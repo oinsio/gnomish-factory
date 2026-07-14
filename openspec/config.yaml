@@ -1,20 +1,92 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  # Gnomish Factory — Autonomous AI Development Orchestrator
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  ## Domain
+  An external orchestrator ("factory") where AI agents ("gnomes") pick tasks
+  from a task tracker and drive them through a development pipeline
+  autonomously. Humans act only as exception handlers: they resolve blocked
+  tasks and choose between alternatives the factory cannot decide on.
+
+  ## Architecture decisions (agreed, pre-stack)
+  - Factory instances are STATELESS; several independent instances may serve
+    one project concurrently
+  - All coordination state lives in the task tracker (statuses, claims,
+    escalations, human decisions in comments)
+  - All working state lives in the task's git branch (stage artifacts and a
+    state file: pipeline position, attempt counters)
+  - Ports & adapters (hexagonal): three port families —
+    tracker (GitHub, Jira, ...), ai-provider, executor (api | agent-cli)
+  - Pipeline stages are DECLARATIVE and live in the target project repo under
+    `.gnomish/` (stage manifest, instructions, verification scripts);
+    the factory is a generic engine that runs them
+  - Each stage is described by the IDEF0/ICOM + Quality Control model:
+    Input / Output / Control / Mechanism / Verification — all
+    machine-verifiable
+  - Each stage declares an advancement mode: auto (default — proceed to the
+    next stage) or manual (debug checkpoint — pause via tracker status;
+    a human returns the task to work; reuses the escalation/resume protocol)
+  - Stage verification = ordered `verify` check list in the manifest, four
+    types: built-in declarative, command (any executable, exit-code
+    contract), external (async third-party: submit + poll with timeout —
+    CI checks on the task branch via the tracker port, SonarQube quality
+    gate), judge (LLM-as-judge via the executor port, acceptance criteria +
+    structured verdict). Cheap deterministic checks first (fail fast),
+    judge last.
+    No webhooks — the factory has no inbound HTTP; external results are
+    polled (virtual threads make blocking polls cheap)
+  - Verification failures have two classes. Quality failure (explicit
+    non-pass verdict): findings are fed back into a stage re-run as
+    feedback context, attempt +1; attempts exhausted -> escalate with the
+    findings history of all attempts. Infrastructure failure (verdict
+    unobtainable: network errors, 5xx, service down): check-level retries
+    via Resilience4j, no stage attempt burned; persistent -> escalate
+    "cannot verify". External poll timeout = quality by default,
+    configurable per check. Every attempt (including failed ones) is
+    committed to the task branch with an updated state file
+  - Escalation: factory sets task status to "blocked" with a detailed report
+    and options; human replies in a comment and returns the task to work;
+    ANY instance may resume from the recorded pipeline position
+  - Autonomy limits (attempts per task, budgets) are configured in the target
+    project repo with sane defaults
+  - Heavy stages run coding agents (e.g. Claude Code) as subprocesses in an
+    isolated working copy; light stages call model APIs directly
+
+  ## Tech stack (ADR 0001 — docs/adr/0001-tech-stack.md)
+  - Java 25 LTS (virtual threads, no preview features), Gradle 9.x (Groovy DSL)
+  - Spring Boot minimal: spring-boot-starter only (DI, config binding,
+    Logback) — no web/webflux, no actuator, no data
+  - java.net.http.HttpClient (async, Flow-based) + Resilience4j
+  - Jackson (+ yaml) for manifests and config; SLF4J + Logback for logging
+  - ProcessBuilder for agent CLIs; git as a subprocess (no JGit)
+  - Tests: Spock 2 (+ spock-spring), WireMock, local bare git repos;
+    JaCoCo + PIT (pitest-junit5-plugin, mutate Java only);
+    Testcontainers (+ testcontainers-spock) for the E2E layer only
+
+  ## Conventions
+  - Documentation language: English
+  - Mermaid diagrams wherever visuals help (no ASCII art, no images)
+
+  ## Process rules
+  Detailed rules live in `.claude/rules/` (traceability, process invariants,
+  proposal format, delta specs, design decisions, archive path, diagrams,
+  stage descriptions).
+
+rules:
+  proposal:
+    - Always include Goals, Non-Goals, Requirements with IDs (FR/NFR-P/NFR-R/NFR-O/NFR-S/NFR-C/UX), Success Metrics, Open Questions
+    - Consider Reliability, Observability, Security, and Cost NFRs explicitly for every change
+    - Follow .claude/rules/proposal-format.md
+  design:
+    - Only for non-trivial local decisions within a change
+    - Global architectural decisions go to docs/adr/
+    - Reference FR/NFR from proposal.md
+  tasks:
+    - Each task references the FR/NFR it implements
+    - Include verification tasks (automated tests preferred over manual steps)
+    - Break tasks into chunks of max 2 hours
+  specs:
+    - Use delta format: ADDED/MODIFIED/REMOVED
+    - Mark invariants with "# implements FR-X of <change-name>"
+    - Include use cases with inputs, effects, and errors
