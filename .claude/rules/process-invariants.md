@@ -37,6 +37,10 @@ If an artifact has no upward reference — it is either unnecessary or missing a
 
 One change = one initiative, completable in 1–4 weeks. If a change grows beyond that, split it into smaller changes.
 
+## Git commits
+
+The AI agent NEVER creates git commits in this project — no `git commit`, `git commit --amend`, or any other history-writing command. Instead, after completing a unit of work, the agent recommends a commit message based on the diff since the last commit (`git status` / `git diff HEAD`); the human reviews and commits. The recommendation should summarize what changed and reference the OpenSpec change / requirement IDs where applicable.
+
 ## Documentation language
 
 All project documentation, specs, rules, code comments, and commit messages are written in English.

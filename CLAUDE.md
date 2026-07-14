@@ -26,6 +26,7 @@ External orchestrator: AI agents ("gnomes") take tasks from a task tracker and c
 
 - Documentation language: English (conversation with the user may be Russian)
 - Mermaid diagrams wherever visuals help — no ASCII art, no images (.claude/rules/diagrams.md)
+- **The AI agent NEVER commits.** No `git commit` — ever. After finishing work, recommend a commit message based on the diff since the last commit; the human commits (.claude/rules/process-invariants.md)
 
 ## Development Workflow (OpenSpec)
 

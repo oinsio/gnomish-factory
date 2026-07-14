@@ -71,6 +71,8 @@ context: |
   ## Conventions
   - Documentation language: English
   - Mermaid diagrams wherever visuals help (no ASCII art, no images)
+  - The AI agent never creates git commits: it recommends a commit message
+    based on the diff since the last commit; the human commits
 
   ## Process rules
   Detailed rules live in `.claude/rules/` (traceability, process invariants,
