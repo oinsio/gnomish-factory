@@ -1,0 +1,28 @@
+# Dependabot keeps Gradle dependencies (gradle/libs.versions.toml) and
+# GitHub Actions (pinned by major tag in .github/workflows/) up to date.
+# Implements NFR-R2 of add-project-skeleton (design D7).
+version: 2
+
+updates:
+  # Gradle dependencies: build plugins and libraries from the version catalog.
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Group minor and patch bumps into a single PR to reduce PR noise;
+    # major bumps stay as individual PRs because they may need migration work.
+    groups:
+      gradle-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by workflows (actions are pinned by major tag,
+  # so PRs here appear only on major releases and keep the tags fresh).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"

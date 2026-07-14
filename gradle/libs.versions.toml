@@ -1,0 +1,64 @@
+# Single source of dependency and plugin versions (design D2, NFR-R1 of add-project-skeleton).
+# Spring-family dependency versions come from the Spring Boot BOM (design D3)
+# and are therefore not declared here.
+# Exception: the foojay-resolver-convention settings plugin version lives in
+# settings.gradle, because the catalog is not available to the settings plugins block.
+# All versions verified against Maven Central / Gradle Plugin Portal on 2026-07-14.
+
+[versions]
+java = "25"
+# Strict: the Spring Boot BOM manages Groovy 5.x, which is incompatible with
+# the stable Spock 2.4-groovy-4.0 line; the test stack must stay on Groovy 4.
+groovy = { strictly = "4.0.32" }
+# Spock groovy-4 variant, aligned with the Groovy 4 line (design risk: Gradle 9 / Groovy 4 / Spock matrix)
+spock = "2.4-groovy-4.0"
+spring-boot = "4.1.0"
+# JaCoCo tool version for the core 'jacoco' Gradle plugin; 0.8.14+ supports Java 25 bytecode.
+jacoco = "0.8.15"
+# PIT: latest pinned for Java 25 bytecode support (design risk: PIT vs Java 25).
+# Key is 'pitest-tool' (not 'pitest') so it doesn't collide with the
+# pitest-* keys below as a catalog-accessor prefix (would force asProvider()).
+pitest-tool = "1.25.7"
+pitest-junit5-plugin = "1.2.3"
+pitest-plugin = "1.19.0"
+spotless = "8.8.0"
+palantir-java-format = "2.96.0"
+errorprone = "2.50.0"
+errorprone-plugin = "5.1.0"
+nullaway = "0.13.7"
+jspecify = "1.0.0"
+dependency-analysis = "3.16.1"
+
+[libraries]
+# Spring Boot BOM imported via platform() in build.gradle (design D3);
+# spring-boot-starter deliberately has no version — it is BOM-managed.
+spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter" }
+# SLF4J API: production code logs through it (FR4); BOM-managed.
+slf4j-api = { module = "org.slf4j:slf4j-api" }
+# Logback backend classes (ListAppender, Logger) used by the logging-level
+# spec to capture events; runtime copy already comes via spring-boot-starter.
+# BOM-managed.
+logback-classic = { module = "ch.qos.logback:logback-classic" }
+# @SpringBootTest and Boot test-context support for context-level specs; BOM-managed.
+spring-boot-test = { module = "org.springframework.boot:spring-boot-test" }
+# @ContextConfiguration and the TestContext framework (spock-spring's Spring side); BOM-managed.
+spring-test = { module = "org.springframework:spring-test" }
+# @Autowired lives in spring-beans; specs compile against it directly, so it is
+# declared directly per the buildHealth advice (FR10); BOM-managed.
+spring-beans = { module = "org.springframework:spring-beans" }
+groovy = { module = "org.apache.groovy:groovy", version.ref = "groovy" }
+# Gradle 9 no longer injects the launcher; version is Boot-BOM-managed.
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+spock-core = { module = "org.spockframework:spock-core", version.ref = "spock" }
+spock-spring = { module = "org.spockframework:spock-spring", version.ref = "spock" }
+errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
+nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
+jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+pitest = { id = "info.solidsoft.pitest", version.ref = "pitest-plugin" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
+dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }

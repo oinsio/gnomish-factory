@@ -1,0 +1,56 @@
+# CodeQL static analysis (SAST) of the production code.
+# Implements FR11, NFR-S1 of add-project-skeleton (design D9): one of three
+# non-overlapping CI security scanners (CodeQL / OSV-Scanner / Gitleaks),
+# deliberately kept out of the local `./gradlew check` loop.
+#
+# Action versions are pinned by major tag; Dependabot (`.github/dependabot.yml`)
+# keeps them fresh — same policy as ci.yml (design D7).
+name: CodeQL
+
+# Unlike ci.yml (every push), CodeQL runs on every pull request and on pushes
+# to main. The analysis is the heaviest scanner here (minutes per run), so
+# feature-branch pushes without a PR are skipped (NFR-C1) — the project is
+# small enough that per-PR analysis keeps the queries fresh without a
+# scheduled re-scan.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least-privilege token (NFR-S2): read the sources, write analysis results to
+# the code-scanning dashboard. (`actions: read` would additionally be needed
+# only on private repos; this repository will be public — design D9.)
+permissions:
+  contents: read
+  security-events: write
+
+# Cancel superseded in-flight runs for the same ref (NFR-C1).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Build mode `none` extracts the CodeQL database straight from source,
+      # without compiling — GitHub's default for JVM languages in default
+      # setup, and the CodeQL Java extractor supports Java source up to 26.
+      # Chosen over autobuild/manual (which would need a JDK 25 toolchain
+      # bootstrap inside this job and a second full Gradle build): more
+      # reliable and cheaper for a pure-Java codebase. Groovy (Spock test
+      # sources) is not a CodeQL language and is not analyzed.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4

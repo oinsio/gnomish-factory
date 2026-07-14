@@ -1,0 +1,4 @@
+# Factory instance configuration (FR2, FR3 of add-project-skeleton).
+# Minimal by design: only the typed properties the skeleton binds.
+factory:
+  instance-id: gnomish-local

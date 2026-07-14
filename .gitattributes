@@ -1,0 +1,37 @@
+# Normalize line endings: auto-detect text, store as LF in the repo.
+* text=auto eol=lf
+
+# Windows scripts must keep CRLF in the working tree.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Unix scripts must keep LF.
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Explicit text files (source, config, docs).
+*.java text
+*.groovy text
+*.gradle text
+*.properties text
+*.xml text
+*.yml text
+*.yaml text
+*.json text
+*.md text
+*.txt text
+*.editorconfig text
+
+# Gradle lockfiles.
+*.lockfile text eol=lf
+
+# Binary files: never normalize, never diff as text.
+*.jar binary
+*.war binary
+*.class binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

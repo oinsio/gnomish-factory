@@ -3,16 +3,17 @@
 ## ADDED Requirements
 
 ### Requirement: Application startup and clean shutdown
-The factory application SHALL boot a minimal Spring context (`spring-boot-starter` only — no web server) and exit with code 0 when no work is requested. <!-- implements FR2 of add-project-skeleton -->
+The factory application SHALL run as a headless worker: boot a plain Spring context from `spring-boot-starter` alone, initiate every network exchange itself (outbound-only), and exit with code 0 when no work is requested. <!-- implements FR2 of add-project-skeleton -->
 
 #### Scenario: Clean boot
 - **WHEN** the application is started with a valid configuration
 - **THEN** the Spring context initializes without errors
 - **AND** the process terminates with exit code 0
 
-#### Scenario: No inbound HTTP
+#### Scenario: Headless outbound-only runtime
 - **WHEN** the application is running
-- **THEN** no HTTP port is opened by the application
+- **THEN** the booted context is a plain annotation-config context
+- **AND** the classpath is the headless `spring-boot-starter` set, so the application itself is the only party that can initiate a network exchange
 
 ### Requirement: Typed configuration binding
 The application SHALL bind configuration from `application.yaml` into an immutable typed properties object and SHALL fail startup on invalid configuration with an error message naming the offending property. <!-- implements FR3 of add-project-skeleton -->

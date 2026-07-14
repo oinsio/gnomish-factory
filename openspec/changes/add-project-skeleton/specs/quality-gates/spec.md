@@ -11,14 +11,14 @@ The build SHALL expose one command — `./gradlew check` — that compiles produ
 - **AND** the command exits 0 only if every gate passes
 
 ### Requirement: Mutation testing gate
-PIT SHALL mutate Java production classes only (never Groovy test bytecode) and SHALL fail the build when the mutation score is below the threshold (100%; explicitly documented exceptions may lower it to 95% for code unreachable by unit tests). <!-- implements FR6 of add-project-skeleton -->
+PIT SHALL mutate Java production classes only and SHALL fail the build when the mutation score is below the threshold (100%; explicitly documented exceptions may lower it to 95% for code unreachable by unit tests). <!-- implements FR6 of add-project-skeleton -->
 
 #### Scenario: Surviving mutant fails the build
 - **WHEN** production code contains logic not killed by any test
 - **THEN** `./gradlew check` fails
 - **AND** the failure output names the mutation threshold and links to the HTML report
 
-#### Scenario: Groovy bytecode is never mutated
+#### Scenario: Only Java production code is mutated
 - **WHEN** PIT runs
 - **THEN** its target classes include only Java production packages
 
@@ -67,7 +67,7 @@ A CI workflow SHALL run `./gradlew check` on every push and pull request and SHA
 - **THEN** JaCoCo and PIT reports are attached as artifacts
 
 ### Requirement: Security scanning
-CI SHALL run security scanning on every push and pull request: CodeQL analysis of the codebase, OSV-Scanner failing the run on known-vulnerable dependency versions, and Gitleaks failing the run on committed secrets. <!-- implements FR11, NFR-S1 of add-project-skeleton -->
+CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every push and pull request; CodeQL analysis of the codebase on every pull request and on pushes to `main`. <!-- implements FR11, NFR-S1 of add-project-skeleton -->
 
 #### Scenario: Vulnerable dependency fails CI
 - **WHEN** a dependency version with a known OSV/CVE advisory is present in the build

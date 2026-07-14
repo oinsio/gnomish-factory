@@ -1,0 +1,13 @@
+#!/bin/sh
+# Git pre-commit hook: formatting safety net.
+# Implements UX3 of add-project-skeleton (design D7, formatting layer 2 of 3).
+# Installed into .git/hooks/ by the Gradle task `installGitHooks` (runs with
+# every `./gradlew check`). Source of truth lives in config/git-hooks/.
+#
+# Applies Spotless to the working tree, then re-stages the already-staged
+# files whose content Spotless changed (update-index --again never stages
+# files that were not staged before).
+set -e
+
+./gradlew --quiet spotlessApply
+git update-index --again

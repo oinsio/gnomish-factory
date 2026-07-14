@@ -47,11 +47,11 @@ _None (first change in the project)._
 
 ### Functional
 - FR1: Gradle wrapper builds the project on JDK 25 (toolchain-pinned); Groovy DSL
-- FR2: the application boots a Spring context via `spring-boot-starter` (no web server) and exits with code 0
+- FR2: the application runs as a headless worker — it boots a plain Spring context via `spring-boot-starter` alone, initiates every network exchange itself (outbound-only), and exits with code 0
 - FR3: configuration binds from `application.yaml` into an immutable typed properties object (`@ConfigurationProperties`), validated at startup
 - FR4: logging goes through SLF4J with Logback backend; log level configurable without recompilation
 - FR5: `./gradlew check` runs the Spock suite, JaCoCo report, and PIT mutation testing as one command
-- FR6: PIT mutates Java production classes only (never Groovy test bytecode) and fails the build below thresholds (100% target; documented exceptions ≥95%)
+- FR6: PIT mutates Java production classes only and fails the build below thresholds (100% target; documented exceptions ≥95%)
 - FR7: CI workflow runs `./gradlew check` on every push and pull request
 - FR8: the build enforces consistent code formatting (Spotless check as part of `./gradlew check`)
 - FR9: compilation fails on Error Prone bug patterns and NullAway null-safety violations; unused-code checks (`UnusedMethod`, `UnusedVariable`) are errors
@@ -61,7 +61,7 @@ _None (first change in the project)._
 ### Non-Functional
 - NFR-R1 (reliability): the build is reproducible — Gradle version fixed by the wrapper, dependency versions pinned in one place
 - NFR-O1 (observability): JaCoCo and PIT HTML/XML reports are published as CI artifacts
-- NFR-S1 (security): no secrets in the repository; anything sensitive comes from environment variables
+- NFR-S1 (security): every sensitive value reaches the application exclusively via environment variables; repository content is limited to non-sensitive material (enforced by secret scanning in CI)
 - NFR-S2 (security): the CI workflow runs with least-privilege token permissions; the Gradle wrapper is validated in CI
 - NFR-R2 (reliability): dependency and workflow-action updates are proposed automatically (Dependabot)
 - NFR-C1 (cost): CI run completes within 10 minutes on the default runner

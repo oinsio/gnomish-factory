@@ -1,0 +1,48 @@
+# OSV-Scanner dependency vulnerability gate.
+# Implements FR11, NFR-S1 of add-project-skeleton (design D9): fails the run
+# when any dependency version with a known OSV/CVE advisory is present.
+#
+# What is scanned: the committed Gradle lock state — `gradle.lockfile` (all
+# project configurations) and `buildscript-gradle.lockfile` (build plugins).
+# OSV-Scanner reads Gradle lockfiles, not `gradle/libs.versions.toml`, which
+# is why dependency locking is enabled in build.gradle (also serves NFR-R1
+# reproducibility). After a dependency change, regenerate the lock state with
+# `./gradlew check --write-locks`, or this gate scans stale versions.
+name: OSV-Scanner
+
+# Trigger pattern mirrors ci.yml: every push (FR11); pull_request only for
+# fork PRs, which get no push events here (NFR-C1: no double scans). Plus a
+# weekly schedule so newly published advisories against unchanged
+# dependencies still fail the default branch.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "32 3 * * 1" # weekly, Monday 03:32 UTC
+  workflow_dispatch:
+
+# No workflow-level grants; the reusable workflow declares what its job needs
+# and receives it from the job-level block below (NFR-S2).
+permissions: {}
+
+# Cancel superseded in-flight runs for the same ref (NFR-C1).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  osv-scan:
+    # Skip pull_request runs for same-repo branches — the push run covers them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    # Google's maintained reusable workflow: scan -> report -> SARIF upload to
+    # the code-scanning dashboard; `fail-on-vuln` defaults to true, making
+    # this the failing gate FR11 requires. Pinned to an exact tag because
+    # upstream publishes no floating major tag (only vX.Y.Z) and reusable
+    # workflows must be pinned to a full ref anyway; Dependabot bumps it.
+    # Note: GitHub does not allow `timeout-minutes` on reusable-workflow jobs;
+    # the scan is a seconds-fast lockfile read, bounded by the callee's steps.
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.8
+    permissions:
+      actions: read # required by the SARIF upload inside the reusable workflow
+      contents: read
+      security-events: write
