@@ -1,0 +1,11 @@
+// Settings for the gnomish-factory build.
+// Implements FR1, NFR-R1 of add-project-skeleton.
+plugins {
+    // Auto-provisions the pinned JDK toolchain on machines that lack it (design D7).
+    // Version is declared here literally because the version catalog is not
+    // available to the settings plugins block; all other versions live in
+    // gradle/libs.versions.toml (design D2).
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'gnomish-factory'

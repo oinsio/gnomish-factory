@@ -1,0 +1,71 @@
+# CI quality gate: runs `./gradlew check` (Spock + JaCoCo + PIT + Spotless +
+# static analysis) on every push and pull request.
+# Implements FR7, NFR-O1, NFR-C1, NFR-S2 of add-project-skeleton (design D6/D7).
+#
+# Action versions are pinned by major tag; Dependabot (`.github/dependabot.yml`)
+# keeps them fresh. Design D7 mandates least-privilege permissions, concurrency
+# cancellation, and wrapper validation — not SHA pinning.
+name: CI
+
+# Trigger pattern: run on every push (FR7); the pull_request event is used only
+# for PRs from forks (which get no push events in this repo). Same-repo PR
+# branches are already covered by their push runs, so the job-level `if` below
+# skips the duplicate pull_request run (NFR-C1: no double builds per commit).
+on:
+  push:
+  pull_request:
+
+# Least-privilege token: the build only reads the repo contents (NFR-S2).
+permissions:
+  contents: read
+
+# Cancel superseded in-flight runs for the same ref (NFR-C1).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Skip pull_request runs for same-repo branches — the push run covers them.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # NFR-C1: CI completes within 10 minutes
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Validate gradle-wrapper.jar against known checksums (NFR-S2).
+          # On by default in v6; kept explicit as a documented security gate.
+          validate-wrappers: true
+
+      - name: Run quality gates
+        run: ./gradlew check
+
+      # Reports are uploaded even when the build fails — a red gate is exactly
+      # when the HTML/XML reports are needed (NFR-O1). 14-day retention keeps
+      # storage cost bounded (NFR-C1).
+      - name: Upload JaCoCo report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-report
+          path: build/reports/jacoco/test/
+          retention-days: 14
+
+      - name: Upload PIT report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pit-report
+          path: build/reports/pitest/
+          retention-days: 14

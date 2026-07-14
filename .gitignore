@@ -5,3 +5,16 @@ Thumbs.db
 # IDE
 .idea
 *.iml
+*.ipr
+*.iws
+.vscode/
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Java
+*.class
+hs_err_pid*
+replay_pid*

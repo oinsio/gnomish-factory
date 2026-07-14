@@ -1,0 +1,274 @@
+// Build script for the gnomish-factory walking skeleton.
+// Implements FR1 of add-project-skeleton (design D1–D3):
+// single module, Java 25 toolchain, Spring Boot plugin + BOM,
+// Spock (Groovy) test stack. All versions come from gradle/libs.versions.toml.
+
+// Dependency locking for the buildscript classpath (plugins). Together with
+// the project-configuration locking below (see `dependencyLocking`), this
+// produces `buildscript-gradle.lockfile` — part of the machine-readable
+// dependency inventory that OSV-Scanner consumes in CI (FR11, design D9).
+// The `buildscript` block must precede `plugins`, hence its position here.
+buildscript {
+    configurations.classpath {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
+plugins {
+    id 'java'
+    id 'groovy' // Spock specs are Groovy sources under src/test/groovy
+    id 'jacoco' // coverage reports, FR6 / NFR-O1 of add-project-skeleton
+    alias(libs.plugins.spring.boot)
+    alias(libs.plugins.pitest) // mutation testing gate, FR6 (design D5)
+    alias(libs.plugins.spotless) // formatting gate, FR8 (design D7)
+    alias(libs.plugins.errorprone) // Error Prone + NullAway gate, FR9 (design D8)
+    alias(libs.plugins.dependency.analysis) // unused/misdeclared deps gate, FR10 (design D8)
+}
+
+group = 'com.github.oinsio'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(libs.versions.java.get().toInteger())
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+// Dependency locking (NFR-R1 reproducibility, FR11 security scanning of
+// add-project-skeleton, design D9). The committed `gradle.lockfile` (plus
+// `buildscript-gradle.lockfile` above) pins every resolved version and is the
+// file OSV-Scanner actually scans in CI — OSV-Scanner reads Gradle lock-files,
+// not the version catalog. After changing dependencies, regenerate with:
+//   ./gradlew check --write-locks
+// Default lock mode: configurations with lock state must match it exactly
+// (build fails on drift); configurations without lock state resolve normally.
+dependencyLocking {
+    lockAllConfigurations()
+}
+
+dependencies {
+    // Spring-family versions are managed by the Boot BOM (design D3).
+    implementation platform(libs.spring.boot.dependencies)
+    implementation libs.spring.boot.starter
+    // Production code compiles against the SLF4J API directly (FR4, design
+    // D10); declared honestly per the dependency-analysis gate rather than
+    // leaning on the starter's transitive copy. Version is BOM-managed.
+    implementation libs.slf4j.api
+
+    // JSpecify nullness annotations (@NullMarked, @Nullable) for NullAway
+    // (FR9, design D8). compileOnly per the dependency-analysis advice (FR10):
+    // the annotations are consumed only by javac-time analysis; the JVM
+    // tolerates absent annotation types at runtime, and spring-core 7 ships
+    // jspecify on the runtime classpath transitively anyway.
+    compileOnly libs.jspecify
+
+    // Compiler plugins for javac's annotation-processor path (FR9, design D8);
+    // never leak onto the application classpath.
+    errorprone libs.errorprone.core
+    errorprone libs.nullaway
+
+    testImplementation libs.groovy
+    testImplementation libs.spock.core
+    // The context-level bootstrap specs (task 3.3) compile against
+    // @SpringBootTest (spring-boot-test), @ContextConfiguration (spring-test)
+    // and @Autowired (spring-beans), so all three are testImplementation —
+    // the promotion the task-2.6 buildHealth advice anticipated (FR10).
+    // spock-spring is a discovered global extension with no compile-time
+    // reference from spec bytecode; buildHealth re-advised testRuntimeOnly in
+    // the GREEN step as anticipated, and that advice is followed here.
+    testRuntimeOnly libs.spock.spring
+    testImplementation libs.spring.boot.test
+    testImplementation libs.spring.test
+    testImplementation libs.spring.beans
+    // The logging-level spec (FR4) emits through the SLF4J API and captures
+    // events with Logback's ListAppender, so it compiles against both.
+    // slf4j-api is inherited via testImplementation -> implementation; the
+    // Logback backend classes need an explicit test declaration (BOM-managed).
+    testImplementation libs.logback.classic
+    // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath.
+    testRuntimeOnly libs.junit.platform.launcher
+}
+
+// Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,
+// design D8). The net.ltgt.errorprone plugin handles the JDK internals access
+// itself (forked javac with the required --add-exports/--add-opens for
+// JDK 16+), verified on the Java 25 toolchain — no manual jvmargs needed.
+// Scoped to production compilation: test code is Groovy (Spock), which never
+// goes through javac, so Error Prone is explicitly off for compileTestJava.
+tasks.named('compileJava', JavaCompile) {
+    options.errorprone {
+        // NullAway null-safety as a build breaker over the JSpecify
+        // annotations; the project package tree is the annotated scope.
+        option 'NullAway:AnnotatedPackages', 'com.github.oinsio.gnomish'
+        // Dead-code layer 1 of 3 (design D8): unused private members fail
+        // compilation. Layers 2–3: dependency-analysis plugin (task 2.6)
+        // and the 100% mutation gate.
+        error 'NullAway', 'UnusedMethod', 'UnusedVariable'
+    }
+}
+
+tasks.named('compileTestJava', JavaCompile) {
+    options.errorprone.enabled = false
+}
+
+// JaCoCo coverage reporting (FR6, NFR-O1 of add-project-skeleton):
+// XML for machine consumption (CI, future quality gates), HTML for humans.
+// The 'jacoco' plugin is a Gradle core plugin; only its tool version is
+// pinned here via the version catalog (design D2).
+jacoco {
+    toolVersion = libs.versions.jacoco.get()
+}
+
+tasks.named('test') {
+    // Spock 2 runs on the JUnit Platform.
+    useJUnitPlatform()
+    // Generate coverage reports whenever tests run, so `check` produces them
+    // as part of the single-command verification (FR5 of add-project-skeleton).
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test') // reports need the execution data from test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+// PIT mutation testing (FR6 of add-project-skeleton, design D5).
+// Spock 2 runs on the JUnit Platform, hence the JUnit 5 PIT plugin.
+pitest {
+    // asProvider(): 'pitest' is a prefix of other catalog version aliases.
+    pitestVersion = libs.versions.pitest.tool.get()
+    junit5PluginVersion = libs.versions.pitest.junit5.plugin.get()
+    // Java production code only — never Groovy test bytecode (mutating Groovy
+    // produces noisy false-positive survivors; see .claude/rules/testing.md).
+    targetClasses = ['com.github.oinsio.gnomish.*']
+    // FR6 documented exception: the application bootstrap class is only
+    // main() + SpringApplication.run(), unreachable by unit tests by design
+    // (design D5, D10). Everything else must reach 100%.
+    excludedClasses = ['com.github.oinsio.gnomish.FactoryApplication']
+    mutationThreshold = 100 // 100% mutation score gate (FR6)
+    timestampedReports = false // stable report path for CI artifact upload
+    outputFormats = ['XML', 'HTML']
+}
+
+tasks.named('pitest') {
+    // PIT hard-fails ("No mutations found", exit 1) when there is nothing to
+    // mutate. Until the first production class lands (task 3.x of
+    // add-project-skeleton) the task is skipped instead of weakening the gate
+    // with failWhenNoMutations = false (which would also mask a misconfigured
+    // targetClasses filter forever). The source set is captured at
+    // configuration time, keeping the onlyIf spec configuration-cache safe.
+    def mainJavaSources = sourceSets.main.allJava
+    onlyIf('no Java production classes to mutate yet') { !mainJavaSources.isEmpty() }
+}
+
+// The mutation gate is part of the standard verification lifecycle: `check`
+// runs Spock + JaCoCo + PIT as one command (FR5, FR6).
+tasks.named('check') {
+    dependsOn tasks.named('pitest')
+}
+
+// UX2: a failed mutation gate must point to the HTML report. PIT's own
+// failure message names the violated threshold but not the report location,
+// so a finalizer prints the stable path whenever a report was produced
+// (finalizedBy runs even when the finalized task fails).
+def pitestReportIndex = layout.buildDirectory.file('reports/pitest/index.html')
+tasks.register('pitestReportLocation') {
+    def reportFile = pitestReportIndex // config-cache-safe capture
+    onlyIf('no PIT report was produced') { reportFile.get().asFile.exists() }
+    doLast {
+        logger.lifecycle("PIT mutation report: ${reportFile.get().asFile}")
+    }
+}
+
+tasks.named('pitest') {
+    finalizedBy tasks.named('pitestReportLocation')
+}
+
+// Spotless formatting gate (FR8 of add-project-skeleton, design D7).
+// The plugin wires `spotlessCheck` into `check` automatically, so misformatted
+// code fails the standard verification lifecycle. palantir-java-format is
+// deterministic and non-configurable — style is never a decision. It runs on
+// the Gradle daemon JVM (verified on JDK 26: no `--add-exports` jvmargs
+// needed with this formatter version; Spotless isolates javac access itself).
+spotless {
+    java {
+        target 'src/*/java/**/*.java'
+        palantirJavaFormat(libs.versions.palantir.java.format.get())
+    }
+    groovy {
+        // Spock specs. greclipse is Spotless's standard Groovy formatter;
+        // its Eclipse/JDT preferences (4-space indent) come from the
+        // checked-in config so daemon defaults never leak into style.
+        target 'src/*/groovy/**/*.groovy'
+        importOrder()
+        greclipse().configFile('gradle/spotless-greclipse.properties')
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    format 'misc', {
+        // Build metadata hygiene only; docs are deliberately excluded
+        // (markdown trailing spaces are semantic, archived changes immutable).
+        target '*.gradle', 'gradle.properties', 'gradle/libs.versions.toml', '.gitignore', '.gitattributes'
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+// Dependency-analysis gate (FR10 of add-project-skeleton, design D8, dead-code
+// layer 2 of 3): any unused or misdeclared dependency fails the build.
+dependencyAnalysis {
+    structure {
+        // spring-boot-starter is a deliberate aggregate (design D3): the code
+        // never compiles against the empty starter jar itself, it uses the
+        // members the starter pulls in (Boot runtime, logging backend). The
+        // bundle tells the analysis that using any member justifies declaring
+        // the starter — DAGP's designed mechanism for starters, NOT an ignore:
+        // if no member is used at all, the starter is still flagged as unused.
+        bundle('spring-boot-starter') {
+            primary 'org.springframework.boot:spring-boot-starter'
+            includeGroup 'org.springframework.boot'
+            includeDependency 'org.springframework:spring-core'
+            includeDependency 'org.springframework:spring-context'
+            includeGroup 'ch.qos.logback'
+            includeGroup 'org.apache.logging.log4j'
+            includeDependency 'io.micrometer:micrometer-observation'
+        }
+    }
+    issues {
+        all {
+            onAny {
+                severity 'fail'
+            }
+        }
+    }
+}
+
+// The dependency gate is part of the standard verification lifecycle (FR10).
+// buildHealth is the plugin's aggregate verification task at the root project.
+tasks.named('check') {
+    dependsOn tasks.named('buildHealth')
+}
+
+// Formatting layer 2 of 3 (UX3, design D7): a git pre-commit hook running
+// spotlessApply as a safety net. The hook source is versioned under
+// config/git-hooks/; this task copies it into .git/hooks/ with the exec bit.
+// Wired into `check` so the hook is installed by the first build — no
+// separate setup ritual (Copy task, configuration-cache compatible).
+tasks.register('installGitHooks', Copy) {
+    description = 'Installs the versioned git pre-commit hook into .git/hooks/.'
+    group = 'build setup'
+    from layout.projectDirectory.file('config/git-hooks/pre-commit')
+    into layout.projectDirectory.dir('.git/hooks')
+    filePermissions { unix(0755) }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('installGitHooks')
+}

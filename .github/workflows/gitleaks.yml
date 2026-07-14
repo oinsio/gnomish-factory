@@ -1,0 +1,57 @@
+# Gitleaks secret scan over the full git history.
+# Implements FR11, NFR-S1 of add-project-skeleton (design D9): the run fails
+# on any committed secret, identifying the offending commit and location.
+#
+# OPERATIONAL NOTE (NFR-S1): once the GitHub remote exists, also enable
+# "Secret scanning" and "Push protection" in the repository settings
+# (Settings -> Code security and analysis). Push protection rejects secrets
+# before they enter history; this workflow catches whatever slips through
+# and everything already committed.
+name: Gitleaks
+
+# Trigger pattern mirrors ci.yml: every push (FR11); pull_request only for
+# fork PRs, which get no push events here (NFR-C1). The weekly schedule
+# re-scans the existing history with newly added detection rules.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "47 3 * * 1" # weekly, Monday 03:47 UTC
+  workflow_dispatch:
+
+# Least-privilege token (NFR-S2): the scan only reads repository content.
+permissions:
+  contents: read
+
+# Cancel superseded in-flight runs for the same ref (NFR-C1).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    # Skip pull_request runs for same-repo branches — the push run covers them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v7
+        with:
+          # Secrets hide in past commits, not just the tip: scan all history.
+          fetch-depth: 0
+
+      # GITLEAKS_LICENSE is deliberately absent: the action requires a license
+      # key only for organization-owned repositories; this repo lives under a
+      # personal account, where gitleaks-action is free (per its README). If
+      # the repo ever moves to an org, add a GITLEAKS_LICENSE secret.
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PR commenting needs pull-requests:write, but the only pull_request
+          # runs here are fork PRs with a read-only token. Findings surface in
+          # the job summary and the uploaded SARIF artifact instead (NFR-S2:
+          # keep the token read-only).
+          GITLEAKS_ENABLE_COMMENTS: "false"
