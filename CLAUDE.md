@@ -11,6 +11,8 @@ External orchestrator: AI agents ("gnomes") take tasks from a task tracker and c
 - `java.net.http.HttpClient` (async) + Resilience4j; Jackson (+ yaml); SLF4J + Logback
 - `ProcessBuilder` for agent CLIs; `git` as a subprocess
 - Tests: Spock 2 (+ spock-spring), WireMock, JaCoCo + PIT (Java-only mutation), Testcontainers for E2E — see `.claude/rules/testing.md`
+- Static analysis: Error Prone + NullAway (JSpecify), unused-code checks as errors; dependency-analysis plugin; Spotless format gate
+- Security scanning (CI only): CodeQL, OSV-Scanner (CVE gate), Gitleaks; ArchUnit planned with the first ports/adapters change
 
 ## Key decisions
 

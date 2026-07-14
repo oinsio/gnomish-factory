@@ -21,6 +21,8 @@ Gnomish Factory is a stateless orchestrator: it polls task trackers, calls AI pr
 | Testing                   | Spock 2 (BDD/TDD, built-in mocks) + `spock-spring`; WireMock for tracker/AI API contract tests; local bare git repos for git-workflow tests                                |
 | Coverage / mutation       | JaCoCo + PIT with `pitest-junit5-plugin` (Spock 2 runs on JUnit Platform); mutate Java production code only — never Groovy test bytecode                                   |
 | Integration / E2E (later) | Testcontainers + `testcontainers-spock`: Gitea container as a real git remote (HTTP auth), sandbox containers for real agent-CLI E2E runs. Docker is a dev/CI prerequisite |
+| Static analysis           | Error Prone + NullAway (JSpecify nullness), unused-code checks as errors; dependency-analysis plugin for unused/misdeclared dependencies                                   |
+| Security scanning (CI)    | CodeQL (SAST), OSV-Scanner (dependency CVE gate), Gitleaks (secrets) — CI workflows only, not part of the local `check` loop                                               |
 | DI style                  | Spring container; no manual wiring, no Dagger                                                                                                                              |
 
 ## Consequences
@@ -48,5 +50,9 @@ Negative:
 **No framework (manual DI)** and **Dagger 2**: viable for three port families, but rejected in favor of a minimal Spring container to avoid hand-rolled wiring and config binding.
 
 **JGit**: full git implementation in-process, but shelling out to `git` is simpler, matches how agent CLIs operate on the working copy, and avoids a heavy dependency.
+
+**OWASP Dependency-Check, SpotBugs + FindSecBugs, SonarCloud (instead of the CodeQL / OSV-Scanner / Gitleaks trio)**: Dependency-Check does OSV-Scanner's job but slowly and behind an NVD API key; SpotBugs+FindSecBugs overlaps Error Prone and CodeQL as a third bytecode analyzer; SonarCloud duplicates gates the build already enforces more strictly (PIT vs coverage smells). ArchUnit is deferred, not rejected — architecture-boundary tests arrive with the first ports/adapters change.
+
+**PMD unused-code rules and whole-program dead-code detectors (UCDetector, DCD)**: PMD's unused rules duplicate Error Prone's `UnusedMethod`/`UnusedVariable`; whole-program public dead-code detection is unreliable in Java under reflection and DI, and the dedicated tools are unmaintained. Dead code is covered by Error Prone (private scope), the dependency-analysis plugin (dependency level), and the 100% mutation gate (unreachable-by-test code cannot pass).
 
 **MockServer (instead of WireMock)**: comparable stubbing features and a strong proxy/verification mode, but active development effectively stalled around 2023. WireMock is actively maintained and wins on stateful Scenarios (modeling tracker ticket lifecycles), fault injection (exercising Resilience4j), record-and-playback against real APIs, and out-of-the-box JUnit Platform / Testcontainers integration.

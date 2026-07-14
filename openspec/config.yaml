@@ -63,6 +63,10 @@ context: |
   - Tests: Spock 2 (+ spock-spring), WireMock, local bare git repos;
     JaCoCo + PIT (pitest-junit5-plugin, mutate Java only);
     Testcontainers (+ testcontainers-spock) for the E2E layer only
+  - Static analysis: Error Prone + NullAway (JSpecify), unused-code checks
+    as errors; dependency-analysis plugin; Spotless format gate
+  - Security scanning (CI only): CodeQL, OSV-Scanner (CVE gate), Gitleaks;
+    ArchUnit deferred to the first ports/adapters change
 
   ## Conventions
   - Documentation language: English
