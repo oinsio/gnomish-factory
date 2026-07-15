@@ -4,13 +4,13 @@
 # To regenerate this file, run: ./gradlew :dependencies --write-locks
 antlr:antlr:2.7.7=pitest
 biz.aQute.bnd:biz.aQute.bnd.annotation:7.1.0=compileClasspath,testCompileClasspath
-ch.qos.logback:logback-classic:1.5.34=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
-ch.qos.logback:logback-core:1.5.34=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+ch.qos.logback:logback-classic:1.5.35=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+ch.qos.logback:logback-core:1.5.35=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.fasterxml.jackson.core:jackson-annotations:2.21=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
-com.fasterxml.jackson.core:jackson-core:2.21.4=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
-com.fasterxml.jackson.core:jackson-databind:2.21.4=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
-com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.4=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
-com.fasterxml.jackson:jackson-bom:2.21.4=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson.core:jackson-core:2.21.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson.core:jackson-databind:2.21.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson:jackson-bom:2.21.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.0.5=annotationProcessor,testAnnotationProcessor
 com.github.kevinstern:software-and-algorithms:1.0=annotationProcessor,testAnnotationProcessor
 com.google.auto.service:auto-service-annotations:1.0.1=annotationProcessor,testAnnotationProcessor
