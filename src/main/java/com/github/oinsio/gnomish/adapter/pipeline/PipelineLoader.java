@@ -135,11 +135,9 @@ public final class PipelineLoader {
 
     /**
      * Structural shape checks on the parsed-OK DTOs (a failed parse short-circuits
-     * its own shape). {@code config.yaml} needs no shape check —
-     * {@link StructuralValidation#checkConfig} is an always-empty entry point
-     * ({@code schemaVersion} presence is the domain {@code SchemaVersionRule}'s
-     * concern) — so it is not called here; {@code pipeline.yaml} and each stage
-     * manifest are checked.
+     * its own shape). {@code config.yaml} needs no shape check — its only required
+     * field, {@code schemaVersion}, is the domain {@code SchemaVersionRule}'s
+     * concern — so only {@code pipeline.yaml} and each stage manifest are checked.
      */
     private static void structural(
             List<ConfigError> errors, Result<PipelineDto> pipeline, Map<String, StageDto> stages) {

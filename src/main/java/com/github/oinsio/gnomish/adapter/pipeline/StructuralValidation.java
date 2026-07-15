@@ -52,21 +52,6 @@ public final class StructuralValidation {
     private StructuralValidation() {}
 
     /**
-     * Checks {@code config.yaml} shape. Nothing is structurally required here:
-     * {@code schemaVersion} presence is {@code SchemaVersionRule}'s concern and
-     * {@code autonomy} is optional. Kept as an explicit entry point so the loader
-     * (task 6.5) treats every file uniformly.
-     *
-     * <p>Implements FR5 of load-pipeline-config.
-     *
-     * @param config the parsed {@code config.yaml} DTO
-     * @return an always-empty immutable error list
-     */
-    public static List<ConfigError> checkConfig(ConfigDto config) {
-        return List.of();
-    }
-
-    /**
      * Checks {@code pipeline.yaml} shape: the {@code stages} key must be present
      * (non-null). An empty list is left to {@code StageOrderRule} (task 4.2).
      *

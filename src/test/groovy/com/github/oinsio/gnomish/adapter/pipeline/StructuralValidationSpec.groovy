@@ -22,14 +22,6 @@ import spock.lang.Specification
  */
 class StructuralValidationSpec extends Specification {
 
-    // --- config.yaml -------------------------------------------------------
-
-    def "a config.yaml with a schema version and no autonomy is structurally clean"() {
-        expect: 'schemaVersion presence is a domain rule, not a structural one'
-        StructuralValidation.checkConfig(new ConfigDto('1', null)).isEmpty()
-        StructuralValidation.checkConfig(new ConfigDto(null, null)).isEmpty()
-    }
-
     // --- pipeline.yaml -----------------------------------------------------
 
     def "pipeline.yaml with a stages list is structurally clean; an absent stages key is a structural error"() {
