@@ -3,8 +3,8 @@
 ## ADDED Requirements
 
 ### Requirement: Load .gnomish/ into a typed pipeline definition
-The loader SHALL read a `.gnomish/` directory — `config.yaml`, `pipeline.yaml`, and `stages/<name>/stage.yaml` for each stage — and build an immutable, typed `PipelineDefinition`.
-<!-- implements FR1 of load-pipeline-config -->
+The loader SHALL read a `.gnomish/` directory — `config.yaml`, `pipeline.yaml`, and `stages/<name>/stage.yaml` for each stage — and build an immutable, typed `PipelineDefinition`. Loading SHALL be deterministic and read-only.
+<!-- implements FR1, NFR-R1 of load-pipeline-config -->
 
 #### Scenario: Valid configuration loads
 - **WHEN** the loader is given a `.gnomish/` directory whose files are structurally and semantically valid
@@ -42,7 +42,7 @@ Each `StageDefinition` SHALL represent the stage-contract sections (purpose, inp
 - **THEN** validation reports a located error
 
 ### Requirement: Artifact references by identifier
-Each stage output SHALL declare a stable `id`. An internal input SHALL reference the `id` of an output produced by a stage that appears **earlier** in the pipeline order. A `source` input SHALL declare that it has no producing stage.
+Each stage output SHALL declare a stable `id`, unique across the whole pipeline. An internal input SHALL reference the `id` of an output produced by a stage that appears **earlier** in the pipeline order. A `source` input SHALL declare that it has no producing stage.
 <!-- implements FR4 of load-pipeline-config -->
 
 #### Scenario: Internal input resolves to an earlier output
@@ -56,6 +56,10 @@ Each stage output SHALL declare a stable `id`. An internal input SHALL reference
 #### Scenario: Dangling or forward reference is rejected
 - **WHEN** an internal input references an `id` that no stage produces, or that is produced only by a later stage
 - **THEN** validation reports a located error identifying the input and the missing/late producer
+
+#### Scenario: Duplicate output id is rejected
+- **WHEN** two stages (or one stage twice) declare outputs with the same `id`
+- **THEN** validation reports a located error naming the duplicated `id` and both declaring stages
 
 ### Requirement: Structural validation
 The loader SHALL reject invalid YAML schema, missing required fields, unknown enum values (executor type, verify-check type, advancement mode), and type mismatches.
@@ -86,7 +90,7 @@ The loader SHALL enforce cross-file rules: unique stage names; every `pipeline.y
 - **THEN** validation reports a located error naming the missing file
 
 ### Requirement: Autonomy limit resolution
-The loader SHALL resolve autonomy limits (attempts, budgets) from `config.yaml` defaults, with per-stage overrides taking precedence over the defaults.
+The loader SHALL resolve the stage attempt limit from the `config.yaml` default, with a per-stage override taking precedence. The resolved limit SHALL be an integer ≥ 1. Token/money budgets are out of scope for this capability version.
 <!-- implements FR7 of load-pipeline-config -->
 
 #### Scenario: Stage override wins over default
@@ -96,6 +100,10 @@ The loader SHALL resolve autonomy limits (attempts, budgets) from `config.yaml` 
 #### Scenario: Default applies when no override
 - **WHEN** a stage declares no override for a limit
 - **THEN** the resolved `StageDefinition` carries the `config.yaml` default
+
+#### Scenario: Non-positive attempt limit is rejected
+- **WHEN** the resolved attempt limit (default or override) is less than 1
+- **THEN** validation reports a located error
 
 ### Requirement: Aggregated, located validation results
 The loader SHALL aggregate all validation problems and return a result that is either a valid `PipelineDefinition` or a non-empty list of `ConfigError`s, each naming its file and location. Validation failure SHALL NOT be signalled by exceptions; exceptions are reserved for I/O faults such as an unreadable file.
@@ -111,19 +119,23 @@ The loader SHALL aggregate all validation problems and return a result that is e
 - **THEN** the loader returns an error result rather than throwing
 
 ### Requirement: Schema version recognition
-The loader SHALL recognize a `schemaVersion`; an unknown or unsupported version SHALL be a validation error.
+A `schemaVersion` SHALL be declared in `config.yaml` — one version for the whole `.gnomish/` tree. A missing, unknown, or unsupported version SHALL be a validation error.
 <!-- implements FR9 of load-pipeline-config -->
 
 #### Scenario: Unsupported schema version is rejected
-- **WHEN** the configuration declares a `schemaVersion` the loader does not support
+- **WHEN** `config.yaml` declares a `schemaVersion` the loader does not support
 - **THEN** validation reports a located error naming the version
 
+#### Scenario: Missing schema version is rejected
+- **WHEN** `config.yaml` declares no `schemaVersion`
+- **THEN** validation reports a located error naming `config.yaml`
+
 ### Requirement: Local sanity validation of mechanism and check configs
-The loader SHALL apply catalog-free sanity rules that do not require a live target. The executor `model` SHALL be present and non-blank when the executor type needs one, and `settings` SHALL be carried as an opaque, well-formed mapping (not validated by key, value, or range). An `external` check SHALL have a positive `interval`, a positive `timeout`, `interval ≤ timeout`, and a non-blank check identifier. A `judge` check SHALL have `votes ≥ 1` and an odd `votes`. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
+The loader SHALL apply catalog-free sanity rules that do not require a live target. The executor `model` SHALL be present and non-blank for every executor type — the model is pinned in the stage manifest so any instance reproduces the stage identically, never left to an executor default — and `settings` SHALL be carried as an opaque, well-formed mapping (not validated by key, value, or range). An `external` check SHALL have a positive `interval`, a positive `timeout`, `interval ≤ timeout`, and a non-blank check identifier. A `judge` check SHALL have `votes ≥ 1` and an odd `votes`. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
 <!-- implements FR11 of load-pipeline-config -->
 
-#### Scenario: Missing model for an executor that needs one is rejected
-- **WHEN** a stage's executor type requires a model but `model` is absent or blank
+#### Scenario: Missing model is rejected
+- **WHEN** a stage's `model` is absent or blank, whatever the executor type
 - **THEN** validation reports a located error
 - **AND** `settings` present as a mapping is accepted without inspecting its keys or values
 
@@ -154,7 +166,7 @@ The loader SHALL NOT execute any command, model call, or external check defined 
 
 ### Requirement: Domain purity guarded by ArchUnit
 The `domain` package SHALL remain free of filesystem and Jackson dependencies and SHALL NOT depend on the `adapter` package; an ArchUnit rule wired into `./gradlew check` SHALL fail the build on violation.
-<!-- implements FR10, NFR-R1 of load-pipeline-config -->
+<!-- implements FR10 of load-pipeline-config -->
 
 #### Scenario: Domain dependency on I/O fails the build
 - **WHEN** a `domain` class gains a dependency on `java.nio.file..`, `com.fasterxml.jackson..`, or the `adapter` package

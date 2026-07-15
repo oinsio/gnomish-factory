@@ -5,7 +5,7 @@ TDD throughout (Red-Green-Refactor per `.claude/rules/testing.md`): write the fa
 ## 1. Build setup and package skeleton
 
 - [ ] 1.1 Add ArchUnit (test scope) to `gradle/libs.versions.toml`; wire it into the test source set
-- [ ] 1.2 Add Jackson YAML (`jackson-dataformat-yaml`) if not already resolvable via the existing Jackson deps; confirm via dependency-analysis it is declared where used
+- [ ] 1.2 Add Jackson to `gradle/libs.versions.toml` — the catalog currently has no Jackson entries: declare `jackson-databind` and `jackson-dataformat-yaml` (versions managed by the Spring Boot BOM); confirm via dependency-analysis they are declared where used
 - [ ] 1.3 Create empty packages `com.github.oinsio.gnomish.domain.pipeline` and `com.github.oinsio.gnomish.adapter.pipeline` with `package-info.java`
 - [ ] 1.4 Run `./gradlew check --write-locks`; confirm green baseline and commit-ready lockfiles
 
@@ -17,25 +17,25 @@ TDD throughout (Red-Green-Refactor per `.claude/rules/testing.md`): write the fa
 ## 3. Domain model (pure records)
 
 - [ ] 3.1 Spec + impl: `ConfigError` (file, where, message) and sealed `LoadOutcome` = `Loaded(PipelineDefinition)` | `Invalid(List<ConfigError>)` (FR8)
-- [ ] 3.2 Spec + impl: `AutonomyLimits` (attempts, budgets) with default+override resolution semantics (FR7)
+- [ ] 3.2 Spec + impl: `AutonomyLimits` (attempt limit only — budgets deferred per NG8) with default+override resolution semantics (FR7)
 - [ ] 3.3 Spec + impl: sealed `VerifyCheck` with variants `Builtin`, `Command`, `External`, `Judge`, order-preserving, each carrying only its own fields (FR2)
 - [ ] 3.4 Spec + impl: `ArtifactOutput` (stable `id`) and sealed `ArtifactInput` = `Internal(producerOutputId)` | `Source` (FR4)
-- [ ] 3.5 Spec + impl: immutable `StageDefinition` (name, inputs, outputs, executor+opaque model/settings map, control/instructions ref, verify list, resolved limits, advancement mode) (FR2, Q1)
+- [ ] 3.5 Spec + impl: immutable `StageDefinition` (name, purpose, inputs, outputs, executor+opaque model/settings map, control/instructions ref, verify list, resolved limits, advancement mode) (FR2, Q1)
 - [ ] 3.6 Spec + impl: immutable `PipelineDefinition` (schemaVersion, resolved autonomy, ordered stages) (FR1)
 
 ## 4. Domain validators (pure, semantic)
 
-- [ ] 4.1 Spec + impl: schema-version support check — unknown/unsupported version → located error (FR9)
+- [ ] 4.1 Spec + impl: schema-version check — `schemaVersion` in `config.yaml` missing, unknown, or unsupported → located error (FR9)
 - [ ] 4.2 Spec + impl: order validation — non-empty, unique stage names in `pipeline.yaml` order (FR3)
-- [ ] 4.3 Spec + impl: artifact DAG validation — every `Internal` input resolves to a strictly-earlier stage's output `id`; `Source` inputs accepted; dangling/forward refs → located error (FR3, FR4)
-- [ ] 4.4 Spec + impl: local-sanity rules — conditional `model` presence/non-blank; `external` timing (positive `interval`/`timeout`, `interval ≤ timeout`); `judge` `votes ≥ 1` and odd (FR11). No target-liveness checks (NG7)
+- [ ] 4.3 Spec + impl: artifact DAG validation — output `id`s unique across the pipeline; every `Internal` input resolves to a strictly-earlier stage's output `id`; `Source` inputs accepted; duplicate ids and dangling/forward refs → located error (FR3, FR4, FR6)
+- [ ] 4.4 Spec + impl: local-sanity rules — `model` present and non-blank for every executor type; `external` timing (positive `interval`/`timeout`, `interval ≤ timeout`); `judge` `votes ≥ 1` and odd (FR11); resolved attempt limit ≥ 1 (FR7). No target-liveness checks (NG7)
 - [ ] 4.5 Spec + impl: a `validate(model)` aggregator that runs all pure rules and returns the full `ConfigError` list (FR8)
 
 ## 5. Adapter — parsing and structural validation
 
 - [ ] 5.1 Spec + impl: annotated DTO records for `config.yaml`, `pipeline.yaml`, `stage.yaml` and the verify-check/input variants, deserialized from YAML via Jackson (D2)
 - [ ] 5.2 Spec + impl: structural error capture during deserialization — missing required fields, type mismatches, unknown enum/`type` values → located `ConfigError` (FR5)
-- [ ] 5.3 Spec + impl: DTO → domain mapper, including default+override resolution of autonomy limits (FR7, D2); map executor `settings` from the parsed YAML tree into plain JDK types (`Map<String, Object>`) so the domain stays Jackson-free (FR11, D5a)
+- [ ] 5.3 Spec + impl: DTO → domain mapper, including default+override resolution of the attempt limit (FR7, D2); map executor `settings` from the parsed YAML tree into plain JDK types (`Map<String, Object>`) so the domain stays Jackson-free (FR11, D5a)
 
 ## 6. Adapter — I/O checks and the loader entry point
 

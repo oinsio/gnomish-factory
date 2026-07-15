@@ -31,6 +31,8 @@ Include only the NFR subsections that apply — but consider each of them explic
 
 ## Conditional sections
 
+- **Capabilities** — New / Modified capability list, when the OpenSpec schema generates it (duplicates What Changes at the capability granularity)
+- **Impact** — affected scope: modules/packages touched, new dependencies, effect on existing code; boundaries only, no design reasoning
 - **Behavior** — reference to behavior specs (Gherkin features) with `@<change-name>` tags, once the test stack exists
 - **Affected stages** — which pipeline stage contracts this change adds or modifies
 
@@ -39,5 +41,5 @@ Include only the NFR subsections that apply — but consider each of them explic
 - Every requirement MUST have an ID (FR1, NFR-R1, UX1, etc.)
 - Success metrics must be concrete and measurable (not "feature works")
 - Non-Goals are as important as Goals — they prevent scope creep
-- No implementation details — library or schema choices belong in design.md
+- No implementation *choices* — picking a library or schema belongs in design.md. Referencing already-fixed decisions (the ADR 0001 tech stack, an existing ADR) is fine: that is context, not a choice
 - Operator Experience criteria describe subjective expectations that must be explicitly agreed upon
