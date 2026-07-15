@@ -1,0 +1,21 @@
+# OSV-Scanner configuration (FR11, NFR-S1 of add-project-skeleton).
+#
+# OSV-Scanner auto-loads this file for the lock state scanned at the repo root
+# (`gradle.lockfile`, `buildscript-gradle.lockfile`). It holds only reviewed
+# false positives with an expiry date — the FR11 gate stays failing for every
+# other advisory. Keep this list short and re-review each entry on its date.
+
+# CVE-2026-54515 — jackson-databind case-insensitive @JsonIgnoreProperties
+# deserialization bypass. Fixed in jackson-databind 2.21.5, which we pin (via
+# the jackson-bom platform override in build.gradle). This is a false positive:
+# the GitHub advisory / OSV entry for the 2.x line has an `introduced: 2.8.0`
+# range with NO `fixed` event, so OSV-Scanner reports every 2.x version —
+# including the already-patched 2.21.5 — as affected with "no fix". Evidence it
+# is patched: the advisory text states "Will be fixed in ... 2.21.5 ...", and
+# OSV's own enumerated affected-versions list stops at 2.21.4 (2.21.5 excluded).
+# Remove once the advisory records the `fixed: 2.21.5` boundary and OSV stops
+# flagging it; the expiry below forces that re-check even if we forget.
+[[IgnoredVulns]]
+id = "GHSA-5jmj-h7xm-6q6v"
+ignoreUntil = 2026-09-01
+reason = "False positive: fixed in pinned jackson-databind 2.21.5; the advisory's 2.x range lacks a `fixed` event so OSV over-reports the patched version. Re-review 2026-09-01."

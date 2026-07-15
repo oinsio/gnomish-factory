@@ -40,12 +40,12 @@ A task travels through a pipeline of stages. Stages are **declarative** and live
 
 ```
 .gnomish/
-  config.yaml          # autonomy limits (attempts, budgets) with defaults
-  pipeline.yaml        # stage order
+  config.yaml          # schemaVersion + default autonomy limit (attempt limit; budgets are a later change)
+  pipeline.yaml        # stage order — an explicit list of stage names
   stages/<name>/
-    stage.yaml         # manifest: inputs, outputs, executor, model, verify checks
-    instructions.md    # prompts, rules, best practices
-    acceptance-criteria/  # criteria for LLM-judge checks (when the stage uses them)
+    stage.yaml         # manifest: purpose, inputs, outputs, executor (type + model + settings), verify checks, advancement
+    instructions.md    # prompts, rules, best practices (referenced by the manifest)
+    acceptance.md      # acceptance criteria for an LLM-judge check, referenced by path per check (when the stage uses them)
 ```
 
 Every stage follows the IDEF0/ICOM model extended with a Quality Control loop (ISO 9001:2015 process approach) — and every element is machine-verifiable:

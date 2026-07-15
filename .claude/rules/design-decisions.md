@@ -18,7 +18,11 @@ paths:
 - The implementation is straightforward — no alternatives to consider
 - The decision is global and not tied to this change — use `docs/adr/` instead
 
-## Required sections
+## Format
+
+Two accepted formats — pick by the number of decisions.
+
+### Single decision
 
 ```markdown
 # Design: <Change name>
@@ -39,6 +43,28 @@ Negative:
 ## Alternatives Considered
 **<Alternative 1>**: why considered and why rejected
 ```
+
+### Multiple decisions
+
+When a change settles several related decisions, use numbered decisions instead of one giant Decision section:
+
+```markdown
+# Design: <Change name>
+
+## Context
+What drove these decisions. Reference FR/NFR from proposal.md.
+
+## Decisions
+**D1 — <short title>.** What was decided. *Rationale:* why.
+*Alternative rejected:* what and why not.
+
+**D2 — ...**
+
+## Risks / Trade-offs
+- [risk or negative consequence] → mitigation
+```
+
+Each Dn must still carry its rationale and at least one rejected alternative; the shared Risks / Trade-offs section covers the negative consequences. Other artifacts reference decisions as `D1`, `D2`, ...
 
 ## Rules
 

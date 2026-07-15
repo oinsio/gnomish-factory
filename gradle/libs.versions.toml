@@ -28,6 +28,21 @@ errorprone-plugin = "5.1.0"
 nullaway = "0.13.7"
 jspecify = "1.0.0"
 dependency-analysis = "3.16.1"
+# ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
+# design D7). 1.4.2 verified on Maven Central 2026-07-15; its shaded ASM
+# supports Java 25 bytecode (class-file version 69).
+archunit = "1.4.2"
+
+# --- Security overrides of Spring Boot 4.1.0 BOM-managed versions ---
+# No Spring Boot 4.1.x patch exists yet (Maven Central, 2026-07-15), so these
+# CVE fixes are pinned here and applied via a platform import + constraints in
+# build.gradle. Drop each once a Boot 4.1.x upgrade supersedes it.
+# jackson: GHSA-5jmj-h7xm-6q6v / CVE-2026-54515 (jackson-databind case-insensitive
+# @JsonIgnoreProperties deserialization bypass); 2.21.5 fixes the 2.19–2.21.4 line.
+jackson = "2.21.5"
+# logback: GHSA-jhq6-gfmj-v8fx (logback-core HardenedObjectInputStream Proxy
+# injection, CVSS 2.9); fixed in 1.5.35. classic is kept on the same version.
+logback = "1.5.35"
 
 [libraries]
 # Spring Boot BOM imported via platform() in build.gradle (design D3);
@@ -38,8 +53,10 @@ spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter" 
 slf4j-api = { module = "org.slf4j:slf4j-api" }
 # Logback backend classes (ListAppender, Logger) used by the logging-level
 # spec to capture events; runtime copy already comes via spring-boot-starter.
-# BOM-managed.
-logback-classic = { module = "ch.qos.logback:logback-classic" }
+# Version pinned above (security override of the Boot BOM); build.gradle also
+# constrains the transitive runtime copies of both artifacts to match.
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+logback-core = { module = "ch.qos.logback:logback-core", version.ref = "logback" }
 # @SpringBootTest and Boot test-context support for context-level specs; BOM-managed.
 spring-boot-test = { module = "org.springframework.boot:spring-boot-test" }
 # @ContextConfiguration and the TestContext framework (spock-spring's Spring side); BOM-managed.
@@ -55,6 +72,25 @@ spock-spring = { module = "org.spockframework:spock-spring", version.ref = "spoc
 errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
 nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+# Plain artifact, not archunit-junit5: the rules are asserted inside Spock
+# specs via ArchRule.check(...) (design D7), so the JUnit @AnalyzeClasses
+# runner and its extra engine wiring are unnecessary.
+archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
+# Jackson for the .gnomish/ YAML loader in the adapter layer ONLY (FR1 of
+# load-pipeline-config, design D1/D2 — the domain stays Jackson-free, guarded
+# by ArchUnit). Boot 4.1.0's jackson-2-bom manages the 2.x line; all four are
+# BOM-managed. jackson-annotations (@JsonTypeInfo/@JsonSubTypes on the sealed
+# DTO families) and jackson-core (JsonFactory, extended by YAMLFactory) are
+# compiled against directly, so the dependency-analysis gate requires them
+# declared directly alongside databind + dataformat-yaml.
+# jackson-bom pinned to the CVE fix (see [versions].jackson) and imported as a
+# platform in build.gradle so the whole Jackson family overrides the Boot BOM's
+# 2.21.4 consistently — the four artifacts below stay version-less (BOM-managed).
+jackson-bom = { module = "com.fasterxml.jackson:jackson-bom", version.ref = "jackson" }
+jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations" }
+jackson-core = { module = "com.fasterxml.jackson.core:jackson-core" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind" }
+jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

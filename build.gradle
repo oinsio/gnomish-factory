@@ -11,6 +11,11 @@
 buildscript {
     configurations.classpath {
         resolutionStrategy.activateDependencyLocking()
+        // Security override: a Gradle plugin drags in commons-lang3 3.16.0
+        // transitively (GHSA-j288-q9x7-2f5v). Force the CVE fix. Kept inline
+        // because the version catalog is not visible to the buildscript
+        // classpath. Drop once the offending plugin ships a fixed transitive.
+        resolutionStrategy.force 'org.apache.commons:commons-lang3:3.18.0'
     }
 }
 
@@ -53,6 +58,22 @@ dependencyLocking {
 dependencies {
     // Spring-family versions are managed by the Boot BOM (design D3).
     implementation platform(libs.spring.boot.dependencies)
+    // Security override: import the Jackson BOM at the CVE-fixed version
+    // (GHSA-5jmj-h7xm-6q6v, see libs.versions.toml). Boot 4.1.0 imports
+    // jackson-bom 2.21.4 transitively; declaring 2.21.5 here wins by Gradle's
+    // highest-version conflict resolution and bumps the whole family at once.
+    // Drop once a Boot 4.1.x upgrade manages 2.21.5+.
+    implementation platform(libs.jackson.bom)
+
+    // Security override: force the transitive logback copies (pulled in by
+    // spring-boot-starter's logging, BOM-pinned at 1.5.34) to the CVE fix
+    // (GHSA-jhq6-gfmj-v8fx). Both artifacts must move together — logback
+    // requires classic and core on the same version.
+    constraints {
+        implementation libs.logback.core
+        implementation libs.logback.classic
+    }
+
     implementation libs.spring.boot.starter
     // Production code compiles against the SLF4J API directly (FR4, design
     // D10); declared honestly per the dependency-analysis gate rather than
@@ -91,6 +112,23 @@ dependencies {
     testImplementation libs.logback.classic
     // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath.
     testRuntimeOnly libs.junit.platform.launcher
+    // ArchUnit for the domain-purity gate (FR10 of load-pipeline-config,
+    // design D7): DomainPuritySpec asserts via ArchRule.check(...) that
+    // `domain` never depends on `adapter`, java.nio.file, or Jackson.
+    testImplementation libs.archunit
+    // Jackson for the .gnomish/ YAML loader in the adapter layer (FR1 of
+    // load-pipeline-config, design D1/D2). jackson-databind provides the
+    // ObjectMapper + annotations the adapter DTOs use; jackson-dataformat-yaml
+    // supplies the YAMLFactory the mapper reads with. The domain stays
+    // Jackson-free (guarded by ArchUnit). Versions are BOM-managed: Boot 4.1.0
+    // pins Jackson 2.x (com.fasterxml.jackson, 2.x line) via its jackson-2-bom.
+    // annotations (@JsonTypeInfo/@JsonSubTypes on the DTOs) and core
+    // (JsonFactory, extended by YAMLFactory) are compiled against directly, so
+    // the dependency-analysis gate requires them declared, not left transitive.
+    implementation libs.jackson.annotations
+    implementation libs.jackson.core
+    implementation libs.jackson.databind
+    implementation libs.jackson.dataformat.yaml
 }
 
 // Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,

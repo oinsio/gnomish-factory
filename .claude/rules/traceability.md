@@ -20,14 +20,15 @@ Uniqueness is per change: `add-tracker-port.FR1` and `add-pipeline.FR1` are diff
 
 ## Where to place traceability links
 
-| Artifact                        | Required reference                          |
-|---------------------------------|---------------------------------------------|
-| Domain spec invariant/use case  | `# implements FR-X of <change-name>`        |
-| Gherkin scenario                | tags `@<change-name> @FR-X` above scenario  |
-| Port interface (doc comment)    | `Implements FR-X of <change-name>`          |
-| Code unit (doc comment)         | `Implements FR-X of <change-name>`          |
-| Test (description or comment)   | `FR-X: <what is verified>`                  |
-| Local ADR (`design.md`)         | "Context: driven by FR-X from proposal"     |
+| Artifact                       | Required reference                          |
+|--------------------------------|---------------------------------------------|
+| Spec requirement (markdown)    | `<!-- implements FR-X of <change-name> -->` |
+| Domain spec invariant/use case | `# implements FR-X of <change-name>`        |
+| Gherkin scenario               | tags `@<change-name> @FR-X` above scenario  |
+| Port interface (doc comment)   | `Implements FR-X of <change-name>`          |
+| Code unit (doc comment)        | `Implements FR-X of <change-name>`          |
+| Test (description or comment)  | `FR-X: <what is verified>`                  |
+| Local ADR (`design.md`)        | "Context: driven by FR-X from proposal"     |
 
 ## Verification rule
 

@@ -1,0 +1,20 @@
+purpose: plan the work from the task description
+inputs:
+  - kind: source
+outputs:
+  - id: plan-doc
+executor:
+  type: api
+  model: plan-model
+  settings:
+    temperature: 0
+instructions: stages/plan/instructions.md
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      paths:
+        - plan.md
+advancement: auto
+autonomy:
+  attemptLimit: 5

@@ -1,0 +1,14 @@
+purpose: review the implemented diff
+inputs:
+  - kind: internal
+    producerOutputId: impl-diff
+outputs:
+  - id: review-report
+executor:
+  type: api
+  model: review-model
+instructions: stages/review/instructions.md
+verify:
+  - type: command
+    command: echo reviewed
+advancement: auto
