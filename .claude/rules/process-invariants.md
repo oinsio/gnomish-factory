@@ -41,6 +41,8 @@ One change = one initiative, completable in 1–4 weeks. If a change grows beyon
 
 The AI agent NEVER creates git commits in this project — no `git commit`, `git commit --amend`, or any other history-writing command. Instead, after completing a unit of work, the agent recommends a commit message based on the diff since the last commit (`git status` / `git diff HEAD`); the human reviews and commits. The recommendation should summarize what changed and reference the OpenSpec change / requirement IDs where applicable.
 
+Keep the recommended message short: a Conventional Commits subject line (≤ ~72 chars) plus, only when the "why" is not obvious from the subject, a brief body of 1–3 lines. Don't restate the diff, re-explain the rationale at length, or pad with metrics — the diff and the change artifacts already carry that. Reference the OpenSpec change / requirement IDs on a trailer line.
+
 ## Documentation language
 
 All project documentation, specs, rules, code comments, and commit messages are written in English.
