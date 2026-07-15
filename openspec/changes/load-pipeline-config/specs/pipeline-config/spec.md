@@ -161,7 +161,12 @@ The loader SHALL NOT execute any command, model call, or external check defined 
 - **THEN** loading parses and validates them as data without running any command, network request, or model call
 
 #### Scenario: Path escaping the config root is rejected
-- **WHEN** a file reference resolves outside the `.gnomish/` directory (e.g. via `../`)
+- **WHEN** a file reference resolves outside the `.gnomish/` directory (e.g. via `../` or an absolute path)
+- **THEN** validation reports a located error rather than reading the outside file
+- **AND** that reference is reported as escaping the root only, never also as "does not exist"
+
+#### Scenario: Symlink escaping the config root is rejected
+- **WHEN** a referenced file is a symlink inside `.gnomish/` whose real target resolves outside the root
 - **THEN** validation reports a located error rather than reading the outside file
 
 ### Requirement: Domain purity guarded by ArchUnit

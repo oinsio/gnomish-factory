@@ -1,0 +1,39 @@
+purpose: implement the plan and produce a diff
+inputs:
+  - kind: internal
+    producerOutputId: plan-doc
+  - kind: source
+outputs:
+  - id: impl-diff
+executor:
+  type: agent-cli
+  model: implement-model
+  settings:
+    temperature: 0
+    maxTurns: 40
+    interactive: false
+    allowedTools:
+      - read
+      - edit
+    limits:
+      wallClockSeconds: 900
+instructions: stages/implement/instructions.md
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      paths:
+        - src
+  - type: command
+    command: ./gradlew test
+  - type: external
+    checkId: ci/build
+    interval: 30s
+    timeout: 5m
+  - type: judge
+    criteriaFile: stages/implement/acceptance.md
+    model: judge-model
+    settings:
+      temperature: 0
+    votes: 3
+advancement: manual

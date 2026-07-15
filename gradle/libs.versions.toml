@@ -28,6 +28,10 @@ errorprone-plugin = "5.1.0"
 nullaway = "0.13.7"
 jspecify = "1.0.0"
 dependency-analysis = "3.16.1"
+# ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
+# design D7). 1.4.2 verified on Maven Central 2026-07-15; its shaded ASM
+# supports Java 25 bytecode (class-file version 69).
+archunit = "1.4.2"
 
 [libraries]
 # Spring Boot BOM imported via platform() in build.gradle (design D3);
@@ -55,6 +59,21 @@ spock-spring = { module = "org.spockframework:spock-spring", version.ref = "spoc
 errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
 nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+# Plain artifact, not archunit-junit5: the rules are asserted inside Spock
+# specs via ArchRule.check(...) (design D7), so the JUnit @AnalyzeClasses
+# runner and its extra engine wiring are unnecessary.
+archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
+# Jackson for the .gnomish/ YAML loader in the adapter layer ONLY (FR1 of
+# load-pipeline-config, design D1/D2 — the domain stays Jackson-free, guarded
+# by ArchUnit). Boot 4.1.0's jackson-2-bom manages the 2.x line; all four are
+# BOM-managed. jackson-annotations (@JsonTypeInfo/@JsonSubTypes on the sealed
+# DTO families) and jackson-core (JsonFactory, extended by YAMLFactory) are
+# compiled against directly, so the dependency-analysis gate requires them
+# declared directly alongside databind + dataformat-yaml.
+jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations" }
+jackson-core = { module = "com.fasterxml.jackson.core:jackson-core" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind" }
+jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

@@ -91,6 +91,23 @@ dependencies {
     testImplementation libs.logback.classic
     // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath.
     testRuntimeOnly libs.junit.platform.launcher
+    // ArchUnit for the domain-purity gate (FR10 of load-pipeline-config,
+    // design D7): DomainPuritySpec asserts via ArchRule.check(...) that
+    // `domain` never depends on `adapter`, java.nio.file, or Jackson.
+    testImplementation libs.archunit
+    // Jackson for the .gnomish/ YAML loader in the adapter layer (FR1 of
+    // load-pipeline-config, design D1/D2). jackson-databind provides the
+    // ObjectMapper + annotations the adapter DTOs use; jackson-dataformat-yaml
+    // supplies the YAMLFactory the mapper reads with. The domain stays
+    // Jackson-free (guarded by ArchUnit). Versions are BOM-managed: Boot 4.1.0
+    // pins Jackson 2.x (com.fasterxml.jackson, 2.x line) via its jackson-2-bom.
+    // annotations (@JsonTypeInfo/@JsonSubTypes on the DTOs) and core
+    // (JsonFactory, extended by YAMLFactory) are compiled against directly, so
+    // the dependency-analysis gate requires them declared, not left transitive.
+    implementation libs.jackson.annotations
+    implementation libs.jackson.core
+    implementation libs.jackson.databind
+    implementation libs.jackson.dataformat.yaml
 }
 
 // Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,
