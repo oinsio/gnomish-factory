@@ -1,5 +1,7 @@
 # Gnomish Factory
 
+![Gnomish Factory](docs/assets/gnomish-factory.png)
+
 An external orchestrator where AI agents — the gnomes — pick tasks from a task tracker and drive them through a development pipeline autonomously. Humans are exception handlers, not participants: they step in only when a task is blocked or the gnomes cannot choose between alternatives.
 
 > **Status: walking skeleton.** Requirements and architecture are shaped through [OpenSpec](openspec); the build, quality gates, and a minimal bootable application exist (see [Building](#building)) — no factory domain logic yet.
