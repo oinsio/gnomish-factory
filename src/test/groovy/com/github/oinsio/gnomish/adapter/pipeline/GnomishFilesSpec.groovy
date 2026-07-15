@@ -56,6 +56,24 @@ class GnomishFilesSpec extends Specification {
         ]
     }
 
+    def "sortByName orders stage directories by file name regardless of input order"() {
+        given: 'directory paths supplied in a deliberately non-alphabetical order'
+        // A filesystem's Files.list() enumeration order is unspecified and
+        // platform-dependent, so the sort is exercised directly with a controlled
+        // unsorted input — the only way to pin the NFR-R1 ordering contract.
+        def input = [
+            Path.of('stages/review'),
+            Path.of('stages/implement'),
+            Path.of('stages/plan')
+        ]
+
+        when: 'the directories are sorted by name'
+        def sorted = GnomishFiles.sortByName(input)
+
+        then: 'they come back in ascending file-name order'
+        sorted*.fileName*.toString() == ['implement', 'plan', 'review']
+    }
+
     def "a stages directory whose manifest is absent yields a null-text raw stage, not an exception"() {
         given: 'the required files plus a stage directory without a stage.yaml'
         write('config.yaml', 'schemaVersion: "1"\n')

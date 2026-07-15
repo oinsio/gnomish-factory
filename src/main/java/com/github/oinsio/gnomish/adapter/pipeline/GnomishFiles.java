@@ -122,10 +122,21 @@ public final class GnomishFiles {
     /** Deterministic (NFR-R1): sub-directories of {@code stages/} sorted by name. */
     private static List<Path> sortedStageDirs(Path stagesDir) throws IOException {
         try (Stream<Path> entries = Files.list(stagesDir)) {
-            return entries.filter(Files::isDirectory)
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                    .toList();
+            return sortByName(entries.filter(Files::isDirectory).toList());
         }
+    }
+
+    /**
+     * Orders stage directories by their file name (NFR-R1). Split from the
+     * {@link Files#list} enumeration and left package-private so the ordering
+     * contract is verifiable with a deliberately-unsorted input: a filesystem's
+     * own enumeration order is unspecified and platform-dependent, so no
+     * filesystem-backed test can reliably exercise the sort itself.
+     */
+    static List<Path> sortByName(List<Path> dirs) {
+        return dirs.stream()
+                .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                .toList();
     }
 
     /** Reads a stage manifest, or returns {@code null} when the directory has none (task 6.2). */
