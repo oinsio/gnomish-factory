@@ -26,7 +26,8 @@ import spock.lang.TempDir
  *
  * <p>No execution (NFR-S1) and no writes (NFR-R1): the loader only parses and validates
  * — it runs no command, model, or external check, and never touches the tree on disk.
- * Implements FR1, FR8 (+ NFR-S1, NFR-R1) of load-pipeline-config.
+ * With nothing executed, loading makes no model or network call (NFR-C1: zero token cost).
+ * Implements FR1, FR8 (+ NFR-S1, NFR-R1, NFR-C1) of load-pipeline-config.
  */
 class PipelineLoaderSpec extends Specification {
 
@@ -312,7 +313,9 @@ advancement: auto
         snapshot(root) == before
     }
 
-    def "loading executes no configured command (NFR-S1): a destructive command leaves no trace"() {
+    def "loading executes no configured command (NFR-S1, NFR-C1): a destructive command leaves no trace"() {
+        // NFR-C1: with no command, model, or external check ever run, loading
+        // makes no model or network call — zero token cost.
         given: 'a stage whose command would create a sentinel file if it ever ran'
         def sentinel = root.resolve('sentinel.txt')
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 1\n')
