@@ -22,7 +22,7 @@ _None. `pipeline-config` is consumed read-only; its domain-purity requirement al
 
 ## Goals
 
-- G1: execute a `PipelineDefinition` end-to-end in-memory with fakes — every stage-contract section (`.claude/rules/stage-description.md` §1–8) has engine semantics
+- G1: execute a `PipelineDefinition` end-to-end in-memory with fakes — every stage-contract section (`.claude/rules/stage-description.md` §1–8) has engine semantics, with deliberately deferred slices recorded as explicit non-goals
 - G2: port interfaces are discovered from the consumer side and locked by contract-style specs that later real adapters must pass
 - G3: every attempt produces analytics-grade telemetry (time, tools, tokens) without a separate persistence channel
 
@@ -35,6 +35,7 @@ _None. `pipeline-config` is consumed read-only; its domain-purity requirement al
 - NG5: cross-stage backtracking — a review that demands rework is a verify check of the producing stage, not a stage that moves the task backwards
 - NG6: pipeline-config schema extensions (per-check `external` timeout class flag, explicit check ids, artifact paths) — deferred until a consumer exists
 - NG7: parallel judge votes, engine-side retries (Resilience4j lives in adapters), sandboxing of `command` checks, inbound HTTP/status endpoint
+- NG8: active submission of `external` checks — the poll-only client relies on the stage contract's "or rely on the branch push trigger" path (the task-branch push starts CI); an explicit submit hook is deferred until an external check exists that cannot be push-triggered
 
 ## Users & Scenarios
 
@@ -48,16 +49,16 @@ _None. `pipeline-config` is consumed read-only; its domain-purity requirement al
 ### Functional
 - FR1: the engine SHALL run one task from its recorded `TaskState` to a terminal `TaskOutcome`, driven only by `PipelineDefinition`, `TaskContext`, an opaque workspace handle, and the seven ports; it SHALL be a pure orchestrator with no tracker, filesystem, or git knowledge
 - FR2: verify checks SHALL run strictly in manifest order; the first non-`Pass` verdict stops the chain
-- FR3: all four check types SHALL be orchestrated: `builtin` and `command` dispatched to their runners; `external` polled by the engine (interval/timeout from the manifest, injected sleeper; timeout = quality failure); `judge` resolved by majority over `votes` sequential single-vote calls — any `CannotVerify` vote fails the whole check as infrastructure
+- FR3: all four check types SHALL be orchestrated: `builtin` and `command` dispatched to their runners; `external` polled by the engine (interval/timeout from the manifest, injected sleeper; timeout = quality failure); `judge` resolved by majority over sequentially cast single-vote calls, stopping early once the majority is mathematically decided — any `CannotVerify` among cast votes fails the whole check as infrastructure
 - FR4: verdicts SHALL classify as `Pass` | `Fail(findings, possibly empty)` | `CannotVerify(reason, details)`; a quality failure increments the attempt counter and feeds the failed check results of ALL prior attempts of the stage into the next executor request; `CannotVerify` escalates without burning an attempt; adapter exceptions are caught and treated as `CannotVerify` with the stack trace preserved
 - FR5: when the resolved attempt limit is exhausted (including `attemptsUsed >= limit` on entry), the engine SHALL escalate with the full recorded attempt history of the stage
 - FR6: an executor SHALL be able to return `DecisionNeeded(question, options)` instead of completing; the engine escalates immediately without burning an attempt
 - FR7: human decisions SHALL be carried in `TaskContext.decisions` (chronological, free text with optional stage/author/time) and passed through to executor and judge requests unmodified; the engine never interprets them — resume adjustments (attempt reset, position change) are the caller's state manipulation
-- FR8: after verification passes, advancement SHALL follow the stage's mode: `auto` proceeds to the next stage; `manual` returns `Paused(stage)`
-- FR9: the engine SHALL resume from any valid `TaskState` at attempt-boundary granularity; a position naming a stage absent from the pipeline SHALL escalate as `PipelineMismatch` before any port call
-- FR10: `TaskOutcome` SHALL be `Completed | Paused | Escalated(report) | Aborted(failedAt, cause)`, each carrying the final `TaskState`; escalation reports SHALL be data-only values of five kinds — `AttemptsExhausted`, `DecisionNeeded`, `CannotVerify`, `PipelineMismatch`, `CannotExecute` (executor infrastructure failure: no attempt burned, no round recorded)
+- FR8: after verification passes, advancement SHALL follow the stage's mode: `auto` proceeds to the next stage; `manual` returns `Paused(passedStage)` with the position advanced past the paused stage — when the paused stage is the last one, the position is the explicit pipeline end, from which a subsequent run SHALL return `Completed` immediately
+- FR9: the engine SHALL resume from any valid `TaskState` at attempt-boundary granularity; a position naming a stage absent from the pipeline SHALL escalate as `PipelineMismatch` before any execution or persistence port call (observability events are still emitted)
+- FR10: `TaskOutcome` SHALL be `Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause)`, each carrying the final `TaskState`; escalation reports SHALL be data-only values of five kinds — `AttemptsExhausted`, `DecisionNeeded`, `CannotVerify`, `PipelineMismatch`, `CannotExecute` (executor infrastructure failure: no attempt burned, no round recorded); engine-internal errors SHALL propagate as exceptions, never as outcomes
 - FR11: the engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` after every executed round — before the `AttemptFinished` event and before any next attempt starts; a persistence failure SHALL abort the run with `Aborted`
-- FR12: the engine SHALL emit seven sealed events (`RunStarted`, `AttemptStarted`, `ExecutionFinished`, `CheckStarted`, `CheckFinished`, `AttemptFinished` with new state and trace, `TaskFinished`), each self-contained with the `(taskId, stage, attempt)` key, delivered synchronously; listener exceptions are logged and swallowed
+- FR12: the engine SHALL emit seven sealed events (`RunStarted`, `AttemptStarted`, `ExecutionFinished`, `CheckStarted`, `CheckFinished`, `AttemptFinished` with new state and trace, `TaskFinished`), each self-contained with the `(taskId, stage, attempt)` key, delivered synchronously; every run — including pre-flight escalations — emits at least `RunStarted` and `TaskFinished`; listener exceptions are logged and swallowed
 - FR13: every executed round SHALL be recorded in `TaskState.attempts` with its metrics — wall time, per-tool aggregate (name, call count, total duration), input/output tokens, all optional — including rounds ending in `CannotVerify`, which are recorded but not counted against the limit; the raw chronological `ToolTrace` SHALL be kept out of `TaskState` and correlated by the attempt key
 - FR14: the attempt history in `TaskState` SHALL cover only the current stage; it resets on stage advancement (git history of committed states is the long-term archive)
 

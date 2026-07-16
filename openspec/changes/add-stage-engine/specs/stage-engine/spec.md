@@ -3,8 +3,8 @@
 ## ADDED Requirements
 
 ### Requirement: Pure orchestration run
-The engine SHALL run one task from its recorded state to a terminal outcome via `run(definition, context, state, workspace, ports)`, touching no tracker, filesystem, or git — all effects happen behind the seven ports.
-<!-- implements FR1 of add-stage-engine -->
+The engine SHALL run one task from its recorded state to a terminal outcome via `run(definition, context, state, workspace, ports)`, touching no tracker, filesystem, or git — the engine executes nothing itself; all effects happen behind the seven ports.
+<!-- implements FR1, NFR-S1 of add-stage-engine -->
 
 #### Scenario: Reference run with fakes only
 - **WHEN** a pipeline exercising all four check types runs with fake ports, including a quality-failure retry, a decision escalation with a decision-carrying re-run, and a manual pause
@@ -19,7 +19,7 @@ Verify checks SHALL run strictly in manifest order; the first non-Pass verdict s
 - **THEN** checks three and four are never invoked and the attempt is a quality failure
 
 ### Requirement: External check poll loop
-The engine SHALL poll an `external` check via single-poll port calls at the manifest interval until a verdict or the manifest timeout, using an injected sleeper/clock; timeout SHALL be a quality failure.
+The engine SHALL poll an `external` check via single-poll port calls returning `PollStatus` (Pass | Fail with findings | Running | CannotVerify with reason and details) at the manifest interval until a verdict or the manifest timeout, using an injected sleeper/clock; timeout SHALL be a quality failure. The engine SHALL NOT submit external checks: they are assumed to be triggered by the task-branch push (submission is deferred — proposal NG8).
 <!-- implements FR3, NFR-R3 of add-stage-engine -->
 
 #### Scenario: Verdict within timeout
@@ -31,12 +31,16 @@ The engine SHALL poll an `external` check via single-poll port calls at the mani
 - **THEN** the check fails as a quality failure with a timeout finding
 
 ### Requirement: Judge majority voting
-The engine SHALL collect the manifest `votes` count of sequential single-vote calls and resolve the check by majority; findings of failing votes are aggregated; any CannotVerify vote SHALL fail the whole check as infrastructure.
+The engine SHALL cast up to the manifest `votes` count of sequential single-vote calls, stopping as soon as the majority is mathematically decided, and resolve the check by that majority; findings of failing cast votes are aggregated; any CannotVerify among cast votes SHALL fail the whole check as infrastructure.
 <!-- implements FR3 of add-stage-engine -->
 
 #### Scenario: Majority verdict with aggregated findings
 - **WHEN** votes return Fail, Pass, Fail for a 3-vote judge check
 - **THEN** the check fails with the findings of both failing votes
+
+#### Scenario: Early majority stops voting
+- **WHEN** the first two votes of a 3-vote judge check both return Fail
+- **THEN** the third vote is never requested and the check fails
 
 #### Scenario: One vote unobtainable
 - **WHEN** any vote returns CannotVerify
@@ -91,15 +95,19 @@ An executor SHALL be able to return DecisionNeeded (question, free-text options)
 - **THEN** the executor request contains all decisions and execution proceeds from the recorded stage
 
 ### Requirement: Advancement modes
-After verification passes, `auto` SHALL proceed to the next stage (Completed after the last); `manual` SHALL return Paused with the position already advanced past the paused stage.
+After verification passes, `auto` SHALL proceed to the next stage (Completed after the last); `manual` SHALL return Paused with the position already advanced past the paused stage. A manual pause on the final stage SHALL park the position at the explicit pipeline end; a run starting there SHALL return Completed immediately, emitting RunStarted and TaskFinished and invoking no execution or persistence port.
 <!-- implements FR8 of add-stage-engine -->
 
 #### Scenario: Manual checkpoint
 - **WHEN** a stage with `manual` advancement passes verification
 - **THEN** the outcome is Paused and a subsequent run with the returned state starts at the next stage
 
+#### Scenario: Manual pause on the last stage
+- **WHEN** the final stage has `manual` advancement and passes verification
+- **THEN** the outcome is Paused with the position at pipeline end, and a subsequent run from that state returns Completed without invoking execution or persistence ports
+
 ### Requirement: Resume from any valid state
-The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, or post-pause. A position naming a stage absent from the pipeline SHALL escalate as PipelineMismatch before any port call.
+The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, or post-pause. A position naming a stage absent from the pipeline SHALL escalate as PipelineMismatch before any execution or persistence port call, with observability events still emitted.
 <!-- implements FR9 of add-stage-engine -->
 
 #### Scenario: Mid-retry resume
@@ -108,19 +116,23 @@ The engine SHALL resume at attempt-boundary granularity from any valid recorded 
 
 #### Scenario: Stale position
 - **WHEN** the state references a stage no longer in the pipeline
-- **THEN** the outcome is Escalated(PipelineMismatch) and no port was invoked
+- **THEN** the outcome is Escalated(PipelineMismatch), no execution or persistence port was invoked, and RunStarted and TaskFinished were emitted
 
 ### Requirement: Outcome and report model
-`TaskOutcome` SHALL be Completed | Paused | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (executor infrastructure failure — no attempt burned, no round recorded). Engine-internal errors SHALL propagate as exceptions, never as outcomes.
-<!-- implements FR10 of add-stage-engine -->
+`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (executor infrastructure failure — no attempt burned, no round recorded). Engine-internal errors SHALL propagate as exceptions, never as outcomes. An escalation SHALL be renderable from the outcome and its final state alone.
+<!-- implements FR10, UX1 of add-stage-engine -->
 
 #### Scenario: Executor infrastructure failure
 - **WHEN** the executor port throws after its own retries
 - **THEN** the outcome is Escalated(CannotExecute), `attemptsUsed` is unchanged, and no round is appended
 
+#### Scenario: Report is self-describing
+- **WHEN** an Escalated(AttemptsExhausted) outcome is rendered using only the outcome value and its final state
+- **THEN** the stage, the limit, and every recorded round's check results and findings are available without any other source
+
 ### Requirement: Strict attempt persistence
-The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchronously after every executed round — before the AttemptFinished event and before any next attempt. A persistence failure SHALL end the run as Aborted with the in-memory final state, the failed round key, and the cause.
-<!-- implements FR11 of add-stage-engine -->
+The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchronously after every executed round — including rounds ending in CannotVerify or DecisionNeeded — before the AttemptFinished event and before any next attempt. A persistence failure SHALL end the run as Aborted with the in-memory final state, the failed round key, and the cause. An unpersisted round SHALL be safe to lose: a new run from the last persisted state re-executes it.
+<!-- implements FR11, NFR-R4 of add-stage-engine -->
 
 #### Scenario: Ordering invariant
 - **WHEN** a round completes
@@ -130,9 +142,13 @@ The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchro
 - **WHEN** persist throws on round N
 - **THEN** the outcome is Aborted with failedAt = round N and no further attempt starts
 
+#### Scenario: Unpersisted round is safe to lose
+- **WHEN** a run aborted on persisting round N is followed by a new run from the last persisted state
+- **THEN** round N is re-executed and the task proceeds as if the aborted round never happened
+
 ### Requirement: Engine events
-The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFinished, CheckStarted, CheckFinished, AttemptFinished (new state + trace), TaskFinished — each self-contained with the (taskId, stage, attempt) key, delivered synchronously; listener exceptions SHALL be logged and swallowed. The stream SHALL suffice to reconstruct a status view (position, attempt, per-check results, aggregate metrics).
-<!-- implements FR12, NFR-O2 of add-stage-engine -->
+The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFinished, CheckStarted, CheckFinished, AttemptFinished (new state + trace), TaskFinished — each self-contained with the (taskId, stage, attempt) key shared with logs and telemetry, delivered synchronously; every run, including pre-flight escalations, emits at least RunStarted and TaskFinished; listener exceptions SHALL be logged and swallowed. The stream SHALL suffice to reconstruct a status view (position, attempt, per-check results, aggregate metrics).
+<!-- implements FR12, NFR-O2, UX2 of add-stage-engine -->
 
 #### Scenario: Status reconstructed from events alone
 - **WHEN** a recording listener observes a run with a retry
@@ -163,7 +179,7 @@ The engine SHALL hold no static or shared mutable state — concurrent runs with
 - **THEN** each produces the same result as when run alone, with no cross-talk in events or state
 
 ### Requirement: Exceptional-path logging
-Adapter exceptions, listener failures, and aborts SHALL log at ERROR/WARN via SLF4J at the point of capture, with stack traces also preserved in CannotVerify details or the Aborted cause. The ArchUnit domain-purity rule SHALL cover the engine packages, explicitly permitting `org.slf4j`.
+Adapter exceptions, listener failures, and aborts SHALL log at ERROR/WARN via SLF4J at the point of capture, with stack traces also preserved in CannotVerify details or the Aborted cause. (Domain purity of the engine packages is already governed by the pipeline-config capability, whose ArchUnit rule covers all `domain` packages and does not forbid `org.slf4j`.)
 <!-- implements NFR-O1 of add-stage-engine -->
 
 #### Scenario: Stack trace reaches the report
