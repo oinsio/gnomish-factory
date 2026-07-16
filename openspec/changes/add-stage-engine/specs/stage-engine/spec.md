@@ -31,7 +31,7 @@ The engine SHALL poll an `external` check via single-poll port calls returning `
 - **THEN** the check fails as a quality failure with a timeout finding
 
 ### Requirement: Judge majority voting
-The engine SHALL cast up to the manifest `votes` count of sequential single-vote calls, stopping as soon as the majority is mathematically decided, and resolve the check by that majority; findings of failing cast votes are aggregated; any CannotVerify among cast votes SHALL fail the whole check as infrastructure.
+The engine SHALL cast up to the manifest `votes` count of sequential single-vote calls, stopping as soon as the majority is mathematically decided, and resolve the check by that majority; findings of failing cast votes are aggregated; any CannotVerify among cast votes SHALL fail the whole check as infrastructure. Manifest validation guarantees an odd `votes` count, so a decided majority is always reached; should all cast votes complete without one (an even count that ties), the check SHALL resolve to Pass — the defensive `pass >= fail` tie-break — never leaving the verdict undefined.
 <!-- implements FR3 of add-stage-engine -->
 
 #### Scenario: Majority verdict with aggregated findings
@@ -46,8 +46,12 @@ The engine SHALL cast up to the manifest `votes` count of sequential single-vote
 - **WHEN** any vote returns CannotVerify
 - **THEN** the whole check is CannotVerify regardless of other votes
 
+#### Scenario: Even-count tie resolves to Pass
+- **WHEN** a 2-vote judge check returns Pass then Fail — a tie in which neither verdict reaches the majority
+- **THEN** the check resolves to Pass via the defensive `pass >= fail` tie-break rather than leaving the verdict undefined
+
 ### Requirement: Failure classification
-Verdicts SHALL be Pass, Fail (findings, possibly empty), or CannotVerify (reason, details). Fail increments the attempt counter and feeds the failed check results of all prior attempts of the stage into the next executor request; CannotVerify escalates without burning an attempt. Adapter exceptions SHALL be caught and treated as CannotVerify with the stack trace preserved. The following classification SHALL hold row by row:
+Verdicts SHALL be Pass, Fail (findings, possibly empty), or CannotVerify (reason, details). Fail increments the attempt counter and feeds the non-passing check results (every non-Pass result, including CannotVerify) of all prior attempts of the stage into the next executor request; CannotVerify escalates without burning an attempt. Adapter exceptions SHALL be caught and treated as CannotVerify with the stack trace preserved. The following classification SHALL hold row by row:
 
 | Situation                                   | Class                      |
 |---------------------------------------------|----------------------------|
@@ -68,7 +72,7 @@ Verdicts SHALL be Pass, Fail (findings, possibly empty), or CannotVerify (reason
 
 #### Scenario: Feedback carries the whole stage history
 - **WHEN** attempt 3 starts after two quality failures
-- **THEN** the executor request contains the failed check results of attempts 1 and 2
+- **THEN** the executor request contains the non-passing check results of attempts 1 and 2
 
 ### Requirement: Attempt limit and exhaustion
 When the resolved attempt limit is exhausted — including `attemptsUsed >= limit` already on entry — the engine SHALL escalate with `AttemptsExhausted` carrying the full recorded attempt history of the stage.
@@ -159,7 +163,7 @@ The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFin
 - **THEN** the run completes normally and each failure is logged
 
 ### Requirement: Two-level attempt telemetry
-Every executed round SHALL be recorded in `TaskState.attempts` with optional metrics — wall time, per-tool aggregates (name, call count, total duration), input/output tokens (judge tokens per vote) — including rounds ending in CannotVerify, which are recorded but not counted. The raw chronological ToolTrace SHALL stay out of TaskState, correlated by the (taskId, stage, attempt) key. The history SHALL cover only the current stage, resetting on advancement.
+Every executed round SHALL be recorded in `TaskState.attempts` with an explicit result classification (Passed, QualityFailure, CannotVerify, DecisionNeeded) and optional metrics — wall time, per-tool aggregates (name, call count, total duration), input/output tokens (judge tokens per vote) — including rounds ending in CannotVerify, which are recorded but not counted. `TaskState` SHALL carry cumulative usage totals for the whole task, updated on every recorded round and preserved across stage advancement and resume. The raw chronological ToolTrace SHALL stay out of TaskState, correlated by the (taskId, stage, attempt) key. The history SHALL cover only the current stage, resetting on advancement.
 <!-- implements FR13, FR14, NFR-C1 of add-stage-engine -->
 
 #### Scenario: Unburned round is still recorded
@@ -169,6 +173,14 @@ Every executed round SHALL be recorded in `TaskState.attempts` with optional met
 #### Scenario: History resets on advancement
 - **WHEN** a stage passes and the pipeline advances
 - **THEN** the new state's attempt history is empty and the previous rounds were persisted
+
+#### Scenario: Round result is explicit
+- **WHEN** a round ends in DecisionNeeded before any check runs
+- **THEN** its record carries the DecisionNeeded result rather than leaving consumers to infer it from an empty check list
+
+#### Scenario: Cumulative totals survive advancement
+- **WHEN** a stage passes and the pipeline advances
+- **THEN** the new state's attempt history is empty while the task totals still include the passed stage's usage
 
 ### Requirement: Reentrant engine without internal retries
 The engine SHALL hold no static or shared mutable state — concurrent runs with independent ports must not interfere — and SHALL never retry a port call.

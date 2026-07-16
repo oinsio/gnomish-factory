@@ -14,7 +14,7 @@ The engine turns a validated `PipelineDefinition` into executed stages. Everythi
 
 **D4 — TaskState: sealed position, attempt-boundary resume, current-stage history.** Immutable; a new state per round (FR9, FR13, FR14). Position is sealed: `AtStage(name)` | `PipelineEnd` — a manual pause on the last stage parks the task at `PipelineEnd`, from which a run returns `Completed` immediately; `PipelineMismatch` applies only to `AtStage` names (FR8, FR9). `attempts` (all executed rounds, with metrics — including `CannotVerify` rounds) diverges deliberately from `attemptsUsed` (quality failures only): cost analytics must see rounds that burned tokens but no attempt. History resets on advancement — git history of persisted states is the archive. *Rejected:* index-based position (silently wrong when `.gnomish/` changes mid-task); whole-task history (duplicates what git keeps better); `Completed` directly from a manual last stage (would silently skip the checkpoint the author asked for).
 
-**D5 — Two-level telemetry joined by the attempt key.** Aggregate per tool name inside `AttemptRecord`; raw chronological `ToolTrace` outside `TaskState`, correlated by `(taskId, stage, attempt)` (FR13, NFR-C1). Usage fields optional — an interactive executor knows only wall time. *Rejected:* trace inside the state file (bloats the resume contract); path-based links (the domain must not know file layout).
+**D5 — Two-level telemetry joined by the attempt key.** Aggregate per tool name inside `AttemptRecord`; raw chronological `ToolTrace` outside `TaskState`, correlated by `(taskId, stage, attempt)` (FR13, NFR-C1). Usage fields optional — an interactive executor knows only wall time. Each recorded round carries an explicit result classification (`Passed | QualityFailure | CannotVerify | DecisionNeeded`), and `TaskState` carries cumulative task usage totals updated on every recorded round — unlike attempt history they survive advancement and resume. Both driven by the first consumer (manual-run status contract); the totals are also the seam for future token/money budgets (NG4). *Rejected:* trace inside the state file (bloats the resume contract); path-based links (the domain must not know file layout); deriving round result and task totals downstream (an empty check list is ambiguous — DecisionNeeded round vs empty verify list; a totals fold over history breaks the moment history resets on advancement).
 
 **D6 — Human decisions are context, never commands.** `TaskContext.decisions` passes through to executor and judge verbatim (FR7). Control actions (attempt reset, position moves) are caller-side state manipulation before `run`. Gnome-initiated escalation is `ExecutionResult.DecisionNeeded` — no attempt burned (FR6). *Rejected:* parsing directives out of comment text — an unbounded control language with no grammar.
 
@@ -28,20 +28,20 @@ The engine turns a validated `PipelineDefinition` into executed stages. Everythi
 
 ## Engine model at a glance
 
-| Type                      | Content                                                                                                                  | Governing decision |
-|---------------------------|--------------------------------------------------------------------------------------------------------------------------|--------------------|
-| `TaskContext`             | taskId (opaque), title, body, `decisions[]` (chronological free text, optional stage/author/time)                        | D6                 |
-| `TaskState`               | position (`AtStage(name)` \| `PipelineEnd`), `attemptsUsed` (burned only), `attempts[]` (all rounds, current stage only) | D4                 |
-| `AttemptRecord`           | round no, `CheckResult[]`, executor usage, judge per-vote tokens                                                         | D4, D5             |
-| usage fields              | wall time, per-tool aggregate (name, calls, total duration), tokens in/out — all optional                                | D5                 |
-| `ToolTrace`               | chronological calls (seq, tool, start, duration); outside `TaskState`; keyed by (taskId, stage, attempt)                 | D5                 |
-| `Verdict`                 | `Pass` \| `Fail(findings, may be empty)` \| `CannotVerify(reason, details)`                                              | D3                 |
-| `Finding` / `CheckResult` | message + optional location/details / checkRef (index + label), verdict, duration                                        | D3                 |
-| `ExecutionResult`         | `Completed(usage, trace)` \| `DecisionNeeded(question, options[], usage, trace)`                                         | D6                 |
-| `PollStatus`              | `Pass` \| `Fail(findings)` \| `Running` \| `CannotVerify(reason, details)` — external single-poll result                 | D2                 |
-| `TaskOutcome`             | `Completed` \| `Paused(passedStage)` \| `Escalated(report)` \| `Aborted(failedAt, cause)` — each carries final state     | D1, D7             |
-| `EscalationReport`        | `AttemptsExhausted` \| `DecisionNeeded` \| `CannotVerify` \| `PipelineMismatch` \| `CannotExecute`                       | D1                 |
-| `EngineEvent`             | 7 sealed events, each self-contained with the (taskId, stage, attempt) key                                               | D7                 |
+| Type                      | Content                                                                                                                                                | Governing decision |
+|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------|
+| `TaskContext`             | taskId (opaque), title, body, `decisions[]` (chronological free text, optional stage/author/time)                                                      | D6                 |
+| `TaskState`               | position (`AtStage(name)` \| `PipelineEnd`), `attemptsUsed` (burned only), `attempts[]` (all rounds, current stage only), cumulative task usage totals | D4, D5             |
+| `AttemptRecord`           | round no, result (`Passed \| QualityFailure \| CannotVerify \| DecisionNeeded`), `CheckResult[]`, executor usage, judge per-vote tokens                | D4, D5             |
+| usage fields              | wall time, per-tool aggregate (name, calls, total duration), tokens in/out — all optional                                                              | D5                 |
+| `ToolTrace`               | chronological calls (seq, tool, start, duration); outside `TaskState`; keyed by (taskId, stage, attempt)                                               | D5                 |
+| `Verdict`                 | `Pass` \| `Fail(findings, may be empty)` \| `CannotVerify(reason, details)`                                                                            | D3                 |
+| `Finding` / `CheckResult` | message + optional location/details / checkRef (index + label), verdict, duration                                                                      | D3                 |
+| `ExecutionResult`         | `Completed(usage, trace)` \| `DecisionNeeded(question, options[], usage, trace)`                                                                       | D6                 |
+| `PollStatus`              | `Pass` \| `Fail(findings)` \| `Running` \| `CannotVerify(reason, details)` — external single-poll result                                               | D2                 |
+| `TaskOutcome`             | `Completed` \| `Paused(passedStage)` \| `Escalated(report)` \| `Aborted(failedAt, cause)` — each carries final state                                   | D1, D7             |
+| `EscalationReport`        | `AttemptsExhausted` \| `DecisionNeeded` \| `CannotVerify` \| `PipelineMismatch` \| `CannotExecute`                                                     | D1                 |
+| `EngineEvent`             | 7 sealed events, each self-contained with the (taskId, stage, attempt) key                                                                             | D7                 |
 
 ## Attempt loop
 
