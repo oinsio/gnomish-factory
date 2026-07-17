@@ -80,7 +80,7 @@ sequenceDiagram
 
 ## Running a task manually
 
-`gnomish run` is the first way to drive the engine for real. It executes **one task through one pipeline in one interactive dialog**, with a human standing in for the gnome: you read each stage briefing and press Enter to complete it, answer the verify checks, and resolve escalations at the prompt. Nothing else is involved — no AI provider, no tracker, no git. It doubles as the pipeline author's dry-run tool for a project's `.gnomish/`, and as the harness that proves the engine's port shapes survive contact with real adapters.
+`gnomish run` is the first way to drive the engine for real. It executes **one task through one pipeline**, no tracker and no git involved. By default it is manifest-driven: real `agent-cli` and judge adapters run each stage, with no AI provider outside them (see [Manifest-driven run and `--interactive` overrides](#manifest-driven-run-and---interactive-overrides) below). Passing `--interactive` swaps in a human standing in for the gnome instead: you read each stage briefing and press Enter to complete it, answer the verify checks, and resolve escalations at the prompt. It doubles as the pipeline author's dry-run tool for a project's `.gnomish/`, and as the harness that proves the engine's port shapes survive contact with real adapters.
 
 There is no launcher script yet; run it through the boot jar (or `bootRun`) and pass the task flags. With **no** run flag present the application keeps its plain boot-and-exit behavior.
 

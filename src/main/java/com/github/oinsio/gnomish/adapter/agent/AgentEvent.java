@@ -107,6 +107,9 @@ public sealed interface AgentEvent {
      * signal task 3.3's fallback depends on.
      *
      * @param sessionId the CLI's session id for this round; never blank
+     * @param subtype the event's {@code subtype} (e.g. {@code "success"},
+     *     {@code "error_max_turns"}), verbatim from the wire, or {@code null}
+     *     if the event carried none
      * @param result the agent's final result text; never null (the CLI may
      *     report an empty string)
      * @param usage the event's raw {@code usage} object (token counts under
@@ -118,6 +121,7 @@ public sealed interface AgentEvent {
      */
     record ResultEvent(
             String sessionId,
+            @Nullable String subtype,
             String result,
             @Nullable Map<String, Object> usage,
             @Nullable Map<String, Object> modelUsage)

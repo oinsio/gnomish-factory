@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import spock.lang.Specification
 
@@ -30,7 +31,12 @@ class StreamJsonParserProgressSpec extends Specification {
         recorded.size() == 3
         recorded[0] == new AgentProgressEvent.RoundStarted('claude-fake-main-1', 'fake-session-plain-1')
         recorded[1] == new AgentProgressEvent.ToolStarted('Write')
-        recorded[2] == new AgentProgressEvent.RoundFinished('Stage complete: output.txt written.')
+
+        and: 'RoundFinished carries the fixture\'s real subtype, tokensByModel derived from modelUsage, and summary'
+        def finished = recorded[2] as AgentProgressEvent.RoundFinished
+        finished.subtype() == 'success'
+        finished.tokensByModel() == ['claude-fake-main-1': new TokenUsage(120, 45, 10, 5)]
+        finished.summary() == 'Stage complete: output.txt written.'
     }
 
     // FR7, D10: only the top-level Task tool call fires ToolStarted; the nested Grep call does not

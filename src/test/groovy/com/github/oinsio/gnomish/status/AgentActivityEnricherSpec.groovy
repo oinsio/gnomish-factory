@@ -100,7 +100,7 @@ class AgentActivityEnricherSpec extends Specification {
         def enricher = new AgentActivityEnricher(holder)
 
         when:
-        enricher.onProgress(new AgentProgressEvent.RoundFinished('done'))
+        enricher.onProgress(new AgentProgressEvent.RoundFinished(null, [:], 'done'))
 
         then:
         holder.activity().activity() == new Activity.Executing(SINCE)
@@ -114,7 +114,7 @@ class AgentActivityEnricherSpec extends Specification {
         def enricher = new AgentActivityEnricher(holder)
 
         when:
-        enricher.onProgress(new AgentProgressEvent.RoundFinished('done'))
+        enricher.onProgress(new AgentProgressEvent.RoundFinished(null, [:], 'done'))
 
         then:
         holder.activity().activity().is(verifying)

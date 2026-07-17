@@ -69,7 +69,7 @@ class AgentRoundResultExtractorSpec extends Specification {
 
         when: 'a synthetic result event is appended so extraction does not throw on the essential path'
         def withResult = events + new TimestampedEvent(
-                new AgentEvent.ResultEvent('fake-session-death-1', 'killed', null, null), roundEnd)
+                new AgentEvent.ResultEvent('fake-session-death-1', 'success', 'killed', null, null), roundEnd)
         def result = extractor.extract(withResult, roundEnd)
 
         then: 'the orphaned Bash call is aggregated with duration measured to roundEnd, no exception'

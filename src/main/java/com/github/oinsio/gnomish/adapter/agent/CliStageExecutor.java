@@ -117,6 +117,15 @@ public final class CliStageExecutor implements StageExecutor {
     }
 
     private ExecutionResult runRound(Request request, String prompt, DecisionFileTransport.Handle handle) {
+        try {
+            return runRoundWithHandle(request, prompt, handle);
+        } catch (RuntimeException e) {
+            handle.discard();
+            throw e;
+        }
+    }
+
+    private ExecutionResult runRoundWithHandle(Request request, String prompt, DecisionFileTransport.Handle handle) {
         var stage = request.stage();
         var executor = stage.executor();
         var invocationFlags = AgentInvocationOptions.renderForExecutor(

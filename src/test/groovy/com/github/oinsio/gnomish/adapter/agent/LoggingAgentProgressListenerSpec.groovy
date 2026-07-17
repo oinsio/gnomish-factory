@@ -73,7 +73,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundFinished('Stage complete: output.txt written.'))
+            listener.onProgress(new AgentProgressEvent.RoundFinished('success', [:], 'Stage complete: output.txt written.'))
         }
 
         then:
@@ -89,7 +89,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
         def listener = new LoggingAgentProgressListener()
 
         when:
-        def events = capture { listener.onProgress(new AgentProgressEvent.RoundFinished('')) }
+        def events = capture { listener.onProgress(new AgentProgressEvent.RoundFinished(null, [:], '')) }
 
         then:
         events.size() == 1

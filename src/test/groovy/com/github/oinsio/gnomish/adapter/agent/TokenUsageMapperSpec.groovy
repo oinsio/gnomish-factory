@@ -64,7 +64,7 @@ class TokenUsageMapperSpec extends Specification {
     def "falls back to the flat usage object keyed by the init event's model when modelUsage is absent"() {
         given: 'a synthetic result event with usage present but modelUsage null (key omitted from the wire)'
         def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-fallback-1', 'done',
+                'fake-session-fallback-1', 'success', 'done',
                 [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
                 null)
         def initEvent = new AgentEvent.InitEvent('fake-session-fallback-1', 'claude-fake-legacy-1')
@@ -79,7 +79,7 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: neither modelUsage nor usage present/interpretable — degrade to empty map, never throw
     def "degrades to an empty tokensByModel when neither modelUsage nor usage is present"() {
         given: 'a synthetic result event with neither usage nor modelUsage'
-        def resultEvent = new AgentEvent.ResultEvent('fake-session-empty-1', 'done', null, null)
+        def resultEvent = new AgentEvent.ResultEvent('fake-session-empty-1', 'success', 'done', null, null)
         def initEvent = new AgentEvent.InitEvent('fake-session-empty-1', 'claude-fake-main-1')
 
         when: 'tokens are mapped'
@@ -93,7 +93,7 @@ class TokenUsageMapperSpec extends Specification {
     def "degrades to an empty tokensByModel when the fallback usage cannot be keyed (no init event)"() {
         given: 'a synthetic result event with a usable flat usage but no init event supplied'
         def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-no-init-1', 'done',
+                'fake-session-no-init-1', 'success', 'done',
                 [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
                 null)
 
@@ -108,7 +108,7 @@ class TokenUsageMapperSpec extends Specification {
     def "skips a malformed modelUsage entry but keeps mapping the other well-formed entries"() {
         given: 'a synthetic result event where one model entry is missing a required field'
         def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-partial-1', 'done',
+                'fake-session-partial-1', 'success', 'done',
                 null,
                 [
                     'claude-fake-good-1': [inputTokens: 100, outputTokens: 20, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
@@ -127,7 +127,7 @@ class TokenUsageMapperSpec extends Specification {
     def "skips a modelUsage entry that is not a map at all"() {
         given: 'a synthetic result event with one entry a plain string instead of a map'
         def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-notmap-1', 'done',
+                'fake-session-notmap-1', 'success', 'done',
                 null,
                 [
                     'claude-fake-good-1': [inputTokens: 5, outputTokens: 5, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
@@ -146,7 +146,7 @@ class TokenUsageMapperSpec extends Specification {
     def "degrades the fallback to empty when the flat usage is missing a required field"() {
         given: 'a synthetic result event with usage missing output_tokens'
         def resultEvent = new AgentEvent.ResultEvent(
-                'fake-session-partial-usage-1', 'done',
+                'fake-session-partial-usage-1', 'success', 'done',
                 [input_tokens: 120, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
                 null)
         def initEvent = new AgentEvent.InitEvent('fake-session-partial-usage-1', 'claude-fake-main-1')

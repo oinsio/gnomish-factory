@@ -89,7 +89,7 @@ final class StreamJsonEventMapper {
         if (result == null) {
             return skip(wire, "result line without a result field");
         }
-        return present(new AgentEvent.ResultEvent(sessionId, result, wire.usage(), wire.modelUsage()));
+        return present(new AgentEvent.ResultEvent(sessionId, wire.subtype(), result, wire.usage(), wire.modelUsage()));
     }
 
     private static List<ContentBlock> contentOf(StreamJsonLine wire) {

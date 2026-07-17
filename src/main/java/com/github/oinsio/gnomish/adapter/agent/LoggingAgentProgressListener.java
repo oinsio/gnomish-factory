@@ -7,7 +7,8 @@ import org.slf4j.LoggerFactory;
  * The {@link AgentProgressListener} adapter that logs one structured INFO line
  * per {@link AgentProgressEvent} to the rolling file appender (task 8.1, design
  * D10): round start (model, session id), each top-level tool started, and round
- * finish (summary) — the live, executor-internal counterpart to {@link
+ * finish (subtype, token summary, summary) — the live, executor-internal
+ * counterpart to {@link
  * com.github.oinsio.gnomish.status.LoggingEventListener}'s per-round engine
  * lines. Every line is logged through SLF4J with parameterized arguments —
  * never string concatenation — matching that class's established idiom.
@@ -47,7 +48,12 @@ public final class LoggingAgentProgressListener implements AgentProgressListener
             case AgentProgressEvent.RoundStarted started ->
                 log.info("round started: model={}, sessionId={}", started.model(), started.sessionId());
             case AgentProgressEvent.ToolStarted started -> log.info("tool started: {}", started.name());
-            case AgentProgressEvent.RoundFinished finished -> log.info("round finished: {}", finished.summary());
+            case AgentProgressEvent.RoundFinished finished ->
+                log.info(
+                        "round finished: subtype={}, tokensByModel={}, summary={}",
+                        finished.subtype(),
+                        finished.tokensByModel(),
+                        finished.summary());
         }
     }
 }

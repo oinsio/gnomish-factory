@@ -121,6 +121,24 @@ public final class DecisionFileTransport {
             }
         }
 
+        /**
+         * Deletes this round's temp directory without reading the decision
+         * file first — the cleanup step for infrastructure-failure paths that
+         * never reach {@link #readAndClose()} (design D1). Safe to call more
+         * than once, and safe to call after {@link #readAndClose()}.
+         *
+         * <p>Implements NFR-R3, D1 of add-agent-executor.
+         *
+         * @throws UncheckedIOException if the temp directory cannot be deleted
+         */
+        public void discard() {
+            try {
+                deleteRecursively(Objects.requireNonNull(decisionFilePath.getParent()));
+            } catch (IOException e) {
+                throw new UncheckedIOException("could not delete decision-file temp directory: " + decisionFilePath, e);
+            }
+        }
+
         private static void deleteRecursively(Path directory) throws IOException {
             if (!Files.exists(directory)) {
                 return;

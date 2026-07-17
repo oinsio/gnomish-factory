@@ -76,7 +76,7 @@ class AgentEventSpec extends Specification {
         def modelUsage = ['claude-x': [inputTokens: 10]]
 
         when:
-        def event = new AgentEvent.ResultEvent('sess-1', 'done', usage, modelUsage)
+        def event = new AgentEvent.ResultEvent('sess-1', 'success', 'done', usage, modelUsage)
 
         then:
         event.result() == 'done'
@@ -87,14 +87,14 @@ class AgentEventSpec extends Specification {
     // FR5, D4: ResultEvent preserves a null modelUsage distinctly from an empty map (fallback signal for task 3.3)
     def "ResultEvent preserves a null modelUsage distinctly from an empty map"() {
         expect:
-        new AgentEvent.ResultEvent('sess-1', 'done', [:], null).modelUsage() == null
-        new AgentEvent.ResultEvent('sess-1', 'done', [:], [:]).modelUsage() == [:]
+        new AgentEvent.ResultEvent('sess-1', 'success', 'done', [:], null).modelUsage() == null
+        new AgentEvent.ResultEvent('sess-1', 'success', 'done', [:], [:]).modelUsage() == [:]
     }
 
     // FR4: ResultEvent rejects a blank sessionId
     def "ResultEvent rejects a blank sessionId"() {
         when:
-        new AgentEvent.ResultEvent('', 'done', null, null)
+        new AgentEvent.ResultEvent('', 'success', 'done', null, null)
 
         then:
         thrown(IllegalArgumentException)

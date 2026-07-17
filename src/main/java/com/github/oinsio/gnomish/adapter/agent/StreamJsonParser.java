@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +66,7 @@ public final class StreamJsonParser {
 
     private final Clock clock;
     private final AgentProgressListener progressListener;
+    private final TokenUsageMapper tokenUsageMapper = new TokenUsageMapper();
 
     /**
      * Equivalent to {@link #StreamJsonParser(Clock, AgentProgressListener)} with
@@ -111,6 +113,7 @@ public final class StreamJsonParser {
      */
     public List<TimestampedEvent> parse(BufferedReader reader) {
         List<TimestampedEvent> events = new ArrayList<>();
+        AgentEvent.InitEvent[] initEvent = new AgentEvent.InitEvent[1];
         String line;
         try {
             while ((line = reader.readLine()) != null) {
@@ -118,7 +121,10 @@ public final class StreamJsonParser {
                 parseLine(line).ifPresent(event -> {
                     log.debug("raw agent event: {}", event);
                     events.add(new TimestampedEvent(event, readAt));
-                    emitProgress(event);
+                    if (event instanceof AgentEvent.InitEvent init) {
+                        initEvent[0] = init;
+                    }
+                    emitProgress(event, initEvent[0]);
                 });
             }
         } catch (IOException e) {
@@ -133,10 +139,17 @@ public final class StreamJsonParser {
      * RoundStarted} for an {@link AgentEvent.InitEvent}, one {@code ToolStarted}
      * per top-level {@link ContentBlock.ToolUse} block for an {@link
      * AgentEvent.AssistantEvent} whose {@code parentToolUseId} is {@code null},
-     * {@code RoundFinished} for an {@link AgentEvent.ResultEvent}. A {@link
-     * AgentEvent.UserEvent} implies no progress event.
+     * {@code RoundFinished} for an {@link AgentEvent.ResultEvent} — its {@code
+     * tokensByModel} derived by {@link TokenUsageMapper} the same way {@link
+     * AgentRoundResultExtractor}'s telemetry is, using {@code roundInit} for the
+     * flat-{@code usage} fallback's model key. A {@link AgentEvent.UserEvent}
+     * implies no progress event.
+     *
+     * @param roundInit the round's {@link AgentEvent.InitEvent} recognized so
+     *     far by this call to {@link #parse}, or {@code null} if none has been
+     *     recognized yet
      */
-    private void emitProgress(AgentEvent event) {
+    private void emitProgress(AgentEvent event, AgentEvent.@Nullable InitEvent roundInit) {
         switch (event) {
             case AgentEvent.InitEvent init ->
                 deliver(new AgentProgressEvent.RoundStarted(init.model(), init.sessionId()));
@@ -149,7 +162,10 @@ public final class StreamJsonParser {
                     }
                 }
             }
-            case AgentEvent.ResultEvent result -> deliver(new AgentProgressEvent.RoundFinished(result.result()));
+            case AgentEvent.ResultEvent result -> {
+                var tokensByModel = tokenUsageMapper.toTokensByModel(result, roundInit);
+                deliver(new AgentProgressEvent.RoundFinished(result.subtype(), tokensByModel, result.result()));
+            }
             case AgentEvent.UserEvent ignored -> {
                 // tool results carry no progress signal of their own (FR7)
             }

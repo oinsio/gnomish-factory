@@ -37,8 +37,10 @@ class StatusReportJsonMapperSpec extends Specification {
     def mapper = new StatusReportJsonMapper()
 
     // FR5, NFR-C1, D12 of add-agent-executor: reference anchor covers the
-    // tokensByModel map shape (empty map means unreported, never a fabricated
-    // zero entry)
+    // spec's canonical example shape, including populated tokensByModel and
+    // byTool (a fabricated zero entry would be wrong; the empty-map/list case
+    // for unreported usage is covered separately, e.g. "byTool maps each
+    // ToolUsage's...")
     def "reference anchor: serializing the deterministic sample is byte-identical to status-report-v1.reference.json"() {
         given:
         def referenceText = getClass().getResourceAsStream('/status-report-v1.reference.json').getText('UTF-8')
@@ -362,19 +364,33 @@ class StatusReportJsonMapperSpec extends Specification {
         def failCheck = new CheckResult(
                 new CheckRef(1, "command:./gradlew test"), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))
 
+        def attemptUsage = new ExecutorUsage(
+                Duration.ofMillis(183000),
+                [
+                    new ToolUsage("Edit", 4, Duration.ofMillis(2100))
+                ],
+                ["claude-sonnet-5": new TokenUsage(1200, 5400, 30000, 410000)])
+
         def attempt = new AttemptRecord(
                 1,
                 AttemptRecord.Result.QUALITY_FAILURE,
                 Instant.parse("2026-07-16T14:35:10Z"),
                 [passCheck, failCheck],
-                new ExecutorUsage(Duration.ofMillis(183000), [], [:]),
+                attemptUsage,
                 JudgeUsage.none())
+
+        def totalsUsage = new ExecutorUsage(
+                Duration.ofMillis(232000),
+                [
+                    new ToolUsage("Edit", 4, Duration.ofMillis(2100))
+                ],
+                ["claude-sonnet-5": new TokenUsage(1450, 6100, 30000, 512000)])
 
         def state = new TaskState(
                 new Position.AtStage("implement"),
                 1,
                 [attempt],
-                new ExecutorUsage(Duration.ofMillis(232000), [], [:]))
+                totalsUsage)
 
         def escalation = new EscalationReport.DecisionNeeded(
                 "Refactor the retry helper or patch in place?", ["refactor", "patch"])

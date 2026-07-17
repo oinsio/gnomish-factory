@@ -1,5 +1,9 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import java.util.Map;
+import org.jspecify.annotations.Nullable;
+
 /**
  * A live progress signal emitted by {@link StreamJsonParser}'s parse loop as it
  * recognizes an event on a round's stream-json output, delivered to an {@link
@@ -10,12 +14,13 @@ package com.github.oinsio.gnomish.adapter.agent;
  * needs to report a round in flight, not the full wire payload.
  *
  * <p>Three variants cover FR7's three live-progress facts: a round starting
- * (model, session id), a top-level tool call starting, and a round's closing
- * summary (the {@code result} event's final-message text, per design D9(c) —
- * "the final message becomes the round summary ... it rides the {@code
- * RoundFinished} progress event and the log, not the domain"). Judge rounds feed
- * the same event stream as executor rounds — this type does not distinguish the
- * two; that distinction belongs to which listeners a caller wires (FR7).
+ * (model, session id), a top-level tool call starting, and a round finishing
+ * (result subtype, token summary, and the {@code result} event's final-message
+ * text, per design D9(c) — "the final message becomes the round summary ... it
+ * rides the {@code RoundFinished} progress event and the log, not the domain").
+ * Judge rounds feed the same event stream as executor rounds — this type does
+ * not distinguish the two; that distinction belongs to which listeners a caller
+ * wires (FR7).
  *
  * <p>Implements FR7, D9, D10 of add-agent-executor.
  */
@@ -60,9 +65,16 @@ public sealed interface AgentProgressEvent {
 
     /**
      * A round has finished: emitted when {@link StreamJsonParser} recognizes the
-     * round's {@code result} event. {@code summary} is {@link
-     * AgentEvent.ResultEvent#result()} verbatim (design D9(c)) — the same text
-     * the domain never sees as decision data, only as a log line and this event.
+     * round's {@code result} event, carrying the three facts the spec's "round
+     * finished" line enumerates — result subtype, token summary, final-message
+     * summary. {@code summary} is {@link AgentEvent.ResultEvent#result()}
+     * verbatim (design D9(c)) — the same text the domain never sees as decision
+     * data, only as a log line and this event. {@code tokensByModel} is derived
+     * the same way {@link AgentRoundResultExtractor}'s telemetry is (task 3.3):
+     * {@link AgentEvent.ResultEvent#modelUsage()} when present, else the flat
+     * {@link AgentEvent.ResultEvent#usage()} keyed by the round's {@link
+     * AgentEvent.InitEvent#model()} — best-effort, empty when neither wire shape
+     * was interpretable (NFR-R2).
      *
      * <p>Carries no {@code sessionId}: unlike {@link RoundStarted} / {@link
      * ToolStarted}, which report facts about an event mid-stream, a listener
@@ -73,12 +85,20 @@ public sealed interface AgentProgressEvent {
      * and the result event's session id carries no information {@code
      * RoundStarted} did not already report.
      *
+     * @param subtype the result event's {@code subtype} (e.g. {@code "success"},
+     *     {@code "error_max_turns"}), verbatim from {@link
+     *     AgentEvent.ResultEvent#subtype()}, or {@code null} if the wire event
+     *     carried none
+     * @param tokensByModel the round's token usage keyed by resolved model id;
+     *     defensively copied, unmodifiable, empty when unreported
      * @param summary the round's final-message text, verbatim from {@link
      *     AgentEvent.ResultEvent#result()}; never null, possibly empty
      */
-    record RoundFinished(String summary) implements AgentProgressEvent {
+    record RoundFinished(@Nullable String subtype, Map<String, TokenUsage> tokensByModel, String summary)
+            implements AgentProgressEvent {
 
         public RoundFinished {
+            tokensByModel = Map.copyOf(tokensByModel);
             requireNonNull(summary, "summary");
         }
     }
