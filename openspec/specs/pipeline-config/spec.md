@@ -94,8 +94,9 @@ The loader SHALL enforce cross-file rules: unique stage names; every `pipeline.y
 - **THEN** validation reports a located error naming the missing file
 
 ### Requirement: Autonomy limit resolution
-The loader SHALL resolve the stage attempt limit from the `config.yaml` default, with a per-stage override taking precedence. The resolved limit SHALL be an integer ≥ 1. Token/money budgets are out of scope for this capability version.
+The loader SHALL resolve the stage attempt limit from the `config.yaml` default, with a per-stage override taking precedence. The resolved limit SHALL be an integer ≥ 1. Token budgets are out of scope for this capability version; monetary budgets are out of scope for the project.
 <!-- implements FR7 of load-pipeline-config -->
+<!-- implements FR16 of add-agent-executor -->
 
 #### Scenario: Stage override wins over default
 - **WHEN** `config.yaml` sets a default attempt limit and a stage overrides it
