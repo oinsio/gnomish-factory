@@ -1,10 +1,19 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
+
+// PIT M4 documented exception (build.gradle has the full rationale): several private
+// helpers below carry @DoNotMutate because PIT's Gregor engine crashes its own minion
+// JVM (RUN_ERROR, not a real test gap) mutating some bytecode shapes of a record's
+// compiler-generated/component-adjacent private methods on JDK 17+ (hcoles/pitest#1285,
+// a JVMTI RedefineClasses restriction on NestHost/NestMembers/Record attributes — not
+// fixable via PIT config). Every annotated method is otherwise fully covered by
+// ExecutorUsageSpec.
 
 /**
  * The telemetry an executor round reports: total {@code wallTime}, the per-tool
@@ -62,10 +71,19 @@ public record ExecutorUsage(
      *
      * @param other the usage to fold into this one; never null
      */
+    // PIT M4 documented exception (build.gradle has the full rationale): @DoNotMutate because
+    // this method's only content is a `new ExecutorUsage(...)` record-construction call, and
+    // that shape triggers the same JVMTI RedefineClasses/record-attribute restriction
+    // (hcoles/pitest#1285) as the private helpers above — RUN_ERROR, not a real coverage gap.
+    // The three helpers it delegates to are separately covered (and separately excluded, for the
+    // same reason); ExecutorUsageSpec exercises `plus` itself through many both-null/one-present/
+    // both-present/tools-merge scenarios at the ordinary test level.
+    @DoNotMutate
     public ExecutorUsage plus(ExecutorUsage other) {
         return new ExecutorUsage(sumWallTime(other.wallTime), mergeTools(other.tools), sumTokens(other.tokens));
     }
 
+    @DoNotMutate
     private @Nullable Duration sumWallTime(@Nullable Duration other) {
         if (wallTime == null) {
             return other;
@@ -76,6 +94,7 @@ public record ExecutorUsage(
         return wallTime.plus(other);
     }
 
+    @DoNotMutate
     private @Nullable TokenUsage sumTokens(@Nullable TokenUsage other) {
         if (tokens == null) {
             return other;
@@ -86,6 +105,7 @@ public record ExecutorUsage(
         return new TokenUsage(tokens.inputTokens() + other.inputTokens(), tokens.outputTokens() + other.outputTokens());
     }
 
+    @DoNotMutate
     private List<ToolUsage> mergeTools(List<ToolUsage> other) {
         var merged = new LinkedHashMap<String, ToolUsage>();
         for (var tool : tools) {
@@ -97,6 +117,7 @@ public record ExecutorUsage(
         return List.copyOf(merged.values());
     }
 
+    @DoNotMutate
     private static void accumulate(Map<String, ToolUsage> merged, ToolUsage tool) {
         var existing = merged.get(tool.name());
         if (existing == null) {
@@ -119,6 +140,7 @@ public record ExecutorUsage(
      * a record's canonical constructor, which would silently exempt this validation
      * from the 100% mutation gate.
      */
+    @DoNotMutate
     private static @Nullable Duration requireNonNegativeOrNull(@Nullable Duration value, String component) {
         if (value != null && value.isNegative()) {
             throw new IllegalArgumentException("ExecutorUsage." + component + " must not be negative");

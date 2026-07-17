@@ -67,6 +67,11 @@ spring-beans = { module = "org.springframework:spring-beans" }
 groovy = { module = "org.apache.groovy:groovy", version.ref = "groovy" }
 # Gradle 9 no longer injects the launcher; version is Boot-BOM-managed.
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+# opentest4j: the port-contract opt-out seam (PortContractSupport) throws
+# TestAbortedException for a runtime, per-variant skip on the JUnit Platform
+# (FR14 of add-manual-run) — a direct source reference, so the
+# dependency-analysis gate requires it declared directly; JUnit-BOM-managed.
+opentest4j = { module = "org.opentest4j:opentest4j" }
 spock-core = { module = "org.spockframework:spock-core", version.ref = "spock" }
 spock-spring = { module = "org.spockframework:spock-spring", version.ref = "spock" }
 errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }

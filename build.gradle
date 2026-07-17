@@ -112,6 +112,11 @@ dependencies {
     testImplementation libs.logback.classic
     // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath.
     testRuntimeOnly libs.junit.platform.launcher
+    // The port-contract suites' opt-out seam (PortContractSupport) throws
+    // org.opentest4j.TestAbortedException for a runtime per-variant skip, a
+    // direct source reference, so buildHealth requires it declared directly
+    // (FR14 of add-manual-run); version is JUnit-BOM-managed.
+    testImplementation libs.opentest4j
     // ArchUnit for the domain-purity gate (FR10 of load-pipeline-config,
     // design D7): DomainPuritySpec asserts via ArchRule.check(...) that
     // `domain` never depends on `adapter`, java.nio.file, or Jackson.
@@ -167,6 +172,17 @@ tasks.named('test') {
     // Generate coverage reports whenever tests run, so `check` produces them
     // as part of the single-command verification (FR5 of add-project-skeleton).
     finalizedBy tasks.named('jacocoTestReport')
+
+    // E2E layer (task 9.1 of add-manual-run, M1): E2eProcessHarness spawns
+    // `gnomish run` as a real process via `java -jar`, so the executable jar must
+    // exist before any E2E spec runs. `dependsOn bootJar` guarantees that for
+    // every `test` invocation, including the common `./gradlew test --tests
+    // "*E2E*"` filtered run; the cost is negligible for non-E2E runs since
+    // bootJar only repackages what's already compiled. The `e2e.jarPath` system
+    // property is the harness's sole, idiomatic way to locate the jar — no
+    // build/libs/*.jar glob that could match a stale or ambiguous artifact.
+    dependsOn tasks.named('bootJar')
+    systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
 }
 
 tasks.named('jacocoTestReport') {
@@ -190,6 +206,48 @@ pitest {
     // main() + SpringApplication.run(), unreachable by unit tests by design
     // (design D5, D10). Everything else must reach 100%.
     excludedClasses = ['com.github.oinsio.gnomish.FactoryApplication']
+    // M1/M4 documented exception: the E2E layer (task 9.1 of add-manual-run)
+    // spawns the real `gnomish run` process via `java -jar`, reading the jar
+    // path from the `e2e.jarPath` system property that only the `test` task
+    // wires (from the bootJar output, see the `tasks.named('test')` block
+    // below). PIT's own coverage/mutation child JVMs are a separate process
+    // launch that never receives that property, so E2eProcessHarness's
+    // precondition check fails immediately for every E2E spec — unrelated to
+    // any mutation. These specs are black-box integration coverage over
+    // classes (`app`, `status`, `adapter.*`) that already have dedicated unit
+    // Spock specs feeding the mutation gate directly; excluding the E2E specs
+    // from PIT's test scan does not remove any production line from mutation
+    // coverage, only from being (re-)run once per mutant by PIT itself, which
+    // would also be prohibitively slow for a real-process spawn per mutant.
+    excludedTestClasses = ['com.github.oinsio.gnomish.e2e.*']
+    // M4 documented exception: a handful of private methods on `record` classes
+    // (ExecutorUsage, StatusReport, Finding, Decision) carry the project's own
+    // @com.github.oinsio.gnomish.DoNotMutate marker instead of a build.gradle
+    // glob exclusion. PIT's Gregor engine mutates by hot-swapping bytecode into
+    // an already-loaded class via JVMTI RedefineClasses; the JVM rejects
+    // redefinition that changes a class's NestHost/NestMembers/Record/
+    // PermittedSubclasses attributes, which some (not all) mutations of these
+    // methods trigger — a known, still-open PIT limitation on JDK 17+
+    // (hcoles/pitest#1285), not a real coverage gap: PIT reports RUN_ERROR
+    // (its minion JVM crashed before any test result was observed) rather than
+    // SURVIVED, and sibling mutations of the very same method are unaffected
+    // and get killed normally. No PIT config or JVM flag works around a
+    // JVMTI-level restriction.
+    //
+    // `excludedMethods` (a plain glob over bare method names, confirmed against
+    // PIT core: no class-qualified syntax exists, see hcoles/pitest#301,
+    // unresolved) would be unsafe here: several of these methods share a name
+    // (`requireNonBlank`) with ~13 unrelated private validators on other record
+    // classes across the codebase, and a name-only glob would silently exempt
+    // all of them from the 100% gate. The annotation is PIT's own supported,
+    // class-and-method-precise mechanism instead (`ExcludedAnnotationInterceptorFactory`,
+    // feature `FANN`, on by default — matches any annotation named `Generated`/
+    // `DoNotMutate`/`CoverageIgnore`, no extra Gradle wiring needed).
+    //
+    // Every annotated method is otherwise fully covered by its own unit spec
+    // (ExecutorUsageSpec, StatusReportSpec/AttemptBoundaryEquivalenceSpec,
+    // FindingSpec, DecisionSpec); the annotation only stops PIT from *mutating*
+    // it, not from being exercised by those specs' normal assertions.
     mutationThreshold = 100 // 100% mutation score gate (FR6)
     timestampedReports = false // stable report path for CI artifact upload
     outputFormats = ['XML', 'HTML']

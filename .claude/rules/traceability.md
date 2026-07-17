@@ -9,7 +9,7 @@ Every artifact must be traceable to a requirement ID from `proposal.md`. If ther
 - `NFR-R1...` — reliability (retries, resume, idempotency)
 - `NFR-O1...` — observability (logs, progress reporting, cost tracking)
 - `NFR-S1...` — security (credentials, sandbox boundaries)
-- `NFR-C1...` — cost (token/money budgets)
+- `NFR-C1...` — cost (token budgets)
 - `UX1, UX2...` — operator experience criteria
 - `M1, M2...` — success metrics
 - `G1, G2...` — goals

@@ -4,7 +4,7 @@
 
 An external orchestrator where AI agents — the gnomes — pick tasks from a task tracker and drive them through a development pipeline autonomously. Humans are exception handlers, not participants: they step in only when a task is blocked or the gnomes cannot choose between alternatives.
 
-> **Status: walking skeleton.** Requirements and architecture are shaped through [OpenSpec](openspec); the build, quality gates, and a minimal bootable application exist (see [Building](#building)). The domain core is taking shape — `.gnomish/` pipeline-config loading and the stage engine (a pure, reentrant orchestrator of the QC loop, driven entirely through ports and exercised in-memory with fakes) are in place; the real adapters (tracker, executors, git) are not built yet.
+> **Status: walking skeleton.** Requirements and architecture are shaped through [OpenSpec](openspec); the build, quality gates, and a minimal bootable application exist (see [Building](#building)). The domain core is in place — `.gnomish/` pipeline-config loading and the stage engine (a pure, reentrant orchestrator of the QC loop, driven entirely through ports). Its first non-fake adapters have landed as an interactive CLI: [`gnomish run`](#running-a-task-manually) drives a single task through the whole quality-control cycle with a human playing the gnome — no AI, tracker, or git. The autonomous adapters (tracker, AI executors, git) are not built yet.
 
 ## How it works
 
@@ -88,6 +88,41 @@ sequenceDiagram
     F->>F: reads decision + state file,<br/>resumes from recorded stage
     Note over F: resuming instance may differ<br/>from the one that blocked
 ```
+
+## Running a task manually
+
+`gnomish run` is the first way to drive the engine for real. It executes **one task through one pipeline in one interactive dialog**, with a human standing in for the gnome: you read each stage briefing and press Enter to complete it, answer the verify checks, and resolve escalations at the prompt. Nothing else is involved — no AI provider, no tracker, no git. It doubles as the pipeline author's dry-run tool for a project's `.gnomish/`, and as the harness that proves the engine's port shapes survive contact with real adapters.
+
+There is no launcher script yet; run it through the boot jar (or `bootRun`) and pass the task flags. With **no** run flag present the application keeps its plain boot-and-exit behavior.
+
+```bash
+# via the boot jar (./gradlew build produces it under build/libs/)
+java -jar build/libs/*.jar --task="fix the flaky login spec" --project=/path/to/target-repo
+
+# or straight from Gradle
+./gradlew bootRun --args='--task="fix the flaky login spec" --project=/path/to/target-repo'
+```
+
+Flags use Spring's `--key=value` form (quote values with spaces):
+
+| Flag | Required | Meaning |
+|------|----------|---------|
+| `--project=<dir>` | no (default: cwd) | workspace root **and** the `.gnomish/` pipeline location |
+| `--task="<text>"` | one of these two | task description inline (first line → title, rest → body) |
+| `--task-file=<path>` | one of these two | task description read from a file |
+| `--task-id=<id>` | no | override the generated id (`[A-Za-z0-9_-]+`); makes logs and JSON stable |
+| `--from-stage=<name>` | no | start partway through the pipeline, skipping earlier stages' checks |
+
+At **any** prompt you can type `status` or `status --json` to print the live task report (the same StatusReport contract a future `gnomish status` will reproduce), and **Ctrl-D** is always a safe exit. After every attempt the operator gets a one-line summary; a full report prints at the end. The runner writes nothing inside the workspace — the findings temp file and the rolling log under `~/.gnomish/logs/` both live outside it.
+
+The process exit code reports the outcome — anything `>= 10` means the engine reached a legitimate terminal state:
+
+| Code | Meaning | | Code | Meaning |
+|------|---------|-|------|---------|
+| 0 | completed | | 4 | stdin exhausted mid-stage |
+| 1 | internal error | | 10 | escalated (attempts exhausted / undecidable) |
+| 2 | usage error | | 11 | paused at a manual checkpoint |
+| 3 | pipeline load failure | | 12 | aborted |
 
 ## Tech stack
 

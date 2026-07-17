@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -36,7 +37,16 @@ public record Decision(
      * in the compact constructor: PIT's record filter suppresses all mutations
      * inside a record's canonical constructor, which would silently exempt this
      * validation from the 100% mutation gate.
+     *
+     * <p>PIT M4 documented exception (build.gradle has the full rationale):
+     * {@code @DoNotMutate} because PIT's Gregor engine crashes its own minion JVM
+     * (RUN_ERROR, not a real test gap) mutating some bytecode shapes of this
+     * record's component-adjacent private methods on JDK 17+
+     * (hcoles/pitest#1285, a JVMTI RedefineClasses restriction on
+     * NestHost/NestMembers/Record attributes — not fixable via PIT config).
+     * Otherwise fully covered by DecisionSpec.
      */
+    @DoNotMutate
     private static String requireNonBlank(String value, String component) {
         if (value.isBlank()) {
             throw new IllegalArgumentException("Decision." + component + " must not be blank");
