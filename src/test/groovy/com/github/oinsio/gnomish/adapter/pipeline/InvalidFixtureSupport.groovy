@@ -48,12 +48,12 @@ trait InvalidFixtureSupport {
         write('stages/plan/instructions.md', 'plan it\n')
     }
 
-    /** The minimal valid {@code plan} manifest: no outputs, one command check, api executor. */
+    /** The minimal valid {@code plan} manifest: no outputs, one command check, agent-cli executor. */
     String planManifest() {
         '''\
 purpose: plan the work
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 verify:

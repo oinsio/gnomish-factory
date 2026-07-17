@@ -24,7 +24,7 @@ class AttemptRecordSpec extends Specification {
     def "exposes round, result, startedAt, checkResults, executorUsage and judgeUsage as constructed"() {
         given: 'a check result, an executor usage and a judge usage'
         def check = passResult()
-        def executorUsage = new ExecutorUsage(Duration.ofSeconds(5), [], null)
+        def executorUsage = new ExecutorUsage(Duration.ofSeconds(5), [], [:])
         def judgeUsage = new JudgeUsage([])
 
         when: 'a record is created'

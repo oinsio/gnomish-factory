@@ -4,8 +4,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The resolved autonomy limits of a pipeline stage — the attempt limit only.
- * Token/money budgets are deliberately not modeled here (NG8); they belong to
- * the ai-provider/executor changes that can give them semantics.
+ * Token budgets are deliberately not modeled here (NG8); they belong to the
+ * ai-provider/executor changes that can give them semantics.
  *
  * <p>The record carries the resolved value <em>without</em> range enforcement:
  * the FR7 "limit &ge; 1" rule is checked by the pure validators as a located

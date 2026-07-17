@@ -4,7 +4,7 @@ import spock.lang.Specification
 
 /**
  * AutonomyLimits: the resolved autonomy limits of a stage — attempt limit only,
- * token/money budgets deferred (NG8). Resolution semantics (FR7): a per-stage
+ * token budgets deferred (NG8). Resolution semantics (FR7): a per-stage
  * override wins over the config.yaml default; the default applies when the
  * stage declares none. The record carries the resolved value without range
  * enforcement — the "&ge; 1" rule is a located pure-validator concern (design

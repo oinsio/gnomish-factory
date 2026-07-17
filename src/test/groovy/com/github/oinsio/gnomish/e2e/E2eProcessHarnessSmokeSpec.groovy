@@ -59,7 +59,8 @@ class E2eProcessHarnessSmokeSpec extends Specification {
                 E2eFixture.projectRoot(),
                 [
                     '--project=' + E2eFixture.projectRoot(),
-                    '--task=smoke test the harness'
+                    '--task=smoke test the harness',
+                    '--interactive'
                 ],
                 script)
 

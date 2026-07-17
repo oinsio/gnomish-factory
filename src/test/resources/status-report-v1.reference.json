@@ -42,8 +42,7 @@
       } ],
       "usage" : {
         "wallMillis" : 183000,
-        "tokensIn" : null,
-        "tokensOut" : null,
+        "tokensByModel" : { },
         "byTool" : [ ]
       },
       "judgeUsage" : {
@@ -53,8 +52,7 @@
   },
   "totals" : {
     "wallMillis" : 232000,
-    "tokensIn" : null,
-    "tokensOut" : null,
+    "tokensByModel" : { },
     "byTool" : [ ]
   },
   "lastEscalation" : {

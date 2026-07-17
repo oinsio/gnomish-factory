@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","session_id":"fake-session-decision-1","model":"claude-fake-main-1","cwd":"/workspace","tools":["Read","Write","Edit","Bash"]}
+{"type":"assistant","session_id":"fake-session-decision-1","message":{"id":"msg_1","model":"claude-fake-main-1","content":[{"type":"text","text":"I am unsure whether to refactor or patch — asking the human."}]}}
+{"type":"result","subtype":"success","session_id":"fake-session-decision-1","result":"Asked the human: refactor or patch?","usage":{"input_tokens":80,"output_tokens":20,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"modelUsage":{"claude-fake-main-1":{"inputTokens":80,"outputTokens":20,"cacheCreationInputTokens":0,"cacheReadInputTokens":0}}}

@@ -25,16 +25,16 @@ class OptionalUsageSpec extends Specification {
     def mapper = new StatusReportJsonMapper()
     def objectMapper = new ObjectMapper()
 
-    def "FR-NFR-C1: human-only round folds to null tokens and non-null wall time via ExecutorUsage.plus"() {
-        given: "two human-executed rounds: measured wall time, empty tools, null tokens"
-        def first = new ExecutorUsage(Duration.ofSeconds(90), [], null)
-        def second = new ExecutorUsage(Duration.ofSeconds(93), [], null)
+    def "FR-NFR-C1: human-only round folds to an empty token map and non-null wall time via ExecutorUsage.plus"() {
+        given: "two human-executed rounds: measured wall time, empty tools, unreported tokens"
+        def first = new ExecutorUsage(Duration.ofSeconds(90), [], [:])
+        def second = new ExecutorUsage(Duration.ofSeconds(93), [], [:])
 
         when: "folded the way TaskState.totals accumulates round usage"
         def totals = first.plus(second)
 
-        then: "both operands null tokens -> sumTokens(null) short-circuits to other (null) -> total tokens stay null"
-        totals.tokens() == null
+        then: "both operands report no tokens -> the merged map stays empty (unreported, not zero)"
+        totals.tokensByModel().isEmpty()
 
         and: "wall time is summed, never null, once any round reports it"
         totals.wallTime() == Duration.ofSeconds(183)
@@ -44,8 +44,8 @@ class OptionalUsageSpec extends Specification {
     }
 
     def "FR-NFR-C1: Human-only run validates -- a manual run with zero token usage renders contract-valid JSON with null tokens and empty byTool/perVote, wall time present"() {
-        given: "an entirely human-executed round: real measured wallTime, empty tools, null tokens, no judge"
-        def humanRound = new ExecutorUsage(Duration.ofMillis(183_000), [], null)
+        given: "an entirely human-executed round: real measured wallTime, empty tools, unreported tokens, no judge"
+        def humanRound = new ExecutorUsage(Duration.ofMillis(183_000), [], [:])
         def attempt = new AttemptRecord(
                 0,
                 AttemptRecord.Result.PASSED,
@@ -72,20 +72,20 @@ class OptionalUsageSpec extends Specification {
         then: "the document parses without error and is contract-valid (version present)"
         tree.get("version").asInt() == 1
 
-        and: "top-level totals: null tokens, non-null wallMillis, empty byTool"
+        and: "top-level totals: empty tokensByModel map, non-null wallMillis, empty byTool"
         def totals = tree.get("totals")
-        totals.get("tokensIn").isNull()
-        totals.get("tokensOut").isNull()
+        totals.get("tokensByModel").isObject()
+        totals.get("tokensByModel").isEmpty()
         !totals.get("wallMillis").isNull()
         totals.get("wallMillis").asLong() == 183_000L
         totals.get("byTool").isArray()
         totals.get("byTool").isEmpty()
 
-        and: "per-attempt usage: same null-tokens / non-null-wallMillis / empty-byTool shape"
+        and: "per-attempt usage: same empty-tokensByModel / non-null-wallMillis / empty-byTool shape"
         def attemptJson = tree.get("currentStage").get("attempts").get(0)
         def attemptUsage = attemptJson.get("usage")
-        attemptUsage.get("tokensIn").isNull()
-        attemptUsage.get("tokensOut").isNull()
+        attemptUsage.get("tokensByModel").isObject()
+        attemptUsage.get("tokensByModel").isEmpty()
         !attemptUsage.get("wallMillis").isNull()
         attemptUsage.get("wallMillis").asLong() == 183_000L
         attemptUsage.get("byTool").isArray()

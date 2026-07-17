@@ -4,10 +4,10 @@ inputs:
 outputs:
   - id: work-diff
 executor:
-  type: api
+  type: agent-cli
   model: work-model
   settings:
-    temperature: 0
+    maxTurns: 10
 instructions: stages/work/instructions.md
 verify:
   - type: builtin
@@ -25,6 +25,6 @@ verify:
     criteriaFile: stages/work/acceptance.md
     model: judge-model
     settings:
-      temperature: 0
+      maxTurns: 3
     votes: 1
 advancement: manual

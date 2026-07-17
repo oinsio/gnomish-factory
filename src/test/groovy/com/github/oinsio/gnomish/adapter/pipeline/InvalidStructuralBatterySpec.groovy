@@ -62,17 +62,46 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         where:
         rule                    | manifest         || expected
         'missing purpose'       | noPurpose()      || new ConfigError('stages/plan/stage.yaml', 'purpose', "missing required field 'purpose'")
-        'missing executor.type' | noExecutorType() || new ConfigError('stages/plan/stage.yaml', 'executor.type', "missing required field 'executor.type'")
         'missing instructions'  | noInstructions() || new ConfigError('stages/plan/stage.yaml', 'instructions', "missing required field 'instructions'")
         'missing advancement'   | noAdvancement()  || new ConfigError('stages/plan/stage.yaml', 'advancement', "missing required field 'advancement'")
-        'unknown executor'      | badExecutor()    || new ConfigError('stages/plan/stage.yaml', 'executor.type', "unknown executor 'wat'; known executors are api, agent-cli")
         'unknown advancement'   | badAdvancement() || new ConfigError('stages/plan/stage.yaml', 'advancement', "unknown advancement 'sideways'; known modes are auto, manual")
     }
 
-    def "M2/FR5: a wholly absent executor yields both the structural and the mapped blank-model error"() {
-        given: 'no executor section at all; the mapper substitutes a default executor with a blank model,'
-        and: 'so the structural "missing executor" and the domain "missing model" errors both fire (inherent'
-        and: 'tier interaction — a missing executor cannot carry a pinned model)'
+    def "M2/FR5: a missing executor.type falls back to the mapper's api default, so the structural error and the api-rejection error (D6 of add-agent-executor) both fire"() {
+        given: 'the tier interaction: an absent executor.type cannot be typed, so the mapper defaults to api,'
+        and: 'which ApiExecutorRule then independently rejects (task 9.2, FR10/UX2/D6)'
+        writeValidBaseline()
+        write('stages/plan/stage.yaml', noExecutorType())
+
+        when:
+        def errors = loadInvalid()
+
+        then:
+        errors == [
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "missing required field 'executor.type'"),
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; 'agent-cli' is the only supported executor type currently"),
+        ]
+    }
+
+    def "M2/FR5: an unknown executor.type falls back to the mapper's api default, so the structural error and the api-rejection error both fire"() {
+        given: 'the same tier interaction as the missing-type case: an unrecognized value cannot be typed either'
+        writeValidBaseline()
+        write('stages/plan/stage.yaml', badExecutor())
+
+        when:
+        def errors = loadInvalid()
+
+        then:
+        errors == [
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "unknown executor 'wat'; known executors are api, agent-cli"),
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; 'agent-cli' is the only supported executor type currently"),
+        ]
+    }
+
+    def "M2/FR5: a wholly absent executor yields the structural, mapped blank-model, and api-rejection errors"() {
+        given: 'no executor section at all; the mapper substitutes a default executor with a blank model'
+        and: 'and executor type api (both the domain "missing model" and the api-rejection errors fire —'
+        and: 'inherent tier interaction: a missing executor cannot carry a pinned model or a real type)'
         writeValidBaseline()
         write('stages/plan/stage.yaml', noExecutor())
 
@@ -83,6 +112,7 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         errors == [
             new ConfigError('stages/plan/stage.yaml', 'executor', "missing required field 'executor'"),
             new ConfigError('stages/plan/stage.yaml', 'executor.model', 'missing required executor model; the model must be pinned in the manifest for every executor type'),
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; 'agent-cli' is the only supported executor type currently"),
         ]
     }
 
@@ -134,7 +164,7 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
     private static String noPurpose() {
         '''\
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 advancement: auto
@@ -163,7 +193,7 @@ advancement: auto
         '''\
 purpose: plan
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 advancement: auto
 '''
@@ -173,7 +203,7 @@ advancement: auto
         '''\
 purpose: plan
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 '''
@@ -194,7 +224,7 @@ advancement: auto
         '''\
 purpose: plan
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 advancement: sideways
@@ -205,7 +235,7 @@ advancement: sideways
         '''\
 purpose: plan
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 verify:
@@ -220,7 +250,7 @@ purpose: plan
 inputs:
   - kind: external
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 advancement: auto

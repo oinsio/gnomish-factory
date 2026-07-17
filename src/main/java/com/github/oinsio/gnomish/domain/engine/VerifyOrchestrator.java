@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +85,7 @@ final class VerifyOrchestrator {
      */
     VerificationResult verify(List<VerifyCheck> checks, TaskContext context, Workspace workspace, AttemptKey key) {
         var results = new ArrayList<CheckResult>();
-        var judgePerVote = new ArrayList<TokenUsage>();
+        var judgePerVote = new ArrayList<Map<String, TokenUsage>>();
         for (int i = 0; i < checks.size(); i++) {
             var check = checks.get(i);
             var ref = CheckRef.of(i, check);
@@ -122,7 +123,11 @@ final class VerifyOrchestrator {
      * @return the verdict the runner reached, or a {@code CannotVerify} on an adapter throw
      */
     private Verdict runCheck(
-            VerifyCheck check, CheckRef ref, TaskContext context, Workspace workspace, List<TokenUsage> judgePerVote) {
+            VerifyCheck check,
+            CheckRef ref,
+            TaskContext context,
+            Workspace workspace,
+            List<Map<String, TokenUsage>> judgePerVote) {
         try {
             return switch (check) {
                 case VerifyCheck.Builtin b -> builtinRunner.run(b, workspace);

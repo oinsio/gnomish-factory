@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.e2e
 
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.Callable
@@ -46,7 +47,7 @@ final class E2eProcessHarness {
             + ' (build.gradle wires it from the bootJar task output)')
         }
         Path resolved = Path.of(configured)
-        if (!java.nio.file.Files.isRegularFile(resolved)) {
+        if (!Files.isRegularFile(resolved)) {
             throw new IllegalStateException(
             "'${JAR_PATH_PROPERTY}' points at a non-existent file: ${resolved}"
             + ' — has the bootJar task run?')
@@ -66,13 +67,20 @@ final class E2eProcessHarness {
      *     exhausted — a too-short script becomes real EOF; when {@code true}, stdin is left open
      *     after the script so a process that finishes early does not race a stdin close against
      *     its own exit
+     * @param extraEnv variables merged into the spawned {@code gnomish run} process's environment
+     *     on top of the default inheritance — the seam the Ollama E2E layer (task 11.1) uses to
+     *     forward {@code ANTHROPIC_BASE_URL}/auth-token/model env vars down to the real {@code
+     *     claude} CLI the process itself spawns (D7's env-passthrough is inheritance-based, so
+     *     this JVM's own environment already carries them; this parameter exists for specs that
+     *     need to set or override values the harness's own JVM does not have)
      * @return the captured exit code, stdout, and stderr
      */
     E2eProcessResult run(
             Path workingDirectory,
             List<String> extraArgs,
             List<String> scriptedInputLines,
-            boolean keepStdinOpen = false) {
+            boolean keepStdinOpen = false,
+            Map<String, String> extraEnv = [:]) {
         List<String> command = new ArrayList<>([
             'java',
             '-jar',
@@ -83,6 +91,7 @@ final class E2eProcessHarness {
 
         ProcessBuilder builder = new ProcessBuilder(command)
         builder.directory(workingDirectory.toFile())
+        builder.environment().putAll(extraEnv)
 
         Process process = builder.start()
         ExecutorService pumps = Executors.newFixedThreadPool(3)

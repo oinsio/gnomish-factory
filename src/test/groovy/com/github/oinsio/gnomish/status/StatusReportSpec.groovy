@@ -88,7 +88,7 @@ class StatusReportSpec extends Specification {
         def failedCheck = new CheckResult(new CheckRef(0, 'command:./gradlew test'),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
         def round = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [failedCheck],
-        new ExecutorUsage(Duration.ofSeconds(5), [], null), JudgeUsage.none())
+        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none())
         def state = TaskState.atStageStart('implement').recordQualityFailure(round)
         def decision = new Decision('patch in place', 'plan', 'operator', STARTED)
         def ctx = context([decision])

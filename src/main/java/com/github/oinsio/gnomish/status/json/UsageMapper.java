@@ -4,16 +4,19 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.domain.engine.ToolUsage;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Maps the domain's usage types ({@link ExecutorUsage}, {@link ToolUsage}, {@link
- * JudgeUsage}) into their wire-format DTOs (task 6.5): {@code Duration.toMillis()}
- * for durations, plain {@code Long} boxing for optional token counts — this
- * project has no {@code jackson-datatype-jsr310}, so neither {@code Instant} nor
- * {@code Duration} is ever bound directly.
+ * JudgeUsage}, {@link TokenUsage}) into their wire-format DTOs (task 6.5, 10.1):
+ * {@code Duration.toMillis()} for durations, a per-model map of {@link
+ * TokenUsageDto} for token counts — this project has no {@code
+ * jackson-datatype-jsr310}, so neither {@code Instant} nor {@code Duration} is
+ * ever bound directly.
  *
- * <p>Implements FR11, M3, NFR-C1 of add-manual-run.
+ * <p>Implements FR5, FR9, NFR-C1, D12 of add-agent-executor.
  */
 final class UsageMapper {
 
@@ -22,8 +25,7 @@ final class UsageMapper {
     static UsageDto toUsage(ExecutorUsage usage) {
         return new UsageDto(
                 usage.wallTime() == null ? null : usage.wallTime().toMillis(),
-                usage.tokens() == null ? null : usage.tokens().inputTokens(),
-                usage.tokens() == null ? null : usage.tokens().outputTokens(),
+                toTokensByModel(usage.tokensByModel()),
                 toByTool(usage.tools()));
     }
 
@@ -39,7 +41,17 @@ final class UsageMapper {
                 .toList();
     }
 
-    private static JudgeUsageDto.Vote toVote(TokenUsage tokens) {
-        return new JudgeUsageDto.Vote(tokens.inputTokens(), tokens.outputTokens());
+    private static JudgeUsageDto.Vote toVote(Map<String, TokenUsage> tokensByModel) {
+        return new JudgeUsageDto.Vote(toTokensByModel(tokensByModel));
+    }
+
+    private static Map<String, TokenUsageDto> toTokensByModel(Map<String, TokenUsage> tokensByModel) {
+        Map<String, TokenUsageDto> result = new LinkedHashMap<>();
+        tokensByModel.forEach((model, usage) -> result.put(model, toTokenUsage(usage)));
+        return result;
+    }
+
+    private static TokenUsageDto toTokenUsage(TokenUsage usage) {
+        return new TokenUsageDto(usage.input(), usage.output(), usage.cacheCreation(), usage.cacheRead());
     }
 }

@@ -37,7 +37,7 @@ class StatusTextRendererSpec extends Specification {
         def check = new CheckResult(new CheckRef(0, 'command:./gradlew test'),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
         new AttemptRecord(round, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check],
-        new ExecutorUsage(Duration.ofSeconds(5), [], null), JudgeUsage.none())
+        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none())
     }
 
     // FR10, UX2: renderAttemptSummary is genuinely one line and mentions the round and result
@@ -141,8 +141,7 @@ class StatusTextRendererSpec extends Specification {
 
         then:
         text.contains('wallMillis=unknown')
-        text.contains('tokensIn=unknown')
-        text.contains('tokensOut=unknown')
+        text.contains('tokensByModel=unknown')
     }
 
     // FR11, D7: renderFull renders every EscalationReport kind without throwing
@@ -179,5 +178,38 @@ class StatusTextRendererSpec extends Specification {
         new Activity.Executing(STARTED)                                           | 'executing'
         new Activity.Verifying(new CheckRef(0, 'builtin:files_exist'), STARTED)   | 'verifying builtin:files_exist'
         new Activity.AwaitingInput('pass/fail? ', STARTED)                        | 'awaiting input: "pass/fail? "'
+    }
+
+    // FR7, UX1, D10, D12 of add-agent-executor: executing activity renders live tool detail when present
+    def "renderFull renders executing activity with currentTool and toolCalls when present"() {
+        given:
+        def renderer = new StatusTextRenderer()
+        def state = TaskState.atStageStart('implement')
+        def activity = new LiveActivity(new Activity.Executing(STARTED, 'Edit', 3), null, null)
+        def report = StatusReport.build(context(), state, 3, activity)
+
+        when:
+        def text = renderer.renderFull(report)
+
+        then:
+        text.contains('executing')
+        text.contains('Edit')
+        text.contains('3')
+    }
+
+    // FR7, D10, D12 of add-agent-executor: executing activity omits tool detail when absent
+    def "renderFull renders plain executing activity when no live tool detail is present"() {
+        given:
+        def renderer = new StatusTextRenderer()
+        def state = TaskState.atStageStart('implement')
+        def activity = new LiveActivity(new Activity.Executing(STARTED), null, null)
+        def report = StatusReport.build(context(), state, 3, activity)
+
+        when:
+        def text = renderer.renderFull(report)
+
+        then:
+        text.contains('executing (since')
+        !text.contains('tool')
     }
 }

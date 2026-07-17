@@ -26,7 +26,7 @@ import java.util.List;
  * <p>Unlike {@code attempts} — which covers only the current stage and resets on
  * advancement — {@code totals} is a cumulative executor-usage aggregate for the whole
  * task: it is folded forward on every recorded round and carried across stage
- * advancement and resume, so it is the seam for future token/money budgets (FR13,
+ * advancement and resume, so it is the seam for future token budgets (FR13,
  * NFR-C1, design D5). It is a carried field, not derived from {@code attempts}, precisely
  * because a fold over the history would break the moment the history resets on advancement.
  *

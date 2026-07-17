@@ -62,7 +62,7 @@ abstract class StatusReconstructionSpecBase extends Specification {
     }
 
     static ExecutorUsage usage(long inTokens, long outTokens) {
-        new ExecutorUsage(Duration.ofSeconds(1), [], new TokenUsage(inTokens, outTokens))
+        new ExecutorUsage(Duration.ofSeconds(1), [], ['model-a': new TokenUsage(inTokens, outTokens, 0, 0)])
     }
 
     static ExecutionResult.Completed completed(String stageName, int round, ExecutorUsage usage) {

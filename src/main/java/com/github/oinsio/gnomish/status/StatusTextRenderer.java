@@ -107,10 +107,8 @@ public final class StatusTextRenderer {
                         totals.wallTime() == null
                                 ? "unknown"
                                 : totals.wallTime().toMillis())
-                .append(", tokensIn=")
-                .append(totals.tokens() == null ? "unknown" : totals.tokens().inputTokens())
-                .append(", tokensOut=")
-                .append(totals.tokens() == null ? "unknown" : totals.tokens().outputTokens())
+                .append(", tokensByModel=")
+                .append(totals.tokensByModel().isEmpty() ? "unknown" : totals.tokensByModel())
                 .append('\n');
     }
 

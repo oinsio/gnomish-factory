@@ -69,6 +69,6 @@ public final class LoggingEventListener implements EngineEventListener {
     }
 
     private void logExecutionFinished(ExecutorUsage usage) {
-        log.info("execution finished: wallTime={}, tokens={}", usage.wallTime(), usage.tokens());
+        log.info("execution finished: wallTime={}, tokensByModel={}", usage.wallTime(), usage.tokensByModel());
     }
 }

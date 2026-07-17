@@ -207,7 +207,7 @@ class TaskStateSpec extends Specification {
                 [
                     new ToolUsage(tool, calls, Duration.ofMillis(calls * 10L))
                 ],
-                new TokenUsage(tokensIn, tokensOut))
+                ['model-a': new TokenUsage(tokensIn, tokensOut, 0, 0)])
     }
 
     // FR13, NFR-C1, D5: a fresh stage-start state carries the identity totals (nothing recorded yet)
@@ -254,7 +254,7 @@ class TaskStateSpec extends Specification {
 
         then: 'wall time and tokens are summed'
         state.totals().wallTime() == Duration.ofSeconds(8)
-        state.totals().tokens() == new TokenUsage(150L, 26L)
+        state.totals().tokensByModel() == ['model-a': new TokenUsage(150L, 26L, 0L, 0L)]
 
         and: 'the same tool accumulated (read: 2+3 calls, 20+30ms) and the new tool joined, in order'
         state.totals().tools() == [
@@ -282,7 +282,7 @@ class TaskStateSpec extends Specification {
         and: 'the cumulative task totals survive the advancement unchanged'
         advanced.totals() == totalsBefore
         advanced.totals().wallTime() == Duration.ofSeconds(6)
-        advanced.totals().tokens() == new TokenUsage(110L, 21L)
+        advanced.totals().tokensByModel() == ['model-a': new TokenUsage(110L, 21L, 0L, 0L)]
     }
 
     // FR13, NFR-C1, D5: totals participate in value equality

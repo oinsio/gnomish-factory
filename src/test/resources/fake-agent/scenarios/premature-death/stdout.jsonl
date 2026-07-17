@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"fake-session-death-1","model":"claude-fake-main-1","cwd":"/workspace","tools":["Read","Write","Bash"]}
+{"type":"assistant","session_id":"fake-session-death-1","message":{"id":"msg_1","model":"claude-fake-main-1","content":[{"type":"text","text":"Starting a long-running tool call..."},{"type":"tool_use","id":"toolu_orphan_1","name":"Bash","input":{"command":"sleep 999"}}]}}

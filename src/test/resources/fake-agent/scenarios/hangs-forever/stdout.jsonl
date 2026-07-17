@@ -1,0 +1,1 @@
+{"type":"system","subtype":"init","session_id":"fake-session-hang-1","model":"claude-fake-main-1","cwd":"/workspace","tools":["Read","Write","Bash"]}

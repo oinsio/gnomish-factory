@@ -51,7 +51,7 @@ class InvalidIoBatterySpec extends Specification implements InvalidFixtureSuppor
         write('stages/orphan/stage.yaml', '''\
 purpose: orphan work
 executor:
-  type: api
+  type: agent-cli
   model: orphan-model
 instructions: stages/orphan/instructions.md
 advancement: auto
@@ -119,7 +119,7 @@ advancement: auto
         write('stages/plan/stage.yaml', """\
 purpose: plan the work
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 verify:
@@ -139,7 +139,7 @@ advancement: auto
         write('stages/plan/stage.yaml', """\
 purpose: plan the work
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: ${instructionsRef}
 verify:
@@ -160,7 +160,7 @@ advancement: auto
         write('stages/plan/stage.yaml', '''\
 purpose: plan the work
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 advancement: sideways
@@ -169,7 +169,7 @@ advancement: sideways
         write('stages/orphan/stage.yaml', '''\
 purpose: orphan work
 executor:
-  type: api
+  type: agent-cli
   model: orphan-model
 instructions: stages/orphan/instructions.md
 advancement: auto

@@ -57,22 +57,22 @@ class JudgeVotingCannotVerifySpec extends JudgeVotingSpecBase {
         voter.voteCount == 1
     }
 
-    // FR3, NFR-C1: tokens reported before and by the CannotVerify vote itself are still
-    //              captured in perVote up to the short-circuit point
-    def "captures per-vote tokens up to and including the CannotVerify vote"() {
+    // FR3, NFR-C1, D4: tokens reported before and by the CannotVerify vote itself are
+    //                  still captured in perVote up to the short-circuit point
+    def "captures per-vote token maps up to and including the CannotVerify vote"() {
         given: 'a 3-vote check: Pass with tokens, CannotVerify with tokens, then unreached'
-        def t1 = new TokenUsage(10, 20)
-        def t2 = new TokenUsage(30, 40)
+        def t1 = ['model-a': new TokenUsage(10, 20, 0, 0)]
+        def t2 = ['model-a': new TokenUsage(30, 40, 0, 0)]
         def voter = new ScriptedJudgeVoter([
             pass(t1),
             cannotVerify('timeout', 'poll deadline exceeded', t2),
-            pass(new TokenUsage(99, 99))
+            pass(['model-a': new TokenUsage(99, 99, 0, 0)])
         ])
 
         when: 'the majority loop runs'
         def result = voting(voter).vote(judge(3), CONTEXT, WORKSPACE)
 
-        then: 'the check is CannotVerify and both cast votes tokens are accounted, in order'
+        then: 'the check is CannotVerify and both cast votes token maps are accounted, in order'
         result.verdict() instanceof Verdict.CannotVerify
         result.perVote() == [t1, t2]
 
@@ -83,11 +83,13 @@ class JudgeVotingCannotVerifySpec extends JudgeVotingSpecBase {
     // FR3: a vote's per-vote result list is defensively copied and unmodifiable
     def "returns an unmodifiable per-vote token list"() {
         given: 'a single passing vote reporting tokens'
-        def voter = new ScriptedJudgeVoter([pass(new TokenUsage(1, 1))])
+        def voter = new ScriptedJudgeVoter([
+            pass(['model-a': new TokenUsage(1, 1, 0, 0)])
+        ])
 
         when: 'the check runs and its perVote list is mutated'
         def result = voting(voter).vote(judge(1), CONTEXT, WORKSPACE)
-        result.perVote().add(new TokenUsage(2, 2))
+        result.perVote().add(['model-b': new TokenUsage(2, 2, 0, 0)])
 
         then: 'the copy rejects mutation'
         thrown(UnsupportedOperationException)

@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"ref-session-no-model-usage-1","model":"claude-opus-4-1-20250805","cwd":"/workspace","tools":["Read","Write","Edit","Bash"]}
+{"type":"assistant","session_id":"ref-session-no-model-usage-1","message":{"id":"msg_ref_1","model":"claude-opus-4-1-20250805","content":[{"type":"text","text":"Writing the requested file."},{"type":"tool_use","id":"toolu_ref_1","name":"Write","input":{"file_path":"output.txt","content":"done"}}]}}
+{"type":"user","session_id":"ref-session-no-model-usage-1","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_ref_1","content":"File written successfully."}]}}
+{"type":"assistant","session_id":"ref-session-no-model-usage-1","message":{"id":"msg_ref_2","model":"claude-opus-4-1-20250805","content":[{"type":"text","text":"Stage complete: output.txt written."}]}}
+{"type":"result","subtype":"success","session_id":"ref-session-no-model-usage-1","result":"Stage complete: output.txt written.","usage":{"input_tokens":205,"output_tokens":58,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}

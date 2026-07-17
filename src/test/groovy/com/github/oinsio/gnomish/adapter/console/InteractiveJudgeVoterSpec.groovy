@@ -46,7 +46,7 @@ class InteractiveJudgeVoterSpec extends Specification {
         io.printed.any { it.contains('Acceptance: the widget spins.') }
     }
 
-    def "pass answer yields Vote with Verdict.Pass and null tokens"() {
+    def "pass answer yields Vote with Verdict.Pass and an empty token map"() {
         given:
         def io = new ScriptedConsoleIO(['pass'])
         def console = new DialogConsole(io, { json -> 'status' })
@@ -57,10 +57,10 @@ class InteractiveJudgeVoterSpec extends Specification {
 
         then:
         vote.verdict() instanceof Verdict.Pass
-        vote.tokens() == null
+        vote.tokensByModel().isEmpty()
     }
 
-    def "fail answer collects findings until an empty line, yielding Vote with Verdict.Fail and null tokens"() {
+    def "fail answer collects findings until an empty line, yielding Vote with Verdict.Fail and an empty token map"() {
         given:
         def io = new ScriptedConsoleIO([
             'fail',
@@ -80,7 +80,7 @@ class InteractiveJudgeVoterSpec extends Specification {
             'widget does not spin',
             'missing a screw'
         ]
-        vote.tokens() == null
+        vote.tokensByModel().isEmpty()
     }
 
     def "a workspace that is not a DirectoryWorkspace prints the exact unavailable placeholder"() {

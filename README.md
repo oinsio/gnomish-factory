@@ -52,18 +52,7 @@ A task travels through a pipeline of stages. Stages are **declarative** and live
 
 Every stage follows the IDEF0/ICOM model extended with a Quality Control loop (ISO 9001:2015 process approach) — and every element is machine-verifiable:
 
-```mermaid
-flowchart LR
-    Control["Control<br/>instructions, rules,<br/>best practices"]
-    Mechanism["Mechanism<br/>executor, model,<br/>workspace"]
-    QC["Quality Control<br/>verify checks: declarative,<br/>command, external, LLM judge"]
-
-    Input["Input<br/>artifacts from<br/>previous stages"] --> Stage["Stage<br/>(transforms Input into Output)"]
-    Stage --> Output["Output<br/>verified artifacts<br/>in the task branch"]
-    Control --> Stage
-    Mechanism --> Stage
-    Stage <--> QC
-```
+![IDEF0 diagram of the Stage process](docs/assets/idef0-stage-diagram.svg)
 
 Stage verification is an ordered list of checks in the manifest — engine built-ins (file/schema checks), `command` (any executable, exit-code contract), `external` (asynchronous third-party verification polled with a timeout: CI checks on the task branch, SonarQube quality gate), and `judge` (LLM-as-judge grading against acceptance criteria, returning a structured verdict). Cheap deterministic checks run first; any failure fails the stage. A **quality failure** (a non-pass verdict) feeds the check's findings back into a re-run of the stage — the gnome gets told what to fix — until the attempt limit is reached, at which point the task escalates with the findings history of all attempts. An **infrastructure failure** (the check itself cannot produce a verdict) is retried at the check level without burning attempts. Every attempt, including failed ones, is committed to the task branch, so any instance can resume mid-retry.
 
@@ -105,24 +94,54 @@ java -jar build/libs/*.jar --task="fix the flaky login spec" --project=/path/to/
 
 Flags use Spring's `--key=value` form (quote values with spaces):
 
-| Flag | Required | Meaning |
-|------|----------|---------|
-| `--project=<dir>` | no (default: cwd) | workspace root **and** the `.gnomish/` pipeline location |
-| `--task="<text>"` | one of these two | task description inline (first line → title, rest → body) |
-| `--task-file=<path>` | one of these two | task description read from a file |
-| `--task-id=<id>` | no | override the generated id (`[A-Za-z0-9_-]+`); makes logs and JSON stable |
-| `--from-stage=<name>` | no | start partway through the pipeline, skipping earlier stages' checks |
+| Flag                  | Required          | Meaning                                                                  |
+|-----------------------|-------------------|--------------------------------------------------------------------------|
+| `--project=<dir>`     | no (default: cwd) | workspace root **and** the `.gnomish/` pipeline location                 |
+| `--task="<text>"`     | one of these two  | task description inline (first line → title, rest → body)                |
+| `--task-file=<path>`  | one of these two  | task description read from a file                                        |
+| `--task-id=<id>`      | no                | override the generated id (`[A-Za-z0-9_-]+`); makes logs and JSON stable |
+| `--from-stage=<name>` | no                | start partway through the pipeline, skipping earlier stages' checks      |
 
 At **any** prompt you can type `status` or `status --json` to print the live task report (the same StatusReport contract a future `gnomish status` will reproduce), and **Ctrl-D** is always a safe exit. After every attempt the operator gets a one-line summary; a full report prints at the end. The runner writes nothing inside the workspace — the findings temp file and the rolling log under `~/.gnomish/logs/` both live outside it.
 
 The process exit code reports the outcome — anything `>= 10` means the engine reached a legitimate terminal state:
 
-| Code | Meaning | | Code | Meaning |
-|------|---------|-|------|---------|
-| 0 | completed | | 4 | stdin exhausted mid-stage |
-| 1 | internal error | | 10 | escalated (attempts exhausted / undecidable) |
-| 2 | usage error | | 11 | paused at a manual checkpoint |
-| 3 | pipeline load failure | | 12 | aborted |
+| Code | Meaning               | | Code | Meaning                                      |
+|------|-----------------------|-|------|----------------------------------------------|
+| 0    | completed             | | 4    | stdin exhausted mid-stage                    |
+| 1    | internal error        | | 10   | escalated (attempts exhausted / undecidable) |
+| 2    | usage error           | | 11   | paused at a manual checkpoint                |
+| 3    | pipeline load failure | | 12   | aborted                                      |
+
+### Manifest-driven run and `--interactive` overrides
+
+By default `gnomish run` is **manifest-driven, not interactive**: it reads the target project's `.gnomish/` pipeline and wires each stage's real adapter straight from the manifest — an `agent-cli` stage executor gets the CLI executor (a real `claude -p` subprocess per round), and every `judge` verify check gets the CLI judge, regardless of the stage's own executor type. This is the normal, paid mode, and starting a real agent round requires **no confirmation gate** by design — that is the tool's purpose, and the operator is present. `api` stages aren't supported yet and are rejected at startup (exit 3, before any dialog), naming the offending stage.
+
+`--interactive` overrides the wiring, entirely or per role:
+
+| Flag                     | Effect                                                                                                            |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------|
+| *(absent)*               | manifest-driven: real CLI executor + real CLI judge (default, paid)                                               |
+| `--interactive`          | full add-manual-run behavior: human plays both executor and judge                                                 |
+| `--interactive=executor` | human plays the executor; judge stays the real CLI judge — verdict calibration                                    |
+| `--interactive=judge`    | human plays the judge; executor stays the real CLI agent — judge-prompt debugging without paying for agent rounds |
+
+`--interactive` may be given only once. External checks are always interactive regardless of this flag.
+
+### Manifest settings vs. installation properties
+
+A stage's `executor.settings` (and a `judge` check's own `settings`) accept exactly four keys — `allowedTools`, `disallowedTools`, `maxTurns`, `roundTimeout` — validated at startup before any dialog; an unrecognized key or malformed value is a startup error naming the stage/check and the key. These are portable, repo-level settings that travel with the pipeline definition.
+
+Installation-level configuration — things that are true of *this machine*, not the repo — lives in `factory.*` application properties instead, never the manifest:
+
+| Property                            | Meaning                                                              |
+|-------------------------------------|----------------------------------------------------------------------|
+| `factory.agent-cli-binary`          | path or name of the agent CLI binary (default: `claude` on `PATH`)   |
+| `factory.agent-cli-env-passthrough` | environment variable names passed through to the spawned CLI process |
+
+### Ollama E2E prerequisite
+
+`./gradlew ollamaE2eTest` runs a local E2E suite that points the real `claude` CLI at a locally running Ollama instance (native Anthropic-compatible API since Ollama v0.14, via `ANTHROPIC_BASE_URL`) and drives a trivial stage through `gnomish run` end to end. It's excluded from `check`/`test`/`build` and is a native dev-machine prerequisite, not a Testcontainers layer — dockerized Ollama has no Metal access on macOS and is too slow. Individual specs skip cleanly with a clear message when Ollama or `claude` isn't available, so it's safe to run without any setup.
 
 ## Tech stack
 

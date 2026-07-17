@@ -74,7 +74,7 @@ class AdvancementSpec extends Specification {
         new ExecutorUsage(Duration.ofSeconds(wallSecs),
                 [
                     new ToolUsage('read', 1, Duration.ofMillis(10))
-                ], new TokenUsage(tokensIn, tokensOut))
+                ], ['model-a': new TokenUsage(tokensIn, tokensOut, 0, 0)])
     }
 
     // FR8: a one-stage auto pipeline that passes verification completes with the position
@@ -135,7 +135,7 @@ class AdvancementSpec extends Specification {
         // usage, then stage 2 carries it forward and folds its own usage into the final total.
         persistence.entries[0].state.totals() == usage(5, 100, 20)
         outcome.finalState().totals().wallTime() == Duration.ofSeconds(8)
-        outcome.finalState().totals().tokens() == new TokenUsage(140L, 30L)
+        outcome.finalState().totals().tokensByModel() == ['model-a': new TokenUsage(140L, 30L, 0L, 0L)]
         outcome.finalState().totals().tools() == [
             new ToolUsage('read', 2, Duration.ofMillis(20))
         ]

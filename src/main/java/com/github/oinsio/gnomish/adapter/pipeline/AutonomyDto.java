@@ -5,7 +5,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code autonomy} block shared by {@code config.yaml} (the pipeline-wide
  * default) and {@code stage.yaml} (the per-stage override). Only the attempt
- * limit is modeled — token/money budgets are out of scope (NG8).
+ * limit is modeled — token budgets are out of scope (NG8).
  *
  * <p>A wire-format DTO (D2): {@code attemptLimit} is boxed so a missing key
  * deserializes to {@code null} rather than {@code 0}, letting the mapper (task

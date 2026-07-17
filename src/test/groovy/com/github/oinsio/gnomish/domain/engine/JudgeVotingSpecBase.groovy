@@ -20,16 +20,16 @@ abstract class JudgeVotingSpecBase extends Specification {
         new VerifyCheck.Judge('criteria.md', 'model', [:], votes)
     }
 
-    static JudgeVoter.Vote pass(TokenUsage tokens = null) {
-        new JudgeVoter.Vote(new Verdict.Pass(), tokens)
+    static JudgeVoter.Vote pass(Map<String, TokenUsage> tokensByModel = [:]) {
+        new JudgeVoter.Vote(new Verdict.Pass(), tokensByModel)
     }
 
-    static JudgeVoter.Vote fail(List<Finding> findings, TokenUsage tokens = null) {
-        new JudgeVoter.Vote(new Verdict.Fail(findings), tokens)
+    static JudgeVoter.Vote fail(List<Finding> findings, Map<String, TokenUsage> tokensByModel = [:]) {
+        new JudgeVoter.Vote(new Verdict.Fail(findings), tokensByModel)
     }
 
-    static JudgeVoter.Vote cannotVerify(String reason, String details, TokenUsage tokens = null) {
-        new JudgeVoter.Vote(new Verdict.CannotVerify(reason, details), tokens)
+    static JudgeVoter.Vote cannotVerify(String reason, String details, Map<String, TokenUsage> tokensByModel = [:]) {
+        new JudgeVoter.Vote(new Verdict.CannotVerify(reason, details), tokensByModel)
     }
 
     JudgeVoting voting(ScriptedJudgeVoter voter) {

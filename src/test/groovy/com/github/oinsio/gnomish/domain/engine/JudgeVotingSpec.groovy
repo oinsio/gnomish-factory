@@ -80,23 +80,23 @@ class JudgeVotingSpec extends JudgeVotingSpecBase {
         voter.voteCount == 2
     }
 
-    // NFR-C1: each cast vote reporting tokens surfaces in perVote in vote order; a vote
-    //         with null tokens contributes no entry
-    def "captures per-vote tokens in vote order, skipping votes that report none"() {
+    // NFR-C1, D4: every cast vote's token map surfaces in perVote in vote order,
+    //             including an empty map for a vote that reported nothing
+    def "captures per-vote token maps in vote order, including empty maps"() {
         given: 'a 3-vote check: Fail with tokens, Fail without, then a Pass (unreached)'
-        def t1 = new TokenUsage(10, 20)
+        def t1 = ['model-a': new TokenUsage(10, 20, 0, 0)]
         def voter = new ScriptedJudgeVoter([
             fail([new Finding('x', null, null)], t1),
-            fail([new Finding('y', null, null)], null),
-            pass(new TokenUsage(99, 99))
+            fail([new Finding('y', null, null)], [:]),
+            pass(['model-a': new TokenUsage(99, 99, 0, 0)])
         ])
 
         when: 'the majority loop runs'
         def result = voting(voter).vote(judge(3), CONTEXT, WORKSPACE)
 
-        then: 'only the two cast votes are accounted, and only the one reporting tokens appears'
+        then: 'only the two cast votes are accounted, each contributing its own map'
         voter.voteCount == 2
-        result.perVote() == [t1]
+        result.perVote() == [t1, [:]]
     }
 
     // FR7: the TaskContext is threaded through to every vote unchanged

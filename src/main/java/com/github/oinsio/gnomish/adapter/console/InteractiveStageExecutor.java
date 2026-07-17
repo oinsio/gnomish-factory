@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The interactive {@link StageExecutor}: a human plays the gnome. Prints the
@@ -71,7 +72,7 @@ public final class InteractiveStageExecutor implements StageExecutor {
 
     private ExecutorUsage usage(long startNanos) {
         Duration wallTime = Duration.ofNanos(System.nanoTime() - startNanos);
-        return new ExecutorUsage(wallTime, List.of(), null);
+        return new ExecutorUsage(wallTime, List.of(), Map.of());
     }
 
     private ToolTrace trace(Request request) {

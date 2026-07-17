@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import org.jspecify.annotations.Nullable;
+import java.util.Map;
 
 /**
  * The port through which the engine casts one LLM-as-judge vote against a stage's
@@ -41,20 +41,29 @@ public interface JudgeVoter {
     Vote vote(VerifyCheck.Judge check, TaskContext context, Workspace workspace);
 
     /**
-     * The outcome of one judge vote: the graded {@link Verdict} and the {@link
-     * TokenUsage} the vote consumed. The engine tallies these into a majority
-     * verdict and aggregates the per-vote token counts for cost telemetry
+     * The outcome of one judge vote: the graded {@link Verdict} and the per-model
+     * {@link TokenUsage} map the vote consumed. The engine tallies these into a
+     * majority verdict and aggregates the per-vote token maps for cost telemetry
      * (NFR-C1). Inert value data compared by content.
      *
-     * <p>{@code tokens} is {@code null} when the adapter did not report token
-     * counts for this vote; the engine simply omits an unreported vote from its
-     * cost aggregation rather than treating a missing count as zero.
+     * <p>{@code tokensByModel} is map-only, following {@link
+     * com.github.oinsio.gnomish.domain.engine.ExecutorUsage#tokensByModel()}'s
+     * shape (design D4): an empty map means the adapter did not report token
+     * counts for this vote — the interactive judge always reports an empty map,
+     * since a human vote never carries tokens — and the engine simply omits an
+     * unreported vote from its cost aggregation rather than treating a missing
+     * count as zero.
      *
-     * <p>Implements FR3, D2 of add-stage-engine.
+     * <p>Implements FR3, D2 of add-stage-engine; FR9, NFR-C1, D4 of add-agent-executor.
      *
      * @param verdict this vote's graded verdict; never null
-     * @param tokens the tokens this vote consumed, or {@code null} when the adapter
-     *     did not report them
+     * @param tokensByModel the tokens this vote consumed, keyed by resolved model
+     *     id; defensively copied, unmodifiable, empty when unreported
      */
-    record Vote(Verdict verdict, @Nullable TokenUsage tokens) {}
+    record Vote(Verdict verdict, Map<String, TokenUsage> tokensByModel) {
+
+        public Vote {
+            tokensByModel = Map.copyOf(tokensByModel);
+        }
+    }
 }

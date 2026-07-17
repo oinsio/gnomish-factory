@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.console.ConsoleClosedException;
@@ -63,7 +64,8 @@ public final class ManualRunRunner implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ManualRunRunner.class);
 
-    private static final List<String> RUN_FLAGS = List.of("project", "task", "task-file", "task-id", "from-stage");
+    private static final List<String> RUN_FLAGS =
+            List.of("project", "task", "task-file", "task-id", "from-stage", "interactive");
 
     /** The MDC key this runner sets once {@code taskId} is known (design D9, task 8.2). */
     private static final String TASK_ID_KEY = "taskId";
@@ -82,7 +84,8 @@ public final class ManualRunRunner implements ApplicationRunner {
             ShellCommandCheckRunner shellCommandCheckRunner,
             InMemoryAttemptPersistence attemptPersistence,
             SystemClock systemClock,
-            ThreadSleeper threadSleeper) {
+            ThreadSleeper threadSleeper,
+            FactoryProperties factoryProperties) {
         this.argumentsParser = argumentsParser;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
@@ -92,7 +95,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                 shellCommandCheckRunner,
                 attemptPersistence,
                 systemClock,
-                threadSleeper);
+                threadSleeper,
+                factoryProperties);
     }
 
     /**
@@ -141,7 +145,8 @@ public final class ManualRunRunner implements ApplicationRunner {
         AdHocTaskSynthesizer.SynthesizedTask synthesized = taskSynthesizer.synthesize(runArguments, definition);
         MDC.put(TASK_ID_KEY, synthesized.context().taskId());
 
-        ManualRunAssembly.Run run = assembly.assemble(definition, synthesized.context(), synthesized.initialState());
+        ManualRunAssembly.Run run = assembly.assemble(
+                definition, synthesized.context(), synthesized.initialState(), runArguments.interactiveMode());
         run.loop().run(definition, synthesized.context(), synthesized.initialState(), loaded.workspace(), run.ports());
     }
 }

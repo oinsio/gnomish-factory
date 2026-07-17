@@ -15,7 +15,7 @@ Every stage description must contain:
    - **built-in declarative** — engine-implemented checks (`files_exist`, schema validation, ...)
    - **`command`** — any executable (any language), contract: exit code 0 = pass; optional structured findings (JSON) for tracker reports
    - **`external`** — asynchronous third-party verification: submit (or rely on the branch push trigger) + poll with interval and timeout; e.g. CI checks on the task branch via the tracker/SCM port, SonarQube quality gate. No webhooks — the factory has no inbound HTTP; results are polled
-   - **`judge`** — LLM-as-judge via the executor port: acceptance-criteria file + model settings, structured verdict (`passed`, `findings[]`); acceptance criteria must be concrete and checkable; use multiple votes for critical stages
+   - **`judge`** — LLM-as-judge via the `JudgeVoter` port: acceptance-criteria file + model settings, structured verdict (`passed`, `findings[]`); acceptance criteria must be concrete and checkable; use multiple votes for critical stages
    Order cheap deterministic checks first (fail fast), `judge` last; any failure fails the stage verification
 7. **Failure & Escalation** — attempt limit and the two failure classes:
    - **Quality failure** (an explicit non-pass verdict: red tests, failed quality gate, judge findings) — collect the check's findings and re-run the stage with them as feedback context (same working copy for `agent-cli`, findings appended for `api`), attempt +1; when attempts are exhausted, escalate with the full findings history of all attempts

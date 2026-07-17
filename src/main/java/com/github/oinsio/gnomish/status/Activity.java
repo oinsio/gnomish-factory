@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What the engine (or the operator dialog) is doing right now, from the live
@@ -26,13 +27,37 @@ public sealed interface Activity permits Activity.Executing, Activity.Verifying,
     Instant since();
 
     /**
-     * An executor round is in flight ({@code AttemptStarted}..{@code ExecutionFinished}).
+     * An executor round is in flight ({@code AttemptStarted}..{@code ExecutionFinished}),
+     * optionally carrying the live tool detail an {@link
+     * com.github.oinsio.gnomish.adapter.agent.AgentProgressListener} enriches this activity
+     * with as the round's CLI process reports its own progress (FR7, UX1, D10, D12 of
+     * add-agent-executor) — {@code currentTool} names the top-level tool call presently
+     * running (or {@code null} before the first tool or once the round finishes) and {@code
+     * toolCalls} counts top-level tool calls started so far in this round. Judge rounds are
+     * never enriched: they run under {@link Verifying}, not this variant, so an enricher that
+     * only mutates on {@code Executing} naturally leaves them untouched.
      *
-     * <p>Implements FR11, D7 of add-manual-run.
+     * <p>Implements FR11, D7 of add-manual-run; FR7, UX1, D10, D12 of add-agent-executor.
      *
      * @param since the moment execution started; never null
+     * @param currentTool the name of the top-level tool call presently running, or {@code
+     *     null} when none has started yet or the round has finished
+     * @param toolCalls the count of top-level tool calls started so far this round; {@code 0}
+     *     before the first tool or once the round finishes
      */
-    record Executing(Instant since) implements Activity {}
+    record Executing(Instant since, @Nullable String currentTool, int toolCalls) implements Activity {
+
+        /**
+         * Convenience constructor for the common case of no live tool detail yet — round
+         * start, or any caller (the engine's {@code StatusEventListener}, most tests) that
+         * only tracks the round boundary, not per-tool detail.
+         *
+         * @param since the moment execution started; never null
+         */
+        public Executing(Instant since) {
+            this(since, null, 0);
+        }
+    }
 
     /**
      * A verify check is in flight ({@code CheckStarted}..{@code CheckFinished}),

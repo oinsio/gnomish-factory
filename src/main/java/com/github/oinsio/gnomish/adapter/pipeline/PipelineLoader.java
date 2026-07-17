@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.adapter.agent.AgentSettingsValidator;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishFiles.RawConfig;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishFiles.RawStage;
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineMapper.StageEntry;
@@ -50,23 +51,26 @@ import org.jspecify.annotations.Nullable;
  *       {@code pipeline.yaml} parsed and every pipeline-named stage has a
  *       structurally-clean parsed DTO, since a domain model cannot be built from a
  *       partial or malformed tree;</li>
- *   <li><b>domain-validate</b> and <b>I/O-validate</b> —
- *       {@link PipelineValidator} (pure semantic rules) and
- *       {@link ReferencedFiles} (file existence + traversal), run only when a
- *       {@link PipelineDefinition} was produced.</li>
+ *   <li><b>domain-validate</b>, <b>I/O-validate</b> and <b>settings-validate</b> —
+ *       {@link PipelineValidator} (pure semantic rules), {@link ReferencedFiles}
+ *       (file existence + traversal), and {@link AgentSettingsValidator}
+ *       (agent-cli/judge settings schema, task 9.1 of add-agent-executor), run
+ *       only when a {@link PipelineDefinition} was produced.</li>
  * </ol>
  *
  * <p><b>Aggregation order (deterministic, NFR-R1).</b> Errors are concatenated
  * coarsest-file-first, in tier order: parse (config, pipeline, then stages in
- * discovery order), structural (same order), consistency, mapping, domain, then
- * referenced-files. The same tree always yields an equal outcome.
+ * discovery order), structural (same order), consistency, mapping, domain,
+ * referenced-files, then settings. The same tree always yields an equal outcome.
  *
  * <p><b>No execution (NFR-S1) / no writes (NFR-R1).</b> The loader only reads text,
  * parses, and validates: it never runs a configured {@code command}, model, or
  * {@code external} check (they are carried as inert data), and never creates,
  * modifies, or deletes anything under the root.
  *
- * <p>Implements FR1, FR8 (+ NFR-S1, NFR-R1) of load-pipeline-config.
+ * <p>Implements FR1, FR8 (+ NFR-S1, NFR-R1) of load-pipeline-config; the
+ * settings-validate tier additionally implements FR11, UX2, D7 of
+ * add-agent-executor (task 9.1).
  */
 public final class PipelineLoader {
 
@@ -196,6 +200,7 @@ public final class PipelineLoader {
         }
         errors.addAll(PipelineValidator.validate(model));
         errors.addAll(ReferencedFiles.check(root, model.stages()));
+        errors.addAll(AgentSettingsValidator.validate(model));
         return model;
     }
 

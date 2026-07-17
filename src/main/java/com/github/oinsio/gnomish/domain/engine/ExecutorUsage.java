@@ -17,52 +17,59 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The telemetry an executor round reports: total {@code wallTime}, the per-tool
- * aggregates, and the round's token {@code tokens}. Every field is optional
- * (design D5, "all optional"): an interactive {@code agent-cli} executor may know
- * only wall time, while an {@code api} round may report tokens but no per-tool
- * breakdown. Absent numbers are {@code null} rather than fabricated zeros, so
- * "unknown" and "zero" stay distinguishable for budget accounting (NFR-C1).
+ * aggregates, and the round's per-model token map {@code tokensByModel}. {@code
+ * wallTime} and {@code tools} stay optional (design D5 of add-stage-engine): an
+ * interactive {@code agent-cli} executor may know only wall time, while an {@code
+ * api} round may report tokens but no per-tool breakdown.
  *
  * <p>{@code wallTime} is {@code null} when unknown and non-negative when present.
  * {@code tools} is defensively copied, unmodifiable, and may be empty (no
- * breakdown reported). {@code tokens} is {@code null} when the adapter did not
- * report token counts. Inert value data compared by content.
+ * breakdown reported). {@code tokensByModel} is defensively copied, unmodifiable,
+ * and map-only: an empty map means unreported, preserving "unknown" distinct from
+ * "zero" without a redundant total field alongside it (design D4, NFR-C1); a
+ * display total is derived on demand by {@link #totalTokens()}, never stored.
+ * Keys are resolved model ids. Inert value data compared by content.
  *
- * <p>Implements FR13, NFR-C1 of add-stage-engine.
+ * <p>Implements FR5, NFR-C1, D4 of add-agent-executor.
  *
  * @param wallTime total round wall time, or {@code null} when unknown; never
  *     negative when present
  * @param tools per-tool aggregates; defensively copied, unmodifiable, possibly
  *     empty
- * @param tokens executor token usage, or {@code null} when unreported
+ * @param tokensByModel token usage keyed by resolved model id; defensively
+ *     copied, unmodifiable, empty when unreported
  */
-public record ExecutorUsage(
-        @Nullable Duration wallTime,
-        List<ToolUsage> tools,
-        @Nullable TokenUsage tokens) {
+public record ExecutorUsage(@Nullable Duration wallTime, List<ToolUsage> tools, Map<String, TokenUsage> tokensByModel) {
 
     public ExecutorUsage {
         wallTime = requireNonNegativeOrNull(wallTime, "wallTime");
         tools = List.copyOf(tools);
+        tokensByModel = Map.copyOf(tokensByModel);
     }
 
+    // PIT M4 documented exception (build.gradle has the full rationale): @DoNotMutate because
+    // this method's only content is a `new ExecutorUsage(...)` record-construction call, the
+    // same RUN_ERROR-triggering shape (hcoles/pitest#1285) as `plus` below — not a real
+    // coverage gap. ExecutorUsageSpec's "none() yields ..." test covers it at the ordinary
+    // test level.
     /** An {@code ExecutorUsage} that knows nothing: no wall time, no tools, no tokens. */
+    @DoNotMutate
     public static ExecutorUsage none() {
-        return new ExecutorUsage(null, List.of(), null);
+        return new ExecutorUsage(null, List.of(), Map.of());
     }
 
     /**
      * Returns a new {@code ExecutorUsage} that is the cumulative merge of {@code this} and
      * {@code other}, so a task's running total can fold in each round's executor usage
-     * (FR13, NFR-C1, design D5). {@link #none()} is the identity for this operation:
+     * (FR5, NFR-C1, design D4). {@link #none()} is the identity for this operation:
      * {@code x.plus(none())} and {@code none().plus(x)} both equal {@code x} by value.
      *
-     * <p>Every optional field is null-aware, preserving the "unknown" vs "zero" distinction
-     * that budget accounting depends on (NFR-C1): a running total's {@code wallTime} or
-     * {@code tokens} is {@code null} only until some round reports it, after which the total
-     * is the running sum of the <em>reported</em> values — a null operand is skipped, never
-     * treated as a fabricated zero. Concretely, for {@code wallTime} and {@code tokens}: both
-     * null yields null; exactly one present yields that one; both present yields their sum.
+     * <p>{@code wallTime} is null-aware, preserving the "unknown" vs "zero" distinction:
+     * both null yields null; exactly one present yields that one; both present yields their
+     * sum. {@code tokensByModel} merges by key union — matching model ids sum their four
+     * counts field-wise ({@link TokenUsage#plus(TokenUsage)}), distinct ids carry over
+     * unchanged; an empty operand map leaves the other operand's entries untouched, so
+     * "unreported" never contaminates a running total with a fabricated zero entry.
      *
      * <p>{@code tools} merge by tool {@code name}: matching names accumulate ({@code calls}
      * summed, {@code totalDuration} summed) while distinct names union. The result order is
@@ -75,12 +82,29 @@ public record ExecutorUsage(
     // this method's only content is a `new ExecutorUsage(...)` record-construction call, and
     // that shape triggers the same JVMTI RedefineClasses/record-attribute restriction
     // (hcoles/pitest#1285) as the private helpers above — RUN_ERROR, not a real coverage gap.
-    // The three helpers it delegates to are separately covered (and separately excluded, for the
+    // The helpers it delegates to are separately covered (and separately excluded, for the
     // same reason); ExecutorUsageSpec exercises `plus` itself through many both-null/one-present/
-    // both-present/tools-merge scenarios at the ordinary test level.
+    // both-present/tools-merge/tokensByModel-merge scenarios at the ordinary test level.
     @DoNotMutate
     public ExecutorUsage plus(ExecutorUsage other) {
-        return new ExecutorUsage(sumWallTime(other.wallTime), mergeTools(other.tools), sumTokens(other.tokens));
+        return new ExecutorUsage(
+                sumWallTime(other.wallTime), mergeTools(other.tools), mergeTokens(other.tokensByModel));
+    }
+
+    /**
+     * Derives the display total across every reported model — the union field-wise sum, or
+     * an all-zero {@link TokenUsage} when {@code tokensByModel} is empty. Derived on demand
+     * rather than stored: a stored total would be exact redundancy inviting drift from the
+     * map it summarizes (design D4).
+     *
+     * @return the field-wise sum of every entry in {@code tokensByModel}; never null
+     */
+    public TokenUsage totalTokens() {
+        var total = new TokenUsage(0L, 0L, 0L, 0L);
+        for (var usage : tokensByModel.values()) {
+            total = total.plus(usage);
+        }
+        return total;
     }
 
     @DoNotMutate
@@ -95,14 +119,10 @@ public record ExecutorUsage(
     }
 
     @DoNotMutate
-    private @Nullable TokenUsage sumTokens(@Nullable TokenUsage other) {
-        if (tokens == null) {
-            return other;
-        }
-        if (other == null) {
-            return tokens;
-        }
-        return new TokenUsage(tokens.inputTokens() + other.inputTokens(), tokens.outputTokens() + other.outputTokens());
+    private Map<String, TokenUsage> mergeTokens(Map<String, TokenUsage> other) {
+        var merged = new LinkedHashMap<>(tokensByModel);
+        other.forEach((model, usage) -> merged.merge(model, usage, TokenUsage::plus));
+        return merged;
     }
 
     @DoNotMutate
@@ -134,8 +154,8 @@ public record ExecutorUsage(
 
     /**
      * Fails fast on a negative {@code wallTime} when one is present: a round cannot
-     * take negative wall time (FR13). A {@code null} means "unknown" and passes
-     * through untouched. Kept as an explicit static method rather than inline in
+     * take negative wall time (FR13 of add-stage-engine). A {@code null} means "unknown" and
+     * passes through untouched. Kept as an explicit static method rather than inline in
      * the compact constructor: PIT's record filter suppresses all mutations inside
      * a record's canonical constructor, which would silently exempt this validation
      * from the 100% mutation gate.

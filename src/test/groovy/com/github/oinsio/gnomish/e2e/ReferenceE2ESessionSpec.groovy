@@ -91,7 +91,8 @@ class ReferenceE2ESessionSpec extends Specification {
                 E2eFixture.projectRoot(),
                 [
                     '--project=' + E2eFixture.projectRoot(),
-                    '--task=reference session: retry, escalate, pause, complete'
+                    '--task=reference session: retry, escalate, pause, complete',
+                    '--interactive'
                 ],
                 script)
 

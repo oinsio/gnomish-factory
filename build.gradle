@@ -183,6 +183,18 @@ tasks.named('test') {
     // build/libs/*.jar glob that could match a stale or ambiguous artifact.
     dependsOn tasks.named('bootJar')
     systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
+
+    // The Ollama E2E layer (task 11.1, M1, D11) needs a native local Ollama install and a
+    // logged-in `claude` CLI — not free/deterministic like the rest of this task's specs (the
+    // fake-agent-binary suites, the self-contained e2e.* harness above). Excluded here and run
+    // instead via the dedicated `ollamaE2eTest` task below, so `./gradlew build`/`check` never
+    // requires Ollama.
+    exclude 'com/github/oinsio/gnomish/e2e/ollama/**'
+
+    // The paid smoke layer (task 11.3, M4, D11) spends real money against the real Anthropic
+    // backend by design — never run implicitly. Excluded here and run only via the dedicated
+    // `paidSmokeTest` task below, so `./gradlew build`/`check`/`test` never spends a cent.
+    exclude 'com/github/oinsio/gnomish/e2e/paidsmoke/**'
 }
 
 tasks.named('jacocoTestReport') {
@@ -190,6 +202,70 @@ tasks.named('jacocoTestReport') {
     reports {
         xml.required = true
         html.required = true
+    }
+}
+
+// Ollama E2E harness (task 11.1, M1, D11): real `claude` CLI pointed at a local Ollama instance
+// (native Anthropic API since Ollama v0.14 — no shim/proxy needed, just `ANTHROPIC_BASE_URL`).
+// Deliberately outside `check`/`test`/`build` — dockerized Ollama has no Metal access on macOS
+// and is unusably slow, so this targets a native dev-machine Ollama install, not Testcontainers
+// (D11). Individual specs under `e2e.ollama` skip themselves cleanly via `OllamaAvailability`
+// (Spock `@IgnoreIf`) when Ollama or the `claude` CLI is not present — this task itself always
+// "succeeds" (0 or more skipped tests), so CI can run it opportunistically without a hard Ollama
+// requirement, though it is intended as a local/manual dev-machine task per D11.
+tasks.register('ollamaE2eTest', Test) {
+    description = 'Runs the Ollama-backed local E2E specs (real claude CLI + local Ollama); skips cleanly when Ollama is absent.'
+    group = 'verification'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include 'com/github/oinsio/gnomish/e2e/ollama/**'
+    dependsOn tasks.named('bootJar')
+    systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
+    // Always show individual outcomes (PASSED/SKIPPED) so a developer can see the skip-with-reason
+    // message from OllamaAvailability/@IgnoreIf directly in the console, not just an aggregate count.
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showStandardStreams = false
+    }
+}
+
+// Paid smoke task (task 11.3, M4, D11's "(3b) Paid smoke"): real `claude` CLI against the real
+// Anthropic backend (a logged-in, authenticated CLI — not Ollama, which OllamaAvailability's
+// weaker "resolves on PATH" check is enough for since Ollama never validates the auth token).
+// Deliberately outside `check`/`test`/`build` and never wired into CI: this task spends real
+// money by design (M4). `PaidSmokeReferenceDumpSpec`'s login preflight fails each recording
+// feature fast with a specific reason (not authenticated, binary missing, hung on an interactive
+// login prompt) rather than hanging — see ClaudeLoginPreflight. Run manually on CLI version bumps,
+// parser changes, unexplained divergence between this layer and the fake-agent/Ollama layers, and
+// before archiving this change; its dumps refresh the committed stream-json-reference fixtures.
+tasks.register('paidSmokeTest', Test) {
+    description = 'Manual, paid smoke test against the real claude CLI backend; refreshes stream-json reference dumps. Never run in CI.'
+    group = 'verification'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include 'com/github/oinsio/gnomish/e2e/paidsmoke/**'
+    // The on-disk source resource directory (not the build/resources/test copy) so a recording
+    // spec's writes land in the committed fixture, the same on-disk-vs-copy distinction
+    // e2e.jarPath draws for the bootJar artifact below.
+    systemProperty 'referenceDumpDir', file('src/test/resources/stream-json-reference').absolutePath
+    // Test tasks fork a separate JVM, so a `-D` on the Gradle command line never reaches it on its
+    // own — this project property (`-PpaidSmoke.claudeBinary=...`) is explicitly forwarded as the
+    // forked JVM's system property of the same name, the seam PaidSmokeReferenceDumpSpec/
+    // ClaudeLoginPreflight read the CLI binary override from (defaults to `claude` on PATH).
+    if (project.hasProperty('paidSmoke.claudeBinary')) {
+        systemProperty 'paidSmoke.claudeBinary', project.property('paidSmoke.claudeBinary')
+    }
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        // Unlike ollamaE2eTest's clean-skip convention, a login-preflight failure here must be
+        // immediately visible on the console — this task runs manually and a hidden failure reason
+        // could read as a hang or an opaque red X instead of "run `claude login` and retry."
+        exceptionFormat = 'full'
+        showExceptions = true
+        showCauses = true
+        showStandardStreams = true
     }
 }
 
