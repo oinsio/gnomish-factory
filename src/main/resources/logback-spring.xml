@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Instance-local logging (task 8.1 of add-manual-run, design D9).
+  Implements NFR-O1, NFR-O2, NFR-S1, NFR-S2 of add-manual-run.
+
+  One rolling file under the operator's home directory, independent of any
+  workspace (the project flag) and independent of this repository's own git
+  tree (NFR-S1: log location outside any workspace/git). The file is never a path
+  a `git add` in either tree could reach, and it is not listed in this
+  project's own working set, so NFR-S2 (never committed to git) holds by
+  construction alone — no .gitignore entry is needed for a path that can
+  never be inside a git working tree in the first place.
+
+  `${user.home}` is Logback's own property lookup (a JVM system property),
+  resolved by Logback's parser independently of Spring Boot's `${...}`
+  placeholder resolution — both syntaxes share the delimiter but are handled
+  by different property sources; `user.home` is not a Spring/Boot property,
+  so Logback's own OS-environment/system-property lookup is what resolves it
+  here, and it works the same in a plain `logback.xml` or a `logback-spring.xml`.
+
+  Rolling policy numbers (D9: "daily/size roll, ~7 days history, total size
+  cap" — no exact numbers pinned in the design, chosen here):
+    - maxFileSize = 10MB: keeps individual rolled files small enough to open
+      in a text editor/grep comfortably during a post-mortem, while not
+      rolling so often that the history fills with tiny fragments under
+      normal single-task-per-process usage.
+    - maxHistory = 7 (days): matches D9's "~7 days" retention target verbatim.
+    - totalSizeCap = 100MB: bounds worst-case disk usage even if a busy week
+      produces many 10MB segments; comfortably above 7 days of a single
+      factory instance's expected log volume, while still being a fixed,
+      predictable ceiling (Logback deletes oldest segments first once hit).
+
+  Pattern: ISO8601 timestamp, thread, level, taskId/stage/attempt MDC (set by
+  the runner and an event-listener adapter — tasks 8.2/8.3, not this config),
+  logger name, message — greppable by any MDC key via `grep 'taskId=<id>'`.
+-->
+<configuration>
+
+    <property name="GNOMISH_LOG_DIR" value="${user.home}/.gnomish/logs"/>
+    <property name="GNOMISH_LOG_PATTERN"
+              value="%d{ISO8601} [%thread] %-5level [taskId=%X{taskId}, stage=%X{stage}, attempt=%X{attempt}] %logger{36} - %msg%n"/>
+
+    <!-- Durable diagnostic record: broad INFO level, the only consumer is a
+         days-horizon post-mortem grep (D9); DEBUG has no consumer here. -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${GNOMISH_LOG_DIR}/gnomish.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${GNOMISH_LOG_DIR}/gnomish.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>100MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${GNOMISH_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- stdout belongs to the dialog (NFR-O2): only WARN and above reach the
+         console the operator is conversing through. -->
+    <appender name="CONSOLE_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.out</target>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder>
+            <pattern>${GNOMISH_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ERROR is duplicated to stderr alongside the WARN+ stdout appender
+         above (NFR-O2: "ERROR duplicated to stderr" — both, not stderr-only). -->
+    <appender name="CONSOLE_STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <encoder>
+            <pattern>${GNOMISH_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="CONSOLE_STDOUT"/>
+        <appender-ref ref="CONSOLE_STDERR"/>
+    </root>
+
+</configuration>

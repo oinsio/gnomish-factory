@@ -22,7 +22,7 @@ Every proposal.md must contain:
    - Non-Functional Reliability: NFR-R1... (retries, resume, idempotency)
    - Non-Functional Observability: NFR-O1... (logs, progress, cost tracking)
    - Non-Functional Security: NFR-S1... (credentials, sandbox boundaries)
-   - Non-Functional Cost: NFR-C1... (token/money budgets)
+   - Non-Functional Cost: NFR-C1... (token budgets)
 7. **Operator Experience Criteria** — UX1, UX2... (what the human sees in tracker/logs/config)
 8. **Success Metrics** — M1, M2... (concrete numbers, not "works well")
 9. **Open Questions** — Q1, Q2...

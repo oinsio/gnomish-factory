@@ -1,0 +1,73 @@
+{
+  "version" : 1,
+  "task" : {
+    "id" : "manual-20260716-143502-x7",
+    "title" : "Fix flaky OrderServiceSpec"
+  },
+  "position" : {
+    "type" : "atStage",
+    "stage" : "implement"
+  },
+  "activity" : {
+    "type" : "verifying",
+    "checkRef" : "command:./gradlew test",
+    "since" : "2026-07-16T14:41:02Z"
+  },
+  "outcome" : null,
+  "currentStage" : {
+    "attemptsUsed" : 1,
+    "attemptLimit" : 3,
+    "attempts" : [ {
+      "round" : 1,
+      "result" : "qualityFailure",
+      "startedAt" : "2026-07-16T14:35:10Z",
+      "checks" : [ {
+        "ref" : "builtin:files_exist",
+        "verdict" : "pass",
+        "findings" : [ ],
+        "durationMillis" : 3,
+        "reason" : null,
+        "details" : null
+      }, {
+        "ref" : "command:./gradlew test",
+        "verdict" : "fail",
+        "findings" : [ {
+          "message" : "command exited with 1",
+          "location" : null,
+          "details" : "…output tail…"
+        } ],
+        "durationMillis" : 41250,
+        "reason" : null,
+        "details" : null
+      } ],
+      "usage" : {
+        "wallMillis" : 183000,
+        "tokensIn" : null,
+        "tokensOut" : null,
+        "byTool" : [ ]
+      },
+      "judgeUsage" : {
+        "perVote" : [ ]
+      }
+    } ]
+  },
+  "totals" : {
+    "wallMillis" : 232000,
+    "tokensIn" : null,
+    "tokensOut" : null,
+    "byTool" : [ ]
+  },
+  "lastEscalation" : {
+    "type" : "decisionNeeded",
+    "stage" : null,
+    "at" : null,
+    "question" : "Refactor the retry helper or patch in place?",
+    "options" : [ "refactor", "patch" ]
+  },
+  "lastDecision" : {
+    "text" : "patch in place",
+    "author" : "operator",
+    "stage" : "plan",
+    "at" : "2026-07-16T14:21:30Z"
+  }
+}

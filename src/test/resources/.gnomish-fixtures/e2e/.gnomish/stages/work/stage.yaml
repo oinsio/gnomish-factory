@@ -1,0 +1,30 @@
+purpose: do the work and pass all four kinds of quality control
+inputs:
+  - kind: source
+outputs:
+  - id: work-diff
+executor:
+  type: api
+  model: work-model
+  settings:
+    temperature: 0
+instructions: stages/work/instructions.md
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      files:
+        - marker.txt
+  - type: command
+    command: test -f attempt-marker.txt && exit 0 || { touch attempt-marker.txt; exit 1; }
+  - type: external
+    checkId: ci/build
+    interval: 1s
+    timeout: 10s
+  - type: judge
+    criteriaFile: stages/work/acceptance.md
+    model: judge-model
+    settings:
+      temperature: 0
+    votes: 1
+advancement: manual

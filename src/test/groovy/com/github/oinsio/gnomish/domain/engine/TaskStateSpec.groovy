@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -13,11 +14,11 @@ import spock.lang.Specification
 class TaskStateSpec extends Specification {
 
     private static AttemptRecord round(int n) {
-        new AttemptRecord(n, AttemptRecord.Result.PASSED, [], ExecutorUsage.none(), JudgeUsage.none())
+        new AttemptRecord(n, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), JudgeUsage.none())
     }
 
     private static AttemptRecord round(int n, ExecutorUsage usage) {
-        new AttemptRecord(n, AttemptRecord.Result.PASSED, [], usage, JudgeUsage.none())
+        new AttemptRecord(n, AttemptRecord.Result.PASSED, Instant.EPOCH, [], usage, JudgeUsage.none())
     }
 
     // FR8, FR13, FR14: the starting state parks at a named stage with no history

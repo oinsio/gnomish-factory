@@ -1,0 +1,9 @@
+purpose: plan the work
+executor:
+  type: api
+  model: plan-model
+instructions: stages/plan/instructions.md
+verify:
+  - type: command
+    command: echo ok
+advancement: auto

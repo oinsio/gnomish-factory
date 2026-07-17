@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -146,5 +147,81 @@ class StageAttemptLoopSpec extends Specification {
         request.attempt() == 0
         request.stage().is(stageDef)
         request.context().is(CONTEXT)
+    }
+
+    // FR15: the recorded round carries startedAt equal to the Clock reading taken WHEN the round
+    //     BEGAN — even when the clock advances DURING execution/verification, the timestamp is the
+    //     begin instant, not a later reading. Asserted for every round result the engine records.
+    def "records startedAt as the begin-of-round Clock reading, unaffected by mid-round advance"() {
+        given: "the clock is at a known begin instant and advances mid-round during verification"
+        clock.instant = begin
+        def stageDef = stage('build', 3, [builtin('files_exist')])
+        builtinRunner.onRun = { check, workspace -> clock.advance(Duration.ofMinutes(5)) }
+        builtinRunner.scripted << verdict
+        executor.scripted << completed(ExecutorUsage.none())
+
+        when: 'the run is driven'
+        new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
+
+        then: 'the round is recorded with startedAt = the begin reading, not the advanced clock'
+        // read from persistence: a passing round advances and resets finalState().attempts(), but
+        // the persisted entry captured the round's state at commit time, before any advancement.
+        def record = persistence.entries[0].state.attempts()[0]
+        record.result() == expectedResult
+        record.startedAt() == begin
+        clock.now() == begin.plus(Duration.ofMinutes(5))
+
+        where:
+        begin                                 | verdict                            || expectedResult
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass()                 || AttemptRecord.Result.PASSED
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Fail([])               || AttemptRecord.Result.QUALITY_FAILURE
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.CannotVerify('x', 'y') || AttemptRecord.Result.CANNOT_VERIFY
+    }
+
+    // FR15: a DecisionNeeded round — no verify chain runs — still carries startedAt equal to the
+    //     Clock reading taken when the round began.
+    def "records startedAt on a DecisionNeeded round taken when the round began"() {
+        given: 'the clock is at a known begin instant and the executor asks a human'
+        def begin = Instant.parse('2026-07-16T09:30:00Z')
+        clock.instant = begin
+        def stageDef = stage('build', 3, [builtin('files_exist')])
+        executor.scripted << new ExecutionResult.DecisionNeeded('which db?', ['pg', 'mysql'],
+        ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+
+        when: 'the run is driven'
+        def outcome = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
+
+        then: 'the DecisionNeeded round records the begin instant'
+        def record = outcome.finalState().attempts()[0]
+        record.result() == AttemptRecord.Result.DECISION_NEEDED
+        record.startedAt() == begin
+    }
+
+    // FR15: across multiple rounds of one stage, each round's startedAt is the Clock reading taken
+    //     when THAT round began — the clock advances between rounds and each record captures its own.
+    def "records each round's own begin instant as the clock advances between rounds"() {
+        given: 'a stage that fails its check twice then passes on the third round'
+        clock.instant = Instant.parse('2026-07-16T10:00:00Z')
+        def stageDef = stage('build', 5, [builtin('files_exist')])
+        executor.scripted << completed(ExecutorUsage.none())
+        executor.scripted << completed(ExecutorUsage.none())
+        executor.scripted << completed(ExecutorUsage.none())
+        builtinRunner.scripted << new Verdict.Fail([])
+        builtinRunner.scripted << new Verdict.Fail([])
+        builtinRunner.scripted << new Verdict.Pass()
+        // each round advances the clock one minute during its verification, so each round begins later
+        builtinRunner.onRun = { check, workspace -> clock.advance(Duration.ofMinutes(1)) }
+
+        when: 'the run is driven to a pass'
+        new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
+
+        then: 'three rounds were recorded, each carrying the begin instant of its own round'
+        // the third round passes and advances (resetting finalState().attempts()); the last persisted
+        // entry captured the pre-advancement state carrying all three rounds.
+        def attempts = persistence.entries.last().state.attempts()
+        attempts.size() == 3
+        attempts[0].startedAt() == Instant.parse('2026-07-16T10:00:00Z')
+        attempts[1].startedAt() == Instant.parse('2026-07-16T10:01:00Z')
+        attempts[2].startedAt() == Instant.parse('2026-07-16T10:02:00Z')
     }
 }

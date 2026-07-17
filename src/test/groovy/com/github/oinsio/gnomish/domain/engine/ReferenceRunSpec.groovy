@@ -197,5 +197,13 @@ class ReferenceRunSpec extends Specification {
         and: 'every executed round of run 2 was persisted (design, build x2, ci, review = 5)'
         persistence2.entries.size() == 5
         persistence2.entries.every { it.taskId == 'TASK-1' }
+
+        and: 'every persisted round carries a startedAt begin instant read from the Clock (FR15)'
+        // FR15: each recorded round is stamped with the Clock reading taken when it began; with the
+        //     VirtualClock starting at EPOCH and only the ci poll loop advancing it, every round begins
+        //     at or after EPOCH and no round is left without a begin instant.
+        persistence2.entries.each { entry ->
+            entry.state.attempts().every { it.startedAt() != null && !it.startedAt().isBefore(Instant.EPOCH) }
+        }
     }
 }
