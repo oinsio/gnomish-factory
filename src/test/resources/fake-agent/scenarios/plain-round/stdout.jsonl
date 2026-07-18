@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"fake-session-plain-1","model":"claude-fake-main-1","cwd":"/workspace","tools":["Read","Write","Edit","Bash"]}
+{"type":"assistant","session_id":"fake-session-plain-1","message":{"id":"msg_1","model":"claude-fake-main-1","content":[{"type":"text","text":"I will write the output file now."},{"type":"tool_use","id":"toolu_1","name":"Write","input":{"file_path":"output.txt","content":"done"}}]}}
+{"type":"user","session_id":"fake-session-plain-1","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file written"}]}}
+{"type":"assistant","session_id":"fake-session-plain-1","message":{"id":"msg_2","model":"claude-fake-main-1","content":[{"type":"text","text":"Stage complete: output.txt written."}]}}
+{"type":"result","subtype":"success","session_id":"fake-session-plain-1","result":"Stage complete: output.txt written.","usage":{"input_tokens":120,"output_tokens":45,"cache_creation_input_tokens":10,"cache_read_input_tokens":5},"modelUsage":{"claude-fake-main-1":{"inputTokens":120,"outputTokens":45,"cacheCreationInputTokens":10,"cacheReadInputTokens":5}}}

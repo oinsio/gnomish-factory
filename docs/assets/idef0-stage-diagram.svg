@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="IDEF0 / ICOM diagram: Input transformed into Output by Stage, with Control from top, Mechanism from bottom, and a Quality Control loop.">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --box: #ffffff;
+      --stage-box: #ffffff;
+      --line: #1a1a1a;
+      --title: #111111;
+      --sub: #555555;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --box: #161b22;
+        --stage-box: #1c2330;
+        --line: #e6edf3;
+        --title: #f0f6fc;
+        --sub: #9da7b3;
+      }
+    }
+    .bg     { fill: var(--bg); }
+    .box    { fill: var(--box); stroke: var(--line); stroke-width: 2.5; }
+    .stage  { fill: var(--stage-box); stroke: var(--line); stroke-width: 3.5; }
+    .edge   { stroke: var(--line); stroke-width: 2.5; fill: none; }
+    .head   { fill: var(--line); }
+    .title  { fill: var(--title); font-weight: 700; }
+    .sub    { fill: var(--sub); }
+  </style>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5"
+            markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse"
+            orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="head"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="980" height="560"/>
+
+  <!-- ===== Arrows (drawn first, so boxes sit on top) ===== -->
+  <!-- Input -> Stage -->
+  <line class="edge" x1="60"  y1="290" x2="365" y2="290" marker-end="url(#arrow)"/>
+  <!-- Stage -> Output -->
+  <line class="edge" x1="610" y1="290" x2="900" y2="290" marker-end="url(#arrow)"/>
+  <!-- Control -> Stage (top down) -->
+  <line class="edge" x1="490" y1="146" x2="490" y2="240" marker-end="url(#arrow)"/>
+  <!-- Mechanism -> Stage (bottom up) -->
+  <line class="edge" x1="490" y1="434" x2="490" y2="340" marker-end="url(#arrow)"/>
+  <!-- Quality Control loop (bidirectional) -->
+  <line class="edge" x1="252" y1="150" x2="372" y2="247"
+        marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+
+  <!-- ===== Boxes ===== -->
+  <!-- Quality Control -->
+  <rect class="box" x="40" y="64" width="214" height="104" rx="8"/>
+  <text text-anchor="middle" x="147">
+    <tspan class="title" font-size="16" y="94">Quality Control</tspan>
+    <tspan class="sub"   font-size="12" x="147" y="114">verify checks:</tspan>
+    <tspan class="sub"   font-size="12" x="147" y="132">declarative, command,</tspan>
+    <tspan class="sub"   font-size="12" x="147" y="150">external, LLM judge</tspan>
+  </text>
+
+  <!-- Control -->
+  <rect class="box" x="380" y="70" width="220" height="76" rx="8"/>
+  <text text-anchor="middle" x="490">
+    <tspan class="title" font-size="16" y="100">Control</tspan>
+    <tspan class="sub"   font-size="12" x="490" y="120">instructions, rules,</tspan>
+    <tspan class="sub"   font-size="12" x="490" y="137">best practices</tspan>
+  </text>
+
+  <!-- Stage -->
+  <rect class="stage" x="370" y="245" width="240" height="90" rx="10"/>
+  <text text-anchor="middle" x="490">
+    <tspan class="title" font-size="19" y="286">Stage</tspan>
+    <tspan class="sub"   font-size="12.5" x="490" y="308">(transforms Input into Output)</tspan>
+  </text>
+
+  <!-- Mechanism -->
+  <rect class="box" x="380" y="434" width="220" height="76" rx="8"/>
+  <text text-anchor="middle" x="490">
+    <tspan class="title" font-size="16" y="464">Mechanism</tspan>
+    <tspan class="sub"   font-size="12" x="490" y="484">executor, model,</tspan>
+    <tspan class="sub"   font-size="12" x="490" y="501">workspace</tspan>
+  </text>
+
+  <!-- ===== Side labels ===== -->
+  <!-- Input -->
+  <text text-anchor="start" x="60">
+    <tspan class="title" font-size="16" y="322">Input</tspan>
+    <tspan class="sub"   font-size="12" x="60" y="342">artifacts from</tspan>
+    <tspan class="sub"   font-size="12" x="60" y="360">previous stages</tspan>
+  </text>
+
+  <!-- Output -->
+  <text text-anchor="start" x="700">
+    <tspan class="title" font-size="16" y="322">Output</tspan>
+    <tspan class="sub"   font-size="12" x="700" y="342">verified artifacts</tspan>
+    <tspan class="sub"   font-size="12" x="700" y="360">in the task branch</tspan>
+  </text>
+</svg>

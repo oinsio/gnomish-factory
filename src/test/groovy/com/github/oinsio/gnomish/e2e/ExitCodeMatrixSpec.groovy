@@ -83,7 +83,8 @@ class ExitCodeMatrixSpec extends Specification {
                 E2eFixture.projectRoot(),
                 [
                     '--project=' + E2eFixture.projectRoot(),
-                    '--task=script too short'
+                    '--task=script too short',
+                    '--interactive'
                 ],
                 emptyScript)
 
@@ -114,7 +115,8 @@ class ExitCodeMatrixSpec extends Specification {
                 E2eFixture.projectRoot(),
                 [
                     '--project=' + E2eFixture.projectRoot(),
-                    '--task=ctrl-d at resume'
+                    '--task=ctrl-d at resume',
+                    '--interactive'
                 ],
                 script)
 
@@ -149,7 +151,8 @@ class ExitCodeMatrixSpec extends Specification {
                 E2eFixture.projectRoot(),
                 [
                     '--project=' + E2eFixture.projectRoot(),
-                    '--task=ctrl-d at checkpoint'
+                    '--task=ctrl-d at checkpoint',
+                    '--interactive'
                 ],
                 script)
 

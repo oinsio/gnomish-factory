@@ -66,17 +66,18 @@ abstract class JudgeVoterContract extends Specification implements PortContractS
 
         expect: 'the verdict is a Pass and the tokens are carried'
         outcome.get().vote().verdict() instanceof Verdict.Pass
-        outcome.get().vote().tokens() instanceof TokenUsage
+        !outcome.get().vote().tokensByModel().isEmpty()
+        outcome.get().vote().tokensByModel().values().every { it instanceof TokenUsage }
     }
 
-    // FR14: tokens are nullable — a vote may report no token counts (NFR-C1)
-    def "a vote can be produced with absent tokens"() {
+    // FR14: tokensByModel may be empty — a vote may report no token counts (NFR-C1, D4)
+    def "a vote can be produced with an empty tokensByModel map"() {
         given: 'a voter arranged to pass without reporting tokens'
         def outcome = arrange(VoteShape.PASS_WITHOUT_TOKENS, sampleContext())
         assumeProducible(outcome, 'JudgeVoter', 'Vote(Pass, no tokens)')
 
         expect: 'the tokens are absent, distinct from a fabricated zero'
-        outcome.get().vote().tokens() == null
+        outcome.get().vote().tokensByModel().isEmpty()
     }
 
     // FR14: the vote's verdict can be a Fail (FR3)

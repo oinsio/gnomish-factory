@@ -4,10 +4,10 @@ inputs:
 outputs:
   - id: plan-doc
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
   settings:
-    temperature: 0
+    maxTurns: 10
 instructions: stages/plan/instructions.md
 verify:
   - type: builtin

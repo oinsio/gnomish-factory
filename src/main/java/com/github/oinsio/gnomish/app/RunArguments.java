@@ -22,9 +22,32 @@ import org.jspecify.annotations.Nullable;
  * @param fromStage the starting stage name, or {@code null} to start at the pipeline's first
  *     stage; validated here only as non-blank — validity against the loaded definition's stage
  *     names is task 7.3's concern (design D4)
+ * @param interactiveMode which role(s), if any, {@code --interactive} swaps from the manifest-
+ *     driven CLI adapters to the interactive console adapters (FR10, design D6); {@link
+ *     InteractiveMode#NONE} when the flag is absent
  */
 public record RunArguments(
         Path project,
         TaskSource taskSource,
         @Nullable String taskId,
-        @Nullable String fromStage) {}
+        @Nullable String fromStage,
+        InteractiveMode interactiveMode) {
+
+    /**
+     * The scope of {@code --interactive}'s override (FR10, design D6): the manifest-driven
+     * default wires the real CLI adapters for every stage (all stages are {@code agent-cli};
+     * {@code api} stages already fail startup validation, task 9.2) — {@code --interactive}
+     * restores add-manual-run's fully-interactive behavior, and the scoped forms swap just one
+     * role, leaving the other on its CLI adapter.
+     */
+    public enum InteractiveMode {
+        /** {@code --interactive} absent: both roles use their manifest-driven CLI adapter. */
+        NONE,
+        /** Bare {@code --interactive}: both the executor and the judge are interactive. */
+        ALL,
+        /** {@code --interactive=executor}: only the stage executor is interactive. */
+        EXECUTOR_ONLY,
+        /** {@code --interactive=judge}: only the judge voter is interactive. */
+        JUDGE_ONLY
+    }
+}

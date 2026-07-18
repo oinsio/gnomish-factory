@@ -113,9 +113,9 @@ class StageAttemptLoopSpec extends Specification {
     def "records the executor and judge usage of the round"() {
         given: 'a stage with a judge check that cannot verify, and a Completed executor reporting usage'
         def stageDef = stage('build', 3, [judge(1)])
-        def executorUsage = new ExecutorUsage(Duration.ofSeconds(4), [], new TokenUsage(100, 40))
+        def executorUsage = new ExecutorUsage(Duration.ofSeconds(4), [], ['model-a': new TokenUsage(100, 40, 0, 0)])
         executor.scripted << completed(executorUsage)
-        def voteTokens = new TokenUsage(7, 3)
+        def voteTokens = ['model-a': new TokenUsage(7, 3, 0, 0)]
         judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.CannotVerify('model unparseable', 'gibberish'), voteTokens)
 
         when: 'the run is driven'

@@ -57,7 +57,7 @@ class InteractiveStageExecutorSpec extends Specification {
         // time on the order of the current epoch nanos (many years), not a few seconds.
         result.usage().wallTime() < Duration.ofSeconds(30)
         result.usage().tools().isEmpty()
-        result.usage().tokens() == null
+        result.usage().tokensByModel().isEmpty()
         result.trace().key() == new AttemptKey('task-1', 'build', 2)
         result.trace().calls().isEmpty()
 
@@ -87,7 +87,7 @@ class InteractiveStageExecutorSpec extends Specification {
         result.options() == ['React', 'Vue']
         result.usage().wallTime() != null
         result.usage().tools().isEmpty()
-        result.usage().tokens() == null
+        result.usage().tokensByModel().isEmpty()
         result.trace().key() == new AttemptKey('task-1', 'build', 2)
         result.trace().calls().isEmpty()
     }

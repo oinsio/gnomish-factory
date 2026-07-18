@@ -22,7 +22,9 @@ import java.util.List;
  *   <li>{@link ArtifactGraphRule} — pipeline-wide artifact DAG across stage
  *       manifests (FR3, FR4, FR6);</li>
  *   <li>{@link StageSanityRule} — per-stage mechanism and check local sanity
- *       (FR11, FR7).</li>
+ *       (FR11, FR7);</li>
+ *   <li>{@link ApiExecutorRule} — per-stage {@code api} executor rejection,
+ *       fail-fast before any dialog (FR10, UX2, D6 of add-agent-executor).</li>
  * </ol>
  *
  * <p>Each delegated rule keeps its own internal ordering and reporting contract;
@@ -33,7 +35,8 @@ import java.util.List;
  * into the same {@link ConfigError} list by the loader (design D6, tasks 5–6),
  * not here.
  *
- * <p>Implements FR8 of load-pipeline-config.
+ * <p>Implements FR8 of load-pipeline-config; the {@code ApiExecutorRule} tier
+ * additionally implements FR10, UX2, D6 of add-agent-executor.
  */
 public final class PipelineValidator {
 
@@ -56,6 +59,7 @@ public final class PipelineValidator {
         errors.addAll(StageOrderRule.validate(model.stages()));
         errors.addAll(ArtifactGraphRule.validate(model.stages()));
         errors.addAll(StageSanityRule.validate(model.stages()));
+        errors.addAll(ApiExecutorRule.validate(model.stages()));
         return List.copyOf(errors);
     }
 }

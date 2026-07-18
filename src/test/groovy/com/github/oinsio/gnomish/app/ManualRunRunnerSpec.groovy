@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
@@ -24,6 +25,8 @@ class ManualRunRunnerSpec extends Specification {
     @TempDir
     Path projectRoot
 
+    private static final FactoryProperties FACTORY_PROPERTIES = new FactoryProperties('test-instance', null, null)
+
     private ManualRunRunner newRunner() {
         new ManualRunRunner(
                 new RunArgumentsParser(),
@@ -34,7 +37,8 @@ class ManualRunRunnerSpec extends Specification {
                 new ShellCommandCheckRunner(),
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
-                new ThreadSleeper())
+                new ThreadSleeper(),
+                FACTORY_PROPERTIES)
     }
 
     private void write(String relative, String text) {
@@ -49,7 +53,7 @@ class ManualRunRunnerSpec extends Specification {
         write('stages/build/stage.yaml', '''\
 purpose: build the thing
 executor:
-  type: api
+  type: agent-cli
   model: some-model
 instructions: stages/build/instructions.md
 verify:
@@ -69,7 +73,7 @@ advancement: auto
         write('stages/build/stage.yaml', '''\
 purpose: build the thing
 executor:
-  type: api
+  type: agent-cli
   model: some-model
 instructions: stages/build/instructions.md
 verify:
@@ -163,7 +167,7 @@ autonomy:
         write('stages/plan/stage.yaml', '''\
 purpose: plan the work
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 verify:
@@ -220,7 +224,8 @@ advancement: auto
         def args = new DefaultApplicationArguments(
                 "--project=${projectRoot}".toString(),
                 '--task=do the thing',
-                '--task-id=manual-test-eof')
+                '--task-id=manual-test-eof',
+                '--interactive')
 
         when:
         try {
@@ -257,11 +262,13 @@ advancement: auto
                 new ShellCommandCheckRunner(),
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
-                new ThreadSleeper())
+                new ThreadSleeper(),
+                FACTORY_PROPERTIES)
         def args = new DefaultApplicationArguments(
                 "--project=${projectRoot}".toString(),
                 '--task=do the thing',
-                '--task-id=manual-test-status')
+                '--task-id=manual-test-status',
+                '--interactive')
 
         when:
         try {
@@ -293,11 +300,13 @@ advancement: auto
                 new ShellCommandCheckRunner(),
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
-                new ThreadSleeper())
+                new ThreadSleeper(),
+                FACTORY_PROPERTIES)
         def args = new DefaultApplicationArguments(
                 "--project=${projectRoot}".toString(),
                 '--task=do the thing',
-                '--task-id=manual-test-1')
+                '--task-id=manual-test-1',
+                '--interactive')
 
         when:
         runner.run(args)

@@ -27,8 +27,10 @@ import spock.lang.Specification
  * stages in a fixed {@code pipeline.yaml} order; the default attempt limit from
  * {@code config.yaml} and a per-stage override, both asserted to resolve
  * correctly (FR7); both {@code source} and {@code internal} input kinds, the
- * internal ones linking to an earlier stage's output id (FR4); both {@code api}
- * and {@code agent-cli} executors; all four verify-check variants — {@code builtin},
+ * internal ones linking to an earlier stage's output id (FR4); the
+ * {@code agent-cli} executor (the only executor type accepted at startup since
+ * add-agent-executor's FR10/D6 — {@code api} stages are rejected fail-fast);
+ * all four verify-check variants — {@code builtin},
  * {@code command}, {@code external}, {@code judge} — in one stage with their order
  * preserved (FR2); and both {@code auto} and {@code manual} advancement.
  *
@@ -79,11 +81,11 @@ class GoldenPipelineSpec extends Specification {
             new ArtifactOutput('plan-doc')
         ]
 
-        and: 'the api executor with its pinned model and opaque plain-JDK settings'
-        plan.executor().type() == ExecutorType.API
+        and: 'the agent-cli executor with its pinned model and opaque plain-JDK settings'
+        plan.executor().type() == ExecutorType.AGENT_CLI
         plan.executor().model() == 'plan-model'
-        plan.executor().settings() == [temperature: 0]
-        plan.executor().settings().temperature instanceof Integer
+        plan.executor().settings() == [maxTurns: 10]
+        plan.executor().settings().maxTurns instanceof Integer
 
         and: 'a single builtin verify check with its plain-JDK params'
         plan.verify().size() == 1
@@ -117,15 +119,14 @@ class GoldenPipelineSpec extends Specification {
             new ArtifactOutput('impl-diff')
         ]
 
-        and: 'the agent-cli executor with nested opaque settings mapped to plain JDK types (D5a)'
+        and: 'the agent-cli executor with opaque settings mapped to plain JDK types (D5a), all four recognized keys (FR11/D7)'
         implement.executor().type() == ExecutorType.AGENT_CLI
         implement.executor().model() == 'implement-model'
         def settings = implement.executor().settings()
-        settings.temperature == 0 && settings.temperature instanceof Integer
         settings.maxTurns == 40 && settings.maxTurns instanceof Integer
-        settings.interactive == false && settings.interactive instanceof Boolean
         settings.allowedTools == ['read', 'edit'] && settings.allowedTools instanceof List
-        settings.limits == [wallClockSeconds: 900] && settings.limits instanceof Map
+        settings.disallowedTools == ['bash'] && settings.disallowedTools instanceof List
+        settings.roundTimeout == 900 && settings.roundTimeout instanceof Integer
     }
 
     def "M1/FR2: the implement stage's verify list holds all four variants in declaration order"() {
@@ -157,7 +158,7 @@ class GoldenPipelineSpec extends Specification {
         def judge = verify[3] as VerifyCheck.Judge
         judge.criteriaFile() == 'stages/implement/acceptance.md'
         judge.model() == 'judge-model'
-        judge.settings() == [temperature: 0]
+        judge.settings() == [maxTurns: 3]
         judge.votes() == 3
     }
 
@@ -180,8 +181,8 @@ class GoldenPipelineSpec extends Specification {
             new ArtifactOutput('review-report')
         ]
 
-        and: 'the second api executor (both executor types are exercised across the pipeline)'
-        review.executor().type() == ExecutorType.API
+        and: 'the second agent-cli executor (every stage in the fixture uses agent-cli)'
+        review.executor().type() == ExecutorType.AGENT_CLI
         review.executor().model() == 'review-model'
         review.executor().settings() == [:]
 

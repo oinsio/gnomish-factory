@@ -18,10 +18,27 @@ class ActivityOutcomeSpec extends Specification {
 
     private static final Instant SINCE = Instant.parse('2026-07-16T14:41:02Z')
 
-    // FR11: Activity.Executing carries only a since instant
-    def "Executing carries the since instant"() {
+    // FR11: Activity.Executing carries a since instant; the single-arg constructor
+    // defaults currentTool/toolCalls for callers with no live tool detail yet
+    def "Executing carries the since instant, defaulting currentTool and toolCalls when unspecified"() {
+        given:
+        def activity = new Activity.Executing(SINCE)
+
         expect:
-        new Activity.Executing(SINCE).since() == SINCE
+        activity.since() == SINCE
+        activity.currentTool() == null
+        activity.toolCalls() == 0
+    }
+
+    // FR7, UX1, D10, D12 of add-agent-executor: Executing can carry live tool detail
+    def "Executing carries currentTool and toolCalls when specified"() {
+        given:
+        def activity = new Activity.Executing(SINCE, 'run_tests', 2)
+
+        expect:
+        activity.since() == SINCE
+        activity.currentTool() == 'run_tests'
+        activity.toolCalls() == 2
     }
 
     // FR11: Activity.Verifying carries a checkRef and a since instant

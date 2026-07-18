@@ -135,4 +135,65 @@ class RunArgumentsParserSpec extends Specification {
         UsageException ex = thrown(UsageException)
         ex.message.contains('--task')
     }
+
+    def "FR10: --interactive absent parses to InteractiveMode.NONE"() {
+        when:
+        RunArguments result = parser.parse(args('--task=t'))
+
+        then:
+        result.interactiveMode() == RunArguments.InteractiveMode.NONE
+    }
+
+    def "FR10/D6: bare --interactive parses to InteractiveMode.ALL"() {
+        when:
+        RunArguments result = parser.parse(args('--task=t', '--interactive'))
+
+        then:
+        result.interactiveMode() == RunArguments.InteractiveMode.ALL
+    }
+
+    def "FR10/D6: --interactive=executor parses to InteractiveMode.EXECUTOR_ONLY"() {
+        when:
+        RunArguments result = parser.parse(args('--task=t', '--interactive=executor'))
+
+        then:
+        result.interactiveMode() == RunArguments.InteractiveMode.EXECUTOR_ONLY
+    }
+
+    def "FR10/D6: --interactive=judge parses to InteractiveMode.JUDGE_ONLY"() {
+        when:
+        RunArguments result = parser.parse(args('--task=t', '--interactive=judge'))
+
+        then:
+        result.interactiveMode() == RunArguments.InteractiveMode.JUDGE_ONLY
+    }
+
+    def "UX1: --interactive=garbage is a usage error naming the accepted values"() {
+        when:
+        parser.parse(args('--task=t', '--interactive=garbage'))
+
+        then:
+        UsageException ex = thrown(UsageException)
+        ex.message.contains('--interactive')
+        ex.message.contains('executor')
+        ex.message.contains('judge')
+    }
+
+    def "UX1: --interactive given twice (bare) is a usage error"() {
+        when:
+        parser.parse(args('--task=t', '--interactive', '--interactive'))
+
+        then:
+        UsageException ex = thrown(UsageException)
+        ex.message.contains('--interactive')
+    }
+
+    def "UX1: --interactive given twice with scoped values is a usage error"() {
+        when:
+        parser.parse(args('--task=t', '--interactive=executor', '--interactive=judge'))
+
+        then:
+        UsageException ex = thrown(UsageException)
+        ex.message.contains('--interactive')
+    }
 }

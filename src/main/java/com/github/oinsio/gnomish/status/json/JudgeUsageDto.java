@@ -1,26 +1,25 @@
 package com.github.oinsio.gnomish.status.json;
 
 import java.util.List;
-import org.jspecify.annotations.Nullable;
+import java.util.Map;
 
 /**
- * The JSON contract's {@code judgeUsage} shape: {@code perVote} token counts, one
- * entry per cast vote (spec.md). Judge tokens stay per-attempt here; they are not
- * folded into the report's cumulative {@code totals}.
+ * The JSON contract's {@code judgeUsage} shape: {@code perVote}, one per-model
+ * token map per cast vote (spec.md). Judge tokens stay per-attempt here; they are
+ * not folded into the report's cumulative {@code totals}.
  *
- * <p>Implements FR11, M3, NFR-C1 of add-manual-run.
+ * <p>Implements FR9, D12 of add-agent-executor.
  *
- * @param perVote one token pair per cast vote, in vote order; possibly empty
+ * @param perVote one per-model token map per cast vote, in vote order; possibly
+ *     empty
  */
 public record JudgeUsageDto(List<Vote> perVote) {
 
     /**
-     * One judge vote's token counts.
+     * One judge vote's per-model token usage.
      *
-     * @param tokensIn input tokens consumed by this vote, or {@code null} when
-     *     unreported
-     * @param tokensOut output tokens produced by this vote, or {@code null} when
-     *     unreported
+     * @param tokensByModel token usage keyed by resolved model id; empty when
+     *     this vote's tokens are unreported
      */
-    public record Vote(@Nullable Long tokensIn, @Nullable Long tokensOut) {}
+    public record Vote(Map<String, TokenUsageDto> tokensByModel) {}
 }

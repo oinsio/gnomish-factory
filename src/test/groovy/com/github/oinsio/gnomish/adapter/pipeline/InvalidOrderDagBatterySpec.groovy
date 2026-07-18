@@ -156,7 +156,7 @@ outputs:
         """\
 purpose: ${name} the work
 ${extra}executor:
-  type: api
+  type: agent-cli
   model: ${name}-model
 instructions: stages/${name}/instructions.md
 advancement: auto

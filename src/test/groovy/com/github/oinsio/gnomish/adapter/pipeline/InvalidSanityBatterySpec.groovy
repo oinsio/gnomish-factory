@@ -35,7 +35,7 @@ class InvalidSanityBatterySpec extends Specification implements InvalidFixtureSu
         given: 'the plan executor pins an empty model'
         writeStage('''\
 executor:
-  type: api
+  type: agent-cli
   model: ""
 instructions: stages/plan/instructions.md
 ''')
@@ -111,11 +111,11 @@ ${body}advancement: auto
         write('stages/plan/instructions.md', 'plan it\n')
     }
 
-    /** An external verify block plus a valid api executor, for the timing rows. */
+    /** An external verify block plus a valid agent-cli executor, for the timing rows. */
     private static String external(String checkId, String interval, String timeout) {
         """\
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 verify:
@@ -126,11 +126,11 @@ verify:
 """
     }
 
-    /** A judge verify block (no criteriaFile) plus a valid api executor, for the vote/model rows. */
+    /** A judge verify block (no criteriaFile) plus a valid agent-cli executor, for the vote/model rows. */
     private static String judge(String model, String votes) {
         """\
 executor:
-  type: api
+  type: agent-cli
   model: plan-model
 instructions: stages/plan/instructions.md
 verify:

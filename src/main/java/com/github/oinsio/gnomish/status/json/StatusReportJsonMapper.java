@@ -77,7 +77,11 @@ public final class StatusReportJsonMapper {
         }
         return switch (activity) {
             case Activity.Executing executing ->
-                new ActivityDto.Executing("executing", executing.since().toString());
+                new ActivityDto.Executing(
+                        "executing",
+                        executing.since().toString(),
+                        executing.currentTool(),
+                        executing.currentTool() == null && executing.toolCalls() == 0 ? null : executing.toolCalls());
             case Activity.Verifying verifying ->
                 new ActivityDto.Verifying(
                         "verifying",

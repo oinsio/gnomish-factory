@@ -22,12 +22,21 @@ final class StatusLineFormatter {
 
     static String activityLine(Activity activity) {
         return switch (activity) {
-            case Activity.Executing executing -> "executing (since " + executing.since() + ")";
+            case Activity.Executing executing -> executingLine(executing);
             case Activity.Verifying verifying ->
                 "verifying " + verifying.checkRef().label() + " (since " + verifying.since() + ")";
             case Activity.AwaitingInput awaitingInput ->
                 "awaiting input: \"" + awaitingInput.prompt() + "\" (since " + awaitingInput.since() + ")";
         };
+    }
+
+    // FR7, D10, D12 of add-agent-executor: appends live tool detail when present
+    private static String executingLine(Activity.Executing executing) {
+        String base = "executing (since " + executing.since() + ")";
+        if (executing.currentTool() == null && executing.toolCalls() == 0) {
+            return base;
+        }
+        return base + " [tool: " + executing.currentTool() + ", toolCalls: " + executing.toolCalls() + "]";
     }
 
     static String escalationLine(EscalationReport escalation) {

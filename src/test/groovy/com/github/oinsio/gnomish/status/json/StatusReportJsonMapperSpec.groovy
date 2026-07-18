@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.status.Activity
 import com.github.oinsio.gnomish.status.LiveActivity
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
+import com.github.oinsio.gnomish.status.json.TokenUsageDto
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -35,6 +36,11 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def mapper = new StatusReportJsonMapper()
 
+    // FR5, NFR-C1, D12 of add-agent-executor: reference anchor covers the
+    // spec's canonical example shape, including populated tokensByModel and
+    // byTool (a fabricated zero entry would be wrong; the empty-map/list case
+    // for unreported usage is covered separately, e.g. "byTool maps each
+    // ToolUsage's...")
     def "reference anchor: serializing the deterministic sample is byte-identical to status-report-v1.reference.json"() {
         given:
         def referenceText = getClass().getResourceAsStream('/status-report-v1.reference.json').getText('UTF-8')
@@ -68,13 +74,25 @@ class StatusReportJsonMapperSpec extends Specification {
         mapper.toDto(report).activity() == null
     }
 
-    def "activity executing renders with since"() {
+    def "activity executing renders with since and null currentTool/toolCalls when unspecified"() {
         given:
         def since = Instant.parse("2026-07-16T14:41:02Z")
         def report = activityReport(new Activity.Executing(since))
 
         expect:
-        mapper.toDto(report).activity() == new ActivityDto.Executing("executing", "2026-07-16T14:41:02Z")
+        mapper.toDto(report).activity() ==
+                new ActivityDto.Executing("executing", "2026-07-16T14:41:02Z", null, null)
+    }
+
+    // FR7, D10, D12 of add-agent-executor: executing activity carries live tool detail
+    def "activity executing renders currentTool and toolCalls when present"() {
+        given:
+        def since = Instant.parse("2026-07-16T14:41:02Z")
+        def report = activityReport(new Activity.Executing(since, "Edit", 3))
+
+        expect:
+        mapper.toDto(report).activity() ==
+                new ActivityDto.Executing("executing", "2026-07-16T14:41:02Z", "Edit", 3)
     }
 
     def "activity verifying renders checkRef label and since"() {
@@ -214,7 +232,7 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def "durations render as millisecond longs"() {
         given:
-        def usage = new ExecutorUsage(Duration.ofMillis(183000), [], null)
+        def usage = new ExecutorUsage(Duration.ofMillis(183000), [], [:])
 
         expect:
         UsageMapper.toUsage(usage).wallMillis() == 183000L
@@ -229,7 +247,7 @@ class StatusReportJsonMapperSpec extends Specification {
         mapper.toDto(report).activity().since() == "2026-07-16T14:41:02Z"
     }
 
-    def "human-only run: null tokens, empty byTool/perVote, wall time present"() {
+    def "human-only run: empty tokensByModel map, empty byTool/perVote, wall time present"() {
         given:
         def report = idleReport(new Position.AtStage("implement"))
 
@@ -237,8 +255,7 @@ class StatusReportJsonMapperSpec extends Specification {
         def dto = mapper.toDto(report)
 
         then:
-        dto.totals().tokensIn() == null
-        dto.totals().tokensOut() == null
+        dto.totals().tokensByModel() == [:]
         dto.totals().byTool() == []
     }
 
@@ -251,7 +268,7 @@ class StatusReportJsonMapperSpec extends Specification {
                     new ToolUsage("shell", 3, Duration.ofMillis(1200)),
                     new ToolUsage("editor", 1, Duration.ofMillis(75))
                 ],
-                null)
+                [:])
         def state = new TaskState(new Position.AtStage("implement"), 0, [], totals)
         def report = StatusReport.build(context, state, 3, LiveActivity.idle())
 
@@ -268,12 +285,13 @@ class StatusReportJsonMapperSpec extends Specification {
         byTool[1].totalMillis() == 75
     }
 
-    def "an attempt's judgeUsage.perVote maps each vote's token counts in vote order"() {
+    // FR9, D12 of add-agent-executor: perVote maps each vote's per-model token map
+    def "an attempt's judgeUsage.perVote maps each vote's tokensByModel in vote order"() {
         given: 'an attempt whose judge usage carries two cast votes'
         def context = new TaskContext("task-1", "Title", "Body", [])
         def judgeUsage = new JudgeUsage([
-            new TokenUsage(100, 20),
-            new TokenUsage(150, 30)
+            ['model-a': new TokenUsage(100, 20, 0, 0)],
+            ['model-a': new TokenUsage(150, 30, 0, 0)]
         ])
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
@@ -286,10 +304,29 @@ class StatusReportJsonMapperSpec extends Specification {
 
         then:
         perVote.size() == 2
-        perVote[0].tokensIn() == 100
-        perVote[0].tokensOut() == 20
-        perVote[1].tokensIn() == 150
-        perVote[1].tokensOut() == 30
+        perVote[0].tokensByModel() == ['model-a': new TokenUsageDto(100, 20, 0, 0)]
+        perVote[1].tokensByModel() == ['model-a': new TokenUsageDto(150, 30, 0, 0)]
+    }
+
+    // FR9, NFR-C1, D4, D12 of add-agent-executor: a cast vote that reported no tokens (its
+    // own map is empty) maps to a Vote DTO with an empty tokensByModel map, distinct from a
+    // fabricated zero entry
+    def "a judge vote with an empty token map maps to an empty tokensByModel map"() {
+        given: 'an attempt whose judge usage carries one unreported vote'
+        def context = new TaskContext("task-1", "Title", "Body", [])
+        def judgeUsage = new JudgeUsage([[:]])
+        def attempt = new AttemptRecord(
+                0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
+                [], ExecutorUsage.none(), judgeUsage)
+        def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
+        def report = StatusReport.build(context, state, 3, LiveActivity.idle())
+
+        when:
+        def perVote = mapper.toDto(report).currentStage().attempts()[0].judgeUsage().perVote()
+
+        then:
+        perVote.size() == 1
+        perVote[0].tokensByModel() == [:]
     }
 
     private static StatusReport idleReport(Position position) {
@@ -327,19 +364,33 @@ class StatusReportJsonMapperSpec extends Specification {
         def failCheck = new CheckResult(
                 new CheckRef(1, "command:./gradlew test"), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))
 
+        def attemptUsage = new ExecutorUsage(
+                Duration.ofMillis(183000),
+                [
+                    new ToolUsage("Edit", 4, Duration.ofMillis(2100))
+                ],
+                ["claude-sonnet-5": new TokenUsage(1200, 5400, 30000, 410000)])
+
         def attempt = new AttemptRecord(
                 1,
                 AttemptRecord.Result.QUALITY_FAILURE,
                 Instant.parse("2026-07-16T14:35:10Z"),
                 [passCheck, failCheck],
-                new ExecutorUsage(Duration.ofMillis(183000), [], null),
+                attemptUsage,
                 JudgeUsage.none())
+
+        def totalsUsage = new ExecutorUsage(
+                Duration.ofMillis(232000),
+                [
+                    new ToolUsage("Edit", 4, Duration.ofMillis(2100))
+                ],
+                ["claude-sonnet-5": new TokenUsage(1450, 6100, 30000, 512000)])
 
         def state = new TaskState(
                 new Position.AtStage("implement"),
                 1,
                 [attempt],
-                new ExecutorUsage(Duration.ofMillis(232000), [], null))
+                totalsUsage)
 
         def escalation = new EscalationReport.DecisionNeeded(
                 "Refactor the retry helper or patch in place?", ["refactor", "patch"])

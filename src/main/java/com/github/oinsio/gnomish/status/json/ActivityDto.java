@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.status.json;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The JSON contract's {@code activity} section: {@code executing},
@@ -20,12 +21,24 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 public sealed interface ActivityDto {
 
     /**
-     * An executor round is in flight.
+     * An executor round is in flight, optionally carrying live tool detail (FR7,
+     * D10, D12 of add-agent-executor): {@code currentTool} names the top-level
+     * tool call presently running and {@code toolCalls} counts top-level tool
+     * calls started so far this round. Both are {@code null} when no live detail
+     * has been reported (an interactive round, or before the first tool starts).
      *
      * @param type the discriminator, always {@code "executing"}
      * @param since ISO-8601 UTC instant this activity began
+     * @param currentTool the name of the top-level tool call presently running,
+     *     or {@code null} when unreported
+     * @param toolCalls the count of top-level tool calls started so far this
+     *     round, or {@code null} when unreported
      */
-    record Executing(String type, String since) implements ActivityDto {}
+    record Executing(
+            String type,
+            String since,
+            @Nullable String currentTool,
+            @Nullable Integer toolCalls) implements ActivityDto {}
 
     /**
      * A verify check is in flight, naming which check.

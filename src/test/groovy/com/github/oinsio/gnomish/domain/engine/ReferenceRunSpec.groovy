@@ -155,8 +155,8 @@ class ReferenceRunSpec extends Specification {
             new PollStatus.Pass()
         ])
         def judge2 = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(), null),
-            new JudgeVoter.Vote(new Verdict.Pass(), null)
+            new JudgeVoter.Vote(new Verdict.Pass(), [:]),
+            new JudgeVoter.Vote(new Verdict.Pass(), [:])
         ])
         def persistence2 = new InMemoryAttemptPersistence()
         def clock2 = new VirtualClock()

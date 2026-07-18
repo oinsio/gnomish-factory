@@ -158,7 +158,7 @@ class DecisionCarryingResumeSpec extends Specification {
         def context = new TaskContext('TASK-1', 'title', 'body', [decision])
         def judge = new VerifyCheck.Judge('criteria.md', 'judge-model', [:], 1)
         def stageDef = stage('review', 5, [judge])
-        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.Pass(), null)
+        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.Pass(), [:])
         executor.scripted << completed()
 
         when: 'the run resumes at the recorded stage'

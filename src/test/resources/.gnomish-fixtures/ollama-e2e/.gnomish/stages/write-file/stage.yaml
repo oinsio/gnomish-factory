@@ -1,0 +1,20 @@
+purpose: create one trivial file, deliberately as simple as a stage can be (M1, D11)
+inputs:
+  - kind: source
+outputs:
+  - id: hello-file
+executor:
+  type: agent-cli
+  model: write-model
+  settings:
+    maxTurns: 5
+    roundTimeout: 120s
+instructions: stages/write-file/instructions.md
+verify:
+  - type: judge
+    criteriaFile: stages/write-file/acceptance.md
+    model: judge-model
+    settings:
+      maxTurns: 3
+    votes: 1
+advancement: auto

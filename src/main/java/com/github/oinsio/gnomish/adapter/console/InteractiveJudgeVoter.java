@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The interactive {@link JudgeVoter}: a human plays the LLM judge for one vote.
@@ -51,7 +52,8 @@ public final class InteractiveJudgeVoter implements JudgeVoter {
      *     read from the task context beyond what a human already sees
      * @param workspace the workspace the criteria file is resolved against
      * @return a {@link Vote} carrying {@link Verdict.Pass} or {@link
-     *     Verdict.Fail} with the collected findings, and no reported tokens
+     *     Verdict.Fail} with the collected findings, and an empty token map — a
+     *     human vote never reports tokens (FR9 of add-agent-executor)
      */
     @Override
     public Vote vote(VerifyCheck.Judge check, TaskContext context, Workspace workspace) {
@@ -59,7 +61,7 @@ public final class InteractiveJudgeVoter implements JudgeVoter {
         String answer = console.ask("Judge vote (pass/fail): ", ACCEPTED_ANSWERS);
         Verdict verdict =
                 PASS_ANSWER.equals(answer) ? new Verdict.Pass() : new Verdict.Fail(findingsDialog.collect(console));
-        return new Vote(verdict, null);
+        return new Vote(verdict, Map.of());
     }
 
     private String readCriteriaFile(VerifyCheck.Judge check, Workspace workspace) {

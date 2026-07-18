@@ -112,8 +112,8 @@ class FakesSanitySpec extends Specification {
     def "ScriptedJudgeVoter returns a vote sequence, counts votes and records the context"() {
         given: 'a voter scripted with two votes'
         def voter = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(), new TokenUsage(1, 2)),
-            new JudgeVoter.Vote(new Verdict.Fail([]), null),
+            new JudgeVoter.Vote(new Verdict.Pass(), ['model-a': new TokenUsage(1, 2, 0, 0)]),
+            new JudgeVoter.Vote(new Verdict.Fail([]), [:]),
         ])
 
         when: 'voted twice'

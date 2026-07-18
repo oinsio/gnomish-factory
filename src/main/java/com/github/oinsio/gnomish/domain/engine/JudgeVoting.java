@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The majority loop of one {@link VerifyCheck.Judge} check, extracted from {@link
@@ -43,17 +44,19 @@ final class JudgeVoting {
 
     /**
      * The outcome of a judge check's majority loop: the {@link Verdict} the votes
-     * collapse to and the per-cast-vote {@link TokenUsage}s in vote order, holding
-     * only the votes that reported tokens ({@code perVote} is defensively copied and
-     * unmodifiable, possibly empty). Inert value data compared by content.
+     * collapse to and the per-cast-vote token maps in vote order — every cast vote
+     * contributes an entry, its own map empty when that vote did not report tokens
+     * (design D4, following {@link ExecutorUsage#tokensByModel()}'s map-only shape).
+     * Inert value data compared by content.
      *
-     * <p>Implements FR3, NFR-C1 of add-stage-engine.
+     * <p>Implements FR3, NFR-C1 of add-stage-engine; FR9, NFR-C1, D4 of
+     * add-agent-executor.
      *
      * @param verdict the whole judge check's verdict; never null
-     * @param perVote token usage per token-reporting vote, in vote order; copied,
+     * @param perVote one per-model token map per cast vote, in vote order; copied,
      *     unmodifiable, possibly empty
      */
-    record Result(Verdict verdict, List<TokenUsage> perVote) {
+    record Result(Verdict verdict, List<Map<String, TokenUsage>> perVote) {
 
         Result {
             perVote = List.copyOf(perVote);
@@ -63,8 +66,9 @@ final class JudgeVoting {
     /**
      * Casts up to {@code check.votes()} judge votes and tallies them into one {@link
      * Result}. Each vote is cast through {@link JudgeVoter#vote} with {@code context}
-     * threaded through (FR7); a vote that reports tokens is appended to the running
-     * {@code perVote} accounting (NFR-C1). The tally is an exhaustive switch over the
+     * threaded through (FR7); every cast vote's token map — possibly empty — is
+     * appended to the running {@code perVote} accounting (NFR-C1, design D4). The
+     * tally is an exhaustive switch over the
      * sealed {@link Verdict}: a {@link Verdict.Pass} counts toward the pass total, a
      * {@link Verdict.Fail} counts toward the fail total and its findings join the
      * aggregate, and a {@link Verdict.CannotVerify} short-circuits the whole check to
@@ -84,15 +88,13 @@ final class JudgeVoting {
      */
     Result vote(VerifyCheck.Judge check, TaskContext context, Workspace workspace) {
         int majority = check.votes() / 2 + 1;
-        var perVote = new ArrayList<TokenUsage>();
+        var perVote = new ArrayList<Map<String, TokenUsage>>();
         var aggregated = new ArrayList<Finding>();
         int pass = 0;
         int fail = 0;
         for (int cast = 0; cast < check.votes(); cast++) {
             JudgeVoter.Vote vote = judgeVoter.vote(check, context, workspace);
-            if (vote.tokens() != null) {
-                perVote.add(vote.tokens());
-            }
+            perVote.add(vote.tokensByModel());
             switch (vote.verdict()) {
                 case Verdict.Pass ignored -> pass++;
                 case Verdict.Fail f -> {

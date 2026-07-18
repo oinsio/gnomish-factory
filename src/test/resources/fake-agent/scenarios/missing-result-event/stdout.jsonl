@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"fake-session-missing-result-1","model":"claude-fake-main-1","cwd":"/workspace","tools":["Read","Write"]}
+{"type":"assistant","session_id":"fake-session-missing-result-1","message":{"id":"msg_1","model":"claude-fake-main-1","content":[{"type":"text","text":"Working..."}]}}

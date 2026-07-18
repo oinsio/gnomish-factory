@@ -42,9 +42,19 @@
       } ],
       "usage" : {
         "wallMillis" : 183000,
-        "tokensIn" : null,
-        "tokensOut" : null,
-        "byTool" : [ ]
+        "tokensByModel" : {
+          "claude-sonnet-5" : {
+            "input" : 1200,
+            "output" : 5400,
+            "cacheCreation" : 30000,
+            "cacheRead" : 410000
+          }
+        },
+        "byTool" : [ {
+          "name" : "Edit",
+          "calls" : 4,
+          "totalMillis" : 2100
+        } ]
       },
       "judgeUsage" : {
         "perVote" : [ ]
@@ -53,9 +63,19 @@
   },
   "totals" : {
     "wallMillis" : 232000,
-    "tokensIn" : null,
-    "tokensOut" : null,
-    "byTool" : [ ]
+    "tokensByModel" : {
+      "claude-sonnet-5" : {
+        "input" : 1450,
+        "output" : 6100,
+        "cacheCreation" : 30000,
+        "cacheRead" : 512000
+      }
+    },
+    "byTool" : [ {
+      "name" : "Edit",
+      "calls" : 4,
+      "totalMillis" : 2100
+    } ]
   },
   "lastEscalation" : {
     "type" : "decisionNeeded",

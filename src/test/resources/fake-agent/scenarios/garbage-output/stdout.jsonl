@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"fake-session-garbage-1","model":"claude-fake-main-1","cwd":"/workspace","tools":["Read","Write"]}
+this line is not JSON at all
+{"type":"assistant","session_id":"fake-session-garbage-1","message":{"id":"msg_1","model":"claude-fake-main-1","content":[{"type":"text","text":"garbage round"}]}}
+{"type":"totally_unknown_event_type","foo":"bar","nested":{"a":1}}
+{unterminated json object without a closing brace

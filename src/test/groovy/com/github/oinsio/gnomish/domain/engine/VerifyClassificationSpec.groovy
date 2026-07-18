@@ -92,12 +92,12 @@ class VerifyClassificationSpec extends Specification {
         ])                                                                                                            || Verdict.Fail
         // M4 row 7 — judge model reply unparseable as verdict -> CannotVerify
         'judge reply unparseable'                     | judge(3)                                      | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.CannotVerify('unparseable verdict', 'not JSON'), null)
+            new JudgeVoter.Vote(new Verdict.CannotVerify('unparseable verdict', 'not JSON'), [:])
         ])                                                        || Verdict.CannotVerify
         // M4 row 8 — judge any single vote CannotVerify -> CannotVerify (whole check)
         'judge any single vote CannotVerify'          | judge(3)                                      | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter([
             passVote(),
-            new JudgeVoter.Vote(new Verdict.CannotVerify('service down', 'timeout'), null),
+            new JudgeVoter.Vote(new Verdict.CannotVerify('service down', 'timeout'), [:]),
             passVote()
         ])                                        || Verdict.CannotVerify
         // M4 row 9 — any check adapter throws -> CannotVerify (caught, stack trace kept)
@@ -123,11 +123,11 @@ class VerifyClassificationSpec extends Specification {
     }
 
     static JudgeVoter.Vote passVote() {
-        new JudgeVoter.Vote(new Verdict.Pass(), null)
+        new JudgeVoter.Vote(new Verdict.Pass(), [:])
     }
 
     static JudgeVoter.Vote failVote() {
-        new JudgeVoter.Vote(new Verdict.Fail([]), null)
+        new JudgeVoter.Vote(new Verdict.Fail([]), [:])
     }
 
     static ScriptedCommandCheckRunner throwingCommandRunner() {

@@ -5,7 +5,7 @@ inputs:
 outputs:
   - id: review-report
 executor:
-  type: api
+  type: agent-cli
   model: review-model
 instructions: stages/review/instructions.md
 verify:

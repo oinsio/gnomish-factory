@@ -9,14 +9,13 @@ executor:
   type: agent-cli
   model: implement-model
   settings:
-    temperature: 0
     maxTurns: 40
-    interactive: false
     allowedTools:
       - read
       - edit
-    limits:
-      wallClockSeconds: 900
+    disallowedTools:
+      - bash
+    roundTimeout: 900
 instructions: stages/implement/instructions.md
 verify:
   - type: builtin
@@ -34,6 +33,6 @@ verify:
     criteriaFile: stages/implement/acceptance.md
     model: judge-model
     settings:
-      temperature: 0
+      maxTurns: 3
     votes: 3
 advancement: manual
