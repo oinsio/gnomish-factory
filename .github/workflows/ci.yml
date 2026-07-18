@@ -34,6 +34,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # Full history (not the default shallow clone) so the merge base
+          # with main is reachable for the diff-base resolution below
+          # (scope-pit-to-changed-files FR2/FR3, design D3).
+          fetch-depth: 0
 
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v5
@@ -48,8 +53,63 @@ jobs:
           # On by default in v6; kept explicit as a documented security gate.
           validate-wrappers: true
 
+      # Resolves the diff base used to scope PIT to changed production classes
+      # (scope-pit-to-changed-files FR2/FR3, design D3). Push runs diff against
+      # the merge base with origin/main, so only what the branch adds on top of
+      # main is scoped; fork pull_request runs use the event's own base SHA
+      # instead (no local merge-base resolution needed, GitHub supplies it).
+      # Fails loudly if the base cannot be resolved rather than silently
+      # falling back to an empty diff (design D3 risk mitigation: a
+      # shallow/detached checkout must be a hard error, not a masked no-op).
+      - name: Resolve diff base
+        id: diff-base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            if [ -z "$base" ]; then
+              echo "::error::pull_request base SHA is empty in the event payload" >&2
+              exit 1
+            fi
+            if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              echo "::error::pull_request base SHA ${base} is not present locally" >&2
+              exit 1
+            fi
+          else
+            if ! git rev-parse --verify --quiet origin/main >/dev/null; then
+              echo "::error::origin/main does not resolve; cannot compute the diff base" >&2
+              exit 1
+            fi
+            if ! base="$(git merge-base origin/main HEAD)"; then
+              echo "::error::git merge-base origin/main HEAD failed" >&2
+              exit 1
+            fi
+          fi
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
+
+      # Derives the changed-class list from the diff base and narrows the PIT
+      # run to those classes (scope-pit-to-changed-files FR2/FR3, design D2).
+      # --diff-filter=d drops deletions (a deleted class cannot be mutated); a
+      # rename shows as delete+add, so only the added path survives, which is
+      # correct. Each surviving src/main/java/**/*.java path is stripped of its
+      # prefix/suffix and '/' -> '.' mapped to a fully-qualified class name used
+      # verbatim as a PIT glob. No production Java changes -> empty string,
+      # which is the empty-scope case build.gradle's pitScope skip handles
+      # (FR4, design D4).
+      - name: Compute changed production classes
+        id: changed-classes
+        run: |
+          classes="$(git diff --diff-filter=d --name-only "${{ steps.diff-base.outputs.base }}...HEAD" -- 'src/main/java/**/*.java' \
+            | sed -e 's#^src/main/java/##' -e 's#\.java$##' -e 's#/#.#g' \
+            | paste -sd ',' -)"
+          echo "classes=${classes}" >> "$GITHUB_OUTPUT"
+
+      # -PpitScope narrows PIT's targetClasses to the changed-class list; when
+      # the list is empty this passes -PpitScope="" which is exactly the
+      # set-but-empty case build.gradle's onlyIf skips cleanly (no "No
+      # mutations found" failure). PIT stays part of the single `check`
+      # lifecycle (scope-pit-to-changed-files FR2-FR4, NFR-C1).
       - name: Run quality gates
-        run: ./gradlew check
+        run: ./gradlew check "-PpitScope=${{ steps.changed-classes.outputs.classes }}"
 
       # Reports are uploaded even when the build fails — a red gate is exactly
       # when the HTML/XML reports are needed (NFR-O1). 14-day retention keeps

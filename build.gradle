@@ -290,13 +290,33 @@ tasks.register('paidSmokeTest', Test) {
 
 // PIT mutation testing (FR6 of add-project-skeleton, design D5).
 // Spock 2 runs on the JUnit Platform, hence the JUnit 5 PIT plugin.
+//
+// pitScope (scope-pit-to-changed-files, FR1/FR5, design D1): opt-in, CI-only
+// project property that narrows targetClasses to the changed-file glob list
+// CI computes from the diff. Unset (the local developer default) always runs
+// the full-tree mutation set below. Captured once here at configuration time
+// (the pitest {} block is configured eagerly, not via a lazy Property) so the
+// read stays config-cache safe — same pattern as mainJavaSources below.
+// Accepted trade-off: only the unset/full-tree run guarantees whole-project
+// mutation coverage; a scoped CI run can miss a mutation surviving in an
+// unchanged file due to a change elsewhere ("cross-file mutation rot" — see
+// design.md's Risks / Trade-offs, scope-pit-to-changed-files).
+def pitScopeRaw = providers.gradleProperty('pitScope')
+def pitScopeSet = pitScopeRaw.isPresent()
+def pitScopeGlobs = pitScopeRaw.getOrElse('')
+        .split(',')
+        .collect { it.trim() }
+        .findAll { !it.isEmpty() }
+
 pitest {
     // asProvider(): 'pitest' is a prefix of other catalog version aliases.
     pitestVersion = libs.versions.pitest.tool.get()
     junit5PluginVersion = libs.versions.pitest.junit5.plugin.get()
     // Java production code only — never Groovy test bytecode (mutating Groovy
     // produces noisy false-positive survivors; see .claude/rules/testing.md).
-    targetClasses = ['com.github.oinsio.gnomish.*']
+    // pitScope unset (local default) => full tree; pitScope set => narrowed to
+    // the CI-supplied glob list (empty list is handled by the onlyIf skip below).
+    targetClasses = pitScopeSet && !pitScopeGlobs.isEmpty() ? pitScopeGlobs : ['com.github.oinsio.gnomish.*']
     // Set the test scope explicitly rather than leaning on PIT's default (which
     // falls back to the targetClasses pattern) — that default only finds the
     // Spock specs by the coincidence that they share the production package
@@ -378,6 +398,11 @@ tasks.named('pitest') {
     // configuration time, keeping the onlyIf spec configuration-cache safe.
     def mainJavaSources = sourceSets.main.allJava
     onlyIf('no Java production classes to mutate yet') { !mainJavaSources.isEmpty() }
+    // scope-pit-to-changed-files FR4/D4: pitScope set but empty (a branch that
+    // changed no production Java files) means nothing to mutate — skip cleanly
+    // rather than let PIT hard-fail on an empty targetClasses match. Booleans/
+    // lists captured above at configuration time, not re-read here.
+    onlyIf('pitScope is set but resolves to no classes') { !(pitScopeSet && pitScopeGlobs.isEmpty()) }
 }
 
 // Fail-closed mutation-status gate (FR6 of add-project-skeleton, M5 of
