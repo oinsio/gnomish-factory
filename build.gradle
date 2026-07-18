@@ -186,6 +186,23 @@ tasks.named('test') {
     dependsOn tasks.named('bootJar')
     systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
 
+    // Reference-dump hygiene spec (design D2, FR6 of harden-reference-dump-scrubber): under the
+    // plain `test` task the classpath copy in build/resources/test is NOT the committed source
+    // file, so an in-place rewrite there would silently touch nothing. The hygiene spec resolves
+    // the committed fixtures via this property instead. Harmless here — it is just a path that is
+    // only read.
+    systemProperty 'referenceDumpDir', file('src/test/resources/stream-json-reference').absolutePath
+
+    // Gated fixture refresh (design D2, FR6 of harden-reference-dump-scrubber): the
+    // ReferenceDumpHygieneSpec rewrite feature is gated on @Requires({ System.getProperty(
+    // 'rescrubReferenceDumps') }). Test tasks fork a JVM, so a `-D` on the Gradle command line
+    // lands on the Gradle JVM only — forward it explicitly (same idiom as paidSmoke.claudeBinary
+    // on paidSmokeTest). Absent by default, so the gate stays skipped and `check` never mutates
+    // the committed fixtures; set `-DrescrubReferenceDumps=true` to run the one-off refresh.
+    if (System.getProperty('rescrubReferenceDumps') != null) {
+        systemProperty 'rescrubReferenceDumps', System.getProperty('rescrubReferenceDumps')
+    }
+
     // The Ollama E2E layer (task 11.1, M1, D11) needs a native local Ollama install and a
     // logged-in `claude` CLI — not free/deterministic like the rest of this task's specs (the
     // fake-agent-binary suites, the self-contained e2e.* harness above). Excluded here and run
@@ -304,7 +321,18 @@ pitest {
     // from PIT's test scan does not remove any production line from mutation
     // coverage, only from being (re-)run once per mutant by PIT itself, which
     // would also be prohibitively slow for a real-process spawn per mutant.
-    excludedTestClasses = ['com.github.oinsio.gnomish.e2e.*']
+    //
+    // M5 documented exception (harden-reference-dump-scrubber): ReferenceDumpHygieneSpec
+    // resolves the committed fixtures through the `referenceDumpDir` system property that only
+    // the `test` task wires — exactly like `e2e.jarPath` above, PIT's child JVMs never receive
+    // it, so its precondition fails for every data-driven iteration, unrelated to any mutation.
+    // It is a Groovy test-support hygiene guard over committed fixtures (the scrubber is Groovy,
+    // outside `targetClasses`), so excluding it removes no production line from mutation coverage;
+    // the scrubber's behaviour is covered by ReferenceDumpScrubberSpec's unit scenarios (M5).
+    excludedTestClasses = [
+        'com.github.oinsio.gnomish.e2e.*',
+        'com.github.oinsio.gnomish.adapter.agent.ReferenceDumpHygieneSpec',
+    ]
     // M4 documented exception: a handful of private methods on `record` classes
     // (ExecutorUsage, StatusReport, Finding, Decision) carry the project's own
     // @com.github.oinsio.gnomish.DoNotMutate marker instead of a build.gradle

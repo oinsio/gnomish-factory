@@ -49,7 +49,7 @@ final class ClaudeLoginPreflight {
         DirectoryWorkspace workspace
         try {
             workspace = new DirectoryWorkspace(workspaceRoot)
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
             return Result.failure("workspace root is not a directory: ${workspaceRoot}")
         }
 
@@ -91,7 +91,7 @@ final class ClaudeLoginPreflight {
         }
     }
 
-    /** Outcome of {@link #check}: either proof of a logged-in CLI, or a specific failure reason. */
+    /** Outcome of check: either proof of a logged-in CLI, or a specific failure reason. */
     static final class Result {
 
         final boolean loggedIn

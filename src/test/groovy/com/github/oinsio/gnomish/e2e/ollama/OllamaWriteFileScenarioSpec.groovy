@@ -45,8 +45,7 @@ class OllamaWriteFileScenarioSpec extends Specification {
 
     @IgnoreIf(
     value = { !OllamaAvailability.harnessReady() },
-    reason = 'local Ollama unreachable or `claude` CLI not on PATH — see OllamaAvailability; '
-    + 'this is expected outside a developer machine with Ollama installed (D11)')
+    reason = 'local Ollama unreachable or `claude` CLI not on PATH — see OllamaAvailability; this is expected outside a developer machine with Ollama installed (D11)')
     def "M1: a real agent-cli round creates hello.txt and the real judge verdict drives the stage to completion"() {
         given: 'the fixture workspace has no hello.txt before the run'
         assert !Files.exists(OllamaFixture.expectedFile())

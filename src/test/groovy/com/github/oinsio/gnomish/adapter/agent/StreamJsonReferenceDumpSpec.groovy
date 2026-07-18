@@ -13,13 +13,15 @@ import spock.lang.Specification
  * committed reference dumps: plain round, subagent round, judge verdict,
  * result with and without {@code modelUsage}").
  *
- * <p><b>Placeholder fixtures (Q1):</b> per {@code
- * stream-json-reference/README.md}, these four dumps are hand-authored
- * placeholders, not byte-real recordings from a live {@code claude} CLI run —
- * that recording is task 11.3's job (design D11's "(3b) Paid smoke"), which
- * has not run yet. This spec exercises the parser against the wire shapes
- * documented in this package's javadoc today; task 11.3 is expected to
- * overwrite the fixture files (not this spec) once real recordings exist.
+ * <p><b>Recorded fixtures (Q1):</b> per {@code
+ * stream-json-reference/README.md}, the plain-round, subagent-round and
+ * judge-verdict dumps are now real recorded {@code claude} CLI transcripts
+ * (recorded then scrubbed of cost / {@code uuid} / {@code request_id} /
+ * {@code permission_denials}); the {@code result-without-model-usage} dump
+ * remains a hand-authored fixture, since no live CLI still emits a result
+ * event that omits {@code modelUsage}. Expected values below are the exact
+ * literals carried by those recordings — scrubbing left model ids, token
+ * counts, result text and tool traces untouched.
  *
  * <p>Assertions target format-drift-sensitive shape, not just presence: exact
  * {@code tokensByModel} keys/counts per model, top-level-only tool trace
@@ -34,8 +36,8 @@ class StreamJsonReferenceDumpSpec extends Specification {
     def parser = new StreamJsonParser(clock)
     def extractor = new AgentRoundResultExtractor()
 
-    // M3, D3, D4: single-model round — modelUsage present, top-level tool trace has both calls
-    def "extracts tokensByModel and a two-call top-level trace from the plain-round reference dump"() {
+    // M3, D3, D4: multi-model round — modelUsage carries every model the round touched, top-level tool trace in wire order
+    def "extracts per-model tokens and the top-level tool trace from the plain-round reference dump"() {
         given: 'the plain-round reference dump parsed into timestamped events'
         def events = parser.parse(readerOf('plain-round'))
 
@@ -44,16 +46,17 @@ class StreamJsonReferenceDumpSpec extends Specification {
 
         then: 'the essential result text and session id are surfaced verbatim'
         result.sessionId() == 'ref-session-plain-1'
-        result.result() == 'Stage complete: output.txt written with the requested content.'
+        result.result() == 'I read spec.md, which asks for a file `output.txt` containing `done`. However, I\'m unable to create it: the Write tool is waiting on a permission grant that hasn\'t been given, and shell redirection is blocked by the sandbox. Please approve the write (or grant write permission) and I\'ll create `output.txt` with the content `done`.'
 
-        and: 'tokensByModel carries exactly one entry, keyed by the resolved model id from modelUsage'
+        and: 'tokensByModel carries one entry per model in modelUsage, keyed by the resolved model id'
         result.usage().tokensByModel() == [
-            'claude-opus-4-1-20250805': new TokenUsage(410, 132, 256, 1024)
+            'claude-haiku-4-5-20251001': new TokenUsage(530, 14, 0, 0),
+            'claude-opus-4-8[1m]'      : new TokenUsage(4099, 781, 7395, 93494)
         ]
 
-        and: 'the top-level trace carries both Read and Write calls, in wire order'
-        result.usage().tools()*.name() == ['Read', 'Write']
-        result.usage().tools().every { it.calls() == 1 }
+        and: 'the top-level trace collapses to first-seen tool order with per-tool call counts (Read×1, Write×2, Bash×1)'
+        result.usage().tools()*.name() == ['Read', 'Write', 'Bash']
+        result.usage().tools()*.calls() == [1, 2, 1]
     }
 
     // M3, D3, D4: subagent round — nested parent_tool_use_id excluded from trace, multi-model tokensByModel
@@ -66,14 +69,13 @@ class StreamJsonReferenceDumpSpec extends Specification {
 
         then: 'tokensByModel reports both the main and the subagent model, each with its own four-field split'
         result.usage().tokensByModel() == [
-            'claude-opus-4-1-20250805' : new TokenUsage(1200, 260, 320, 2048),
-            'claude-haiku-4-5-20251001': new TokenUsage(650, 150, 192, 1024)
+            'claude-opus-4-8[1m]'      : new TokenUsage(7981, 912, 17802, 87894),
+            'claude-haiku-4-5-20251001': new TokenUsage(552, 16, 0, 0)
         ]
 
-        and: 'the top-level trace carries only the two top-level calls (Task, Edit) — the nested Grep/Read are excluded'
-        result.usage().tools()*.name() == ['Task', 'Edit']
-        result.usage().tools().every { it.name() != 'Grep' }
-        result.usage().tools().every { it.name() != 'Read' }
+        and: 'the top-level trace carries only the two top-level calls (Agent, Write) — the subagent\'s nested Bash/Write are excluded'
+        result.usage().tools()*.name() == ['Agent', 'Write']
+        result.usage().tools().every { it.calls() == 1 }
     }
 
     // M3, D3, D5, D8: judge-shaped round — read-only tool trace, fenced JSON verdict survives as the raw result text
@@ -88,11 +90,12 @@ class StreamJsonReferenceDumpSpec extends Specification {
         result.result() == '```json\n{"passed": true, "findings": []}\n```'
 
         and: 'the tool trace reflects only the read-only calls a judge is allowed (FR12, NFR-S1)'
-        result.usage().tools()*.name() == ['Read', 'Grep']
+        result.usage().tools()*.name() == ['Grep', 'Read']
 
         and: 'tokensByModel is derived from modelUsage same as any other round'
         result.usage().tokensByModel() == [
-            'claude-opus-4-1-20250805': new TokenUsage(640, 38, 0, 512)
+            'claude-haiku-4-5-20251001': new TokenUsage(558, 15, 0, 0),
+            'claude-opus-4-8[1m]'      : new TokenUsage(4095, 399, 5629, 51725)
         ]
     }
 

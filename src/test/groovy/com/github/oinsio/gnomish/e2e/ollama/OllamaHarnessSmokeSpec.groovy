@@ -51,8 +51,7 @@ class OllamaHarnessSmokeSpec extends Specification {
     // this feature as SKIPPED with the reason string below, never a failure.
     @IgnoreIf(
     value = { !OllamaAvailability.harnessReady() },
-    reason = 'local Ollama unreachable or `claude` CLI not on PATH — see OllamaAvailability; '
-    + 'this is expected outside a developer machine with Ollama installed (D11)')
+    reason = 'local Ollama unreachable or `claude` CLI not on PATH — see OllamaAvailability; this is expected outside a developer machine with Ollama installed (D11)')
     def "M1: harness prerequisites are ready — real claude CLI and local Ollama are both reachable"() {
         expect: 'the E2E jar the harness spawns actually exists (OllamaWriteFileScenarioSpec runs the real scenario)'
         new E2eProcessHarness() != null

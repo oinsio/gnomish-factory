@@ -42,6 +42,14 @@ For the in-place refresh, path/session arguments are passed empty: the files are
 
 It already calls `ReferenceDumpScrubber.scrub(...)` per line; extending that method means the next paid recording is scrubbed automatically. No change to the recorder, so M4/D11 behaviour is untouched.
 
+### D4: Collapse machine temp paths by regex; keep opaque per-run tokens
+
+Driven by FR7, NFR-S1. A real recording leaves machine-identifying absolute paths the workspace-literal replacement (D1's string phase) does not catch, because they are *not* the workspace root: the macOS per-user temp hash `/private/var/folders/<xx>/<hash>…`, the per-uid `/private/tmp/claude-<uid>/…`, and — crucially — Claude Code's *dashed* project-dir encoding of such a path (`-private-var-folders-…-workspaceRoot<n>`) that surfaces in `memory_paths.auto` and a subagent's `output_file`. These are collapsed to `/workspace-scrubbed` (`-workspace-scrubbed` for the dashed form) by an ordered list of anchored regexes in the string phase, alongside the pre-existing `/(Users|home)/…` rule. *Rationale:* like the home-path collapse, these paths are structurally recognizable and not JSON-key-scoped (they appear inside string *values*), so a targeted regex is the right tool — a key deny-list (D1) cannot reach a substring of a path value. Each rule rewrites to a fixed placeholder that matches none of the patterns, so re-scrubbing is a no-op (NFR-R1).
+
+*Boundary — what stays.* The random `workspaceRoot<n>` suffix rides inside the `var-folders` segment and is removed with it, but the opaque per-run tokens `agentId`/`task_id` (a random hex, no machine or user identity) are **kept**, on the same footing as the API `msg_`/`toolu_` ids D1 already keeps: they make the subagent linkage representative (NG3). The alternative — adding `agentId`/`task_id` to the deny-list and stripping the init-event config (plugins, MCP servers, `memory_paths`) — was rejected: it shrinks the fixture but erases exactly the real event shape a local Ollama run cannot reproduce, defeating D11.
+
+*Alternative rejected:* narrowing NFR-S1's wording to the home-path guard + field deny-list (a doc-only fix) — cheaper, but it would knowingly leave a per-user temp hash committed in the repo, which is the machine-identifying data NFR-S1 exists to remove.
+
 ## Risks / Trade-offs
 
 - **Re-serialization vs byte-fidelity**: Jackson round-trips compact JSON with preserved key order, but a pathological numeric reformat (e.g. `0.16131700000000002`) is possible. Mitigation: the hygiene spec asserts token counts are still present and correct after refresh; the diff is reviewed by the human before commit (the agent never commits). Accepted: fixtures are for shape/parse tests, not exact-number contracts.

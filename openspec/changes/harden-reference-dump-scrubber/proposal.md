@@ -4,7 +4,7 @@ The paid-smoke recorder commits a real `claude -p --output-format stream-json` t
 
 ## What Changes
 
-- **MODIFIED** reference-dump scrubbing (agent-executor paid-smoke tooling, D11/M4): the scrubber additionally strips money (`total_cost_usd`, every nested `costUSD`), the `permission_denials` array, and per-event `uuid` and `request_id` from each captured line, while preserving resolved model ids and every token/cache count.
+- **MODIFIED** reference-dump scrubbing (agent-executor paid-smoke tooling, D11/M4): the scrubber additionally strips money (`total_cost_usd`, every nested `costUSD`), the `permission_denials` array, per-event `uuid` and `request_id`, and machine-identifying absolute temp paths (`var/folders` hashes, `/tmp/claude-<uid>` dirs, and their dashed project-dir encoding) from each captured line, while preserving resolved model ids, every token/cache count, and opaque per-run tokens (`agentId`, `task_id`).
 - **ADDED** a deterministic, idempotent re-scrub over the already-committed `*.reference.json` fixtures — refresh them from disk with no `claude` invocation and no spend.
 - The three committed dumps (`plain-round`, `subagent-round`, `judge-verdict`) are regenerated through the hardened scrubber.
 - The scrubber javadoc is corrected to list exactly what is stripped vs kept.
@@ -20,7 +20,7 @@ The paid-smoke recorder commits a real `claude -p --output-format stream-json` t
 ## Goals
 
 - G1: no committed fixture contains dollar figures.
-- G2: no committed fixture contains raw tool inputs, file contents, absolute paths, usernames, or per-run identifiers.
+- G2: no committed fixture contains raw tool inputs, file contents, home- or temp-directory absolute paths, usernames, or the `uuid`/`request_id` envelope identifiers. Opaque per-run tokens that carry no machine or user identity (`agentId`, `task_id`, the random `workspaceRoot<n>` temp suffix, API `msg_`/`toolu_` ids) are kept as representative CLI output (see NG3).
 - G3: token and resolved-model realism (the point of the paid smoke, D11) is preserved intact.
 - G4: fixtures can be refreshed without a paid CLI run.
 - G5: the scrubber's documented contract matches its behaviour.
@@ -47,6 +47,7 @@ The paid-smoke recorder commits a real `claude -p --output-format stream-json` t
 - FR4: the scrubber SHALL preserve resolved model ids and all four token/cache counts under each `modelUsage` entry, and the top-level `usage` token fields, unchanged.
 - FR5: the existing workspace-path and session-id scrubbing SHALL remain, unchanged in behaviour.
 - FR6: a deterministic operation SHALL re-scrub the committed `*.reference.json` files in place from disk, requiring no `claude` invocation.
+- FR7: the scrubber SHALL collapse machine- or user-identifying absolute temp paths a real recording leaves behind — the macOS per-user temp root (`/private/var/folders/…`, `/var/folders/…`), the per-uid `/private/tmp/claude-<uid>/…` (and `/tmp/claude-<uid>/…`), and Claude Code's dashed project-dir encoding of such a path (`-private-var-folders-…`) — to `/workspace-scrubbed`, while preserving opaque per-run tokens that carry no machine or user identity (`agentId`, `task_id`, the `workspaceRoot<n>` suffix) per NG3.
 
 ### Non-Functional Reliability
 
@@ -54,7 +55,7 @@ The paid-smoke recorder commits a real `claude -p --output-format stream-json` t
 
 ### Non-Functional Security
 
-- NFR-S1: after scrubbing, no committed fixture SHALL contain file contents, absolute paths, usernames, raw tool inputs, or per-run identifiers.
+- NFR-S1: after scrubbing, no committed fixture SHALL contain file contents, home- or temp-directory absolute paths (including the per-user macOS `var/folders` hash and the `/tmp/claude-<uid>` uid, in both slash and dashed-encoded form), usernames, raw tool inputs, cost figures, `permission_denials`, `uuid`, or `request_id`. Opaque per-run identifiers that carry no machine or user identity (`agentId`, `task_id`, `workspaceRoot<n>`, API `msg_`/`toolu_` ids) are deliberately retained as representative CLI output (see NG3).
 
 ### Non-Functional Cost
 
@@ -70,11 +71,12 @@ The paid-smoke recorder commits a real `claude -p --output-format stream-json` t
 
 ## Success Metrics
 
-- M1: `grep -rE 'costUSD|total_cost_usd' src/test/resources/stream-json-reference` returns zero matches.
-- M2: `grep -rE 'permission_denials|"uuid"|"request_id"' src/test/resources/stream-json-reference` returns zero matches.
+- M1: `grep -rE --include='*.reference.json' 'costUSD|total_cost_usd' src/test/resources/stream-json-reference` returns zero matches (scoped to the fixtures: the directory's README legitimately names the stripped fields as documentation).
+- M2: `grep -rE --include='*.reference.json' 'permission_denials|"uuid"|"request_id"' src/test/resources/stream-json-reference` returns zero matches.
 - M3: resolved model ids and `inputTokens`/`outputTokens`/cache counts are still present in every refreshed dump (> 0 matches).
 - M4: the re-scrub is idempotent — a second application leaves the files byte-identical (empty diff).
 - M5: `./gradlew check` is green, including a hygiene spec that fails if any committed fixture regains a stripped field (the scrubber is Groovy test-support, outside the PIT mutation gate by design; its behaviour is covered by unit scenarios instead).
+- M6: `grep -rE --include='*.reference.json' 'var[-/]folders|/tmp/claude-[0-9]' src/test/resources/stream-json-reference` returns zero matches — no machine temp path (slash or dashed-encoded) survives in any fixture (FR7, NFR-S1).
 
 ## Open Questions
 
