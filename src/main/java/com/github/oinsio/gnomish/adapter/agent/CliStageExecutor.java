@@ -54,7 +54,7 @@ public final class CliStageExecutor implements StageExecutor {
     private final Clock clock;
     private final AgentProgressListener progressListener;
     private final ExecutorPromptBuilder promptBuilder = new ExecutorPromptBuilder();
-    private final DecisionFileTransport decisionFileTransport = new DecisionFileTransport();
+    private final DecisionFileTransport decisionFileTransport;
     private final AgentProcessLauncher launcher;
     private final AgentRoundResultExtractor resultExtractor = new AgentRoundResultExtractor();
     private final DecisionFileReader decisionFileReader = new DecisionFileReader();
@@ -71,7 +71,7 @@ public final class CliStageExecutor implements StageExecutor {
      *     shared with the injected {@link AgentProcessLauncher}; never null
      */
     public CliStageExecutor(FactoryProperties factoryProperties, Clock clock) {
-        this(factoryProperties, clock, event -> {});
+        this(factoryProperties, clock, _ -> {});
     }
 
     /**
@@ -85,9 +85,26 @@ public final class CliStageExecutor implements StageExecutor {
      *     subscribers, or a no-op ({@code event -> {}}) to reach none
      */
     public CliStageExecutor(FactoryProperties factoryProperties, Clock clock, AgentProgressListener progressListener) {
+        this(factoryProperties, clock, progressListener, new DecisionFileTransport());
+    }
+
+    /**
+     * Testing seam (package-private): the same executor with the per-round
+     * decision-file transport supplied by the caller, so a spec can assert the
+     * infrastructure-failure cleanup contract — {@code runRound} must {@link
+     * DecisionFileTransport.Handle#discard()} the round directory on any {@link
+     * RuntimeException} (NFR-R3, D1) — without depending on the shared JVM temp
+     * directory. Production always uses the no-arg transport.
+     */
+    CliStageExecutor(
+            FactoryProperties factoryProperties,
+            Clock clock,
+            AgentProgressListener progressListener,
+            DecisionFileTransport decisionFileTransport) {
         this.factoryProperties = factoryProperties;
         this.clock = clock;
         this.progressListener = progressListener;
+        this.decisionFileTransport = decisionFileTransport;
         this.launcher = new AgentProcessLauncher(clock);
     }
 

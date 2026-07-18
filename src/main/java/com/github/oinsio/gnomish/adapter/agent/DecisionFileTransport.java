@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Owns the per-round decision-file temp-directory lifecycle (design D1):
@@ -39,6 +40,31 @@ public final class DecisionFileTransport {
 
     private static final String TEMP_DIR_PREFIX = "gnomish-decision-";
 
+    private final @Nullable Path tempParent;
+
+    /**
+     * Production transport: per-round directories are created under the JVM
+     * temp directory ({@code java.io.tmpdir}), always outside any stage
+     * workspace (NFR-S2).
+     */
+    public DecisionFileTransport() {
+        this(null);
+    }
+
+    /**
+     * Testing seam (package-private): the same transport rooted at a caller-
+     * supplied parent directory instead of the shared, concurrently written
+     * JVM temp directory, so a spec can assert the create/discard lifecycle in
+     * an isolated location. Production always uses {@link
+     * #DecisionFileTransport()} ({@code null} parent → JVM temp).
+     *
+     * @param tempParent the directory each round's fresh temp dir is created
+     *     under, or {@code null} to use the JVM temp directory; must exist
+     */
+    DecisionFileTransport(@Nullable Path tempParent) {
+        this.tempParent = tempParent;
+    }
+
     /**
      * Creates a fresh per-round temp directory outside the workspace and
      * resolves the decision-file path inside it. The directory is created
@@ -54,7 +80,9 @@ public final class DecisionFileTransport {
      */
     public Handle open() {
         try {
-            Path tempDir = Files.createTempDirectory(TEMP_DIR_PREFIX);
+            Path tempDir = tempParent == null
+                    ? Files.createTempDirectory(TEMP_DIR_PREFIX)
+                    : Files.createTempDirectory(tempParent, TEMP_DIR_PREFIX);
             return new Handle(tempDir.resolve(DECISION_FILE_NAME));
         } catch (IOException e) {
             throw new UncheckedIOException("could not create decision-file temp directory", e);

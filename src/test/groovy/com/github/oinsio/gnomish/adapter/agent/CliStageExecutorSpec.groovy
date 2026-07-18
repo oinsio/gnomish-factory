@@ -25,6 +25,9 @@ class CliStageExecutorSpec extends Specification {
     @TempDir
     Path workspaceDir
 
+    @TempDir
+    Path decisionRoot
+
     def clock = new VirtualClock()
 
     def setup() {
@@ -102,6 +105,27 @@ class CliStageExecutorSpec extends Specification {
 
         then:
         thrown(RoundTimeoutException)
+    }
+
+    // FR3, NFR-R3, D1: an infrastructure failure mid-round still cleans up the round's
+    // decision temp directory — runRound() calls Handle.discard() on any RuntimeException
+    // path (here a roundTimeout kill), so nothing from the decision protocol leaks after
+    // a failed round. The transport is rooted at this spec's own @TempDir, so the check is
+    // deterministic under the parallel suite (no dependence on the shared JVM temp dir).
+    def "a failed round discards the decision temp directory"() {
+        given:
+        def properties = FakeAgentSupport.propertiesFor('hangs-forever')
+        def transport = new DecisionFileTransport(decisionRoot)
+        def executor = new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, transport)
+
+        when:
+        executor.execute(requestFor([roundTimeout: 1]))
+
+        then:
+        thrown(RoundTimeoutException)
+
+        and: 'NFR-R3, D1: no round directory survives under the injected root'
+        Files.list(decisionRoot).withCloseable { it.count() == 0L }
     }
 
     // FR4, NFR-R1: a stream with no result event throws, uncaught infrastructure failure.

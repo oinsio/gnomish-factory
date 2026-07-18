@@ -1,3 +1,5 @@
+import groovy.xml.XmlSlurper
+
 // Build script for the gnomish-factory walking skeleton.
 // Implements FR1 of add-project-skeleton (design D1–D3):
 // single module, Java 25 toolchain, Spring Boot plugin + BOM,
@@ -278,6 +280,13 @@ pitest {
     // Java production code only — never Groovy test bytecode (mutating Groovy
     // produces noisy false-positive survivors; see .claude/rules/testing.md).
     targetClasses = ['com.github.oinsio.gnomish.*']
+    // Set the test scope explicitly rather than leaning on PIT's default (which
+    // falls back to the targetClasses pattern) — that default only finds the
+    // Spock specs by the coincidence that they share the production package
+    // tree, and would silently discover zero tests the moment a spec moved. An
+    // empty test scan is what lets a run count every mutation as RUN_ERROR and
+    // still report ~100% (see pitestVerifyAllKilled below).
+    targetTests = ['com.github.oinsio.gnomish.*']
     // FR6 documented exception: the application bootstrap class is only
     // main() + SpringApplication.run(), unreachable by unit tests by design
     // (design D5, D10). Everything else must reach 100%.
@@ -323,7 +332,10 @@ pitest {
     // Every annotated method is otherwise fully covered by its own unit spec
     // (ExecutorUsageSpec, StatusReportSpec/AttemptBoundaryEquivalenceSpec,
     // FindingSpec, DecisionSpec); the annotation only stops PIT from *mutating*
-    // it, not from being exercised by those specs' normal assertions.
+    // it, so those methods never emit a mutation entry at all — a real RUN_ERROR
+    // from anywhere else is a broken run, not an accepted exception, and is
+    // failed hard by pitestVerifyAllKilled below (mutationThreshold alone cannot
+    // catch it: PIT counts RUN_ERROR as "detected").
     mutationThreshold = 100 // 100% mutation score gate (FR6)
     timestampedReports = false // stable report path for CI artifact upload
     outputFormats = ['XML', 'HTML']
@@ -340,10 +352,46 @@ tasks.named('pitest') {
     onlyIf('no Java production classes to mutate yet') { !mainJavaSources.isEmpty() }
 }
 
+// Fail-closed mutation-status gate (FR6 of add-project-skeleton, M5 of
+// add-agent-executor). PIT's DetectionStatus counts RUN_ERROR, MEMORY_ERROR and
+// TIMED_OUT as "detected", so a degraded run where the minion JVM crashes before
+// running any test (e.g. a stale test classpath, an incompatible minion JDK)
+// reports a green ~100% score while verifying almost nothing — mutationThreshold
+// cannot see the difference. This check parses the report and fails unless EVERY
+// mutation was genuinely KILLED, turning a broken PIT run into a red build
+// instead of a false green. Runs after `pitest`, on the same stable report path.
+def pitestMutationsXml = layout.buildDirectory.file('reports/pitest/mutations.xml')
+tasks.register('pitestVerifyAllKilled') {
+    description = 'Fails unless every PIT mutation was KILLED — RUN_ERROR/MEMORY_ERROR/TIMED_OUT do not count as detected.'
+    group = 'verification'
+    dependsOn tasks.named('pitest')
+    def reportFile = pitestMutationsXml // config-cache-safe capture
+    // Mirror pitest's own skip: no report means nothing was mutated yet.
+    onlyIf('a PIT mutations.xml was produced') { reportFile.get().asFile.exists() }
+    doLast {
+        def xml = new XmlSlurper().parse(reportFile.get().asFile)
+        def offenders = xml.mutation.findAll { it.@status.text() != 'KILLED' }
+        if (!offenders.isEmpty()) {
+            def byStatus = offenders
+                    .groupBy { it.@status.text() }
+                    .collectEntries { status, list -> [status, list.size()] }
+            def sample = offenders.take(10)
+                    .collect { m -> "  ${m.@status.text()}: ${m.mutatedClass.text()}.${m.mutatedMethod.text()} (${m.mutator.text().tokenize('.').last()})" }
+                    .join('\n')
+            throw new GradleException(
+                    "PIT mutation gate is not trustworthy: ${offenders.size()} mutation(s) were not KILLED ${byStatus}. " +
+                    "PIT counts RUN_ERROR/MEMORY_ERROR/TIMED_OUT as 'detected', so the reported score is inflated. " +
+                    "First offenders:\n${sample}\nReport: ${reportFile.get().asFile}")
+        }
+    }
+}
+
 // The mutation gate is part of the standard verification lifecycle: `check`
-// runs Spock + JaCoCo + PIT as one command (FR5, FR6).
+// runs Spock + JaCoCo + PIT as one command (FR5, FR6). pitestVerifyAllKilled
+// closes the RUN_ERROR-counts-as-detected loophole in the same lifecycle.
 tasks.named('check') {
     dependsOn tasks.named('pitest')
+    dependsOn tasks.named('pitestVerifyAllKilled')
 }
 
 // UX2: a failed mutation gate must point to the HTML report. PIT's own

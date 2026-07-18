@@ -105,6 +105,48 @@ class DecisionFileTransportSpec extends Specification {
         secondHandle.readAndClose()
     }
 
+    def "a transport rooted at a given parent creates its round directory under that parent"() {
+        given: 'the package-private testing seam roots rounds at an explicit directory'
+        def transport = new DecisionFileTransport(workspaceRoot)
+
+        when:
+        def handle = transport.open()
+
+        then: 'the fresh round directory is created directly under the supplied parent'
+        handle.decisionFilePath().parent.parent == workspaceRoot
+
+        cleanup:
+        handle.discard()
+    }
+
+    def "discard deletes the round's temp directory without reading the file first"() {
+        given:
+        def transport = new DecisionFileTransport()
+        def handle = transport.open()
+        def tempDir = handle.decisionFilePath().parent
+        Files.writeString(handle.decisionFilePath(), 'unread garbage')
+
+        when: 'the infrastructure-failure cleanup path runs instead of readAndClose'
+        handle.discard()
+
+        then: 'NFR-R3, D1: the round directory is gone even though it was never read'
+        !Files.exists(tempDir)
+    }
+
+    def "discard is safe after readAndClose and on repeated calls"() {
+        given:
+        def transport = new DecisionFileTransport()
+        def handle = transport.open()
+
+        when:
+        handle.readAndClose()
+        handle.discard()
+        handle.discard()
+
+        then:
+        noExceptionThrown()
+    }
+
     def "readAndClose is idempotent-safe to call once and leaves no directory behind on repeated calls"() {
         given:
         def transport = new DecisionFileTransport()
