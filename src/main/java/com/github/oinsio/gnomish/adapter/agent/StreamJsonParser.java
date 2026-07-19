@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,13 +45,17 @@ import org.slf4j.LoggerFactory;
  * {@code EnginePorts} composes {@link
  * com.github.oinsio.gnomish.domain.engine.port.EngineEventListener}s — via a
  * fan-out implementation of this one-listener slot — rather than this class
- * accepting a list itself.
+ * accepting a list itself. The dispatch itself is delegated to {@link
+ * AgentProgressEmitter} (design D3, fix-oversized-adapters): this class keeps
+ * the tolerant read/parse loop and the read-time {@link Clock} stamping, and
+ * calls the emitter inline before reading the next line to preserve this
+ * live-before-next-line ordering.
  *
  * <p>Every recognized raw {@link AgentEvent} is also logged at DEBUG (task
  * 8.1), one line per event, independent of and in addition to the derived
- * {@link AgentProgressEvent} delivered to {@link #progressListener}: the raw
- * line is the full-fidelity record for a deep debugging session, while the
- * progress event is the coarse, always-INFO summary a renderer such as {@link
+ * {@link AgentProgressEvent} the emitter delivers: the raw line is the
+ * full-fidelity record for a deep debugging session, while the progress event
+ * is the coarse, always-INFO summary a renderer such as {@link
  * LoggingAgentProgressListener} surfaces (NFR-O1, UX1).
  *
  * <p>Implements FR4, FR6, FR7, NFR-O1, UX1, NFR-O3, D3, D10 of add-agent-executor.
@@ -65,8 +68,7 @@ public final class StreamJsonParser {
             new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private final Clock clock;
-    private final AgentProgressListener progressListener;
-    private final TokenUsageMapper tokenUsageMapper = new TokenUsageMapper();
+    private final AgentProgressEmitter progressEmitter;
 
     /**
      * Equivalent to {@link #StreamJsonParser(Clock, AgentProgressListener)} with
@@ -79,7 +81,7 @@ public final class StreamJsonParser {
      *     controllable fake)
      */
     public StreamJsonParser(Clock clock) {
-        this(clock, event -> {});
+        this(clock, _ -> {});
     }
 
     /**
@@ -93,7 +95,7 @@ public final class StreamJsonParser {
      */
     public StreamJsonParser(Clock clock, AgentProgressListener progressListener) {
         this.clock = clock;
-        this.progressListener = progressListener;
+        this.progressEmitter = new AgentProgressEmitter(progressListener, new TokenUsageMapper());
     }
 
     /**
@@ -124,66 +126,13 @@ public final class StreamJsonParser {
                     if (event instanceof AgentEvent.InitEvent init) {
                         initEvent[0] = init;
                     }
-                    emitProgress(event, initEvent[0]);
+                    progressEmitter.emit(event, initEvent[0]);
                 });
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
         return events;
-    }
-
-    /**
-     * Dispatches the {@link AgentProgressEvent}(s) a recognized {@link AgentEvent}
-     * implies to {@link #progressListener} (design D10, FR7): {@code
-     * RoundStarted} for an {@link AgentEvent.InitEvent}, one {@code ToolStarted}
-     * per top-level {@link ContentBlock.ToolUse} block for an {@link
-     * AgentEvent.AssistantEvent} whose {@code parentToolUseId} is {@code null},
-     * {@code RoundFinished} for an {@link AgentEvent.ResultEvent} — its {@code
-     * tokensByModel} derived by {@link TokenUsageMapper} the same way {@link
-     * AgentRoundResultExtractor}'s telemetry is, using {@code roundInit} for the
-     * flat-{@code usage} fallback's model key. A {@link AgentEvent.UserEvent}
-     * implies no progress event.
-     *
-     * @param roundInit the round's {@link AgentEvent.InitEvent} recognized so
-     *     far by this call to {@link #parse}, or {@code null} if none has been
-     *     recognized yet
-     */
-    private void emitProgress(AgentEvent event, AgentEvent.@Nullable InitEvent roundInit) {
-        switch (event) {
-            case AgentEvent.InitEvent init ->
-                deliver(new AgentProgressEvent.RoundStarted(init.model(), init.sessionId()));
-            case AgentEvent.AssistantEvent assistant -> {
-                if (assistant.parentToolUseId() == null) {
-                    for (ContentBlock block : assistant.content()) {
-                        if (block instanceof ContentBlock.ToolUse toolUse) {
-                            deliver(new AgentProgressEvent.ToolStarted(toolUse.name()));
-                        }
-                    }
-                }
-            }
-            case AgentEvent.ResultEvent result -> {
-                var tokensByModel = tokenUsageMapper.toTokensByModel(result, roundInit);
-                deliver(new AgentProgressEvent.RoundFinished(result.subtype(), tokensByModel, result.result()));
-            }
-            case AgentEvent.UserEvent ignored -> {
-                // tool results carry no progress signal of their own (FR7)
-            }
-        }
-    }
-
-    /**
-     * Delivers {@code event} to {@link #progressListener}, swallowing and
-     * logging any {@link RuntimeException} it throws so a broken listener never
-     * interrupts parsing (design D10) — mirroring how {@code Events.emit}
-     * shields the engine's own event delivery.
-     */
-    private void deliver(AgentProgressEvent event) {
-        try {
-            progressListener.onProgress(event);
-        } catch (RuntimeException ex) {
-            log.warn("agent progress listener threw for {}", event, ex);
-        }
     }
 
     private java.util.Optional<AgentEvent> parseLine(String line) {

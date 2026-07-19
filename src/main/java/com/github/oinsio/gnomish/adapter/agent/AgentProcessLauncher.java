@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -12,13 +11,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * Spawns one fresh {@code claude -p} round as a real subprocess (design D2,
  * D7): binary path from {@link FactoryProperties#agentCliBinary()}, cwd set
- * to the stage workspace's root, and the hard-wired print-mode transport
- * flags that are protocol internals, not settings (FR12) — {@code -p
- * <prompt>}, {@code --output-format stream-json --verbose}. Invocation
- * options that vary per stage/check ({@code --model}, {@code allowedTools},
- * {@code disallowedTools}, {@code maxTurns}) are rendered by {@link
- * AgentInvocationOptions} and appended after the prompt, before the
- * transport flags.
+ * to the stage workspace's root. Command-line assembly (transport flags,
+ * invocation options) is delegated to {@link AgentCommandLine} (design D2);
+ * this class keeps only the {@code ProcessBuilder} start seam.
  *
  * <p>Environment: the child process inherits the current process's full
  * environment, which is {@link ProcessBuilder}'s default behaviour (the same
@@ -38,14 +33,6 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR1, FR6, FR12, D3, D7 of add-agent-executor.
  */
 public final class AgentProcessLauncher {
-
-    private static final String PRINT_FLAG = "-p";
-
-    private static final String OUTPUT_FORMAT_FLAG = "--output-format";
-
-    private static final String STREAM_JSON = "stream-json";
-
-    private static final String VERBOSE_FLAG = "--verbose";
 
     private final Clock clock;
 
@@ -79,8 +66,7 @@ public final class AgentProcessLauncher {
     @Nullable
     public LaunchedAgentProcess launch(
             DirectoryWorkspace workspace, String prompt, FactoryProperties factoryProperties) {
-        List<String> command = List.of(
-                factoryProperties.agentCliBinary(), PRINT_FLAG, prompt, OUTPUT_FORMAT_FLAG, STREAM_JSON, VERBOSE_FLAG);
+        List<String> command = AgentCommandLine.transportOnly(factoryProperties.agentCliBinary(), prompt);
         return start(workspace, command);
     }
 
@@ -141,15 +127,9 @@ public final class AgentProcessLauncher {
             String model,
             Map<String, Object> settings,
             Map<String, String> extraEnv) {
-        List<String> command = new ArrayList<>();
-        command.add(factoryProperties.agentCliBinary());
-        command.add(PRINT_FLAG);
-        command.add(prompt);
-        command.addAll(AgentInvocationOptions.render(model, settings));
-        command.add(OUTPUT_FORMAT_FLAG);
-        command.add(STREAM_JSON);
-        command.add(VERBOSE_FLAG);
-        return start(workspace, List.copyOf(command), extraEnv);
+        List<String> command =
+                AgentCommandLine.fromModelAndSettings(factoryProperties.agentCliBinary(), prompt, model, settings);
+        return start(workspace, command, extraEnv);
     }
 
     /**
@@ -182,15 +162,9 @@ public final class AgentProcessLauncher {
             FactoryProperties factoryProperties,
             List<String> invocationFlags,
             Map<String, String> extraEnv) {
-        List<String> command = new ArrayList<>();
-        command.add(factoryProperties.agentCliBinary());
-        command.add(PRINT_FLAG);
-        command.add(prompt);
-        command.addAll(invocationFlags);
-        command.add(OUTPUT_FORMAT_FLAG);
-        command.add(STREAM_JSON);
-        command.add(VERBOSE_FLAG);
-        return start(workspace, List.copyOf(command), extraEnv);
+        List<String> command =
+                AgentCommandLine.fromRenderedFlags(factoryProperties.agentCliBinary(), prompt, invocationFlags);
+        return start(workspace, command, extraEnv);
     }
 
     @Nullable
