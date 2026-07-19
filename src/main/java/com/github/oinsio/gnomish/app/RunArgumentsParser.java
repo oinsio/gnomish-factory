@@ -13,19 +13,22 @@ import org.springframework.stereotype.Component;
  * {@link RunArguments}, via Spring Boot's {@link ApplicationArguments} (design D5, task 7.1
  * scope). "First-tier" means: flags exist, are well-formed, and are mutually consistent —
  * {@code --from-stage} against the loaded pipeline's actual stage names is validated later
- * (task 7.3, design D4), and {@code --project} is never stat'd here (design D3; existence is
+ * (task 7.3, design D4), and {@code --dir} is never stat'd here (design D3; existence is
  * {@code DirectoryWorkspace}'s job, task 7.2/7.3).
  *
  * <p>Every violation throws {@link UsageException} with a message naming the problem and, per
  * UX1, the accepted form — including the {@code --key=value} syntax {@link ApplicationArguments}
  * requires (design D5).
  *
- * <p>Implements FR1, UX1 of add-manual-run.
+ * <p>Implements FR1, UX1 of add-manual-run; {@code --dir} (renamed from {@code --project}) and
+ * {@code --mode} implement FR7, design D8 of add-git-workflow; {@code --base}, {@code --resume},
+ * {@code --discard-work} and their exclusion matrix implement FR7, FR8, FR10, design D7, D9, D10
+ * of add-git-workflow.
  */
 @Component
 public final class RunArgumentsParser {
 
-    private static final String PROJECT = "project";
+    private static final String DIR = "dir";
     private static final String TASK = "task";
     private static final String TASK_FILE = "task-file";
     private static final String TASK_ID = "task-id";
@@ -33,6 +36,10 @@ public final class RunArgumentsParser {
     private static final String INTERACTIVE = "interactive";
     private static final String INTERACTIVE_EXECUTOR = "executor";
     private static final String INTERACTIVE_JUDGE = "judge";
+    private static final String MODE = "mode";
+    private static final String BASE = "base";
+    private static final String RESUME = "resume";
+    private static final String DISCARD_WORK = "discard-work";
 
     /**
      * Filesystem/git-ref-safe charset for {@code --task-id}: ASCII letters, digits, {@code -}
@@ -51,16 +58,21 @@ public final class RunArgumentsParser {
      *     or a flag's value fails its format check
      */
     public RunArguments parse(ApplicationArguments args) {
-        Path project = parseProject(args);
-        TaskSource taskSource = parseTaskSource(args);
+        Path dir = parseDir(args);
+        String resume = singleValue(args, RESUME);
+        TaskSource taskSource = resume == null ? parseTaskSource(args) : null;
         String taskId = parseTaskId(args);
         String fromStage = parseFromStage(args);
         RunArguments.InteractiveMode interactiveMode = parseInteractiveMode(args);
-        return new RunArguments(project, taskSource, taskId, fromStage, interactiveMode);
+        RunArguments.Mode mode = GitFlagsValidator.parseMode(singleValue(args, MODE));
+        String base = singleValue(args, BASE);
+        boolean discardWork = args.containsOption(DISCARD_WORK);
+        GitFlagsValidator.validate(mode, resume, base, discardWork, args);
+        return new RunArguments(dir, taskSource, taskId, fromStage, interactiveMode, mode, base, resume, discardWork);
     }
 
-    private Path parseProject(ApplicationArguments args) {
-        String value = singleValue(args, PROJECT);
+    private Path parseDir(ApplicationArguments args) {
+        String value = singleValue(args, DIR);
         return value == null ? Path.of(".") : Path.of(value);
     }
 

@@ -45,7 +45,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
     }
 
     private static RunArguments args(String taskId, String fromStage, source) {
-        new RunArguments(Path.of('.'), source, taskId, fromStage, RunArguments.InteractiveMode.NONE)
+        new RunArguments(Path.of('.'), source, taskId, fromStage, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
     }
 
     def "FR2: --task-id present is used verbatim"() {

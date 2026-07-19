@@ -58,8 +58,9 @@ class E2eProcessHarnessSmokeSpec extends Specification {
         def result = harness.run(
                 E2eFixture.projectRoot(),
                 [
-                    '--project=' + E2eFixture.projectRoot(),
+                    '--dir=' + E2eFixture.projectRoot(),
                     '--task=smoke test the harness',
+                    '--mode=in-place',
                     '--interactive'
                 ],
                 script)

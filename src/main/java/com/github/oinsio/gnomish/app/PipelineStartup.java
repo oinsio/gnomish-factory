@@ -9,10 +9,10 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
- * Loads the pipeline definition from {@code --project}'s {@code .gnomish/} exactly once at
+ * Loads the pipeline definition from {@code --dir}'s {@code .gnomish/} exactly once at
  * startup, before any dialog (FR1, FR12, design D3): constructs the {@link DirectoryWorkspace}
- * from {@link RunArguments#project()}, then calls {@link PipelineLoader#load} on
- * {@code project/.gnomish}.
+ * from {@link RunArguments#dir()}, then calls {@link PipelineLoader#load} on
+ * {@code dir/.gnomish}.
  *
  * <p>This class stays pure with respect to process concerns: it neither prints nor exits.
  * An invalid tree is reported back as {@link PipelineLoadOutcome.Failed}, carrying every
@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
 public final class PipelineStartup {
 
     /**
-     * Loads the pipeline definition named by {@code args.project()}'s {@code .gnomish/}
+     * Loads the pipeline definition named by {@code args.dir()}'s {@code .gnomish/}
      * subdirectory, once.
      *
      * <p>Implements FR1, FR12, D3 of add-manual-run.
@@ -37,14 +37,14 @@ public final class PipelineStartup {
      * @param args the parsed and first-tier-validated run arguments (task 7.1)
      * @return {@link PipelineLoadOutcome.Loaded} with the definition and workspace when the
      *     tree is valid, else {@link PipelineLoadOutcome.Failed} with the rendered errors
-     * @throws IllegalArgumentException if {@code args.project()} is not a pre-existing
+     * @throws IllegalArgumentException if {@code args.dir()} is not a pre-existing
      *     directory ({@link DirectoryWorkspace})
      * @throws IOException if {@code .gnomish/} cannot be read (a genuine I/O fault, not a
      *     validation problem — {@link PipelineLoader})
      */
     public PipelineLoadOutcome load(RunArguments args) throws IOException {
-        DirectoryWorkspace workspace = new DirectoryWorkspace(args.project());
-        LoadOutcome outcome = PipelineLoader.load(args.project().resolve(".gnomish"));
+        DirectoryWorkspace workspace = new DirectoryWorkspace(args.dir());
+        LoadOutcome outcome = PipelineLoader.load(args.dir().resolve(".gnomish"));
         return switch (outcome) {
             case LoadOutcome.Loaded(var definition) -> new PipelineLoadOutcome.Loaded(definition, workspace);
             case LoadOutcome.Invalid(List<ConfigError> errors) -> new PipelineLoadOutcome.Failed(render(errors));

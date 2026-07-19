@@ -159,6 +159,9 @@ class RunnerOutcomeLoopSpec extends Specification {
         def ex = thrown(AbortedException)
         ex.message == 'persist failed'
 
+        and: 'FR1, FR6, FR8 of add-git-workflow: the full Aborted outcome is carried, not just the cause string'
+        ex.outcome() == outcome
+
         cleanup:
         System.err = originalErr
     }

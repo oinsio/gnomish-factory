@@ -43,7 +43,7 @@ class ExitCodeMatrixSpec extends Specification {
         def result = harness.run(
                 E2eFixture.projectRoot(),
                 [
-                    '--project=' + E2eFixture.projectRoot()
+                    '--dir=' + E2eFixture.projectRoot()
                 ],
                 noArgsNeeded)
 
@@ -62,8 +62,9 @@ class ExitCodeMatrixSpec extends Specification {
         def result = harness.run(
                 brokenRoot,
                 [
-                    '--project=' + brokenRoot,
-                    '--task=irrelevant, load fails first'
+                    '--dir=' + brokenRoot,
+                    '--task=irrelevant, load fails first',
+                    '--mode=in-place'
                 ],
                 [])
 
@@ -82,8 +83,9 @@ class ExitCodeMatrixSpec extends Specification {
         def result = harness.run(
                 E2eFixture.projectRoot(),
                 [
-                    '--project=' + E2eFixture.projectRoot(),
+                    '--dir=' + E2eFixture.projectRoot(),
                     '--task=script too short',
+                    '--mode=in-place',
                     '--interactive'
                 ],
                 emptyScript)
@@ -114,8 +116,9 @@ class ExitCodeMatrixSpec extends Specification {
         def result = harness.run(
                 E2eFixture.projectRoot(),
                 [
-                    '--project=' + E2eFixture.projectRoot(),
+                    '--dir=' + E2eFixture.projectRoot(),
                     '--task=ctrl-d at resume',
+                    '--mode=in-place',
                     '--interactive'
                 ],
                 script)
@@ -150,8 +153,9 @@ class ExitCodeMatrixSpec extends Specification {
         def result = harness.run(
                 E2eFixture.projectRoot(),
                 [
-                    '--project=' + E2eFixture.projectRoot(),
+                    '--dir=' + E2eFixture.projectRoot(),
                     '--task=ctrl-d at checkpoint',
+                    '--mode=in-place',
                     '--interactive'
                 ],
                 script)

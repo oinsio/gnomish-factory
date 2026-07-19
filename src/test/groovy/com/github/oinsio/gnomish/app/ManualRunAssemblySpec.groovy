@@ -53,7 +53,6 @@ class ManualRunAssemblySpec extends Specification {
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.out),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
-                new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
                 factoryProperties)
@@ -119,7 +118,7 @@ class ManualRunAssemblySpec extends Specification {
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode)
+        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence())
 
         then:
         run.ports().executor().class == expectedExecutor
@@ -138,7 +137,7 @@ class ManualRunAssemblySpec extends Specification {
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode)
+        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence())
 
         then:
         run.ports().judgeVoter().class == expectedJudgeVoter
@@ -159,7 +158,7 @@ class ManualRunAssemblySpec extends Specification {
         given:
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE)
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence())
         run.holder().updateActivity(new Activity.Executing(java.time.Instant.now()))
 
         // Snapshot the held activity right after each of this test's own log lines lands, so
@@ -212,7 +211,7 @@ class ManualRunAssemblySpec extends Specification {
         given:
         Files.writeString(workspaceDir.resolve('criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE)
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence())
         run.holder().updateActivity(new Activity.Executing(java.time.Instant.now()))
         def before = run.holder().activity().activity() as Activity.Executing
 

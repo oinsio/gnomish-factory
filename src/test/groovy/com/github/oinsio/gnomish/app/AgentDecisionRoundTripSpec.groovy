@@ -92,14 +92,14 @@ exec sh '${scriptPath}' "\$@"
                 consoleIo,
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
-                new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
                 fakeAgentProperties('decision-then-plain', captureFile.absolutePath))
 
         def context = new TaskContext('task-1', 'title', 'body', List.<Decision> of())
         def initialState = TaskState.atStageStart('build')
-        def run = assembly.assemble(pipeline(), context, initialState, RunArguments.InteractiveMode.NONE)
+        def run = assembly.assemble(
+                pipeline(), context, initialState, RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence())
 
         when:
         run.loop().run(pipeline(), context, initialState, new DirectoryWorkspace(workspaceDir), run.ports())

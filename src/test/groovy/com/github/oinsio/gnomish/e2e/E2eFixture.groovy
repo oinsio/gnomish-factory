@@ -8,7 +8,7 @@ import java.nio.file.Path
  * self-contained project directory — {@code marker.txt} at its root plus a
  * {@code .gnomish/} pipeline defining one {@code work} stage whose {@code verify}
  * list covers all four check types ({@code files_exist}, {@code command},
- * {@code external}, {@code judge}, one vote). {@code --project} for the real
+ * {@code external}, {@code judge}, one vote). {@code --dir} for the real
  * {@code gnomish run} process points at {@link #projectRoot()}.
  *
  * <p>M1 of add-manual-run.
@@ -18,7 +18,7 @@ final class E2eFixture {
     private E2eFixture() {}
 
     /**
-     * @return the fixture project root ({@code --project} target), resolved from
+     * @return the fixture project root ({@code --dir} target), resolved from
      *     the test classpath resource {@code /.gnomish-fixtures/e2e}
      */
     static Path projectRoot() {
