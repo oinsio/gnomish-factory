@@ -40,6 +40,16 @@ jobs:
           # (scope-pit-to-changed-files FR2/FR3, design D3).
           fetch-depth: 0
 
+      # The git-mode test suite exercises real `git commit` calls through the
+      # production adapters (GitTaskRepository, GitAttemptPersistence, ...),
+      # which rely on an ambient git identity same as a real deployment would.
+      # The runner has none by default, so every such commit fails with
+      # "Author identity unknown" — set one scoped to this job.
+      - name: Configure git identity for test-suite commits
+        run: |
+          git config --global user.email "ci@gnomish-factory.invalid"
+          git config --global user.name "gnomish-factory CI"
+
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v5
         with:
