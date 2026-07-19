@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.engine.SystemClock;
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Random;
 import org.springframework.context.annotation.Bean;
@@ -75,5 +76,15 @@ public class ManualRunConfiguration {
     @Bean
     public AdHocTaskSynthesizer adHocTaskSynthesizer(Clock javaTimeClock, Random taskIdRandom) {
         return new AdHocTaskSynthesizer(javaTimeClock, taskIdRandom);
+    }
+
+    /**
+     * The root directory under which per-task git worktrees are materialized (FR6 of
+     * add-git-workflow, design D6): {@code ~/.gnomish/worktrees}, outside any project clone, so
+     * one factory instance can serve several projects without littering any of them.
+     */
+    @Bean
+    public Path worktreesRoot() {
+        return Path.of(System.getProperty("user.home"), ".gnomish", "worktrees");
     }
 }

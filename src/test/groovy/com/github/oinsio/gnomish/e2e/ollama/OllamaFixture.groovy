@@ -17,7 +17,7 @@ final class OllamaFixture {
     private OllamaFixture() {}
 
     /**
-     * @return the fixture project root ({@code --project} target), resolved from the test
+     * @return the fixture project root ({@code --dir} target), resolved from the test
      *     classpath resource {@code /.gnomish-fixtures/ollama-e2e}
      */
     static Path projectRoot() {

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.git.DivergedBranchException;
 import org.springframework.boot.ExitCodeExceptionMapper;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,9 @@ import org.springframework.stereotype.Component;
  *   <tr><td>{@link UsageException}</td><td>2</td><td>usage error</td></tr>
  *   <tr><td>{@link PipelineLoadFailedException}</td><td>3</td><td>pipeline load failure</td></tr>
  *   <tr><td>{@link InputExhaustedException}</td><td>4</td><td>stdin exhausted mid-stage</td></tr>
+ *   <tr><td>{@link DivergedBranchException}</td><td>5</td><td>local/origin branch divergence (FR9)</td></tr>
+ *   <tr><td>{@link TaskNotFoundException}</td><td>6</td><td>{@code status}/{@code usage}: no task
+ *       branch found (FR13, UX3) — a normal outcome, not a crash</td></tr>
  *   <tr><td>{@link EscalationEofException}</td><td>10</td><td>Ctrl-D at the escalation resume prompt</td></tr>
  *   <tr><td>{@link CheckpointEofException}</td><td>11</td><td>Ctrl-D at the manual checkpoint prompt</td></tr>
  *   <tr><td>{@link AbortedException}</td><td>12</td><td>persistence failed</td></tr>
@@ -26,7 +30,7 @@ import org.springframework.stereotype.Component;
  *   <tr><td>anything else</td><td>1</td><td>generic internal-error fallback</td></tr>
  * </table>
  *
- * <p>Implements FR12, D10 of add-manual-run.
+ * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run.
  */
 @Component
 public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
@@ -42,6 +46,8 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
             case UsageException ignored -> 2;
             case PipelineLoadFailedException ignored -> 3;
             case InputExhaustedException ignored -> 4;
+            case DivergedBranchException ignored -> 5;
+            case TaskNotFoundException ignored -> 6;
             case EscalationEofException ignored -> 10;
             case CheckpointEofException ignored -> 11;
             case AbortedException ignored -> 12;

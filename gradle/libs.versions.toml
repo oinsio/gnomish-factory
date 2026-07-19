@@ -81,6 +81,12 @@ jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 # specs via ArchRule.check(...) (design D7), so the JUnit @AnalyzeClasses
 # runner and its extra engine wiring are unnecessary.
 archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
+# Testcontainers core: GenericContainer + DockerClientFactory.isDockerAvailable() for the Gitea
+# E2E fixture (task 6.5 of add-git-workflow). Version is Spring Boot BOM-managed (4.1.0 -> 2.0.5).
+# No JUnit/Spock integration module is declared — the fixture manages container lifecycle itself
+# (setupSpec/cleanupSpec), matching this project's existing hand-rolled fixture style
+# (BareGitRepoFixture, E2eProcessHarness).
+testcontainers = { module = "org.testcontainers:testcontainers" }
 # Jackson for the .gnomish/ YAML loader in the adapter layer ONLY (FR1 of
 # load-pipeline-config, design D1/D2 — the domain stays Jackson-free, guarded
 # by ArchUnit). Boot 4.1.0's jackson-2-bom manages the 2.x line; all four are

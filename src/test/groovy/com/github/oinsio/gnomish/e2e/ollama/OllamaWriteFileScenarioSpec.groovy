@@ -54,8 +54,9 @@ class OllamaWriteFileScenarioSpec extends Specification {
         def result = harness.run(
                 OllamaFixture.projectRoot(),
                 [
-                    '--project=' + OllamaFixture.projectRoot(),
-                    '--task=create hello.txt with any single line of text'
+                    '--dir=' + OllamaFixture.projectRoot(),
+                    '--task=create hello.txt with any single line of text',
+                    '--mode=in-place'
                 ],
                 [],
                 false,

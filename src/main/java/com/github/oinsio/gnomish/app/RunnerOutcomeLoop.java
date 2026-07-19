@@ -185,7 +185,7 @@ public final class RunnerOutcomeLoop {
                 + "', attempt " + failedAt.attempt() + " was not persisted. Last known state: position="
                 + finalState.position() + ", attemptsUsed=" + finalState.attemptsUsed() + ", "
                 + finalState.attempts().size() + " attempt(s) recorded in this stage.");
-        throw new AbortedException(aborted.cause());
+        throw new AbortedException(aborted);
     }
 
     /**

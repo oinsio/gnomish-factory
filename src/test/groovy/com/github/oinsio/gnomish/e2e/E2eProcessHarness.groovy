@@ -60,8 +60,8 @@ final class E2eProcessHarness {
      * process's cwd, feeds {@code scriptedInputLines} to stdin, and waits for completion.
      *
      * @param workingDirectory the process's working directory (normally irrelevant to {@code
-     *     gnomish run}, which takes its workspace from {@code --project}, but set for realism)
-     * @param extraArgs the {@code gnomish run} flags, e.g. {@code ['--project=...', '--task=...']}
+     *     gnomish run}, which takes its workspace from {@code --dir}, but set for realism)
+     * @param extraArgs the {@code gnomish run} flags, e.g. {@code ['--dir=...', '--task=...']}
      * @param scriptedInputLines the operator's scripted answers, one per line, in order
      * @param keepStdinOpen when {@code false} (default), stdin is closed once the script is
      *     exhausted — a too-short script becomes real EOF; when {@code true}, stdin is left open

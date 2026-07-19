@@ -6,7 +6,7 @@ import java.nio.file.Path;
 
 /**
  * The workspace for a manual run: a pre-existing directory on disk, supplied
- * by the operator via {@code --project} (defaulting to cwd) and never created
+ * by the operator via {@code --dir} (defaulting to cwd) and never created
  * or written to by the runner itself (design D3, NFR-S1). The engine only
  * ever sees this through the opaque {@link Workspace} marker; check runners
  * and console adapters downcast to {@link #root()} when they need the
@@ -23,7 +23,7 @@ public final class DirectoryWorkspace implements Workspace {
      * pre-existing directory. No directory is ever created here — the
      * workspace belongs to the operator (design D3).
      *
-     * @param root the workspace root, typically resolved from {@code --project}
+     * @param root the workspace root, typically resolved from {@code --dir}
      * @throws IllegalArgumentException if {@code root} does not exist or is
      *     not a directory
      */

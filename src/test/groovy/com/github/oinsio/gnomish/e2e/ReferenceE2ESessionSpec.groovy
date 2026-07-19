@@ -90,8 +90,9 @@ class ReferenceE2ESessionSpec extends Specification {
         def result = harness.run(
                 E2eFixture.projectRoot(),
                 [
-                    '--project=' + E2eFixture.projectRoot(),
+                    '--dir=' + E2eFixture.projectRoot(),
                     '--task=reference session: retry, escalate, pause, complete',
+                    '--mode=in-place',
                     '--interactive'
                 ],
                 script)

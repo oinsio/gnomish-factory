@@ -8,7 +8,7 @@ import spock.lang.TempDir
 
 /**
  * FR1, FR12, design D3 of add-manual-run: the runner loads {@code .gnomish/} from inside
- * {@code --project} exactly once at startup, before any dialog. A valid tree yields the
+ * {@code --dir} exactly once at startup, before any dialog. A valid tree yields the
  * definition and the constructed workspace; an invalid tree yields every loader error
  * rendered as-is (task 7.2 scope only — exit-code mapping is task 7.9's job).
  */
@@ -39,10 +39,10 @@ advancement: auto
         write('stages/plan/instructions.md', 'plan it\n')
     }
 
-    def "FR1/D3: a valid .gnomish/ under --project loads and returns the definition and workspace"() {
+    def "FR1/D3: a valid .gnomish/ under --dir loads and returns the definition and workspace"() {
         given:
         writeValidTree()
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE)
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
 
         when:
         PipelineLoadOutcome outcome = startup.load(args)
@@ -56,8 +56,8 @@ advancement: auto
     }
 
     def "FR1/FR12/D3: a missing .gnomish/ produces a Failed outcome with rendered loader errors"() {
-        given: 'no .gnomish/ directory at all under --project'
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE)
+        given: 'no .gnomish/ directory at all under --dir'
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
 
         when:
         startup.load(args)
@@ -70,7 +70,7 @@ advancement: auto
         given: 'a tree that fails validation: pipeline.yaml has no stages key'
         write('config.yaml', 'schemaVersion: "1"\n')
         write('pipeline.yaml', '{}\n')
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE)
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
 
         when:
         PipelineLoadOutcome outcome = startup.load(args)
@@ -83,10 +83,10 @@ advancement: auto
         }
     }
 
-    def "D3: --project non-existence propagates rather than being swallowed"() {
+    def "D3: --dir non-existence propagates rather than being swallowed"() {
         given:
         Path missing = projectRoot.resolve('does-not-exist')
-        RunArguments args = new RunArguments(missing, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE)
+        RunArguments args = new RunArguments(missing, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
 
         when:
         startup.load(args)
@@ -98,7 +98,7 @@ advancement: auto
     def "loading is deterministic across repeated calls (NFR-R1 carried through from PipelineLoader)"() {
         given:
         writeValidTree()
-        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE)
+        RunArguments args = new RunArguments(projectRoot, new TaskSource.Inline('t'), null, null, RunArguments.InteractiveMode.NONE, RunArguments.Mode.GIT, null, null, false)
 
         when:
         def first = startup.load(args) as PipelineLoadOutcome.Loaded

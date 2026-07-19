@@ -1,6 +1,6 @@
 /**
  * Concrete {@link com.github.oinsio.gnomish.domain.engine.port.Workspace}
- * implementation for manual runs: wraps the operator-supplied {@code --project}
+ * implementation for manual runs: wraps the operator-supplied {@code --dir}
  * directory and exposes its root path to non-domain code. The domain never
  * inspects a workspace (design D1); check runners ({@code adapter.check}) and
  * console adapters ({@code adapter.console}) are exactly the code that needs

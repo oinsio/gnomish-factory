@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * The result of {@link PipelineStartup#load}: either the pipeline definition loaded from
- * {@code --project}'s {@code .gnomish/} together with the constructed workspace, or the
+ * {@code --dir}'s {@code .gnomish/} together with the constructed workspace, or the
  * loader's problems rendered as text lines, ready to print as-is before exit (FR1, FR12,
  * design D3).
  *
@@ -20,12 +20,12 @@ import java.util.List;
 public sealed interface PipelineLoadOutcome {
 
     /**
-     * The pipeline definition loaded cleanly from {@code --project}'s {@code .gnomish/}.
+     * The pipeline definition loaded cleanly from {@code --dir}'s {@code .gnomish/}.
      *
      * <p>Implements FR1, D3 of add-manual-run.
      *
      * @param definition the validated, immutable pipeline model
-     * @param workspace the workspace constructed from {@code --project}, for the runner to
+     * @param workspace the workspace constructed from {@code --dir}, for the runner to
      *     proceed with (FR1, D3)
      */
     record Loaded(PipelineDefinition definition, DirectoryWorkspace workspace) implements PipelineLoadOutcome {}

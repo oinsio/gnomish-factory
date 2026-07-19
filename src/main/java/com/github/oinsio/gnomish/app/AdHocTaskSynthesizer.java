@@ -53,7 +53,7 @@ public final class AdHocTaskSynthesizer {
      * <p>Implements FR1, FR2, D4 of add-manual-run.
      *
      * @param args the parsed and first-tier-validated run arguments (task 7.1)
-     * @param definition the pipeline definition loaded from {@code --project}'s
+     * @param definition the pipeline definition loaded from {@code --dir}'s
      *     {@code .gnomish/} (task 7.2), whose stage order supplies the default start and
      *     whose stage names validate {@code --from-stage}
      * @return the synthesized task context and its initial state
@@ -61,10 +61,20 @@ public final class AdHocTaskSynthesizer {
      *     path cannot be read
      * @throws UsageException if {@code --from-stage} names a stage absent from
      *     {@code definition}, listing the known stage names (D4)
+     * @throws IllegalStateException if {@code args.taskSource()} is {@code null} — that is, if
+     *     {@code args} came from a {@code --resume} invocation; ad-hoc synthesis is only for
+     *     fresh runs. Resume bootstrap (add-git-workflow FR8, task 4.6) reads the task from the
+     *     branch instead of calling this method, and is not wired yet.
      */
     public SynthesizedTask synthesize(RunArguments args, PipelineDefinition definition) throws IOException {
         String taskId = args.taskId() != null ? args.taskId() : generateTaskId();
-        String text = readDescription(args.taskSource());
+        TaskSource taskSource = args.taskSource();
+        if (taskSource == null) {
+            throw new IllegalStateException(
+                    "AdHocTaskSynthesizer.synthesize requires a non-null taskSource; --resume runs are not"
+                            + " wired to this path yet (add-git-workflow task 4.6)");
+        }
+        String text = readDescription(taskSource);
         Split split = splitTitleAndBody(text);
         String startStage = resolveStartStage(args.fromStage(), definition);
 
