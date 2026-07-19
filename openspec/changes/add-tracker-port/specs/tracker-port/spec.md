@@ -38,7 +38,9 @@ Transitions SHALL be initiated only by the factory or a human — never by the
 gnome. The scheduler-slot state of an instance SHALL never be written to the
 tracker. The engine outcome (`Completed`/`Paused`/`Escalated`/`Aborted`) is the
 event driving factory-initiated transitions; `Paused` SHALL appear in the tracker
-as `AwaitingHuman(checkpoint)`, not as a distinct state.
+as `AwaitingHuman(checkpoint)`, not as a distinct state. The factory SHALL claim
+tasks only from `Ready`; the only exits from `AwaitingHuman` are human actions —
+returning the task to `Ready` or closing it.
 <!-- implements FR2 of add-tracker-port -->
 
 ```mermaid
@@ -55,9 +57,17 @@ stateDiagram-v2
 #### Scenario: Outcome-to-transition mapping
 - **WHEN** an engine run ends with each of Completed, Escalated(report),
   Paused(passedStage), and Aborted
-- **THEN** the resulting port calls are `finish`, `park(ESCALATION)`,
-  `park(CHECKPOINT)`, and `recordAbort` (or `park(INFRA)` at the fuse threshold)
+- **THEN** the resulting port calls are `finish`; `park` with the reason picked
+  by escalation kind — `ESCALATION` for AttemptsExhausted and DecisionNeeded,
+  `INFRA` for CannotVerify, CannotExecute, and PipelineMismatch;
+  `park(CHECKPOINT)`; and `recordAbort` (or `park(INFRA)` at the fuse threshold)
   respectively
+- **AND** an infra park from an escalation leaves the abort counter untouched
+
+#### Scenario: Parked task returns only through a human
+- **WHEN** a task is `AwaitingHuman` and no human has returned it to `Ready`
+- **THEN** no factory operation transitions it to `Working` — a claim is only
+  attempted after a human return makes it `Ready`
 
 #### Scenario: Gnome never transitions
 - **WHEN** a gnome round runs to completion
@@ -157,7 +167,8 @@ semantics; the contract suite as law with the in-memory adapter as the worked
 reference; physical state mapping by example (GitHub labels as-built, Redmine
 statuses as a thought-through sketch); snapshot, decision, and abort-fact
 obligations; config-subsection ownership (adapter declares and validates its own
-subsection, never touches core keys); and known limitations (branch-name sanitize
+subsection, never touches core keys) including the mandatory declaration of
+credential env variables for the gnome-environment scrub; and known limitations (branch-name sanitize
 collisions, polling economy with the GitHub analysis as the model, the considered
 and rejected surrogate-id approach).
 <!-- implements FR19 of add-tracker-port -->

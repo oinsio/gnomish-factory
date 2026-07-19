@@ -139,7 +139,8 @@ The adapter SHALL declare and validate its `tracker.github` subsection:
 hex color validation. Validation SHALL aggregate errors and fail fast at load,
 consistent with pipeline-config error reporting. The token SHALL come only from
 the `GNOMISH_GITHUB_TOKEN` environment variable — never from yaml — and SHALL
-never reach the gnome process environment or prompts.
+never reach the gnome process environment or prompts; the adapter SHALL declare
+`GNOMISH_GITHUB_TOKEN` as its credential variable for the launcher scrub.
 <!-- implements FR17 of add-tracker-port -->
 <!-- implements NFR-S1 of add-tracker-port -->
 
@@ -152,7 +153,7 @@ never reach the gnome process environment or prompts.
 - **THEN** the gnome process environment contains no tracker credential variables
 
 ### Requirement: Conditional-request polling economy
-All repeated polls (feed, decision wait, round-boundary check) SHALL use
+All repeated polls (feed, round-boundary check) SHALL use
 conditional requests (`If-None-Match`/ETag), treating `304 Not Modified` as "no
 change" without consuming rate limit. Steady-state single-task operation SHALL
 stay within the primary limit (5000 req/h) and secondary write limits by design:
@@ -160,6 +161,6 @@ a state transition costs 2–3 writes.
 <!-- implements NFR-P1 of add-tracker-port -->
 
 #### Scenario: Unchanged poll is free
-- **WHEN** the decision wait polls an unchanged issue thread
+- **WHEN** the round-boundary check re-reads an unchanged issue
 - **THEN** the request carries `If-None-Match` and a `304` response is handled as
-  "no new decisions"
+  "no change"

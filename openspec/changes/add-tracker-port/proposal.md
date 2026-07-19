@@ -33,9 +33,10 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
   ready queue, one task, exit). Always git mode; no ad-hoc flags.
 - Task snapshot at first claim (id/title/body frozen into `TaskContext`/`task.json`);
   resume collects only human decisions, never re-reads the snapshot.
-- Resume protocol: decisions are comments after the last ack; interactive wait
-  listens to TTY and tracker simultaneously (first non-empty answer wins); every
-  consumed decision is acknowledged with an "acting on decision" comment.
+- Resume protocol: a human returns a parked task by moving it back to ready —
+  the factory claims only ready tasks; decisions are comments after the last
+  ack, collected at resume claim; every consumed decision is acknowledged with
+  an "acting on decision" comment.
 - Abort protocol: structural abort marker + return to `Ready` in one operation;
   abort facts (count, last time) recoverable from comments by any instance; K-abort
   fuse diverts the task to `AwaitingHuman` with an infrastructure report.
@@ -52,6 +53,8 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
 - `.gnomish/config.yaml` gains a `tracker` section: core keys (`type` discriminator,
   `abort-threshold`) plus a typed adapter-owned subsection (`github:` with mandatory
   `api-url`, `repo`, `labels`), validated by the adapter with fail-fast aggregation.
+- Agent-executor environment passthrough always excludes tracker credential
+  variables declared by the active tracker adapter (launcher scrub).
 
 ### REMOVED
 
@@ -78,6 +81,9 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
   knows the core keys (`type`, `abort-threshold`) and delegates the typed adapter
   subsection to the adapter's own validator; mismatched or missing subsections are
   load errors.
+- `agent-executor`: the CLI process environment always excludes the credential
+  variables declared by the active tracker adapter — the launcher scrubs them
+  regardless of passthrough configuration.
 
 ## Goals
 
@@ -117,8 +123,8 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
   comment; the operator reviews the branch.
 - **U2 — Operator resolves an escalation**: sees `gnomish:needs-human` and a report
   comment; replies with a decision and moves the label back to ready; the next
-  `take <ref>` (or the still-waiting interactive dialog) consumes the decision,
-  acknowledges it, and continues from the branch.
+  `take <ref>` (or a scheduled bare `take`) claims the task, consumes the
+  decision, acknowledges it, and continues from the branch.
 - **U3 — Adapter author**: implements the port for Redmine following the guide, runs
   the shared contract spec suite against it, ships it without touching core.
 - **U4 — Cron minimal factory**: a scheduled bare `gnomish take` drains the ready
@@ -163,12 +169,12 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
 - **FR8**: The GitHub feed SHALL use the List Issues API (`state=open` + ready label,
   ascending by number) — not the Search API — and SHALL filter out pull requests.
 - **FR9**: `gnomish take <ref>` SHALL implement the explicit-mode disposition matrix:
-  claim `Ready` (mandate overrides the readiness criterion, abort backoff, and the K
-  fuse for one attempt without resetting the abort counter); resume
-  `AwaitingHuman` by collecting a decision (escalation) or a confirmation
-  (checkpoint); refuse `Working` held by another instance with an error naming the
-  holder; skip `Finished` ("already done") and closed/nonexistent tasks with clear
-  errors. Short refs (`42`, `#42`) expand via the configured binding; a canonical id
+  claim `Ready` (mandate overrides the readiness criterion and abort backoff,
+  without resetting the abort counter), resuming from the branch outcome when one
+  is recorded; refuse `AwaitingHuman` with a message naming the pending report and
+  the return path (reply if needed, move the task back to ready); refuse `Working`
+  held by another instance with an error naming the holder; skip `Finished`
+  ("already done") and closed/nonexistent tasks with clear errors. Short refs (`42`, `#42`) expand via the configured binding; a canonical id
   pointing at a foreign repo is an error.
 - **FR10**: Bare `gnomish take` SHALL take the head of the `listReady` queue (adapter
   order), process exactly one task, and exit; an empty queue is a clean no-op run.
@@ -177,14 +183,15 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
   `TaskContext` and `task.json`; subsequent issue edits SHALL NOT affect the running
   or parked task; resume SHALL NOT re-read the snapshot — it collects decisions only.
 - **FR12**: Decision collection SHALL return human reply comments posted after the
-  last ack; consuming a decision from any source (tracker comment or TTY) SHALL post
-  an "acting on decision: <text>" ack comment — the single mechanism that mirrors
-  console input, resolves the two-answers race, and anchors future pairing.
-- **FR13**: The interactive decision wait SHALL listen to TTY input and tracker
-  polling concurrently — first non-empty answer wins, the other source is cancelled
-  — and SHALL tell the operator both channels are watched. Headless (no TTY, no
-  tracker answer): leave the task `AwaitingHuman` and report "reply in the tracker
-  and re-run".
+  last ack; consuming a decision SHALL post an "acting on decision: <text>" ack
+  comment before acting — the single mechanism that records which reply the
+  factory acted on and anchors future decision collection.
+- **FR13**: An escalation SHALL end the take run — park the task and exit,
+  identically with or without a TTY — reporting the pending question and the
+  return path ("reply in the tracker and move the task back to ready"). A task
+  claimed with a recorded `DecisionNeeded` escalation and no pending reply SHALL
+  be parked again with the question restated; other recorded outcomes resume on
+  the human return alone (the return is the confirmation).
 - **FR14**: On an infrastructure abort the factory SHALL log ERROR, post a
   best-effort structural abort comment (cause, instance, time), release the claim,
   and return the task to `Ready`; when the consecutive-abort count reaches K
@@ -233,7 +240,7 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
 ### Non-Functional — Performance
 
 - **NFR-P1**: GitHub polling SHALL use conditional requests (ETag/304, which do not
-  consume the rate limit) for feed and decision polling; steady-state operation
+  consume the rate limit) for feed and round-boundary polling; steady-state operation
   SHALL stay far below the primary (5000 req/h) and secondary write
   (80 content-writes/min) limits — a state transition costs 2–3 writes.
 
@@ -265,9 +272,9 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
 - **UX2**: Every refusal of `take <ref>` names the reason in the task's own terms:
   who holds the claim, that the task is already delivered, that it is closed, or
   that the id belongs to a foreign repo.
-- **UX3**: The decision dialog states explicitly that both the console and the
-  tracker are being watched; whichever answer the factory acts on is visible in the
-  tracker as the "acting on decision" ack.
+- **UX3**: The reply the factory acts on is always visible in the tracker as the
+  "acting on decision" ack; every escalation exit tells the operator where the
+  question is and how to return the task to work.
 - **UX4**: The tracker issue thread alone tells the story of a task: claim, reports,
   decisions, acks, aborts, final summary — readable without access to factory logs.
 
@@ -279,7 +286,7 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
   contract-test runs for every adapter.
 - **M3**: Integration tests demonstrate both full lifecycles end-to-end:
   ready → claim → work → delivered with final report, and
-  ready → claim → escalate → human decision → resume → delivered — including resume
+  ready → claim → escalate → human decision and return → resume → delivered — including resume
   by a different instance than the one that claimed.
 - **M4**: Coverage and mutation-score gates per `.claude/rules/testing.md` hold for
   all new production code (100% target; justified exceptions only at integration

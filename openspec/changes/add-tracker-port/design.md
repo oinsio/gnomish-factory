@@ -72,16 +72,32 @@ persistence) and adds a tracker shell around one engine run:
 flowchart LR
     Claim["claim + snapshot"] --> Run["engine.run"]
     Run -->|Completed| F["finish(summary)"]
-    Run -->|Escalated| P1["park(escalation)<br/>then decision wait"]
+    Run -->|"Escalated(AttemptsExhausted,<br/>DecisionNeeded)"| P1["park(escalation)"]
+    Run -->|"Escalated(CannotVerify,<br/>CannotExecute, PipelineMismatch)"| P3["park(infra)"]
     Run -->|Paused| P2["park(checkpoint)"]
-    Run -->|Aborted| A["recordAbort or<br/>park(infra) at K"]
+    Run -->|"Aborted /<br/>uncaught exception"| A["recordAbort or<br/>park(infra) at K"]
     Run -->|revocation exception| R["salvage + note + release"]
 ```
 
-The K fuse decides at abort time: `abortFacts.count + 1 >= K` → `park(INFRA)`
+Escalation kinds split by what resume needs: `AttemptsExhausted` and
+`DecisionNeeded` require a human decision → `park(ESCALATION)`; `CannotVerify`,
+`CannotExecute`, and `PipelineMismatch` require a fix (environment, pipeline)
+followed by a retry → `park(INFRA)`, whose resume is the one-bypass-attempt
+protocol — no fictitious decision text. An infra park from an escalation does
+NOT touch the abort counter — only the abort path below does. Note that
+`PipelineMismatch`, unreachable in-process for manual runs, IS reachable here:
+a cross-instance resume after a pipeline edit.
+
+The abort path (infrastructure abort) covers two events: the engine `Aborted`
+outcome (durable persist failed) and an uncaught exception of the take run
+itself (explore Р5: "либо упал сам") — both do best-effort `recordAbort`. The
+K fuse decides at abort time: `abortFacts.count + 1 >= K` → `park(INFRA)`
 instead of `recordAbort`. *Rationale:* single-task semantics means no scheduler —
-the whole tracker mode is a mapping from `TaskOutcome` to port calls. *Rejected:*
-a long-lived coordinator object — that is the factory loop's job, premature here.
+the whole tracker mode is a mapping from `TaskOutcome` to port calls; the
+kind split keeps infra recoveries decision-free. *Rejected:* mapping all
+escalations to `park(ESCALATION)` — forces the operator to invent a decision
+after an environment fix; treating a runner crash as a silent process death —
+leaves a hanging claim with no stale-claim protocol until the factory loop.
 
 **D4 — No `--from-stage` on `take` in v1.** (Q2) A tracker task always starts at the
 pipeline start; resume position comes from the branch state file. *Rationale:* stage
@@ -93,23 +109,29 @@ row for a need nobody has demonstrated; add later by pain.
 
 **D5 — Config and env names.** (Q3; FR17, NFR-S1) Token: `GNOMISH_GITHUB_TOKEN`
 environment variable, read at adapter construction, never from yaml. Factory-side
-properties (Spring `@ConfigurationProperties`, defaults in the factory jar,
-env-overridable): `gnomish.instance-name` (default: hostname),
-`gnomish.tracker.decision-poll-interval` (default `30s`),
-`gnomish.tracker.abort-backoff-base` (default `2m`),
-`gnomish.tracker.abort-backoff-cap` (default `1h`). Project-side (`.gnomish/
+properties join the implemented `factory.*` prefix (Spring
+`@ConfigurationProperties`, defaults in the factory jar, env-overridable):
+`factory.instance-name` (default `gnomish-factory`; renames the existing required
+`factory.instance-id` — the configured value is the name half of D6, not the full
+id), `factory.tracker.abort-backoff-base` (default `2m`),
+`factory.tracker.abort-backoff-cap` (default `1h`). Project-side (`.gnomish/
 config.yaml`): `tracker.type`, `tracker.abort-threshold` (default 3), and the
 adapter-owned `tracker.github` subsection (`api-url` mandatory, `repo`,
 `labels.{ready,working,needs-human,delivered}` as `{name, color}`). *Rationale:*
 placement rule from explore — shared-across-instances in `.gnomish/`, instance
-identity/tempo in factory config, secrets only in env. *Rejected:*
-`~/.gnomish/application.yaml` operator file — deferred to the factory loop (decision
-recorded there; env layering suffices for v1).
+identity/tempo in factory config, secrets only in env; one property prefix, and a
+neutral name default because the instance name lands in public issue comments.
+*Rejected:* a new `gnomish.*` prefix (D5 as first drafted) — two prefixes or a
+rename of working code for taste; hostname as the name default — leaks the
+machine name into public issues (the same concern D6 records);
+`~/.gnomish/application.yaml` operator file — deferred to the factory loop
+(decision recorded there; env layering suffices for v1).
 
 **D6 — instanceId = `<instance-name>-<random per-process suffix>`.** (FR9, UX2)
-Suffix: 6 chars base36 generated at startup; the name half is diagnostic ("whose
-machine"), the suffix half makes copied configs and reused pids safe. Atomicity does
-not depend on it (comment id decides races). *Rejected:* hostname+pid (pid reuse,
+The name half comes from `factory.instance-name` (D5; default `gnomish-factory`) and is
+diagnostic ("whose machine") once the operator sets it; the suffix half — 6 chars
+base36 generated at startup — makes copied configs and reused pids safe.
+Atomicity does not depend on it (comment id decides races). *Rejected:* hostname+pid (pid reuse,
 containers all pid 1, hostname leak into public issues), pure random (no
 diagnostics), pure configured name (config copy-paste makes two instances treat each
 other's claim as their own).
@@ -137,8 +159,8 @@ considered).
 followed by human-readable text.** (Q7; FR7, NFR-O1) GitHub adapter comment shape:
 
 ```
-<!-- gnomish {"kind":"claim","instance":"gnomish_factory-x7k2q1","at":"2026-07-20T12:00:00Z","v":1} -->
-🤖 gnomish: claimed by gnomish_factory-x7k2q1
+<!-- gnomish {"kind":"claim","instance":"gnomish-factory-x7k2q1","at":"2026-07-20T12:00:00Z","v":1} -->
+🤖 gnomish: claimed by gnomish-factory-x7k2q1
 ```
 
 HTML comments render invisibly on GitHub, so humans see prose while machines parse
@@ -167,16 +189,20 @@ model. *Rationale:* status-report spec already defines the single source of trut
 for progress data; the final report is its terminal render. *Rejected:* a bespoke
 report builder — second source of truth, drift risk.
 
-**D12 — Decision wait: two virtual threads racing to complete one future.** (FR13)
-One thread blocks on the console reader, one polls `collectDecisions` at
-`decision-poll-interval`; both race to complete a single `CompletableFuture`
-(first non-empty answer wins). The poll loop is interruptible and is cancelled
-cleanly. The console read cannot be interrupted portably: after a tracker answer
-wins, the dialog prints "answered in tracker — press Enter to close" and discards
-any late console input; the ack comment (FR12) makes the acted-on decision
-unambiguous regardless. *Rejected:* raw-mode/JLine console handling for true
-cancellation — a dependency and terminal-compatibility surface far beyond what a
-notice line solves.
+**D12 — No in-run decision wait: an escalation parks the task and exits.** (FR13)
+The take run has one return path for every escalation, TTY or not: park, report,
+exit. Resume is always tracker-driven — the human replies (when a question is
+pending) and moves the task back to ready; the factory claims only ready tasks
+and collects the reply at resume claim. A `DecisionNeeded` resume without a
+pending reply parks again restating the question; every other recorded outcome
+treats the human return itself as the confirmation (matching manual-run's
+empty-decision retry). This removes the need for a decision-poll-interval
+property. *Rationale:* the human-only exit from `AwaitingHuman` keeps one
+visible convention on the board and one code path in the runner. *Rejected:* a
+console/tracker decision race (two virtual threads, first answer wins) —
+complexity plus an uninterruptible console read for a flow the tracker already
+covers; holding the claim while a console dialog waits — hides the escalation
+from the board, which must show that the ball is with humans.
 
 **D13 — Lease-claim sequence and edge cases.** (FR6, NFR-R1) Sequence: (1) point-add
 `working` label / remove `ready`; (2) post-structural claim comment; (3) list claim
@@ -205,14 +231,42 @@ command in the existing CLI package as `TakeCommand` beside the run command;
 contract spec suite as an abstract Spock base class extended per adapter
 (testing.md contract-test rule).
 
+**D16 — take exit codes extend the manual-run families.** (FR9, FR10, FR15)
+Codes shared with `run` keep their meaning: 0 success (Delivered; a bare-take
+empty queue is a clean no-op — the normal steady state of a cron factory, U4),
+1 failure outside a claimed run (tracker unreachable at startup, label
+provisioning), 2 usage error, 3 pipeline load failure, 10 parked-escalation,
+11 parked-checkpoint, 12 infrastructure abort below the fuse. New codes:
+13 parked-infra (fuse trip or infra escalation), 14 revoked, 15 refused/skipped
+(held by another instance, already done, closed/missing, foreign repo). An
+uncaught exception runs the abort protocol (D3) and exits 12 or 13, never a
+bare 1. *Rationale:* cron/wrapper scripts react per outcome family without
+parsing output; existing `run` scripting keeps its meaning of 0/2/3/10/11/12.
+*Rejected:* one coarse code for every `AwaitingHuman` — forces output parsing
+to tell "needs an answer" from "fix the environment"; a distinct empty-queue
+code — an empty queue is not a signal worth a branch in every cron wrapper.
+
+**D17 — Tracker credential scrubbing at the launcher, driven by adapter
+declaration.** (NFR-S1) Each tracker adapter declares the names of its
+credential environment variables (GitHub: `GNOMISH_GITHUB_TOKEN`) on its
+registration seam — the same adapter-owned object that declares and validates
+the config subsection, keeping the `Tracker` runtime port at its exact ten
+operations (FR1). The wiring hands the active adapter's list to the agent
+process launcher, which removes those variables from the child environment at
+the documented isolation seam — regardless of the
+`factory.agent-cli-env-passthrough` setting. A MODIFIED delta records this on
+the agent-executor spec (the launcher is its component), and the author guide
+makes the declaration mandatory for new adapters. *Rationale:* explicit and
+extensible — a future Jira/Redmine adapter declares its own names without
+touching executor code. *Rejected:* hardcoding `GNOMISH_GITHUB_TOKEN` in the
+launcher — every new adapter edits executor code; a `GNOMISH_*_TOKEN` name
+pattern — an implicit convention a third-party adapter can silently miss.
+
 ## Risks / Trade-offs
 
 - [Revocation latency equals one round; a long agent round keeps burning tokens
   after a human closes the issue] → accepted for v1 (explore Р6); mid-round cancel
   needs an executor cancel seam, scheduled for when long rounds hurt.
-- [Blocking console read is not interruptible — a tracker win leaves a pending
-  stdin read] → notice line + discard late input (D12); ack comment keeps the audit
-  unambiguous.
 - [Human edits labels concurrently with the adapter] → point add/remove label calls
   only (never whole-set PATCH), so concurrent edits are not lost; contract tests
   cover the observable outcome.

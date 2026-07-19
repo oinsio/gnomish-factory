@@ -3,9 +3,9 @@
 ## Purpose
 
 The `gnomish take` CLI: single-task tracker modes (explicit ref and bare
-auto-take), the disposition matrix, snapshot at claim, resume with decision
-collection and the console-vs-tracker race, abort handling with the K fuse,
-revocation at round boundaries, delivery, and the operator guide.
+auto-take), the disposition matrix, snapshot at claim, tracker-driven resume
+with decision collection, abort handling with the K fuse, revocation at round
+boundaries, delivery, and the operator guide.
 
 ## ADDED Requirements
 
@@ -34,13 +34,14 @@ via the configured binding; a full canonical id naming a foreign repo is an erro
 ### Requirement: Explicit-mode disposition by task state
 `take <ref>` SHALL act as an operator mandate per the task's logical state:
 `Ready` (or readiness criterion unmet) → claim and work, overriding the readiness
-criterion, abort backoff, and the K fuse for one attempt without resetting the
-abort counter; `AwaitingHuman(escalation)` → collect a decision, then claim and
-resume from the branch; `AwaitingHuman(checkpoint)` → same with a continue
-confirmation instead of a decision; `AwaitingHuman(infra)` → one bypass attempt
-(infrastructure-escalation resume); `Working` held by another instance → refuse
-with an error naming the holder; `Finished` → skip reporting "already done";
-`Gone` (closed or nonexistent) → skip with a clear error.
+criterion and abort backoff without resetting the abort counter — resuming from
+the branch outcome when one is recorded (a pending reply is collected and
+acknowledged; a recorded `DecisionNeeded` with no reply parks again restating
+the question; any other recorded outcome continues on the return alone);
+`AwaitingHuman` (any reason) → refuse, naming the pending report and the return
+path (reply if needed, move the task back to ready); `Working` held by another
+instance → refuse with an error naming the holder; `Finished` → skip reporting
+"already done"; `Gone` (closed or nonexistent) → skip with a clear error.
 <!-- implements FR9 of add-tracker-port -->
 
 #### Scenario: Mandate overrides readiness and backoff
@@ -48,6 +49,11 @@ with an error naming the holder; `Finished` → skip reporting "already done";
   unexpired abort backoff
 - **THEN** the task is claimed and worked, and the abort counter is not reset by
   the mandate itself
+
+#### Scenario: Parked task is refused
+- **WHEN** `take <ref>` targets a task in `AwaitingHuman`
+- **THEN** the run refuses, restating the parked report and telling the operator
+  to reply (if a question is pending) and move the task back to ready
 
 #### Scenario: Held task is refused
 - **WHEN** `take <ref>` targets a task claimed by instance B
@@ -93,44 +99,46 @@ decisions only. Status output takes the title from the snapshot.
   and resume proceeds from the snapshot plus collected decisions
 
 ### Requirement: Decision consumption always leaves an ack
-On resume the factory SHALL collect decisions posted after the last ack; consuming
-a decision from any source (tracker comment or console input) SHALL post an
-"acting on decision: <text>" ack comment before acting. The ack is the single
-mechanism that mirrors console input into the tracker, records which of two
-conflicting answers the factory acted on, and anchors future decision collection.
+At resume claim the factory SHALL collect decisions posted after the last ack;
+consuming a decision SHALL post an "acting on decision: <text>" ack comment
+before acting. The ack records which reply the factory acted on and anchors
+future decision collection.
 <!-- implements FR12 of add-tracker-port -->
 
-#### Scenario: Console decision is mirrored
-- **WHEN** the operator answers an escalation in the console dialog
-- **THEN** the tracker shows an ack comment with the entered decision before the
-  resumed run proceeds
+#### Scenario: Ack precedes acting
+- **WHEN** a resumed run consumes a human reply
+- **THEN** the tracker shows the "acting on decision" ack before any further
+  work is recorded
 
-#### Scenario: Two conflicting answers
-- **WHEN** one answer arrives in the console and a different one in the tracker
-- **THEN** the factory acts on the first seen, and the ack states that decision;
-  the other remains an ordinary thread comment
+#### Scenario: Reply consumed on resume
+- **WHEN** an instance claims a returned task whose thread holds a reply after
+  the last ack
+- **THEN** the reply is acknowledged and recorded as the decision driving the
+  resumed run
 
-### Requirement: Decision wait races console against tracker
-The interactive decision wait SHALL listen to console input and tracker polling
-(at the configured interval) concurrently; the first non-empty answer wins and
-the other source is cancelled. The dialog SHALL tell the operator both channels
-are watched. Without a TTY and without a tracker answer, the run SHALL leave the
-task `AwaitingHuman` and report "reply in the tracker and re-run"; an operator
-quitting the dialog without answering leaves the same state.
+### Requirement: Escalation parks and exits
+An escalation SHALL end the take run identically with or without a TTY: park
+the task with its report, then exit telling the operator where the question is
+and how to return the task ("reply in the tracker and move the task back to
+ready"). There is no in-run decision wait. A resume claim that finds a recorded
+`DecisionNeeded` outcome and no pending reply SHALL park the task again with
+the question restated.
 <!-- implements FR13 of add-tracker-port -->
 
-#### Scenario: Tracker wins the race
-- **WHEN** a human posts a decision comment while the console dialog is open
-- **THEN** the factory acknowledges and acts on the tracker decision, and the
-  dialog announces that the tracker answered
+#### Scenario: Escalation ends the run
+- **WHEN** a take run escalates while a TTY is attached
+- **THEN** the task is parked with the report and the run exits with the
+  return-path message — no console prompt is opened
 
-#### Scenario: Headless escalation
-- **WHEN** an escalation occurs with no TTY attached and no pending tracker reply
-- **THEN** the task stays `AwaitingHuman` and the run exits with a report telling
-  the operator to reply in the tracker and re-run
+#### Scenario: Returned without an answer
+- **WHEN** a human moves a `DecisionNeeded`-parked task back to ready without
+  replying and a take run claims it
+- **THEN** the task is parked again with the question restated
 
 ### Requirement: Abort protocol with a K fuse
-On an infrastructure abort the factory SHALL log ERROR, then best-effort: post the
+An infrastructure abort is either an engine `Aborted` outcome (durable persist
+failed) or an uncaught exception of the take run itself. On an infrastructure
+abort the factory SHALL log ERROR, then best-effort: post the
 structural abort comment, release the claim, and return the task to `Ready` via
 `recordAbort` — a dead tracker never blocks the abort itself. When the
 consecutive-abort count (shared across instances via tracker facts) reaches the
@@ -150,6 +158,11 @@ The counter resets on the first durably persisted round after claim.
 - **WHEN** a run aborts and the shared count reaches K
 - **THEN** the task is parked as `AwaitingHuman(infra)` with the abort history of
   all instances in the report
+
+#### Scenario: Runner crash is an abort
+- **WHEN** the take run dies with an uncaught exception mid-run
+- **THEN** the best-effort abort protocol runs: structural abort comment, claim
+  released, task back to `Ready` (or parked at the fuse threshold)
 
 #### Scenario: Progress resets the counter
 - **WHEN** a claim is followed by a durably persisted round and later an abort
@@ -192,16 +205,42 @@ claim, collect the decision, and continue from the recorded pipeline position.
 
 #### Scenario: Cross-instance resume
 - **WHEN** instance A escalates a task and instance B runs `take <ref>` after a
-  human reply
-- **THEN** B collects the decision, acknowledges it, claims, and resumes from the
+  human reply and return to ready
+- **THEN** B claims, collects the reply, acknowledges it, and resumes from the
   branch state without any data from A
+
+### Requirement: Exit codes by take result
+`gnomish take` SHALL exit with: 0 — Delivered, or a clean bare-mode no-op
+(empty queue); 1 — failure outside a claimed run (tracker unreachable at
+startup, label provisioning); 2 — usage error; 3 — pipeline load failure;
+10 — parked as escalation; 11 — parked as checkpoint; 12 — infrastructure
+abort below the fuse; 13 — parked as infra (fuse trip or infrastructure
+escalation); 14 — revoked; 15 — refused or skipped (held by another instance,
+already done, closed or nonexistent, foreign repo). Codes shared with
+`gnomish run` SHALL keep the same meaning. An uncaught exception follows the
+abort protocol and exits 12 or 13, never a bare 1.
+<!-- implements FR9 of add-tracker-port -->
+<!-- implements FR10 of add-tracker-port -->
+<!-- implements FR15 of add-tracker-port -->
+
+#### Scenario: Empty queue exits clean
+- **WHEN** bare `take` finds no eligible ready task
+- **THEN** the process exits 0 reporting an empty queue
+
+#### Scenario: Escalation park exit
+- **WHEN** a take run parks its task as an escalation
+- **THEN** the process exits 10
+
+#### Scenario: Refusal exit
+- **WHEN** `take <ref>` refuses a task held by another instance
+- **THEN** the process exits 15 naming the holder
 
 ### Requirement: Operator guide
 The change SHALL ship an operator guide (`docs/operator-guide.md`) covering: quick
 start (tracker config section, token env variable, factory config layers), handing
 off a task via the ready label and automatic label provisioning, the label
-dictionary with who moves what, the escalation/decision/ack flow including the
-console-vs-tracker race, snapshot behavior (issue edits do not affect a taken
+dictionary with who moves what, the escalation/decision/ack flow (reply, return
+to ready, re-run), snapshot behavior (issue edits do not affect a taken
 task; influence via decisions or revoke-and-recreate), the stuck-`Working` escape
 hatch (manual label flip until heartbeat exists), Projects v2 boards as a
 display-only parallel universe with the shipped reference "column → ready label"
