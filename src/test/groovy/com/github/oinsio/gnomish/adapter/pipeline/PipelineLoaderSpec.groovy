@@ -442,6 +442,179 @@ advancement: auto
         thrown(UnsupportedOperationException)
     }
 
+    // FR17 of add-tracker-port, "No tracker section" delta-spec scenario:
+    // loading succeeds exactly as before and the definition reports no tracker
+    // configuration when config.yaml declares no tracker section at all
+    def "a tree with no tracker section loads unchanged, with no tracker configuration"() {
+        given:
+        writeValidTree()
+
+        when:
+        def outcome = PipelineLoader.load(root)
+
+        then:
+        outcome instanceof LoadOutcome.Loaded
+        (outcome as LoadOutcome.Loaded).definition().tracker() == null
+    }
+
+    // FR17 of add-tracker-port, "Defaulted threshold" delta-spec scenario: a
+    // tracker section declaring type but no abort-threshold resolves to 3.
+    // Includes a matching github: subsection (task 3.2's seam rule requires
+    // one for a known type) so this test proves only the threshold default.
+    def "a tracker section with type but no abort-threshold loads with threshold 3"() {
+        given:
+        write('config.yaml', '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+'''.stripIndent())
+        write('pipeline.yaml', 'stages:\n  - plan\n')
+        write('stages/plan/stage.yaml', planManifest())
+        write('stages/plan/instructions.md', 'plan it\n')
+        write('stages/plan/accept.md', 'criteria\n')
+
+        when:
+        def outcome = PipelineLoader.load(root)
+
+        then:
+        outcome instanceof LoadOutcome.Loaded
+        def tracker = (outcome as LoadOutcome.Loaded).definition().tracker()
+        tracker.type() == 'github'
+        tracker.abortThreshold() == 3
+    }
+
+    // FR17 of add-tracker-port, task 3.2: an unknown tracker type is a located
+    // seam error, aggregated like any other ConfigError
+    def "a tracker section with an unknown type fails to load with a located error naming it"() {
+        given:
+        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\ntracker:\n  type: bogus\n')
+        write('pipeline.yaml', 'stages:\n  - plan\n')
+        write('stages/plan/stage.yaml', planManifest())
+        write('stages/plan/instructions.md', 'plan it\n')
+        write('stages/plan/accept.md', 'criteria\n')
+
+        when:
+        def outcome = PipelineLoader.load(root)
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors() == [
+            new ConfigError('config.yaml', 'tracker.type', "unknown tracker type 'bogus'")
+        ]
+    }
+
+    // FR17 of add-tracker-port, task 3.2, "Missing subsection" delta-spec scenario
+    def "a known tracker type with no matching subsection fails to load with a located error"() {
+        given:
+        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\ntracker:\n  type: github\n')
+        write('pipeline.yaml', 'stages:\n  - plan\n')
+        write('stages/plan/stage.yaml', planManifest())
+        write('stages/plan/instructions.md', 'plan it\n')
+        write('stages/plan/accept.md', 'criteria\n')
+
+        when:
+        def outcome = PipelineLoader.load(root)
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors() == [
+            new ConfigError('config.yaml', 'tracker.github', "missing required subsection 'github'")
+        ]
+    }
+
+    // FR17 of add-tracker-port, task 3.2, "Mismatched subsection" delta-spec
+    // scenario: the stray jira: key is reported even though github: is present
+    def "a tracker section with a stray subsection not matching type fails to load with a located error"() {
+        given:
+        write('config.yaml', '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+  jira:
+    project: FOO
+'''.stripIndent())
+        write('pipeline.yaml', 'stages:\n  - plan\n')
+        write('stages/plan/stage.yaml', planManifest())
+        write('stages/plan/instructions.md', 'plan it\n')
+        write('stages/plan/accept.md', 'criteria\n')
+
+        when:
+        def outcome = PipelineLoader.load(root)
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors() == [
+            new ConfigError('config.yaml', 'tracker.jira',
+            "subsection 'jira' does not match declared tracker type 'github'")
+        ]
+    }
+
+    // FR17 of add-tracker-port, task 3.2, "Adapter errors aggregate with core
+    // errors" delta-spec scenario: a tracker-seam error (unknown type, standing
+    // in for a delegated adapter rejection since no real GitHub content
+    // validator exists until task 4.2) and an unrelated structural error both
+    // surface in the same one-pass LoadOutcome.Invalid
+    def "a tracker seam error aggregates with an unrelated core error in one pass"() {
+        given: 'an unknown tracker type plus an unrelated structural error (unknown executor)'
+        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\ntracker:\n  type: bogus\n')
+        write('pipeline.yaml', 'stages:\n  - plan\n')
+        write('stages/plan/stage.yaml', '''\
+purpose: plan
+executor:
+  type: bogus-executor
+  model: m
+instructions: stages/plan/instructions.md
+advancement: auto
+''')
+        write('stages/plan/instructions.md', 'plan\n')
+
+        when:
+        def outcome = PipelineLoader.load(root)
+
+        then: 'one Invalid outcome carries both the tracker-seam error and the structural error'
+        outcome instanceof LoadOutcome.Invalid
+        def errors = (outcome as LoadOutcome.Invalid).errors()
+        errors.contains(new ConfigError('config.yaml', 'tracker.type', "unknown tracker type 'bogus'"))
+        errors.any {
+            it.file() == 'stages/plan/stage.yaml' && it.where() == 'executor.type' &&
+            it.message().contains("unknown executor 'bogus-executor'")
+        }
+    }
+
+    // FR17 of add-tracker-port, task 3.2: a known type with a present, matching
+    // subsection loads cleanly — the seam tier does not break the happy path
+    def "a tracker section with a known type and matching subsection loads cleanly"() {
+        given:
+        write('config.yaml', '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+'''.stripIndent())
+        write('pipeline.yaml', 'stages:\n  - plan\n')
+        write('stages/plan/stage.yaml', planManifest())
+        write('stages/plan/instructions.md', 'plan it\n')
+        write('stages/plan/accept.md', 'criteria\n')
+
+        when:
+        def outcome = PipelineLoader.load(root)
+
+        then:
+        outcome instanceof LoadOutcome.Loaded
+        (outcome as LoadOutcome.Loaded).definition().tracker().type() == 'github'
+    }
+
     private static Map<String, String> snapshot(Path root) {
         Map<String, String> files = [:]
         Files.walk(root).withCloseable { stream ->

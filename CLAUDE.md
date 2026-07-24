@@ -17,7 +17,7 @@ External orchestrator: AI agents ("gnomes") take tasks from a task tracker and c
 ## Key decisions
 
 - Factory instances are stateless; state = task tracker (coordination) + task git branch (artifacts, state file)
-- Ports & adapters: tracker (GitHub/Jira), ai-provider, executor (`api` | `agent-cli`)
+- Ports & adapters: tracker (GitHub built, in-memory reference for tests, Jira planned), ai-provider, executor (`api` | `agent-cli`); `gnomish take` is the tracker-driven CLI entry point, alongside `gnomish run`
 - Pipeline stages are declarative, defined in the target project repo under `.gnomish/`
 - Stage contract = IDEF0/ICOM + Quality Control: Input / Output / Control / Mechanism / Verification, all machine-verifiable
 - Escalation via tracker statuses; any instance can resume a returned task

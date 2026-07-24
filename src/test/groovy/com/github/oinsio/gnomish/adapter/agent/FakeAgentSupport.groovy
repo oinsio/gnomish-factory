@@ -34,6 +34,6 @@ final class FakeAgentSupport {
         wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${scenario}'\nexec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"\n"
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, envPassthrough)
+        new FactoryProperties('factory-01', wrapper.absolutePath, envPassthrough, null)
     }
 }

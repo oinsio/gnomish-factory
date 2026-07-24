@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish
 
+import java.util.zip.ZipFile
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
@@ -34,8 +35,8 @@ class FactoryApplicationSpec extends Specification {
 
     // FR3: valid configuration binds — the bean carries the application.yaml value
     def "factory properties bean is populated from application.yaml"() {
-        expect: 'the instance id equals the value declared in application.yaml'
-        factoryProperties.instanceId() == 'gnomish-local'
+        expect: 'the instance name equals the value declared in application.yaml'
+        factoryProperties.instanceName() == 'gnomish-local'
     }
 
     // FR2: headless runtime — the booted context is a plain annotation-config context
@@ -44,19 +45,25 @@ class FactoryApplicationSpec extends Specification {
         context instanceof AnnotationConfigApplicationContext
     }
 
-    // FR2: outbound-only runtime — the classpath stays the headless spring-boot-starter
-    // set; verified at the root, by the server-capability class being unresolvable
-    def "classpath stays headless: server class #webStackClass is not resolvable"() {
-        when: 'the class that any HTTP server support would require is looked up'
-        Class.forName(webStackClass)
+    // FR2: outbound-only runtime — the *shipped* app stays the headless
+    // spring-boot-starter set. Checked against the bootJar's bundled
+    // BOOT-INF/lib/ (design D10's e2e.jarPath convention), not the test JVM's
+    // own classloader: test-only dependencies that legitimately embed a Jetty
+    // server for in-JVM HTTP stubbing (e.g. WireMock, task 4.4 of
+    // add-tracker-port) put jetty/servlet jars on testRuntimeClasspath without
+    // that ever reaching the packaged application.
+    def "bootJar stays headless: no servlet/web-server jar is bundled"() {
+        given: 'the packaged application jar built by this test run (dependsOn bootJar)'
+        def jarPath = System.getProperty('e2e.jarPath')
+        assert jarPath != null: 'e2e.jarPath system property is not set (see tasks.named("test") in build.gradle)'
 
-        then: 'it does not exist — the classpath is the headless spring-boot-starter set'
-        thrown(ClassNotFoundException)
+        when: 'the bundled library jars are listed'
+        def bundledLibNames = new ZipFile(jarPath).withCloseable { zip ->
+            zip.entries().findAll { it.name.startsWith('BOOT-INF/lib/') && it.name.endsWith('.jar') }
+            .collect { it.name }
+        }
 
-        where:
-        webStackClass << [
-            'org.springframework.web.context.WebApplicationContext',
-            'jakarta.servlet.Servlet',
-        ]
+        then: 'no jetty or servlet-API jar is bundled — the app carries no HTTP server capability'
+        bundledLibNames.every { !(it =~ /(?i)(jetty|servlet)/) }
     }
 }

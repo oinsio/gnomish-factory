@@ -70,7 +70,7 @@ public final class CliJudgeVoter implements JudgeVoter {
      *     shared with the injected {@link AgentProcessLauncher}; never null
      */
     public CliJudgeVoter(FactoryProperties factoryProperties, Clock clock) {
-        this(factoryProperties, clock, event -> {});
+        this(factoryProperties, clock, _ -> {});
     }
 
     /**
@@ -85,10 +85,30 @@ public final class CliJudgeVoter implements JudgeVoter {
      *     never null — pass a no-op ({@code event -> {}}) to reach none
      */
     public CliJudgeVoter(FactoryProperties factoryProperties, Clock clock, AgentProgressListener progressListener) {
+        this(factoryProperties, clock, progressListener, List.of());
+    }
+
+    /**
+     * @param factoryProperties installation config: CLI binary path and env
+     *     passthrough intent; never null
+     * @param clock the read-time source for process start/exit stamping,
+     *     shared with the injected {@link AgentProcessLauncher}; never null
+     * @param progressListener the live-progress subscriber for this judge's
+     *     rounds (design D10, task 9.4); never null
+     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
+     *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into
+     *     this voter's own {@link AgentProcessLauncher}; never null, empty when no tracker is
+     *     involved
+     */
+    public CliJudgeVoter(
+            FactoryProperties factoryProperties,
+            Clock clock,
+            AgentProgressListener progressListener,
+            List<String> credentialEnvVarsToScrub) {
         this.factoryProperties = factoryProperties;
         this.clock = clock;
         this.progressListener = progressListener;
-        this.launcher = new AgentProcessLauncher(clock);
+        this.launcher = new AgentProcessLauncher(clock, credentialEnvVarsToScrub);
     }
 
     /**

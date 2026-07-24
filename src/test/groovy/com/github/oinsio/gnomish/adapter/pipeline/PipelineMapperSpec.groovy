@@ -459,4 +459,71 @@ class PipelineMapperSpec extends Specification {
         s.outputs() == []
         s.verify() == []
     }
+
+    // FR17 of add-tracker-port: no tracker section at all maps to a null
+    // TrackerConfig — the loader-unchanged contract for the "No tracker
+    // section" delta-spec scenario
+    def "maps an absent tracker section to a null TrackerConfig"() {
+        given:
+        def cfg = new ConfigDto('1', null, null)
+
+        when:
+        def definition = PipelineMapper.map(cfg, []).definition()
+
+        then:
+        definition.tracker() == null
+    }
+
+    // FR17 of add-tracker-port: a present section with type but no
+    // abort-threshold resolves to threshold 3 — the "Defaulted threshold"
+    // delta-spec scenario
+    def "defaults the abort threshold to 3 when the tracker section omits it"() {
+        given:
+        def cfg = new ConfigDto('1', null, new TrackerDto('github', null))
+
+        when:
+        def definition = PipelineMapper.map(cfg, []).definition()
+
+        then:
+        definition.tracker() == new TrackerConfig('github', 3)
+    }
+
+    // FR17 of add-tracker-port: a declared abort-threshold overrides the default
+    def "carries a declared abort threshold through unchanged"() {
+        given:
+        def cfg = new ConfigDto('1', null, new TrackerDto('github', 7))
+
+        when:
+        def definition = PipelineMapper.map(cfg, []).definition()
+
+        then:
+        definition.tracker() == new TrackerConfig('github', 7)
+    }
+
+    // FR9 of add-tracker-port (task 5.14): the ONE subsection matching tracker.type is passed
+    // through to TrackerConfig.subsection() for downstream short-ref expansion / adapter
+    // construction (task 5.15); non-matching subsections are ignored (seam validation's concern)
+    def "passes the subsection matching tracker.type through to TrackerConfig"() {
+        given:
+        def githubSection = ['api-url': 'https://api.github.com', 'repo': 'acme/widgets']
+        def cfg = new ConfigDto('1', null, new TrackerDto('github', 3, [github: githubSection]))
+
+        when:
+        def definition = PipelineMapper.map(cfg, []).definition()
+
+        then:
+        definition.tracker().subsection() == githubSection
+    }
+
+    // FR9 of add-tracker-port: absent subsections map to an empty map, never null
+    def "defaults the subsection to an empty map when no subsections are declared"() {
+        given:
+        def cfg = new ConfigDto('1', null, new TrackerDto('github', 3))
+
+        when:
+        def definition = PipelineMapper.map(cfg, []).definition()
+
+        then:
+        definition.tracker().subsection() == [:]
+    }
 }

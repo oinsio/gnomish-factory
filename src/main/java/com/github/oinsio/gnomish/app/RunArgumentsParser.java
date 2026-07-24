@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
@@ -33,9 +32,6 @@ public final class RunArgumentsParser {
     private static final String TASK_FILE = "task-file";
     private static final String TASK_ID = "task-id";
     private static final String FROM_STAGE = "from-stage";
-    private static final String INTERACTIVE = "interactive";
-    private static final String INTERACTIVE_EXECUTOR = "executor";
-    private static final String INTERACTIVE_JUDGE = "judge";
     private static final String MODE = "mode";
     private static final String BASE = "base";
     private static final String RESUME = "resume";
@@ -63,7 +59,7 @@ public final class RunArgumentsParser {
         TaskSource taskSource = resume == null ? parseTaskSource(args) : null;
         String taskId = parseTaskId(args);
         String fromStage = parseFromStage(args);
-        RunArguments.InteractiveMode interactiveMode = parseInteractiveMode(args);
+        RunArguments.InteractiveMode interactiveMode = InteractiveModeParser.parse(args);
         RunArguments.Mode mode = GitFlagsValidator.parseMode(singleValue(args, MODE));
         String base = singleValue(args, BASE);
         boolean discardWork = args.containsOption(DISCARD_WORK);
@@ -114,52 +110,6 @@ public final class RunArgumentsParser {
     }
 
     /**
-     * Parses {@code --interactive} into its {@link RunArguments.InteractiveMode} (FR10, design
-     * D6): absent &rarr; {@code NONE}; bare (no {@code =value}) &rarr; {@code ALL}; {@code
-     * =executor} / {@code =judge} &rarr; the matching scoped mode. Any other value is a usage
-     * error naming the accepted forms. A repeated occurrence — bare or scoped, same or
-     * different value — is rejected the same way {@link #singleValue} rejects repeated {@code
-     * --task}; this is checked against the raw {@link ApplicationArguments#getSourceArgs()}
-     * rather than {@link ApplicationArguments#getOptionValues}, because two bare occurrences
-     * both collapse to an empty value list there and would otherwise be indistinguishable from
-     * one.
-     */
-    private RunArguments.InteractiveMode parseInteractiveMode(ApplicationArguments args) {
-        if (!args.containsOption(INTERACTIVE)) {
-            return RunArguments.InteractiveMode.NONE;
-        }
-        if (countOccurrences(args, INTERACTIVE) > 1) {
-            throw new UsageException(
-                    "--interactive may be given only once (bare, --interactive=executor, or --interactive=judge)");
-        }
-        List<String> values = args.getOptionValues(INTERACTIVE);
-        if (values == null || values.isEmpty()) {
-            return RunArguments.InteractiveMode.ALL;
-        }
-        String value = values.get(0);
-        return switch (value) {
-            case INTERACTIVE_EXECUTOR -> RunArguments.InteractiveMode.EXECUTOR_ONLY;
-            case INTERACTIVE_JUDGE -> RunArguments.InteractiveMode.JUDGE_ONLY;
-            default ->
-                throw new UsageException("--interactive=" + value + " is invalid: accepted forms are"
-                        + " --interactive, --interactive=executor, or --interactive=judge");
-        };
-    }
-
-    /**
-     * Counts how many raw source arguments name {@code --name}, either bare or with a
-     * {@code =value} suffix — {@code getSourceArgs()} preserves each occurrence verbatim,
-     * unlike {@code getOptionValues}, which cannot tell two bare occurrences of the same flag
-     * apart from one.
-     */
-    private static long countOccurrences(ApplicationArguments args, String name) {
-        String prefix = "--" + name;
-        return Arrays.stream(args.getSourceArgs())
-                .filter(raw -> raw.equals(prefix) || raw.startsWith(prefix + "="))
-                .count();
-    }
-
-    /**
      * Returns the single value of {@code name}, or {@code null} if the flag is absent. Multiple
      * occurrences are rejected — {@code ApplicationArguments} would otherwise silently accept
      * {@code --task=a --task=b} and hand back the last one, hiding an operator mistake.
@@ -175,6 +125,6 @@ public final class RunArgumentsParser {
         if (values.size() > 1) {
             throw new UsageException("--" + name + " may be given only once");
         }
-        return values.get(0);
+        return values.getFirst();
     }
 }

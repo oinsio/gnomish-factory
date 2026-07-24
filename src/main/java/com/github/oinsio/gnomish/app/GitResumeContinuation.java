@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.List;
 
 /**
  * The four outcome-driven continuation paths {@link GitResumeRunner#run} switches on: {@link
@@ -163,7 +164,7 @@ final class GitResumeContinuation {
         Path worktree = bootstrap.worktreePath();
         var persistence = new GitAttemptPersistence(runner, worktree, bootstrap.taskId());
         var workspace = new DirectoryWorkspace(worktree);
-        var assembled = assembly.assemble(definition, context, state, interactiveMode, persistence);
+        var assembled = assembly.assemble(definition, context, state, interactiveMode, persistence, List.of());
 
         try {
             assembled.loop().run(definition, context, state, workspace, assembled.ports());

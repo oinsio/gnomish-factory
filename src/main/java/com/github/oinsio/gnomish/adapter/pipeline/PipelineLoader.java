@@ -47,6 +47,11 @@ import java.util.Map;
  *       {@code pipeline.yaml} parsed and every pipeline-named stage has a
  *       structurally-clean parsed DTO, since a domain model cannot be built from a
  *       partial or malformed tree;</li>
+ *   <li><b>tracker-seam</b> — {@link TrackerSeamValidator} (FR17 of
+ *       add-tracker-port): runs alongside mapping on the parsed {@code tracker}
+ *       DTO — unknown {@code type}, missing/mismatched subsection, and any
+ *       delegated adapter-validator errors, independent of whether a full
+ *       {@link PipelineDefinition} could be built;</li>
  *   <li><b>domain-validate</b>, <b>I/O-validate</b> and <b>settings-validate</b> —
  *       {@link PipelineValidator} (pure semantic rules), {@link ReferencedFiles}
  *       (file existence + traversal), and {@link AgentSettingsValidator}
@@ -56,8 +61,9 @@ import java.util.Map;
  *
  * <p><b>Aggregation order (deterministic, NFR-R1).</b> Errors are concatenated
  * coarsest-file-first, in tier order: parse (config, pipeline, then stages in
- * discovery order), structural (same order), consistency, mapping, domain,
- * referenced-files, then settings. The same tree always yields an equal outcome.
+ * discovery order), structural (same order), consistency, mapping, tracker-seam,
+ * domain, referenced-files, then settings. The same tree always yields an equal
+ * outcome.
  *
  * <p><b>No execution (NFR-S1) / no writes (NFR-R1).</b> The loader only reads text,
  * parses, and validates: it never runs a configured {@code command}, model, or
@@ -66,7 +72,8 @@ import java.util.Map;
  *
  * <p>Implements FR1, FR8 (+ NFR-S1, NFR-R1) of load-pipeline-config; the
  * settings-validate tier additionally implements FR11, UX2, D7 of
- * add-agent-executor (task 9.1).
+ * add-agent-executor (task 9.1); the tracker-seam tier additionally implements
+ * FR17 of add-tracker-port (task 3.2).
  */
 public final class PipelineLoader {
 
