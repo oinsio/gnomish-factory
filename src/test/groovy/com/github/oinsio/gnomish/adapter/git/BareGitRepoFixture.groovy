@@ -38,4 +38,16 @@ trait BareGitRepoFixture {
         assert result.exitCode() == 0: "git init failed: ${result.stderr()}"
         repo
     }
+
+    /**
+     * Stages everything under {@code repo} and creates a commit with a fixed test identity,
+     * asserting both steps succeed — the standard "seed an initial commit" step shared by specs
+     * that need a working tree with history rather than an empty repo.
+     */
+    void commitAll(Path repo, String message = 'init') {
+        def runner = new GitProcessRunner()
+        assert runner.run(repo, 'add', '.').exitCode() == 0
+        def result = runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', message)
+        assert result.exitCode() == 0: "git commit failed: ${result.stderr()}"
+    }
 }

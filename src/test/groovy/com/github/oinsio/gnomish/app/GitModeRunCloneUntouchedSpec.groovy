@@ -70,7 +70,7 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
                 new ShellCommandCheckRunner(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null))
+                new FactoryProperties('test-instance', null, null, null))
         new GitModeRunner(assembly, worktreesRoot)
     }
 

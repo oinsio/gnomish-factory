@@ -60,7 +60,7 @@ exec sh '${scriptPath}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('test-instance', wrapper.absolutePath, [])
+        new FactoryProperties('test-instance', wrapper.absolutePath, [], null)
     }
 
     private static StageDefinition stage() {
@@ -99,7 +99,7 @@ exec sh '${scriptPath}' "\$@"
         def context = new TaskContext('task-1', 'title', 'body', List.<Decision> of())
         def initialState = TaskState.atStageStart('build')
         def run = assembly.assemble(
-                pipeline(), context, initialState, RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence())
+                pipeline(), context, initialState, RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
 
         when:
         run.loop().run(pipeline(), context, initialState, new DirectoryWorkspace(workspaceDir), run.ports())

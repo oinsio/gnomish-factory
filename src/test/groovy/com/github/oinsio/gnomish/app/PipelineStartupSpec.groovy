@@ -17,7 +17,7 @@ class PipelineStartupSpec extends Specification {
     @TempDir
     Path projectRoot
 
-    private final PipelineStartup startup = new PipelineStartup()
+    private final PipelineStartup startup = new PipelineStartup([:])
 
     private void write(String relative, String text) {
         Path target = projectRoot.resolve('.gnomish').resolve(relative)

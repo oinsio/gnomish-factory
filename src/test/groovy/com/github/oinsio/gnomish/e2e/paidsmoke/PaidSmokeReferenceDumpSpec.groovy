@@ -52,7 +52,7 @@ class PaidSmokeReferenceDumpSpec extends Specification {
     Path workspaceRoot
 
     private final FactoryProperties factoryProperties =
-    new FactoryProperties('paid-smoke', System.getProperty('paidSmoke.claudeBinary', 'claude'), List.of())
+    new FactoryProperties('paid-smoke', System.getProperty('paidSmoke.claudeBinary', 'claude'), List.of(), null)
 
     private final SystemClock clock = new SystemClock()
 

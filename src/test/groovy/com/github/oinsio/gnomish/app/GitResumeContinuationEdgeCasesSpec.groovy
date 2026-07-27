@@ -33,8 +33,9 @@ import spock.lang.TempDir
 
 /**
  * FR5, FR8, FR10, D1, D10 of add-git-workflow: two {@link GitResumeContinuation} scenarios not
- * covered elsewhere in the suite without them being masked by later cleanup. Split out from {@link
- * GitResumeRunnerSpec} to keep both files within the file-size guidance
+ * covered elsewhere in the suite without them being masked by later cleanup. Split out from the
+ * original GitResumeRunner spec suite (now {@link GitResumeOutcomeSpec}, {@link
+ * GitResumeBootstrapSpec}, and this file) to keep each file within the file-size guidance
  * (.claude/rules/process-invariants.md):
  *
  * <ul>
@@ -45,7 +46,7 @@ import spock.lang.TempDir
  *       — this is the one scenario in the suite where no decision is appended at all.
  *   <li>{@link GitResumeContinuation#resumeFromRecordedPosition}'s {@code --discard-work} path
  *       calls {@link com.github.oinsio.gnomish.adapter.git.WorktreeSalvage#discard}. {@link
- *       GitResumeRunnerSpec}'s own discard-work scenario checks the leftover file's absence only
+ *       GitResumeOutcomeSpec}'s own discard-work scenario checks the leftover file's absence only
  *       from the live worktree — but a completed task's worktree is unconditionally removed by
  *       {@link GitOutcomeRecorder} regardless of whether discard ran, so that check alone cannot
  *       distinguish the mutant (PIT: VoidMethodCallMutator survivor). This spec instead proves it
@@ -101,7 +102,7 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
                 new ShellCommandCheckRunner(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null))
+                new FactoryProperties('test-instance', null, null, null))
         new GitResumeRunner(assembly, worktreesRoot, 'taskId')
     }
 
@@ -117,7 +118,7 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
 
     // FR5, FR8, D1, PIT ConditionalsBoundaryMutator: a blank decision answer must NOT append a
     // Decision — proven by the historical task.json blobs never carrying a second decision entry,
-    // unlike GitResumeRunnerSpec's "drives the decision dialog" scenario where a non-blank answer
+    // unlike GitResumeOutcomeSpec's "drives the decision dialog" scenario where a non-blank answer
     // does land one.
     def "run() with outcome escalated and a blank decision answer resumes without appending a decision"() {
         given: 'a task escalated after one persisted round'
@@ -150,7 +151,7 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
 
     // FR10, D10, PIT VoidMethodCallMutator: --discard-work must call WorktreeSalvage#discard —
     // proven through the branch's own commit history (never erased by the later worktree-removal
-    // cleanup on completion, unlike GitResumeRunnerSpec's live-worktree check), so a leftover file
+    // cleanup on completion, unlike GitResumeOutcomeSpec's live-worktree check), so a leftover file
     // that discard() should have wiped before the round commit never appears in ANY commit's tree.
     def "run() with --discard-work never commits the discarded leftover to branch history"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'

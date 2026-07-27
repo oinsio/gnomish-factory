@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,9 @@ import org.jspecify.annotations.Nullable;
  */
 public final class PipelineMapper {
 
+    /** FR17 of add-tracker-port: the core abort-fuse threshold default when the key is omitted. */
+    private static final int DEFAULT_ABORT_THRESHOLD = 3;
+
     private PipelineMapper() {}
 
     /**
@@ -106,9 +110,37 @@ public final class PipelineMapper {
         if (!errors.isEmpty()) {
             return new Result(null, errors);
         }
-        PipelineDefinition definition =
-                new PipelineDefinition(orEmpty(config.schemaVersion()), new AutonomyLimits(defaultLimit), stages);
+        PipelineDefinition definition = new PipelineDefinition(
+                orEmpty(config.schemaVersion()),
+                new AutonomyLimits(defaultLimit),
+                stages,
+                mapTracker(config.tracker()));
         return new Result(definition, List.of());
+    }
+
+    /**
+     * Maps the {@code tracker} core keys (FR17, FR9 of add-tracker-port): {@code
+     * null} when the whole section is absent from {@code config.yaml}; otherwise
+     * carries {@code type} through, defaults {@code abort-threshold} to 3 when
+     * the section is present but the key is omitted, and passes through the
+     * ONE raw subsection matching {@code type} (already schema-validated at the
+     * seam, task 3.2/4.2) for downstream short-ref expansion and adapter
+     * construction (task 5.15) to consume.
+     */
+    private static @Nullable TrackerConfig mapTracker(@Nullable TrackerDto tracker) {
+        if (tracker == null) {
+            return null;
+        }
+        int threshold = tracker.abortThreshold() == null ? DEFAULT_ABORT_THRESHOLD : tracker.abortThreshold();
+        String type = orEmpty(tracker.type());
+        return new TrackerConfig(
+                type, threshold, castSubsection(tracker.subsections().get(type)));
+    }
+
+    /** Mirrors {@code TrackerSeamValidator.castSubsection}: the seam already guaranteed the shape. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castSubsection(@Nullable Object raw) {
+        return raw instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
     }
 
     /** The config attempt-limit default; absent (no {@code autonomy}/limit) maps to 0 (FR7). */

@@ -3,19 +3,20 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
-import com.github.oinsio.gnomish.adapter.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.adapter.console.DialogConsole;
 import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.engine.SystemClock;
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
-import com.github.oinsio.gnomish.adapter.git.state.UnsupportedStateFileVersionException;
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -25,28 +26,24 @@ import org.springframework.stereotype.Component;
 
 /**
  * The whole-CLI entrypoint (design D10): runs on the {@code ApplicationRunner} thread Spring Boot
- * calls after context refresh. The first thing it does is {@link SubcommandDispatch}: a {@code
- * status}/{@code usage} subcommand (FR13, FR14 of add-git-workflow) hands off to {@link
- * StatusCommand}/{@link UsageCommand} and returns, never touching the run flow below. For {@code
- * run} — explicit or implicit, {@link Subcommand#parse} — with none of {@code gnomish run}'s flags
- * present, this runner no-ops (FR12). With at least one relevant flag present, it drives the full
- * pipeline: parse → load {@code .gnomish/} → dispatch by {@code --resume} presence, then by
- * {@link RunArguments#mode()}.
+ * calls after context refresh. {@link SubcommandDispatch} first tries {@code status}/{@code
+ * usage}/{@code take} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port) — a bare {@code
+ * gnomish take} is never confused with a bare {@code gnomish run} no-op, since the leading
+ * positional token settles the subcommand before {@link #RUN_FLAGS} is ever consulted. For
+ * {@code run} — explicit or implicit — with none of its flags present, this runner no-ops (FR12);
+ * otherwise it drives the full pipeline: parse → load {@code .gnomish/} → dispatch by {@code
+ * --resume} presence, then by {@link RunArguments#mode()}.
  *
  * <p>The per-run collaborators ({@link com.github.oinsio.gnomish.status.StatusSnapshotHolder},
  * {@link DialogConsole}, {@link EnginePorts} itself) depend on the {@link TaskContext} synthesized
  * from the parsed flags, so {@link ManualRunAssembly} builds them imperatively, once per
  * invocation, rather than as {@code @Bean}s; {@link ManualRunConfiguration} supplies every other
- * collaborator. Exceptions from the pipeline propagate uncaught past this method, except for
- * pass-through catch/rethrow branches that print a short line instead of a full stack trace (UX3)
- * before rethrowing unchanged, so {@link RunExitCodeMapper} still maps the exit code — including
- * {@link TaskNotFoundException} and state-file version refusals (FR13, FR4, UX3), which skip the
- * WARN-logged generic fallback. The {@code taskId} MDC key is cleared in {@code finally}.
+ * collaborator. Exception reporting (UX3) is delegated to {@link RunExceptionReporting}; the
+ * {@code taskId} MDC key is cleared in {@code finally}.
  *
- * <p>{@code --resume} (FR8) delegates to {@link GitResumeRunner#run}: locate the branch, load
- * {@code task.json}, materialize the worktree, then drive the outcome-switch continuation.
- * Otherwise {@link RunArguments#mode()} gates the drive (design D8): {@code IN_PLACE} prints
- * {@link #IN_PLACE_REMINDER} then runs {@link #driveInPlace}; {@code GIT} delegates to {@link
+ * <p>{@code --resume} (FR8) delegates to {@link GitResumeRunner#run}. Otherwise {@link
+ * RunArguments#mode()} gates the drive (design D8): {@code IN_PLACE} prints {@link
+ * #IN_PLACE_REMINDER} then runs {@link #driveInPlace}; {@code GIT} delegates to {@link
  * GitModeRunner}.
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3, D9, D10 of add-manual-run; FR5-FR8, FR13,
@@ -86,7 +83,7 @@ public final class ManualRunRunner implements ApplicationRunner {
     private final GitResumeRunner gitResumeRunner;
     private final SubcommandDispatch subcommandDispatch;
 
-    public ManualRunRunner(
+    ManualRunRunner(
             RunArgumentsParser argumentsParser,
             PipelineStartup pipelineStartup,
             AdHocTaskSynthesizer taskSynthesizer,
@@ -99,12 +96,14 @@ public final class ManualRunRunner implements ApplicationRunner {
             FactoryProperties factoryProperties,
             Path worktreesRoot,
             StatusCommand statusCommand,
-            UsageCommand usageCommand) {
+            UsageCommand usageCommand,
+            Clock javaTimeClock,
+            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry) {
         this.argumentsParser = argumentsParser;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
         this.inPlacePersistence = attemptPersistence;
-        this.subcommandDispatch = new SubcommandDispatch(statusCommand, usageCommand);
         this.assembly = new ManualRunAssembly(
                 systemConsoleIO,
                 filesExistCheckRunner,
@@ -114,31 +113,30 @@ public final class ManualRunRunner implements ApplicationRunner {
                 factoryProperties);
         this.gitModeRunner = new GitModeRunner(assembly, worktreesRoot);
         this.gitResumeRunner = new GitResumeRunner(assembly, worktreesRoot, TASK_ID_KEY);
+        var takeCommand = new TakeCommand(
+                assembly,
+                worktreesRoot,
+                TASK_ID_KEY,
+                factoryProperties,
+                javaTimeClock,
+                trackerAdapterRegistry,
+                trackerValidatorRegistry);
+        this.subcommandDispatch = new SubcommandDispatch(statusCommand, usageCommand, takeCommand);
     }
 
     /** No relevant flag present → no-op (FR12); otherwise drives the run (see class javadoc). */
     @Override
     public void run(ApplicationArguments args) throws IOException {
         try {
-            if (subcommandDispatch.dispatchNonRun(args) || RUN_FLAGS.stream().noneMatch(args::containsOption)) {
-                return;
-            }
-            drive(args);
-        } catch (UsageException | PipelineLoadFailedException | InternalErrorException ex) {
-            System.err.println(ex.getMessage());
-            throw ex;
-        } catch (InputExhaustedException | ConsoleClosedException ex) {
-            System.err.println("Input exhausted — stopping.");
-            throw ex;
-        } catch (TaskNotFoundException ex) { // UX3, D15: calm message already on System.out
-            throw ex;
-        } catch (UnsupportedStateFileVersionException ex) { // FR4: clean refusal, no WARN/stack trace
-            System.err.println(ex.getMessage());
-            throw ex;
-        } catch (RuntimeException | IOException ex) {
-            log.warn("gnomish run terminated with an unhandled exception", ex);
-            System.err.println("gnomish run failed: " + ex.getMessage());
-            throw ex;
+            RunExceptionReporting.run(
+                    () -> {
+                        if (subcommandDispatch.dispatchNonRun(args)
+                                || RUN_FLAGS.stream().noneMatch(args::containsOption)) {
+                            return;
+                        }
+                        drive(args);
+                    },
+                    log);
         } finally {
             MDC.remove(TASK_ID_KEY);
         }
@@ -151,8 +149,8 @@ public final class ManualRunRunner implements ApplicationRunner {
         }
 
         PipelineLoadOutcome loadOutcome = pipelineStartup.load(runArguments);
-        if (loadOutcome instanceof PipelineLoadOutcome.Failed failed) {
-            throw new PipelineLoadFailedException(failed.renderedErrors());
+        if (loadOutcome instanceof PipelineLoadOutcome.Failed(List<String> renderedErrors)) {
+            throw new PipelineLoadFailedException(renderedErrors);
         }
         var loaded = (PipelineLoadOutcome.Loaded) loadOutcome;
         PipelineDefinition definition = loaded.definition();
@@ -191,7 +189,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                 synthesized.context(),
                 synthesized.initialState(),
                 runArguments.interactiveMode(),
-                inPlacePersistence);
+                inPlacePersistence,
+                List.of());
         run.loop().run(definition, synthesized.context(), synthesized.initialState(), loaded.workspace(), run.ports());
     }
 }

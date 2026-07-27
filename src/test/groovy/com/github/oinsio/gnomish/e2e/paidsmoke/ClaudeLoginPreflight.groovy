@@ -43,7 +43,7 @@ final class ClaudeLoginPreflight {
      *     CLI) or a human-readable reason the preflight failed — never throws
      */
     static Result check(String binary = 'claude', Path workspaceRoot) {
-        def factoryProperties = new FactoryProperties('paid-smoke-preflight', binary, List.of())
+        def factoryProperties = new FactoryProperties('paid-smoke-preflight', binary, List.of(), null)
         def clock = new SystemClock()
         def launcher = new AgentProcessLauncher(clock)
         DirectoryWorkspace workspace

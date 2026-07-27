@@ -47,17 +47,24 @@ import java.util.Map;
  *       {@code pipeline.yaml} parsed and every pipeline-named stage has a
  *       structurally-clean parsed DTO, since a domain model cannot be built from a
  *       partial or malformed tree;</li>
+ *   <li><b>tracker-seam</b> — {@link TrackerSeamValidator} (FR17 of
+ *       add-tracker-port): runs alongside mapping on the parsed {@code tracker}
+ *       DTO — unknown {@code type}, missing/mismatched subsection, and any
+ *       delegated adapter-validator errors, independent of whether a full
+ *       {@link PipelineDefinition} could be built;</li>
  *   <li><b>domain-validate</b>, <b>I/O-validate</b> and <b>settings-validate</b> —
- *       {@link PipelineValidator} (pure semantic rules), {@link ReferencedFiles}
- *       (file existence + traversal), and {@link AgentSettingsValidator}
+ *       {@link com.github.oinsio.gnomish.domain.pipeline.PipelineValidator} (pure
+ *       semantic rules), {@link ReferencedFiles} (file existence + traversal), and
+ *       {@link com.github.oinsio.gnomish.adapter.agent.AgentSettingsValidator}
  *       (agent-cli/judge settings schema, task 9.1 of add-agent-executor), run
  *       only when a {@link PipelineDefinition} was produced.</li>
  * </ol>
  *
  * <p><b>Aggregation order (deterministic, NFR-R1).</b> Errors are concatenated
  * coarsest-file-first, in tier order: parse (config, pipeline, then stages in
- * discovery order), structural (same order), consistency, mapping, domain,
- * referenced-files, then settings. The same tree always yields an equal outcome.
+ * discovery order), structural (same order), consistency, mapping, tracker-seam,
+ * domain, referenced-files, then settings. The same tree always yields an equal
+ * outcome.
  *
  * <p><b>No execution (NFR-S1) / no writes (NFR-R1).</b> The loader only reads text,
  * parses, and validates: it never runs a configured {@code command}, model, or
@@ -66,7 +73,8 @@ import java.util.Map;
  *
  * <p>Implements FR1, FR8 (+ NFR-S1, NFR-R1) of load-pipeline-config; the
  * settings-validate tier additionally implements FR11, UX2, D7 of
- * add-agent-executor (task 9.1).
+ * add-agent-executor (task 9.1); the tracker-seam tier additionally implements
+ * FR17 of add-tracker-port (task 3.2).
  */
 public final class PipelineLoader {
 
@@ -74,7 +82,12 @@ public final class PipelineLoader {
     private static final String PIPELINE = "pipeline.yaml";
 
     /**
-     * Loads and validates the {@code .gnomish/} tree rooted at {@code gnomishRoot}.
+     * Loads and validates the {@code .gnomish/} tree rooted at {@code gnomishRoot} with no known
+     * tracker adapters — every {@code tracker.type} is reported unknown by the tracker-seam tier
+     * (the documented empty-registry mode of {@link TrackerSeamValidator}). Suitable for callers
+     * that never load a project with a {@code tracker:} section; production callers that do
+     * ({@link com.github.oinsio.gnomish.app.PipelineStartup}, {@code TakeCommandSupport}) pass the
+     * Spring-supplied registry via {@link #load(Path, Map)}.
      *
      * <p>Implements FR1, FR8 of load-pipeline-config.
      *
@@ -85,6 +98,31 @@ public final class PipelineLoader {
      *     validation problem — FR8/D3)
      */
     public static LoadOutcome load(Path gnomishRoot) throws IOException {
+        return load(gnomishRoot, Map.of());
+    }
+
+    /**
+     * Loads and validates the {@code .gnomish/} tree rooted at {@code gnomishRoot}, delegating each
+     * {@code tracker.<type>} subsection's content validation to {@code trackerValidators} (FR17 of
+     * add-tracker-port): a subsection whose {@code type} has a registered validator is handed to it,
+     * so an adapter-owned error (e.g. GitHub's bad hex color) is a located load error aggregated
+     * with core errors in one pass. The registry is supplied by the composition root ({@code
+     * TrackerAdapterConfiguration}) rather than referenced here, keeping {@code adapter.pipeline}
+     * free of any {@code adapter.tracker} dependency (the
+     * {@code TrackerPortBoundarySpec} gate).
+     *
+     * <p>Implements FR1, FR8 of load-pipeline-config; FR17 of add-tracker-port.
+     *
+     * @param gnomishRoot the {@code .gnomish/} directory root
+     * @param trackerValidators known adapter subsection validators, keyed by {@code tracker.type};
+     *     an empty map means no adapters are known and every declared type is reported unknown
+     * @return {@link LoadOutcome.Loaded} with the validated model when the tree has
+     *     no problem, else {@link LoadOutcome.Invalid} with every located error
+     * @throws IOException when a required file cannot be read (an I/O fault, never a
+     *     validation problem — FR8/D3)
+     */
+    public static LoadOutcome load(Path gnomishRoot, Map<String, TrackerSubsectionValidator> trackerValidators)
+            throws IOException {
         RawConfig raw = GnomishFiles.read(gnomishRoot);
         List<ConfigError> errors = new ArrayList<>();
 
@@ -98,7 +136,8 @@ public final class PipelineLoader {
         List<String> pipelineNames = pipelineStageNames(pipeline);
         errors.addAll(StageConsistency.check(pipelineNames, raw.stages()));
 
-        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(gnomishRoot, config, pipeline, stages, errors);
+        PipelineDefinition model =
+                PipelineModelBuilder.mapAndValidate(gnomishRoot, config, pipeline, stages, trackerValidators, errors);
 
         if (errors.isEmpty() && model != null) {
             return new LoadOutcome.Loaded(model);

@@ -119,8 +119,9 @@ A CLI judge vote SHALL report its token usage per resolved model id in the same 
 - **THEN** the vote carries `tokensByModel` with those resolved model ids
 
 ### Requirement: Manifest settings with strict validation
-The manifest `settings` map of an `agent-cli` executor and of a judge check SHALL accept exactly `allowedTools`, `disallowedTools`, `maxTurns`, and `roundTimeout`; any unknown key SHALL be a startup error raised before any dialog, naming the stage/check and the offending key. Installation-level configuration — the CLI binary path (default: `claude` from PATH) and environment passthrough to the CLI process — SHALL live in application properties, never in the manifest.
+The manifest `settings` map of an `agent-cli` executor and of a judge check SHALL accept exactly `allowedTools`, `disallowedTools`, `maxTurns`, and `roundTimeout`; any unknown key SHALL be a startup error raised before any dialog, naming the stage/check and the offending key. Installation-level configuration — the CLI binary path (default: `claude` from PATH) and environment passthrough to the CLI process — SHALL live in application properties, never in the manifest. Environment passthrough SHALL always exclude the credential variables declared by the active tracker adapter: the launcher removes them from the CLI process environment regardless of passthrough configuration, so tracker credentials never reach the gnome.
 <!-- implements FR11, UX2, D7 of add-agent-executor -->
+<!-- implements NFR-S1 of add-tracker-port -->
 
 #### Scenario: Typo fails fast
 - **WHEN** a stage's settings contain `allowedTols`
@@ -129,6 +130,10 @@ The manifest `settings` map of an `agent-cli` executor and of a judge check SHAL
 #### Scenario: Binary path is installation config
 - **WHEN** application properties point the CLI binary at a fake agent script
 - **THEN** rounds execute that binary with no manifest change
+
+#### Scenario: Tracker credentials scrubbed from the gnome
+- **WHEN** a stage executes while `GNOMISH_GITHUB_TOKEN` is set in the factory environment
+- **THEN** the CLI process environment contains no variable declared as a credential by the active tracker adapter
 
 ### Requirement: Hard-wired adapter policy
 The following SHALL be adapter policy, not configuration: the judge runs strictly read-only (Read/Grep/Glob-class tools; a judge check's `allowedTools` may only narrow that set, never widen it); the executor round receives a pinpoint write allowance for exactly the decision-file path the adapter generated; transport flags (`-p`, `--output-format stream-json --verbose`) are protocol internals invisible to configuration; the model is not a setting — it is first-class manifest data (`executor.model`, the judge check's `model`) mapped to `--model`.

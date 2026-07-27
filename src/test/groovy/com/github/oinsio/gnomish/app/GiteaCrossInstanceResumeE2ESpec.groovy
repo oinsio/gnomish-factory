@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import spock.lang.AutoCleanup
 import spock.lang.IgnoreIf
 import spock.lang.Shared
@@ -41,7 +42,7 @@ import spock.lang.Timeout
  *
  * <p>Implements NFR-R3 of add-git-workflow.
  */
-@Timeout(value = 180, unit = java.util.concurrent.TimeUnit.SECONDS)
+@Timeout(value = 180, unit = TimeUnit.SECONDS)
 @IgnoreIf(
 value = {
     !GiteaAvailability.dockerAvailable()
@@ -92,7 +93,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
                 new ShellCommandCheckRunner(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null))
+                new FactoryProperties('test-instance', null, null, null))
     }
 
     /** A brand-new, independent local clone of the Gitea repo — stands in for a separate machine. */

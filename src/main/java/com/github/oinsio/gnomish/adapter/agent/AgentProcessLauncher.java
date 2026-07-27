@@ -17,34 +17,54 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Environment: the child process inherits the current process's full
  * environment, which is {@link ProcessBuilder}'s default behaviour (the same
- * default {@link com.github.oinsio.gnomish.adapter.check.CommandProcessRunner}
+ * default {@code CommandProcessRunner}
  * relies on elsewhere in this codebase). {@link
  * FactoryProperties#agentCliEnvPassthrough()} names the Ollama-seam
  * variables (e.g. {@code ANTHROPIC_BASE_URL}, an auth token, a default-model
  * env var) an operator is expected to set in the environment this JVM itself
  * runs under; because inheritance already carries the full environment
  * through, no code here needs to selectively copy those names — the list is
- * documentation of operator intent (D7), not a runtime allowlist. Should a
- * future requirement call for isolating the child's environment to a strict
- * subset, this is the seam to change: replace the default inheritance with
- * an explicit {@code builder.environment()} rebuild from just the passthrough
- * names.
+ * documentation of operator intent (D7), not a runtime allowlist.
  *
- * <p>Implements FR1, FR6, FR12, D3, D7 of add-agent-executor.
+ * <p>The one exception is {@code credentialEnvVarsToScrub} (design D17,
+ * NFR-S1 of add-tracker-port): the names the active tracker adapter declares
+ * as its own credential environment variables (e.g. {@code
+ * GNOMISH_GITHUB_TOKEN}) are removed from the child's inherited environment
+ * in {@link #start}, as the last step — after any {@code extraEnv} fragment
+ * has been merged in — so a scrubbed name can never survive, even if {@code
+ * extraEnv} tried to set it. This scrub always applies, regardless of {@code
+ * agentCliEnvPassthrough}: the gnome must never see tracker credentials,
+ * independent of the Ollama-seam passthrough intent documented above for
+ * every other variable.
+ *
+ * <p>Implements FR1, FR6, FR12, D3, D7 of add-agent-executor; D17 of
+ * add-tracker-port.
+ *
+ * @param clock the read-time source stamped onto {@link
+ *     LaunchedAgentProcess#startedAt()} immediately after the process starts
+ *     (FR6, D3); never null (production wiring uses {@link
+ *     com.github.oinsio.gnomish.adapter.engine.SystemClock}, tests a
+ *     controllable fake)
+ * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
+ *     environment variable names (design D17, NFR-S1 of add-tracker-port), removed from
+ *     every spawned process's environment regardless of {@code agentCliEnvPassthrough};
+ *     never null, empty when {@code gnomish run} has no tracker involved
  */
-public final class AgentProcessLauncher {
-
-    private final Clock clock;
+public record AgentProcessLauncher(Clock clock, List<String> credentialEnvVarsToScrub) {
 
     /**
+     * Equivalent to {@link #AgentProcessLauncher(Clock, List)} with nothing to scrub — the shape
+     * every existing caller with no tracker involved (plain {@code gnomish run}, contract-suite
+     * tests) uses.
+     *
      * @param clock the read-time source stamped onto {@link
-     *     LaunchedAgentProcess#startedAt} immediately after the process
+     *     LaunchedAgentProcess#startedAt()} immediately after the process
      *     starts (FR6, D3); never null (production wiring uses {@link
      *     com.github.oinsio.gnomish.adapter.engine.SystemClock}, tests a
      *     controllable fake)
      */
     public AgentProcessLauncher(Clock clock) {
-        this.clock = clock;
+        this(clock, List.of());
     }
 
     /**
@@ -177,7 +197,14 @@ public final class AgentProcessLauncher {
             DirectoryWorkspace workspace, List<String> command, Map<String, String> extraEnv) {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workspace.root().toFile());
+        // Merge extraEnv onto the inherited environment first, then scrub declared tracker
+        // credentials last (D17, NFR-S1) — scrubbing last is what makes the guarantee hold:
+        // a scrubbed name can never survive, even if extraEnv tried to set it (it never
+        // legitimately needs to, but the scrub, not the caller, has the final say).
         builder.environment().putAll(extraEnv);
+        for (String name : credentialEnvVarsToScrub) {
+            builder.environment().remove(name);
+        }
 
         Process process;
         try {

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -33,11 +34,11 @@ class CliJudgeVoterSpec extends Specification {
         new CliJudgeVoter(properties, clock)
     }
 
-    private VerifyCheck.Judge checkFor(Map<String, Object> settings = [:], String criteriaFile = 'criteria.md') {
+    private static VerifyCheck.Judge checkFor(Map<String, Object> settings = [:], String criteriaFile = 'criteria.md') {
         new VerifyCheck.Judge(criteriaFile, 'claude-fake-judge-1', settings, 1)
     }
 
-    private TaskContext context() {
+    private static TaskContext context() {
         new TaskContext('TASK-1', 'title', 'body', [])
     }
 
@@ -131,8 +132,8 @@ class CliJudgeVoterSpec extends Specification {
     // producing a bad verdict) yields CannotVerify with no tokens, never a thrown exception.
     def "agent process failing to start yields Vote(CannotVerify)"() {
         given: 'a FactoryProperties pointing at a binary path that cannot be executed'
-        def properties = new com.github.oinsio.gnomish.FactoryProperties(
-                'factory-01', workspaceDir.resolve('no-such-binary-here').toString(), [])
+        def missingBinary = workspaceDir.resolve('no-such-binary-here').toString()
+        def properties = new FactoryProperties('factory-01', missingBinary, [], null)
         def voter = new CliJudgeVoter(properties, clock)
 
         when:
@@ -145,7 +146,7 @@ class CliJudgeVoterSpec extends Specification {
         and: 'the failure reason and details describe the process failing to start, not a round outcome'
         def cannotVerify = vote.verdict() as Verdict.CannotVerify
         cannotVerify.reason() == 'agent CLI process failed to start'
-        cannotVerify.details() == workspaceDir.resolve('no-such-binary-here').toString()
+        cannotVerify.details() == missingBinary
     }
 
     // FR7, D10, task 9.4: a supplied AgentProgressListener receives the round's live progress —

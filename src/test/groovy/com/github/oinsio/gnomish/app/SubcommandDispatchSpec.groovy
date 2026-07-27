@@ -1,29 +1,57 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
+import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
+import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
+import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import java.nio.file.Path
+import java.time.Clock
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR13, FR14 of add-git-workflow: {@link SubcommandDispatch} routes {@code status}/{@code usage}
- * to their dedicated commands and reports back that the invocation was handled, leaving the
- * {@code run} subcommand (explicit or implicit) for {@link ManualRunRunner}'s own flow.
+ * FR13, FR14 of add-git-workflow; FR9 of add-tracker-port (task 5.13): {@link SubcommandDispatch}
+ * routes {@code status}/{@code usage}/{@code take} to their dedicated commands and reports back
+ * that the invocation was handled, leaving the {@code run} subcommand (explicit or implicit) for
+ * {@link ManualRunRunner}'s own flow.
  *
- * <p>{@link StatusCommand}/{@link UsageCommand} are {@code final} (project convention) and this
- * codebase has no Mockito, so real instances are used and dispatch is proven by which command's
- * own observable behavior actually ran (a distinct exception/stdout each), rather than by mocking.
+ * <p>{@link StatusCommand}/{@link UsageCommand}/{@link TakeCommand} are {@code final} (project
+ * convention) and this codebase has no Mockito, so real instances are used and dispatch is proven
+ * by which command's own observable behavior actually ran (a distinct exception/stdout each),
+ * rather than by mocking.
  */
 class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture {
 
     @TempDir
     Path worktreesRoot
 
-    def dispatch = new SubcommandDispatch(new StatusCommand(worktreesRoot), new UsageCommand())
+    private static ManualRunAssembly newAssembly() {
+        new ManualRunAssembly(
+                new SystemConsoleIO(
+                new ByteArrayInputStream(new byte[0]), System.out),
+                new FilesExistCheckRunner(),
+                new ShellCommandCheckRunner(),
+                new SystemClock(),
+                new ThreadSleeper(),
+                new FactoryProperties('test-instance', null, null, null))
+    }
+
+    private TakeCommand newTakeCommand() {
+        new TakeCommand(
+                newAssembly(), worktreesRoot, 'taskId',
+                new FactoryProperties('test-instance', null, null, null), Clock.systemUTC(), [:],
+                TrackerValidatorStub.acceptingGithub())
+    }
+
+    def dispatch = new SubcommandDispatch(new StatusCommand(worktreesRoot), new UsageCommand(), newTakeCommand())
 
     // FR13: 'status' actually reaches StatusCommand#run (PIT: VoidMethodCallMutator survivor) —
     // proven by its list-mode output, and reports the invocation as handled.
@@ -112,5 +140,19 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
             ['--dir=.', '--task=x'],
             ['run', '--dir=.', '--task=x']
         ]
+    }
+
+    // FR9 of add-tracker-port: 'take' reaches TakeCommand#run and reports the invocation as
+    // handled — proven by TakeCommand's own distinct failure mode (a project with no .gnomish/
+    // at all fails pipeline load, never StatusCommand's/UsageCommand's own error shapes).
+    def "dispatchNonRun() routes to TakeCommand for the 'take' subcommand and returns true"() {
+        given:
+        def args = new DefaultApplicationArguments('take', "--dir=${worktreesRoot}".toString())
+
+        when:
+        dispatch.dispatchNonRun(args)
+
+        then: 'no .gnomish/ tree under worktreesRoot: pipeline load fails, proving TakeCommand#run ran'
+        thrown(IOException)
     }
 }

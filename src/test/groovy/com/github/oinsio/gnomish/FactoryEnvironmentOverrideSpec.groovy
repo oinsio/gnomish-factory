@@ -15,7 +15,7 @@ import spock.lang.Specification
  * be set from inside the running JVM, so this spec models one faithfully with
  * a {@link SystemEnvironmentPropertySource} inserted at the system-environment
  * precedence tier. That exercises exactly the two mechanisms a real env var
- * relies on: relaxed name mapping (FACTORY_INSTANCE_ID -> factory.instance-id,
+ * relies on: relaxed name mapping (FACTORY_INSTANCE_NAME -> factory.instance-name,
  * applied by Spring Boot only to system-environment sources, i.e. sources of
  * that type named "systemEnvironment" or "*-systemEnvironment") and property
  * source precedence above config data (application.yaml). True OS-process
@@ -30,20 +30,20 @@ class FactoryEnvironmentOverrideSpec extends Specification {
     FactoryProperties factoryProperties
 
     // FR3: environment override — the env-tier value wins over application.yaml
-    def "environment variable FACTORY_INSTANCE_ID overrides the application.yaml value"() {
-        expect: 'the bound instance id is the environment value, not the yaml one'
-        factoryProperties.instanceId() == EnvironmentVariableStub.ENVIRONMENT_INSTANCE_ID
+    def "environment variable FACTORY_INSTANCE_NAME overrides the application.yaml value"() {
+        expect: 'the bound instance name is the environment value, not the yaml one'
+        factoryProperties.instanceName() == EnvironmentVariableStub.ENVIRONMENT_INSTANCE_NAME
     }
 }
 
 /**
- * Injects FACTORY_INSTANCE_ID as a simulated OS environment variable, placed
+ * Injects FACTORY_INSTANCE_NAME as a simulated OS environment variable, placed
  * directly below the real systemEnvironment source — the exact precedence tier
  * OS env vars occupy, above all config-data (application.yaml) sources.
  */
 class EnvironmentVariableStub implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 
-    static final String ENVIRONMENT_INSTANCE_ID = 'gnomish-from-environment'
+    static final String ENVIRONMENT_INSTANCE_NAME = 'gnomish-from-environment'
 
     @Override
     void initialize(ConfigurableApplicationContext context) {
@@ -51,6 +51,6 @@ class EnvironmentVariableStub implements ApplicationContextInitializer<Configura
                 StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
                 new SystemEnvironmentPropertySource(
                 'test-systemEnvironment',
-                [FACTORY_INSTANCE_ID: ENVIRONMENT_INSTANCE_ID] as Map<String, Object>))
+                [FACTORY_INSTANCE_NAME: ENVIRONMENT_INSTANCE_NAME] as Map<String, Object>))
     }
 }

@@ -126,4 +126,25 @@ class PipelineDefinitionSpec extends Specification {
         expect: 'two independently constructed pipelines with equal fields are equal'
         pipelineWith([stage('plan')]) == pipelineWith([stage('plan')])
     }
+
+    // FR17 of add-tracker-port: the three-arg constructor predates the tracker
+    // field — every call site written before add-tracker-port keeps compiling
+    // and defaults to no tracker configuration
+    def "the three-arg constructor defaults tracker to null"() {
+        expect:
+        pipelineWith([stage('plan')]).tracker() == null
+    }
+
+    // FR17 of add-tracker-port: the four-arg constructor carries the parsed
+    // tracker core config through unchanged
+    def "the four-arg constructor carries the tracker config through"() {
+        given:
+        def tracker = new TrackerConfig('github', 5)
+
+        when:
+        def pipeline = new PipelineDefinition('1', DEFAULT_LIMITS, [stage('plan')], tracker)
+
+        then:
+        pipeline.tracker() == tracker
+    }
 }

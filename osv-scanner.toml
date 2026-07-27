@@ -5,17 +5,52 @@
 # false positives with an expiry date — the FR11 gate stays failing for every
 # other advisory. Keep this list short and re-review each entry on its date.
 
-# CVE-2026-54515 — jackson-databind case-insensitive @JsonIgnoreProperties
-# deserialization bypass. Fixed in jackson-databind 2.21.5, which we pin (via
-# the jackson-bom platform override in build.gradle). This is a false positive:
-# the GitHub advisory / OSV entry for the 2.x line has an `introduced: 2.8.0`
-# range with NO `fixed` event, so OSV-Scanner reports every 2.x version —
-# including the already-patched 2.21.5 — as affected with "no fix". Evidence it
-# is patched: the advisory text states "Will be fixed in ... 2.21.5 ...", and
-# OSV's own enumerated affected-versions list stops at 2.21.4 (2.21.5 excluded).
-# Remove once the advisory records the `fixed: 2.21.5` boundary and OSV stops
-# flagging it; the expiry below forces that re-check even if we forget.
+# --- Accepted risk: WireMock-transitive Jetty 11 advisories with no Maven
+# Central fix ---
+# WireMock 3.13.1 (the latest stable line) runs on an embedded Jetty 11 stack,
+# pinned consistently at 11.0.26 (the last Maven Central release of the EOL
+# Jetty 11 line) via an enforcedPlatform in build.gradle. The advisories below
+# are fixed only in Jetty 12.x; the 11.0.31 "fix" some list is not published to
+# Maven Central (EOL vendor patches only). Moving to Jetty 12 requires WireMock
+# 4.x, which is still beta (4.0.0-beta.10 as of 2026-07) — the project pins
+# stable deps only (see gradle/libs.versions.toml). These jars are TEST-SCOPE
+# ONLY (testCompileClasspath/testRuntimeClasspath): an in-JVM mock HTTP server
+# bound to localhost during the build, never shipped in any factory artifact and
+# never exposed to untrusted input, so the CVEs are not reachable at runtime.
+# Re-review 2026-10-01: drop these once WireMock 4.x (Jetty 12) is stable.
+# jetty-http (GHSA-355h fix 12.0.33, GHSA-qh8g fix 12.0.12, GHSA-wjpw fix 12.0.31):
 [[IgnoredVulns]]
-id = "GHSA-5jmj-h7xm-6q6v"
-ignoreUntil = 2026-09-01
-reason = "False positive: fixed in pinned jackson-databind 2.21.5; the advisory's 2.x range lacks a `fixed` event so OSV over-reports the patched version. Re-review 2026-09-01."
+id = "GHSA-355h-qmc2-wpwf"
+ignoreUntil = 2026-10-01
+reason = "Test-scope only (WireMock 3.13.1 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.33 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-10-01."
+[[IgnoredVulns]]
+id = "GHSA-qh8g-58pp-2wxh"
+ignoreUntil = 2026-10-01
+reason = "Test-scope only (WireMock 3.13.1 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.12 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-10-01."
+[[IgnoredVulns]]
+id = "GHSA-wjpw-4j6x-6rwh"
+ignoreUntil = 2026-10-01
+reason = "Test-scope only (WireMock 3.13.1 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.31 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-10-01."
+# jetty-server (GHSA-7p3p fix 12.0.35):
+[[IgnoredVulns]]
+id = "GHSA-7p3p-8qv8-m2vh"
+ignoreUntil = 2026-10-01
+reason = "Test-scope only (WireMock 3.13.1 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.35 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-10-01."
+# jetty-security (GHSA-2fvj fix 11.0.31 — not published to Maven Central, 12.x only):
+[[IgnoredVulns]]
+id = "GHSA-2fvj-hgj9-j2gr"
+ignoreUntil = 2026-10-01
+reason = "Test-scope only (WireMock 3.13.1 embedded Jetty 11, localhost mock server, never shipped). Advisory lists fix 11.0.31 but that is not on Maven Central (max published 11.0.26); WireMock 4.x/Jetty 12 still beta. Re-review 2026-10-01."
+
+# --- Accepted risk: WireMock-transitive Handlebars advisory, no compatible fix ---
+# GHSA-r4gv-qr8j-p3pg (com.github.jknack:handlebars, response templating) is
+# fixed only in 4.5.2, which removes handlebars.helper.NumberHelper — a class
+# WireMock 3.13.1 loads at startup, so bumping breaks every WireMock spec
+# (NoClassDefFoundError). Test-scope only (in-JVM localhost mock server, never
+# shipped) and all templates are developer-authored, so the SSTI vector is not
+# reachable. Resolved when WireMock 4.x (which ships a compatible handlebars)
+# goes stable. Re-review 2026-10-01.
+[[IgnoredVulns]]
+id = "GHSA-r4gv-qr8j-p3pg"
+ignoreUntil = 2026-10-01
+reason = "Test-scope only (WireMock 3.13.1 templating, localhost, never shipped, developer-authored templates). Fix 4.5.2 removes NumberHelper and breaks WireMock 3.13.1 at startup; WireMock 4.x still beta. Re-review 2026-10-01."

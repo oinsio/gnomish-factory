@@ -42,11 +42,13 @@ final class ExecutorAdapterSelector {
             RunArguments.InteractiveMode interactiveMode,
             StatusSnapshotHolder holder,
             FactoryProperties factoryProperties,
-            SystemClock systemClock) {
+            SystemClock systemClock,
+            List<String> credentialEnvVarsToScrub) {
         return switch (interactiveMode) {
             case ALL, EXECUTOR_ONLY -> new InteractiveStageExecutor(console, new StageBriefing());
             case NONE, JUDGE_ONLY ->
-                new CliStageExecutor(factoryProperties, systemClock, executorProgressListener(holder));
+                new CliStageExecutor(
+                        factoryProperties, systemClock, executorProgressListener(holder), credentialEnvVarsToScrub);
         };
     }
 
@@ -60,11 +62,13 @@ final class ExecutorAdapterSelector {
             DialogConsole console,
             RunArguments.InteractiveMode interactiveMode,
             FactoryProperties factoryProperties,
-            SystemClock systemClock) {
+            SystemClock systemClock,
+            List<String> credentialEnvVarsToScrub) {
         return switch (interactiveMode) {
             case ALL, JUDGE_ONLY -> new InteractiveJudgeVoter(console);
             case NONE, EXECUTOR_ONLY ->
-                new CliJudgeVoter(factoryProperties, systemClock, new LoggingAgentProgressListener());
+                new CliJudgeVoter(
+                        factoryProperties, systemClock, new LoggingAgentProgressListener(), credentialEnvVarsToScrub);
         };
     }
 

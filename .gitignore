@@ -18,3 +18,5 @@ build/
 *.class
 hs_err_pid*
 replay_pid*
+
+uncommitted-files.md

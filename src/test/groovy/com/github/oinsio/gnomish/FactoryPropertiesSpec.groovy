@@ -1,33 +1,63 @@
 package com.github.oinsio.gnomish
 
+import java.time.Duration
 import spock.lang.Specification
 
 /**
  * FactoryProperties: immutable typed configuration record (design D4).
  * Validation is plain Java in the compact constructor — no Spring context
  * needed here; constructor binding is covered by the context-level spec.
- * Contract: null/blank instanceId throws IllegalArgumentException whose
- * message names the external property {@code factory.instance-id}.
+ * Contract: an unset instance-name defaults to "gnomish-factory" (design D5,
+ * D6); an explicitly blank instance-name still fails fast, naming the
+ * external property {@code factory.instance-name}.
  * Implements FR3 of add-project-skeleton.
  *
  * <p>agentCliBinary and agentCliEnvPassthrough: installation-level executor
  * config (never in the manifest). Implements FR11, D7 of add-agent-executor.
+ *
+ * <p>tracker: the abort-backoff base/cap Duration defaults (design D5, D10).
+ * Implements FR17 of add-tracker-port.
  */
 class FactoryPropertiesSpec extends Specification {
 
     // FR3: valid configuration binds — the record exposes the constructor value
-    def "valid instance-id is exposed by the record accessor"() {
-        when: 'a properties record is created with a valid instance-id'
-        def properties = new FactoryProperties('factory-01', 'claude', [])
+    def "explicit instance-name is exposed by the record accessor"() {
+        when: 'a properties record is created with an explicit instance-name'
+        def properties = new FactoryProperties('factory-01', 'claude', [], null)
 
         then: 'the accessor returns exactly the constructed value'
-        properties.instanceId() == 'factory-01'
+        properties.instanceName() == 'factory-01'
+    }
+
+    // FR3/D5/D6: instance-name defaults to "gnomish-factory" when unset
+    def "instance-name defaults to gnomish-factory when null"() {
+        when: 'a properties record is created without an explicit instance-name'
+        def properties = new FactoryProperties(null, 'claude', [], null)
+
+        then: 'the accessor returns the neutral default'
+        properties.instanceName() == 'gnomish-factory'
+    }
+
+    // FR3/D5: an explicitly blank instance-name is still a configuration mistake
+    def "instance-name of #description is rejected with the property name in the message"() {
+        when: 'a properties record is created with a blank instance-name'
+        new FactoryProperties(blankInstanceName, 'claude', [], null)
+
+        then: 'construction fails and the message names factory.instance-name'
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('factory.instance-name')
+
+        where:
+        blankInstanceName | description
+        ''                | 'empty string'
+        '   '             | 'spaces only'
+        '\t\n'            | 'other whitespace'
     }
 
     // FR11/D7: CLI binary path defaults to "claude" from PATH when unset
     def "agent-cli-binary defaults to claude when null"() {
         when: 'a properties record is created without an explicit agent-cli-binary'
-        def properties = new FactoryProperties('factory-01', null, [])
+        def properties = new FactoryProperties('factory-01', null, [], null)
 
         then: 'the accessor returns the default binary name'
         properties.agentCliBinary() == 'claude'
@@ -36,7 +66,7 @@ class FactoryPropertiesSpec extends Specification {
     // FR11/D7: an explicit CLI binary path overrides the default
     def "agent-cli-binary of an explicit value is exposed unchanged"() {
         when: 'a properties record is created with an explicit agent-cli-binary'
-        def properties = new FactoryProperties('factory-01', '/usr/local/bin/claude', [])
+        def properties = new FactoryProperties('factory-01', '/usr/local/bin/claude', [], null)
 
         then: 'the accessor returns exactly the configured value'
         properties.agentCliBinary() == '/usr/local/bin/claude'
@@ -45,7 +75,7 @@ class FactoryPropertiesSpec extends Specification {
     // FR11/D7: env passthrough defaults to an empty list when unset
     def "agent-cli-env-passthrough defaults to an empty list when null"() {
         when: 'a properties record is created without an explicit env passthrough list'
-        def properties = new FactoryProperties('factory-01', 'claude', null)
+        def properties = new FactoryProperties('factory-01', 'claude', null, null)
 
         then: 'the accessor returns an empty list'
         properties.agentCliEnvPassthrough() == []
@@ -57,7 +87,7 @@ class FactoryPropertiesSpec extends Specification {
         def properties = new FactoryProperties('factory-01', 'claude', [
             'ANTHROPIC_BASE_URL',
             'ANTHROPIC_AUTH_TOKEN'
-        ])
+        ], null)
 
         then: 'the accessor returns exactly the configured list'
         properties.agentCliEnvPassthrough() == [
@@ -66,24 +96,45 @@ class FactoryPropertiesSpec extends Specification {
         ]
     }
 
-    // FR3: invalid configuration fails fast — the error names the property
-    def "instance-id of #description is rejected with the property name in the message"() {
-        when: 'a properties record is created with an invalid instance-id'
-        new FactoryProperties(invalidInstanceId, 'claude', [])
+    // FR17/D5/D10: tracker abort-backoff base/cap default to 2m/1h when unset
+    def "tracker abort-backoff base and cap default to 2m/1h when unset"() {
+        when: 'a properties record is created without an explicit tracker section'
+        def properties = new FactoryProperties('factory-01', 'claude', [], null)
 
-        then: 'construction fails and the message names factory.instance-id'
-        def failure = thrown(IllegalArgumentException)
-        failure.message.contains('factory.instance-id')
-
-        where:
-        invalidInstanceId | description
-        null              | 'null'
-        ''                | 'empty string'
-        '   '             | 'spaces only'
-        '\t\n'            | 'other whitespace'
+        then: 'the accessor returns the design D5 defaults'
+        properties.tracker().abortBackoffBase() == Duration.ofMinutes(2)
+        properties.tracker().abortBackoffCap() == Duration.ofHours(1)
     }
 
-    // FR3: the properties object is immutable — a record with no setters
+    // FR17/D5/D10: explicit tracker abort-backoff base/cap are exposed unchanged
+    def "tracker abort-backoff base and cap of #base/#cap are exposed unchanged"() {
+        when: 'a properties record is created with an explicit tracker section'
+        def properties = new FactoryProperties(
+                'factory-01', 'claude', [], new FactoryProperties.Tracker(base, cap))
+
+        then: 'the accessor returns exactly the configured values'
+        properties.tracker().abortBackoffBase() == base
+        properties.tracker().abortBackoffCap() == cap
+
+        where:
+        base                     | cap
+        Duration.ofMinutes(5)    | Duration.ofHours(2)
+        Duration.ofSeconds(30)   | Duration.ofMinutes(45)
+        Duration.ofMillis(1)     | Duration.ofDays(1)
+    }
+
+    // FR17/D5/D10: a partially-configured tracker section still defaults the other half
+    def "tracker abort-backoff base defaults when only cap is configured"() {
+        when: 'a properties record is created with only the cap explicitly set'
+        def properties = new FactoryProperties(
+                'factory-01', 'claude', [], new FactoryProperties.Tracker(null, Duration.ofHours(3)))
+
+        then: 'the base still defaults, the cap is the configured value'
+        properties.tracker().abortBackoffBase() == Duration.ofMinutes(2)
+        properties.tracker().abortBackoffCap() == Duration.ofHours(3)
+    }
+
+    // FR3: the properties type is an immutable record without setters
     def "the properties type is an immutable record without setter methods"() {
         given: 'the FactoryProperties class'
         def type = FactoryProperties

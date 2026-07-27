@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import org.springframework.boot.DefaultApplicationArguments
@@ -46,13 +47,13 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture {
     @TempDir
     Path worktreesRoot
 
-    private static final FactoryProperties FACTORY_PROPERTIES = new FactoryProperties('test-instance', null, null)
+    private static final FactoryProperties FACTORY_PROPERTIES = new FactoryProperties('test-instance', null, null, null)
 
     private ManualRunRunner newRunner() {
         new ManualRunRunner(
                 new RunArgumentsParser(),
-                new PipelineStartup(),
-                new AdHocTaskSynthesizer(java.time.Clock.systemUTC(), new Random()),
+                new PipelineStartup([:]),
+                new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
                 new SystemConsoleIO(System.in, System.out),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
@@ -62,7 +63,10 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture {
                 FACTORY_PROPERTIES,
                 worktreesRoot,
                 new StatusCommand(worktreesRoot),
-                new UsageCommand())
+                new UsageCommand(),
+                Clock.systemUTC(),
+                [:],
+                [:])
     }
 
     private void write(String relative, String text) {
@@ -371,20 +375,7 @@ advancement: auto
                 .getBytes('UTF-8'))
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
-        def runner = new ManualRunRunner(
-                new RunArgumentsParser(),
-                new PipelineStartup(),
-                new AdHocTaskSynthesizer(java.time.Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                FACTORY_PROPERTIES,
-                worktreesRoot,
-                new StatusCommand(worktreesRoot),
-                new UsageCommand())
+        def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
@@ -413,20 +404,7 @@ advancement: auto
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
-        def runner = new ManualRunRunner(
-                new RunArgumentsParser(),
-                new PipelineStartup(),
-                new AdHocTaskSynthesizer(java.time.Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                FACTORY_PROPERTIES,
-                worktreesRoot,
-                new StatusCommand(worktreesRoot),
-                new UsageCommand())
+        def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',
@@ -697,20 +675,7 @@ advancement: auto
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
         def capturedOut = new ByteArrayOutputStream()
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
-        def runner = new ManualRunRunner(
-                new RunArgumentsParser(),
-                new PipelineStartup(),
-                new AdHocTaskSynthesizer(java.time.Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                FACTORY_PROPERTIES,
-                worktreesRoot,
-                new StatusCommand(worktreesRoot),
-                new UsageCommand())
+        def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
                 '--task=do the thing',

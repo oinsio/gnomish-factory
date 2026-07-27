@@ -17,7 +17,10 @@ import org.jspecify.annotations.Nullable;
  * The model-building tier of {@link PipelineLoader} (design D1): builds the
  * domain {@link PipelineDefinition} from the parsed-OK DTOs, or reports why it
  * could not be built, when the tree is clean enough to attempt (the "skip when
- * unbuildable" logic).
+ * unbuildable" logic). Also runs {@link TrackerSeamValidator} (FR17 of
+ * add-tracker-port) right after mapping, since it needs the parsed {@code
+ * tracker} DTO that mapping already has in hand; its errors append to the same
+ * shared list as every other tier here.
  *
  * <p>Implements FR1, FR3 of fix-oversized-adapters (D1): extracted from
  * {@link PipelineLoader} with identical {@code @Nullable} return semantics and
@@ -44,6 +47,7 @@ final class PipelineModelBuilder {
             Result<ConfigDto> config,
             Result<PipelineDto> pipeline,
             Map<String, StageDto> stages,
+            Map<String, TrackerSubsectionValidator> trackerValidators,
             List<ConfigError> errors) {
         if (!(config instanceof Ok<ConfigDto>(ConfigDto value))
                 || !(pipeline instanceof Ok<PipelineDto>(PipelineDto value1))) {
@@ -59,6 +63,7 @@ final class PipelineModelBuilder {
         }
         PipelineMapper.Result mapped = PipelineMapper.map(value, entries);
         errors.addAll(mapped.errors());
+        errors.addAll(TrackerSeamValidator.validate("config.yaml", value.tracker(), trackerValidators));
         PipelineDefinition model = mapped.definition();
         if (model == null) {
             return null;

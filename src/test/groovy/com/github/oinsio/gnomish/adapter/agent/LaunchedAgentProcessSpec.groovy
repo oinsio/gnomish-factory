@@ -81,6 +81,6 @@ class LaunchedAgentProcessSpec extends Specification {
         wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${scenario}'\nexec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"\n"
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, [])
+        new FactoryProperties('factory-01', wrapper.absolutePath, [], null)
     }
 }

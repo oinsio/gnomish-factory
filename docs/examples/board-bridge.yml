@@ -1,0 +1,99 @@
+# REFERENCE EXAMPLE — not wired into this repo's CI.
+#
+# implements FR19 of add-tracker-port
+#
+# Gnomish Factory has no inbound HTTP and does not read GitHub Projects v2
+# boards directly: issue labels and structural comments are its only source
+# of truth (see docs/operator-guide.md, "Projects v2 Boards: Display Only").
+#
+# This workflow is the bridge: on a cron, it reads a Projects v2 board's
+# "Status" field via the GraphQL API and applies the factory's ready label
+# to every issue sitting in the configured "Ready" column.
+#
+# Copy this file into `.github/workflows/` of the TARGET project (the repo
+# whose issues the factory works — not this repo) and fill in the
+# placeholders in the `env:` block below:
+#
+#   PROJECT_OWNER  - org or user login that owns the Projects v2 board
+#   PROJECT_NUMBER - the project number (from its URL, e.g.
+#                    https://github.com/orgs/acme/projects/7 -> 7)
+#   READY_COLUMN   - exact name of the board's "Status" option that means
+#                    "ready for the factory", e.g. "Ready"
+#   READY_LABEL    - the factory's ready label; leave as the shipped default
+#                    "gnomish:ready" unless tracker.github.labels.ready.name
+#                    is overridden in .gnomish/config.yaml
+#
+# Requires a `GH_TOKEN` secret (classic PAT or GitHub App token) with:
+#   - read access to the Projects v2 board ("read:project" scope)
+#   - issues:write on the target repo (to add the label)
+
+name: Board bridge (Projects v2 -> ready label)
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes; adjust to taste
+  workflow_dispatch: {}       # allow a manual run for testing
+
+env:
+  # --- placeholders: fill these in for your project ---
+  PROJECT_OWNER: acme
+  PROJECT_NUMBER: "7"
+  READY_COLUMN: "Ready"
+  READY_LABEL: "gnomish:ready"
+
+jobs:
+  sync-ready-column:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Label issues sitting in the Ready column
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # GraphQL query: walk the project's items, each item's Status field
+          # (a single-select), and the underlying issue number + repo name.
+          # 100 items per page is enough for a small-to-medium board; add
+          # pagination (endCursor / hasNextPage) if your board grows past that.
+          query='
+            query($owner: String!, $number: Int!) {
+              organization(login: $owner) {
+                projectV2(number: $number) {
+                  items(first: 100) {
+                    nodes {
+                      fieldValueByName(name: "Status") {
+                        ... on ProjectV2ItemFieldSingleSelectValue { name }
+                      }
+                      content {
+                        ... on Issue {
+                          number
+                          repository { nameWithOwner }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }'
+
+          result=$(gh api graphql \
+            -f query="$query" \
+            -F owner="$PROJECT_OWNER" \
+            -F number="$PROJECT_NUMBER")
+
+          echo "$result" | jq -r --arg col "$READY_COLUMN" --arg repo "$REPO" '
+            .data.organization.projectV2.items.nodes[]
+            | select(.fieldValueByName.name == $col)
+            | select(.content.repository.nameWithOwner == $repo)
+            | .content.number' |
+          while read -r issue_number; do
+            echo "Applying $READY_LABEL to $REPO#$issue_number"
+            gh issue edit "$issue_number" --repo "$REPO" --add-label "$READY_LABEL"
+          done
+
+          # Note for personal (non-org) boards: replace the `organization(...)`
+          # field above with `user(login: $owner)` — Projects v2 GraphQL exposes
+          # the same `projectV2` shape under both root fields.

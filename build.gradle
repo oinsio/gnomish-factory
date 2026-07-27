@@ -13,11 +13,19 @@ import groovy.xml.XmlSlurper
 buildscript {
     configurations.classpath {
         resolutionStrategy.activateDependencyLocking()
-        // Security override: a Gradle plugin drags in commons-lang3 3.16.0
-        // transitively (GHSA-j288-q9x7-2f5v). Force the CVE fix. Kept inline
-        // because the version catalog is not visible to the buildscript
-        // classpath. Drop once the offending plugin ships a fixed transitive.
-        resolutionStrategy.force 'org.apache.commons:commons-lang3:3.18.0'
+        // Security overrides forcing CVE fixes onto Gradle-plugin transitives.
+        // Versions live in gradle.properties (the `buildscript*` keys), because
+        // the version catalog is not visible to the buildscript classpath;
+        // referencing them by name keeps version bumps out of this file.
+        // commons-lang3: a plugin drags in 3.16.0 transitively (GHSA-j288-q9x7-2f5v).
+        resolutionStrategy.force "org.apache.commons:commons-lang3:${buildscriptCommonsLang3Version}"
+        // tools.jackson (Jackson 3.x): a plugin drags in 3.1.4; jackson-databind
+        // 3.1.4 has GHSA-5gvw-p9qm-jgwh. Force the whole family so the
+        // buildscript-classpath lock state stays consistent. Buildscript
+        // classpath only — never reaches the application or test runtime.
+        resolutionStrategy.force "tools.jackson.core:jackson-databind:${buildscriptJacksonVersion}",
+            "tools.jackson.core:jackson-core:${buildscriptJacksonVersion}",
+            "tools.jackson:jackson-bom:${buildscriptJacksonVersion}"
     }
 }
 
@@ -140,6 +148,41 @@ dependencies {
     implementation libs.jackson.core
     implementation libs.jackson.databind
     implementation libs.jackson.dataformat.yaml
+
+    // Resilience4j retry for the tracker adapter's HTTP client core (task 4.4 of
+    // add-tracker-port, NFR-R2): infrastructure failures of tracker calls are retried.
+    implementation libs.resilience4j.retry
+    // resilience4j-core: GithubRetryConfig references IntervalFunction directly
+    // (buildHealth advice — a transitive of resilience4j-retry used directly
+    // must be declared directly).
+    implementation libs.resilience4j.core
+
+    // WireMock for tracker/AI API contract tests, in-JVM (.claude/rules/testing.md,
+    // add-tracker-port task 4.x): no Docker needed for HTTP contract-level specs.
+    testImplementation libs.wiremock
+    // GithubHttpClientSpec builds its own fast RetryConfig with IntervalFunction
+    // directly; buildHealth reports the main-scope `implementation
+    // libs.resilience4j.core` above as already sufficient for test code
+    // (implementation is on testImplementation's extendsFrom chain), so no
+    // separate testImplementation declaration is needed.
+    // WireMock 3.13.1's HttpServerFactoryLoader needs an internally consistent
+    // Jetty 11 stack (its own jetty-bom import); the Boot 4.1.0 BOM otherwise
+    // wins conflict resolution on jetty-server/-http/-io/etc. (their highest
+    // version, 12.1.10) while jetty-servlet/-webapp (which Boot does not
+    // manage) stay on 11 — the mixed 11/12 classpath then fails at
+    // WireMockServer startup with "Jetty 11 is not present" (task 4.4).
+    // enforcedPlatform (not platform) forces every jetty-bom-managed version to
+    // the pinned Jetty 11 line on the test classpaths, overriding the Boot BOM's
+    // constraint so WireMock gets one consistent Jetty 11 stack in tests. The
+    // version lives in the catalog ([versions].jetty); it clears
+    // GHSA-mmxm-8w33-wc4h (http2-common), and the residual Jetty 11 advisories
+    // are test-scope only — see osv-scanner.toml for the accepted-risk entries.
+    testImplementation enforcedPlatform(libs.jetty.bom)
+    // NB: handlebars (GHSA-r4gv-qr8j-p3pg) cannot be bumped here — its only fix,
+    // 4.5.2, drops com.github.jknack.handlebars.helper.NumberHelper, which
+    // WireMock 3.13.1 loads at startup (NoClassDefFoundError). Test-scope only
+    // and templates are developer-authored, so it is an accepted risk until
+    // WireMock 4.x — see osv-scanner.toml.
 }
 
 // Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,
@@ -353,9 +396,24 @@ pitest {
     // It is a Groovy test-support hygiene guard over committed fixtures (the scrubber is Groovy,
     // outside `targetClasses`), so excluding it removes no production line from mutation coverage;
     // the scrubber's behaviour is covered by ReferenceDumpScrubberSpec's unit scenarios (M5).
+    //
+    // M4 documented exception (add-tracker-port, task 6.5): FactoryApplicationSpec's
+    // "bootJar stays headless" feature resolves the packaged jar through the `e2e.jarPath`
+    // system property that only the `test` task wires (from the bootJar output) — exactly the
+    // same PIT-minion-never-receives-it gap as the E2E layer above, unrelated to any mutation.
+    // This feature was green under plain `test` before this change; it only started failing
+    // PIT's own pre-mutation coverage pass here because task 4.1 (add-tracker-port) added
+    // WireMock, which pulls jetty/servlet jars onto testRuntimeClasspath — the assertion itself
+    // still holds against the real bootJar, it is PIT's separate process launch that never sees
+    // the property. Excluding the whole spec (not just the one feature — PIT's exclusion glob
+    // has no per-feature granularity) removes no production line from mutation coverage: the
+    // other three features in this spec assert Spring wiring already exercised by dozens of
+    // other unit specs across the codebase, and the headless-jar guarantee itself is not
+    // tracker-port production code.
     excludedTestClasses = [
         'com.github.oinsio.gnomish.e2e.*',
         'com.github.oinsio.gnomish.adapter.agent.ReferenceDumpHygieneSpec',
+        'com.github.oinsio.gnomish.FactoryApplicationSpec',
     ]
     // M4 documented exception: a handful of private methods on `record` classes
     // (ExecutorUsage, StatusReport, Finding, Decision, UsageTotals of add-git-workflow)
@@ -391,6 +449,13 @@ pitest {
     // failed hard by pitestVerifyAllKilled below (mutationThreshold alone cannot
     // catch it: PIT counts RUN_ERROR as "detected").
     mutationThreshold = 100 // 100% mutation score gate (FR6)
+    // Per-mutation timeout stays at PIT's default (4000ms + 1.25x normal test
+    // time). The one TIMED_OUT ever observed (InMemoryTracker.claim, CI-only)
+    // was NOT load: the unlock-dropping mutant deadlocked the claim-race
+    // contract test, which then hung forever in ExecutorService.close() —
+    // no budget rescues an infinite hang. Fixed at the source: TrackerContract
+    // fails fast (bounded get + shutdownNow) instead of hanging, so every test
+    // verdict lands well inside the default budget on any runner.
     timestampedReports = false // stable report path for CI artifact upload
     outputFormats = ['XML', 'HTML']
 }

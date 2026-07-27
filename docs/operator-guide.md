@@ -1,0 +1,246 @@
+# Operator Guide: Running the Factory Against a Tracker
+
+<!-- implements FR19 of add-tracker-port -->
+
+This guide is for the human on the other end of `gnomish take` — the operator who
+hands tasks to the factory through a GitHub issue tracker and resolves the
+escalations it can't decide alone. It assumes the factory is already built and a
+target project has a working `.gnomish/` pipeline (see the main README for `gnomish
+run`); this document covers the tracker-driven single-task workflow layered on top.
+
+## Quick Start
+
+Three places carry configuration, each with a different owner and a different
+reason for existing.
+
+```mermaid
+flowchart LR
+    Env["Environment<br/>GNOMISH_GITHUB_TOKEN"]
+    ProjectConfig[".gnomish/config.yaml<br/>tracker: type, abort-threshold, github"]
+    FactoryConfig["factory.* properties<br/>instance-name, backoff tuning"]
+
+    Env --> Take["gnomish take"]
+    ProjectConfig --> Take
+    FactoryConfig --> Take
+```
+
+1. **`.gnomish/config.yaml`** (lives in the target project repo, shared by every
+   factory instance) gets a `tracker` section:
+
+   ```yaml
+   tracker:
+     type: github
+     abort-threshold: 3          # optional, defaults to 3
+     github:
+       api-url: https://api.github.com
+       repo: acme/widgets
+       # labels: entirely optional — see the label dictionary below
+   ```
+
+   `type` and `abort-threshold` are the only keys the core loader understands;
+   everything under `github:` is validated by the GitHub adapter itself. An
+   absent `tracker` section is valid — `take` is simply unavailable and `run`
+   is unaffected.
+
+2. **`GNOMISH_GITHUB_TOKEN`** is an environment variable on the machine running
+   the factory — never in yaml, never visible to the gnome. Give it a
+   personal access token (or GitHub App token) with issue read/write and label
+   write access on the target repo. If it's missing or blank, `take` fails
+   fast at startup with a named error, before any task is touched.
+
+3. **`factory.*` properties** are per-instance/installation tuning, set the
+   same way as the existing `factory.instance-name`/`factory.agent-cli-binary`
+   properties (Spring `--key=value` or `application.yaml`):
+
+   | Property                             | Default           | Meaning                                                                                                           |
+   |--------------------------------------|-------------------|-------------------------------------------------------------------------------------------------------------------|
+   | `factory.instance-name`              | `gnomish-factory` | diagnostic name folded into this instance's identity; shows up in public issue comments, so keep it non-sensitive |
+   | `factory.tracker.abort-backoff-base` | `2m`              | base delay before a task that just aborted becomes eligible again for bare `take`                                 |
+   | `factory.tracker.abort-backoff-cap`  | `1h`              | ceiling on the exponential backoff                                                                                |
+
+## Handing Off a Task
+
+Put the `gnomish:ready` label on an issue and run `gnomish take` (bare, for a
+queue-draining cron) or `gnomish take <ref>` (explicit, naming that issue). The
+factory claims it, works it through the pipeline, and either delivers it or
+escalates — no other factory-side command is needed to start, answer, or revoke
+a task.
+
+Labels are provisioned automatically: at startup the GitHub adapter creates any
+of its four labels that don't yet exist on the repo, with their default color
+and an operator-hint description. This doubles as a smoke test of the binding —
+if the token can't write to the configured repo (a common symptom after cloning
+or forking without updating config), startup fails immediately with an error
+naming the repo, instead of failing silently mid-task later. Once a label
+exists, the factory never recolors it — repaint it however you like.
+
+## Label Dictionary
+
+| Label                 | Default color   | Meaning                                                 | Who moves it here                                                      |
+|-----------------------|-----------------|---------------------------------------------------------|------------------------------------------------------------------------|
+| `gnomish:ready`       | green `2ea44f`  | queued for the factory                                  | human (hand-off), or the factory itself (abort recovery, human return) |
+| `gnomish:working`     | blue `0366d6`   | claimed and in progress                                 | factory only                                                           |
+| `gnomish:needs-human` | red `d73a4a`    | parked — a decision, checkpoint, or infra fix is needed | factory only                                                           |
+| `gnomish:delivered`   | purple `6f42c1` | done; review the branch                                 | factory only                                                           |
+
+Labels are mutually exclusive — the factory always adds one and removes another
+in the same transition, never replacing the whole label set, so any other
+labels you use for your own triage are left untouched. Coordination facts
+(who holds the claim, abort history, acknowledgements) never live in labels —
+they're in structural comments on the issue thread, which is also how the
+factory recognizes a human moving `gnomish:needs-human` back to `gnomish:ready`
+as "task returned to work."
+
+Configured names/colors override these defaults per logical state under
+`tracker.github.labels.{ready,working,needs-human,delivered}`, each an object
+with `name` and `color` (6-digit hex, no `#`).
+
+## Escalation, Decision, and Acknowledgement Flow
+
+The factory never waits in-band for an answer. An escalation parks the task and
+exits the run immediately — identically whether a terminal is attached —
+leaving a report comment that says what's blocked and how to unblock it.
+
+```mermaid
+sequenceDiagram
+    participant F as Factory
+    participant Gh as GitHub issue
+    participant H as Human
+
+    F->>Gh: label -> needs-human<br/>report comment (the question)
+    H->>Gh: reply comment (the decision)
+    H->>Gh: label -> ready
+    F->>Gh: take claims the ready task
+    F->>Gh: "acting on decision: <text>" ack comment
+    F->>F: resumes from the branch state
+```
+
+The reply the factory acts on is always visible as an "acting on decision" ack
+comment, posted before the factory does anything else — that ack is also what
+anchors the next round of decision collection, so replying twice without an ack
+in between just means both replies are picked up together. If you move a
+parked task back to `ready` without replying, and the parked reason was a
+pending question, the factory parks it again restating the question rather
+than guessing.
+
+Every escalation report names its own return path: reply and move to ready if
+a question is open; just move to ready if the fix was environmental (a
+`needs-human` from an infrastructure problem, or a manual pipeline checkpoint) —
+the human return itself is read as confirmation.
+
+## Snapshot Behavior
+
+At the moment a task is first claimed, the factory reads its id, title, and
+body once and freezes them — into `TaskContext` for the running gnome and into
+`task.json` on the task branch. Editing the issue body afterward, while the
+task is `Working` or parked, has **no effect** on the task in flight: resume
+never re-reads the issue, only new decision comments.
+
+If you need to change the actual task content mid-flight, you have two levers,
+neither of which is "edit the issue and hope":
+
+- **A decision comment** — steer the *next* step without altering what the
+  gnome already committed to solving.
+- **Revoke and recreate** — close the issue (the factory salvages its work at
+  the next round boundary and releases the claim) and open a fresh issue with
+  the corrected body.
+
+## Stuck `Working`: The Manual Escape Hatch
+
+There is no heartbeat or stale-claim protocol yet — that lands with the
+factory-loop change. If an instance dies mid-task (process killed, machine
+lost) the issue stays `gnomish:working` forever as far as the tracker can see,
+with no automatic timeout. Until heartbeats exist, recovery is a manual label
+flip: remove `gnomish:working`, add `gnomish:ready` yourself. The task branch
+still holds every committed round, so the next `take` (bare or explicit) picks
+up from the last durable point, not from scratch. Do this only when you're
+sure the claiming instance is actually gone — flipping the label out from
+under a live instance races it.
+
+## Projects v2 Boards: Display Only
+
+GitHub Projects v2 boards are not a source of truth for the factory — only
+issue labels and structural comments are. A board is a convenient *view*
+layered on top: you can arrange a "Ready" column, drag cards into it, and have
+that reflect into the `gnomish:ready` label via a small bridge workflow, but
+the factory itself never reads project fields or column membership directly.
+
+A reference cron GitHub Action that syncs "column → ready label" using the `gh`
+CLI ships alongside this guide at
+[`docs/examples/board-bridge.yml`](examples/board-bridge.yml). Copy it into
+`.github/workflows/` in the target repo and adjust the column name and project
+number for your board.
+
+## Fork Warning: Check `tracker.github.repo`
+
+If you fork the target project, `.gnomish/config.yaml` — including its
+`tracker.github.repo` value — comes along in the fork. Left unchanged, the
+factory will faithfully try to operate against the **original** repo's issues
+using **your** token, which typically just fails at label provisioning
+(no write access) and stops before any task is claimed. Update
+`tracker.github.repo` (and `api-url`, if you're pointed at a different GitHub
+host) to your fork before running `take`.
+
+One related case is tolerated automatically: if the upstream repo itself gets
+renamed (an `owner/repo` rename, not a fork), GitHub serves a redirect, and a
+canonical task id minted before the rename still resolves — the factory
+follows the redirect and proceeds with a warning. Only a genuine mismatch
+(your binding pointing at a repo that isn't, and never was via rename, the
+one a task id names) is refused outright, with an error naming both repos.
+
+## `take` CLI Reference
+
+```bash
+gnomish take                 # bare auto mode: claim the head of the ready queue, process one task, exit
+gnomish take 42              # explicit mode: act on issue #42 per the disposition matrix
+gnomish take github:acme/widgets#42   # explicit mode with a full canonical id
+```
+
+`take` is always git mode — there is no `--mode` flag, no ad-hoc `--task`/
+`--task-file`/`--task-id`, no `--resume`, and no `--from-stage`: task identity
+and resume position always come from the tracker and the task branch, never
+from the command line.
+
+| Flag                              | Applies to                      | Meaning                                                            |
+|-----------------------------------|---------------------------------|--------------------------------------------------------------------|
+| `--dir=<path>`                    | both                            | project clone directory and `.gnomish/` location; defaults to `.`  |
+| `--interactive[=executor\|judge]` | both                            | human stands in for the named role instead of the real adapter     |
+| `--base=<ref>`                    | explicit mode only, fresh claim | override the branch base; rejected on the bare form                |
+| `--discard-work`                  | explicit mode only, resume      | discard an interrupted round's leftovers instead of salvaging them |
+
+Short refs (`42`, `#42`) expand into the canonical `github:owner/repo#42` form
+using the configured `tracker.github` binding. A full canonical id naming a
+different repo is refused unless it resolves via a GitHub rename redirect (see
+the fork warning above).
+
+**Explicit mode (`take <ref>`)** is an operator mandate: it claims and works a
+`Ready` task even past an unmet readiness criterion or unexpired abort
+backoff (without resetting the abort counter), and resumes a task whose branch
+already carries an outcome. It refuses a `Working` task held by another
+instance (naming the holder) and a parked `AwaitingHuman` task (naming the
+reason and return path) without changing anything. It skips a `Finished` task
+("already done") and a `Gone` (closed or nonexistent) task with a clear error.
+
+**Bare mode (`take`)** takes the head of the ready queue (adapter order,
+oldest first), hides tasks still inside their abort backoff window, claims
+one, processes it to a terminal result, and exits. An empty or fully-backed-off
+queue is a clean no-op — the expected steady state of a cron-driven factory.
+
+### Exit Codes
+
+| Code | Meaning                                                                                            |
+|------|----------------------------------------------------------------------------------------------------|
+| 0    | delivered, or a clean bare-mode no-op (empty queue)                                                |
+| 1    | failure outside a claimed run (tracker unreachable at startup, label provisioning failure)         |
+| 2    | usage error                                                                                        |
+| 3    | pipeline load failure                                                                              |
+| 10   | parked as escalation — a decision is needed                                                        |
+| 11   | parked as a manual checkpoint                                                                      |
+| 12   | infrastructure abort, below the fuse — task returned to `Ready`                                    |
+| 13   | parked as infra — fuse tripped, or an infrastructure escalation                                    |
+| 14   | revoked — claim lost mid-run (issue closed or reassigned under a working gnome)                    |
+| 15   | refused or skipped (held by another instance, already delivered, closed/nonexistent, foreign repo) |
+
+Codes shared with `gnomish run` (0/1/2/3/10/11/12) keep the same meaning. An
+uncaught exception during a take run always runs the abort protocol first and
+exits 12 or 13 — never a bare 1.

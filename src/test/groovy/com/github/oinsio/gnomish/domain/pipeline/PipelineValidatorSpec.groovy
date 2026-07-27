@@ -73,6 +73,7 @@ class PipelineValidatorSpec extends Specification {
         where:
         ruleName          | model                        || expected
         'SchemaVersion'   | unsupportedVersionModel()    || SchemaVersionRule.validate(unsupportedVersionModel().schemaVersion())
+        'TrackerConfig'   | badThresholdModel()          || TrackerConfigRule.validate(badThresholdModel().tracker())
         'StageOrder'      | emptyOrderModel()            || StageOrderRule.validate(emptyOrderModel().stages())
         'ArtifactGraph'   | danglingRefModel()           || ArtifactGraphRule.validate(danglingRefModel().stages())
         'StageSanity'     | blankModelModel()            || StageSanityRule.validate(blankModelModel().stages())
@@ -80,20 +81,23 @@ class PipelineValidatorSpec extends Specification {
 
     // FR8 / UX1 / delta-spec "All problems reported in one pass": a model
     // violating every rule at once yields ALL errors, concatenated in the
-    // documented order — SchemaVersion, StageOrder, ArtifactGraph, StageSanity.
+    // documented order — SchemaVersion, TrackerConfig, StageOrder,
+    // ArtifactGraph, StageSanity.
     def "a model violating all rules yields every error in the documented order"() {
-        given: 'a model that breaks all four rules simultaneously'
+        given: 'a model that breaks all five rules simultaneously'
         PipelineDefinition model = allRulesBrokenModel()
 
-        expect: 'the aggregate is exactly the four rules concatenated in order'
+        expect: 'the aggregate is exactly the five rules concatenated in order'
         PipelineValidator.validate(model) ==
                 SchemaVersionRule.validate(model.schemaVersion()) +
+                TrackerConfigRule.validate(model.tracker()) +
                 StageOrderRule.validate(model.stages()) +
                 ArtifactGraphRule.validate(model.stages()) +
                 StageSanityRule.validate(model.stages())
 
         and: 'and each rule genuinely contributed at least one error'
         !SchemaVersionRule.validate(model.schemaVersion()).isEmpty()
+        !TrackerConfigRule.validate(model.tracker()).isEmpty()
         !StageOrderRule.validate(model.stages()).isEmpty()
         !ArtifactGraphRule.validate(model.stages()).isEmpty()
         !StageSanityRule.validate(model.stages()).isEmpty()
@@ -133,6 +137,17 @@ class PipelineValidatorSpec extends Specification {
                 ])
     }
 
+    private static PipelineDefinition badThresholdModel() {
+        new PipelineDefinition(
+                SchemaVersionRule.SUPPORTED_VERSION, new AutonomyLimits(3),
+                [
+                    stage('plan', [new ArtifactInput.Source()], [
+                        new ArtifactOutput('plan-out')
+                    ])
+                ],
+                new TrackerConfig('github', 0))
+    }
+
     private static PipelineDefinition emptyOrderModel() {
         new PipelineDefinition(SchemaVersionRule.SUPPORTED_VERSION, new AutonomyLimits(3), [])
     }
@@ -160,8 +175,9 @@ class PipelineValidatorSpec extends Specification {
     }
 
     /** Breaks every rule at once: unsupported version (SchemaVersion), a
-     * duplicated stage name (StageOrder), a dangling internal reference
-     * (ArtifactGraph), and a blank executor model (StageSanity). */
+     * non-positive abort-threshold (TrackerConfig), a duplicated stage name
+     * (StageOrder), a dangling internal reference (ArtifactGraph), and a blank
+     * executor model (StageSanity). */
     private static PipelineDefinition allRulesBrokenModel() {
         new PipelineDefinition(
                 '999', new AutonomyLimits(3),
@@ -174,6 +190,7 @@ class PipelineValidatorSpec extends Specification {
                     stage('plan', [new ArtifactInput.Source()], [
                         new ArtifactOutput('build-out')
                     ], executor('')),
-                ])
+                ],
+                new TrackerConfig('github', 0))
     }
 }

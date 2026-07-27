@@ -4,7 +4,7 @@
 
 An external orchestrator where AI agents — the gnomes — pick tasks from a task tracker and drive them through a development pipeline autonomously. Humans are exception handlers, not participants: they step in only when a task is blocked or the gnomes cannot choose between alternatives.
 
-> **Status: walking skeleton.** Requirements and architecture are shaped through [OpenSpec](openspec); the build, quality gates, and a minimal bootable application exist (see [Building](#building)). The domain core is in place — `.gnomish/` pipeline-config loading and the stage engine (a pure, reentrant orchestrator of the QC loop, driven entirely through ports). Its first non-fake adapters have landed as a CLI: [`gnomish run`](#running-a-task) drives a single task through the whole quality-control cycle, with real `agent-cli` and judge adapters by default and a git-backed task workflow — task branch, dedicated worktree, resume — as the normal mode. The tracker and non-CLI AI-provider adapters are not built yet.
+> **Status: walking skeleton.** Requirements and architecture are shaped through [OpenSpec](openspec); the build, quality gates, and a minimal bootable application exist (see [Building](#building)). The domain core is in place — `.gnomish/` pipeline-config loading and the stage engine (a pure, reentrant orchestrator of the QC loop, driven entirely through ports). Its first non-fake adapters have landed as a CLI: [`gnomish run`](#running-a-task) drives a single task through the whole quality-control cycle, with real `agent-cli` and judge adapters by default and a git-backed task workflow — task branch, dedicated worktree, resume — as the normal mode. [`gnomish take`](#taking-a-task-from-a-tracker) layers a tracker-driven single-task workflow on top, with a GitHub adapter (plus an in-memory reference used for tests). Non-CLI AI-provider adapters are not built yet.
 
 ## How it works
 
@@ -32,7 +32,7 @@ The factory core is a generic engine built on **ports and adapters**:
 
 | Port        | Purpose                                                    | Adapters                                                                                        |
 |-------------|------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| Tracker     | claim tasks, update statuses, post reports                 | GitHub, Jira, ...                                                                               |
+| Tracker     | claim tasks, update statuses, post reports                 | GitHub (plus an in-memory reference adapter for tests); Jira and others are future work         |
 | AI provider | call models from different vendors with per-stage settings | Claude, OpenAI, Gemini, Ollama, ...                                                             |
 | Executor    | perform a stage                                            | `api` (direct model call), `agent-cli` (coding agent as subprocess in an isolated working copy) |
 
@@ -80,7 +80,7 @@ sequenceDiagram
 
 ## Running a task
 
-`gnomish run` is the first way to drive the engine for real. It executes **one task through one pipeline**. By default it is manifest-driven: real `agent-cli` and judge adapters run each stage, with no AI provider outside them (see [Manifest-driven run and `--interactive` overrides](#manifest-driven-run-and---interactive-overrides) below). Passing `--interactive` swaps in a human standing in for the gnome instead: you read each stage briefing and press Enter to complete it, answer the verify checks, and resolve escalations at the prompt. It doubles as the pipeline author's dry-run tool for a project's `.gnomish/`, and as the harness that proves the engine's port shapes survive contact with real adapters.
+`gnomish run` is the first way to drive the engine for real. It executes **one task through one pipeline**. By default, it is manifest-driven: real `agent-cli` and judge adapters run each stage, with no AI provider outside them (see [Manifest-driven run and `--interactive` overrides](#manifest-driven-run-and---interactive-overrides) below). Passing `--interactive` swaps in a human standing in for the gnome instead: you read each stage briefing and press Enter to complete it, answer the verify checks, and resolve escalations at the prompt. It doubles as the pipeline author's dry-run tool for a project's `.gnomish/`, and as the harness that proves the engine's port shapes survive contact with real adapters.
 
 There is no launcher script yet; run it through the boot jar (or `bootRun`) and pass the task flags. With **no** run flag present the application keeps its plain boot-and-exit behavior. `run` is the implicit default subcommand — `gnomish --task=... --dir=...` and `gnomish run --task=... --dir=...` are equivalent — so existing invocations keep working; see [Inspecting tasks](#inspecting-tasks) for the other subcommands.
 
@@ -94,18 +94,18 @@ java -jar build/libs/*.jar --task="fix the flaky login spec" --dir=/path/to/targ
 
 Flags use Spring's `--key=value` form (quote values with spaces):
 
-| Flag                        | Required             | Default            | Meaning                                                                                          |
-|------------------------------|-----------------------|---------------------|---------------------------------------------------------------------------------------------------|
-| `--dir=<path>`               | no                    | `.` (cwd)           | project clone directory **and** the `.gnomish/` pipeline location (renamed from `--project`)      |
-| `--task="<text>"`            | one of these two\*    | —                   | task description inline (first line → title, rest → body); mutually exclusive with `--task-file` |
-| `--task-file=<path>`         | one of these two\*    | —                   | task description read from a file                                                                 |
-| `--task-id=<id>`             | no                    | auto-generated      | override the generated id (`[A-Za-z0-9_-]+`); makes logs and JSON stable                          |
-| `--from-stage=<name>`        | no                    | first stage         | start partway through the pipeline, skipping earlier stages' checks                               |
-| `--mode=git\|in-place`       | no                    | `git`               | task workflow mode — see [Git mode vs. in-place mode](#git-mode-vs-in-place-mode)                 |
-| `--base=<ref>`                | no                    | current clone state | git mode only; override the branch base                                                           |
-| `--resume=<task>`            | no                    | —                   | git mode only; resume a task by id instead of starting a new one — see [Resuming a task](#resuming-a-task) |
-| `--discard-work`             | no                    | `false`             | git mode only; requires `--resume`; discards the interrupted round instead of salvaging it        |
-| `--interactive[=executor\|judge]` | no               | —                   | human plays a role instead of the real adapter — see below                                        |
+| Flag                              | Required           | Default             | Meaning                                                                                                    |
+|-----------------------------------|--------------------|---------------------|------------------------------------------------------------------------------------------------------------|
+| `--dir=<path>`                    | no                 | `.` (cwd)           | project clone directory **and** the `.gnomish/` pipeline location (renamed from `--project`)               |
+| `--task="<text>"`                 | one of these two\* | —                   | task description inline (first line → title, rest → body); mutually exclusive with `--task-file`           |
+| `--task-file=<path>`              | one of these two\* | —                   | task description read from a file                                                                          |
+| `--task-id=<id>`                  | no                 | auto-generated      | override the generated id (`[A-Za-z0-9_-]+`); makes logs and JSON stable                                   |
+| `--from-stage=<name>`             | no                 | first stage         | start partway through the pipeline, skipping earlier stages' checks                                        |
+| `--mode=git\|in-place`            | no                 | `git`               | task workflow mode — see [Git mode vs. in-place mode](#git-mode-vs-in-place-mode)                          |
+| `--base=<ref>`                    | no                 | current clone state | git mode only; override the branch base                                                                    |
+| `--resume=<task>`                 | no                 | —                   | git mode only; resume a task by id instead of starting a new one — see [Resuming a task](#resuming-a-task) |
+| `--discard-work`                  | no                 | `false`             | git mode only; requires `--resume`; discards the interrupted round instead of salvaging it                 |
+| `--interactive[=executor\|judge]` | no                 | —                   | human plays a role instead of the real adapter — see below                                                 |
 
 \* Exactly one of `--task`/`--task-file` is required unless `--resume` is given, in which case none of `--task`/`--task-file`/`--task-id`/`--from-stage` may be used. `--base`, `--resume`, and `--discard-work` are rejected together with `--mode=in-place` (exit code 2, usage error).
 
@@ -134,18 +134,18 @@ If the local branch and its remote counterpart have diverged, resume needs a hum
 
 The process exit code reports the outcome — anything `>= 10` means the engine reached a legitimate terminal state:
 
-| Code | Meaning                                                   |
-|------|------------------------------------------------------------|
-| 0    | completed                                                   |
-| 1    | internal error                                              |
-| 2    | usage error                                                 |
-| 3    | pipeline load failure                                       |
-| 4    | stdin exhausted mid-stage (Ctrl-D at an ordinary prompt)    |
-| 5    | diverged branch on resume — needs a human to reconcile      |
+| Code | Meaning                                                             |
+|------|---------------------------------------------------------------------|
+| 0    | completed                                                           |
+| 1    | internal error                                                      |
+| 2    | usage error                                                         |
+| 3    | pipeline load failure                                               |
+| 4    | stdin exhausted mid-stage (Ctrl-D at an ordinary prompt)            |
+| 5    | diverged branch on resume — needs a human to reconcile              |
 | 6    | task not found (`status`/`usage` only — no `gnomish/<task>` branch) |
-| 10   | escalated (attempts exhausted / undecidable)                |
-| 11   | paused at a manual checkpoint                               |
-| 12   | aborted                                                     |
+| 10   | escalated (attempts exhausted / undecidable)                        |
+| 11   | paused at a manual checkpoint                                       |
+| 12   | aborted                                                             |
 
 ### Merging a gnome's task branch
 
@@ -163,12 +163,12 @@ gnomish status --dir=<clone-dir> [<task>] [--json]
 
 - **List mode** (`<task>` omitted): prints a table over all `gnomish/*` branches, local and remote-tracking alike, deduplicated per task (the local tip wins when both exist).
 
-  | Column   | Meaning                        |
-  |----------|---------------------------------|
-  | task     | task id                         |
-  | stage    | current pipeline stage          |
-  | attempts | attempts recorded so far        |
-  | outcome  | last recorded outcome           |
+  | Column   | Meaning                  |
+  |----------|--------------------------|
+  | task     | task id                  |
+  | stage    | current pipeline stage   |
+  | attempts | attempts recorded so far |
+  | outcome  | last recorded outcome    |
 
 - **Single-task mode** (`<task>` given): reads `.gnomish-task/` straight off `gnomish/<task>` via `git show` — no worktree is materialized, no checkout happens, no local branch is created. If the branch isn't already known locally or as a remote-tracking ref, `status` falls back to a narrow fetch of exactly `gnomish/<task>`. Output is the same StatusReport `"version": 1` contract used by the live in-process `status`/`status --json` prompt commands (see [Running a task](#running-a-task) above), plus the task's worktree path if one currently exists.
 - **Task not found**: if no `gnomish/<task>` branch exists — typically because its PR was already squash-merged and the branch deleted, see [Merging a gnome's task branch](#merging-a-gnomes-task-branch) — `status` prints `task not found: <task>` and exits with code 6. This is a normal, expected outcome of a task's lifecycle, not an error to investigate.
@@ -251,6 +251,29 @@ Installation-level configuration — things that are true of *this machine*, not
 ### Ollama E2E prerequisite
 
 `./gradlew ollamaE2eTest` runs a local E2E suite that points the real `claude` CLI at a locally running Ollama instance (native Anthropic-compatible API since Ollama v0.14, via `ANTHROPIC_BASE_URL`) and drives a trivial stage through `gnomish run` end to end. It's excluded from `check`/`test`/`build` and is a native dev-machine prerequisite, not a Testcontainers layer — dockerized Ollama has no Metal access on macOS and is too slow. Individual specs skip cleanly with a clear message when Ollama or `claude` isn't available, so it's safe to run without any setup.
+
+## Taking a task from a tracker
+
+`gnomish take` layers a tracker-driven, single-task workflow on top of the same engine `run` uses: instead of a `--task` flag on the command line, the task comes from a GitHub issue tracked with a `gnomish:ready` label. Run bare for a queue-draining cron (claims the head of the ready queue, works it through the pipeline, exits) or with an explicit ref to act on one named issue. Either way the factory reports back on the issue thread itself — claim, progress, decisions, and the final outcome all show up as comments and label transitions; no separate report channel exists.
+
+`take` requires a `tracker` section in the target project's `.gnomish/config.yaml` (type, optional abort threshold, and an adapter subsection such as `github:`) plus a `GNOMISH_GITHUB_TOKEN` environment variable on the machine running the factory — never in yaml, never visible to the gnome. `take` is always git mode: there is no `--mode`, no ad-hoc `--task`/`--task-file`/`--task-id`, no `--resume`, and no `--from-stage` — task identity and resume position always come from the tracker and the task branch.
+
+```bash
+# bare auto mode: claim the head of the ready queue, process one task, exit
+java -jar build/libs/*.jar take --dir=/path/to/target-repo
+
+# explicit mode: act on one issue by short ref or full canonical id
+java -jar build/libs/*.jar take 42 --dir=/path/to/target-repo
+```
+
+| Flag                              | Applies to                      | Meaning                                                            |
+|-----------------------------------|---------------------------------|--------------------------------------------------------------------|
+| `--dir=<path>`                    | both                            | project clone directory and `.gnomish/` location; defaults to `.`  |
+| `--interactive[=executor\|judge]` | both                            | human stands in for the named role instead of the real adapter     |
+| `--base=<ref>`                    | explicit mode only, fresh claim | override the branch base; rejected on the bare form                |
+| `--discard-work`                  | explicit mode only, resume      | discard an interrupted round's leftovers instead of salvaging them |
+
+See [`docs/operator-guide.md`](docs/operator-guide.md) for the full guide: the three configuration layers, the label dictionary, the escalation/decision/acknowledgement flow, the manual escape hatch for a stuck `Working` task, and the complete `take` CLI reference with its exit-code table. Adapter authors implementing a new tracker should start from [`docs/adapter-author-guide.md`](docs/adapter-author-guide.md).
 
 ## Tech stack
 

@@ -41,7 +41,7 @@ import spock.lang.TempDir
  * state.json}, and the task going on to complete a further round.
  *
  * <p>Reuses {@link BareGitRepoFixture} (task 2.1) and composes the same production adapters
- * {@link GitResumeRunnerSpec} exercises individually — this spec's contribution is the explicit
+ * the resume-runner specs exercise individually — this spec's contribution is the explicit
  * end-to-end chain plus the "salvage commit does not inflate state.json's attempts" assertion
  * task 6.2 calls for, which no existing spec checks directly.
  */
@@ -97,7 +97,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
                 new ShellCommandCheckRunner(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null))
+                new FactoryProperties('test-instance', null, null, null))
         new GitResumeRunner(assembly, worktreesRoot, 'taskId')
     }
 
@@ -144,10 +144,11 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
         and: 'the salvage commit carries the leftover file'
         def salvageSha = gitRunner.run(cloneDir, 'log', '--format=%H', "${branchTipAfterFirstRound}..gnomish/${taskId}")
                 .stdout().readLines().last()
-        gitRunner.run(cloneDir, 'show', '--stat', salvageSha).stdout().contains('half-done.txt')
+        def salvageStat = gitRunner.run(cloneDir, 'show', '--stat', salvageSha).stdout()
+        salvageStat.contains('half-done.txt')
 
         and: 'the salvage commit is NOT a round: it carries no state.json change at all'
-        gitRunner.run(cloneDir, 'show', '--stat', salvageSha).stdout().contains('.gnomish-task/state.json') == false
+        !salvageStat.contains('.gnomish-task/state.json')
 
         and: 'the task went on to complete a further round: the branch records a Completed outcome'
         gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0

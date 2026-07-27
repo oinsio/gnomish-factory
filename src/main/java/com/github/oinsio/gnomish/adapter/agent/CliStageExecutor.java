@@ -85,7 +85,27 @@ public final class CliStageExecutor implements StageExecutor {
      *     subscribers, or a no-op ({@code event -> {}}) to reach none
      */
     public CliStageExecutor(FactoryProperties factoryProperties, Clock clock, AgentProgressListener progressListener) {
-        this(factoryProperties, clock, progressListener, new DecisionFileTransport());
+        this(factoryProperties, clock, progressListener, List.of());
+    }
+
+    /**
+     * @param factoryProperties installation config: CLI binary path and env
+     *     passthrough intent; never null
+     * @param clock the read-time source for process start/exit stamping,
+     *     shared with the injected {@link AgentProcessLauncher}; never null
+     * @param progressListener the live-progress subscriber for this
+     *     executor's rounds (design D10, task 9.4); never null
+     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
+     *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into
+     *     this executor's own {@link AgentProcessLauncher}; never null, empty when no tracker
+     *     is involved
+     */
+    public CliStageExecutor(
+            FactoryProperties factoryProperties,
+            Clock clock,
+            AgentProgressListener progressListener,
+            List<String> credentialEnvVarsToScrub) {
+        this(factoryProperties, clock, progressListener, new DecisionFileTransport(), credentialEnvVarsToScrub);
     }
 
     /**
@@ -101,11 +121,21 @@ public final class CliStageExecutor implements StageExecutor {
             Clock clock,
             AgentProgressListener progressListener,
             DecisionFileTransport decisionFileTransport) {
+        this(factoryProperties, clock, progressListener, decisionFileTransport, List.of());
+    }
+
+    /** Testing seam (package-private): same as the four-argument overload, plus the scrub list. */
+    CliStageExecutor(
+            FactoryProperties factoryProperties,
+            Clock clock,
+            AgentProgressListener progressListener,
+            DecisionFileTransport decisionFileTransport,
+            List<String> credentialEnvVarsToScrub) {
         this.factoryProperties = factoryProperties;
         this.clock = clock;
         this.progressListener = progressListener;
         this.decisionFileTransport = decisionFileTransport;
-        this.launcher = new AgentProcessLauncher(clock);
+        this.launcher = new AgentProcessLauncher(clock, credentialEnvVarsToScrub);
     }
 
     /**

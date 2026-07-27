@@ -51,29 +51,13 @@ import java.util.List;
  * <p>Implements FR7, FR10, NFR-O1, UX1, D6, D10 of add-agent-executor; D10 of add-manual-run; FR7
  * of add-git-workflow.
  */
-final class ManualRunAssembly {
-
-    private final SystemConsoleIO systemConsoleIO;
-    private final FilesExistCheckRunner filesExistCheckRunner;
-    private final ShellCommandCheckRunner shellCommandCheckRunner;
-    private final SystemClock systemClock;
-    private final ThreadSleeper threadSleeper;
-    private final FactoryProperties factoryProperties;
-
-    ManualRunAssembly(
-            SystemConsoleIO systemConsoleIO,
-            FilesExistCheckRunner filesExistCheckRunner,
-            ShellCommandCheckRunner shellCommandCheckRunner,
-            SystemClock systemClock,
-            ThreadSleeper threadSleeper,
-            FactoryProperties factoryProperties) {
-        this.systemConsoleIO = systemConsoleIO;
-        this.filesExistCheckRunner = filesExistCheckRunner;
-        this.shellCommandCheckRunner = shellCommandCheckRunner;
-        this.systemClock = systemClock;
-        this.threadSleeper = threadSleeper;
-        this.factoryProperties = factoryProperties;
-    }
+record ManualRunAssembly(
+        SystemConsoleIO systemConsoleIO,
+        FilesExistCheckRunner filesExistCheckRunner,
+        ShellCommandCheckRunner shellCommandCheckRunner,
+        SystemClock systemClock,
+        ThreadSleeper threadSleeper,
+        FactoryProperties factoryProperties) {
 
     /**
      * Builds the per-run {@link RunnerOutcomeLoop} and {@link EnginePorts} for one {@code gnomish
@@ -91,6 +75,10 @@ final class ManualRunAssembly {
      *     of the manifest-driven CLI adapter (FR10, design D6); never null
      * @param attemptPersistence the {@code AttemptPersistence} realization this run commits
      *     rounds through; never null
+     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
+     *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into the
+     *     wired CLI executor/judge adapters' {@code AgentProcessLauncher}; never null, empty for
+     *     plain {@code gnomish run} callers with no tracker involved
      * @return the outcome loop and the ports it drives; never null
      */
     Run assemble(
@@ -98,7 +86,8 @@ final class ManualRunAssembly {
             TaskContext context,
             TaskState initialState,
             RunArguments.InteractiveMode interactiveMode,
-            AttemptPersistence attemptPersistence) {
+            AttemptPersistence attemptPersistence,
+            List<String> credentialEnvVarsToScrub) {
         var holder = new StatusSnapshotHolder(initialState, resolveAttemptLimit(definition, initialState.position()));
         var statusRenderer = new ConsoleStatusRenderer(holder, context, new StatusTextRenderer());
         var activityTracker = new SnapshotActivityTracker(holder, systemClock);
@@ -107,11 +96,13 @@ final class ManualRunAssembly {
         var listener = new CompositeEngineEventListener(List.of(
                 new StatusEventListener(holder, systemClock), new MdcEventListener(), new LoggingEventListener()));
         var ports = new EnginePorts(
-                ExecutorAdapterSelector.stageExecutor(console, interactiveMode, holder, factoryProperties, systemClock),
+                ExecutorAdapterSelector.stageExecutor(
+                        console, interactiveMode, holder, factoryProperties, systemClock, credentialEnvVarsToScrub),
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
                 new InteractiveExternalCheckClient(console),
-                ExecutorAdapterSelector.judgeVoter(console, interactiveMode, factoryProperties, systemClock),
+                ExecutorAdapterSelector.judgeVoter(
+                        console, interactiveMode, factoryProperties, systemClock, credentialEnvVarsToScrub),
                 listener,
                 attemptPersistence,
                 systemClock,
@@ -145,11 +136,11 @@ final class ManualRunAssembly {
      * re-implemented here).
      */
     private static int resolveAttemptLimit(PipelineDefinition definition, Position position) {
-        if (!(position instanceof Position.AtStage atStage)) {
+        if (!(position instanceof Position.AtStage(String stageName))) {
             return definition.defaultLimits().attemptLimit();
         }
         for (StageDefinition stage : definition.stages()) {
-            if (stage.name().equals(atStage.name())) {
+            if (stage.name().equals(stageName)) {
                 return stage.limits().attemptLimit();
             }
         }

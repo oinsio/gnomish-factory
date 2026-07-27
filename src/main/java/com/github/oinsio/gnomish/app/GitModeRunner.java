@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -125,7 +126,7 @@ final class GitModeRunner {
 
         var persistence = new GitAttemptPersistence(runner, worktree, taskId);
         var workspace = new DirectoryWorkspace(worktree);
-        var assembled = assembly.assemble(definition, context, initialState, interactiveMode, persistence);
+        var assembled = assembly.assemble(definition, context, initialState, interactiveMode, persistence, List.of());
 
         try {
             assembled.loop().run(definition, context, initialState, workspace, assembled.ports());

@@ -17,6 +17,8 @@ import java.util.List;
  *
  * <ol>
  *   <li>{@link SchemaVersionRule} — {@code config.yaml} tree-wide version (FR9);</li>
+ *   <li>{@link TrackerConfigRule} — {@code config.yaml} tracker core keys, i.e.
+ *       a positive {@code abort-threshold} (FR17 of add-tracker-port);</li>
  *   <li>{@link StageOrderRule} — {@code pipeline.yaml} order and stage-name
  *       uniqueness (FR3, FR6);</li>
  *   <li>{@link ArtifactGraphRule} — pipeline-wide artifact DAG across stage
@@ -35,8 +37,9 @@ import java.util.List;
  * into the same {@link ConfigError} list by the loader (design D6, tasks 5–6),
  * not here.
  *
- * <p>Implements FR8 of load-pipeline-config; the {@code ApiExecutorRule} tier
- * additionally implements FR10, UX2, D6 of add-agent-executor.
+ * <p>Implements FR8 of load-pipeline-config; the {@code TrackerConfigRule} tier
+ * additionally implements FR17 of add-tracker-port; the {@code ApiExecutorRule}
+ * tier additionally implements FR10, UX2, D6 of add-agent-executor.
  */
 public final class PipelineValidator {
 
@@ -56,6 +59,7 @@ public final class PipelineValidator {
     public static List<ConfigError> validate(PipelineDefinition model) {
         List<ConfigError> errors = new ArrayList<>();
         errors.addAll(SchemaVersionRule.validate(model.schemaVersion()));
+        errors.addAll(TrackerConfigRule.validate(model.tracker()));
         errors.addAll(StageOrderRule.validate(model.stages()));
         errors.addAll(ArtifactGraphRule.validate(model.stages()));
         errors.addAll(StageSanityRule.validate(model.stages()));
