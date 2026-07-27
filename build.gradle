@@ -449,6 +449,18 @@ pitest {
     // failed hard by pitestVerifyAllKilled below (mutationThreshold alone cannot
     // catch it: PIT counts RUN_ERROR as "detected").
     mutationThreshold = 100 // 100% mutation score gate (FR6)
+    // Per-mutation timeout budget = timeoutConstInMillis + timeoutFactor * normal
+    // test time. PIT's defaults (4000ms + 1.25x) are too tight for the loaded CI
+    // runner: a legitimately-killed mutant whose covering spec runs ~2-4s (thread
+    // joins, Testcontainers-adjacent specs) can blow past the budget under GC/CPU
+    // pressure and be reported TIMED_OUT instead of KILLED, which
+    // pitestVerifyAllKilled (rightly) refuses to trust — a false-red gate failure.
+    // Locally every mutant of the offending class (InMemoryTracker.claim) is
+    // killed in well under a second with zero timeouts, so this is CI load, not a
+    // real hang. Widening the budget only rescues slow-but-terminating tests: a
+    // genuine deadlock/infinite loop still exhausts the (larger) budget, still
+    // reports TIMED_OUT, and still fails the gate — just later.
+    timeoutConstInMillis = 12000
     timestampedReports = false // stable report path for CI artifact upload
     outputFormats = ['XML', 'HTML']
 }
