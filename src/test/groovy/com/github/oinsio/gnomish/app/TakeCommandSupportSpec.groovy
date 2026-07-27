@@ -42,4 +42,28 @@ class TakeCommandSupportSpec extends Specification {
         def ex = thrown(UsageException)
         ex.message.contains('unknown-type')
     }
+
+    def "the refusal lists the supported tracker types, sorted, so the operator hint is actionable"() {
+        given: 'a registry with several known types in non-sorted insertion order'
+        def trackerConfig = new TrackerConfig('unknown-type', 3, [:])
+        def registry = [inmemory: Mock(TrackerAdapterFactory), github: Mock(TrackerAdapterFactory)]
+
+        when:
+        TakeCommandSupport.resolveTracker(trackerConfig, registry, 'gnomish-factory-a1')
+
+        then: 'FR17: the message names the registered types as a stable, sorted list'
+        def ex = thrown(UsageException)
+        ex.message.contains('github, inmemory')
+    }
+
+    def "supportedTypes renders the registered type keys sorted and comma-joined"() {
+        expect:
+        TakeCommandSupport.supportedTypes(registry) == expected
+
+        where:
+        registry                                                                     || expected
+        [:]                                                                          || ''
+        [github: Mock(TrackerAdapterFactory)]                                        || 'github'
+        [inmemory: Mock(TrackerAdapterFactory), github: Mock(TrackerAdapterFactory)] || 'github, inmemory'
+    }
 }
