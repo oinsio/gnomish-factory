@@ -1,5 +1,7 @@
 # Adapter author guide: building a `Tracker` port adapter
 
+<!-- implements FR19 of add-tracker-port -->
+
 This guide teaches you how to implement a new `Tracker` port adapter for
 Gnomish Factory — for example a Jira or Redmine binding. It is self-sufficient:
 every obligation the port contract suite checks is stated here, so you should
@@ -189,7 +191,7 @@ operation with one coarse `ReentrantLock`, because `claim`'s
 check-decide-mutate sequence must be observably atomic and its critical
 sections are microseconds long — per-task locking would add complexity for no
 benefit at this scale. It requires no configuration subsection at all, which
-is the minimal case of the config seam described in §5.
+is the minimal case of the config seam described in §6.
 `InMemoryTrackerContractSpec` shows how a concrete adapter subclass wires
 `arrange`/`seedTask`/`seedReply` against it.
 
@@ -220,7 +222,8 @@ replace — e.g. moving `Ready` → `Working` removes `gnomish:ready` and adds
 `gnomish:working` as two separate calls. This means a human editing unrelated
 labels concurrently never loses their edit. Coordination facts (claim holder,
 abort count, acks) are never encoded in labels — labels carry only the coarse
-logical state; everything else lives in structural comments (§4.1 below).
+logical state; everything else lives in structural comments (see "Structural
+markers" below).
 
 A human moving `needs-human` back to `ready` is recognized as "returned to
 work"; issue closure is recognized as revocation.
@@ -239,7 +242,7 @@ run at startup, before any task is claimed — never mid-task.
 `github:ghe.example.com/owner/repo#42`. The `github:` prefix is a fixed code
 constant, never configuration. Core treats this string as fully opaque; only
 the GitHub adapter parses or builds it. It flows unchanged into branch names
-via the shared `TaskIdSanitizer.branchName(taskId)` (see §6.1).
+via the shared `TaskIdSanitizer.branchName(taskId)` (see §7).
 
 **Structural markers.** Coordination facts ride inside GitHub issue comments
 as a hidden HTML comment carrying one-line JSON, followed by human-readable
@@ -264,8 +267,9 @@ decision-ack semantics round-trip; a Jira/Redmine renderer that strips or
 mangles HTML comments is free to use a different structural encoding (see the
 Redmine sketch below).
 
-**Claim lease.** `GithubClaimLease` implements `claim` as a lease sequence —
-see §6.2 for the full sequence and edge cases.
+**Claim lease.** `GithubClaimLease` implements `claim` as a lease sequence; the
+atomicity properties and race edge cases it must satisfy are the contract law
+in §3 (claim atomicity, claim-against-non-Ready).
 
 ### 4.2 Redmine statuses — a thought-through sketch (NOT implemented)
 

@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The pipeline-load and tracker-resolution helpers {@link TakeCommand} needs before it can
@@ -81,8 +82,8 @@ final class TakeCommandSupport {
             TrackerConfig trackerConfig, Map<String, TrackerAdapterFactory> registry) {
         TrackerAdapterFactory factory = registry.get(trackerConfig.type());
         if (factory == null) {
-            throw new UsageException("no tracker adapter registered for type '" + trackerConfig.type()
-                    + "' — task 5.15 lands adapter wiring for this type");
+            throw new UsageException(
+                    "unknown tracker type '" + trackerConfig.type() + "' — supported: " + supportedTypes(registry));
         }
         return factory;
     }
@@ -101,5 +102,17 @@ final class TakeCommandSupport {
     static Tracker resolveTracker(
             TrackerConfig trackerConfig, Map<String, TrackerAdapterFactory> registry, String instanceId) {
         return resolveFactory(trackerConfig, registry).create(trackerConfig, instanceId);
+    }
+
+    /**
+     * Renders the registered {@code tracker.type} keys as a stable, comma-separated list for the
+     * "unknown tracker type" operator message — sorted so the hint reads the same on every run
+     * regardless of registry iteration order.
+     *
+     * @param registry known tracker adapter factories, keyed by {@code tracker.type}; never null
+     * @return the sorted type keys joined by {@code ", "} (e.g. {@code "github, inmemory"})
+     */
+    static String supportedTypes(Map<String, TrackerAdapterFactory> registry) {
+        return registry.keySet().stream().sorted().collect(Collectors.joining(", "));
     }
 }

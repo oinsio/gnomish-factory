@@ -1,5 +1,7 @@
 # Operator Guide: Running the Factory Against a Tracker
 
+<!-- implements FR19 of add-tracker-port -->
+
 This guide is for the human on the other end of `gnomish take` — the operator who
 hands tasks to the factory through a GitHub issue tracker and resolves the
 escalations it can't decide alone. It assumes the factory is already built and a

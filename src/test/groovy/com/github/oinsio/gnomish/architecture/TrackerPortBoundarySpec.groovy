@@ -18,10 +18,9 @@ import spock.lang.Specification
  * via this spec, naming the violating class.
  *
  * <p>The {@code adapter.tracker.inmemory} and {@code adapter.tracker.github}
- * packages (design D15) do not exist yet — tasks 2.x/4.x create them. Until
- * then this rule holds vacuously (there are no {@code adapter.tracker} classes
- * to depend on). It becomes meaningful the moment the first adapter class
- * lands: any core class that imports it will fail this check immediately.
+ * packages (design D15) now exist, so this rule bites for real: any core
+ * class that imports a class inside them fails this check immediately,
+ * naming the offender.
  */
 class TrackerPortBoundarySpec extends Specification {
 

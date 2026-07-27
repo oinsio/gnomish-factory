@@ -33,10 +33,10 @@ import org.springframework.boot.ApplicationArguments;
  * are delegated to {@link TakeCommandSupport} (kept out of this class purely for file size). Per
  * FR17, a project with no {@code tracker:} section refuses with a {@link UsageException} (exit 2)
  * before ever touching a tracker; once a {@link TrackerConfig} is present, a live {@link Tracker}
- * is resolved from the {@code trackerAdapterRegistry} (task 5.13's seam, {@link
- * TrackerAdapterFactory}) by {@link TrackerConfig#type()} — an unregistered type is likewise a
- * {@link UsageException} (exit 2); today that registry is empty for every type (task 5.15 wires
- * real adapters in), so this is the expected outcome for any project until then.
+ * is resolved from the {@code trackerAdapterRegistry} ({@link TrackerAdapterFactory}) by {@link
+ * TrackerConfig#type()} — a type naming no registered adapter (i.e. anything but the adapters
+ * {@code TrackerAdapterConfiguration} registers, currently {@code github}/{@code inmemory}) is
+ * likewise a {@link UsageException} (exit 2).
  *
  * <p>Short-ref expansion (`42`, `#42` via the configured binding, FR9) is handled by {@link
  * #resolveExplicitRef}: a recognized short ref is expanded via the registered {@link
@@ -77,7 +77,7 @@ final class TakeCommand {
      * @param clock supplies "now" for bare-mode's backoff filter and the {@link AbortHandler}'s
      *     abort timestamp; never null
      * @param trackerAdapterRegistry known tracker adapter factories, keyed by {@code tracker.type}
-     *     (task 5.13's seam); an empty map in production until task 5.15 wires real adapters in
+     *     (supplied by {@code TrackerAdapterConfiguration}: {@code github}, {@code inmemory})
      * @param trackerValidatorRegistry known adapter subsection validators, keyed by {@code
      *     tracker.type} ({@code TrackerAdapterConfiguration}), so {@code take} rejects a malformed
      *     {@code tracker.<type>} subsection at load time (FR17) exactly as {@code run} does
@@ -199,8 +199,9 @@ final class TakeCommand {
         }
         TrackerAdapterFactory factory = trackerAdapterRegistry.get(trackerConfig.type());
         if (factory == null) {
-            throw new UsageException("cannot expand short ref '" + ref + "': no tracker adapter registered for type '"
-                    + trackerConfig.type() + "' — task 5.15 lands adapter wiring for this type");
+            throw new UsageException("cannot expand short ref '" + ref + "': unknown tracker type '"
+                    + trackerConfig.type() + "' — supported: "
+                    + TakeCommandSupport.supportedTypes(trackerAdapterRegistry));
         }
         return factory.expandRef(trackerConfig, ref);
     }

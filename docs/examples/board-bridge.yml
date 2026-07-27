@@ -1,5 +1,7 @@
 # REFERENCE EXAMPLE — not wired into this repo's CI.
 #
+# implements FR19 of add-tracker-port
+#
 # Gnomish Factory has no inbound HTTP and does not read GitHub Projects v2
 # boards directly: issue labels and structural comments are its only source
 # of truth (see docs/operator-guide.md, "Projects v2 Boards: Display Only").

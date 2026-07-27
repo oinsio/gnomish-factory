@@ -30,12 +30,12 @@ import org.jspecify.annotations.Nullable;
  * NFR-S1 of add-tracker-port): the names the active tracker adapter declares
  * as its own credential environment variables (e.g. {@code
  * GNOMISH_GITHUB_TOKEN}) are removed from the child's inherited environment
- * in {@link #start}, right after {@link ProcessBuilder} is constructed and
- * before any {@code extraEnv} fragment is merged in — so a scrubbed name can
- * never sneak back in through {@code extraEnv} either. This scrub always
- * applies, regardless of {@code agentCliEnvPassthrough}: the gnome must never
- * see tracker credentials, independent of the Ollama-seam passthrough intent
- * documented above for every other variable.
+ * in {@link #start}, as the last step — after any {@code extraEnv} fragment
+ * has been merged in — so a scrubbed name can never survive, even if {@code
+ * extraEnv} tried to set it. This scrub always applies, regardless of {@code
+ * agentCliEnvPassthrough}: the gnome must never see tracker credentials,
+ * independent of the Ollama-seam passthrough intent documented above for
+ * every other variable.
  *
  * <p>Implements FR1, FR6, FR12, D3, D7 of add-agent-executor; D17 of
  * add-tracker-port.
@@ -197,13 +197,14 @@ public record AgentProcessLauncher(Clock clock, List<String> credentialEnvVarsTo
             DirectoryWorkspace workspace, List<String> command, Map<String, String> extraEnv) {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workspace.root().toFile());
-        // Scrub declared tracker credentials from the inherited environment first (D17,
-        // NFR-S1), then merge extraEnv — so a scrubbed name could never sneak back in
-        // through extraEnv either (it never legitimately needs to set a scrubbed name).
+        // Merge extraEnv onto the inherited environment first, then scrub declared tracker
+        // credentials last (D17, NFR-S1) — scrubbing last is what makes the guarantee hold:
+        // a scrubbed name can never survive, even if extraEnv tried to set it (it never
+        // legitimately needs to, but the scrub, not the caller, has the final say).
+        builder.environment().putAll(extraEnv);
         for (String name : credentialEnvVarsToScrub) {
             builder.environment().remove(name);
         }
-        builder.environment().putAll(extraEnv);
 
         Process process;
         try {

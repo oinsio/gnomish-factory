@@ -6,23 +6,28 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Boundary-anchoring over a task's parsed structural markers, in comment
- * order (design D13's boundary-marker idea: "since the newest boundary
- * marker — release/park/abort/finish — whichever is newest"). Only {@link
- * GithubMarkerKind#CLAIM} and {@link GithubMarkerKind#ABORT} exist as
- * distinct, already-implemented boundary kinds as of task 4.10 — {@code
- * release}/{@code park}/{@code finish} markers land with task 4.14's write
- * path and are not yet a distinct recognizable kind (design D9's marker-kind
- * vocabulary lists only {@code claim, abort, ack, note, report}). This class
- * therefore anchors to the latest marker whose kind is CLAIM or ABORT; when
- * task 4.14 introduces a richer boundary vocabulary, {@link
- * #latestBoundaryIndex(List)} is the single place to extend it.
+ * The claim/abort boundary over a task's parsed structural markers, in
+ * comment order: the latest {@link GithubMarkerKind#CLAIM} or {@link
+ * GithubMarkerKind#ABORT} marker anchors who currently holds the task and how
+ * many aborts belong to the active retry streak. {@link GithubTaskFetcher}
+ * uses it so a stale abort or a superseded claim recorded before the
+ * currently active claim never leaks into {@code fetchTask}'s reported facts
+ * (github-tracker spec risk: "a human deleting factory comments resets
+ * history" — the mirror risk here is a *stale* marker persisting past its
+ * boundary). A {@code report}-kind park/finish marker sitting before the
+ * active claim is not itself a boundary kind here, but it still stops the
+ * backward abort-streak scan in {@link #abortFactsSinceBoundary(List)}, so
+ * recorded durable progress correctly ends the streak.
  *
- * <p>Used by {@link GithubTaskFetcher} so a stale abort or a superseded claim
- * recorded before the currently active claim never leaks into {@code
- * fetchTask}'s reported facts (github-tracker spec risk: "a human deleting
- * factory comments resets history" — the mirror risk here is a *stale*
- * marker persisting past its boundary).
+ * <p>This is a distinct boundary from the session-ending boundary {@link
+ * GithubClaimLease} uses to void stale claims during a lease race — that one
+ * is the latest {@code abort} or {@code report} ({@code park} and {@code
+ * finish} are the two REPORT-kind markers {@link GithubStateWrites} writes;
+ * {@code release} posts no GitHub marker, design D2). Both descend from
+ * design D13's "since the newest boundary marker" idea but answer different
+ * questions — "who holds it now, and how many aborts this streak" here versus
+ * "which claims are still fresh" there — so each keeps its own marker-kind
+ * set rather than collapsing into one.
  *
  * <p>Implements FR2, FR5 of add-tracker-port.
  */
@@ -68,8 +73,9 @@ final class GithubCommentBoundary {
     /**
      * Folds ABORT markers into {@link AbortFacts}: "aborts since last durable
      * progress" (tracker-port spec, {@code AbortFacts} Javadoc) — NOT simply
-     * reset by every reclaim, since no marker kind yet exists (pre-4.14's
-     * richer boundary vocabulary) to record "a round persisted". Two cases:
+     * reset by every reclaim: a holder retrying after its own abort keeps its
+     * streak, while a {@code report}-kind park/finish (durable progress) or a
+     * different instance's claim ends it. Two cases:
      *
      * <ul>
      *   <li>the latest boundary marker is ABORT — the task is back in {@code
