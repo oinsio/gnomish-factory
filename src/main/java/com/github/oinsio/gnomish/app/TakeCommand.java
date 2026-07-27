@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.MDC;
 import org.springframework.boot.ApplicationArguments;
 
@@ -62,6 +64,7 @@ final class TakeCommand {
     private final FactoryProperties factoryProperties;
     private final Clock clock;
     private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
+    private final Map<String, TrackerSubsectionValidator> trackerValidatorRegistry;
 
     /**
      * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
@@ -75,6 +78,9 @@ final class TakeCommand {
      *     abort timestamp; never null
      * @param trackerAdapterRegistry known tracker adapter factories, keyed by {@code tracker.type}
      *     (task 5.13's seam); an empty map in production until task 5.15 wires real adapters in
+     * @param trackerValidatorRegistry known adapter subsection validators, keyed by {@code
+     *     tracker.type} ({@code TrackerAdapterConfiguration}), so {@code take} rejects a malformed
+     *     {@code tracker.<type>} subsection at load time (FR17) exactly as {@code run} does
      */
     TakeCommand(
             ManualRunAssembly assembly,
@@ -82,13 +88,15 @@ final class TakeCommand {
             String taskIdMdcKey,
             FactoryProperties factoryProperties,
             Clock clock,
-            Map<String, TrackerAdapterFactory> trackerAdapterRegistry) {
+            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry) {
         this.assembly = assembly;
         this.worktreesRoot = worktreesRoot;
         this.taskIdMdcKey = taskIdMdcKey;
         this.factoryProperties = factoryProperties;
         this.clock = clock;
         this.trackerAdapterRegistry = trackerAdapterRegistry;
+        this.trackerValidatorRegistry = trackerValidatorRegistry;
     }
 
     /**
@@ -106,7 +114,8 @@ final class TakeCommand {
     void run(ApplicationArguments args) throws IOException {
         try {
             TakeArguments takeArguments = argumentsParser.parse(args);
-            PipelineDefinition definition = TakeCommandSupport.loadPipeline(takeArguments.dir());
+            PipelineDefinition definition =
+                    TakeCommandSupport.loadPipeline(takeArguments.dir(), trackerValidatorRegistry);
             TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
             InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
             TrackerAdapterFactory factory = TakeCommandSupport.resolveFactory(trackerConfig, trackerAdapterRegistry);
@@ -123,7 +132,8 @@ final class TakeCommand {
                             trackerConfig,
                             tracker,
                             instanceId,
-                            credentialEnvVarsToScrub);
+                            credentialEnvVarsToScrub,
+                            factory);
 
             throw new TakeExitCodeException(TakeExitCodeMapper.exitCodeFor(result));
         } finally {
@@ -138,13 +148,22 @@ final class TakeCommand {
             TrackerConfig trackerConfig,
             Tracker tracker,
             InstanceId instanceId,
-            List<String> credentialEnvVarsToScrub) {
+            List<String> credentialEnvVarsToScrub,
+            TrackerAdapterFactory factory) {
         // NFR-O1: the canonical ref is known as soon as short-ref expansion resolves it, before
         // fetchTask/dispose ever run — so every explicit-mode disposition outcome, including a
         // refusal (AwaitingHuman/Working/Finished/Gone in TakeDisposition, none of which reach any
         // deeper resume/fresh-claim MDC-setting code), is logged under the correct taskId.
         TaskRef ref = resolveExplicitRef(rawRef, trackerConfig);
         MDC.put(taskIdMdcKey, ref.id());
+        // FR9, design D8: a full canonical id naming a repo the adapter cannot reconcile to the
+        // configured binding (GitHub: neither the configured repo nor a rename predecessor of it)
+        // is refused here — before fetchTask ever touches the foreign repo — as exit 15 (Skipped),
+        // never silently acted on. Adapters whose refs carry no repo binding return empty.
+        Optional<String> foreignRefusal = factory.refuseForeignRef(trackerConfig, ref);
+        if (foreignRefusal.isPresent()) {
+            return new TakeResult.Skipped(foreignRefusal.get());
+        }
         TrackerTask trackerTask = tracker.fetchTask(ref);
         var disposition = new TakeDisposition(
                 assembly,

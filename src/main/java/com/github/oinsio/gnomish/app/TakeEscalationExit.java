@@ -27,8 +27,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
  *
  * <p>Scope note: only the {@code Escalated} case is closed here. {@code Completed} → {@code
  * finish} is closed by {@link TakeFinishReport} (task 5.11); {@code Paused} → {@code
- * park(CHECKPOINT)} has the identical "decided but never called" gap and is not assigned to
- * any task in 5.1-5.11 — it remains open for a future task.
+ * park(CHECKPOINT)} is closed by {@link TakePauseExit}.
  *
  * <p>Implements FR13, D12, UX3 of add-tracker-port.
  */

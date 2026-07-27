@@ -17,6 +17,9 @@ import org.jspecify.annotations.Nullable;
  * other {@link ConfigError}:
  *
  * <ul>
+ *   <li>the section is present but {@code type} is omitted — missing type; the
+ *       sole reported problem, since no subsection can be judged without a type
+ *       to match it against;</li>
  *   <li>{@code type} names no registered adapter — unknown type;</li>
  *   <li>{@code type} is known but its matching subsection (named after {@code
  *       type}) is absent — missing subsection;</li>
@@ -60,10 +63,13 @@ public final class TrackerSeamValidator {
         if (tracker == null) {
             return List.of();
         }
-        List<ConfigError> errors = new ArrayList<>();
         String type = tracker.type();
-        TrackerSubsectionValidator validator = type == null ? null : registry.get(type);
-        if (type != null && validator == null) {
+        if (type == null) {
+            return List.of(new ConfigError(file, "tracker.type", "missing required tracker type"));
+        }
+        List<ConfigError> errors = new ArrayList<>();
+        TrackerSubsectionValidator validator = registry.get(type);
+        if (validator == null) {
             errors.add(new ConfigError(file, "tracker.type", "unknown tracker type '%s'".formatted(type)));
         }
         checkSubsections(file, type, validator, tracker.subsections(), errors);
@@ -73,7 +79,7 @@ public final class TrackerSeamValidator {
     /** Checks the matching subsection (missing, or delegated) and reports every stray one, in name order. */
     private static void checkSubsections(
             String file,
-            @Nullable String type,
+            String type,
             @Nullable TrackerSubsectionValidator validator,
             Map<String, Object> subsections,
             List<ConfigError> errors) {
@@ -91,7 +97,7 @@ public final class TrackerSeamValidator {
                 errors.addAll(validator.validate(file, where, castSubsection(raw)));
             }
         }
-        if (validator != null && type != null && !subsections.containsKey(type)) {
+        if (validator != null && !subsections.containsKey(type)) {
             errors.add(new ConfigError(file, "tracker." + type, "missing required subsection '%s'".formatted(type)));
         }
     }

@@ -34,6 +34,13 @@ class TrackerTaskStateSpec extends Specification {
         new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION).reason() == ParkReason.ESCALATION
     }
 
+    // FR5: Gone carries the tracker's closure reason for the revocation context; no-arg means unknown
+    def "Gone exposes its closure reason, or null when constructed no-arg"() {
+        expect:
+        new TrackerTaskState.Gone('completed').closureReason() == 'completed'
+        new TrackerTaskState.Gone().closureReason() == null
+    }
+
     // FR2: the dictionary is sealed — an exhaustive switch handles all five variants
     def "an exhaustive switch over TrackerTaskState handles all five variants"() {
         expect:
@@ -58,6 +65,9 @@ class TrackerTaskStateSpec extends Specification {
         new TrackerTaskState.Ready() == new TrackerTaskState.Ready()
         new TrackerTaskState.Finished() == new TrackerTaskState.Finished()
         new TrackerTaskState.Gone() == new TrackerTaskState.Gone()
+        new TrackerTaskState.Gone('completed') == new TrackerTaskState.Gone('completed')
+        new TrackerTaskState.Gone('completed') != new TrackerTaskState.Gone('not_planned')
+        new TrackerTaskState.Gone('completed') != new TrackerTaskState.Gone()
     }
 
     private static String describe(TrackerTaskState state) {

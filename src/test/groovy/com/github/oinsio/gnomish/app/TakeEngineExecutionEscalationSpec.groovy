@@ -85,4 +85,32 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
         and:
         result instanceof TakeResult.Delivered
     }
+
+    // FR13, FR18, D12: a fresh Paused (manual checkpoint) outcome now parks the tracker for real
+    // with CHECKPOINT — previously it fell through to TakeOutcomeMapper's placeholder and no park
+    // call was made, so after exit 11 the task stayed Working in the tracker.
+    def "resumeWithoutDecision parks a Paused checkpoint on the tracker with CHECKPOINT"() {
+        given: 'a task with one persisted round and a manual-checkpoint stage that passes verification'
+        def taskId = 'PROJ-7'
+        repository().createTask(context(taskId), null)
+        def state = TaskState.atStageStart('build')
+        persistOneRound(taskId, state)
+        def runner = newTakeResumeRunner()
+        def bootstrap = runner.bootstrap(cloneDir, taskId)
+
+        when:
+        def result = runner.resumeWithoutDecision(
+                cloneDir, bootstrap, pipeline(AdvancementMode.MANUAL), state,
+                RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
+
+        then: 'the tracker was actually parked with CHECKPOINT and a checkpoint/return-path report'
+        0 * tracker.finish(*_)
+        1 * tracker.park(REF, ParkReason.CHECKPOINT, { String report ->
+            report.contains('build') && report.toLowerCase().contains('checkpoint') && report.toLowerCase().contains('ready')
+        })
+
+        and:
+        result instanceof TakeResult.AwaitingHuman
+        (result as TakeResult.AwaitingHuman).reason() == ParkReason.CHECKPOINT
+    }
 }

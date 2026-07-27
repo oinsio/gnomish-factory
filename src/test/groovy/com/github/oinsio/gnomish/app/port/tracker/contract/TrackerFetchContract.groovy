@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.port.tracker.contract
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import java.time.Instant
@@ -49,6 +50,25 @@ abstract class TrackerFetchContract extends TrackerMarkerContract {
         result.snapshot().id() == ref.id()
         result.state() == new TrackerTaskState.Working(holder)
         result.abortFacts() == abortFacts
+    }
+
+    // FR11: fetchTask carries the snapshot's title and body verbatim, not just the id —
+    //     the frozen-at-first-claim record a gnome's context and task.json depend on. The
+    //     row above only asserts snapshot().id(), so the title/body carry is untested there.
+    def "fetchTask carries the snapshot title and body verbatim"() {
+        given: 'a tracker seeded with a task whose snapshot has a distinct title and body'
+        def tracker = arrange()
+        assumeProducible(tracker, 'Tracker', 'fetchTask snapshot title/body fixture')
+        def adapter = tracker.get()
+        def ref = new TaskRef('fixture:fetch-snapshot-text')
+        def snapshot = new TaskSnapshot(ref.id(), 'implement the widget', 'acceptance: the widget renders')
+        seedTask(adapter, ref, snapshot, new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+
+        when: 'fetchTask is called'
+        def result = adapter.fetchTask(ref)
+
+        then: 'the whole snapshot round-trips — id, title, and body — exactly as seeded'
+        result.snapshot() == snapshot
     }
 
     // FR2: fetchTask reports AwaitingHuman with the exact park reason it was seeded with

@@ -26,6 +26,20 @@ class TrackerSeamValidatorSpec extends Specification {
         TrackerSeamValidator.validate(FILE, null, [:]) == []
     }
 
+    def "a present section with no type reports a located missing-type error, contract of TrackerConfig/TrackerDto"() {
+        given: 'a tracker section present but with type omitted, even carrying a subsection'
+        def tracker = new TrackerDto(null, null, [github: [url: 'https://api.github.com']])
+        def registry = [github: okValidator()]
+
+        when:
+        def errors = TrackerSeamValidator.validate(FILE, tracker, registry)
+
+        then: 'the sole error names tracker.type — never a misleading "does not match type null"'
+        errors == [
+            new ConfigError(FILE, 'tracker.type', 'missing required tracker type')
+        ]
+    }
+
     def "an unknown type reports a located error naming it, before any subsection check"() {
         given:
         def tracker = new TrackerDto('bogus', null, [:])

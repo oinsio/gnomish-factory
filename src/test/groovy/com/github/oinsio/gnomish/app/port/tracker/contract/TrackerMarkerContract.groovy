@@ -74,6 +74,27 @@ abstract class TrackerMarkerContract extends TrackerContract {
         adapter.collectDecisions(ref).isEmpty()
     }
 
+    // FR4, FR12: collectDecisions returns MULTIPLE pending replies in posting order —
+    //     the runner replays human decisions in the order they were posted, so a single
+    //     reply (the rows above) is not enough to pin the ordering guarantee down
+    def "collectDecisions returns multiple pending replies in posting order"() {
+        given: 'a tracker seeded with one Working task and three replies posted in sequence'
+        def tracker = arrange()
+        assumeProducible(tracker, 'Tracker', 'decision ordering fixture')
+        def adapter = tracker.get()
+        def ref = new TaskRef('fixture:decision-order')
+        seedTask(adapter, ref, new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+        def first = new HumanReply('first answer', Instant.parse('2026-07-20T09:00:00Z'))
+        def second = new HumanReply('second answer', Instant.parse('2026-07-20T10:00:00Z'))
+        def third = new HumanReply('third answer', Instant.parse('2026-07-20T11:00:00Z'))
+        seedReply(adapter, ref, first)
+        seedReply(adapter, ref, second)
+        seedReply(adapter, ref, third)
+
+        expect: 'all three come back in the order they were posted, none dropped or reordered'
+        adapter.collectDecisions(ref) == [first, second, third]
+    }
+
     // FR4, FR12: a stale, already-acknowledged reply never resurfaces once a later
     //     reply is posted — collectDecisions returns only what followed the last ack
     def "collectDecisions never resurfaces a reply consumed by an earlier ack"() {

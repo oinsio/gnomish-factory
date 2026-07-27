@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader;
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
@@ -30,12 +31,16 @@ final class TakeCommandSupport {
      * Loads the pipeline definition from {@code dir}'s {@code .gnomish/}, once.
      *
      * @param dir the target project directory; never null
+     * @param trackerValidatorRegistry the composition-root {@code tracker.type} → subsection
+     *     validator registry, so {@code take} rejects a malformed {@code tracker.<type>} subsection
+     *     at load time (FR17) exactly as {@code run} does; never null
      * @return the validated, immutable pipeline model
      * @throws PipelineLoadFailedException if the tree fails to load
      * @throws IOException if {@code .gnomish/} cannot be read (a genuine I/O fault)
      */
-    static PipelineDefinition loadPipeline(Path dir) throws IOException {
-        LoadOutcome outcome = PipelineLoader.load(dir.resolve(".gnomish"));
+    static PipelineDefinition loadPipeline(Path dir, Map<String, TrackerSubsectionValidator> trackerValidatorRegistry)
+            throws IOException {
+        LoadOutcome outcome = PipelineLoader.load(dir.resolve(".gnomish"), trackerValidatorRegistry);
         return switch (outcome) {
             case LoadOutcome.Loaded(var definition) -> definition;
             case LoadOutcome.Invalid(List<ConfigError> errors) ->

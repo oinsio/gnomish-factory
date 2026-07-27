@@ -15,7 +15,8 @@ its FR. Design decisions referenced as D1–D15 (design.md).
       returns `AwaitingHuman → Ready` (label flip); the factory claims only
       `Ready` tasks; the take decision-wait dialog is removed — an escalation
       always parks and exits, resume happens at claim from the branch outcome
-      (deviation from explore Р5 noted: no direct take of parked tasks).
+      (a deviation from the earlier exploratory assumption: parked tasks cannot
+      be taken directly).
       Recorded in proposal (FR9, FR12, FR13, UX3, U2, NFR-P1), design
       (D3, D5, D12), tracker-port and tracker-take specs (FR2, FR9)
 - [x] 0.3 Reconcile design D5/D6 property names with the implemented
@@ -136,7 +137,9 @@ its FR. Design decisions referenced as D1–D15 (design.md).
       re-read; status title from snapshot (FR11)
 - [x] 5.3 Abort path per 0.1 (engine `Aborted` and uncaught run exception):
       ERROR log, best-effort `recordAbort`, K fuse decides `park(INFRA)` with
-      abort history; counter reset on first persisted round
+      abort history; ~~counter reset on first persisted round~~ (marked done but
+      never built — superseded by fix-abort-progress-reset; the reset half of
+      FR14 is delivered there)
       (FR14, NFR-R2, NFR-C1)
 - [x] 5.4 Backoff policy in core: exponential base/cap from factory config,
       applied over adapter abort facts to hide feed entries (FR10, D10, NFR-C1)

@@ -40,11 +40,11 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         given:
         def repo = initWorkingRepo(tempDir)
         def older = commit(repo, 'a.txt', 'first')
-        runner.run(repo, 'tag', 'v-old', older)
+        runner.run(repo, 'tag', 'version-old', older)
         commit(repo, 'b.txt', 'second')
 
         when:
-        def result = creator.createBranch(repo, 'PROJ-2', 'v-old')
+        def result = creator.createBranch(repo, 'PROJ-2', 'version-old')
 
         then:
         result instanceof BranchCreationResult.Created

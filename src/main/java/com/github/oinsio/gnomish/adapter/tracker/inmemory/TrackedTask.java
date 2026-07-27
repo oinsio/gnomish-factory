@@ -11,7 +11,10 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Package-private mutable holder for one task's state inside {@link
- * InMemoryTracker}'s store: the frozen {@link TaskSnapshot}, the current
+ * InMemoryTracker}'s store: the live {@link TaskSnapshot} (id/title/body as the
+ * issue currently reads — a human editing the issue mutates it via {@link
+ * InMemoryTrackerHarness#edit}; FR11's claim-time freeze lives in the taken
+ * task's {@code task.json}, not here), the current
  * {@link TrackerTaskState}, abort history, pending human replies, the
  * decision-ack boundary, the last report/summary text a park/finish call
  * recorded, and the ordered {@link CorrespondenceEntry} thread narrating every
@@ -29,7 +32,7 @@ import org.jspecify.annotations.Nullable;
  */
 final class TrackedTask {
 
-    private final TaskSnapshot snapshot;
+    private TaskSnapshot snapshot;
     private TrackerTaskState state;
     private int abortCount;
     private @Nullable Instant lastAbortAt;
@@ -46,6 +49,16 @@ final class TrackedTask {
 
     TaskSnapshot snapshot() {
         return snapshot;
+    }
+
+    /**
+     * Overwrites the live snapshot when a human edits the issue in the tracker
+     * (simulated by {@link InMemoryTrackerHarness#edit}). Only the live
+     * tracker-side record changes; a taken task's claim-time snapshot, already
+     * copied into {@code task.json}, is a separate frozen value (FR11).
+     */
+    void snapshot(TaskSnapshot newSnapshot) {
+        this.snapshot = newSnapshot;
     }
 
     TrackerTaskState state() {

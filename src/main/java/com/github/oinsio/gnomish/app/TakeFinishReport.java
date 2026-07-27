@@ -31,8 +31,7 @@ import com.github.oinsio.gnomish.status.StatusTextRenderer;
  *
  * <p>Scope note: only the {@code Completed} case is closed here. {@code Escalated} → {@code park}
  * was already closed by {@link TakeEscalationExit} (task 5.8); {@code Paused} → {@code
- * park(CHECKPOINT)} has the identical "decided but never called" gap and remains open for a
- * future task (per {@link TakeEngineExecution}'s own javadoc).
+ * park(CHECKPOINT)} is closed by {@link TakePauseExit}.
  *
  * <p>Implements FR18, D11 of add-tracker-port.
  */
