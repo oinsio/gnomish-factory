@@ -7,6 +7,14 @@ The manifest `settings` map of an `agent-cli` executor and of a judge check SHAL
 <!-- implements FR11, UX2, D7 of add-agent-executor -->
 <!-- implements NFR-S1 of add-tracker-port -->
 
+#### Scenario: Typo fails fast
+- **WHEN** a stage's settings contain `allowedTols`
+- **THEN** startup fails before any dialog with a message naming the stage and the unknown key
+
+#### Scenario: Binary path is installation config
+- **WHEN** application properties point the CLI binary at a fake agent script
+- **THEN** rounds execute that binary with no manifest change
+
 #### Scenario: Tracker credentials scrubbed from the gnome
 - **WHEN** a stage executes while `GNOMISH_GITHUB_TOKEN` is set in the factory environment
 - **THEN** the CLI process environment contains no variable declared as a credential by the active tracker adapter
