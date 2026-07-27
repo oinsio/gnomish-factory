@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import java.time.Instant
-import spock.lang.Specification
 
 /**
  * Implementation-detail properties of {@link InMemoryTrackerHarness} that the
@@ -16,11 +15,14 @@ import spock.lang.Specification
  * {@link InMemoryTrackerHarness#seed} decides to replay {@code recordAbort}
  * calls (task 2.6), and that {@link InMemoryTrackerHarness#seedReply} fully
  * releases the wrapped adapter's store lock on exit, mirroring {@link
- * InMemoryTrackerSpec}'s lock-release properties for the adapter itself.
+ * InMemoryTrackerSpec}'s lock-release properties for the adapter itself. Also
+ * covers {@link InMemoryTrackerHarness#edit} — the human-edits-the-issue
+ * simulation — and, through it, FR11's "snapshot at first claim": an edit to
+ * the live issue leaves a claim-time snapshot untouched.
  *
- * <p>Implements FR3 of add-tracker-port.
+ * <p>Implements FR3, FR11 of add-tracker-port.
  */
-class InMemoryTrackerHarnessSpec extends Specification {
+class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
 
     // task 2.6: seed only replays recordAbort when count is STRICTLY positive — a zero
     //     count must never call recordAbort, even when lastAbortAt is (irregularly) non-null
@@ -82,6 +84,55 @@ class InMemoryTrackerHarnessSpec extends Specification {
         lockIsFreeFromAnotherThread(tracker)
     }
 
+    // FR3: edit rewrites the live issue's title and body (the id stays the ref's identity)
+    //     and fully releases the store lock, mirroring the other human-simulation ops.
+    def "edit rewrites the live issue title and body and fully releases the store lock"() {
+        given: 'a tracker and harness with one seeded, claimed task'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:edit')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 'original title', 'original body'), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+
+        when: 'a human edits the issue title and body'
+        harness.edit(ref, 'rewritten title', 'rewritten body')
+
+        then: 'fetchTask reflects the new title and body, the id is unchanged, and the lock is free'
+        def snapshot = tracker.fetchTask(ref).snapshot()
+        snapshot.id() == ref.id()
+        snapshot.title() == 'rewritten title'
+        snapshot.body() == 'rewritten body'
+        lockIsFreeFromAnotherThread(tracker)
+    }
+
+    // FR11 "Issue edited mid-task": a snapshot captured at first claim is a frozen value —
+    //     editing the live issue afterwards (while Working or parked) changes what fetchTask
+    //     returns but NOT the already-captured claim-time snapshot the gnome's context and
+    //     task.json hold. This is the "snapshot at first claim" guarantee, exercised through
+    //     the harness's edit operation.
+    def "an issue edited after first claim does not affect the claim-time snapshot"() {
+        given: 'a tracker and harness with one seeded, claimed task'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:edit-mid-task')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 'claim-time title', 'claim-time body'), new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+
+        and: 'the snapshot the factory froze at first claim — the value that flows into task.json'
+        def claimTimeSnapshot = tracker.fetchTask(ref).snapshot()
+
+        when: 'a human edits the issue title and body while the task is in flight'
+        harness.edit(ref, 'edited title', 'edited body')
+
+        then: 'the live tracker reflects the edit'
+        def live = tracker.fetchTask(ref).snapshot()
+        live.title() == 'edited title'
+        live.body() == 'edited body'
+
+        and: 'the claim-time snapshot is untouched — a frozen copy, immune to the later edit'
+        claimTimeSnapshot.id() == ref.id()
+        claimTimeSnapshot.title() == 'claim-time title'
+        claimTimeSnapshot.body() == 'claim-time body'
+    }
+
     def "thread fully releases the store lock on exit"() {
         given: 'a tracker and harness with one seeded task'
         def tracker = new InMemoryTracker()
@@ -94,20 +145,6 @@ class InMemoryTrackerHarnessSpec extends Specification {
 
         then: 'a different thread can immediately acquire the lock, proving it was released'
         lockIsFreeFromAnotherThread(tracker)
-    }
-
-    /** Proves {@code tracker.lock} is NOT held, from a thread other than the caller's own. */
-    private static boolean lockIsFreeFromAnotherThread(InMemoryTracker tracker) {
-        boolean[] acquired = [false]
-        Thread thread = Thread.ofVirtual().unstarted {
-            if (tracker.lock.tryLock()) {
-                acquired[0] = true
-                tracker.lock.unlock()
-            }
-        }
-        thread.start()
-        thread.join(2000)
-        acquired[0]
     }
 
     // FR18, M3, UX4 of add-tracker-port: claim -> park -> finish appends one ordered

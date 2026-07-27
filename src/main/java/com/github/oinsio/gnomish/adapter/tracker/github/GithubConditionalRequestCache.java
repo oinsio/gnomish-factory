@@ -40,9 +40,14 @@ public final class GithubConditionalRequestCache {
      * If-None-Match} with the ETag cached under {@code cacheKey} when one is
      * known. A {@code 304} response is returned as {@link NotModified} without
      * consuming any further rate-limit-relevant work; any other response
-     * (including a first-ever {@code 200}) is returned as {@link Fresh} and
-     * updates the cache with the new ETag and body — or clears the entry if no
-     * {@code ETag} header was present.
+     * (including a first-ever {@code 200}) is returned as {@link Fresh}
+     * carrying its status code and body, and refreshes the cache only when it
+     * is a successful ({@code 2xx}) response that carries an {@code ETag} —
+     * any other outcome (a {@code 4xx}/{@code 5xx}, or a {@code 2xx} without an
+     * {@code ETag}) clears the entry instead. Caching only successful bodies
+     * keeps {@link NotModified} an unambiguous "the resource is still there and
+     * unchanged" signal for callers that key behavior on the status code (e.g.
+     * {@link GithubTaskFetcher} distinguishing a {@code 404} from a live issue).
      */
     public ConditionalResult get(HttpRequest.Builder requestBuilder, String cacheKey) {
         CachedEntry cached = entries.get(cacheKey);
@@ -57,12 +62,12 @@ public final class GithubConditionalRequestCache {
         }
 
         String eTag = response.headers().firstValue("ETag").orElse(null);
-        if (eTag == null) {
-            entries.remove(cacheKey);
-        } else {
+        if (response.statusCode() / 100 == 2 && eTag != null) {
             entries.put(cacheKey, new CachedEntry(eTag, response.body()));
+        } else {
+            entries.remove(cacheKey);
         }
-        return new Fresh(response.body(), eTag);
+        return new Fresh(response.statusCode(), response.body(), eTag);
     }
 
     private record CachedEntry(String eTag, String body) {}
@@ -71,12 +76,15 @@ public final class GithubConditionalRequestCache {
     public sealed interface ConditionalResult permits Fresh, NotModified {}
 
     /**
-     * The resource was fetched anew (first request, or the ETag no longer
-     * matched). {@code eTag} is {@code null} only if the server omitted the
-     * {@code ETag} header, in which case no conditional caching is possible
-     * for this key.
+     * The resource was fetched anew (first request, the ETag no longer
+     * matched, or the response was not a cacheable {@code 2xx}). {@code
+     * statusCode} is the HTTP status of that fresh response, so callers can
+     * distinguish e.g. a {@code 404} from a live {@code 200}. {@code eTag} is
+     * {@code null} only if the server omitted the {@code ETag} header, in which
+     * case no conditional caching is possible for this key.
      */
-    public record Fresh(String body, @Nullable String eTag) implements ConditionalResult {}
+    public record Fresh(
+            int statusCode, String body, @Nullable String eTag) implements ConditionalResult {}
 
     /** The resource is unchanged since the cached ETag; reuse {@link #previousBody()}. */
     public record NotModified(String previousBody) implements ConditionalResult {}

@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.net.http.HttpRequest;
@@ -30,8 +28,6 @@ import java.util.Optional;
  * <p>Implements FR12 of add-tracker-port.
  */
 public final class GithubDecisions {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final GithubHttpClient httpClient;
     private final GithubCommentThread commentThread;
@@ -68,7 +64,7 @@ public final class GithubDecisions {
         HttpRequest.Builder request = httpClient
                 .newRequest(path)
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(toCommentBodyJson(body)));
+                .POST(HttpRequest.BodyPublishers.ofString(GithubCommentBody.toJson(body)));
 
         HttpResponse<String> response = httpClient.send(request);
         if (response.statusCode() / 100 != 2) {
@@ -90,14 +86,4 @@ public final class GithubDecisions {
         }
         return Optional.ofNullable(index);
     }
-
-    private static String toCommentBodyJson(String body) {
-        try {
-            return MAPPER.writeValueAsString(new CommentBody(body));
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize ack comment request body", e);
-        }
-    }
-
-    private record CommentBody(String body) {}
 }

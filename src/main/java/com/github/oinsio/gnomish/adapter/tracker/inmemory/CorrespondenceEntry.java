@@ -21,16 +21,16 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory;
  * @param kind which coordination write produced this entry
  * @param text a short, human-readable one-line narration of the fact recorded; never blank
  */
-record CorrespondenceEntry(Kind kind, String text) {
+public record CorrespondenceEntry(Kind kind, String text) {
 
-    CorrespondenceEntry {
+    public CorrespondenceEntry {
         if (text.isBlank()) {
             throw new IllegalArgumentException("CorrespondenceEntry.text must not be blank");
         }
     }
 
     /** Which port write produced a {@link CorrespondenceEntry}, mirroring the tracker thread's own vocabulary. */
-    enum Kind {
+    public enum Kind {
         CLAIM,
         PARK,
         FINISH,

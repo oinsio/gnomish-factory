@@ -17,9 +17,10 @@ import java.time.Instant;
  * on write or force the read-side aggregate to fake a per-abort cause/instance
  * it does not track.
  *
- * <p>{@code instance} is a plain {@link String} for this task (1.2): the
- * dedicated {@code InstanceId} composite type is introduced in task 1.3 and may
- * replace this field's type then.
+ * <p>{@code instance} is a plain {@link String}: the port carries the flattened
+ * {@link InstanceId#value()} form ({@code <name>-<suffix>}), not the composite
+ * {@link InstanceId} type — an abort marker only needs an attributable label
+ * (FR14), so the port stays agnostic to the composite's structure.
  *
  * <p>Inert value data compared by content.
  *

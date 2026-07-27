@@ -76,7 +76,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture {
                 new ShellCommandCheckRunner(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null))
+                new FactoryProperties('test-instance', null, null, null))
         new GitModeRunner(assembly, worktreesRoot)
     }
 

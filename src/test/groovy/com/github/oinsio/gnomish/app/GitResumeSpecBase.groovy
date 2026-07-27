@@ -88,7 +88,7 @@ abstract class GitResumeSpecBase extends Specification implements BareGitRepoFix
                 new ShellCommandCheckRunner(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null))
+                new FactoryProperties('test-instance', null, null, null))
         new GitResumeRunner(assembly, worktreesRoot, 'taskId')
     }
 

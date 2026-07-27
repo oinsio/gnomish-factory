@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -9,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
@@ -49,8 +51,12 @@ class GithubTaskFetcherSpec extends Specification {
 
     private GithubTaskFetcher newFetcher(String workingLabel = 'gnomish:working',
             String needsHumanLabel = 'gnomish:needs-human') {
+        new GithubTaskFetcher(newCache(), workingLabel, needsHumanLabel)
+    }
+
+    private GithubConditionalRequestCache newCache() {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        new GithubTaskFetcher(httpClient, workingLabel, needsHumanLabel)
+        new GithubConditionalRequestCache(httpClient)
     }
 
     private TaskRef refFor(int issueNumber) {
@@ -181,11 +187,26 @@ class GithubTaskFetcherSpec extends Specification {
         result.state() == new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
     }
 
-    def "reports Gone for a closed issue without throwing, carrying no abort facts obligation"() {
+    def "reports Gone for a closed issue, carrying state_reason as the closure reason (revocation context)"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/10'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         {"number":10,"title":"t","body":"b","state":"closed","state_reason":"completed","labels":[]}
+                        ''')))
+        def fetcher = newFetcher()
+
+        when:
+        def result = fetcher.fetchTask(refFor(10))
+
+        then:
+        result.state() == new TrackerTaskState.Gone('completed')
+    }
+
+    def "reports Gone with no closure reason for a closed issue whose state_reason is absent"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/10'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        {"number":10,"title":"t","body":"b","state":"closed","labels":[]}
                         ''')))
         def fetcher = newFetcher()
 
@@ -232,5 +253,45 @@ class GithubTaskFetcherSpec extends Specification {
         then:
         result.abortFacts().count() == 1
         result.abortFacts().lastAbortAt() == Instant.parse('2026-07-20T11:00:00Z')
+    }
+
+    def "re-reading an unchanged task at a round boundary sends If-None-Match and treats 304 as no change"() {
+        given: 'the issue and its comments each answer 200+ETag once, then 304 on the conditional re-read'
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12'))
+                .inScenario('issue-boundary').whenScenarioStateIs('Started')
+                .willReturn(aResponse().withStatus(200).withHeader('ETag', '"iss1"').withBody('''
+                        {"number":12,"title":"t","body":"b","state":"open",
+                         "labels":[{"name":"gnomish:working"}]}
+                        '''))
+                .willSetStateTo('issue-cached'))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12'))
+                .inScenario('issue-boundary').whenScenarioStateIs('issue-cached')
+                .willReturn(aResponse().withStatus(304)))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100'))
+                .inScenario('comments-boundary').whenScenarioStateIs('Started')
+                .willReturn(aResponse().withStatus(200).withHeader('ETag', '"com1"').withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}
+                        ]
+                        '''))
+                .willSetStateTo('comments-cached'))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100'))
+                .inScenario('comments-boundary').whenScenarioStateIs('comments-cached')
+                .willReturn(aResponse().withStatus(304)))
+        def fetcher = newFetcher()
+
+        when: 'the same fetcher (sharing one cache) reads the task twice, as a round-boundary check does'
+        def first = fetcher.fetchTask(refFor(12))
+        def second = fetcher.fetchTask(refFor(12))
+
+        then: 'the 304 re-read reuses the cached issue and comments, still resolving the same live state'
+        first.state() == new TrackerTaskState.Working('gnomish-factory-a1')
+        second.state() == new TrackerTaskState.Working('gnomish-factory-a1')
+
+        and: 'the second read carried If-None-Match with the cached ETag of each resource'
+        wireMock.verify(getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12'))
+                .withHeader('If-None-Match', WireMock.equalTo('"iss1"')))
+        wireMock.verify(getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100'))
+                .withHeader('If-None-Match', WireMock.equalTo('"com1"')))
     }
 }

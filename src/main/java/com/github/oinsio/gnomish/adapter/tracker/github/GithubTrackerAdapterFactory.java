@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Assembles a live, ready-to-use {@link GithubTracker} from a validated {@link TrackerConfig}
@@ -19,7 +20,7 @@ import java.util.Map;
  *
  * <p>Label defaults (FR5): names {@code gnomish:ready}/{@code gnomish:working}/{@code
  * gnomish:needs-human}/{@code gnomish:delivered}; colors from GitHub's own commonly-used label
- * palette — {@code 2ea44f} (green), {@code 0366d6} (blue), {@code d73a4a} (red), {@code 6f42c1}
+ * palette — {@code 2ea44f} (green), {@code 1f6feb} (blue), {@code d73a4a} (red), {@code 8250df}
  * (purple); each with a short operator-hint description. Configured {@code labels.*} entries
  * (already schema-validated by {@link GithubLabelsValidator}) override the default for that
  * logical state only.
@@ -34,11 +35,11 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     private static final GithubLabelDef DEFAULT_READY =
             new GithubLabelDef("gnomish:ready", "2ea44f", "Gnomish factory: ready to be claimed");
     private static final GithubLabelDef DEFAULT_WORKING =
-            new GithubLabelDef("gnomish:working", "0366d6", "Gnomish factory: currently being worked");
+            new GithubLabelDef("gnomish:working", "1f6feb", "Gnomish factory: currently being worked");
     private static final GithubLabelDef DEFAULT_NEEDS_HUMAN =
             new GithubLabelDef("gnomish:needs-human", "d73a4a", "Gnomish factory: waiting on a human decision");
     private static final GithubLabelDef DEFAULT_DELIVERED =
-            new GithubLabelDef("gnomish:delivered", "6f42c1", "Gnomish factory: delivered for review");
+            new GithubLabelDef("gnomish:delivered", "8250df", "Gnomish factory: delivered for review");
 
     // PIT M4 documented exception (build.gradle has the full rationale style): @DoNotMutate — this
     // method's success path (the token resolves and construction proceeds) can only be exercised
@@ -84,7 +85,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
 
         return new GithubTracker(
                 new GithubFeedQuery(cache, owner, repo, readyLabel.name()),
-                new GithubTaskFetcher(httpClient, workingLabel.name(), needsHumanLabel.name()),
+                new GithubTaskFetcher(cache, workingLabel.name(), needsHumanLabel.name()),
                 new GithubClaimLease(httpClient, labelOps, readyLabel.name(), workingLabel.name()),
                 new GithubStateWrites(
                         httpClient,
@@ -102,6 +103,51 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     public TaskRef expandRef(TrackerConfig config, String rawRef) {
         int issueNumber = Integer.parseInt(rawRef.startsWith("#") ? rawRef.substring(1) : rawRef);
         return GithubRefExpander.expand(config.subsection(), issueNumber);
+    }
+
+    // PIT M4 documented exception (same integration-boundary rationale as create(config, id) and
+    // requireToken above): this public entry point only reads GNOMISH_GITHUB_TOKEN from the real
+    // process environment and delegates; its success path can be exercised only with a real env
+    // token, not reliably possible on a module-path JVM without --add-opens. The actual foreign-repo
+    // logic (the 3-arg overload's owner/repo threading, verify delegation, and exception→refusal
+    // translation) is fully covered via the explicit-token testing seam below.
+    @DoNotMutate
+    @Override
+    public Optional<String> refuseForeignRef(TrackerConfig config, TaskRef ref) {
+        return refuseForeignRef(config, ref, requireToken());
+    }
+
+    /**
+     * Package-private testing seam mirroring {@link #create(TrackerConfig, String, String)}:
+     * verifies {@code ref} against an explicit {@code token} instead of reading {@code
+     * GNOMISH_GITHUB_TOKEN} from the environment. Delegates to {@link GithubForeignRepoCheck}
+     * (design D8), which only issues a {@code GET /repos/{owner}/{repo}} when the ref's owner/repo
+     * differ from the configured binding — a matching id returns empty with no network call. A
+     * genuinely foreign id (or one whose rename redirect resolves elsewhere) is translated from the
+     * check's {@link GithubForeignRepoException} into the port's refusal message.
+     */
+    Optional<String> refuseForeignRef(TrackerConfig config, TaskRef ref, String token) {
+        Map<String, Object> subsection = config.subsection();
+        String apiUrl = requireStringValue(subsection, "api-url");
+        GithubRepoRef repoRef = GithubRepoRef.parse(requireStringValue(subsection, "repo"));
+        var check = new GithubForeignRepoCheck(new GithubHttpClient(apiUrl, token));
+        try {
+            check.verify(GithubTaskId.parse(ref.id()), repoRef.owner(), repoRef.repo());
+            return Optional.empty();
+        } catch (GithubForeignRepoException e) {
+            return Optional.of(refusalMessageOf(e));
+        }
+    }
+
+    // PIT M4 documented exception (mirrors TakeEngineExecution#reasonFor): @DoNotMutate — the null
+    // branch is provably unreachable, GithubForeignRepoException's every constructor calls
+    // super(String) with a non-null message; it exists only to satisfy NullAway's @Nullable view of
+    // Throwable.getMessage(). Isolated to its own method so this dead-but-defensive branch gives no
+    // mutant a place to survive against the refusal logic GithubForeignRepoCheckSpec already covers.
+    @DoNotMutate
+    private static String refusalMessageOf(GithubForeignRepoException e) {
+        String message = e.getMessage();
+        return message == null ? "foreign-repo refusal" : message;
     }
 
     /**

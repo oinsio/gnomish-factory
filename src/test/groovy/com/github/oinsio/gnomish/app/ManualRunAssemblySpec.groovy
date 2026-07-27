@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.AppenderBase
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
@@ -18,23 +19,18 @@ import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.status.Activity
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Unroll
-
 /**
  * FR10, D6 of add-agent-executor: {@link ManualRunAssembly#assemble} selects the manifest-driven
  * CLI adapter for each role by default and swaps to the interactive console adapter only for the
@@ -46,9 +42,9 @@ class ManualRunAssemblySpec extends Specification {
     @TempDir
     Path workspaceDir
 
-    private static final FactoryProperties FACTORY_PROPERTIES = new FactoryProperties('test-instance', null, null)
+    private static final FactoryProperties FACTORY_PROPERTIES = new FactoryProperties('test-instance', null, null, null)
 
-    private ManualRunAssembly newAssembly(FactoryProperties factoryProperties = FACTORY_PROPERTIES) {
+    private static ManualRunAssembly newAssembly(FactoryProperties factoryProperties = FACTORY_PROPERTIES) {
         new ManualRunAssembly(
                 new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.out),
                 new FilesExistCheckRunner(),
@@ -70,7 +66,7 @@ class ManualRunAssemblySpec extends Specification {
         wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${scenario}'\nexec sh '${scriptPath}' \"\$@\"\n"
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('test-instance', wrapper.absolutePath, [])
+        new FactoryProperties('test-instance', wrapper.absolutePath, [], null)
     }
 
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
@@ -118,7 +114,7 @@ class ManualRunAssemblySpec extends Specification {
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence())
+        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [])
 
         then:
         run.ports().executor().class == expectedExecutor
@@ -137,7 +133,7 @@ class ManualRunAssemblySpec extends Specification {
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence())
+        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [])
 
         then:
         run.ports().judgeVoter().class == expectedJudgeVoter
@@ -158,15 +154,15 @@ class ManualRunAssemblySpec extends Specification {
         given:
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence())
-        run.holder().updateActivity(new Activity.Executing(java.time.Instant.now()))
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
+        run.holder().updateActivity(new Activity.Executing(Instant.now()))
 
         // Snapshot the held activity right after each of this test's own log lines lands, so
         // the mid-round enrichment (before RoundFinished resets it) is observable even though
         // the assembled AgentActivityEnricher itself is private to ManualRunAssembly.
         def toolCallsSeenDuringRound = []
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(LoggingAgentProgressListener)
-        def probe = new ch.qos.logback.core.AppenderBase<ILoggingEvent>() {
+        def probe = new AppenderBase<ILoggingEvent>() {
                     protected void append(ILoggingEvent event) {
                         toolCallsSeenDuringRound << (run.holder().activity().activity() as Activity.Executing).toolCalls()
                     }
@@ -211,11 +207,11 @@ class ManualRunAssemblySpec extends Specification {
         given:
         Files.writeString(workspaceDir.resolve('criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence())
-        run.holder().updateActivity(new Activity.Executing(java.time.Instant.now()))
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
+        run.holder().updateActivity(new Activity.Executing(Instant.now()))
         def before = run.holder().activity().activity() as Activity.Executing
 
-        def check = new com.github.oinsio.gnomish.domain.pipeline.VerifyCheck.Judge(
+        def check = new VerifyCheck.Judge(
                 'criteria.md', 'claude-fake-judge-1', [:], 1)
 
         when:

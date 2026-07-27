@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import java.time.Instant
-import spock.lang.Specification
 
 /**
  * Implementation-detail properties of {@link InMemoryTracker} that the
@@ -21,7 +20,7 @@ import spock.lang.Specification
  *
  * <p>Implements FR1, FR2, FR3 of add-tracker-port.
  */
-class InMemoryTrackerSpec extends Specification {
+class InMemoryTrackerSpec extends AbstractInMemoryTrackerSpec {
 
     def "acknowledgeDecision fully releases the store lock on exit"() {
         given: 'a tracker with one seeded task'
@@ -248,19 +247,5 @@ class InMemoryTrackerSpec extends Specification {
 
         then: 'the synthesized snapshot carries the exact expected fields'
         result.snapshot() == new TaskSnapshot(ref.id(), ref.id(), '')
-    }
-
-    /** Proves {@code tracker.lock} is NOT held, from a thread other than the caller's own. */
-    private static boolean lockIsFreeFromAnotherThread(InMemoryTracker tracker) {
-        boolean[] acquired = [false]
-        Thread thread = Thread.ofVirtual().unstarted {
-            if (tracker.lock.tryLock()) {
-                acquired[0] = true
-                tracker.lock.unlock()
-            }
-        }
-        thread.start()
-        thread.join(2000)
-        acquired[0]
     }
 }

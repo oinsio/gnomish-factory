@@ -58,9 +58,42 @@ class GithubConditionalRequestCacheSpec extends Specification {
 
         then:
         result instanceof GithubConditionalRequestCache.Fresh
+        result.statusCode() == 200
         result.body() == '{"n":1}'
-        result.etag() == '"v1"'
+        result.eTag() == '"v1"'
         wireMock.verify(getRequestedFor(urlEqualTo('/issues/42'))
+                .withoutHeader('If-None-Match'))
+    }
+
+    def "a non-2xx response is returned Fresh with its status and is not cached, even when it carries an ETag"() {
+        given: 'a 404 that (unusually) carries an ETag — it must not seed the conditional cache'
+        wireMock.stubFor(get(urlEqualTo('/issues/99'))
+                .willReturn(aResponse().withStatus(404).withHeader('ETag', '"gone"').withBody('{"message":"Not Found"}')))
+        def cache = new GithubConditionalRequestCache(newClient())
+
+        when:
+        def first = cache.get(cache.httpClient().newRequest('/issues/99'), 'issues/99')
+        cache.get(cache.httpClient().newRequest('/issues/99'), 'issues/99')
+
+        then: 'the status is surfaced and the next request carries no If-None-Match (nothing was cached)'
+        first instanceof GithubConditionalRequestCache.Fresh
+        first.statusCode() == 404
+        wireMock.verify(2, getRequestedFor(urlEqualTo('/issues/99'))
+                .withoutHeader('If-None-Match'))
+    }
+
+    def "a 2xx response without an ETag is not cached"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/issues/7'))
+                .willReturn(aResponse().withStatus(200).withBody('{"n":1}')))
+        def cache = new GithubConditionalRequestCache(newClient())
+
+        when:
+        cache.get(cache.httpClient().newRequest('/issues/7'), 'issues/7')
+        cache.get(cache.httpClient().newRequest('/issues/7'), 'issues/7')
+
+        then: 'with no ETag to replay, the second request is unconditional too'
+        wireMock.verify(2, getRequestedFor(urlEqualTo('/issues/7'))
                 .withoutHeader('If-None-Match'))
     }
 
@@ -82,12 +115,12 @@ class GithubConditionalRequestCacheSpec extends Specification {
     def "a 304 response is treated as no change, reusing the previously cached body"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/issues/42'))
-                .inScenario('etag-304')
+                .inScenario('eTag-304')
                 .whenScenarioStateIs('Started')
                 .willReturn(aResponse().withStatus(200).withHeader('ETag', '"v1"').withBody('{"n":1}'))
                 .willSetStateTo('cached'))
         wireMock.stubFor(get(urlEqualTo('/issues/42'))
-                .inScenario('etag-304')
+                .inScenario('eTag-304')
                 .whenScenarioStateIs('cached')
                 .willReturn(aResponse().withStatus(304)))
         def cache = new GithubConditionalRequestCache(newClient())
@@ -104,17 +137,17 @@ class GithubConditionalRequestCacheSpec extends Specification {
     def "a changed resource returns a new ETag and body as fresh, updating the cache"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/issues/42'))
-                .inScenario('etag-change')
+                .inScenario('eTag-change')
                 .whenScenarioStateIs('Started')
                 .willReturn(aResponse().withStatus(200).withHeader('ETag', '"v1"').withBody('{"n":1}'))
                 .willSetStateTo('changed'))
         wireMock.stubFor(get(urlEqualTo('/issues/42'))
-                .inScenario('etag-change')
+                .inScenario('eTag-change')
                 .whenScenarioStateIs('changed')
                 .willReturn(aResponse().withStatus(200).withHeader('ETag', '"v2"').withBody('{"n":2}'))
                 .willSetStateTo('caching-v2'))
         wireMock.stubFor(get(urlEqualTo('/issues/42'))
-                .inScenario('etag-change')
+                .inScenario('eTag-change')
                 .whenScenarioStateIs('caching-v2')
                 .willReturn(aResponse().withStatus(304)))
         def cache = new GithubConditionalRequestCache(newClient())
@@ -126,7 +159,7 @@ class GithubConditionalRequestCacheSpec extends Specification {
         then:
         result instanceof GithubConditionalRequestCache.Fresh
         result.body() == '{"n":2}'
-        result.etag() == '"v2"'
+        result.eTag() == '"v2"'
 
         when:
         def third = cache.get(cache.httpClient().newRequest('/issues/42'), 'issues/42')

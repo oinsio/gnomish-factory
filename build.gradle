@@ -140,6 +140,33 @@ dependencies {
     implementation libs.jackson.core
     implementation libs.jackson.databind
     implementation libs.jackson.dataformat.yaml
+
+    // Resilience4j retry for the tracker adapter's HTTP client core (task 4.4 of
+    // add-tracker-port, NFR-R2): infrastructure failures of tracker calls are retried.
+    implementation libs.resilience4j.retry
+    // resilience4j-core: GithubRetryConfig references IntervalFunction directly
+    // (buildHealth advice — a transitive of resilience4j-retry used directly
+    // must be declared directly).
+    implementation libs.resilience4j.core
+
+    // WireMock for tracker/AI API contract tests, in-JVM (.claude/rules/testing.md,
+    // add-tracker-port task 4.x): no Docker needed for HTTP contract-level specs.
+    testImplementation libs.wiremock
+    // GithubHttpClientSpec builds its own fast RetryConfig with IntervalFunction
+    // directly; buildHealth reports the main-scope `implementation
+    // libs.resilience4j.core` above as already sufficient for test code
+    // (implementation is on testImplementation's extendsFrom chain), so no
+    // separate testImplementation declaration is needed.
+    // WireMock 3.13.1's HttpServerFactoryLoader needs an internally consistent
+    // Jetty 11 stack (its own jetty-bom import); the Boot 4.1.0 BOM otherwise
+    // wins conflict resolution on jetty-server/-http/-io/etc. (their highest
+    // version, 12.1.10) while jetty-servlet/-webapp (which Boot does not
+    // manage) stay on 11 — the mixed 11/12 classpath then fails at
+    // WireMockServer startup with "Jetty 11 is not present" (task 4.4).
+    // enforcedPlatform (not platform) forces every jetty-bom-managed version
+    // down to 11.0.24 on the test classpaths, overriding the Boot BOM's
+    // constraint so WireMock gets one consistent Jetty 11 stack in tests.
+    testImplementation enforcedPlatform('org.eclipse.jetty:jetty-bom:11.0.24')
 }
 
 // Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,
@@ -353,9 +380,24 @@ pitest {
     // It is a Groovy test-support hygiene guard over committed fixtures (the scrubber is Groovy,
     // outside `targetClasses`), so excluding it removes no production line from mutation coverage;
     // the scrubber's behaviour is covered by ReferenceDumpScrubberSpec's unit scenarios (M5).
+    //
+    // M4 documented exception (add-tracker-port, task 6.5): FactoryApplicationSpec's
+    // "bootJar stays headless" feature resolves the packaged jar through the `e2e.jarPath`
+    // system property that only the `test` task wires (from the bootJar output) — exactly the
+    // same PIT-minion-never-receives-it gap as the E2E layer above, unrelated to any mutation.
+    // This feature was green under plain `test` before this change; it only started failing
+    // PIT's own pre-mutation coverage pass here because task 4.1 (add-tracker-port) added
+    // WireMock, which pulls jetty/servlet jars onto testRuntimeClasspath — the assertion itself
+    // still holds against the real bootJar, it is PIT's separate process launch that never sees
+    // the property. Excluding the whole spec (not just the one feature — PIT's exclusion glob
+    // has no per-feature granularity) removes no production line from mutation coverage: the
+    // other three features in this spec assert Spring wiring already exercised by dozens of
+    // other unit specs across the codebase, and the headless-jar guarantee itself is not
+    // tracker-port production code.
     excludedTestClasses = [
         'com.github.oinsio.gnomish.e2e.*',
         'com.github.oinsio.gnomish.adapter.agent.ReferenceDumpHygieneSpec',
+        'com.github.oinsio.gnomish.FactoryApplicationSpec',
     ]
     // M4 documented exception: a handful of private methods on `record` classes
     // (ExecutorUsage, StatusReport, Finding, Decision, UsageTotals of add-git-workflow)

@@ -101,7 +101,7 @@ class AgentProcessLauncherSpec extends Specification {
     // into an infrastructure failure without a stack trace.
     def "start failure returns null instead of throwing"() {
         given: 'a binary path that cannot possibly exist'
-        def properties = new FactoryProperties('factory-01', '/no/such/binary-xyz', [])
+        def properties = new FactoryProperties('factory-01', '/no/such/binary-xyz', [], null)
 
         when:
         def launched = launcher.launch(workspace(), 'goal', properties)
@@ -215,6 +215,72 @@ class AgentProcessLauncherSpec extends Specification {
         decisionFile.toFile().exists()
     }
 
+    // D17, NFR-S1 of add-tracker-port: a name in credentialEnvVarsToScrub is removed from the
+    // child's inherited environment regardless of agentCliEnvPassthrough, while an unrelated
+    // inherited var is left untouched — proven against two real, always-present inherited
+    // variables (this test JVM's own HOME/USER) rather than a synthetic credential, since
+    // there is no reliable, portable way to inject a brand-new var into this running JVM's
+    // own environment for a fake credential to then be inherited from. PATH itself is
+    // deliberately NOT used here: POSIX sh assigns a default PATH on startup when none is
+    // inherited, which would falsely look like "PATH survived scrubbing".
+    def "a declared name is scrubbed from the child process environment while an untouched name still reaches it"() {
+        given: 'a launcher configured to scrub HOME specifically, and a wrapper that reports both HOME and USER'
+        def scrubbingLauncher = new AgentProcessLauncher(clock, ['HOME'])
+        def properties = fakeAgentPropertiesReportingEnv(['HOME', 'USER'])
+
+        when:
+        def launched = scrubbingLauncher.launch(workspace(), 'goal', properties)
+        launched.process().waitFor()
+        def report = envReport()
+
+        then: 'the scrubbed name is gone from the child process environment'
+        !report.contains('HOME=present')
+        report.contains('HOME=absent')
+
+        and: 'an untouched, already-inherited name still reaches the child unaffected'
+        report.contains('USER=present')
+    }
+
+    // Positive control for the test above: the identical wrapper/report mechanism, through a
+    // launcher with nothing declared to scrub — both names still reach the child, proving the
+    // report file itself (not some quirk of HOME specifically) is what changes with scrubbing.
+    def "with nothing declared to scrub, both names still reach the child process"() {
+        given:
+        def properties = fakeAgentPropertiesReportingEnv(['HOME', 'USER'])
+
+        when:
+        def launched = launcher.launch(workspace(), 'goal', properties)
+        launched.process().waitFor()
+        def report = envReport()
+
+        then:
+        report.contains('HOME=present')
+        report.contains('USER=present')
+    }
+
+    private String envReport() {
+        workspaceDir.resolve('env-report.txt').toFile().text
+    }
+
+    /**
+     * Wraps the fake agent with a preamble that, for each of {@code varNames}, appends a
+     * {@code <name>=present} or {@code <name>=absent} line to {@code env-report.txt} in the
+     * workspace — the seam this spec uses to observe exactly which inherited names actually
+     * reached the child process, mirroring the existing wrapper-script pattern the other
+     * specs in this file use for the scenario/argv-capture env vars.
+     */
+    private FactoryProperties fakeAgentPropertiesReportingEnv(List<String> varNames) {
+        def reportPath = workspaceDir.resolve('env-report.txt')
+        def checks = varNames.collect { name ->
+            "if [ -n \"\${${name}:-}\" ]; then echo '${name}=present' >> '${reportPath}'; else echo '${name}=absent' >> '${reportPath}'; fi"
+        }.join('\n')
+        def wrapper = File.createTempFile('fake-agent-wrapper-env-report', '.sh')
+        wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='plain-round'\n${checks}\nexec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"\n"
+        wrapper.setExecutable(true)
+        wrapper.deleteOnExit()
+        new FactoryProperties('factory-01', wrapper.absolutePath, [], null)
+    }
+
     private static FactoryProperties fakeAgentProperties(String scenario, List<String> envPassthrough = []) {
         // The fake agent script cannot be invoked as a single argv[0] binary (Gradle's
         // resource copy / a fresh checkout does not reliably preserve the executable
@@ -226,6 +292,6 @@ class AgentProcessLauncherSpec extends Specification {
         wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${scenario}'\nexec sh '${FakeAgentBinary.commandPrefix()[1]}' \"\$@\"\n"
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, envPassthrough)
+        new FactoryProperties('factory-01', wrapper.absolutePath, envPassthrough, null)
     }
 }

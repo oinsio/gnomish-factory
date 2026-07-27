@@ -72,7 +72,7 @@ class GithubTrackerSpec extends Specification {
         def cache = new GithubConditionalRequestCache(httpClient)
         new GithubTracker(
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
-                new GithubTaskFetcher(httpClient, 'gnomish:working', 'gnomish:needs-human'),
+                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human'),
                 new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
                 new GithubStateWrites(httpClient, labelOps, 'gnomish-factory-x7k2q1',
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),

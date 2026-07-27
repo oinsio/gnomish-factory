@@ -130,7 +130,7 @@ public final class GithubMarker {
         }
         String rest = matcher.group("rest");
         String humanText = rest == null ? "" : rest;
-        return Optional.of(new ParsedMarker(kind, fields.instance(), at, fields.v(), humanText, fields.reason()));
+        return Optional.of(new ParsedMarker(kind, fields.instance(), at, fields.version(), humanText, fields.reason()));
     }
 
     private static String writeStructuralJson(
@@ -154,6 +154,6 @@ public final class GithubMarker {
             @Nullable @JsonProperty("kind") String kind,
             @Nullable @JsonProperty("instance") String instance,
             @Nullable @JsonProperty("at") String at,
-            @JsonProperty("v") int v,
+            @JsonProperty("version") int version,
             @Nullable @JsonProperty("reason") String reason) {}
 }

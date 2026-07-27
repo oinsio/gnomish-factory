@@ -90,7 +90,7 @@ a cross-instance resume after a pipeline edit.
 
 The abort path (infrastructure abort) covers two events: the engine `Aborted`
 outcome (durable persist failed) and an uncaught exception of the take run
-itself (explore Р5: "либо упал сам") — both do best-effort `recordAbort`. The
+itself (the run crashed on its own) — both do best-effort `recordAbort`. The
 K fuse decides at abort time: `abortFacts.count + 1 >= K` → `park(INFRA)`
 instead of `recordAbort`. *Rationale:* single-task semantics means no scheduler —
 the whole tracker mode is a mapping from `TaskOutcome` to port calls; the
@@ -159,7 +159,7 @@ considered).
 followed by human-readable text.** (Q7; FR7, NFR-O1) GitHub adapter comment shape:
 
 ```
-<!-- gnomish {"kind":"claim","instance":"gnomish-factory-x7k2q1","at":"2026-07-20T12:00:00Z","v":1} -->
+<!-- gnomish {"kind":"claim","instance":"gnomish-factory-x7k2q1","at":"2026-07-20T12:00:00Z","version":1} -->
 🤖 gnomish: claimed by gnomish-factory-x7k2q1
 ```
 
@@ -175,7 +175,9 @@ renderers differ (HTML comments may be visible or stripped); adapters need freed
 FR10, NFR-C1) `delay = base × 2^(count−1)`, capped (`abort-backoff-base`/`-cap`,
 D5). A `Ready` task is invisible to the bare-`take` feed while
 `now − lastAbortAt < delay`. The counter is "aborts since last durable progress" —
-reset by the first persisted round after claim, reconstructed from comments by any
+reset by the first persisted round after claim (the reset mechanism itself is
+delivered by `fix-abort-progress-reset`, not this change), reconstructed from
+comments by any
 instance. Explicit `take <ref>` ignores backoff (mandate). *Rejected:* fixed delay —
 does not distinguish a transient hiccup from a persistently broken environment;
 adapter-side filtering — adapters report facts, core applies policy (contract-spec
@@ -265,7 +267,7 @@ pattern — an implicit convention a third-party adapter can silently miss.
 ## Risks / Trade-offs
 
 - [Revocation latency equals one round; a long agent round keeps burning tokens
-  after a human closes the issue] → accepted for v1 (explore Р6); mid-round cancel
+  after a human closes the issue] → accepted for v1; mid-round cancel
   needs an executor cancel seam, scheduled for when long rounds hurt.
 - [Human edits labels concurrently with the adapter] → point add/remove label calls
   only (never whole-set PATCH), so concurrent edits are not lost; contract tests
@@ -279,7 +281,7 @@ pattern — an implicit convention a third-party adapter can silently miss.
 - [WireMock cannot prove GitHub's real comment-id ordering] → contract race test
   runs on the in-memory reference (which simulates interleavings) plus a
   WireMock-scripted interleaving for the GitHub adapter; real-GitHub behavior rests
-  on the documented server-side id order (explore Р13 API research).
+  on the documented server-side id order (confirmed by GitHub API research).
 
 ## Migration Plan
 

@@ -36,7 +36,7 @@ class FactoryApplicationSpec extends Specification {
     // FR3: valid configuration binds — the bean carries the application.yaml value
     def "factory properties bean is populated from application.yaml"() {
         expect: 'the instance name equals the value declared in application.yaml'
-        factoryProperties.instanceName() == 'gnomish-local'
+        factoryProperties.instanceName() == 'gnomish-factory'
     }
 
     // FR2: headless runtime — the booted context is a plain annotation-config context

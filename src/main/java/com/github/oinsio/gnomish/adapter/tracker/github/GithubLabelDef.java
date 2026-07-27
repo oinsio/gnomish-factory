@@ -11,7 +11,11 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
  * -resolved triple that {@link GithubLabelProvisioner} needs to create a
  * label.
  *
- * <p>Implements FR5 of add-tracker-port.
+ * <p>The human-meaningful name plus operator-hint description are what let the
+ * operator drive the factory from the tracker UI alone (UX1 of add-tracker-port):
+ * the label a human clicks is self-describing, no factory-side command needed.
+ *
+ * <p>Implements FR5, UX1 of add-tracker-port.
  *
  * @param name the label name, e.g. {@code gnomish:ready}
  * @param color a 6-digit hex color with no leading {@code #}, e.g. {@code 2ea44f}

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerFetchContract
@@ -72,7 +73,7 @@ class GithubTrackerContractSpec extends TrackerFetchContract {
 
         def realTracker = new GithubTracker(
                 new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
-                new GithubTaskFetcher(httpClient, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL),
+                new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL),
                 new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL),
                 new GithubStateWrites(httpClient, labelOps, INSTANCE_ID,
                 FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
@@ -103,8 +104,8 @@ class GithubTrackerContractSpec extends TrackerFetchContract {
     }
 
     @Override
-    protected void seedTask(Tracker adapter, TaskRef ref, TrackerTaskState state, AbortFacts abortFacts) {
-        fixtureAdapter.seedTask(ref, state, abortFacts)
+    protected void seedTask(Tracker adapter, TaskRef ref, TaskSnapshot snapshot, TrackerTaskState state, AbortFacts abortFacts) {
+        fixtureAdapter.seedTask(ref, snapshot, state, abortFacts)
     }
 
     @Override

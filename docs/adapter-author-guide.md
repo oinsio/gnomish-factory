@@ -246,12 +246,12 @@ as a hidden HTML comment carrying one-line JSON, followed by human-readable
 text — rendered and parsed by `GithubMarker`:
 
 ```
-<!-- gnomish {"kind":"claim","instance":"gnomish-factory-x7k2q1","at":"2026-07-20T12:00:00Z","v":1} -->
+<!-- gnomish {"kind":"claim","instance":"gnomish-factory-x7k2q1","at":"2026-07-20T12:00:00Z","version":1} -->
 🤖 gnomish: claimed by gnomish-factory-x7k2q1
 ```
 
 GitHub renders HTML comments invisibly, so a human sees only the prose line
-while a fresh adapter instance parses `kind`/`instance`/`at`/`v` back out of
+while a fresh adapter instance parses `kind`/`instance`/`at`/`version` back out of
 the raw comment body. The marker-kind vocabulary (`GithubMarkerKind`) is
 `claim`, `abort`, `ack`, `note`, `report` — the wire value is always the
 lowercase enum name, decoupled from Java constant naming so the JSON is stable

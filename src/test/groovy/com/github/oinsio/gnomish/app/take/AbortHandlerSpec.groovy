@@ -68,6 +68,64 @@ class AbortHandlerSpec extends Specification {
         (result as TakeResult.AwaitingHuman).report().contains('disk full')
     }
 
+    // FR14: the fuse report carries the abort history, not just the last cause —
+    // the count/threshold streak, the previous abort's timestamp from AbortFacts,
+    // and a pointer to the per-abort entries where every cause is recorded
+    def "the fuse report narrates the abort history, not only the last cause"() {
+        given: 'a prior abort recorded an hour earlier, reaching the threshold once incremented'
+        def previousAbortAt = Instant.parse('2026-07-17T09:00:00Z')
+        def facts = new AbortFacts(THRESHOLD - 1, previousAbortAt)
+        String captured = null
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> { args -> captured = args[2] }
+
+        when:
+        handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
+
+        then: 'the report carries the streak count, the threshold, the prior abort time, and points to the per-abort entries'
+        captured.contains("$THRESHOLD")
+        captured.toLowerCase().contains('threshold')
+        captured.contains(previousAbortAt.toString())
+        captured.toLowerCase().contains('abort entries')
+        captured.contains('disk full')
+    }
+
+    // FR14: when the facts carry no prior-abort timestamp (count/timestamp
+    // pairing is an adapter guarantee, not enforced on the read side), the report
+    // omits the "previous abort" clause but still narrates count/threshold/cause
+    def "the fuse report omits the prior-abort time when the facts have none"() {
+        given: 'facts at the threshold but with a null lastAbortAt'
+        def facts = new AbortFacts(THRESHOLD - 1, null)
+        String captured = null
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> { args -> captured = args[2] }
+
+        when:
+        handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
+
+        then:
+        !captured.toLowerCase().contains('previous abort')
+        captured.contains("$THRESHOLD")
+        captured.toLowerCase().contains('threshold')
+        captured.contains('disk full')
+    }
+
+    // NFR-R2: "a dead tracker never blocks the abort itself" applies at the fuse
+    // too — a park failure is caught, logged, and does not propagate; the handler
+    // still returns AwaitingHuman(INFRA) so the run stops for a human
+    def "a park failure at the fuse does not propagate and still returns AwaitingHuman(INFRA)"() {
+        given: 'a fuse-tripping abort against a tracker whose park call is unreachable'
+        def facts = new AbortFacts(THRESHOLD - 1, Instant.parse('2026-07-17T09:00:00Z'))
+        tracker.park(*_) >> { throw new RuntimeException('tracker unreachable') }
+
+        when:
+        def result = handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
+
+        then:
+        noExceptionThrown()
+        result instanceof TakeResult.AwaitingHuman
+        (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
+        (result as TakeResult.AwaitingHuman).report().contains('disk full')
+    }
+
     // NFR-R2: "a dead tracker never blocks the abort itself" — a recordAbort
     // failure below the fuse is caught, logged, and does not propagate; the
     // handler still returns Aborted

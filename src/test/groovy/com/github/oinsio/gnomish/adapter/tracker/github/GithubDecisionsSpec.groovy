@@ -65,9 +65,9 @@ class GithubDecisionsSpec extends Specification {
         given:
         stubComments(wireMock, 30, '''
                 [
-                  {"id":1,"created_at":"2026-07-20T09:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"v\\":1} -->\\n🤖 claimed"},
+                  {"id":1,"created_at":"2026-07-20T09:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
                   {"id":2,"created_at":"2026-07-20T09:05:00Z","body":"Please use approach B instead."},
-                  {"id":3,"created_at":"2026-07-20T09:06:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:06:00Z\\",\\"v\\":1} -->\\n🤖 report"},
+                  {"id":3,"created_at":"2026-07-20T09:06:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:06:00Z\\",\\"version\\":1} -->\\n🤖 report"},
                   {"id":4,"created_at":"2026-07-20T09:07:00Z","body":"Actually go with C."}
                 ]
                 ''')
@@ -88,7 +88,7 @@ class GithubDecisionsSpec extends Specification {
         stubComments(wireMock, 31, '''
                 [
                   {"id":1,"created_at":"2026-07-20T09:00:00Z","body":"Old reply, already acted on."},
-                  {"id":2,"created_at":"2026-07-20T09:01:00Z","body":"<!-- gnomish {\\"kind\\":\\"ack\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:01:00Z\\",\\"v\\":1} -->\\n🤖 acting on decision: Old reply, already acted on."},
+                  {"id":2,"created_at":"2026-07-20T09:01:00Z","body":"<!-- gnomish {\\"kind\\":\\"ack\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:01:00Z\\",\\"version\\":1} -->\\n🤖 acting on decision: Old reply, already acted on."},
                   {"id":3,"created_at":"2026-07-20T09:02:00Z","body":"New reply after the ack."}
                 ]
                 ''')
@@ -108,8 +108,8 @@ class GithubDecisionsSpec extends Specification {
         stubComments(wireMock, 32, '''
                 [
                   {"id":1,"created_at":"2026-07-20T09:00:00Z","body":"Old decision."},
-                  {"id":2,"created_at":"2026-07-20T09:01:00Z","body":"<!-- gnomish {\\"kind\\":\\"ack\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:01:00Z\\",\\"v\\":1} -->\\n🤖 acting on decision: Old decision."},
-                  {"id":3,"created_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"v\\":1} -->\\n🤖 new escalation report"}
+                  {"id":2,"created_at":"2026-07-20T09:01:00Z","body":"<!-- gnomish {\\"kind\\":\\"ack\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:01:00Z\\",\\"version\\":1} -->\\n🤖 acting on decision: Old decision."},
+                  {"id":3,"created_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 new escalation report"}
                 ]
                 ''')
         def decisions = newDecisions()
@@ -126,7 +126,7 @@ class GithubDecisionsSpec extends Specification {
         stubComments(wireMock, 33, '''
                 [
                   {"id":1,"created_at":"2026-07-20T09:00:00Z","body":"Use approach B."},
-                  {"id":2,"created_at":"2026-07-20T09:05:00Z","body":"<!-- gnomish {\\"kind\\":\\"ack\\",\\"instance\\":\\"gnomish-factory-x7k2q1\\",\\"at\\":\\"2026-07-20T09:05:00Z\\",\\"v\\":1} -->\\n🤖 gnomish: acting on decision: Use approach B."}
+                  {"id":2,"created_at":"2026-07-20T09:05:00Z","body":"<!-- gnomish {\\"kind\\":\\"ack\\",\\"instance\\":\\"gnomish-factory-x7k2q1\\",\\"at\\":\\"2026-07-20T09:05:00Z\\",\\"version\\":1} -->\\n🤖 gnomish: acting on decision: Use approach B."}
                 ]
                 ''')
         wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/33/comments'))

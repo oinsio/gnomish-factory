@@ -35,8 +35,7 @@ class InMemoryTrackerContractSpec extends TrackerFetchContract {
     }
 
     @Override
-    protected void seedTask(Tracker adapter, TaskRef ref, TrackerTaskState state, AbortFacts abortFacts) {
-        def snapshot = new TaskSnapshot(ref.id(), 'fixture title', 'fixture body')
+    protected void seedTask(Tracker adapter, TaskRef ref, TaskSnapshot snapshot, TrackerTaskState state, AbortFacts abortFacts) {
         harness.seed(ref, snapshot, state, abortFacts)
     }
 
