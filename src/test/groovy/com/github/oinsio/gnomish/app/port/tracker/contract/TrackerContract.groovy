@@ -157,15 +157,24 @@ abstract class TrackerContract extends Specification implements PortContractSupp
         def barrier = new CyclicBarrier(callerCount)
 
         when: 'every caller calls claim() concurrently, forced to line up at a shared barrier first'
+        // shutdownNow(), never close(): a claim() that fails to release its store
+        // lock (e.g. a PIT mutant dropping the finally-unlock) parks the losing
+        // callers in an uninterruptible lock.lock() forever — close() would await
+        // them indefinitely and hang the whole test run instead of failing it.
+        // The 3s get() bound keeps that failure inside PIT's default per-mutation
+        // budget (4000ms + 1.25x); the critical section itself is microseconds.
         List<ClaimResult> results
-        try (def pool = Executors.newVirtualThreadPerTaskExecutor()) {
+        def pool = Executors.newVirtualThreadPerTaskExecutor()
+        try {
             def futures = callerIds.collect { callerId ->
                 pool.submit({
                     barrier.await(5, TimeUnit.SECONDS)
                     adapter.claim(ref, callerId)
                 } as java.util.concurrent.Callable)
             }
-            results = futures.collect { it.get(10, TimeUnit.SECONDS) }
+            results = futures.collect { it.get(3, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
         }
 
         then: 'exactly one caller acquired the claim, and every other caller was told the winner'
