@@ -36,6 +36,14 @@ archunit = "1.4.2"
 # NFR-R2 of add-tracker-port). 3.13.1 is the latest stable line on Maven Central (2026-07-23);
 # 4.0.0 is still beta. Plain JDK artifact, so no JDK-version-specific classifier is needed.
 wiremock = "3.13.1"
+# WireMock 3.13.1's embedded Jetty stack (test scope). Pinned to the latest
+# Maven Central release of the EOL Jetty 11 line and applied via an
+# enforcedPlatform in build.gradle so WireMock gets one internally consistent
+# Jetty 11 stack (the Boot BOM otherwise mixes 11/12 and startup fails — see
+# build.gradle). 11.0.26 clears GHSA-mmxm-8w33-wc4h; the residual Jetty 11
+# advisories have no Maven Central fix (Jetty 12 needs WireMock 4.x, still beta)
+# and are accepted in osv-scanner.toml. Bump the whole stack by editing here.
+jetty = "11.0.26"
 # Resilience4j retry for the tracker adapter's HTTP client (NFR-R2 of add-tracker-port:
 # infrastructure failures of tracker calls SHALL be retried). 2.3.0 verified on Maven
 # Central 2026-07-23. `resilience4j-core` (IntervalFunction, used directly by
@@ -100,6 +108,9 @@ archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" 
 testcontainers = { module = "org.testcontainers:testcontainers" }
 # WireMock standalone server, embedded in-JVM (design: no Docker for HTTP contract tests).
 wiremock = { module = "org.wiremock:wiremock", version.ref = "wiremock" }
+# Jetty 11 BOM, imported as an enforcedPlatform on the test classpaths to pin
+# WireMock's transitive Jetty stack to one consistent version (see [versions].jetty).
+jetty-bom = { module = "org.eclipse.jetty:jetty-bom", version.ref = "jetty" }
 # Resilience4j retry: the GitHub tracker adapter's HTTP client core (task 4.4 of
 # add-tracker-port) wraps java.net.http calls in a Retry decorator.
 resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }

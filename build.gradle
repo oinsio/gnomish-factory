@@ -13,11 +13,19 @@ import groovy.xml.XmlSlurper
 buildscript {
     configurations.classpath {
         resolutionStrategy.activateDependencyLocking()
-        // Security override: a Gradle plugin drags in commons-lang3 3.16.0
-        // transitively (GHSA-j288-q9x7-2f5v). Force the CVE fix. Kept inline
-        // because the version catalog is not visible to the buildscript
-        // classpath. Drop once the offending plugin ships a fixed transitive.
-        resolutionStrategy.force 'org.apache.commons:commons-lang3:3.18.0'
+        // Security overrides forcing CVE fixes onto Gradle-plugin transitives.
+        // Versions live in gradle.properties (the `buildscript*` keys), because
+        // the version catalog is not visible to the buildscript classpath;
+        // referencing them by name keeps version bumps out of this file.
+        // commons-lang3: a plugin drags in 3.16.0 transitively (GHSA-j288-q9x7-2f5v).
+        resolutionStrategy.force "org.apache.commons:commons-lang3:${buildscriptCommonsLang3Version}"
+        // tools.jackson (Jackson 3.x): a plugin drags in 3.1.4; jackson-databind
+        // 3.1.4 has GHSA-5gvw-p9qm-jgwh. Force the whole family so the
+        // buildscript-classpath lock state stays consistent. Buildscript
+        // classpath only — never reaches the application or test runtime.
+        resolutionStrategy.force "tools.jackson.core:jackson-databind:${buildscriptJacksonVersion}",
+            "tools.jackson.core:jackson-core:${buildscriptJacksonVersion}",
+            "tools.jackson:jackson-bom:${buildscriptJacksonVersion}"
     }
 }
 
@@ -163,10 +171,18 @@ dependencies {
     // version, 12.1.10) while jetty-servlet/-webapp (which Boot does not
     // manage) stay on 11 — the mixed 11/12 classpath then fails at
     // WireMockServer startup with "Jetty 11 is not present" (task 4.4).
-    // enforcedPlatform (not platform) forces every jetty-bom-managed version
-    // down to 11.0.24 on the test classpaths, overriding the Boot BOM's
-    // constraint so WireMock gets one consistent Jetty 11 stack in tests.
-    testImplementation enforcedPlatform('org.eclipse.jetty:jetty-bom:11.0.24')
+    // enforcedPlatform (not platform) forces every jetty-bom-managed version to
+    // the pinned Jetty 11 line on the test classpaths, overriding the Boot BOM's
+    // constraint so WireMock gets one consistent Jetty 11 stack in tests. The
+    // version lives in the catalog ([versions].jetty); it clears
+    // GHSA-mmxm-8w33-wc4h (http2-common), and the residual Jetty 11 advisories
+    // are test-scope only — see osv-scanner.toml for the accepted-risk entries.
+    testImplementation enforcedPlatform(libs.jetty.bom)
+    // NB: handlebars (GHSA-r4gv-qr8j-p3pg) cannot be bumped here — its only fix,
+    // 4.5.2, drops com.github.jknack.handlebars.helper.NumberHelper, which
+    // WireMock 3.13.1 loads at startup (NoClassDefFoundError). Test-scope only
+    // and templates are developer-authored, so it is an accepted risk until
+    // WireMock 4.x — see osv-scanner.toml.
 }
 
 // Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,
