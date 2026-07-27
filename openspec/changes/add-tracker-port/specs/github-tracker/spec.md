@@ -41,6 +41,7 @@ stale binding) SHALL fail the run at startup with an error naming the repo and
 the likely cause, never mid-task.
 <!-- implements FR5 of add-tracker-port -->
 <!-- implements NFR-R4 of add-tracker-port -->
+<!-- implements UX1 of add-tracker-port -->
 
 #### Scenario: Second start changes nothing
 - **WHEN** the adapter starts twice against the same repo

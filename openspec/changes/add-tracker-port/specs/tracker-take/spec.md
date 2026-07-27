@@ -31,6 +31,11 @@ via the configured binding; a full canonical id naming a foreign repo is an erro
 - **WHEN** the operator runs `take 42` with a configured GitHub binding
 - **THEN** the run targets the canonical id built from the binding and issue 42
 
+#### Scenario: Foreign canonical id is refused
+- **WHEN** `take github:other/repo#7` names a repo that is neither the configured
+  binding nor (via the adapter's rename tolerance) a predecessor of it
+- **THEN** the run refuses (exit 15) before fetching the task, naming both repos
+
 ### Requirement: Explicit-mode disposition by task state
 `take <ref>` SHALL act as an operator mandate per the task's logical state:
 `Ready` (or readiness criterion unmet) → claim and work, overriding the readiness
@@ -38,8 +43,9 @@ criterion and abort backoff without resetting the abort counter — resuming fro
 the branch outcome when one is recorded (a pending reply is collected and
 acknowledged; a recorded `DecisionNeeded` with no reply parks again restating
 the question; any other recorded outcome continues on the return alone);
-`AwaitingHuman` (any reason) → refuse, naming the pending report and the return
-path (reply if needed, move the task back to ready); `Working` held by another
+`AwaitingHuman` (any reason) → refuse, naming the reason and the return
+path (reply if needed, move the task back to ready) — the port has no
+read-report operation, so the refusal never restates the parked report; `Working` held by another
 instance → refuse with an error naming the holder; `Finished` → skip reporting
 "already done"; `Gone` (closed or nonexistent) → skip with a clear error.
 <!-- implements FR9 of add-tracker-port -->
@@ -52,8 +58,10 @@ instance → refuse with an error naming the holder; `Finished` → skip reporti
 
 #### Scenario: Parked task is refused
 - **WHEN** `take <ref>` targets a task in `AwaitingHuman`
-- **THEN** the run refuses, restating the parked report and telling the operator
+- **THEN** the run refuses, naming the reason and telling the operator
   to reply (if a question is pending) and move the task back to ready
+- **AND** it does not restate the parked report — the port exposes no
+  read-report operation to retrieve it
 
 #### Scenario: Held task is refused
 - **WHEN** `take <ref>` targets a task claimed by instance B
@@ -144,7 +152,6 @@ structural abort comment, release the claim, and return the task to `Ready` via
 consecutive-abort count (shared across instances via tracker facts) reaches the
 configured `abort-threshold` K, the factory SHALL instead park the task as
 `AwaitingHuman(infra)` with an infrastructure report carrying the abort history.
-The counter resets on the first durably persisted round after claim.
 <!-- implements FR14 of add-tracker-port -->
 <!-- implements NFR-R2 of add-tracker-port -->
 <!-- implements NFR-C1 of add-tracker-port -->
@@ -156,17 +163,14 @@ The counter resets on the first durably persisted round after claim.
 
 #### Scenario: Fuse trips at K
 - **WHEN** a run aborts and the shared count reaches K
-- **THEN** the task is parked as `AwaitingHuman(infra)` with the abort history of
-  all instances in the report
+- **THEN** the task is parked as `AwaitingHuman(infra)` with an abort summary in
+  the report (count, threshold, last cause and time of the previous abort)
+  pointing to the structural abort records as the full cross-instance history
 
 #### Scenario: Runner crash is an abort
 - **WHEN** the take run dies with an uncaught exception mid-run
 - **THEN** the best-effort abort protocol runs: structural abort comment, claim
   released, task back to `Ready` (or parked at the fuse threshold)
-
-#### Scenario: Progress resets the counter
-- **WHEN** a claim is followed by a durably persisted round and later an abort
-- **THEN** the abort counter starts again from one
 
 ### Requirement: Revocation detected at round boundaries
 After every durably persisted round the factory SHALL verify the task is still
@@ -247,6 +251,7 @@ display-only parallel universe with the shipped reference "column → ready labe
 cron workflow (`docs/examples/board-bridge.yml`), the fork warning ("fix
 `tracker.repo`"), and the `take` CLI reference with exit behavior.
 <!-- implements FR19 of add-tracker-port -->
+<!-- implements UX1 of add-tracker-port -->
 
 #### Scenario: Guide covers the operator surface
 - **WHEN** an operator follows the guide against a fresh repository

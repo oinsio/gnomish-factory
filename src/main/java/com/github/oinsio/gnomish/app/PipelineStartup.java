@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader;
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,6 +30,18 @@ import org.springframework.stereotype.Component;
 @Component
 public final class PipelineStartup {
 
+    private final Map<String, TrackerSubsectionValidator> trackerValidatorRegistry;
+
+    /**
+     * @param trackerValidatorRegistry the composition-root {@code tracker.type} → subsection
+     *     validator registry ({@code TrackerAdapterConfiguration}), so a malformed {@code
+     *     tracker.<type>} subsection is a located load error (FR17 of add-tracker-port) rather than
+     *     surfacing only later; never null
+     */
+    public PipelineStartup(Map<String, TrackerSubsectionValidator> trackerValidatorRegistry) {
+        this.trackerValidatorRegistry = trackerValidatorRegistry;
+    }
+
     /**
      * Loads the pipeline definition named by {@code args.dir()}'s {@code .gnomish/}
      * subdirectory, once.
@@ -44,7 +58,7 @@ public final class PipelineStartup {
      */
     public PipelineLoadOutcome load(RunArguments args) throws IOException {
         DirectoryWorkspace workspace = new DirectoryWorkspace(args.dir());
-        LoadOutcome outcome = PipelineLoader.load(args.dir().resolve(".gnomish"));
+        LoadOutcome outcome = PipelineLoader.load(args.dir().resolve(".gnomish"), trackerValidatorRegistry);
         return switch (outcome) {
             case LoadOutcome.Loaded(var definition) -> new PipelineLoadOutcome.Loaded(definition, workspace);
             case LoadOutcome.Invalid(List<ConfigError> errors) -> new PipelineLoadOutcome.Failed(render(errors));

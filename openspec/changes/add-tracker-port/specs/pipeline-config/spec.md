@@ -20,6 +20,11 @@ unchanged.
 - **WHEN** a `tracker` section declares `type` but no `abort-threshold`
 - **THEN** the definition carries threshold 3
 
+#### Scenario: Non-positive threshold
+- **WHEN** a `tracker` section declares `abort-threshold: 0` (or a negative value)
+- **THEN** loading fails with a located error naming `tracker.abort-threshold` —
+  the threshold must be a positive integer
+
 ### Requirement: Adapter-owned subsection validated at the seam
 The `tracker` section SHALL contain a typed subsection named after `type` (e.g.
 `github:`), whose schema is declared and validated by the adapter — the loader

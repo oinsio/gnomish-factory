@@ -163,7 +163,7 @@ class StageBriefingSpec extends Specification {
                 'purpose',
                 [],
                 [],
-                new StageDefinition.Executor(ExecutorType.API, 'model-v', [:]),
+                new StageDefinition.Executor(ExecutorType.API, 'model-version', [:]),
                 '../secret.md',
                 [],
                 new AutonomyLimits(1),

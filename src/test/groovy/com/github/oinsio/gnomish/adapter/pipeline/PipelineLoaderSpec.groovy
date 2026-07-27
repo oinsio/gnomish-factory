@@ -478,7 +478,7 @@ tracker:
         write('stages/plan/accept.md', 'criteria\n')
 
         when:
-        def outcome = PipelineLoader.load(root)
+        def outcome = PipelineLoader.load(root, TrackerValidatorStub.acceptingGithub())
 
         then:
         outcome instanceof LoadOutcome.Loaded
@@ -507,6 +507,27 @@ tracker:
         ]
     }
 
+    // FR17 of add-tracker-port, task 3.2: a present tracker section with no type
+    // is a located seam error (TrackerConfig/TrackerDto contract: type is never
+    // null when the section is present), not a silent success
+    def "a tracker section present but missing type fails to load with a located error"() {
+        given:
+        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\ntracker:\n  abort-threshold: 3\n')
+        write('pipeline.yaml', 'stages:\n  - plan\n')
+        write('stages/plan/stage.yaml', planManifest())
+        write('stages/plan/instructions.md', 'plan it\n')
+        write('stages/plan/accept.md', 'criteria\n')
+
+        when:
+        def outcome = PipelineLoader.load(root, TrackerValidatorStub.acceptingGithub())
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors() == [
+            new ConfigError('config.yaml', 'tracker.type', 'missing required tracker type')
+        ]
+    }
+
     // FR17 of add-tracker-port, task 3.2, "Missing subsection" delta-spec scenario
     def "a known tracker type with no matching subsection fails to load with a located error"() {
         given:
@@ -517,7 +538,7 @@ tracker:
         write('stages/plan/accept.md', 'criteria\n')
 
         when:
-        def outcome = PipelineLoader.load(root)
+        def outcome = PipelineLoader.load(root, TrackerValidatorStub.acceptingGithub())
 
         then:
         outcome instanceof LoadOutcome.Invalid
@@ -547,7 +568,7 @@ tracker:
         write('stages/plan/accept.md', 'criteria\n')
 
         when:
-        def outcome = PipelineLoader.load(root)
+        def outcome = PipelineLoader.load(root, TrackerValidatorStub.acceptingGithub())
 
         then:
         outcome instanceof LoadOutcome.Invalid
@@ -557,11 +578,15 @@ tracker:
         ]
     }
 
-    // FR17 of add-tracker-port, task 3.2, "Adapter errors aggregate with core
-    // errors" delta-spec scenario: a tracker-seam error (unknown type, standing
-    // in for a delegated adapter rejection since no real GitHub content
-    // validator exists until task 4.2) and an unrelated structural error both
-    // surface in the same one-pass LoadOutcome.Invalid
+    // FR17 of add-tracker-port, task 3.2: the seam-mechanics half of "Adapter
+    // errors aggregate with core errors" — a tracker-seam error (unknown type)
+    // and an unrelated structural error both surface in the same one-pass
+    // LoadOutcome.Invalid, exercised here with an empty registry so no adapter
+    // import crosses the TrackerPortBoundarySpec gate. The delegated-content
+    // half of the scenario (a real GithubTrackerSubsectionValidator bad-color
+    // error aggregating with a core error through the assembled loader) is
+    // covered by TrackerAdapterConfigurationSpec, in adapter.tracker where
+    // importing the concrete validator is permitted.
     def "a tracker seam error aggregates with an unrelated core error in one pass"() {
         given: 'an unknown tracker type plus an unrelated structural error (unknown executor)'
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\ntracker:\n  type: bogus\n')
@@ -608,7 +633,7 @@ tracker:
         write('stages/plan/accept.md', 'criteria\n')
 
         when:
-        def outcome = PipelineLoader.load(root)
+        def outcome = PipelineLoader.load(root, TrackerValidatorStub.acceptingGithub())
 
         then:
         outcome instanceof LoadOutcome.Loaded

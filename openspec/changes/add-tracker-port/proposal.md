@@ -105,8 +105,9 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
   polling, heartbeat/stale-claim protocol (separate change; backlog recorded in
   `explore-notes-factory-loop.md`).
 - **NG2**: Jira adapter (port is designed for it; implementation later).
-- **NG3**: External CI checks on the task branch (deferred to a QC-focused change;
-  scope frozen in explore notes Р17).
+- **NG3**: External CI checks on the task branch — the first `external` check type
+  from the stage contract (deferred to a QC-focused change; its scope is already
+  settled and will not be reopened here).
 - **NG4**: Projects v2 as an adapter source of truth (documented as rejected for v1;
   the board is a display, the bridge workflow is an operator-side recipe).
 - **NG5**: Mid-round cancellation of a running gnome (revocation latency = one round
@@ -171,8 +172,9 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
 - **FR9**: `gnomish take <ref>` SHALL implement the explicit-mode disposition matrix:
   claim `Ready` (mandate overrides the readiness criterion and abort backoff,
   without resetting the abort counter), resuming from the branch outcome when one
-  is recorded; refuse `AwaitingHuman` with a message naming the pending report and
-  the return path (reply if needed, move the task back to ready); refuse `Working`
+  is recorded; refuse `AwaitingHuman` with a message naming the reason and
+  the return path (reply if needed, move the task back to ready) — the port has no
+  read-report operation, so the refusal does not restate the parked report; refuse `Working`
   held by another instance with an error naming the holder; skip `Finished`
   ("already done") and closed/nonexistent tasks with clear errors. Short refs (`42`, `#42`) expand via the configured binding; a canonical id
   pointing at a foreign repo is an error.
@@ -196,8 +198,9 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
   best-effort structural abort comment (cause, instance, time), release the claim,
   and return the task to `Ready`; when the consecutive-abort count reaches K
   (`abort-threshold`, shared across instances via comments) the task SHALL go to
-  `AwaitingHuman` with an infrastructure report instead. The counter resets on the
-  first durably committed round after claim.
+  `AwaitingHuman` with an infrastructure report instead. The counter semantics is
+  "aborts since last durable progress"; the reset-on-progress mechanism is
+  superseded by `fix-abort-progress-reset` and delivered there, not in this change.
 - **FR15**: At each round boundary the factory SHALL verify the task is still ours
   and alive (not closed, claim intact, state unchanged by a human); on revocation:
   salvage-commit uncommitted work, best-effort push, structural "work stopped" note,
