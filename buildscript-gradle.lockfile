@@ -2,10 +2,10 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew dependencies --write-locks
-com.autonomousapps.dependency-analysis:com.autonomousapps.dependency-analysis.gradle.plugin:3.16.1=classpath
+com.autonomousapps.dependency-analysis:com.autonomousapps.dependency-analysis.gradle.plugin:3.17.0=classpath
 com.autonomousapps:antlr:4.13.2.2=classpath
 com.autonomousapps:asm-relocated:9.9.0=classpath
-com.autonomousapps:dependency-analysis-gradle-plugin:3.16.1=classpath
+com.autonomousapps:dependency-analysis-gradle-plugin:3.17.0=classpath
 com.autonomousapps:graph-support:0.12.0=classpath
 com.autonomousapps:kotlin-editor-relocated:0.24.0=classpath
 com.autonomousapps:variant-artifacts:0.6.0=classpath
