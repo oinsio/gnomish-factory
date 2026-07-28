@@ -30,20 +30,6 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         new TakeDisposition(newAssembly(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [])
     }
 
-    private static ManualRunAssembly newAssembly() {
-        // Mirrors TakeResumeSpecBase#newTakeResumeRunner's own assembly construction: package-
-        // private, so a small helper here builds an equivalent instance for TakeDisposition,
-        // which needs the assembly directly (not just a pre-built TakeResumeRunner).
-        new ManualRunAssembly(
-                new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.engine.SystemClock(),
-                new com.github.oinsio.gnomish.adapter.engine.ThreadSleeper(),
-                new com.github.oinsio.gnomish.FactoryProperties('test-instance', null, null, null))
-    }
-
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
         new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none())
     }

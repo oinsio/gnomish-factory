@@ -39,7 +39,7 @@ import spock.lang.TempDir
  *
  * <p>Implements NFR-S1, D17 of add-tracker-port.
  */
-class TakeCommandCredentialScrubSpec extends Specification implements BareGitRepoFixture {
+class TakeCommandCredentialScrubSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -118,18 +118,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties(INSTANCE_NAME, wrapper.absolutePath, [], null)
-    }
-
-    private static ManualRunAssembly newAssembly(FactoryProperties factoryProperties) {
-        new ManualRunAssembly(
-                new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.engine.SystemClock(),
-                new com.github.oinsio.gnomish.adapter.engine.ThreadSleeper(),
-                factoryProperties)
+        testProperties(instanceName: INSTANCE_NAME, agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
     }
 
     /** Declares CREDENTIAL_VAR via TrackerAdapterFactory#credentialEnvVars (design D17). */

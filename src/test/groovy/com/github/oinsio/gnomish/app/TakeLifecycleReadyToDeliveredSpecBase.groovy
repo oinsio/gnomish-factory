@@ -44,7 +44,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR1, FR3, FR18, M3, UX4 of add-tracker-port.
  */
-abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification implements BareGitRepoFixture {
+abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
 
@@ -106,17 +106,6 @@ tracker:
         gitRunner.run(projectDir, 'add', '.')
         gitRunner.run(projectDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         worktreesRoot = tempDir.resolve('worktrees')
-    }
-
-    private ManualRunAssembly newAssembly(FactoryProperties factoryProperties) {
-        new ManualRunAssembly(
-                new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.engine.SystemClock(),
-                new com.github.oinsio.gnomish.adapter.engine.ThreadSleeper(),
-                factoryProperties)
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {

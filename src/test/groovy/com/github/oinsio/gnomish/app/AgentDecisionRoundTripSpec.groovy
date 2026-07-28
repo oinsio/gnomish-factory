@@ -1,12 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -41,7 +36,7 @@ import spock.lang.TempDir
  * plays {@code decision-needed}, attempt 2+ in the same workspace plays {@code plain-round} —
  * the stand-in for "the operator answered, so the next attempt is a normal completing round".
  */
-class AgentDecisionRoundTripSpec extends Specification {
+class AgentDecisionRoundTripSpec extends Specification implements AppAssemblyFixture {
 
     @TempDir
     Path workspaceDir
@@ -60,7 +55,7 @@ exec sh '${scriptPath}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('test-instance', wrapper.absolutePath, [], null)
+        testProperties(agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
     }
 
     private static StageDefinition stage() {
@@ -86,14 +81,8 @@ exec sh '${scriptPath}' "\$@"
         and: 'operator input scripted with the escalation answer, then a bare Enter for the final Completed summary'
         def scriptedIn = new ByteArrayInputStream((ANSWER + System.lineSeparator()).getBytes('UTF-8'))
         def capturedOut = new ByteArrayOutputStream()
-        def consoleIo = new SystemConsoleIO(scriptedIn, new PrintStream(capturedOut, true, 'UTF-8'))
 
-        def assembly = new ManualRunAssembly(
-                consoleIo,
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
+        def assembly = newAssembly(scriptedIn, new PrintStream(capturedOut, true, 'UTF-8'),
                 fakeAgentProperties('decision-then-plain', captureFile.absolutePath))
 
         def context = new TaskContext('task-1', 'title', 'body', List.<Decision> of())

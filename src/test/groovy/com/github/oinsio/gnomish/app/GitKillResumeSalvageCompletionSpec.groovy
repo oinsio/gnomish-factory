@@ -1,11 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -45,7 +39,7 @@ import spock.lang.TempDir
  * end-to-end chain plus the "salvage commit does not inflate state.json's attempts" assertion
  * task 6.2 calls for, which no existing spec checks directly.
  */
-class GitKillResumeSalvageCompletionSpec extends Specification implements BareGitRepoFixture {
+class GitKillResumeSalvageCompletionSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @TempDir
     Path tempDir
@@ -91,14 +85,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     }
 
     private GitResumeRunner newResumeRunner(InputStream input, PrintStream output) {
-        def assembly = new ManualRunAssembly(
-                new SystemConsoleIO(input, output),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null, null))
-        new GitResumeRunner(assembly, worktreesRoot, 'taskId')
+        new GitResumeRunner(newAssembly(input, output), worktreesRoot, 'taskId')
     }
 
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */

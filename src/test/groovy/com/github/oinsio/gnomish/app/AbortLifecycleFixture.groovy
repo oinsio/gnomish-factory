@@ -2,11 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -34,7 +29,7 @@ import org.springframework.boot.DefaultApplicationArguments
  *
  * <p>Implements FR9, FR10, FR14, D10 of add-tracker-port.
  */
-trait AbortLifecycleFixture implements BareGitRepoFixture {
+trait AbortLifecycleFixture implements BareGitRepoFixture, AppAssemblyFixture {
 
     static final int ABORT_THRESHOLD = 2
     static final Duration BACKOFF_BASE = Duration.ofMinutes(2)
@@ -89,21 +84,10 @@ tracker:
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
-    private ManualRunAssembly newAssembly(FactoryProperties factoryProperties) {
-        new ManualRunAssembly(
-                new SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                factoryProperties)
-    }
-
     private FactoryProperties factoryProperties() {
-        new FactoryProperties(
-                'test-instance', FakeAgentSupport.propertiesFor('plain-round').agentCliBinary(), null,
-                new FactoryProperties.Tracker(BACKOFF_BASE, BACKOFF_CAP))
+        testProperties(
+                agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary(),
+                tracker: new FactoryProperties.Tracker(BACKOFF_BASE, BACKOFF_CAP))
     }
 
     /** Builds a fresh {@link TakeCommand}, positioned at {@code now} (design D10's backoff clock). */

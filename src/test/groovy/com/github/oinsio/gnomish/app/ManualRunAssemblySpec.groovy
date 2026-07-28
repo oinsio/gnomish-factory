@@ -8,14 +8,9 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.console.InteractiveJudgeVoter
 import com.github.oinsio.gnomish.adapter.console.InteractiveStageExecutor
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -37,36 +32,24 @@ import spock.lang.Unroll
  * role(s) named by {@link RunArguments.InteractiveMode} — proven here by inspecting the concrete
  * type wired into the resulting {@code EnginePorts}.
  */
-class ManualRunAssemblySpec extends Specification {
+class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture {
 
     @TempDir
     Path workspaceDir
-
-    private static final FactoryProperties FACTORY_PROPERTIES = new FactoryProperties('test-instance', null, null, null)
-
-    private static ManualRunAssembly newAssembly(FactoryProperties factoryProperties = FACTORY_PROPERTIES) {
-        new ManualRunAssembly(
-                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                factoryProperties)
-    }
 
     /**
      * Points {@code FactoryProperties.agentCliBinary} at the fake agent script (task 2, D11 of
      * add-agent-executor), mirroring {@code adapter.agent.FakeAgentSupport} — duplicated locally
      * since that helper is package-private to {@code adapter.agent} and unreachable from here.
      */
-    private static FactoryProperties fakeAgentProperties(String scenario) {
+    private FactoryProperties fakeAgentProperties(String scenario) {
         URL resource = ManualRunAssemblySpec.getResource('/fake-agent/fake-agent.sh')
         def scriptPath = Path.of(resource.toURI()).toAbsolutePath().toString()
         def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
         wrapper.text = "#!/bin/sh\nexport GNOMISH_FAKE_SCENARIO='${scenario}'\nexec sh '${scriptPath}' \"\$@\"\n"
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('test-instance', wrapper.absolutePath, [], null)
+        testProperties(agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
     }
 
     private static List<ILoggingEvent> capture(Closure<Void> emit) {

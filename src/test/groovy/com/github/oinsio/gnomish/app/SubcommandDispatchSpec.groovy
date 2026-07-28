@@ -1,11 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
@@ -28,26 +22,15 @@ import spock.lang.TempDir
  * by which command's own observable behavior actually ran (a distinct exception/stdout each),
  * rather than by mocking.
  */
-class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture {
+class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @TempDir
     Path worktreesRoot
 
-    private static ManualRunAssembly newAssembly() {
-        new ManualRunAssembly(
-                new SystemConsoleIO(
-                new ByteArrayInputStream(new byte[0]), System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null, null))
-    }
-
     private TakeCommand newTakeCommand() {
         new TakeCommand(
-                newAssembly(), worktreesRoot, 'taskId',
-                new FactoryProperties('test-instance', null, null, null), Clock.systemUTC(), [:],
+                newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, 'taskId',
+                testProperties(), Clock.systemUTC(), [:],
                 TrackerValidatorStub.acceptingGithub())
     }
 

@@ -2,11 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -38,7 +33,7 @@ import spock.lang.TempDir
  * regression net that would fail if a future change threaded the workspace root into that
  * decision instead.
  */
-class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFixture {
+class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @TempDir
     Path tempDir
@@ -68,13 +63,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
     }
 
     private GitModeRunner newRunner(FactoryProperties factoryProperties) {
-        def assembly = new ManualRunAssembly(
-                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                factoryProperties)
+        def assembly = newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProperties)
         new GitModeRunner(assembly, worktreesRoot)
     }
 

@@ -29,7 +29,7 @@ import org.springframework.boot.DefaultApplicationArguments
  *
  * <p>Implements FR9, FR11, M3, NFR-R3 of add-tracker-port.
  */
-trait TwoInstanceTakeFixture implements BareGitRepoFixture {
+trait TwoInstanceTakeFixture implements BareGitRepoFixture, AppAssemblyFixture {
 
     abstract Path getTempDir()
 
@@ -98,17 +98,6 @@ tracker:
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
-    private ManualRunAssembly newAssembly(FactoryProperties factoryProperties) {
-        new ManualRunAssembly(
-                new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.engine.SystemClock(),
-                new com.github.oinsio.gnomish.adapter.engine.ThreadSleeper(),
-                factoryProperties)
-    }
-
     /**
      * Builds a brand-new {@link TakeCommand}, simulating a fresh factory instance: no field or
      * object here is ever shared with any other command built by this method (NFR-R3) — a fresh
@@ -122,7 +111,7 @@ tracker:
      */
     TakeCommand newCommand(String instanceName) {
         String fakeAgentBinary = FakeAgentSupport.propertiesFor('plain-round').agentCliBinary()
-        def factoryProperties = new FactoryProperties(instanceName, fakeAgentBinary, null, null)
+        def factoryProperties = testProperties(instanceName: instanceName, agentCliBinary: fakeAgentBinary)
         new TakeCommand(
                 newAssembly(factoryProperties),
                 worktreesRoot,

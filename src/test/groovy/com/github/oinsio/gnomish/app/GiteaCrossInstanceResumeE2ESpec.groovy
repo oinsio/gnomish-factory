@@ -1,11 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -48,7 +42,7 @@ value = {
     !GiteaAvailability.dockerAvailable()
 },
 reason = 'Docker daemon unreachable — see GiteaAvailability; Docker is a dev/CI prerequisite for the Gitea E2E layer (.claude/rules/testing.md)')
-class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRepoFixture {
+class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @Shared
     @AutoCleanup('stop')
@@ -86,14 +80,11 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
         new TaskContext(taskId, 'title', 'body', List.<Decision> of())
     }
 
-    private static ManualRunAssembly assembly(InputStream input = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))) {
-        new ManualRunAssembly(
-                new SystemConsoleIO(input, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null, null))
+    /** A single Enter is the dominant literal at this spec's call sites — just enough buffered
+     * input for the console prompts these runs never drive interactively, matching the previous
+     * inline default (a single platform line separator, not the trait's 20-line default). */
+    private ManualRunAssembly assembly(InputStream input = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))) {
+        newAssembly(input)
     }
 
     /** A brand-new, independent local clone of the Gitea repo — stands in for a separate machine. */
