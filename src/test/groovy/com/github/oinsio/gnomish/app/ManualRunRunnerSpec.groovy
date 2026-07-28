@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
@@ -39,15 +38,13 @@ import spock.lang.TempDir
  * branch and worktree, prints the UX1 banner upfront, and runs the pipeline against the worktree
  * — proven here end to end against a local bare-repo clone (task 4.4).
  */
-class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture {
+class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @TempDir
     Path projectRoot
 
     @TempDir
     Path worktreesRoot
-
-    private static final FactoryProperties FACTORY_PROPERTIES = new FactoryProperties('test-instance', null, null, null)
 
     private ManualRunRunner newRunner() {
         new ManualRunRunner(
@@ -60,7 +57,7 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture {
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                FACTORY_PROPERTIES,
+                testProperties(),
                 worktreesRoot,
                 new StatusCommand(worktreesRoot),
                 new UsageCommand(),

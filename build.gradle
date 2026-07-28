@@ -70,9 +70,9 @@ dependencies {
     implementation platform(libs.spring.boot.dependencies)
     // Security override: import the Jackson BOM at the CVE-fixed version
     // (GHSA-5jmj-h7xm-6q6v, see libs.versions.toml). Boot 4.1.0 imports
-    // jackson-bom 2.21.4 transitively; declaring 2.21.5 here wins by Gradle's
+    // jackson-bom 2.21.4 transitively; declaring 2.22.1 here wins by Gradle's
     // highest-version conflict resolution and bumps the whole family at once.
-    // Drop once a Boot 4.1.x upgrade manages 2.21.5+.
+    // Drop once a Boot 4.1.x upgrade manages 2.22.1+.
     implementation platform(libs.jackson.bom)
 
     // Security override: force the transitive logback copies (pulled in by
@@ -359,6 +359,16 @@ pitest {
     // asProvider(): 'pitest' is a prefix of other catalog version aliases.
     pitestVersion = libs.versions.pitest.tool.get()
     junit5PluginVersion = libs.versions.pitest.junit5.plugin.get()
+    // Concurrent PIT minion JVMs for the mutation phase (PIT's default is 1).
+    // Derived from Gradle's own worker ceiling (--max-workers /
+    // org.gradle.workers.max, defaults to the core count) so one standard
+    // Gradle knob governs load on any machine. Gradle does not schedule the
+    // minions — the pitest task occupies a single worker slot and the minions
+    // are child processes of PIT's forked main JVM — so the -2 keeps headroom
+    // for the daemon and concurrently running tasks; without it, CPU
+    // oversubscription can push covering tests past PIT's per-mutation timeout
+    // and pitestVerifyAllKilled fails the build on the resulting TIMED_OUT.
+    threads = Math.max(1, gradle.startParameter.maxWorkerCount - 2)
     // Java production code only — never Groovy test bytecode (mutating Groovy
     // produces noisy false-positive survivors; see .claude/rules/testing.md).
     // pitScope unset (local default) => full tree; pitScope set => narrowed to
@@ -449,13 +459,22 @@ pitest {
     // failed hard by pitestVerifyAllKilled below (mutationThreshold alone cannot
     // catch it: PIT counts RUN_ERROR as "detected").
     mutationThreshold = 100 // 100% mutation score gate (FR6)
-    // Per-mutation timeout stays at PIT's default (4000ms + 1.25x normal test
-    // time). The one TIMED_OUT ever observed (InMemoryTracker.claim, CI-only)
-    // was NOT load: the unlock-dropping mutant deadlocked the claim-race
-    // contract test, which then hung forever in ExecutorService.close() —
-    // no budget rescues an infinite hang. Fixed at the source: TrackerContract
-    // fails fast (bounded get + shutdownNow) instead of hanging, so every test
-    // verdict lands well inside the default budget on any runner.
+    // Per-mutation timeout budget (allowed = recorded test time × factor +
+    // const). PIT records test times during the single-threaded coverage pass,
+    // i.e. on an unloaded machine — but the mutation phase runs `threads`
+    // minions at once, and under that CPU load the same tests run 2–3× slower.
+    // PIT's default budget (1.25× + 4000ms) produced 17 load-induced TIMED_OUT
+    // at threads=12, all in classes whose covering specs spawn real
+    // subprocesses (CliStageExecutor/CliJudgeVoter fake-agent runs) or block
+    // on concurrency seams (InMemoryTracker). The raised budget only removes
+    // those false positives — it is NOT a quality trade-off: TIMED_OUT never
+    // counts as a kill here (pitestVerifyAllKilled fails on it), so a mutant
+    // that genuinely hangs still reds the build, just after a longer wait.
+    // Genuine infinite hangs are also fixed at the source, not by budget:
+    // TrackerContract fails fast (bounded get + shutdownNow) after the one
+    // real deadlocking mutant ever observed (InMemoryTracker.claim, CI-only).
+    timeoutFactor = 3.0
+    timeoutConstInMillis = 10000
     timestampedReports = false // stable report path for CI artifact upload
     outputFormats = ['XML', 'HTML']
 }

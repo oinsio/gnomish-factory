@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
@@ -28,7 +27,7 @@ import spock.lang.TempDir
  * bare-mode dispatch reaching {@link TakeBareAuto}, each converted to the right
  * {@link TakeExitCodeException}.
  */
-class TakeCommandSpec extends Specification implements BareGitRepoFixture {
+class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -69,17 +68,6 @@ advancement: auto
                 "schemaVersion: \"1\"\nautonomy:\n  attemptLimit: 3\n$trackerSection")
     }
 
-    private static ManualRunAssembly newAssembly() {
-        new ManualRunAssembly(
-                new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.engine.SystemClock(),
-                new com.github.oinsio.gnomish.adapter.engine.ThreadSleeper(),
-                new FactoryProperties(INSTANCE_NAME, null, null, null))
-    }
-
     private static TrackerAdapterFactory fakeFactory(Tracker t) {
         new TrackerAdapterFactory() {
                     Tracker create(com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, String instanceId) {
@@ -94,10 +82,10 @@ advancement: auto
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {
         new TakeCommand(
-                newAssembly(),
+                newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 worktreesRoot,
                 'taskId',
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                testProperties(instanceName: INSTANCE_NAME),
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 TrackerValidatorStub.acceptingGithub())

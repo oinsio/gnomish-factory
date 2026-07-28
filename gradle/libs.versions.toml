@@ -25,17 +25,17 @@ spotless = "8.8.0"
 palantir-java-format = "2.96.0"
 errorprone = "2.50.0"
 errorprone-plugin = "5.1.0"
-nullaway = "0.13.7"
+nullaway = "0.13.8"
 jspecify = "1.0.0"
-dependency-analysis = "3.16.1"
+dependency-analysis = "3.17.0"
 # ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
 # design D7). 1.4.2 verified on Maven Central 2026-07-15; its shaded ASM
 # supports Java 25 bytecode (class-file version 69).
 archunit = "1.4.2"
 # WireMock for tracker/AI API contract tests, in-JVM, no Docker (.claude/rules/testing.md,
-# NFR-R2 of add-tracker-port). 3.13.1 is the latest stable line on Maven Central (2026-07-23);
+# NFR-R2 of add-tracker-port). 3.13.2 is the latest stable line on Maven Central (2026-07-28);
 # 4.0.0 is still beta. Plain JDK artifact, so no JDK-version-specific classifier is needed.
-wiremock = "3.13.1"
+wiremock = "3.13.2"
 # WireMock 3.13.1's embedded Jetty stack (test scope). Pinned to the latest
 # Maven Central release of the EOL Jetty 11 line and applied via an
 # enforcedPlatform in build.gradle so WireMock gets one internally consistent
@@ -45,12 +45,12 @@ wiremock = "3.13.1"
 # and are accepted in osv-scanner.toml. Bump the whole stack by editing here.
 jetty = "11.0.26"
 # Resilience4j retry for the tracker adapter's HTTP client (NFR-R2 of add-tracker-port:
-# infrastructure failures of tracker calls SHALL be retried). 2.3.0 verified on Maven
-# Central 2026-07-23. `resilience4j-core` (IntervalFunction, used directly by
+# infrastructure failures of tracker calls SHALL be retried). 2.4.0 verified on Maven
+# Central 2026-07-28. `resilience4j-core` (IntervalFunction, used directly by
 # GithubRetryConfig and its test) is a transitive of resilience4j-retry but
 # buildHealth (task 4.4) requires it declared directly since production/test code
 # references it, not just resilience4j-retry's own API surface.
-resilience4j = "2.3.0"
+resilience4j = "2.4.0"
 
 # --- Security overrides of Spring Boot 4.1.0 BOM-managed versions ---
 # No Spring Boot 4.1.x patch exists yet (Maven Central, 2026-07-15), so these
@@ -58,10 +58,14 @@ resilience4j = "2.3.0"
 # build.gradle. Drop each once a Boot 4.1.x upgrade supersedes it.
 # jackson: GHSA-5jmj-h7xm-6q6v / CVE-2026-54515 (jackson-databind case-insensitive
 # @JsonIgnoreProperties deserialization bypass); 2.21.5 fixes the 2.19–2.21.4 line.
-jackson = "2.21.5"
+# 2.22.1 is the latest stable jackson-bom release on Maven Central (2026-07-28)
+# and stays on the fixed line.
+jackson = "2.22.1"
 # logback: GHSA-jhq6-gfmj-v8fx (logback-core HardenedObjectInputStream Proxy
-# injection, CVSS 2.9); fixed in 1.5.35. classic is kept on the same version.
-logback = "1.5.35"
+# injection, CVSS 2.9); fixed in 1.5.35. 1.6.0 is the latest stable release on
+# Maven Central (2026-07-28) and stays on the fixed line. classic is kept on
+# the same version.
+logback = "1.6.0"
 
 [libraries]
 # Spring Boot BOM imported via platform() in build.gradle (design D3);

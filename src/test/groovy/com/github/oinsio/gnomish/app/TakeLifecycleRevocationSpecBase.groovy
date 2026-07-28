@@ -45,7 +45,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR15 of add-tracker-port.
  */
-abstract class TakeLifecycleRevocationSpecBase extends Specification implements BareGitRepoFixture {
+abstract class TakeLifecycleRevocationSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
     protected static final String LEFTOVER_FILE = 'leftover-uncommitted.txt'
@@ -130,17 +130,6 @@ tracker:
         bareRepo = initBareRepo(tempDir, 'origin.git')
         gitRunner.run(projectDir, 'remote', 'add', 'origin', bareRepo.toString())
         worktreesRoot = tempDir.resolve('worktrees')
-    }
-
-    private ManualRunAssembly newAssembly(FactoryProperties factoryProperties) {
-        new ManualRunAssembly(
-                new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.engine.SystemClock(),
-                new com.github.oinsio.gnomish.adapter.engine.ThreadSleeper(),
-                factoryProperties)
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {

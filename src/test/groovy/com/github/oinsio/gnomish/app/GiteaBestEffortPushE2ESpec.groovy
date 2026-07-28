@@ -1,11 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -48,7 +42,7 @@ value = {
     !GiteaAvailability.dockerAvailable()
 },
 reason = 'Docker daemon unreachable — see GiteaAvailability; Docker is a dev/CI prerequisite for the Gitea E2E layer (.claude/rules/testing.md)')
-class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFixture {
+class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @Shared
     @AutoCleanup('stop')
@@ -88,13 +82,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFix
     }
 
     private GitModeRunner newRunner() {
-        def assembly = new ManualRunAssembly(
-                new SystemConsoleIO(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null, null))
+        def assembly = newAssembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')))
         new GitModeRunner(assembly, worktreesRoot)
     }
 

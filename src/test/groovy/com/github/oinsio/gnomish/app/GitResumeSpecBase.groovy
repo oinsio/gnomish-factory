@@ -1,11 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -36,7 +30,7 @@ import spock.lang.TempDir
  * need to create tasks, drive a {@link GitResumeRunner}, and persist rounds. Implements FR5, FR8,
  * UX2 of add-git-workflow.
  */
-abstract class GitResumeSpecBase extends Specification implements BareGitRepoFixture {
+abstract class GitResumeSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @TempDir
     Path tempDir
@@ -82,13 +76,7 @@ abstract class GitResumeSpecBase extends Specification implements BareGitRepoFix
     }
 
     protected GitResumeRunner newResumeRunner(InputStream input, PrintStream output) {
-        def assembly = new ManualRunAssembly(
-                new SystemConsoleIO(input, output),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null, null))
+        def assembly = newAssembly(input, output, testProperties())
         new GitResumeRunner(assembly, worktreesRoot, 'taskId')
     }
 

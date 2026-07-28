@@ -1,11 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -27,7 +21,7 @@ import spock.lang.TempDir
  * worktree via {@code GitTaskRepository#createTask}, run the pipeline against the worktree (not
  * the clone), and clean up on completion.
  */
-class GitModeRunnerSpec extends Specification implements BareGitRepoFixture {
+class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     @TempDir
     Path tempDir
@@ -70,14 +64,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture {
      * and writing to {@code out}.
      */
     private GitModeRunner newRunner(InputStream input, PrintStream output) {
-        def assembly = new ManualRunAssembly(
-                new SystemConsoleIO(input, output),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                new FactoryProperties('test-instance', null, null, null))
-        new GitModeRunner(assembly, worktreesRoot)
+        new GitModeRunner(newAssembly(input, output), worktreesRoot)
     }
 
     private Path expectedWorktree(String taskId) {

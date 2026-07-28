@@ -1,11 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
-import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -46,7 +41,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR9, FR12, D3 of add-tracker-port.
  */
-abstract class TakeResumeSpecBase extends Specification implements BareGitRepoFixture {
+abstract class TakeResumeSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
     protected static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
@@ -112,15 +107,9 @@ abstract class TakeResumeSpecBase extends Specification implements BareGitRepoFi
 
     protected TakeResumeRunner newTakeResumeRunner(
             InputStream input = new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')),
-            FactoryProperties factoryProperties = new FactoryProperties('test-instance', null, null, null),
+            FactoryProperties factoryProperties = testProperties(),
             List<String> credentialEnvVarsToScrub = []) {
-        def assembly = new ManualRunAssembly(
-                new SystemConsoleIO(input, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                factoryProperties)
+        def assembly = newAssembly(input, System.out, factoryProperties)
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeResumeRunner(assembly, worktreesRoot, 'taskId', abortHandler, ABORT_THRESHOLD, credentialEnvVarsToScrub)
     }

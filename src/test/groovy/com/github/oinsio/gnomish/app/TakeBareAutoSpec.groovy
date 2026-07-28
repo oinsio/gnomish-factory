@@ -35,17 +35,6 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         new TakeBareAuto(newAssembly(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', BASE, CAP, CLOCK, [])
     }
 
-    private static ManualRunAssembly newAssembly() {
-        new ManualRunAssembly(
-                new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.engine.SystemClock(),
-                new com.github.oinsio.gnomish.adapter.engine.ThreadSleeper(),
-                new com.github.oinsio.gnomish.FactoryProperties('test-instance', null, null, null))
-    }
-
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none()) {
         new ReadyTask(new TaskRef(taskId), facts)
     }
