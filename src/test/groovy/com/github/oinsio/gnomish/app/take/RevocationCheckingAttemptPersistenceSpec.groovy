@@ -32,7 +32,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     private RevocationCheckingAttemptPersistence persistence =
     new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE)
 
-    private TrackerTask taskWith(TrackerTaskState state) {
+    private static TrackerTask taskWith(TrackerTaskState state) {
         new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none())
     }
 
@@ -133,7 +133,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "the revocation check runs only after the delegate persist completes"() {
         given: 'the delegate throws — the round itself failed to persist durably'
-        delegate.persist(*_) >> { throw new RuntimeException('disk full') }
+        delegate.persist(_ as String, _ as TaskState, _ as ToolTrace) >> { throw new RuntimeException('disk full') }
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -142,5 +142,52 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         def ex = thrown(RuntimeException)
         ex.message == 'disk full'
         0 * tracker.fetchTask(*_)
+    }
+
+    def "the first persist call records progress exactly once"() {
+        given:
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+
+        when:
+        persistence.persist('PROJ-1', STATE, TRACE)
+
+        then:
+        1 * tracker.recordProgress(REF)
+    }
+
+    def "a second and third persist call do not re-emit progress"() {
+        given:
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+
+        when: 'three rounds of the same run persist in sequence'
+        persistence.persist('PROJ-1', STATE, TRACE)
+        persistence.persist('PROJ-1', STATE, TRACE)
+        persistence.persist('PROJ-1', STATE, TRACE)
+
+        then: 'the progress marker is emitted once for the whole run, not once per round'
+        1 * tracker.recordProgress(REF)
+    }
+
+    def "a recordProgress throw is swallowed and the round proceeds as if it succeeded"() {
+        given:
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.recordProgress(REF) >> { throw new RuntimeException('boom') }
+
+        when:
+        persistence.persist('PROJ-1', STATE, TRACE)
+
+        then: 'the throw never surfaces — the revocation check still runs and passes normally'
+        noExceptionThrown()
+        1 * tracker.recordProgress(REF)
+
+        and: 'revocation() stays empty — a failed marker never turns into a revocation'
+        persistence.revocation().isEmpty()
+
+        when: 'a second round persists after the throwing first attempt'
+        persistence.persist('PROJ-1', STATE, TRACE)
+
+        then: 'the guard was set despite the throw — recordProgress is not attempted again'
+        0 * tracker.recordProgress(REF)
+        noExceptionThrown()
     }
 }

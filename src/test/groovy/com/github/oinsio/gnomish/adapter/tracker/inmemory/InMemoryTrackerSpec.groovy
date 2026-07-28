@@ -78,6 +78,47 @@ class InMemoryTrackerSpec extends AbstractInMemoryTrackerSpec {
         lockIsFreeFromAnotherThread(tracker)
     }
 
+    def "recordProgress fully releases the store lock on exit"() {
+        given: 'a tracker with one seeded task'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:progress-unlock')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Working('instance-a'), new AbortFacts(2, Instant.parse('2026-07-20T10:00:00Z')))
+
+        when: 'recordProgress returns'
+        tracker.recordProgress(ref)
+
+        then: 'a different thread can immediately acquire the lock, proving it was released'
+        lockIsFreeFromAnotherThread(tracker)
+    }
+
+    // FR1, FR3, D1-D4: recordProgress after an abort clears the abort streak, narrates the
+    //     reset in the thread, and leaves the task's logical state untouched.
+    def "recordProgress after an abort zeroes the abort count, appends a PROGRESS entry, and does not change state"() {
+        given: 'a tracker with one seeded Working task carrying abort history'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:progress-reset')
+        def workingState = new TrackerTaskState.Working('instance-a')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), workingState, new AbortFacts(2, Instant.parse('2026-07-20T10:00:00Z')))
+
+        when: 'recordProgress is called'
+        tracker.recordProgress(ref)
+
+        then: 'the abort count and last-abort timestamp are reset'
+        def facts = tracker.fetchTask(ref).abortFacts()
+        facts.count() == 0
+        facts.lastAbortAt() == null
+
+        and: 'the thread carries a PROGRESS entry'
+        harness.thread(ref)*.kind() == [
+            CorrespondenceEntry.Kind.PROGRESS
+        ]
+
+        and: 'the task remains in its prior logical state, untouched'
+        tracker.fetchTask(ref).state() == workingState
+    }
+
     def "an armed claim gate runs before claim competes for the store lock"() {
         given: 'a tracker with one seeded ready task and an armed claim gate'
         def tracker = new InMemoryTracker()

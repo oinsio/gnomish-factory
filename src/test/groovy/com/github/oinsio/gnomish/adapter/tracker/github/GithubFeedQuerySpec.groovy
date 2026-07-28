@@ -119,6 +119,31 @@ class GithubFeedQuerySpec extends Specification {
         result[0].abortFacts().lastAbortAt() == Instant.parse('2026-07-20T12:30:00Z')
     }
 
+    def "counts only abort markers strictly after the latest PROGRESS marker (FR3, D3 of fix-abort-progress-reset)"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":8}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/8/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T08:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T08:30:00Z\\",\\"version\\":1} -->\\n🤖 aborted: before progress"},
+                          {"id":3,"body":"<!-- gnomish {\\"kind\\":\\"progress\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"version\\":1} -->\\n🤖 progressed"},
+                          {"id":4,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 aborted: after progress"}
+                        ]
+                        ''')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        result.size() == 1
+        result[0].abortFacts().count() == 1
+        result[0].abortFacts().lastAbortAt() == Instant.parse('2026-07-20T10:00:00Z')
+    }
+
     def "a ready task with no abort markers reports AbortFacts.none()"() {
         given:
         wireMock.stubFor(get(urlEqualTo(

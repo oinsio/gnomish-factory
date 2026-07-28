@@ -47,10 +47,10 @@ class GithubMarkerSpec extends Specification {
     def "round-trip: render then parse recovers kind, instance, at, v, and human text exactly (#kind)"() {
         given:
         def at = Instant.parse('2026-07-20T12:00:00Z')
-        def humanText = '🤖 gnomish: ' + kind.name().toLowerCase()
+        def humanText = '🤖 gnomish: ' + (kind as GithubMarkerKind).name().toLowerCase()
 
         when:
-        def body = GithubMarker.render(kind, 'gnomish-factory-x7k2q1', at, humanText)
+        def body = GithubMarker.render(kind as GithubMarkerKind, 'gnomish-factory-x7k2q1', at, humanText)
         def parsed = GithubMarker.parse(body)
 
         then:
@@ -96,6 +96,18 @@ class GithubMarkerSpec extends Specification {
     def "parse returns empty for a gnomish-prefixed comment with malformed JSON"() {
         expect:
         GithubMarker.parse('<!-- gnomish {not valid json} -->\nhello').isEmpty()
+    }
+
+    def "parse returns empty for a gnomish-prefixed comment carrying an unrecognized kind (unknown-kind tolerance)"() {
+        expect:
+        GithubMarker.parse('<!-- gnomish {"kind":"reticulate-splines","instance":"gnomish-factory-x7k2q1",' +
+                '"at":"2026-07-20T12:00:00Z","version":1} -->\nhello').isEmpty()
+    }
+
+    def "GithubMarkerKind.PROGRESS round-trips its wire value ('progress')"() {
+        expect:
+        GithubMarkerKind.PROGRESS.wireValue() == 'progress'
+        GithubMarkerKind.fromWireValue('progress') == GithubMarkerKind.PROGRESS
     }
 
     def "the format version is a fixed code constant, not a render parameter"() {

@@ -152,6 +152,11 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         delegate.postNote(canonicalRefFor(ref), text);
     }
 
+    @Override
+    public void recordProgress(TaskRef ref) {
+        delegate.recordProgress(canonicalRefFor(ref));
+    }
+
     // --- Fixture seeding, delegated to FixtureSeeder for the wire-shape details ---
 
     /**

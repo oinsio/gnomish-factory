@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -68,7 +67,6 @@ abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification imple
         trackerFactory = seeded[1] as TrackerAdapterFactory
 
         projectDir = initWorkingRepo(tempDir, 'project')
-        def gitRunner = new GitProcessRunner()
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
@@ -103,8 +101,7 @@ tracker:
     api-url: https://api.github.com
     repo: acme/widgets
 ''')
-        gitRunner.run(projectDir, 'add', '.')
-        gitRunner.run(projectDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(projectDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
@@ -147,10 +144,11 @@ tracker:
         finishEntry.contains('Stage: pipeline complete')
         finishEntry.contains('Branch: gnomish/PROJ-1')
 
-        and: 'the tracker thread alone tells the story in order: claim, then final report (UX4) — no other source consulted'
-        entries.size() == 2
+        and: 'the tracker thread alone tells the story in order: claim, durable-progress marker, then final report (UX4, FR2 of fix-abort-progress-reset) — no other source consulted'
+        entries.size() == 3
         entries[0].startsWith('CLAIM:')
         entries[0].contains('claimed by')
-        entries[1].startsWith('FINISH:')
+        entries[1].startsWith('PROGRESS:')
+        entries[2].startsWith('FINISH:')
     }
 }

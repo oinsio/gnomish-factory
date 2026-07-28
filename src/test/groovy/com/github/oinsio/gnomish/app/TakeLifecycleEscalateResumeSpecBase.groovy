@@ -97,17 +97,19 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         and: 'the tracker ends Finished'
         tracker.fetchTask(REF).state() instanceof TrackerTaskState.Finished
 
-        and: 'the tracker thread alone tells the full cross-instance story, in order (UX4, NFR-R3)'
+        and: 'the tracker thread alone tells the full cross-instance story, in order (UX4, NFR-R3), including the durable-progress marker each run emits on its first round (FR2 of fix-abort-progress-reset)'
         def entries = thread(tracker, REF)
-        entries.size() == 5
+        entries.size() == 7
         entries[0].startsWith('CLAIM:')
         entries[0].contains('instance-a')
-        entries[1].startsWith('PARK:')
-        entries[2].startsWith('CLAIM:')
-        entries[2].contains('instance-b')
-        entries[3].startsWith('ACK:')
-        entries[3].contains('please retry, I fixed the environment')
-        entries[4].startsWith('FINISH:')
+        entries[1].startsWith('PROGRESS:')
+        entries[2].startsWith('PARK:')
+        entries[3].startsWith('CLAIM:')
+        entries[3].contains('instance-b')
+        entries[4].startsWith('ACK:')
+        entries[4].contains('please retry, I fixed the environment')
+        entries[5].startsWith('PROGRESS:')
+        entries[6].startsWith('FINISH:')
     }
 
     /**
@@ -120,7 +122,7 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
      * that worktree would never surface inside it). This mirrors what "fixing the environment"
      * means for a working-copy-based CLI factory: a human (or another process) edits files in the
      * SAME shared working copy. Not a channel between instance A and B's in-process state
-     * (NFR-R3): both instances share only the tracker and the one {@link #worktreesRoot}/project
+     * (NFR-R3): both instances share only the tracker and the one {@code worktreesRoot}/project
      * directory convention, exactly as two real factory processes on the same machine would.
      */
     private void fixMissingFileInSharedWorktree() {

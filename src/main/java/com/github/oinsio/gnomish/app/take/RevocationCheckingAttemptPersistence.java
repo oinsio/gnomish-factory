@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Decorates the engine's {@link AttemptPersistence} port with the round-boundary revocation check
@@ -44,15 +46,30 @@ import org.jspecify.annotations.Nullable;
  * wraps a persistence used during an active take run, so a task already {@code Finished} can only
  * mean it was moved out from under this run.
  *
- * <p>Implements FR15, D2 of add-tracker-port.
+ * <p>Once per run, on the first successful delegate persist, this decorator also emits a
+ * durable-progress marker via {@link Tracker#recordProgress(TaskRef)} — before the revocation
+ * check above (design D2) — so that an abort on a LATER round of the same run is recognized as
+ * "after durable progress" and does not over-count toward the abort fuse. The emission is
+ * strictly best-effort (FR2, NFR-R1, NFR-O1): the round is already durable by the time it runs,
+ * so a failed marker only risks a later over-count, never lost work. A thrown {@link
+ * RuntimeException} from {@code recordProgress} is caught, logged at WARN with the task ref, and
+ * swallowed — the run proceeds unchanged. The once-per-run guard is set BEFORE the call is known
+ * to succeed and is never reset on failure, so {@code recordProgress} is attempted at most once
+ * per {@code engine.run(...)}, whether that attempt succeeds or throws.
+ *
+ * <p>Implements FR15, D2 of add-tracker-port. Implements FR2, NFR-R1, NFR-O1 of
+ * fix-abort-progress-reset.
  */
 public final class RevocationCheckingAttemptPersistence implements AttemptPersistence {
+
+    private static final Logger log = LoggerFactory.getLogger(RevocationCheckingAttemptPersistence.class);
 
     private final AttemptPersistence delegate;
     private final Tracker tracker;
     private final TaskRef ref;
     private final InstanceId instanceId;
     private volatile @Nullable RevocationDetectedException detected;
+    private volatile boolean progressRecorded;
 
     /**
      * @param delegate the underlying persistence that actually makes each round durable; never null
@@ -71,11 +88,13 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
     }
 
     /**
-     * Delegates the round's durable persist first, then performs the "still ours and alive"
-     * tracker check; a failed check records the failure (see {@link #revocation()}) and throws
-     * after the round is already safely committed. The throw is what stops the engine's attempt
-     * loop from starting a further round — see the class doc for why it never reaches a caller of
-     * {@code engine.run(...)} as a thrown exception.
+     * Delegates the round's durable persist first, then — on the first round of this run only —
+     * best-effort emits a durable-progress marker via {@link Tracker#recordProgress(TaskRef)}
+     * (FR2, D2), then performs the "still ours and alive" tracker check; a failed check records
+     * the failure (see {@link #revocation()}) and throws after the round is already safely
+     * committed. The throw is what stops the engine's attempt loop from starting a further round —
+     * see the class doc for why it never reaches a caller of {@code engine.run(...)} as a thrown
+     * exception.
      *
      * @throws RevocationDetectedException if the task is no longer claimed by this instance,
      *     closed, or otherwise moved by a human or another instance
@@ -84,11 +103,32 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         delegate.persist(taskId, state, trace);
 
+        recordProgressOnce();
+
         TrackerTaskState current = tracker.fetchTask(ref).state();
         if (!(current instanceof TrackerTaskState.Working(String holder)) || !holder.equals(instanceId.value())) {
             var exception = new RevocationDetectedException(taskId, describe(current));
             detected = exception;
             throw exception;
+        }
+    }
+
+    /**
+     * Emits the run's durable-progress marker at most once, on the first call, regardless of
+     * whether that attempt succeeds or throws (FR2, D2). Best-effort: a {@link RuntimeException}
+     * from {@link Tracker#recordProgress(TaskRef)} is caught, logged at WARN with the task ref,
+     * and swallowed — the round is already durable, so the only risk of a failed marker is a
+     * later over-count, never lost work (NFR-R1, NFR-O1).
+     */
+    private void recordProgressOnce() {
+        if (progressRecorded) {
+            return;
+        }
+        progressRecorded = true;
+        try {
+            tracker.recordProgress(ref);
+        } catch (RuntimeException e) {
+            log.warn("recordProgress failed for task {}; proceeding with the run anyway", ref.id(), e);
         }
     }
 

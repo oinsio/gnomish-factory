@@ -3,14 +3,15 @@ package com.github.oinsio.gnomish.app.port.tracker;
 import java.util.List;
 
 /**
- * The application layer's single abstraction over any task tracker: exactly
- * the ten v1 operations of feed, coordination, and correspondence (design D1
- * sketch), speaking only the factory's own vocabulary — tasks, states,
- * decisions, abort facts — never a tracker-specific concept such as a label or
- * an issue. All such mapping is confined to adapters under {@code
- * adapter.tracker.*}; core compiles and is tested against this interface
- * alone (tracker-port spec, "Single Tracker port speaking the factory's
- * language").
+ * The application layer's single abstraction over any task tracker: the
+ * eleven v1 operations of feed, coordination, and correspondence (design D1
+ * sketch of add-tracker-port, grown from ten to eleven by design D1 of
+ * fix-abort-progress-reset), speaking only the factory's own vocabulary —
+ * tasks, states, decisions, abort facts — never a tracker-specific concept
+ * such as a label or an issue. All such mapping is confined to adapters under
+ * {@code adapter.tracker.*}; core compiles and is tested against this
+ * interface alone (tracker-port spec, "Single Tracker port speaking the
+ * factory's language").
  *
  * <p>Transitions between the logical task states ({@link TrackerTaskState})
  * are initiated only by the factory or by a human acting in the tracker UI —
@@ -149,6 +150,22 @@ public interface Tracker {
      * @param record the abort marker to persist; never null
      */
     void recordAbort(TaskRef ref, AbortRecord record);
+
+    /**
+     * Persists a structural durable-progress marker for {@code ref}, leaving
+     * the task's logical state and claim holder untouched. The marker SHALL be
+     * reconstructable by any instance from the tracker alone: after this call,
+     * a {@code fetchTask} or {@code listReady} from a different instance
+     * observes {@link AbortFacts} reset to "aborts since this marker" (FR1,
+     * FR4, design D1). Emission is idempotent under repeated calls within the
+     * same claim: a second marker within the same claim is harmless, since
+     * reconstruction always anchors to the latest one (NFR-R2).
+     *
+     * <p>Implements FR1 of fix-abort-progress-reset.
+     *
+     * @param ref the task's canonical identity; never null
+     */
+    void recordProgress(TaskRef ref);
 
     /**
      * Posts an "acting on decision" marker naming {@code decisionText}, such

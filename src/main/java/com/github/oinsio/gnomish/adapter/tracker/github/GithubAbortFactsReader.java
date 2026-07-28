@@ -5,6 +5,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Reconstructs a task's {@link AbortFacts} from its GitHub issue comments
@@ -16,16 +17,24 @@ import java.util.List;
  * adapter-local state.
  *
  * <p>This class does not apply backoff or the K-abort fuse policy — that is
- * core's job over the facts returned here (design D10). It also does not
- * decide the "since last durable progress" boundary beyond "every {@code
- * abort} marker currently on the issue": a resumed/claimed task's markers
- * before the claim are still counted here, but {@link GithubFeedQuery} only
- * calls this reader for {@code Ready} issues, where no later boundary marker
- * (claim, ack, finish) can have superseded them — the same fold callers use
- * for {@code fetchTask} (task 4.10) additionally anchor to the latest
- * boundary marker when one exists.
+ * core's job over the facts returned here (design D10). It DOES now decide
+ * the "since last durable progress" boundary (FR3, design D3 of
+ * fix-abort-progress-reset): when a {@link GithubMarkerKind#PROGRESS} marker
+ * is present, only ABORT markers strictly after the latest one are folded in,
+ * reusing {@link GithubCommentBoundary#latestProgressIndex(List)} and {@link
+ * GithubCommentBoundary#foldAbortsAfter(List, int)} — the same PROGRESS-anchor
+ * rule {@link GithubCommentBoundary#abortFactsSinceBoundary(List)} applies for
+ * {@code fetchTask}. This reader is only called by {@link GithubFeedQuery}
+ * for {@code Ready} issues, where no CLAIM/ABORT claim boundary can be active,
+ * so the claim-streak fallback in {@code abortFactsSinceBoundary} is
+ * irrelevant here — but a PROGRESS marker can still be present on a
+ * Ready-adjacent history (PROGRESS is not a claim boundary), so the two
+ * readers must agree on it for consistency between {@code listReady} and
+ * {@code fetchTask}. Without a PROGRESS marker, every ABORT marker currently
+ * on the issue folds in, unchanged from before.
  *
- * <p>Implements FR8, FR14 of add-tracker-port.
+ * <p>Implements FR8, FR14 of add-tracker-port; FR3 of
+ * fix-abort-progress-reset.
  */
 record GithubAbortFactsReader(GithubHttpClient httpClient) {
 
@@ -47,6 +56,10 @@ record GithubAbortFactsReader(GithubHttpClient httpClient) {
     }
 
     private static AbortFacts foldAbortMarkers(List<ParsedMarker> markers) {
+        Optional<Integer> progressIndex = GithubCommentBoundary.latestProgressIndex(markers);
+        if (progressIndex.isPresent()) {
+            return GithubCommentBoundary.foldAbortsAfter(markers, progressIndex.get());
+        }
         int count = 0;
         Instant lastAbortAt = null;
         for (ParsedMarker marker : markers) {

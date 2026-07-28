@@ -78,6 +78,17 @@ final class TrackedTask {
         lastAbortAt = at;
     }
 
+    /**
+     * Resets abort history on forward progress (FR3, D4): a task that resumes work after one or
+     * more aborts is no longer "stuck", so the abort streak is cleared. The {@code PROGRESS}
+     * thread entry narrating this reset is appended by {@link InMemoryTracker}, not here (mirrors
+     * {@link #recordAbort}, which likewise only mutates fields).
+     */
+    void recordProgress() {
+        abortCount = 0;
+        lastAbortAt = null;
+    }
+
     void addReply(HumanReply reply) {
         pendingReplies.add(reply);
     }
