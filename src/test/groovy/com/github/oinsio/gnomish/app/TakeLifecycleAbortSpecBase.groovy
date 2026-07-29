@@ -44,7 +44,7 @@ import spock.lang.TempDir
  * com.github.oinsio.gnomish.app.TakeEngineExecution} for how that outcome is then routed to {@link
  * com.github.oinsio.gnomish.app.take.AbortHandler} rather than the ordinary outcome mapper.
  *
- * <p>The fuse threshold K is configured to {@link AbortLifecycleFixture#ABORT_THRESHOLD} (2) so
+ * <p>The fuse threshold K is configured to {@code AbortLifecycleFixture.ABORT_THRESHOLD} (2) so
  * the fuse trips on the SECOND abort, keeping the scenario short without weakening what FR14
  * requires: an arbitrary K only changes how many times the cycle repeats, not the protocol proved.
  *
@@ -72,6 +72,18 @@ abstract class TakeLifecycleAbortSpecBase extends Specification implements Abort
      * any other, answers normally.
      */
     abstract void armToAbortOnNextRoundBoundaryCheck()
+
+    /**
+     * Like {@link #armToAbortOnNextRoundBoundaryCheck}, but the run's own {@code recordProgress}
+     * emission (fix-abort-progress-reset FR2, D2) also fails and is swallowed (NFR-R1), so the
+     * abort tally this run's forced abort adds to is NOT reset by this run's own first-round
+     * progress marker first. Needed to still exercise consecutive aborts accumulating toward the
+     * fuse now that a genuinely successful {@code recordProgress} always precedes the forced abort
+     * within the SAME run (the pipeline here has exactly one round per claim) and would otherwise
+     * reset the count to one on every single run, making the fuse untestable via repeated forced
+     * aborts alone.
+     */
+    abstract void armToAbortWithFailedProgressRecording()
 
     def setup() {
         def seeded = seededReadyTrackerAndFactory(REF, 'Add widgets', 'please add widgets')
@@ -113,11 +125,12 @@ abstract class TakeLifecycleAbortSpecBase extends Specification implements Abort
         afterAbort.abortFacts().count() == 1
         afterAbort.abortFacts().lastAbortAt() == START
 
-        and: 'the tracker thread shows the claim followed by an ABORT entry (UX4)'
+        and: 'the tracker thread shows the claim, the first-round durable-progress marker (FR2 of fix-abort-progress-reset), then an ABORT entry (UX4)'
         def entries = thread(tracker, REF)
-        entries.size() == 2
+        entries.size() == 3
         entries[0].startsWith('CLAIM:')
-        entries[1].startsWith('ABORT:')
+        entries[1].startsWith('PROGRESS:')
+        entries[2].startsWith('ABORT:')
     }
 
     def "backoff hides the aborted task from the bare feed until the window expires, then it is claimable again (FR10, D10)"() {
@@ -133,7 +146,7 @@ abstract class TakeLifecycleAbortSpecBase extends Specification implements Abort
         def emptyRun = thrown(TakeExitCodeException)
         emptyRun.exitCode() == 0
         tracker.fetchTask(REF).state() instanceof TrackerTaskState.Ready
-        thread(tracker, REF).size() == 2
+        thread(tracker, REF).size() == 3
 
         when: 'a BARE take run happens after the backoff window has expired'
         // No manual branch reset: the branch left behind by the prior abort records outcome
@@ -158,7 +171,15 @@ abstract class TakeLifecycleAbortSpecBase extends Specification implements Abort
         // No manual branch reset: the take mandate resumes the Aborted branch on the return alone
         // (FR9, D12) and the armed round-boundary check aborts it a second time, accumulating the
         // consecutive count to K without human intervention below the fuse.
-        armToAbortOnNextRoundBoundaryCheck()
+        //
+        // This second arm also fails the run's OWN recordProgress emission (fix-abort-progress-reset
+        // FR2/D2/NFR-R1): the pipeline here has exactly one round per claim, so a genuinely
+        // successful recordProgress always lands right before the forced abort on the SAME run,
+        // resetting the abort tally to zero before that abort re-raises it to one — meaning every
+        // repeated forced abort would reconstruct as count-one forever and the fuse could never
+        // trip. Simulating a recordProgress infra hiccup on this run (best-effort, swallowed) leaves
+        // the first abort's count intact for this second one to add to, reaching the threshold.
+        armToAbortWithFailedProgressRecording()
         def secondAttemptTime = START.plusSeconds(1)
         newCommand(secondAttemptTime).run(takeArgs('take', 'PROJ-1', "--dir=$projectDir"))
 

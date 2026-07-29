@@ -5,11 +5,6 @@ import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.TakeLifecycleAbortSpecBase
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
-import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.HumanReply
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -66,6 +61,11 @@ class InMemoryTakeLifecycleAbortSpec extends TakeLifecycleAbortSpecBase {
     void armToAbortOnNextRoundBoundaryCheck() {
         armedTracker.armNextRunToAbort()
     }
+
+    @Override
+    void armToAbortWithFailedProgressRecording() {
+        armedTracker.armNextRunToAbortWithFailedProgress()
+    }
 }
 
 /**
@@ -82,25 +82,45 @@ class InMemoryTakeLifecycleAbortSpec extends TakeLifecycleAbortSpecBase {
  * InMemoryTakeLifecycleAbortSpec} does) makes exactly one round boundary per run abort, regardless
  * of how many {@code fetchTask} calls surround it in that or any other run.
  *
+ * <p>{@link #armNextRunToAbortWithFailedProgress} additionally makes the run's OWN {@link
+ * #recordProgress} call throw (fix-abort-progress-reset NFR-R1's best-effort-failure path): the
+ * durable round persists as normal, but the durable-progress marker that would otherwise reset the
+ * abort tally before this run's own forced abort is landed never lands, so a PRIOR run's abort
+ * count carries forward into this one — the only way, once {@code recordProgress} genuinely fires
+ * on every run's first round (fix-abort-progress-reset D2), for the K-fuse test below to still
+ * exercise consecutive aborts accumulating to the threshold instead of resetting to one every time.
+ *
  * <p>Kept in {@code adapter.tracker} (not {@code adapter.tracker.inmemory}) because it is
  * test-support scaffolding for this one spec, not a reusable in-memory-adapter capability; it may
  * still depend on {@link InMemoryTracker} since this package is the one place {@code
  * TrackerPortBoundarySpec} allows that.
  */
-class ThrowOnNextFetchTracker implements Tracker {
+class ThrowOnNextFetchTracker extends DelegatingTracker {
 
-    private final InMemoryTracker delegate
     private boolean armed = false
     private int fetchCountSinceArmed = 0
+    private boolean failNextRecordProgress = false
 
     ThrowOnNextFetchTracker(InMemoryTracker delegate) {
-        this.delegate = delegate
+        super(delegate)
     }
 
     /** Arms the SECOND {@link #fetchTask} call of the next run to throw instead of delegating. */
     void armNextRunToAbort() {
         armed = true
         fetchCountSinceArmed = 0
+    }
+
+    /**
+     * Arms the SECOND {@link #fetchTask} call of the next run to throw, exactly like {@link
+     * #armNextRunToAbort}, AND makes that run's {@link #recordProgress} call throw instead of
+     * delegating — so the run's own forced abort is not preceded by a reset of the abort tally
+     * (fix-abort-progress-reset NFR-R1: a failed {@code recordProgress} is swallowed and the round
+     * proceeds, but the count it would have zeroed is left intact).
+     */
+    void armNextRunToAbortWithFailedProgress() {
+        armNextRunToAbort()
+        failNextRecordProgress = true
     }
 
     @Override
@@ -116,47 +136,11 @@ class ThrowOnNextFetchTracker implements Tracker {
     }
 
     @Override
-    List<ReadyTask> listReady(int limit) {
-        delegate.listReady(limit)
-    }
-
-    @Override
-    List<HumanReply> collectDecisions(TaskRef ref) {
-        delegate.collectDecisions(ref)
-    }
-
-    @Override
-    ClaimResult claim(TaskRef ref, String instanceId) {
-        delegate.claim(ref, instanceId)
-    }
-
-    @Override
-    void release(TaskRef ref) {
-        delegate.release(ref)
-    }
-
-    @Override
-    void park(TaskRef ref, ParkReason reason, String report) {
-        delegate.park(ref, reason, report)
-    }
-
-    @Override
-    void finish(TaskRef ref, String summary) {
-        delegate.finish(ref, summary)
-    }
-
-    @Override
-    void recordAbort(TaskRef ref, AbortRecord record) {
-        delegate.recordAbort(ref, record)
-    }
-
-    @Override
-    void acknowledgeDecision(TaskRef ref, String decisionText) {
-        delegate.acknowledgeDecision(ref, decisionText)
-    }
-
-    @Override
-    void postNote(TaskRef ref, String text) {
-        delegate.postNote(ref, text)
+    void recordProgress(TaskRef ref) {
+        if (failNextRecordProgress) {
+            failNextRecordProgress = false
+            throw new RuntimeException('simulated tracker infrastructure failure recording progress')
+        }
+        delegate.recordProgress(ref)
     }
 }

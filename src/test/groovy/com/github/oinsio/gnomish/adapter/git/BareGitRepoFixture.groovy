@@ -50,4 +50,17 @@ trait BareGitRepoFixture {
         def result = runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', message)
         assert result.exitCode() == 0: "git commit failed: ${result.stderr()}"
     }
+
+    /** Registers {@code url} as remote {@code name} in {@code repo}, asserting success. */
+    void addRemote(Path repo, String name, String url) {
+        def result = new GitProcessRunner().run(repo, 'remote', 'add', name, url)
+        assert result.exitCode() == 0: "git remote add failed: ${result.stderr()}"
+    }
+
+    /** Runs an arbitrary read-only {@code git} command in {@code repo} and returns trimmed stdout. */
+    String gitOutput(Path repo, String... args) {
+        def result = new GitProcessRunner().run(repo, args)
+        assert result.exitCode() == 0: "git ${args.join(' ')} failed: ${result.stderr()}"
+        result.stdout().trim()
+    }
 }

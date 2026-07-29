@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -85,7 +84,6 @@ abstract class TakeLifecycleRevocationSpecBase extends Specification implements 
     /** Writes a two-AUTO-stage pipeline: both stages pass trivially (no verify checks). */
     private void writeTwoStageProjectFixture() {
         projectDir = initWorkingRepo(tempDir, 'project')
-        def gitRunner = new GitProcessRunner()
         ['first', 'second'].each { stageName ->
             Files.createDirectories(projectDir.resolve(".gnomish/stages/${stageName}"))
             Files.createDirectories(projectDir.resolve("stages/${stageName}"))
@@ -122,13 +120,12 @@ tracker:
     api-url: https://api.github.com
     repo: acme/widgets
 ''')
-        gitRunner.run(projectDir, 'add', '.')
-        gitRunner.run(projectDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(projectDir)
         // A real origin remote so BranchPush actually pushes (with none configured, push is a
         // silent no-op, per BranchPush's own contract) — every task worktree created via `git
         // worktree add` under projectDir inherits this remote from the shared .git.
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        gitRunner.run(projectDir, 'remote', 'add', 'origin', bareRepo.toString())
+        addRemote(projectDir, 'origin', bareRepo.toString())
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
@@ -167,23 +164,22 @@ tracker:
         tracker.fetchTask(REF).state() instanceof TrackerTaskState.Gone
 
         and: 'the branch still exists in the bare remote, carrying the salvage commit (kept, per FR15)'
-        def gitRunner = new GitProcessRunner()
-        def bareBranchTip = gitRunner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
+        def bareBranchTip = gitOutput(bareRepo, 'rev-parse', 'gnomish/PROJ-1')
         bareBranchTip.length() == 40
 
         and: 'the salvage commit is present in the branch history, carrying the leftover file'
-        gitRunner.run(bareRepo, 'log', '-1', '--format=%s', 'gnomish/PROJ-1').stdout().trim() ==
-                'gnomish: salvage'
-        gitRunner.run(bareRepo, 'show', '--stat', 'gnomish/PROJ-1').stdout().contains(LEFTOVER_FILE)
+        gitOutput(bareRepo, 'log', '-1', '--format=%s', 'gnomish/PROJ-1') == 'gnomish: salvage'
+        gitOutput(bareRepo, 'show', '--stat', 'gnomish/PROJ-1').contains(LEFTOVER_FILE)
 
         and: 'the worktree is kept on disk, not deleted'
         Files.exists(worktree)
 
-        and: 'the tracker thread tells the story: claim, then the structural stop note (UX4)'
+        and: 'the tracker thread tells the story: claim, the first round durable-progress marker (FR2 of fix-abort-progress-reset), then the structural stop note (UX4)'
         def entries = thread(tracker, REF)
-        entries.size() == 2
+        entries.size() == 3
         entries[0].startsWith('CLAIM:')
-        def noteEntry = entries[1]
+        entries[1].startsWith('PROGRESS:')
+        def noteEntry = entries[2]
         noteEntry.startsWith('NOTE:')
         noteEntry.contains('Work stopped')
     }

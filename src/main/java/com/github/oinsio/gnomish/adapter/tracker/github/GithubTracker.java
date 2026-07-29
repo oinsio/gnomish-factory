@@ -34,7 +34,8 @@ import java.util.List;
  * @param feedQuery implements {@code listReady}
  * @param taskFetcher implements {@code fetchTask}
  * @param claimLease implements {@code claim}
- * @param stateWrites implements {@code park}/{@code finish}/{@code recordAbort}
+ * @param stateWrites implements {@code park}/{@code finish}/{@code recordAbort}/{@code
+ *     recordProgress}
  * @param correspondence implements {@code release}/{@code postNote}
  * @param decisions implements {@code collectDecisions}/{@code acknowledgeDecision}
  */
@@ -97,6 +98,12 @@ public record GithubTracker(
     @Override
     public void acknowledgeDecision(TaskRef ref, String decisionText) {
         decisions.acknowledgeDecision(ref, decisionText);
+    }
+
+    // Implements FR1 of fix-abort-progress-reset.
+    @Override
+    public void recordProgress(TaskRef ref) {
+        stateWrites.recordProgress(ref);
     }
 
     @Override

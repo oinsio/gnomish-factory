@@ -5,11 +5,6 @@ import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.TakeLifecycleRevocationSpecBase
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
-import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.HumanReply
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -86,9 +81,8 @@ class InMemoryTakeLifecycleRevocationSpec extends TakeLifecycleRevocationSpecBas
  * still depend on {@link InMemoryTracker}/{@link InMemoryTrackerHarness} since this package is the
  * one place {@code TrackerPortBoundarySpec} allows that.
  */
-class CloseOnNthFetchTracker implements Tracker {
+class CloseOnNthFetchTracker extends DelegatingTracker {
 
-    private final InMemoryTracker delegate
     private final InMemoryTrackerHarness harness
     private final TaskRef armedRef
     private final int closeOnCallNumber
@@ -98,7 +92,7 @@ class CloseOnNthFetchTracker implements Tracker {
     CloseOnNthFetchTracker(
     InMemoryTracker delegate, InMemoryTrackerHarness harness, TaskRef armedRef, int closeOnCallNumber,
     Path leftoverFile) {
-        this.delegate = delegate
+        super(delegate)
         this.harness = harness
         this.armedRef = armedRef
         this.closeOnCallNumber = closeOnCallNumber
@@ -113,50 +107,5 @@ class CloseOnNthFetchTracker implements Tracker {
             harness.close(ref)
         }
         delegate.fetchTask(ref)
-    }
-
-    @Override
-    List<ReadyTask> listReady(int limit) {
-        delegate.listReady(limit)
-    }
-
-    @Override
-    List<HumanReply> collectDecisions(TaskRef ref) {
-        delegate.collectDecisions(ref)
-    }
-
-    @Override
-    ClaimResult claim(TaskRef ref, String instanceId) {
-        delegate.claim(ref, instanceId)
-    }
-
-    @Override
-    void release(TaskRef ref) {
-        delegate.release(ref)
-    }
-
-    @Override
-    void park(TaskRef ref, ParkReason reason, String report) {
-        delegate.park(ref, reason, report)
-    }
-
-    @Override
-    void finish(TaskRef ref, String summary) {
-        delegate.finish(ref, summary)
-    }
-
-    @Override
-    void recordAbort(TaskRef ref, AbortRecord record) {
-        delegate.recordAbort(ref, record)
-    }
-
-    @Override
-    void acknowledgeDecision(TaskRef ref, String decisionText) {
-        delegate.acknowledgeDecision(ref, decisionText)
-    }
-
-    @Override
-    void postNote(TaskRef ref, String text) {
-        delegate.postNote(ref, text)
     }
 }

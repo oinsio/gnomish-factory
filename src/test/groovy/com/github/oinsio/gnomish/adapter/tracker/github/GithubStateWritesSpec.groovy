@@ -24,9 +24,11 @@ import spock.lang.Specification
  * REPORT-kind marker carrying the park reason; {@code finish}
  * point-transitions working -> delivered and posts a plain REPORT-kind
  * marker; {@code recordAbort} posts an ABORT-kind marker AND
- * point-transitions working -> ready, as one operation.
+ * point-transitions working -> ready, as one operation. {@code recordProgress}
+ * posts a PROGRESS-kind marker only, with no label transition at all
+ * (fix-abort-progress-reset design D3).
  *
- * Implements FR14, FR18 of add-tracker-port.
+ * Implements FR14, FR18 of add-tracker-port; FR1, FR4 of fix-abort-progress-reset.
  */
 class GithubStateWritesSpec extends Specification {
 
@@ -131,6 +133,21 @@ class GithubStateWritesSpec extends Specification {
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"abort"')))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"instance":"gnomish-factory-a"')))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('agent CLI crashed'))))
+    }
+
+    def "recordProgress posts a PROGRESS marker with no label transition"() {
+        given:
+        stubComment(wireMock, 44)
+        def writes = newWrites()
+
+        when:
+        writes.recordProgress(refFor(44))
+
+        then:
+        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/44/comments'))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"progress"')))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"instance":"gnomish-factory-x7k2q1"'))))
+        wireMock.findAll(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/44/labels'))).isEmpty()
     }
 
     def "park failing to post the comment surfaces as GithubStateWriteException"() {

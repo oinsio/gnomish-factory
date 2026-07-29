@@ -6,12 +6,13 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Abort history for a task, reconstructable by any instance from the tracker
- * alone (NFR-R3): {@code count} is "aborts since last durable progress" — reset
- * by the first persisted round after claim — and {@code lastAbortAt} is the
- * timestamp of the most recent recorded abort. Adapters report these facts as
- * observed from structural markers; they never apply backoff or the K-fuse
- * policy themselves — that is core's job over adapter-provided facts (design
- * D10, FR14).
+ * alone (NFR-R3): {@code count} is the number of abort markers recorded
+ * strictly after the latest durable-progress marker on the task —
+ * markers at or before that progress marker are not counted — and {@code
+ * lastAbortAt} is the timestamp of the most recent recorded abort. Adapters
+ * report these facts as observed from structural markers; they never apply
+ * backoff or the K-fuse policy themselves — that is core's job over
+ * adapter-provided facts (design D10, FR14).
  *
  * <p>{@code count} zero means no aborts are on record, in which case {@code
  * lastAbortAt} is {@code null}; a positive {@code count} SHOULD carry a non-null
@@ -21,9 +22,11 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Inert value data compared by content.
  *
- * <p>Implements FR14 of add-tracker-port.
+ * <p>Implements FR14 of add-tracker-port; the reconstruction rule is FR3 of
+ * fix-abort-progress-reset.
  *
- * @param count aborts recorded since the last durable progress; never negative
+ * @param count aborts recorded strictly after the latest durable-progress
+ *     marker on the task; never negative
  * @param lastAbortAt when the most recent abort was recorded, or {@code null}
  *     if {@code count} is zero
  */

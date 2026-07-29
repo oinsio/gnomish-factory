@@ -162,6 +162,23 @@ public class InMemoryTracker implements Tracker {
         }
     }
 
+    /**
+     * Resets abort history only; leaves the logical state untouched (design D1-D4, FR3 of
+     * fix-abort-progress-reset). The thread note is a single terse line — the in-memory
+     * equivalent of the GitHub adapter's hidden marker (UX1 of fix-abort-progress-reset).
+     */
+    @Override
+    public void recordProgress(TaskRef ref) {
+        lock.lock();
+        try {
+            TrackedTask task = requireTask(ref);
+            task.recordProgress();
+            task.note(CorrespondenceEntry.Kind.PROGRESS, "progress recorded");
+        } finally {
+            lock.unlock();
+        }
+    }
+
     @Override
     public void acknowledgeDecision(TaskRef ref, String decisionText) {
         lock.lock();

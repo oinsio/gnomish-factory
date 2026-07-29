@@ -20,6 +20,11 @@ import java.util.Locale;
  * already used by {@code GithubClaimLease#postClaimComment} and {@link
  * GithubDecisions#acknowledgeDecision}.
  *
+ * <p>{@code recordProgress} (fix-abort-progress-reset design D3) is the
+ * exception to that pattern: it posts a {@code progress}-kind structural
+ * marker only, with no label transition at all — it anchors abort-count
+ * reconstruction without acting as a label-state boundary.
+ *
  * <p>Judgment call (task 4.14): design D9's marker-kind vocabulary has no
  * dedicated {@code park}/{@code finish} kind. A park is a {@code
  * report}-kind marker carrying the optional {@code reason} field (task
@@ -89,6 +94,20 @@ public final class GithubStateWrites {
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, readyLabel);
         String body = GithubMarker.render(
                 GithubMarkerKind.ABORT, record.instance(), record.at(), "🤖 gnomish: aborted: " + record.cause());
+        postComment(id, body);
+    }
+
+    /**
+     * Implements {@code Tracker.recordProgress} for GitHub (FR1, FR4 of
+     * fix-abort-progress-reset). The structural JSON rides in {@link
+     * GithubMarker}'s hidden HTML comment and the human-readable line is a
+     * terse one-liner, so the marker never adds visible noise to the tracker
+     * thread (UX1 of fix-abort-progress-reset).
+     */
+    public void recordProgress(TaskRef ref) {
+        GithubTaskId id = GithubTaskId.parse(ref.id());
+        String body = GithubMarker.render(
+                GithubMarkerKind.PROGRESS, instanceId, Instant.now(), "🤖 gnomish: progress recorded");
         postComment(id, body);
     }
 
