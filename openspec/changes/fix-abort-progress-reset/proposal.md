@@ -102,8 +102,8 @@ there is no reconstruction-only fix.
   `recordProgress` exactly once per claim, best-effort (a tracker failure is
   logged and never aborts or blocks the run).
 - **FR3**: Every adapter SHALL reconstruct `AbortFacts.count` as the number of
-  abort markers recorded strictly after the latest durable-progress marker for
-  the current claim; markers at or before it SHALL NOT be counted.
+  abort markers recorded strictly after the latest durable-progress marker on
+  the task; markers at or before it SHALL NOT be counted.
 - **FR4**: A `PROGRESS` marker SHALL round-trip across instances — after
   `recordProgress`, a fresh `fetchTask`/`listReady` from a different instance
   observes the reset `AbortFacts`.

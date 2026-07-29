@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * Abort history for a task, reconstructable by any instance from the tracker
  * alone (NFR-R3): {@code count} is the number of abort markers recorded
- * strictly after the latest durable-progress marker for the current claim —
+ * strictly after the latest durable-progress marker on the task —
  * markers at or before that progress marker are not counted — and {@code
  * lastAbortAt} is the timestamp of the most recent recorded abort. Adapters
  * report these facts as observed from structural markers; they never apply
@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  * fix-abort-progress-reset.
  *
  * @param count aborts recorded strictly after the latest durable-progress
- *     marker for the current claim; never negative
+ *     marker on the task; never negative
  * @param lastAbortAt when the most recent abort was recorded, or {@code null}
  *     if {@code count} is zero
  */

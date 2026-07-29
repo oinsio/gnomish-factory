@@ -38,7 +38,7 @@ SHALL be reconstructable by any instance from the tracker alone: after
 `recordAbort`, a `fetchTask` or `listReady` from a different instance SHALL
 observe the updated count and last-abort time; after `recordProgress`, a
 different instance SHALL observe the count reset. The count semantics is "aborts
-recorded strictly after the last durable-progress marker for the current claim";
+recorded strictly after the last durable-progress marker on the task";
 adapters report facts and SHALL NOT apply backoff or fuse policy.
 <!-- implements FR14 of add-tracker-port -->
 <!-- implements FR1 of fix-abort-progress-reset -->
@@ -61,7 +61,7 @@ adapters report facts and SHALL NOT apply backoff or fuse policy.
 Every adapter SHALL reconstruct `AbortFacts.count` as the number of abort
 markers recorded strictly after the latest durable-progress marker; abort
 markers at or before that marker SHALL NOT be counted. When no durable-progress
-marker exists for the current claim, the count SHALL fall back to the existing
+marker exists on the task, the count SHALL fall back to the existing
 claim-streak reconstruction. This holds identically for the `listReady` feed and
 for `fetchTask`.
 <!-- implements FR3 of fix-abort-progress-reset -->

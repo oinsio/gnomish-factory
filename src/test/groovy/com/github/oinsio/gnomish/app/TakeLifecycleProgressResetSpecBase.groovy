@@ -63,7 +63,7 @@ abstract class TakeLifecycleProgressResetSpecBase extends Specification implemen
         given: 'two aborts recorded directly against the fresh Ready task, before any progress'
         tracker.recordAbort(REF, new AbortRecord('boom-1', INSTANCE, START))
         tracker.recordAbort(REF, new AbortRecord('boom-2', INSTANCE, START.plusSeconds(1)))
-        tracker.fetchTask(REF).abortFacts().count() == 2
+        assert tracker.fetchTask(REF).abortFacts().count() == 2
 
         when: 'the task is reclaimed and driven through one durable round via the real take engine'
         def roundTime = START.plusSeconds(120)

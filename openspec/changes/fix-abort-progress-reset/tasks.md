@@ -10,7 +10,7 @@ target (justify any ≥95% exception at the best-effort wiring boundary).
       (Implements FR1 of fix-abort-progress-reset): records a durable-progress
       marker, leaves logical state and claim holder untouched (FR1)
 - [x] 1.2 Update `AbortFacts` Javadoc: count is "aborts strictly after the last
-      durable-progress marker for the current claim" (FR3)
+      durable-progress marker on the task" (FR3)
 - [x] 1.3 Extend the shared `Tracker` contract spec suite with a
       `recordProgress` round-trip case: record abort(s) → `recordProgress` →
       count resets to zero, observed by a fresh read; every adapter must pass
