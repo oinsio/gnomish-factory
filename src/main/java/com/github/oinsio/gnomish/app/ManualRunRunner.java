@@ -113,7 +113,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                 factoryProperties);
         this.gitModeRunner = new GitModeRunner(assembly, worktreesRoot);
         this.gitResumeRunner = new GitResumeRunner(assembly, worktreesRoot, TASK_ID_KEY);
-        var takeCommand = new TakeCommand(
+        var takeCommand = TakeCommandFactory.of(
                 assembly,
                 worktreesRoot,
                 TASK_ID_KEY,
@@ -184,7 +184,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             AdHocTaskSynthesizer.SynthesizedTask synthesized,
             RunArguments runArguments,
             PipelineLoadOutcome.Loaded loaded) {
-        ManualRunAssembly.Run run = assembly.assemble(
+        Run run = assembly.assemble(
                 definition,
                 synthesized.context(),
                 synthesized.initialState(),

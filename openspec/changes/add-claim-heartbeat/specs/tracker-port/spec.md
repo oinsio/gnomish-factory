@@ -5,8 +5,9 @@
 ### Requirement: Single Tracker port speaking the factory's language
 The application layer SHALL expose one `Tracker` port with exactly the
 operations `listReady`, `fetchTask`, `collectDecisions`, `claim`, `release`,
-`park`, `finish`, `recordAbort`, `acknowledgeDecision`, `postNote`, plus the
-lease-maintenance operations `listOpen`, `heartbeat`, and `removeStaleClaim`.
+`park`, `finish`, `recordAbort`, `acknowledgeDecision`, `postNote`,
+`recordProgress`, plus the lease-maintenance operations `listOpen`,
+`heartbeat`, and `removeStaleClaim`.
 The port vocabulary SHALL be the factory's (tasks, states, decisions, abort
 facts, claim versions); all tracker-specific mapping SHALL be confined to
 adapters. Report rendering (domain report → text) SHALL happen in core: the
@@ -67,6 +68,11 @@ exception.
 - **THEN** the result reports the claim as lost, distinguishable from an
   infrastructure failure
 
+#### Scenario: Beat of a task the tracker no longer holds is claim-gone
+- **WHEN** `heartbeat` is called for a task the tracker no longer holds at all
+- **THEN** the result reports the claim as lost — the strongest form of "claim
+  gone" — not an infrastructure failure and never a thrown exception
+
 ### Requirement: Stale-claim removal returns the task to circulation
 `removeStaleClaim` SHALL, as one operation given the task and the observed
 stale claim version: record a structural holder-transition marker ("stale
@@ -88,13 +94,22 @@ the current state rather than an error — making concurrent removals converge.
   (the holder beat the claim meanwhile)
 - **THEN** nothing is removed and the result reports the live claim
 
+#### Scenario: Removal of a task the tracker no longer holds is a no-op
+- **WHEN** `removeStaleClaim` is called for a task the tracker no longer holds
+  at all
+- **THEN** nothing is removed and the result reports an absent claim (a null
+  current version), never a thrown exception — so a foreign reaper observing a
+  vanished task converges without burning a retry
+
 ### Requirement: Contract suite covers lease maintenance
 The shared contract spec suite SHALL be extended to verify on every adapter:
 `listOpen` filtering (only `Working`/`AwaitingHuman`, never `Ready`/
 `Finished`/`Gone`, never non-task artifacts); heartbeat version observability
 (a beat changes the version another instance reads); the heartbeat "claim
-gone" signal; `removeStaleClaim` round-trip, version-mismatch no-op, and
-concurrent-removal convergence; and the holder-transition marker round-trip.
+gone" signal, including a beat against a task the tracker no longer holds;
+`removeStaleClaim` round-trip, version-mismatch no-op, removal of a task the
+tracker no longer holds, and concurrent-removal convergence; and the
+holder-transition marker round-trip.
 <!-- implements FR5 of add-claim-heartbeat -->
 <!-- implements NFR-R2, NFR-R3 of add-claim-heartbeat -->
 

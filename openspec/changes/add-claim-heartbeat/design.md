@@ -88,9 +88,18 @@ resource that matters, already can.
 **D7 — Beat failures are classified, not counted.** (FR8) Network/5xx → WARN
 and continue (the round boundary already re-checks the claim and will pass,
 reveal the takeover, or abort); "comment gone" → claim lost, react at the
-nearest boundary exactly like a revocation. *Alternative rejected:* an
-"M consecutive failures" fuse — an arbitrary constant duplicating what the
-boundary check decides for free.
+nearest boundary exactly like a revocation. "Task gone" is the strongest form
+of "comment gone" and folds into the same claim-lost result, not an infra
+failure: on GitHub a 404 on the comment listing (the issue itself is gone), on
+the in-memory reference a ref the store no longer holds — both map to
+`ClaimGone` (heartbeat) / `Mismatch(null)` (removeStaleClaim) so the reference
+adapter stays observably symmetric with the live one (post-review fix). Only a
+non-404 non-2xx and a transport error remain infrastructure failures.
+*Alternative rejected:* an "M consecutive failures" fuse — an arbitrary
+constant duplicating what the boundary check decides for free. *Also rejected:*
+leaving the in-memory ops on the shared `requireTask` helper and documenting
+"unknown ref is undefined" in Javadoc — cheaper, but the reference adapter is
+contract law, so it must not throw where the live adapter returns a result.
 
 **D8 — Defaults: 5-minute interval, multiplier 3.** (FR3, NFR-P1) 12
 writes/hour per working task; death-to-Ready latency ≈ TTL (15 min) + one
@@ -139,6 +148,41 @@ version, time) and the claim comment's refreshed body (stage, attempt,
 alive-at, format version). *Alternative rejected:* a new format family — two
 conventions to parse with no gain.
 
+**D13 — An instance never reaps its own held claim.** (FR4, G2) The tick hands
+the reaper the snapshot of claims the instance holds, and the reaper filters
+those out of the `listOpen` result *before* feeding the staleness memory — so
+an instance's own claims never even open an observation window. Without this,
+an asymmetric failure where beats (PATCH) fail while `listOpen` (GET) succeeds
+— GitHub secondary limits hitting mutations, a write-scope-expired token, a
+proxy dropping mutations — lets the instance watch its own unchanged version
+cross the TTL and reap its own live run, reintroducing exactly the "M failed
+beats = lost claim" fuse D7 deliberately rejected, through the back door. A
+foreign observer reaping a genuinely unbeaten claim stays correct and
+unaffected; only self-reap is removed. *Rationale:* an instance knows which
+claims it holds and knows it is alive, so "version unchanged" can never mean
+"holder dead" for itself; the filter is precise by construction and needs no
+holder-id parsing. *Alternative rejected:* comparing each `OpenTask`'s holder
+field to the instance id — works, but pulls identity knowledge into the pure
+staleness policy and depends on parsing the holder; the held-set filter is
+simpler and carries forward unchanged to `add-factory-serve`'s multi-claim
+instances.
+
+**D14 — A failed stale-claim removal re-arms the emission latch.** (FR4) The
+staleness memory emits each stale version at most once (so the reaper is not
+driven to redundant removals). Because the latch is set inside `observe`,
+before the removal is attempted, a `removeStaleClaim` that fails with an
+infrastructure error would otherwise leave the claim `Working` yet never
+re-emitted until its version changed, `listOpen` glitched, or the instance
+restarted. The reaper therefore calls back into the memory to clear the latch
+for that exact version on an infrastructure failure, so the next tick retries
+the removal. *Rationale:* removal is idempotent and version-guarded, so an
+extra retry is safe; correctness (a dead claim is eventually reaped) outranks
+the one redundant call a retry might cost. *Alternative rejected:* setting the
+latch only after a successful removal — cleaner in theory, but it would move
+removal-outcome knowledge into the pure policy and re-emit on every tick during
+the window between emission and confirmation; a targeted re-arm on failure
+keeps `observe` outcome-agnostic.
+
 ## Risks / Trade-offs
 
 - [Unfenced tracker writes keep a TOCTOU window] → pre-write check narrows
@@ -151,10 +195,34 @@ conventions to parse with no gain.
   coupling named in the operator guide; interval is the knob.
 - [Heartbeat thread dies while the run continues] → beats stop, the claim
   goes stale, a reaper returns the task; the fence keeps the still-running
-  zombie harmless — degradation is the designed death path.
+  zombie harmless — degradation is the designed death path, so the thread is
+  **not** resurrected to keep beating the in-flight claim. Two guards make that
+  death safe rather than silent: the worker is a named thread with an
+  uncaught-exception handler that logs the death at ERROR (an `Error` from deep
+  in an adapter would otherwise reach only the default handler's stderr, past
+  slf4j — the operator would see the stale-and-reaped effect long after, and
+  unlinked from, its cause); and the same handler clears `running` under the
+  lock, so a *later* `register` (a different claim of the run) starts a fresh
+  thread instead of mistaking the dead one for alive — inert under single-task
+  `take`, load-bearing once `serve` holds several claims.
 - [Confirmed takeover of a genuinely live holder] → the old holder's next
   beat hits 404 (claim lost), it stops at its boundary writing nothing; git
   fence arbitrates any race on the branch.
+- [Systematically intermittent `listOpen` starves reaping] → the reaper forgets
+  every observation window on each `listOpen` failure (D2/FR9), and TTL is
+  measured as unbroken monotonic time since first sight. So a failure pattern
+  that recurs faster than the TTL — e.g. every second poll fails — resets the
+  windows before any dead claim accumulates a full TTL of observations, and that
+  claim may never be reaped for as long as the pattern holds. This is a
+  **conscious safety-over-promptness choice**: the same forget that starves
+  reaping is exactly what stops a live-but-tracker-isolated holder from being
+  falsely reaped for time it could not be observed (FR9). We accept indefinite
+  reaping delay under a pathological, self-clearing poll-failure pattern rather
+  than risk a single false reap of a live claim. Mitigation if it bites in
+  practice: the operator lowers the poll cadence's failure rate (tracker health)
+  or uses explicit `--takeover`; a smarter accrual policy that excuses only the
+  outage portion of an observation gap is possible later but is out of scope
+  here — it trades this change's simple, provably-safe forget for tuning risk.
 
 ## Migration Plan
 

@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
+import java.time.Duration;
 import java.util.Map;
 
 /**
  * The core {@code tracker} section keys carried on {@link PipelineDefinition}
  * (design D5): the adapter discriminator, the abort-fuse threshold shared by
- * all instances, and the raw adapter-owned subsection matching {@code type}.
+ * all instances, the heartbeat protocol constants (beat interval and TTL
+ * multiplier), and the raw adapter-owned subsection matching {@code type}.
  * Present exactly when {@code config.yaml} declares a {@code tracker}
  * section; absent (no {@link PipelineDefinition#tracker()}) means tracker
  * subcommands are unavailable and {@code run} is unaffected (FR17).
@@ -29,24 +31,57 @@ import java.util.Map;
  *     error at the seam (task 3.2), not represented here
  * @param abortThreshold the resolved core abort-fuse threshold; defaults to 3
  *     when the section is present but the key is omitted (FR17)
+ * @param heartbeatInterval the resolved beat interval — a heartbeat protocol
+ *     constant shared by all instances; defaults to
+ *     {@link #DEFAULT_HEARTBEAT_INTERVAL} (5 minutes) when the section is
+ *     present but the key is omitted (FR3 of add-claim-heartbeat)
+ * @param heartbeatTtlMultiplier the resolved TTL multiplier — a claim's
+ *     time-to-live is {@code heartbeatTtlMultiplier × heartbeatInterval}; an
+ *     integer floor of 3 makes an inconsistent beat/TTL pair inexpressible;
+ *     defaults to {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER} (3) when the section
+ *     is present but the key is omitted (FR3 of add-claim-heartbeat)
  * @param subsection the raw, already-schema-validated subsection matching
  *     {@code type} (e.g. {@code tracker.github}'s {@code api-url}/{@code
  *     repo}/{@code labels} keys); empty when absent
  */
-public record TrackerConfig(String type, int abortThreshold, Map<String, Object> subsection) {
+public record TrackerConfig(
+        String type,
+        int abortThreshold,
+        Duration heartbeatInterval,
+        int heartbeatTtlMultiplier,
+        Map<String, Object> subsection) {
+
+    /** FR3 of add-claim-heartbeat, design D8: the beat interval default (5 minutes). */
+    public static final Duration DEFAULT_HEARTBEAT_INTERVAL = Duration.ofMinutes(5);
+
+    /** FR3 of add-claim-heartbeat, design D8: the TTL multiplier default (×3 ⇒ 15-minute TTL). */
+    public static final int DEFAULT_HEARTBEAT_TTL_MULTIPLIER = 3;
 
     public TrackerConfig {
         subsection = subsection == null ? Map.of() : Map.copyOf(subsection);
     }
 
     /**
-     * Convenience constructor for callers that never need the adapter subsection
-     * (most existing tests predating this field) — {@link #subsection()}
+     * Convenience constructor for callers that need neither the heartbeat
+     * constants nor the adapter subsection (most existing tests predating those
+     * fields) — the heartbeat keys default to {@link #DEFAULT_HEARTBEAT_INTERVAL}
+     * / {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER} and {@link #subsection()}
      * defaults to an empty map.
      *
-     * <p>Implements FR17 of add-tracker-port.
+     * <p>Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat.
      */
     public TrackerConfig(String type, int abortThreshold) {
-        this(type, abortThreshold, Map.of());
+        this(type, abortThreshold, DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_HEARTBEAT_TTL_MULTIPLIER, Map.of());
+    }
+
+    /**
+     * Convenience constructor for callers that carry an adapter subsection but
+     * not the heartbeat constants — the heartbeat keys default to
+     * {@link #DEFAULT_HEARTBEAT_INTERVAL} / {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER}.
+     *
+     * <p>Implements FR9 of add-tracker-port, FR3 of add-claim-heartbeat.
+     */
+    public TrackerConfig(String type, int abortThreshold, Map<String, Object> subsection) {
+        this(type, abortThreshold, DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_HEARTBEAT_TTL_MULTIPLIER, subsection);
     }
 }

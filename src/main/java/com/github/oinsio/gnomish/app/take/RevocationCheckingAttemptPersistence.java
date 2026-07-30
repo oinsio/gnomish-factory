@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -57,8 +58,15 @@ import org.slf4j.LoggerFactory;
  * to succeed and is never reset on failure, so {@code recordProgress} is attempted at most once
  * per {@code engine.run(...)}, whether that attempt succeeds or throws.
  *
+ * <p>The same boundary is the one authoritative "still ours" decision for the heartbeat's
+ * claim-loss flag (design D7, FR8 of add-claim-heartbeat): a beat that answered {@code ClaimGone}
+ * sets a {@link ClaimLossFlag}, and {@link #persist} consults it here beside the {@code fetchTask}
+ * check, so a lost claim throws the very same {@link RevocationDetectedException} and takes the
+ * revocation-identical reaction (salvage, best-effort push, release, no park/finish/abort). An
+ * empty flag never trips, so a run without a live heartbeat behaves exactly as before.
+ *
  * <p>Implements FR15, D2 of add-tracker-port. Implements FR2, NFR-R1, NFR-O1 of
- * fix-abort-progress-reset.
+ * fix-abort-progress-reset. Implements FR8, D7 of add-claim-heartbeat.
  */
 public final class RevocationCheckingAttemptPersistence implements AttemptPersistence {
 
@@ -68,6 +76,7 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
     private final Tracker tracker;
     private final TaskRef ref;
     private final InstanceId instanceId;
+    private final ClaimLossFlag claimLossFlag;
     private volatile @Nullable RevocationDetectedException detected;
     private volatile boolean progressRecorded;
 
@@ -78,13 +87,32 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
      * @param ref the task being run under this persistence; never null
      * @param instanceId this factory instance's identity, compared against the reported claim
      *     holder; never null
+     * @param claimLossFlag the per-run heartbeat claim-loss flag (design D7, FR8 of
+     *     add-claim-heartbeat): consulted at each round boundary in addition to the {@code
+     *     fetchTask} check, so a claim a beat already proved gone is reacted to as a revocation
+     *     without waiting for the tracker read to catch up; never null
      */
     public RevocationCheckingAttemptPersistence(
-            AttemptPersistence delegate, Tracker tracker, TaskRef ref, InstanceId instanceId) {
+            AttemptPersistence delegate,
+            Tracker tracker,
+            TaskRef ref,
+            InstanceId instanceId,
+            ClaimLossFlag claimLossFlag) {
         this.delegate = delegate;
         this.tracker = tracker;
         this.ref = ref;
         this.instanceId = instanceId;
+        this.claimLossFlag = claimLossFlag;
+    }
+
+    /**
+     * The heartbeat-flag-free construction used by the revocation and lifecycle specs that predate
+     * the claim-loss flag: delegates with a fresh empty {@link ClaimLossFlag} that never trips, so
+     * the boundary decision reduces to the {@code fetchTask} check exactly as before.
+     */
+    public RevocationCheckingAttemptPersistence(
+            AttemptPersistence delegate, Tracker tracker, TaskRef ref, InstanceId instanceId) {
+        this(delegate, tracker, ref, instanceId, new ClaimLossFlag());
     }
 
     /**
@@ -102,6 +130,17 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         delegate.persist(taskId, state, trace);
+
+        // FR8, design D7: a beat that answered "claim gone" flags the loss for the nearest round
+        // boundary. Consulted BEFORE recordProgressOnce and the fetchTask read so a lost claim
+        // writes no further tracker state and takes the revocation-identical reaction immediately —
+        // the beat's 404 is authoritative even when this instance's (ETag-cached) fetchTask would
+        // still report the claim as ours.
+        if (claimLossFlag.isLost(ref)) {
+            var exception = new RevocationDetectedException(taskId, "claim marker gone (heartbeat reported loss)");
+            detected = exception;
+            throw exception;
+        }
 
         recordProgressOnce();
 

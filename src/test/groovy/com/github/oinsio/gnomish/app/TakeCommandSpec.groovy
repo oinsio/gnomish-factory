@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
@@ -11,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -44,7 +44,6 @@ class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAs
         // through TakeFreshClaim -> GitFreshTaskSupport, which creates a task branch off the
         // clone's current HEAD (mirrors TakeResumeSpecBase's own setup).
         projectDir = initWorkingRepo(tempDir, 'project')
-        def gitRunner = new GitProcessRunner()
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
@@ -56,8 +55,7 @@ executor:
 instructions: stages/build/instructions.md
 advancement: auto
 ''')
-        gitRunner.run(projectDir, 'add', '.')
-        gitRunner.run(projectDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(projectDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
@@ -70,18 +68,18 @@ advancement: auto
 
     private static TrackerAdapterFactory fakeFactory(Tracker t) {
         new TrackerAdapterFactory() {
-                    Tracker create(com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerConfig config, String instanceId) {
                         t
                     }
 
-                    TaskRef expandRef(com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, String rawRef) {
+                    TaskRef expandRef(TrackerConfig config, String rawRef) {
                         throw new UnsupportedOperationException('not used by this fixture')
                     }
                 }
     }
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {
-        new TakeCommand(
+        TakeCommandFactory.of(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 worktreesRoot,
                 'taskId',
@@ -198,16 +196,16 @@ tracker:
     repo: acme/widgets
 ''')
         def factory = new TrackerAdapterFactory() {
-                    Tracker create(com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerConfig config, String instanceId) {
                         tracker
                     }
 
-                    TaskRef expandRef(com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, String rawRef) {
+                    TaskRef expandRef(TrackerConfig config, String rawRef) {
                         throw new UnsupportedOperationException('not used by this fixture')
                     }
 
                     Optional<String> refuseForeignRef(
-                            com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, TaskRef ref) {
+                            TrackerConfig config, TaskRef ref) {
                         Optional.of("Task id names repo other/repo but the factory is configured for acme/widgets")
                     }
                 }
@@ -283,11 +281,11 @@ tracker:
         tracker.fetchTask(REF) >> new TrackerTask(
                 REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none())
         def factory = new TrackerAdapterFactory() {
-                    Tracker create(com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, String instanceId) {
+                    Tracker create(TrackerConfig config, String instanceId) {
                         tracker
                     }
 
-                    TaskRef expandRef(com.github.oinsio.gnomish.domain.pipeline.TrackerConfig config, String rawRef) {
+                    TaskRef expandRef(TrackerConfig config, String rawRef) {
                         assert rawRef == '42'
                         assert config.type() == 'github'
                         REF

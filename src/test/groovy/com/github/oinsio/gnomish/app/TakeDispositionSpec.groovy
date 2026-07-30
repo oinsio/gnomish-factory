@@ -1,9 +1,14 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.DivergedBranchException
+import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
+import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -16,6 +21,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import java.nio.file.Files
 import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 
 /**
  * FR9, UX2 of add-tracker-port (task 5.9): {@link TakeDisposition#dispose} — the explicit-mode
@@ -25,9 +32,26 @@ import java.time.Clock
  */
 class TakeDispositionSpec extends TakeResumeSpecBase {
 
+    // A fixed "now" for the display-only last-beat age; the seeded claim version below is 47 minutes
+    // older, so the takeover facts render the age as "47m".
+    private static final Instant NOW = Instant.parse('2026-07-29T12:00:00Z')
+
     private TakeDisposition newDisposition() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeDisposition(newAssembly(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [])
+    }
+
+    // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
+    // over a fixed clock, so the Working case's TakeTakeover path is exercised deterministically.
+    private TakeDisposition newTakeoverDisposition(TakeoverConfirmation confirmation, boolean takeoverFlag) {
+        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
+        new TakeDisposition(
+                newAssembly(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
+                ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag())
+    }
+
+    private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
+        new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt))
     }
 
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
@@ -118,6 +142,38 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         thrown(UsageException)
         0 * tracker.recordAbort(*_)
         0 * tracker.park(*_)
+    }
+
+    // FR1 of add-claim-heartbeat: dispatchAfterClaim is the single claim-holding choke point, so
+    // the beat lifecycle must bracket the claimed run — register the instant the claim is held,
+    // unregister in a finally even when the run exits via deliberate control flow (the bad --base
+    // UsageException path here, chosen as the cheapest post-claim exit: no engine round, no agent
+    // process). Two then-blocks enforce the order. Deliberately fast and interaction-based: the
+    // full lifecycle rehearsals (TakeHeartbeatLifecycleSpecBase and the death-and-recovery spec)
+    // also kill PIT's dropped-register/unregister mutants, but only after multi-second bounded
+    // waits that can outlive PIT's per-mutation budget under load (a flaky TIMED_OUT instead of a
+    // clean kill); this spec kills both mutants in milliseconds.
+    def "the beat lifecycle brackets a claimed run even when it exits via deliberate control flow"() {
+        given: 'a fresh Ready claim whose post-claim work exits via a deliberate UsageException'
+        def beat = Mock(ClaimBeat)
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
+        def disposition = new TakeDisposition(
+                newAssembly(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
+                beat, false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC),
+                new ClaimLossFlag())
+
+        when:
+        disposition.dispose(
+                cloneDir, 'no-such-base-ref', pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
+
+        then: 'the claim is registered for beating the instant it is held'
+        thrown(UsageException)
+        1 * beat.register(REF)
+
+        then: 'and unregistered on the way out, despite the deliberate exception'
+        1 * beat.unregister(REF)
     }
 
     // D16: a DivergedBranchException on resume (local/origin divergence, exit 5) is likewise a
@@ -211,29 +267,38 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         1 * tracker.park(REF, ParkReason.ESCALATION, { it.contains('continue?') })
     }
 
-    // Ready + existing branch + a recorded Completed outcome (rare inconsistency: branch says
-    // done but tracker still reported Ready). The branch's own cleanup commit (FR15) already
-    // removed .gnomish-task/ from the tip entirely, so there is no live finalState left to reuse
-    // at the tip — refuses with a UsageException naming the inconsistency rather than fabricating
-    // a Delivered result with an invented TaskState.
-    def "Ready with an existing branch recorded Completed refuses naming the inconsistency"() {
-        given:
+    // Ready + existing branch + a recorded Completed outcome whose tracker finish never landed (a
+    // dead instance or a dead tracker at the finish line, FR10/D10/NFR-C1 of add-claim-heartbeat).
+    // The Completed cleanup commit (FR15) removed .gnomish-task/ from the tip, so bootstrap finds
+    // no live task.json — but the delivered task.json + state.json survive at the cleanup commit's
+    // parent. Reconcile-on-resume recovers them and posts the DEFERRED finish, exiting Delivered
+    // with ZERO engine rounds (M4), replacing the former refusal: the branch already carries the
+    // delivered outcome, so re-running paid work — or demanding a human reconcile labels — is wrong.
+    // Zero rounds is proven by the task branch tip commit being unchanged across the run (an engine
+    // round would add commits); the deferred finish is proven to come from the branch-recorded
+    // delivery (not a fresh render) by naming the task and its branch.
+    def "Ready with an existing branch recorded Completed reconciles the deferred finish, zero engine rounds"() {
+        given: 'a delivered branch whose finish never reached the tracker'
         def taskId = 'PROJ-4'
         repository().createTask(context(taskId), null)
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(taskId, new TaskOutcome.Completed(state))
+        def tipBefore = gitRunner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-4').stdout().strip()
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
         def disposition = newDisposition()
 
         when:
-        disposition.dispose(
+        def result = disposition.dispose(
                 cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
                 trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
 
-        then:
-        thrown(UsageException)
-        0 * tracker.finish(*_)
+        then: 'the deferred finish was posted from the branch-recorded delivery, and the run delivered'
+        result instanceof TakeResult.Delivered
+        1 * tracker.finish(REF, { it.contains('PROJ-4') && it.contains('Branch: gnomish/PROJ-4') })
+
+        and: 'no engine round ran — the task branch tip is unchanged (M4: zero rounds, no new commits)'
+        gitRunner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-4').stdout().strip() == tipBefore
     }
 
     // Ready + existing branch + a recorded Aborted outcome: the abort protocol (FR14) returns a
@@ -278,10 +343,84 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1').exitCode() != 0
     }
 
-    // Scenario: Held task is refused — already-Working, no claim attempt at all.
-    def "Working held by another instance refuses naming the holder, no tracker mutation"() {
+    // Scenario "Held task shows facts and asks" (FR6, D9): a Working task with a TTY attached prints
+    // the holder and last-beat age and asks; declining leaves the tracker untouched and exits as a
+    // refusal naming the holder. The confirmation seam is the "prints facts + asks" surface — here a
+    // Mock verifying it was asked with the holder and the computed age (47m), answering DECLINED.
+    def "Working with a TTY shows holder and last-beat age, declining refuses untouched"() {
         given:
-        def disposition = newDisposition()
+        def confirmation = Mock(TakeoverConfirmation)
+        tracker.listOpen() >> [
+            workingOpenTask('gnomish-other-x1y2z3')
+        ]
+        def disposition = newTakeoverDisposition(confirmation, false)
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Working('gnomish-other-x1y2z3')), tracker, INSTANCE)
+
+        then: 'the operator was asked with the holder and the display-only last-beat age'
+        1 * confirmation.confirm(REF, 'gnomish-other-x1y2z3', '47m') >> TakeoverConfirmation.Decision.DECLINED
+
+        and: 'declining refuses naming the holder and changes nothing in the tracker'
+        result instanceof TakeResult.Skipped
+        (result as TakeResult.Skipped).reason().contains('gnomish-other-x1y2z3')
+        0 * tracker.removeStaleClaim(*_)
+        0 * tracker.claim(*_)
+        0 * tracker.park(*_)
+        0 * tracker.finish(*_)
+    }
+
+    // FR6, D9: the display-only last-beat age shown in the takeover facts, computed as
+    // Duration.between(claim version updatedAt, now) on the run's clock and rendered compactly. A
+    // future/absent version clamps to 0s / "unknown" respectively; the seam (Mock) captures the
+    // rendered age, and DECLINED short-circuits so no other tracker call runs.
+    def "takeover facts render the last-beat age as '#expectedAge'"() {
+        given:
+        def confirmation = Mock(TakeoverConfirmation)
+        tracker.listOpen() >> openTasks
+        def disposition = newTakeoverDisposition(confirmation, false)
+
+        when:
+        disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1')), tracker, INSTANCE)
+
+        then:
+        1 * confirmation.confirm(REF, 'gnomish-dead-x1', expectedAge) >> TakeoverConfirmation.Decision.DECLINED
+
+        where:
+        expectedAge | openTasks
+        '0s'        | [
+            workingOpenTask('gnomish-dead-x1', NOW.plusSeconds(60))
+        ]
+        '30s'       | [
+            workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(30))
+        ]
+        '1m'        | [
+            workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(60))
+        ]
+        '5m'        | [
+            workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(300))
+        ]
+        '1h 0m'     | [
+            workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(3600))
+        ]
+        '2h 5m'     | [
+            workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(2 * 3600 + 5 * 60))
+        ]
+        'unknown'   | []
+    }
+
+    // Scenario "Headless takeover needs the flag" (FR6): no TTY (confirmation UNAVAILABLE) and no
+    // --takeover flag → refuse, naming the holder AND mentioning the flag; nothing is mutated.
+    def "Working headless without the flag refuses naming the holder and the --takeover flag"() {
+        given:
+        tracker.listOpen() >> [
+            workingOpenTask('gnomish-other-x1y2z3')
+        ]
+        def disposition = newTakeoverDisposition(TakeoverConfirmation.UNAVAILABLE, false)
 
         when:
         def result = disposition.dispose(
@@ -290,10 +429,115 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         then:
         result instanceof TakeResult.Skipped
-        (result as TakeResult.Skipped).reason().contains('gnomish-other-x1y2z3')
+        def reason = (result as TakeResult.Skipped).reason()
+        reason.contains('gnomish-other-x1y2z3')
+        reason.contains('--takeover')
+        0 * tracker.removeStaleClaim(*_)
         0 * tracker.claim(*_)
         0 * tracker.park(*_)
         0 * tracker.finish(*_)
+    }
+
+    // Scenario "Confirmed takeover resumes the task" (FR6, D9): the operator confirms → the old claim
+    // is removed via removeStaleClaim, the run claims by the ordinary lease and resumes from the
+    // existing branch. Uses a real branch (like the Ready-resume test) so the confirmed path is the
+    // SAME claimAndWork/resume the Ready case runs.
+    def "Working confirmed via TTY removes the stale claim, claims ordinarily, and resumes to Delivered"() {
+        given: 'an existing branch for the held task, resumable from its last durable round'
+        def taskId = 'PROJ-1'
+        repository().createTask(context(taskId), null)
+        persistOneRound(taskId, TaskState.atStageStart('build'))
+        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
+        tracker.listOpen() >> [
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
+        ]
+        def confirmation = { r, h, a -> TakeoverConfirmation.Decision.CONFIRMED } as TakeoverConfirmation
+        def disposition = newTakeoverDisposition(confirmation, false)
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'), taskId), tracker, INSTANCE)
+
+        then: 'the old claim was removed with the observed version, then the ordinary lease claimed it'
+        1 * tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+
+        and: 'the run resumed from the branch and delivered'
+        result instanceof TakeResult.Delivered
+    }
+
+    // Scenario "Headless takeover needs the flag" — with the flag (FR6): no TTY, but --takeover
+    // authorizes it, so it proceeds exactly as a confirmed takeover (removeStaleClaim + claim +
+    // resume) without ever consulting the confirmation seam.
+    def "Working headless with --takeover proceeds as a confirmed takeover, bypassing the seam"() {
+        given:
+        def taskId = 'PROJ-1'
+        repository().createTask(context(taskId), null)
+        persistOneRound(taskId, TaskState.atStageStart('build'))
+        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
+        tracker.listOpen() >> [
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
+        ]
+        def confirmation = Mock(TakeoverConfirmation)
+        def disposition = newTakeoverDisposition(confirmation, true)
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'), taskId), tracker, INSTANCE)
+
+        then: 'the seam is never asked — the flag is the headless authorization'
+        0 * confirmation.confirm(*_)
+
+        and: 'it still removes the stale claim, claims ordinarily, and resumes to Delivered'
+        1 * tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        result instanceof TakeResult.Delivered
+    }
+
+    // Edge: the operator confirms but no live claim version is observable (the ref is absent from
+    // listOpen, or its claim marker is gone) — there is nothing to remove, so removeStaleClaim is
+    // skipped and the ordinary claim decides: still Working → Held → refuse naming the holder.
+    def "Working confirmed with no observable claim version skips removeStaleClaim and refuses on Held"() {
+        given:
+        tracker.listOpen() >> []
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held('gnomish-dead-x1')
+        def disposition = newTakeoverDisposition(TakeoverConfirmation.UNAVAILABLE, true)
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1')), tracker, INSTANCE)
+
+        then:
+        0 * tracker.removeStaleClaim(*_)
+        result instanceof TakeResult.Skipped
+        (result as TakeResult.Skipped).reason().contains('gnomish-dead-x1')
+    }
+
+    // A confirmed takeover that loses the race: removeStaleClaim reports Mismatch (the holder beat
+    // between listOpen and removal), so the task is still Working and the ordinary claim comes back
+    // Held — the run refuses naming the current holder, tracker converges (NFR-R2).
+    def "Working confirmed but the takeover loses the race refuses naming the current holder"() {
+        given:
+        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
+        tracker.listOpen() >> [
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
+        ]
+        tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Mismatch(observed)
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held('gnomish-live-x2')
+        def confirmation = { r, h, a -> TakeoverConfirmation.Decision.CONFIRMED } as TakeoverConfirmation
+        def disposition = newTakeoverDisposition(confirmation, false)
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Working('gnomish-dead-x1')), tracker, INSTANCE)
+
+        then:
+        result instanceof TakeResult.Skipped
+        (result as TakeResult.Skipped).reason().contains('gnomish-live-x2')
     }
 
     // Scenario: Parked task is refused — every ParkReason names the reason and a return path,

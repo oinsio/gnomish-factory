@@ -31,6 +31,7 @@ sees the tracker. Claim liveness answers "is the holder process alive", never
 "is the work progressing" — a hung gnome under a live instance is handled by
 the per-stage `roundTimeout` of the executor, not by this protocol.
 <!-- implements FR1 of add-claim-heartbeat -->
+<!-- implements UX1 of add-claim-heartbeat -->
 
 #### Scenario: Beats continue through a long round
 - **WHEN** a gnome round runs for hours while the slot thread is blocked on the
@@ -77,8 +78,31 @@ task to `Ready`. The reaper SHALL NOT claim the task for itself; the task
 re-enters the ordinary queue. Two instances reaping the same stale claim
 SHALL converge safely: the removal is idempotent in effect and subsequent
 claiming follows the ordinary lease.
+
+The reaper SHALL NEVER remove a claim currently held by its own instance: an
+instance excludes its own held claims from staleness observation before
+judging staleness, so a run whose beats are failing while its `listOpen` still
+succeeds can never reap its own live claim — only a foreign observer may (a
+running instance knows it is alive; a bare "version unchanged" cannot mean
+"holder dead" for the holder itself). A `removeStaleClaim` that fails with an
+infrastructure error SHALL re-arm that claim for retry on a later tick, so an
+attempted-but-failed removal never leaves a stale claim silently un-reaped
+until its version changes.
 <!-- implements FR4 of add-claim-heartbeat -->
 <!-- implements NFR-R2 of add-claim-heartbeat -->
+
+#### Scenario: An instance never reaps its own claim
+- **WHEN** an instance's beats fail for longer than TTL while its `listOpen`
+  keeps returning its own claim at an unchanged version
+- **THEN** the instance never removes its own claim, and a foreign stale claim
+  in the same listing is still reaped
+
+#### Scenario: A failed removal is retried, not silently dropped
+- **WHEN** the reaper's `removeStaleClaim` for a stale claim fails with an
+  infrastructure error
+- **THEN** the same unchanged version is emitted and retried on a later tick
+  instead of being suppressed until the version changes or the instance
+  restarts
 
 #### Scenario: Dead instance's task returns without a human
 - **WHEN** instance A dies mid-task and instance B works another task longer
@@ -137,7 +161,12 @@ While the tracker is unreachable no staleness progress SHALL accrue: TTL is
 measured between observations, and an observer that cannot read versions
 observes nothing. Polls and beats SHALL retry with backoff and resume when the
 tracker returns; after recovery every claim gets a fresh TTL window from its
-next observation.
+next observation. This safety guarantee has a deliberate promptness cost: a
+`listOpen` failure pattern that recurs faster than the TTL (e.g. every second
+poll fails) forgets the observation windows before any dead claim accrues a
+full TTL, so reaping MAY be delayed indefinitely while the pattern holds —
+never reaping a live claim is preferred over reaping a dead one promptly (see
+design.md Risks / Trade-offs).
 <!-- implements FR9 of add-claim-heartbeat -->
 
 #### Scenario: Long outage, no casualties

@@ -3,9 +3,13 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
+import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
+import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
+import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -91,6 +95,11 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         return GithubTaskId.parse(canonicalRef.id()).issueNumber();
     }
 
+    /** Resolves (assigning if new) the fixture issue backing {@code ref}'s canonical id. */
+    private FixtureIssue issueFor(TaskRef ref) {
+        return registry.issueFor(issueNumberOf(canonicalRefFor(ref)));
+    }
+
     // --- Tracker delegation with ref translation ---
 
     @Override
@@ -157,6 +166,27 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         delegate.recordProgress(canonicalRefFor(ref));
     }
 
+    @Override
+    public List<OpenTask> listOpen() {
+        // Like listReady, each returned entry's canonical ref translates back to the fixture ref the
+        // contract suite seeded; the opaque ClaimVersion and the state carry through unchanged.
+        return delegate.listOpen().stream()
+                .map(open -> new OpenTask(toFixture(open.ref()), open.state(), open.claimVersion()))
+                .toList();
+    }
+
+    @Override
+    public HeartbeatResult heartbeat(TaskRef ref, String progressPayload) {
+        // HeartbeatResult (Beaten/ClaimGone) carries no TaskRef, so only the input ref is translated.
+        return delegate.heartbeat(canonicalRefFor(ref), progressPayload);
+    }
+
+    @Override
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
+        // RemoveStaleClaimResult (Removed/Mismatch) carries no TaskRef, so only the input ref is translated.
+        return delegate.removeStaleClaim(canonicalRefFor(ref), observedVersion);
+    }
+
     // --- Fixture seeding, delegated to FixtureSeeder for the wire-shape details ---
 
     /**
@@ -166,8 +196,7 @@ final class GithubTrackerFixtureAdapter implements Tracker {
      * reads them back verbatim through {@code fetchTask} (FR11).
      */
     void seedTask(TaskRef ref, TaskSnapshot snapshot, TrackerTaskState state, AbortFacts abortFacts) {
-        TaskRef canonical = canonicalRefFor(ref);
-        FixtureIssue issue = registry.issueFor(issueNumberOf(canonical));
+        FixtureIssue issue = issueFor(ref);
         issue.title(snapshot.title());
         issue.body(snapshot.body());
         seeder.seedTask(issue, state, abortFacts);
@@ -175,8 +204,15 @@ final class GithubTrackerFixtureAdapter implements Tracker {
 
     /** Seeds a pending human reply comment, per {@code TrackerContract.seedReply}. */
     void seedReply(TaskRef ref, HumanReply reply) {
-        TaskRef canonical = canonicalRefFor(ref);
-        FixtureIssue issue = registry.issueFor(issueNumberOf(canonical));
-        seeder.seedReply(issue, reply);
+        seeder.seedReply(issueFor(ref), reply);
+    }
+
+    /**
+     * Seeds a {@code Working(holder)} fixture issue WITH a live claim comment, per {@code
+     * TrackerLeaseContract.seedWorkingWithClaim}, so {@code listOpen}/{@code heartbeat}/{@code
+     * removeStaleClaim} resolve a non-null claim version through the real adapter.
+     */
+    void seedWorkingWithClaim(TaskRef ref, String holder) {
+        seeder.seedWorkingWithClaim(issueFor(ref), holder);
     }
 }

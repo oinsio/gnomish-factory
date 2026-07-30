@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import java.time.Clock
 import java.time.Instant
@@ -76,7 +77,7 @@ class AbortHandlerSpec extends Specification {
         def previousAbortAt = Instant.parse('2026-07-17T09:00:00Z')
         def facts = new AbortFacts(THRESHOLD - 1, previousAbortAt)
         String captured = null
-        tracker.park(REF, ParkReason.INFRA, _ as String) >> { args -> captured = args[2] }
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report -> captured = report }
 
         when:
         handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
@@ -96,7 +97,7 @@ class AbortHandlerSpec extends Specification {
         given: 'facts at the threshold but with a null lastAbortAt'
         def facts = new AbortFacts(THRESHOLD - 1, null)
         String captured = null
-        tracker.park(REF, ParkReason.INFRA, _ as String) >> { args -> captured = args[2] }
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report -> captured = report }
 
         when:
         handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
@@ -140,6 +141,25 @@ class AbortHandlerSpec extends Specification {
         then:
         noExceptionThrown()
         result == new TakeResult.Aborted(STATE, 'tracker down')
+    }
+
+    // FR10 of add-claim-heartbeat: the abort path stays best-effort — a tracker OUTAGE
+    // (TrackerUnavailableException, the same signal finish/park now retry for ~10 min) must NOT
+    // trigger a retry loop here. recordAbort is attempted exactly once, then the handler returns
+    // Aborted promptly; a dead tracker never blocks the abort itself.
+    def "an abort during a tracker outage does not retry-loop: recordAbort is attempted once"() {
+        given: 'a tracker whose recordAbort reports an outage'
+        def facts = AbortFacts.none()
+
+        when:
+        def result = handler.handle(REF, STATE, 'tracker outage', facts, THRESHOLD, INSTANCE)
+
+        then: 'recordAbort is called exactly once — no bounded retry loop on the abort path'
+        1 * tracker.recordAbort(*_) >> {
+            throw new TrackerUnavailableException('tracker unreachable')
+        }
+        noExceptionThrown()
+        result == new TakeResult.Aborted(STATE, 'tracker outage')
     }
 
     // D3: both abort triggers (engine Aborted outcome, uncaught run exception)

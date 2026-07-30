@@ -74,6 +74,7 @@ for per-attempt env var overrides.
 | Scenario                    | Covers                                                                 |
 |-------------------------------|-------------------------------------------------------------------------|
 | `plain-round`                | a clean round: init → tool_use/tool_result → final message → result    |
+| `plain-round-slow`           | `plain-round` plus a short `sleep-seconds` before exit, so the round stays in flight long enough for a heartbeat test to beat the held claim mid-round (add-claim-heartbeat task 6.1) |
 | `decision-needed`            | agent writes a well-formed decision file and exits (D1)                |
 | `decision-garbage`           | agent writes an unparseable decision file (tolerant-read fixture)      |
 | `subagent-round`             | a `Task` tool call with nested events carrying `parent_tool_use_id`, for top-level trace filtering (FR6) |

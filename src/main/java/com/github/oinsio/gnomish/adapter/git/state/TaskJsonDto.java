@@ -22,6 +22,12 @@ import org.jspecify.annotations.Nullable;
  *     progress
  * @param lastEscalation the last escalation report, or {@code null} if the task
  *     was never escalated
+ * @param trackerWritePending {@code true} when a terminal park outcome
+ *     ({@code Escalated}/{@code Paused}) was recorded here but its tracker write
+ *     has not been confirmed landed — the durable "tracker-write pending" marker
+ *     reconcile-on-resume reads to complete an orphaned park (FR10 of
+ *     add-claim-heartbeat); {@code null}/{@code false} means no park write is
+ *     outstanding
  */
 public record TaskJsonDto(
         int version,
@@ -32,4 +38,5 @@ public record TaskJsonDto(
         String baseCommit,
         List<TaskDecisionDto> decisions,
         @Nullable TaskOutcomeDto outcome,
-        @Nullable EscalationReportDto lastEscalation) {}
+        @Nullable EscalationReportDto lastEscalation,
+        @Nullable Boolean trackerWritePending) {}

@@ -1,14 +1,16 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import java.time.Duration
 import spock.lang.Specification
 
 /**
  * TrackerConfig: the core tracker keys carried on PipelineDefinition when the
- * config.yaml tracker section is present (design D5) — the type discriminator
- * and the abort-fuse threshold shared by all instances. Adapter-owned
- * subsection validation (task 3.2) is not this record's concern; it is inert
- * data like the rest of the domain model (design D3: validation is data).
- * Implements FR17 of add-tracker-port.
+ * config.yaml tracker section is present (design D5) — the type discriminator,
+ * the abort-fuse threshold, and the heartbeat protocol constants (beat interval
+ * and TTL multiplier) shared by all instances. Adapter-owned subsection
+ * validation (task 3.2) is not this record's concern; it is inert data like the
+ * rest of the domain model (design D3: validation is data).
+ * Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat.
  */
 class TrackerConfigSpec extends Specification {
 
@@ -20,6 +22,34 @@ class TrackerConfigSpec extends Specification {
         then:
         config.type() == 'github'
         config.abortThreshold() == 5
+    }
+
+    // FR3 of add-claim-heartbeat: the five-arg canonical carries the heartbeat
+    // constants through exactly as given
+    def "exposes the heartbeat interval and TTL multiplier exactly"() {
+        when:
+        def config = new TrackerConfig('github', 5, Duration.ofMinutes(2), 4, [:])
+
+        then:
+        config.heartbeatInterval() == Duration.ofMinutes(2)
+        config.heartbeatTtlMultiplier() == 4
+    }
+
+    // FR3 of add-claim-heartbeat, design D8: the convenience constructors default
+    // the heartbeat constants to 5 minutes / 3 (a 15-minute TTL)
+    def "the convenience constructors default the heartbeat constants to 5 minutes and 3"() {
+        expect: 'both the two-arg and three-arg forms carry the D8 defaults'
+        new TrackerConfig('github', 5).heartbeatInterval() == Duration.ofMinutes(5)
+        new TrackerConfig('github', 5).heartbeatTtlMultiplier() == 3
+        new TrackerConfig('github', 5, [k: 'v']).heartbeatInterval() == Duration.ofMinutes(5)
+        new TrackerConfig('github', 5, [k: 'v']).heartbeatTtlMultiplier() == 3
+    }
+
+    // FR3 of add-claim-heartbeat: the public default constants pin the D8 values
+    def "the public default constants are 5 minutes and 3"() {
+        expect:
+        TrackerConfig.DEFAULT_HEARTBEAT_INTERVAL == Duration.ofMinutes(5)
+        TrackerConfig.DEFAULT_HEARTBEAT_TTL_MULTIPLIER == 3
     }
 
     // FR17 delta-spec scenario "Defaulted threshold": a present section with no

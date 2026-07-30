@@ -40,6 +40,7 @@ final class TrackedTask {
     private @Nullable Instant lastAckAt;
     private @Nullable String lastReport;
     private @Nullable String lastSummary;
+    private @Nullable ClaimMarker claimMarker;
     private final List<CorrespondenceEntry> thread = new ArrayList<>();
 
     TrackedTask(TaskSnapshot snapshot, TrackerTaskState state) {
@@ -67,6 +68,22 @@ final class TrackedTask {
 
     void state(TrackerTaskState newState) {
         this.state = newState;
+    }
+
+    /** The live claim marker, or {@code null} when the task holds no claim (FR5 of add-claim-heartbeat). */
+    @Nullable
+    ClaimMarker claimMarker() {
+        return claimMarker;
+    }
+
+    /** Establishes a claim marker whose version {@code listOpen} then reports (FR5 of add-claim-heartbeat). */
+    void establishClaim(ClaimMarker marker) {
+        this.claimMarker = marker;
+    }
+
+    /** Clears the marker when the task leaves {@code Working} — park/finish/recordAbort/release (FR5). */
+    void clearClaim() {
+        this.claimMarker = null;
     }
 
     AbortFacts abortFacts() {

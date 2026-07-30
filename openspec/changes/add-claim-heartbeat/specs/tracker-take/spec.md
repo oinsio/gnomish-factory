@@ -142,3 +142,11 @@ best-effort as before — a dead tracker never blocks the abort itself.
   final write
 - **THEN** the delivery completes normally with the final report, and the
   thread shows nothing unusual beyond the beat gap
+
+#### Scenario: Give-up past the bound names the unreconciled state
+- **WHEN** the tracker stays unreachable until the retry bound elapses, so a
+  finish or park write is given up as deferred
+- **THEN** the run logs exactly one ERROR naming the task and its unreconciled
+  tracker-write state (the pending finish, or the "tracker-write pending" park),
+  keeps the outcome durable in the branch, and returns the mapped terminal
+  result for reconcile-on-resume to close later

@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
@@ -54,7 +53,6 @@ class TakeCommandCredentialScrubSpec extends Specification implements BareGitRep
 
     def setup() {
         projectDir = initWorkingRepo(tempDir, 'project')
-        def gitRunner = new GitProcessRunner()
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
@@ -87,8 +85,7 @@ tracker:
     api-url: https://api.github.com
     repo: acme/widgets
 ''')
-        gitRunner.run(projectDir, 'add', '.')
-        gitRunner.run(projectDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(projectDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
@@ -152,7 +149,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties, Map<String, TrackerAdapterFactory> registry) {
-        new TakeCommand(
+        TakeCommandFactory.of(
                 newAssembly(factoryProperties),
                 worktreesRoot,
                 'taskId',

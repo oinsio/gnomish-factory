@@ -96,7 +96,10 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
                         deliveredLabel.name(),
                         readyLabel.name()),
                 new GithubCorrespondence(httpClient, instanceId),
-                new GithubDecisions(httpClient, instanceId));
+                new GithubDecisions(httpClient, instanceId),
+                new GithubHeartbeat(httpClient, instanceId),
+                new GithubOpenQuery(cache, owner, repo, workingLabel.name(), needsHumanLabel.name()),
+                new GithubStaleClaimRemoval(httpClient, labelOps, instanceId, workingLabel.name(), readyLabel.name()));
     }
 
     @Override

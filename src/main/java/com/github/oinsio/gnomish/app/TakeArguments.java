@@ -26,10 +26,15 @@ import org.jspecify.annotations.Nullable;
  *     rejected outright on the bare form (spec "Flag validation")
  * @param discardWork {@code --discard-work}: true discards an interrupted round's leftovers
  *     instead of salvaging them when resuming
+ * @param takeover {@code --takeover}: the headless authorization to take over a {@code Working}
+ *     task held by another instance without a TTY prompt (task 6.2 of add-claim-heartbeat, FR6);
+ *     meaningful only for explicit-mode {@code take <ref>}, rejected on the bare form like {@code
+ *     --base}
  */
 record TakeArguments(
         Path dir,
         @Nullable String ref,
         RunArguments.InteractiveMode interactiveMode,
         @Nullable String base,
-        boolean discardWork) {}
+        boolean discardWork,
+        boolean takeover) {}

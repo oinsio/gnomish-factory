@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.adapter.git.TaskWorktreeCleanup;
 import com.github.oinsio.gnomish.adapter.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonContent;
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
@@ -56,7 +57,8 @@ final class TakeFreshClaim {
             RunArguments.InteractiveMode interactiveMode,
             TrackerTask trackerTask,
             Tracker tracker,
-            InstanceId instanceId) {
+            InstanceId instanceId,
+            ClaimLossFlag claimLossFlag) {
         GitProcessRunner runner = new GitProcessRunner();
         String taskId = trackerTask.snapshot().id();
 
@@ -76,10 +78,18 @@ final class TakeFreshClaim {
                 content.lastEscalation(),
                 worktree,
                 branchName,
-                content.baseCommit());
+                content.baseCommit(),
+                content.trackerWritePending());
 
         var execution = new TakeEngineExecution(
-                assembly, runner, cloneDir, worktreesRoot, abortHandler, abortThreshold, credentialEnvVarsToScrub);
+                assembly,
+                runner,
+                cloneDir,
+                worktreesRoot,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                claimLossFlag);
         return execution.run(
                 definition,
                 bootstrap,

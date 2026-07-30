@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerFetchContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReapContract
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
@@ -18,10 +18,14 @@ import java.net.http.HttpResponse
  * GithubFeedQuery}, {@link GithubTaskFetcher}, {@link GithubClaimLease},
  * {@link GithubStateWrites}, {@link GithubCorrespondence}, {@link
  * GithubDecisions} — every one of them unmodified) against a WireMock server
- * into the full port contract suite (task 4.16, FR4, M1, M2): {@link
- * TrackerFetchContract} transitively runs every property from {@code
- * TrackerContract}, {@code TrackerMarkerContract}, and itself against this
- * one adapter, with zero adapter-specific exemptions.
+ * into the full port contract suite (task 4.16 / task 3.5, FR4, M1, M2):
+ * {@link TrackerReapContract} — the most-derived link in the lease chain —
+ * transitively runs every property from {@code TrackerContract}, {@code
+ * TrackerMarkerContract}, {@code TrackerFetchContract}, {@code
+ * TrackerLeaseContract}, {@code TrackerHeartbeatContract}, and itself against
+ * this one adapter, with zero adapter-specific exemptions — the SAME whole
+ * suite the in-memory reference passes (M1), including the reap/beat race
+ * scenarios (M2).
  *
  * <p>The abstract suite's fixture {@link TaskRef} strings (e.g. {@code
  * fixture:ready-a}) do not match GitHub's canonical {@code
@@ -49,13 +53,26 @@ import java.net.http.HttpResponse
  * mirroring GitHub's own global, per-repository comment-id total order that
  * the real {@link GithubClaimLease} relies on to decide "earliest id wins".
  *
- * <p>Implements FR4, NFR-R1 of add-tracker-port.
+ * <p>The lease suite always models the adapter under test AS the claim holder
+ * {@code instance-a} (every {@code seedWorkingWithClaim} call uses that holder):
+ * a beat is performed BY the holder, and GitHub's {@code heartbeat} rewrites the
+ * claim comment with the BEATING instance's id, which {@code fetchTask} then reads
+ * back as the holder. So {@link GithubHeartbeat} is wired with {@link
+ * #HOLDER_INSTANCE_ID} — the suite's holder — for the post-beat holder to
+ * round-trip; this is fixture wiring, not a property exemption, and touches only
+ * the beat (no currently-green property invokes {@code heartbeat}). The other
+ * collaborators keep the neutral {@link #INSTANCE_ID}, whose markers (park/finish
+ * reports, progress, notes) no property asserts by author.
+ *
+ * <p>Implements FR4, NFR-R1 of add-tracker-port; FR1, FR4, FR5, FR8, NFR-R2,
+ * M1 of add-claim-heartbeat (the extended contract passes on the GitHub adapter).
  */
-class GithubTrackerContractSpec extends TrackerFetchContract {
+class GithubTrackerContractSpec extends TrackerReapContract {
 
     private static final String OWNER = 'acme'
     private static final String REPO = 'widgets'
     private static final String INSTANCE_ID = 'gnomish-factory-contract'
+    private static final String HOLDER_INSTANCE_ID = 'instance-a'
 
     private WireMockServer wireMock
     private GithubTrackerFixtureAdapter fixtureAdapter
@@ -79,7 +96,11 @@ class GithubTrackerContractSpec extends TrackerFetchContract {
                 FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
                 FixtureSeeder.DELIVERED_LABEL, FixtureSeeder.READY_LABEL),
                 new GithubCorrespondence(httpClient, INSTANCE_ID),
-                new GithubDecisions(httpClient, INSTANCE_ID))
+                new GithubDecisions(httpClient, INSTANCE_ID),
+                new GithubHeartbeat(httpClient, HOLDER_INSTANCE_ID),
+                new GithubOpenQuery(cache, OWNER, REPO, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL),
+                new GithubStaleClaimRemoval(httpClient, labelOps, INSTANCE_ID,
+                FixtureSeeder.WORKING_LABEL, FixtureSeeder.READY_LABEL))
 
         fixtureAdapter = new GithubTrackerFixtureAdapter(
                 realTracker, registry, wireMock.baseUrl(), OWNER, REPO, INSTANCE_ID)
@@ -111,5 +132,10 @@ class GithubTrackerContractSpec extends TrackerFetchContract {
     @Override
     protected void seedReply(Tracker adapter, TaskRef ref, HumanReply reply) {
         fixtureAdapter.seedReply(ref, reply)
+    }
+
+    @Override
+    protected void seedWorkingWithClaim(Tracker adapter, TaskRef ref, String holder) {
+        fixtureAdapter.seedWorkingWithClaim(ref, holder)
     }
 }

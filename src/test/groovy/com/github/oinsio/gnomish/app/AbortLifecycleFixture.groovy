@@ -17,7 +17,7 @@ import org.springframework.boot.DefaultApplicationArguments
  * Shared project/pipeline fixture and {@link TakeCommand} factory for {@link
  * TakeLifecycleAbortSpecBase} (task 6.4, FR10, FR14): a single-{@code agent-cli}-stage pipeline
  * with no {@code verify} checks (trivially passing on its one attempt) and an {@code
- * abort-threshold} of {@link #ABORT_THRESHOLD}, plus {@link #newCommand}, which builds a brand-new
+ * abort-threshold} of {@code #ABORT_THRESHOLD}, plus {@link #newCommand}, which builds a brand-new
  * {@link TakeCommand}/{@link ManualRunAssembly}/{@link FactoryProperties} trio positioned at a
  * caller-chosen {@code Instant} (design D10's backoff clock) — only the shared {@link Tracker},
  * {@link TrackerAdapterFactory}, and {@code worktreesRoot} fields cross between calls, exactly as
@@ -42,7 +42,7 @@ trait AbortLifecycleFixture implements BareGitRepoFixture, AppAssemblyFixture {
     Tracker tracker
     TrackerAdapterFactory trackerFactory
 
-    /** Writes a single-AUTO-stage pipeline (trivially passing) with a fuse threshold of {@link #ABORT_THRESHOLD}. */
+    /** Writes a single-AUTO-stage pipeline (trivially passing) with a fuse threshold of {@code #ABORT_THRESHOLD}. */
     void writeAbortProjectFixture() {
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
@@ -92,7 +92,7 @@ tracker:
 
     /** Builds a fresh {@link TakeCommand}, positioned at {@code now} (design D10's backoff clock). */
     TakeCommand newCommand(Instant now) {
-        new TakeCommand(
+        TakeCommandFactory.of(
                 newAssembly(factoryProperties()),
                 worktreesRoot,
                 'taskId',

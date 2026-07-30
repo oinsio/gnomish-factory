@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -54,5 +55,28 @@ public record PipelineDefinition(
      */
     public PipelineDefinition(String schemaVersion, AutonomyLimits defaultLimits, List<StageDefinition> stages) {
         this(schemaVersion, defaultLimits, stages, null);
+    }
+
+    /**
+     * Looks {@code stageName} up in {@link #stages()}'s declaration order, returning it or
+     * {@code null} when the pipeline declares no stage with that name. The single lookup shared by
+     * every caller that needs to resolve a stage name back to its {@link StageDefinition}.
+     *
+     * <p>PIT M4 documented exception (build.gradle has the full rationale):
+     * {@code @DoNotMutate} because PIT's Gregor engine crashes its own minion JVM on this method's
+     * NULL_RETURNS mutant — deterministic RUN_ERROR with zero tests observed, not a real test gap —
+     * the same JDK 17+ JVMTI RedefineClasses restriction on record classes as the annotated methods
+     * of Decision/Finding/ExecutorUsage (hcoles/pitest#1285, not fixable via PIT config). The
+     * suppressed loop logic stays behaviorally covered by AttemptLimitResolverSpec and the Engine
+     * stage-resolution specs, which killed this method's sibling NegateConditionals mutant.
+     */
+    @DoNotMutate
+    public @Nullable StageDefinition findStage(String stageName) {
+        for (StageDefinition stage : stages) {
+            if (stage.name().equals(stageName)) {
+                return stage;
+            }
+        }
+        return null;
     }
 }

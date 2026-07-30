@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
@@ -69,6 +71,53 @@ public final class TakeBareAuto {
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
      *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded down to
      *     every {@link TakeEngineExecution} this class eventually constructs; never null
+     * @param heartbeat the instance heartbeat lifecycle registered/unregistered around the claimed
+     *     run (task 6.1 of add-claim-heartbeat, FR1); {@link ClaimBeat#NONE} when no beat runs
+     * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
+     *     add-claim-heartbeat), threaded down to every {@link TakeEngineExecution} this class
+     *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
+     */
+    TakeBareAuto(
+            ManualRunAssembly assembly,
+            Path worktreesRoot,
+            AbortHandler abortHandler,
+            int abortThreshold,
+            String taskIdMdcKey,
+            Duration backoffBase,
+            Duration backoffCap,
+            Clock clock,
+            List<String> credentialEnvVarsToScrub,
+            ClaimBeat heartbeat,
+            ClaimLossFlag claimLossFlag) {
+        var resumeRunner = new TakeResumeRunner(
+                assembly,
+                worktreesRoot,
+                taskIdMdcKey,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                claimLossFlag);
+        var dispositionResume =
+                new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner), worktreesRoot);
+        this.claimAndWork = new TakeClaimAndWork(
+                assembly,
+                worktreesRoot,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                dispositionResume,
+                heartbeat,
+                claimLossFlag);
+        this.taskIdMdcKey = taskIdMdcKey;
+        this.backoffBase = backoffBase;
+        this.backoffCap = backoffCap;
+        this.clock = clock;
+    }
+
+    /**
+     * The heartbeat-free construction used where no beat runs (the bare-auto unit spec): delegates
+     * with {@link ClaimBeat#NONE} and a fresh empty {@link ClaimLossFlag} that never trips, so the
+     * existing 9-argument call sites are unaffected by task 6.1's and 6.3's added seams.
      */
     TakeBareAuto(
             ManualRunAssembly assembly,
@@ -80,15 +129,18 @@ public final class TakeBareAuto {
             Duration backoffCap,
             Clock clock,
             List<String> credentialEnvVarsToScrub) {
-        var resumeRunner = new TakeResumeRunner(
-                assembly, worktreesRoot, taskIdMdcKey, abortHandler, abortThreshold, credentialEnvVarsToScrub);
-        var dispositionResume = new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner));
-        this.claimAndWork = new TakeClaimAndWork(
-                assembly, worktreesRoot, abortHandler, abortThreshold, credentialEnvVarsToScrub, dispositionResume);
-        this.taskIdMdcKey = taskIdMdcKey;
-        this.backoffBase = backoffBase;
-        this.backoffCap = backoffCap;
-        this.clock = clock;
+        this(
+                assembly,
+                worktreesRoot,
+                abortHandler,
+                abortThreshold,
+                taskIdMdcKey,
+                backoffBase,
+                backoffCap,
+                clock,
+                credentialEnvVarsToScrub,
+                ClaimBeat.NONE,
+                new ClaimLossFlag());
     }
 
     /**

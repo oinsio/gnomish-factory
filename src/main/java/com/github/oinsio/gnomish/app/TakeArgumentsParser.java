@@ -20,9 +20,10 @@ import org.springframework.boot.ApplicationArguments;
  * --from-stage} (design D4: a tracker task always starts at the pipeline's first stage) are all
  * rejected with {@link UsageException} before the tracker is ever touched. The bare form (no
  * {@code <ref>}) additionally rejects {@code --base} — a start modifier meaningful only for an
- * explicit-mode fresh claim.
+ * explicit-mode fresh claim — and {@code --takeover}, the explicit-mode-only headless takeover
+ * authorization (task 6.2 of add-claim-heartbeat, FR6).
  *
- * <p>Implements FR9 of add-tracker-port.
+ * <p>Implements FR9 of add-tracker-port; FR6 of add-claim-heartbeat.
  */
 final class TakeArgumentsParser {
 
@@ -30,6 +31,7 @@ final class TakeArgumentsParser {
     private static final String DIR = "dir";
     private static final String BASE = "base";
     private static final String DISCARD_WORK = "discard-work";
+    private static final String TAKEOVER = "takeover";
 
     /** Flags {@code take} never accepts (spec "Flag validation"), each with its own reason. */
     private static final List<String> REJECTED_FLAGS =
@@ -48,11 +50,16 @@ final class TakeArgumentsParser {
         RunArguments.InteractiveMode interactiveMode = InteractiveModeParser.parse(args);
         String base = singleValue(args, BASE);
         boolean discardWork = args.containsOption(DISCARD_WORK);
+        boolean takeover = args.containsOption(TAKEOVER);
         if (ref == null && base != null) {
             throw new UsageException(
                     "--base cannot be combined with bare 'take': it is a start modifier for 'take <ref>' only");
         }
-        return new TakeArguments(dir, ref, interactiveMode, base, discardWork);
+        if (ref == null && takeover) {
+            throw new UsageException(
+                    "--takeover cannot be combined with bare 'take': it authorizes an explicit 'take <ref>' takeover only");
+        }
+        return new TakeArguments(dir, ref, interactiveMode, base, discardWork, takeover);
     }
 
     private void rejectRunOnlyFlags(ApplicationArguments args) {
@@ -75,18 +82,7 @@ final class TakeArgumentsParser {
      * nor the leading {@code take} subcommand token itself; {@code null} for bare mode.
      */
     private @Nullable String firstPositionalAfterSubcommand(ApplicationArguments args) {
-        boolean skippedSubcommand = false;
-        for (String raw : args.getSourceArgs()) {
-            if (raw.startsWith("--")) {
-                continue;
-            }
-            if (!skippedSubcommand && raw.equals(TAKE_TOKEN)) {
-                skippedSubcommand = true;
-                continue;
-            }
-            return raw;
-        }
-        return null;
+        return ArgumentsParsingSupport.firstPositionalAfterSubcommand(args, TAKE_TOKEN);
     }
 
     /**
@@ -94,16 +90,6 @@ final class TakeArgumentsParser {
      * occurrences are rejected, mirroring {@link RunArgumentsParser}'s own {@code singleValue}.
      */
     private @Nullable String singleValue(ApplicationArguments args, String name) {
-        if (!args.containsOption(name)) {
-            return null;
-        }
-        List<String> values = args.getOptionValues(name);
-        if (values == null || values.isEmpty()) {
-            throw new UsageException("--" + name + " requires a value (e.g. --" + name + "=value)");
-        }
-        if (values.size() > 1) {
-            throw new UsageException("--" + name + " may be given only once");
-        }
-        return values.getFirst();
+        return ArgumentsParsingSupport.singleValue(args, name);
     }
 }

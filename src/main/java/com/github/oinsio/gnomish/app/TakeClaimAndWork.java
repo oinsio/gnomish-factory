@@ -4,8 +4,11 @@ import com.github.oinsio.gnomish.adapter.git.BranchLocation;
 import com.github.oinsio.gnomish.adapter.git.DivergedBranchException;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.TaskBranchLocator;
+import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
+import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
@@ -39,6 +42,8 @@ final class TakeClaimAndWork {
     private final int abortThreshold;
     private final List<String> credentialEnvVarsToScrub;
     private final TakeDispositionResume dispositionResume;
+    private final ClaimBeat heartbeat;
+    private final ClaimLossFlag claimLossFlag;
     private final TakeCrashAbort crashAbort;
 
     TakeClaimAndWork(
@@ -47,13 +52,17 @@ final class TakeClaimAndWork {
             AbortHandler abortHandler,
             int abortThreshold,
             List<String> credentialEnvVarsToScrub,
-            TakeDispositionResume dispositionResume) {
+            TakeDispositionResume dispositionResume,
+            ClaimBeat heartbeat,
+            ClaimLossFlag claimLossFlag) {
         this.assembly = assembly;
         this.worktreesRoot = worktreesRoot;
         this.abortHandler = abortHandler;
         this.abortThreshold = abortThreshold;
         this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
         this.dispositionResume = dispositionResume;
+        this.heartbeat = heartbeat;
+        this.claimLossFlag = claimLossFlag;
         this.crashAbort = new TakeCrashAbort(abortHandler, abortThreshold);
     }
 
@@ -100,7 +109,15 @@ final class TakeClaimAndWork {
      * shared with {@code run} keep their meaning). A claim that never succeeds is a pre-claim
      * failure handled one layer up (exit 1) and never reaches this method.
      *
-     * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port.
+     * <p>The instance heartbeat lifecycle is anchored here (task 6.1 of add-claim-heartbeat, FR1):
+     * this is the single choke point every claim-holding path reaches — explicit {@code Ready} via
+     * {@link #claimAndWork}, explicit resume, and bare-auto's own pre-held claim — so {@link
+     * ClaimBeat#register} is called the instant a claim is held (starting the beat thread on the
+     * first claim) and {@link ClaimBeat#unregister} in a {@code finally}, stopping the beats at any
+     * terminal result, exception, or crash-abort. A path that never holds a claim (a lost race,
+     * an empty queue) never reaches this method, so it never beats.
+     *
+     * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port; FR1 of add-claim-heartbeat.
      */
     TakeResult dispatchAfterClaim(
             Path cloneDir,
@@ -111,6 +128,8 @@ final class TakeClaimAndWork {
             TrackerTask trackerTask,
             Tracker tracker,
             InstanceId instanceId) {
+        TaskRef ref = trackerTask.ref();
+        heartbeat.register(ref);
         try {
             return locateAndWork(
                     cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
@@ -118,6 +137,8 @@ final class TakeClaimAndWork {
             throw deliberate;
         } catch (RuntimeException crash) {
             return crashAbort.onCrash(definition, trackerTask, tracker, instanceId, crash);
+        } finally {
+            heartbeat.unregister(ref);
         }
     }
 
@@ -147,7 +168,8 @@ final class TakeClaimAndWork {
                     interactiveMode,
                     trackerTask,
                     tracker,
-                    instanceId);
+                    instanceId,
+                    claimLossFlag);
         }
         return dispositionResume.resumeExisting(
                 cloneDir, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);

@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -86,24 +85,9 @@ public record GithubTaskFetcher(GithubConditionalRequestCache cache, String work
             return new TrackerTaskState.Working(holder);
         }
         if (detail.labelNames().contains(needsHumanLabel)) {
-            return new TrackerTaskState.AwaitingHuman(latestParkReason(markers));
+            return new TrackerTaskState.AwaitingHuman(GithubParkReason.latest(markers));
         }
         return new TrackerTaskState.Ready();
-    }
-
-    private static ParkReason latestParkReason(List<ParsedMarker> markers) {
-        for (int i = markers.size() - 1; i >= 0; i--) {
-            ParsedMarker marker = markers.get(i);
-            if (marker.kind() == GithubMarkerKind.REPORT && marker.reason() != null) {
-                return parseParkReason(marker.reason());
-            }
-        }
-        throw new GithubFeedQueryException(
-                "issue carries the needs-human label but no report marker with a reason was found");
-    }
-
-    private static ParkReason parseParkReason(String wireValue) {
-        return ParkReason.valueOf(wireValue.toUpperCase(Locale.ROOT));
     }
 
     /**

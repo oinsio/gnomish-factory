@@ -162,25 +162,32 @@ public final class GithubClaimLease {
      * marker that ended the prior working session and so voids every claim
      * posted before it (design D13: "since the newest boundary marker —
      * release/park/abort/finish — whichever is newest"): an {@code abort}
-     * (task returned to {@code Ready}) or a {@code report} — {@link
+     * (task returned to {@code Ready}), a {@code report} — {@link
      * GithubStateWrites} posts both {@code park} and {@code finish} as
-     * REPORT-kind markers, the only REPORT markers this adapter writes.
-     * ({@code release} posts no marker on GitHub — it is a documented no-op,
-     * design D2 — so it never appears here.)
+     * REPORT-kind markers, the only REPORT markers this adapter writes — or a
+     * {@code stale_claim_removed} marker (a reaper's stale-claim-removal
+     * boundary; add-claim-heartbeat design D5, FR4): the removal marker
+     * anchors the next lease round exactly like release/park/abort/finish, so
+     * a re-claim after a reaper freed the task ignores the dead holder's
+     * original CLAIM comment even when a best-effort delete failure left it
+     * physically in the thread. ({@code release} posts no marker on GitHub —
+     * it is a documented no-op, design D2 — so it never appears here.)
      *
-     * <p>Without this, a stale CLAIM left by a holder that has since parked
-     * or finished the task always wins by earliest id, so a task returned to
-     * {@code Ready} after a park could never be re-claimed until an abort
-     * happened to reset the window. GitHub's own comments-listing order
-     * already reflects the server-side total order (design D13), so this
-     * scans by list position rather than by parsed timestamp — immune to
-     * clock skew between racing instances.
+     * <p>Without this, a stale CLAIM left by a holder that has since parked,
+     * finished, or been reaped always wins by earliest id, so a task returned
+     * to {@code Ready} after a park or a stale-claim removal could never be
+     * re-claimed until an abort happened to reset the window. GitHub's own
+     * comments-listing order already reflects the server-side total order
+     * (design D13), so this scans by list position rather than by parsed
+     * timestamp — immune to clock skew between racing instances.
      */
     private static Optional<Integer> latestBoundaryIndex(List<CommentAndMarker> comments) {
         Integer index = null;
         for (int i = 0; i < comments.size(); i++) {
             GithubMarkerKind kind = comments.get(i).marker().kind();
-            if (kind == GithubMarkerKind.ABORT || kind == GithubMarkerKind.REPORT) {
+            if (kind == GithubMarkerKind.ABORT
+                    || kind == GithubMarkerKind.REPORT
+                    || kind == GithubMarkerKind.STALE_CLAIM_REMOVED) {
                 index = i;
             }
         }

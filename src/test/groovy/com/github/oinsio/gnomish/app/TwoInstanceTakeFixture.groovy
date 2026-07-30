@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import java.nio.file.Files
@@ -41,7 +40,6 @@ trait TwoInstanceTakeFixture implements BareGitRepoFixture, AppAssemblyFixture {
     /** Writes the shared project fixture: a single {@code build} stage that fails its first attempt. */
     void writeTwoInstanceProjectFixture() {
         projectDir = initWorkingRepo(tempDir, 'project')
-        def gitRunner = new GitProcessRunner()
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
@@ -89,8 +87,7 @@ tracker:
     api-url: https://api.github.com
     repo: acme/widgets
 ''')
-        gitRunner.run(projectDir, 'add', '.')
-        gitRunner.run(projectDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(projectDir)
         // One shared worktrees root (matching the one machine-local ~/.gnomish/worktrees every
         // factory instance on a box shares, per the git-task-persistence spec) — git itself, not
         // this fixture, is what actually prevents a task branch from being checked out twice; NFR-R3
@@ -112,7 +109,7 @@ tracker:
     TakeCommand newCommand(String instanceName) {
         String fakeAgentBinary = FakeAgentSupport.propertiesFor('plain-round').agentCliBinary()
         def factoryProperties = testProperties(instanceName: instanceName, agentCliBinary: fakeAgentBinary)
-        new TakeCommand(
+        TakeCommandFactory.of(
                 newAssembly(factoryProperties),
                 worktreesRoot,
                 'taskId',

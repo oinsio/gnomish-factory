@@ -44,6 +44,40 @@ class TrackerDtoSpec extends Specification {
         dto.abortThreshold() == null
     }
 
+    // FR3 of add-claim-heartbeat: the kebab-case heartbeat keys bind directly to
+    // the explicit DTO fields and are NOT swept into the subsections any-setter —
+    // they are loader-owned protocol constants, not an adapter subsection
+    def "a tracker block deserializes the kebab-case heartbeat keys as core fields"() {
+        given:
+        def body = '''\
+            type: github
+            heartbeat-interval: 5m
+            heartbeat-ttl-multiplier: 4
+            '''.stripIndent()
+
+        when:
+        def dto = yaml.readValue(body, TrackerDto)
+
+        then:
+        dto.heartbeatInterval() == '5m'
+        dto.heartbeatTtlMultiplier() == 4
+        dto.subsections() == [:]
+    }
+
+    // FR3 of add-claim-heartbeat: omitted heartbeat keys leave the DTO fields null
+    // for the mapper to default (5 min / 3)
+    def "a tracker block with no heartbeat keys leaves them null"() {
+        given:
+        def body = 'type: github\n'
+
+        when:
+        def dto = yaml.readValue(body, TrackerDto)
+
+        then:
+        dto.heartbeatInterval() == null
+        dto.heartbeatTtlMultiplier() == null
+    }
+
     // The core loader stays adapter-agnostic (task 3.1 scope): any unrecognized
     // top-level key — the adapter-owned subsection named after `type` — is
     // captured raw rather than causing a hard Jackson parse failure, since

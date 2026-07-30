@@ -2,12 +2,19 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.delete
+import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.patch
+import static com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
+import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
+import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -77,7 +84,11 @@ class GithubTrackerSpec extends Specification {
                 new GithubStateWrites(httpClient, labelOps, 'gnomish-factory-x7k2q1',
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
                 new GithubCorrespondence(httpClient, 'gnomish-factory-x7k2q1'),
-                new GithubDecisions(httpClient, 'gnomish-factory-x7k2q1'))
+                new GithubDecisions(httpClient, 'gnomish-factory-x7k2q1'),
+                new GithubHeartbeat(httpClient, 'gnomish-factory-x7k2q1'),
+                new GithubOpenQuery(cache, 'acme', 'widgets', 'gnomish:working', 'gnomish:needs-human'),
+                new GithubStaleClaimRemoval(httpClient, labelOps, 'gnomish-factory-x7k2q1',
+                'gnomish:working', 'gnomish:ready'))
     }
 
     private TaskRef ref() {
@@ -142,5 +153,49 @@ class GithubTrackerSpec extends Specification {
         then:
         wireMock.verify(postRequestedFor(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments"))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"abort"'))))
+    }
+
+    def "heartbeat delegates to GithubHeartbeat, PATCHing the resolved claim comment"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments?per_page=100"))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":501,"updated_at":"2026-07-23T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-x7k2q1\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}
+                        ]
+                        ''')))
+        wireMock.stubFor(patch(urlPathEqualTo('/repos/acme/widgets/issues/comments/501'))
+                .willReturn(aResponse().withStatus(200)
+                .withBody('{"id":501,"updated_at":"2026-07-23T10:05:00Z","body":"refreshed"}')))
+
+        when:
+        def result = newTracker().heartbeat(ref(), 'progress')
+
+        then:
+        result instanceof HeartbeatResult.Beaten
+        wireMock.verify(patchRequestedFor(urlPathEqualTo('/repos/acme/widgets/issues/comments/501'))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"claim"'))))
+    }
+
+    def "removeStaleClaim delegates to GithubStaleClaimRemoval, posting the stale-claim-removed marker"() {
+        given: 'the observed claim (id 501) still matches; the removal posts the boundary marker, deletes it, flips the label'
+        wireMock.stubFor(get(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments?per_page=100"))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":501,"updated_at":"2026-07-23T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-dead\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}
+                        ]
+                        ''')))
+        stubComment()
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/501'))
+                .willReturn(aResponse().withStatus(204)))
+        stubLabelTransition('gnomish%3Aworking')
+
+        when:
+        def result = newTracker().removeStaleClaim(ref(),
+                new ClaimVersion('501', Instant.parse('2026-07-23T10:00:00Z')))
+
+        then:
+        result instanceof RemoveStaleClaimResult.Removed
+        wireMock.verify(postRequestedFor(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments"))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"stale_claim_removed"'))))
     }
 }

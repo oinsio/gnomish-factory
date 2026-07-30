@@ -32,7 +32,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "toDto maps taskId, title, body, createdAt, baseCommit, version=1"() {
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null, false)
 
         then:
         dto.version() == 1
@@ -45,7 +45,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "toDto maps decisions in order with author, stage, at"() {
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null, false)
 
         then:
         dto.decisions() == [
@@ -60,7 +60,7 @@ class TaskJsonMapperSpec extends Specification {
         ])
 
         when:
-        def dto = TaskJsonMapper.toDto(context, baseCommit, createdAt, null, null)
+        def dto = TaskJsonMapper.toDto(context, baseCommit, createdAt, null, null, false)
 
         then:
         dto.decisions() == [
@@ -70,7 +70,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "toDto renders outcome and lastEscalation as null when both absent"() {
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null, false)
 
         then:
         dto.outcome() == null
@@ -82,7 +82,7 @@ class TaskJsonMapperSpec extends Specification {
         def outcome = new TaskOutcome.Completed(someState())
 
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null, false)
 
         then:
         dto.outcome() == new TaskOutcomeDto.Completed("completed")
@@ -93,7 +93,7 @@ class TaskJsonMapperSpec extends Specification {
         def outcome = new TaskOutcome.Paused(someState(), "implement")
 
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null, false)
 
         then:
         dto.outcome() == new TaskOutcomeDto.Paused("paused", "implement")
@@ -104,7 +104,7 @@ class TaskJsonMapperSpec extends Specification {
         def outcome = new TaskOutcome.Escalated(someState(), new EscalationReport.AttemptsExhausted(3))
 
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null, false)
 
         then:
         dto.outcome() == new TaskOutcomeDto.Escalated(
@@ -117,7 +117,7 @@ class TaskJsonMapperSpec extends Specification {
         def outcome = new TaskOutcome.Aborted(someState(), failedAt, "disk full")
 
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null, false)
 
         then:
         dto.outcome() == new TaskOutcomeDto.Aborted("aborted", failedAt.toString(), "disk full")
@@ -128,7 +128,7 @@ class TaskJsonMapperSpec extends Specification {
         def lastEscalation = new EscalationReport.DecisionNeeded("Refactor or patch?", ["refactor", "patch"])
 
         when:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, lastEscalation)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, lastEscalation, false)
 
         then:
         dto.outcome() == null
@@ -138,7 +138,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "toDto maps every EscalationReport kind"() {
         expect:
-        TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, report).lastEscalation() == expected
+        TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, report, false).lastEscalation() == expected
 
         where:
         report                                                                          | expected
@@ -165,7 +165,8 @@ class TaskJsonMapperSpec extends Specification {
                 new TaskOutcomeDto.Escalated(
                 "escalated",
                 new EscalationReportDto.CannotVerify("cannotVerify", "external:ci", "timeout", "poll exceeded")),
-                new EscalationReportDto.DecisionNeeded("decisionNeeded", "Refactor or patch?", ["refactor", "patch"]))
+                new EscalationReportDto.DecisionNeeded("decisionNeeded", "Refactor or patch?", ["refactor", "patch"]),
+                null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -178,7 +179,7 @@ class TaskJsonMapperSpec extends Specification {
     def "round-trip: null outcome and null lastEscalation survive serialize/deserialize"() {
         given:
         def mapper = TaskStateJson.mapper()
-        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, null)
+        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, null, null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -193,7 +194,7 @@ class TaskJsonMapperSpec extends Specification {
     def "round-trip: every TaskOutcomeDto kind survives serialize/deserialize"() {
         given:
         def mapper = TaskStateJson.mapper()
-        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], outcome, null)
+        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], outcome, null, null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -214,7 +215,7 @@ class TaskJsonMapperSpec extends Specification {
     def "round-trip: every EscalationReportDto kind survives serialize/deserialize as lastEscalation"() {
         given:
         def mapper = TaskStateJson.mapper()
-        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, escalation)
+        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, escalation, null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -316,7 +317,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "fromDto maps taskId, title, body, decisions, baseCommit, createdAt back to domain"() {
         given:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null, false)
 
         when:
         def content = TaskJsonMapper.fromDto(dto)
@@ -332,7 +333,7 @@ class TaskJsonMapperSpec extends Specification {
     def "fromDto maps lastEscalation back to a domain EscalationReport"() {
         given:
         def lastEscalation = new EscalationReport.PipelineMismatch("removed-stage")
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, lastEscalation)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, lastEscalation, false)
 
         when:
         def content = TaskJsonMapper.fromDto(dto)
@@ -343,7 +344,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "fromDto keeps outcome at the DTO level for every TaskOutcome kind"() {
         given:
-        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null)
+        def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, outcome, null, false)
 
         when:
         def content = TaskJsonMapper.fromDto(dto)
