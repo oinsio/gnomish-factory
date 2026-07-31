@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -18,7 +19,14 @@ import org.jspecify.annotations.Nullable;
  * NFR-S1), merges stdout/stderr into one chronological stream, and captures the exit code
  * together with a bounded tail of that stream (design D6, FR7).
  *
- * <p>Implements FR7, FR8, D6 of add-manual-run.
+ * <p>The child's inherited environment is the factory environment minus {@code
+ * credentialEnvVarsToScrub} — the names the active tracker adapter declares as its own
+ * credential variables (e.g. {@code GNOMISH_GITHUB_TOKEN}), scrubbed in {@link #run} as the last
+ * step, after {@code GNOMISH_FINDINGS_FILE} has been set, so a scrubbed name can never survive
+ * (the same declared-scrub-list {@code AgentProcessLauncher} applies; design D11, D17). An empty
+ * list leaves the inherited environment unchanged — the shape plain {@code gnomish run} uses.
+ *
+ * <p>Implements FR7, FR8, D6 of add-manual-run; FR11, NFR-S1, D11 of add-claim-heartbeat.
  */
 final class CommandProcessRunner {
 
@@ -31,14 +39,32 @@ final class CommandProcessRunner {
 
     private final String shell;
 
+    private final List<String> credentialEnvVarsToScrub;
+
     CommandProcessRunner(String shell) {
+        this(shell, List.of());
+    }
+
+    CommandProcessRunner(String shell, List<String> credentialEnvVarsToScrub) {
         this.shell = shell;
+        this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
+    }
+
+    /**
+     * Returns a copy of this runner that scrubs {@code credentialEnvVarsToScrub} from every check
+     * process's inherited environment, keeping the same shell — the per-run seam {@link
+     * ShellCommandCheckRunner#withCredentialScrub} threads the active tracker adapter's declared
+     * credential names through (design D11, D17 of add-claim-heartbeat).
+     */
+    CommandProcessRunner withCredentialScrub(List<String> credentialEnvVarsToScrub) {
+        return new CommandProcessRunner(shell, credentialEnvVarsToScrub);
     }
 
     /**
      * Runs {@code check}'s command line via {@code sh -c} with {@code workspace}'s root as cwd
-     * and the current process's environment inherited plus {@code GNOMISH_FINDINGS_FILE} (FR8),
-     * merging stdout and stderr into one chronological stream. Returns {@code null} if the
+     * and the current process's environment inherited plus {@code GNOMISH_FINDINGS_FILE} (FR8)
+     * minus the declared credential variables (FR11, NFR-S1 of add-claim-heartbeat), merging
+     * stdout and stderr into one chronological stream. Returns {@code null} if the
      * process could not even be started (e.g. the shell executable is missing) instead of
      * throwing, so the caller can turn that into a {@code CannotVerify} verdict without a stack
      * trace crashing the check.
@@ -59,6 +85,12 @@ final class CommandProcessRunner {
         builder.redirectErrorStream(true);
         if (findingsFile != null) {
             builder.environment().put(FINDINGS_FILE_ENV_VAR, findingsFile.toString());
+        }
+        // Scrub declared tracker credentials LAST (design D11, D17; NFR-S1) — after any env
+        // set-up, so a scrubbed name can never survive. An empty list is a no-op, leaving the
+        // inherited factory environment unchanged (plain gnomish run has no tracker credentials).
+        for (String name : credentialEnvVarsToScrub) {
+            builder.environment().remove(name);
         }
 
         Process process;

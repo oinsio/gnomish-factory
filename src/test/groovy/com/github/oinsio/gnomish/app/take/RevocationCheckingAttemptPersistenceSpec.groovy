@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take
 
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -166,6 +167,49 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
         then: 'the progress marker is emitted once for the whole run, not once per round'
         1 * tracker.recordProgress(REF)
+    }
+
+    // FR8, D7 of add-claim-heartbeat: a beat that already proved the claim gone sets the flag; at
+    // the next round boundary the flag consult throws the same RevocationDetectedException — before
+    // the fetchTask read and before recordProgress, so no further tracker state is written.
+    def "a set claim-loss flag revokes at the boundary before the fetchTask read"() {
+        given: 'the heartbeat flagged this task lost'
+        def flag = new ClaimLossFlag()
+        flag.claimLost(REF)
+        def guarded = new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, flag)
+
+        when:
+        guarded.persist('PROJ-1', STATE, TRACE)
+
+        then: 'the round is still made durable first'
+        1 * delegate.persist('PROJ-1', STATE, TRACE)
+
+        and: 'a revocation is thrown and recorded, naming the heartbeat-detected loss'
+        def ex = thrown(RevocationDetectedException)
+        ex.message.contains('PROJ-1')
+        ex.message.contains('claim marker gone (heartbeat reported loss)')
+        guarded.revocation().isPresent()
+        guarded.revocation().get() == ex
+
+        and: 'no further tracker state is written for a task that is no longer ours (FR8)'
+        0 * tracker.recordProgress(*_)
+        0 * tracker.fetchTask(*_)
+    }
+
+    // FR8, D7: an empty flag never trips — the boundary decision reduces to the fetchTask check.
+    def "an unset claim-loss flag leaves the fetchTask check as the sole boundary decision"() {
+        given:
+        def guarded = new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, new ClaimLossFlag())
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+
+        when:
+        guarded.persist('PROJ-1', STATE, TRACE)
+
+        then: 'the round passes normally — the fetchTask read still runs and records progress'
+        1 * delegate.persist('PROJ-1', STATE, TRACE)
+        1 * tracker.recordProgress(REF)
+        noExceptionThrown()
+        guarded.revocation().isEmpty()
     }
 
     def "a recordProgress throw is swallowed and the round proceeds as if it succeeded"() {

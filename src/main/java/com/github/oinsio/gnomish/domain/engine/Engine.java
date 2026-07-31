@@ -117,12 +117,7 @@ public final class Engine {
      */
     @Nullable
     private static StageDefinition findStage(PipelineDefinition definition, String stageName) {
-        for (var stage : definition.stages()) {
-            if (stage.name().equals(stageName)) {
-                return stage;
-            }
-        }
-        return null;
+        return definition.findStage(stageName);
     }
 
     /**

@@ -246,6 +246,68 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         ]
     }
 
+    // FR10, D10 of add-claim-heartbeat: recording a terminal PARK sets the durable "tracker-write
+    // pending" marker before its (git-unfenced) tracker write, so a resuming instance can tell an
+    // orphaned park from a settled one.
+    def "FR10: recordOutcome for a park (#event) sets the tracker-write pending marker, round-tripping the branch"() {
+        given:
+        repository.createTask(sampleContext(), null)
+
+        when:
+        repository.recordOutcome('PROJ-1', outcome)
+
+        then: 'a fresh read of the branch tip sees the pending marker'
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        content.trackerWritePending()
+
+        where:
+        event       | outcome
+        'ESCALATED' | new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
+                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']))
+        'PAUSED'    | new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement')
+    }
+
+    // FR10, D10: a non-park terminal outcome never sets the marker (Aborted's write is best-effort;
+    // Completed's reconcile is decided by cleanup-detection, not the marker).
+    def "FR10: recordOutcome for Aborted leaves the tracker-write pending marker unset"() {
+        given:
+        repository.createTask(sampleContext(), null)
+
+        when:
+        repository.recordOutcome(
+                'PROJ-1',
+                new TaskOutcome.Aborted(TaskState.atStageStart('implement'), new AttemptKey('PROJ-1', 'implement', 0),
+                'boom'))
+
+        then:
+        !TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1'))).trackerWritePending()
+    }
+
+    // FR10, D10: once the park's tracker write confirms, confirmTerminalWrite clears the marker in a
+    // new commit, preserving the recorded outcome and escalation.
+    def "FR10: confirmTerminalWrite clears the pending marker while preserving the recorded park outcome"() {
+        given:
+        repository.createTask(sampleContext(), null)
+        def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+
+        when:
+        repository.confirmTerminalWrite('PROJ-1')
+
+        then: 'the marker is cleared'
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        !content.trackerWritePending()
+
+        and: 'the recorded outcome and escalation survive the clear'
+        content.outcome() != null
+        content.lastEscalation() == report
+
+        and: 'the clear is a dedicated write-confirmed commit at the tip'
+        def worktree = worktreeFor('PROJ-1')
+        runner.run(worktree, 'log', '-1', '--format=%s').stdout().trim() ==
+                ServiceCommitMessages.trackerWriteConfirmed()
+    }
+
     private int commitCount(Path worktree) {
         runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().trim() as int
     }

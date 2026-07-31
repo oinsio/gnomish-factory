@@ -1,18 +1,11 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.adapter.git.BranchLocation;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository;
-import com.github.oinsio.gnomish.adapter.git.TaskBranchLocator;
-import com.github.oinsio.gnomish.adapter.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.adapter.git.TaskWorktreeManager;
-import com.github.oinsio.gnomish.adapter.git.WorktreeDivergenceCheck;
-import com.github.oinsio.gnomish.adapter.git.state.TaskJsonContent;
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
-import org.slf4j.MDC;
 
 /**
  * Resume bootstrap (FR8, design D9) and outcome-driven continuation (task 4.7): the {@code
@@ -49,7 +42,7 @@ final class GitResumeRunner {
 
     private final ManualRunAssembly assembly;
     private final Path worktreesRoot;
-    private final String taskIdMdcKey;
+    private final TakeResumeBootstrap resumeBootstrap;
 
     /**
      * @param assembly the shared engine/ports assembly, reused from the fresh-run path — builds
@@ -64,7 +57,7 @@ final class GitResumeRunner {
     GitResumeRunner(ManualRunAssembly assembly, Path worktreesRoot, String taskIdMdcKey) {
         this.assembly = assembly;
         this.worktreesRoot = worktreesRoot;
-        this.taskIdMdcKey = taskIdMdcKey;
+        this.resumeBootstrap = new TakeResumeBootstrap(worktreesRoot, taskIdMdcKey);
     }
 
     /**
@@ -91,7 +84,6 @@ final class GitResumeRunner {
             RunArguments.InteractiveMode interactiveMode,
             boolean discardWork) {
         ResumeBootstrap bootstrap = bootstrap(cloneDir, taskId);
-        MDC.put(taskIdMdcKey, bootstrap.taskId());
         continueFrom(cloneDir, bootstrap, definition, interactiveMode, discardWork);
     }
 
@@ -114,33 +106,7 @@ final class GitResumeRunner {
      *     relationship (FR9)
      */
     ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
-        GitProcessRunner runner = new GitProcessRunner();
-        BranchLocation location = new TaskBranchLocator(runner).locate(cloneDir, taskId);
-        if (location instanceof BranchLocation.NotFound) {
-            throw new UsageException("could not resume task \"" + taskId + "\": no branch \""
-                    + TaskIdSanitizer.branchName(taskId)
-                    + "\" found locally, as a remote-tracking ref, or on origin (even after a fetch attempt)");
-        }
-
-        String branchName = TaskIdSanitizer.branchName(taskId);
-        Path worktree = new TaskWorktreeManager(runner, worktreesRoot).ensureWorktree(cloneDir, taskId, branchName);
-
-        // FR9, NFR-R3: reconcile local/origin divergence before task.json is read back — a
-        // BEHIND outcome fast-forwards the worktree and discards uncommitted leftovers, which
-        // can change what task.json/state.json actually contain on disk. Runs once, here, for
-        // every resume outcome (null/escalated/paused/completed alike) since divergence is a
-        // general resume precondition (design D9), not specific to one outcome branch.
-        new WorktreeDivergenceCheck(runner, worktree).reconcile(taskId, branchName);
-
-        TaskJsonContent content = GitFreshTaskSupport.readTaskJson(worktree);
-        return new ResumeBootstrap(
-                taskId,
-                content.context(),
-                content.outcome(),
-                content.lastEscalation(),
-                worktree,
-                branchName,
-                content.baseCommit());
+        return resumeBootstrap.bootstrap(cloneDir, taskId);
     }
 
     /**

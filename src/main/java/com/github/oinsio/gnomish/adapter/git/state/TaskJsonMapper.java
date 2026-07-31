@@ -52,6 +52,9 @@ public final class TaskJsonMapper {
      *     progress
      * @param lastEscalation the last escalation report, or {@code null} if the
      *     task was never escalated
+     * @param trackerWritePending {@code true} to record the durable "tracker-write
+     *     pending" marker for a terminal park whose tracker write has not confirmed
+     *     (FR10 of add-claim-heartbeat); {@code false} to leave no marker
      * @return the equivalent {@code task.json} DTO tree
      */
     public static TaskJsonDto toDto(
@@ -59,7 +62,8 @@ public final class TaskJsonMapper {
             String baseCommit,
             Instant createdAt,
             @Nullable TaskOutcome outcome,
-            @Nullable EscalationReport lastEscalation) {
+            @Nullable EscalationReport lastEscalation,
+            boolean trackerWritePending) {
         return new TaskJsonDto(
                 1,
                 context.taskId(),
@@ -69,7 +73,8 @@ public final class TaskJsonMapper {
                 baseCommit,
                 toDecisions(context.decisions()),
                 outcome == null ? null : toOutcome(outcome),
-                lastEscalation == null ? null : toEscalation(lastEscalation));
+                lastEscalation == null ? null : toEscalation(lastEscalation),
+                trackerWritePending ? Boolean.TRUE : null);
     }
 
     /**
@@ -91,7 +96,12 @@ public final class TaskJsonMapper {
         TaskContext context = new TaskContext(dto.taskId(), dto.title(), dto.body(), fromDecisions(dto.decisions()));
         EscalationReport lastEscalation = dto.lastEscalation() == null ? null : fromEscalation(dto.lastEscalation());
         return new TaskJsonContent(
-                context, dto.baseCommit(), Instant.parse(dto.createdAt()), dto.outcome(), lastEscalation);
+                context,
+                dto.baseCommit(),
+                Instant.parse(dto.createdAt()),
+                dto.outcome(),
+                lastEscalation,
+                Boolean.TRUE.equals(dto.trackerWritePending()));
     }
 
     private static List<TaskDecisionDto> toDecisions(List<Decision> decisions) {

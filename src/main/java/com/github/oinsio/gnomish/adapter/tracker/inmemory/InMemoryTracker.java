@@ -3,9 +3,13 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
+import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
+import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
+import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -15,38 +19,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 
 /**
- * In-memory reference implementation of the {@link Tracker} port (design D15):
- * the executable example for adapter authors (FR3, G2). Tasks live in a single
- * {@link LinkedHashMap} keyed by {@link TaskRef}, preserving insertion order as
- * the adapter's queue order for {@link #listReady(int)}; every operation runs
- * under one coarse {@link ReentrantLock} guarding the whole store — not
- * per-task locking, since critical sections are microseconds long and {@link
- * #claim(TaskRef, String)}'s check/decide/mutate sequence must be observably
- * atomic (NFR-R1). Ships with no config subsection (FR3): plain Java
- * construction. {@link InMemoryTrackerHarness} adds human-simulation and
- * fixture-seeding hooks, reaching into this class's package-private {@link
- * #store}/{@link #lock}; this class keeps only {@link #claimGate}.
- *
- * <p>Every coordination write also appends a {@link CorrespondenceEntry} to
- * the task's thread (FR18, M3, UX4), read back via {@link
- * InMemoryTrackerHarness#thread} — {@code release} appends nothing (design
- * D2). Implements FR1, FR2, FR3, FR18, M3, UX4 of add-tracker-port.
+ * In-memory reference implementation of the {@link Tracker} port (design D15): the executable example
+ * for adapter authors (FR3, G2). Tasks live in one insertion-ordered {@link LinkedHashMap} (queue
+ * order for {@link #listReady(int)}); every operation runs under one coarse {@link ReentrantLock} via
+ * {@link #withLock}, since {@link #claim(TaskRef, String)}'s check/decide/mutate must be observably
+ * atomic (NFR-R1). {@link InMemoryTrackerHarness} adds simulation/seeding hooks over the
+ * package-private {@link #store}/{@link #lock}. Every coordination write appends a {@link
+ * CorrespondenceEntry} to the task's thread except {@code release} (FR18, M3, UX4, D2). Implements
+ * FR1, FR2, FR3, FR18, M3, UX4 of add-tracker-port.
  */
 public class InMemoryTracker implements Tracker {
 
     /** The task store, in insertion (adapter queue) order; guarded by {@link #lock}. */
     final Map<TaskRef, TrackedTask> store = new LinkedHashMap<>();
-
-    /** Guards every read/write of {@link #store} and the mutable fields inside each {@link TrackedTask}. */
+    /** Guards every read/write of {@link #store} and each {@link TrackedTask}'s mutable fields. */
     final ReentrantLock lock = new ReentrantLock();
-
-    /**
-     * Race-interleaving test hook (FR3): when non-null, {@link #claim(TaskRef, String)} runs
-     * this before acquiring {@link #lock} (see {@link InMemoryTrackerHarness#armClaimGate}).
-     */
+    /** Per-adapter monotonic minter for claim markers and their advancing versions (FR5). */
+    final ClaimClock claimClock = new ClaimClock();
+    /** Lease-maintenance trio (listOpen/heartbeat/removeStaleClaim), split out for file size. */
+    final InMemoryLeaseOps leaseOps = new InMemoryLeaseOps(this);
+    /** Race-interleaving hook (FR3): run by {@link #claim} before the lock (see harness {@code armClaimGate}). */
     @Nullable
     Runnable claimGate;
 
@@ -55,41 +51,28 @@ public class InMemoryTracker implements Tracker {
         if (limit <= 0) {
             throw new IllegalArgumentException("listReady limit must be positive, was " + limit);
         }
-        lock.lock();
-        try {
-            return store.entrySet().stream()
-                    .filter(entry -> entry.getValue().state() instanceof TrackerTaskState.Ready)
-                    .limit(limit)
-                    .map(entry -> new ReadyTask(entry.getKey(), entry.getValue().abortFacts()))
-                    .toList();
-        } finally {
-            lock.unlock();
-        }
+        return withLock(() -> store.entrySet().stream()
+                .filter(entry -> entry.getValue().state() instanceof TrackerTaskState.Ready)
+                .limit(limit)
+                .map(entry -> new ReadyTask(entry.getKey(), entry.getValue().abortFacts()))
+                .toList());
     }
 
     @Override
     public TrackerTask fetchTask(TaskRef ref) {
-        lock.lock();
-        try {
+        return withLock(() -> {
             TrackedTask task = store.get(ref);
             if (task == null) {
-                return new TrackerTask(ref, goneSnapshot(ref), new TrackerTaskState.Gone(), AbortFacts.none());
+                TaskSnapshot gone = new TaskSnapshot(ref.id(), ref.id(), "");
+                return new TrackerTask(ref, gone, new TrackerTaskState.Gone(), AbortFacts.none());
             }
             return new TrackerTask(ref, task.snapshot(), task.state(), task.abortFacts());
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     @Override
     public List<HumanReply> collectDecisions(TaskRef ref) {
-        lock.lock();
-        try {
-            TrackedTask task = requireTask(ref);
-            return task.decisionsSinceAck();
-        } finally {
-            lock.unlock();
-        }
+        return withLock(() -> requireTask(ref).decisionsSinceAck());
     }
 
     @Override
@@ -98,120 +81,120 @@ public class InMemoryTracker implements Tracker {
         if (gate != null) {
             gate.run();
         }
-        lock.lock();
-        try {
+        return withLock(() -> {
             TrackedTask task = requireTask(ref);
             if (task.state() instanceof TrackerTaskState.Working(String holder)) {
                 return new ClaimResult.Held(holder);
             }
             task.state(new TrackerTaskState.Working(instanceId));
+            task.establishClaim(claimClock.mint(instanceId));
             task.note(CorrespondenceEntry.Kind.CLAIM, "claimed by " + instanceId);
             return new ClaimResult.Acquired();
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
-    /** Leaves the logical state untouched (design D2, FR15). */
+    /** Leaves the logical state untouched (design D2, FR15) but drops any claim marker (FR5). */
     @Override
     public void release(TaskRef ref) {
-        lock.lock();
-        try {
-            requireTask(ref);
-        } finally {
-            lock.unlock();
-        }
+        withLock(() -> requireTask(ref).clearClaim());
     }
 
     @Override
     public void park(TaskRef ref, ParkReason reason, String report) {
-        lock.lock();
-        try {
+        withLock(() -> {
             TrackedTask task = requireTask(ref);
             task.state(new TrackerTaskState.AwaitingHuman(reason));
+            task.clearClaim();
             task.report(report);
             task.note(CorrespondenceEntry.Kind.PARK, "parked (" + reason + "): " + report);
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     @Override
     public void finish(TaskRef ref, String summary) {
-        lock.lock();
-        try {
+        withLock(() -> {
             TrackedTask task = requireTask(ref);
             task.state(new TrackerTaskState.Finished());
+            task.clearClaim();
             task.summary(summary);
             task.note(CorrespondenceEntry.Kind.FINISH, summary);
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     @Override
     public void recordAbort(TaskRef ref, AbortRecord record) {
-        lock.lock();
-        try {
+        withLock(() -> {
             TrackedTask task = requireTask(ref);
             task.recordAbort(record.at());
             task.state(new TrackerTaskState.Ready());
+            task.clearClaim();
             task.note(CorrespondenceEntry.Kind.ABORT, "abort: " + record.cause());
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
-    /**
-     * Resets abort history only; leaves the logical state untouched (design D1-D4, FR3 of
-     * fix-abort-progress-reset). The thread note is a single terse line — the in-memory
-     * equivalent of the GitHub adapter's hidden marker (UX1 of fix-abort-progress-reset).
-     */
+    /** Resets abort history only; leaves the logical state untouched (D1-D4, FR3/UX1 of fix-abort-progress-reset). */
     @Override
     public void recordProgress(TaskRef ref) {
-        lock.lock();
-        try {
+        withLock(() -> {
             TrackedTask task = requireTask(ref);
             task.recordProgress();
             task.note(CorrespondenceEntry.Kind.PROGRESS, "progress recorded");
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     @Override
     public void acknowledgeDecision(TaskRef ref, String decisionText) {
-        lock.lock();
-        try {
+        withLock(() -> {
             TrackedTask task = requireTask(ref);
             task.acknowledge();
             task.note(CorrespondenceEntry.Kind.ACK, "acting on decision: " + decisionText);
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     /** No read-side fact, but still belongs in the thread (UX4). */
     @Override
     public void postNote(TaskRef ref, String text) {
+        withLock(() -> requireTask(ref).note(CorrespondenceEntry.Kind.NOTE, text));
+    }
+
+    @Override
+    public List<OpenTask> listOpen() {
+        return leaseOps.listOpen();
+    }
+
+    @Override
+    public HeartbeatResult heartbeat(TaskRef ref, String progressPayload) {
+        return leaseOps.heartbeat(ref, progressPayload);
+    }
+
+    @Override
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
+        return leaseOps.removeStaleClaim(ref, observedVersion);
+    }
+
+    <T> T withLock(Supplier<T> body) {
         lock.lock();
         try {
-            TrackedTask task = requireTask(ref);
-            task.note(CorrespondenceEntry.Kind.NOTE, text);
+            return body.get();
         } finally {
             lock.unlock();
         }
     }
 
-    private TrackedTask requireTask(TaskRef ref) {
+    private void withLock(Runnable body) {
+        lock.lock();
+        try {
+            body.run();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    TrackedTask requireTask(TaskRef ref) {
         TrackedTask task = store.get(ref);
         if (task == null) {
             throw new NoSuchTrackedTaskException(ref);
         }
         return task;
-    }
-
-    private static TaskSnapshot goneSnapshot(TaskRef ref) {
-        return new TaskSnapshot(ref.id(), ref.id(), "");
     }
 }

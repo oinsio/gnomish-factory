@@ -30,6 +30,10 @@ import org.jspecify.annotations.Nullable;
  * @param worktreePath the materialized worktree's absolute path; ready to use as-is
  * @param branchName the task branch's short name, e.g. {@code gnomish/PROJ-1}
  * @param baseCommit the commit the task branch was created from, as recorded in {@code task.json}
+ * @param trackerWritePending {@code true} when the branch's recorded terminal park still has an
+ *     unconfirmed tracker write — the durable "tracker-write pending" marker reconcile-on-resume
+ *     reads to distinguish an orphaned park (deferred park, zero engine rounds) from a settled one
+ *     (normal resume); FR10, D10 of add-claim-heartbeat
  */
 public record ResumeBootstrap(
         String taskId,
@@ -38,4 +42,5 @@ public record ResumeBootstrap(
         @Nullable EscalationReport lastEscalation,
         Path worktreePath,
         String branchName,
-        String baseCommit) {}
+        String baseCommit,
+        boolean trackerWritePending) {}

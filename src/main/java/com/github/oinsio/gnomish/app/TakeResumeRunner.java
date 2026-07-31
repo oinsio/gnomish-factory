@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.TaskBranchLocator;
 import com.github.oinsio.gnomish.adapter.git.TaskWorktreeManager;
 import com.github.oinsio.gnomish.adapter.git.WorktreeDivergenceCheck;
 import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage;
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -46,6 +47,7 @@ final class TakeResumeRunner {
     private final AbortHandler abortHandler;
     private final int abortThreshold;
     private final List<String> credentialEnvVarsToScrub;
+    private final ClaimLossFlag claimLossFlag;
     private final TakeResumeBootstrap resumeBootstrap;
 
     /**
@@ -64,6 +66,9 @@ final class TakeResumeRunner {
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
      *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into
      *     every {@link TakeEngineExecution} this runner constructs; never null
+     * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
+     *     add-claim-heartbeat), threaded into every {@link TakeEngineExecution} this runner
+     *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
      */
     TakeResumeRunner(
             ManualRunAssembly assembly,
@@ -71,12 +76,14 @@ final class TakeResumeRunner {
             String taskIdMdcKey,
             AbortHandler abortHandler,
             int abortThreshold,
-            List<String> credentialEnvVarsToScrub) {
+            List<String> credentialEnvVarsToScrub,
+            ClaimLossFlag claimLossFlag) {
         this.assembly = assembly;
         this.worktreesRoot = worktreesRoot;
         this.abortHandler = abortHandler;
         this.abortThreshold = abortThreshold;
         this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
+        this.claimLossFlag = claimLossFlag;
         this.resumeBootstrap = new TakeResumeBootstrap(worktreesRoot, taskIdMdcKey);
     }
 
@@ -200,6 +207,13 @@ final class TakeResumeRunner {
 
     private TakeEngineExecution newExecution(GitProcessRunner runner, Path cloneDir) {
         return new TakeEngineExecution(
-                assembly, runner, cloneDir, worktreesRoot, abortHandler, abortThreshold, credentialEnvVarsToScrub);
+                assembly,
+                runner,
+                cloneDir,
+                worktreesRoot,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                claimLossFlag);
     }
 }

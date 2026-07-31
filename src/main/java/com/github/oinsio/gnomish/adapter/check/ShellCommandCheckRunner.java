@@ -31,14 +31,12 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR7, FR8, NFR-R2, NFR-S1, D6 of add-manual-run.
  */
-public final class ShellCommandCheckRunner implements CommandCheckRunner {
+public record ShellCommandCheckRunner(CommandProcessRunner processRunner) implements CommandCheckRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ShellCommandCheckRunner.class);
 
-    private final CommandProcessRunner processRunner;
-
     public ShellCommandCheckRunner() {
-        this("sh");
+        this(new CommandProcessRunner("sh"));
     }
 
     /**
@@ -48,7 +46,25 @@ public final class ShellCommandCheckRunner implements CommandCheckRunner {
      * @param shell the shell executable to invoke via {@code -c <command>}
      */
     ShellCommandCheckRunner(String shell) {
-        this.processRunner = new CommandProcessRunner(shell);
+        this(new CommandProcessRunner(shell));
+    }
+
+    /**
+     * Returns a copy of this runner whose check processes have {@code credentialEnvVarsToScrub}
+     * removed from their inherited environment — the active tracker adapter's declared credential
+     * variable names (e.g. {@code GNOMISH_GITHUB_TOKEN}), so a tracker credential never reaches a
+     * command check (FR11, NFR-S1, D11 of add-claim-heartbeat). {@code ManualRunAssembly} threads
+     * the same declared-scrub-list the agent launcher applies through this seam per run; an empty
+     * list leaves the check environment inherited unchanged (plain {@code gnomish run}).
+     *
+     * <p>Implements FR11, NFR-S1, D11 of add-claim-heartbeat.
+     *
+     * @param credentialEnvVarsToScrub the declared credential variable names to remove from every
+     *     check process's environment; never null, empty when no tracker is configured
+     * @return a runner identical but for the added credential scrub; never null
+     */
+    public ShellCommandCheckRunner withCredentialScrub(List<String> credentialEnvVarsToScrub) {
+        return new ShellCommandCheckRunner(processRunner.withCredentialScrub(credentialEnvVarsToScrub));
     }
 
     @Override

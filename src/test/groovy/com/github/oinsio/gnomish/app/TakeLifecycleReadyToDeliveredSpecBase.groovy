@@ -106,7 +106,7 @@ tracker:
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
-        new TakeCommand(
+        TakeCommandFactory.of(
                 newAssembly(factoryProperties),
                 worktreesRoot,
                 'taskId',

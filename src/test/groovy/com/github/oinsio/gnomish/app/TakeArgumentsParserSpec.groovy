@@ -29,6 +29,7 @@ class TakeArgumentsParserSpec extends Specification {
         result.interactiveMode() == RunArguments.InteractiveMode.NONE
         result.base() == null
         !result.discardWork()
+        !result.takeover()
     }
 
     def "bare take (no positional ref) parses ref as null"() {
@@ -61,6 +62,26 @@ class TakeArgumentsParserSpec extends Specification {
 
         then:
         result.discardWork()
+    }
+
+    // FR6 of add-claim-heartbeat (task 6.2): --takeover is the headless authorization for the
+    // explicit-mode Working takeover, parsed as a bare boolean flag like --discard-work.
+    def "--takeover is parsed as a bare flag on the explicit form"() {
+        when:
+        TakeArguments result = parser.parse(args('take', '42', '--takeover'))
+
+        then:
+        result.takeover()
+    }
+
+    // --takeover is a modifier meaningful only for 'take <ref>' — the bare form rejects it exactly
+    // as it rejects --base (spec "Headless takeover needs the flag" applies to explicit mode only).
+    def "bare take rejects --takeover"() {
+        when:
+        parser.parse(args('take', '--takeover'))
+
+        then:
+        thrown(UsageException)
     }
 
     @Unroll

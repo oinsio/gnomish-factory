@@ -420,13 +420,30 @@ pitest {
     // other three features in this spec assert Spring wiring already exercised by dozens of
     // other unit specs across the codebase, and the headless-jar guarantee itself is not
     // tracker-port production code.
+    //
+    // M5 documented exception (add-claim-heartbeat): InstanceHeartbeatLifecycleSpec drives the REAL
+    // background beat thread through a rendezvous BlockingSleeper (register → worker → awaitEntered →
+    // releaseOne → join). Under PIT mutation a loop/register/beat mutant either makes the worker
+    // never enter its sleep (the test's unbounded awaitEntered/join then blocks) or drops the sleep
+    // so the worker busy-spins — both surface as TIMED_OUT, not a clean kill, and no covering-test
+    // change fixes a genuinely non-terminating background loop. This is the same "background/blocking
+    // thread under a mutated loop" category as the E2E specs above. Excluding it removes NO production
+    // line from mutation coverage: every InstanceHeartbeat line it touches is also driven
+    // SYNCHRONOUSLY on the test thread by InstanceHeartbeatSpec — loop() (sleep, empty-and-stop,
+    // per-tick failure) via seedHeldForTest + a bounded sleeper, register()'s single-thread guard via
+    // "a single instance-level thread serves all claims", and beat()'s ClaimGone branch via the
+    // direct-tick specs — so the mutation gate still holds; only the timing-sensitive lifecycle
+    // rehearsal (which stays green under plain `test`) is kept out of PIT's per-mutation re-runs.
     excludedTestClasses = [
         'com.github.oinsio.gnomish.e2e.*',
         'com.github.oinsio.gnomish.adapter.agent.ReferenceDumpHygieneSpec',
         'com.github.oinsio.gnomish.FactoryApplicationSpec',
+        'com.github.oinsio.gnomish.app.lease.InstanceHeartbeatLifecycleSpec',
     ]
-    // M4 documented exception: a handful of private methods on `record` classes
-    // (ExecutorUsage, StatusReport, Finding, Decision, UsageTotals of add-git-workflow)
+    // M4 documented exception: a handful of methods on `record` classes
+    // (ExecutorUsage, StatusReport, Finding, Decision, UsageTotals of add-git-workflow;
+    // PipelineDefinition.findStage of add-claim-heartbeat, whose NULL_RETURNS mutant
+    // crashed the minion deterministically with zero tests observed)
     // carry the project's own
     // @com.github.oinsio.gnomish.DoNotMutate marker instead of a build.gradle
     // glob exclusion. PIT's Gregor engine mutates by hot-swapping bytecode into
@@ -458,6 +475,9 @@ pitest {
     // from anywhere else is a broken run, not an accepted exception, and is
     // failed hard by pitestVerifyAllKilled below (mutationThreshold alone cannot
     // catch it: PIT counts RUN_ERROR as "detected").
+    // This whole-tree mutation gate (with the JaCoCo coverage report above) is
+    // what M5 of add-claim-heartbeat relies on: the same coverage/mutation gates
+    // per .claude/rules/testing.md hold for the new heartbeat production code.
     mutationThreshold = 100 // 100% mutation score gate (FR6)
     // Per-mutation timeout budget (allowed = recorded test time × factor +
     // const). PIT records test times during the single-threaded coverage pass,
@@ -473,8 +493,19 @@ pitest {
     // Genuine infinite hangs are also fixed at the source, not by budget:
     // TrackerContract fails fast (bounded get + shutdownNow) after the one
     // real deadlocking mutant ever observed (InMemoryTracker.claim, CI-only).
+    // Second calibration (add-claim-heartbeat): a full-tree run produced 4 more
+    // load-induced TIMED_OUT (TakeClaimAndWork's beat register/unregister,
+    // AgentProcessLauncher, LaunchedAgentProcess) — every one KILLED cleanly
+    // when re-run scoped, i.e. off-budget, not surviving. Their covering specs
+    // either spawn real subprocesses or hold REAL-TIME bounded waits (the
+    // heartbeat lifecycle rehearsals poll up to 10s), which load does not
+    // shrink while the recorded-time-based budget assumes it scales; the
+    // raised const absorbs that fixed real-time component. The dropped-
+    // register/unregister mutants also gained a millisecond-fast interaction
+    // killer in TakeDispositionSpec so the slow rehearsals are no longer the
+    // deciding test for them.
     timeoutFactor = 3.0
-    timeoutConstInMillis = 10000
+    timeoutConstInMillis = 20000
     timestampedReports = false // stable report path for CI artifact upload
     outputFormats = ['XML', 'HTML']
 }

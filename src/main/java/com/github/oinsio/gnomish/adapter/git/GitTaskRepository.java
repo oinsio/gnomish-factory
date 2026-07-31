@@ -19,26 +19,16 @@ import java.util.List;
  * The git realization of {@link TaskRepository} (design D1): creates the task branch and worktree
  * and writes the first {@code task.json} commit at start, appends resume {@link Decision}s
  * (resetting {@code outcome} to null in the same commit, FR5/D9), and records the terminal {@link
- * TaskOutcome} — populating {@code lastEscalation} for {@code Escalated} — at completion or
- * parking. Shares the branch with the git {@link GitAttemptPersistence} realization of the
- * engine's {@code AttemptPersistence} port; both write into the same worktree's {@code
- * .gnomish-task/}, split by file (D3): this class owns {@code task.json} exclusively.
+ * TaskOutcome} — populating {@code lastEscalation} for {@code Escalated} — at completion or parking.
+ * Shares the branch with {@link GitAttemptPersistence}, split by file (D3): this class owns {@code
+ * task.json} exclusively. Worktree setup is an internal concern (not on the port): every method
+ * resolves the deterministic worktree via {@link TaskWorktreeManager#ensureWorktree}, idempotent
+ * for both fresh start and resume.
  *
- * <p>Worktree materialization is this adapter's internal concern, not exposed by the {@link
- * TaskRepository} interface (whose javadoc calls branch/worktree setup "adapter concerns, out of
- * scope for this port"): every method locates or creates the deterministic worktree via {@link
- * TaskWorktreeManager#ensureWorktree}, idempotent whether the worktree already exists (resume) or
- * not (fresh start).
- *
- * <p>Strict port: any failure to durably record a lifecycle event is surfaced as a thrown {@link
- * GitTaskRepositoryException}, never swallowed.
- *
- * <p>On {@code Completed}, {@link #recordOutcome} adds a second, follow-up cleanup commit that
- * removes {@code .gnomish-task/} from the branch tip entirely (FR15, design D4); every prior
- * commit — including the just-written {@code Completed} {@code task.json} — remains reachable in
- * branch history as the audit trail (M4).
- *
- * <p>Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow.
+ * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
+ * GitTaskRepositoryException}. On {@code Completed}, {@link #recordOutcome} adds a follow-up cleanup
+ * commit removing {@code .gnomish-task/} from the branch tip (FR15, design D4); prior commits stay
+ * reachable as the audit trail (M4). Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow.
  */
 public final class GitTaskRepository implements TaskRepository {
 
@@ -49,10 +39,8 @@ public final class GitTaskRepository implements TaskRepository {
 
     /**
      * @param runner the git subprocess runner
-     * @param cloneDir the working directory of the existing git clone (the {@code --dir} target);
-     *     branch creation and {@code git worktree add} run here
-     * @param worktreesRoot the root directory under which per-task worktrees are materialized, see
-     *     {@link TaskWorktreeManager}
+     * @param cloneDir the existing git clone (the {@code --dir} target) where branch/worktree ops run
+     * @param worktreesRoot the root under which per-task worktrees are materialized
      */
     public GitTaskRepository(GitProcessRunner runner, Path cloneDir, Path worktreesRoot) {
         this.runner = runner;
@@ -83,7 +71,7 @@ public final class GitTaskRepository implements TaskRepository {
                 };
 
         Path worktree = ensureWorktree(taskId);
-        TaskJsonDto dto = TaskJsonMapper.toDto(context, baseCommit, Instant.now(), null, null);
+        TaskJsonDto dto = TaskJsonMapper.toDto(context, baseCommit, Instant.now(), null, null, false);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.STARTED);
     }
 
@@ -101,7 +89,7 @@ public final class GitTaskRepository implements TaskRepository {
                 decisions);
 
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                updatedContext, current.baseCommit(), current.createdAt(), null, current.lastEscalation());
+                updatedContext, current.baseCommit(), current.createdAt(), null, current.lastEscalation(), false);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.RESUMED);
     }
 
@@ -113,8 +101,13 @@ public final class GitTaskRepository implements TaskRepository {
         var lastEscalation =
                 outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : current.lastEscalation();
 
+        // Durable "tracker-write pending" marker (FR10, D10 of add-claim-heartbeat): only a terminal
+        // PARK (Escalated/Paused) sets it — recorded here BEFORE its git-unfenced tracker write so
+        // the branch outcome is durable first, then cleared by confirmTerminalWrite once it lands.
+        // Completed reconciles via the cleanup-detection path; Aborted's write is best-effort.
+        boolean pending = outcome instanceof TaskOutcome.Escalated || outcome instanceof TaskOutcome.Paused;
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation);
+                current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending);
         writeAndCommit(taskId, worktree, dto, event);
 
         if (outcome instanceof TaskOutcome.Completed) {
@@ -123,11 +116,24 @@ public final class GitTaskRepository implements TaskRepository {
     }
 
     /**
-     * Follow-up commit for {@code Completed} (FR15/M4): removes {@code .gnomish-task/} from both
-     * the worktree and the index in one step via {@code git rm -r}, then commits with the fixed
-     * cleanup message. History is untouched — only this new commit stops tracking the directory,
-     * so every prior round/lifecycle commit (including the just-written {@code Completed}
-     * task.json) remains reachable via {@code git show <sha>:.gnomish-task/...}.
+     * Clears the durable "tracker-write pending" marker for {@code taskId} once its terminal park's
+     * tracker write has confirmed landed, committing the cleared {@code task.json} so a later
+     * reconcile-on-resume reads the park as settled rather than orphaned (FR10, D10 of
+     * add-claim-heartbeat). The marker rewrite is delegated to {@link TerminalWriteMarker} (file
+     * size); this class owns worktree resolution and the confirming commit.
+     *
+     * @param taskId the task whose pending marker is cleared; never blank
+     */
+    public void confirmTerminalWrite(String taskId) {
+        Path worktree = ensureWorktree(taskId);
+        TerminalWriteMarker.clearPending(worktree, taskId);
+        commitWith(taskId, worktree, ServiceCommitMessages.trackerWriteConfirmed(), TaskLifecycleEvent.RESUMED);
+    }
+
+    /**
+     * Follow-up commit for {@code Completed} (FR15/M4): removes {@code .gnomish-task/} from worktree
+     * and index via {@code git rm -r}, then commits the fixed cleanup message. History is untouched
+     * — every prior commit stays reachable via {@code git show <sha>:.gnomish-task/...}.
      */
     private void commitCleanup(String taskId, Path worktree) {
         GitCommandResult rm = runner.run(worktree, "rm", "-r", ".gnomish-task");
@@ -135,7 +141,6 @@ public final class GitTaskRepository implements TaskRepository {
             throw new GitTaskRepositoryException(
                     taskId, TaskLifecycleEvent.COMPLETED, "git rm -r .gnomish-task", rm.stderr());
         }
-
         GitCommandResult commit = runner.run(worktree, "commit", "-m", ServiceCommitMessages.cleanup());
         if (commit.exitCode() != 0) {
             throw new GitTaskRepositoryException(
@@ -169,12 +174,15 @@ public final class GitTaskRepository implements TaskRepository {
             throw new GitTaskRepositoryException(taskId, event, "writing task.json", e);
         }
 
+        commitWith(taskId, worktree, ServiceCommitMessages.taskEvent(event), event);
+    }
+
+    private void commitWith(String taskId, Path worktree, String message, TaskLifecycleEvent event) {
         GitCommandResult add = runner.run(worktree, "add", "-A");
         if (add.exitCode() != 0) {
             throw new GitTaskRepositoryException(taskId, event, "git add -A", add.stderr());
         }
-
-        GitCommandResult commit = runner.run(worktree, "commit", "-m", ServiceCommitMessages.taskEvent(event));
+        GitCommandResult commit = runner.run(worktree, "commit", "-m", message);
         if (commit.exitCode() != 0) {
             throw new GitTaskRepositoryException(taskId, event, "git commit", commit.stderr());
         }

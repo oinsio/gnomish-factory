@@ -61,6 +61,7 @@ record TakeResumeBootstrap(Path worktreesRoot, String taskIdMdcKey) {
                 content.lastEscalation(),
                 worktree,
                 branchName,
-                content.baseCommit());
+                content.baseCommit(),
+                content.trackerWritePending());
     }
 }

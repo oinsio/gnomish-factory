@@ -217,6 +217,49 @@ class CommandProcessRunnerSpec extends Specification {
         lines.last() == String.format('%099d', 400)
     }
 
+    // FR11, NFR-S1, D11 of add-claim-heartbeat: a name in credentialEnvVarsToScrub is removed
+    // from the check process's inherited environment, while an untouched inherited var still
+    // reaches it — proven against two real, always-present inherited variables (this test JVM's
+    // own HOME/USER) rather than a synthetic credential, since there is no reliable, portable way
+    // to inject a brand-new var into this running JVM's own environment. PATH is deliberately not
+    // used: POSIX sh assigns a default PATH when none is inherited, which would falsely look like
+    // "PATH survived scrubbing". Mirrors AgentProcessLauncherSpec's scrub test.
+    def "FR11: a declared credential var is scrubbed from the check environment while an untouched var still reaches it"() {
+        given: 'a runner configured to scrub HOME, and a command reporting both HOME and USER'
+        def scrubbingRunner = new CommandProcessRunner('sh', ['HOME'])
+        def check = command(envReportCommand('HOME', 'USER'))
+
+        when:
+        def outcome = scrubbingRunner.run(check, workspace())
+
+        then: 'the scrubbed name is gone from the check environment'
+        outcome.exitCode() == 0
+        outcome.outputTail().readLines().contains('HOME=absent')
+
+        and: 'an untouched, already-inherited name still reaches the check unaffected'
+        outcome.outputTail().readLines().contains('USER=present')
+    }
+
+    // FR11 negative control: with an empty scrub list (no tracker configured) the environment is
+    // inherited unchanged — HOME, present in the factory environment, reaches the check.
+    def "FR11: with an empty scrub list the check environment is inherited unchanged"() {
+        given: 'the default runner, which scrubs nothing'
+        def check = command(envReportCommand('HOME'))
+
+        when:
+        def outcome = runner.run(check, workspace())
+
+        then:
+        outcome.exitCode() == 0
+        outcome.outputTail().readLines().contains('HOME=present')
+    }
+
+    private static String envReportCommand(String... names) {
+        names.collect { name ->
+            "if [ -n \"\${${name}:-}\" ]; then echo '${name}=present'; else echo '${name}=absent'; fi"
+        }.join('; ')
+    }
+
     def "an interrupt raised while waiting for the process maps to the interrupted exit code"() {
         given: 'a Process whose waitFor() throws InterruptedException, exercised directly (no blocking read)'
         def interruptingProcess = new Process() {

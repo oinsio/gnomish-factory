@@ -16,6 +16,7 @@ import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -58,6 +59,12 @@ class GithubClaimLeaseSpec extends Specification {
 
     private TaskRef refFor(int issueNumber) {
         new TaskRef(GithubTaskId.build(wireMock.baseUrl(), 'acme', 'widgets', issueNumber).canonicalId())
+    }
+
+    /** Renders one GitHub comment JSON object, JSON-escaping a rendered marker body for embedding in a listing. */
+    private static String commentJson(long id, String body) {
+        def escaped = body.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+        "{\"id\":${id},\"body\":\"${escaped}\"}"
     }
 
     private static void stubLabelCalls(WireMockServer wireMock, int issueNumber) {
@@ -273,6 +280,28 @@ class GithubClaimLeaseSpec extends Specification {
         def result = lease.claim(refFor(28), 'gnomish-factory-fresh')
 
         then: 'the pre-finish claim (id 1) is voided by the finish report boundary; the fresh claim wins'
+        result == new ClaimResult.Acquired()
+    }
+
+    def "FR4: boundary-anchors the re-claim past a stale-claim-removed marker so the dead holder's pre-removal claim is ignored (D5)"() {
+        given: 'a reaper removed a stale claim but a delete failure left the dead holder CLAIM comment in the thread; a fresh instance now re-claims'
+        stubLabelCalls(wireMock, 29)
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/29/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":930,"body":"whatever"}')))
+        def deadClaim = commentJson(1, GithubMarker.render(GithubMarkerKind.CLAIM,
+                'gnomish-factory-dead', Instant.parse('2026-07-20T09:00:00Z'), '🤖 claimed'))
+        def removal = commentJson(2, GithubMarker.render(GithubMarkerKind.STALE_CLAIM_REMOVED,
+                'gnomish-factory-dead', Instant.parse('2026-07-24T09:00:00Z'), '🤖 stale claim removed: gnomish-factory-dead'))
+        def freshClaim = commentJson(930, GithubMarker.render(GithubMarkerKind.CLAIM,
+                'gnomish-factory-fresh', Instant.parse('2026-07-24T10:00:00Z'), '🤖 claimed by gnomish-factory-fresh'))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/29/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody("[${deadClaim},${removal},${freshClaim}]")))
+        def lease = newLease()
+
+        when:
+        def result = lease.claim(refFor(29), 'gnomish-factory-fresh')
+
+        then: 'the dead holder pre-removal claim (id 1) is voided by the removal boundary; the caller is the only post-boundary claim, so it wins instead of Held(dead)'
         result == new ClaimResult.Acquired()
     }
 }

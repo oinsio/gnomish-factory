@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +64,12 @@ public final class PipelineMapper {
     /** FR17 of add-tracker-port: the core abort-fuse threshold default when the key is omitted. */
     private static final int DEFAULT_ABORT_THRESHOLD = 3;
 
+    /** FR3 of add-claim-heartbeat: the {@code config.yaml} location stamped onto a bad heartbeat interval. */
+    private static final String TRACKER_FILE = "config.yaml";
+
+    /** FR3 of add-claim-heartbeat: the field locator for a malformed {@code heartbeat-interval}. */
+    private static final String HEARTBEAT_INTERVAL_WHERE = "tracker.heartbeat-interval";
+
     private PipelineMapper() {}
 
     /**
@@ -107,34 +114,46 @@ public final class PipelineMapper {
         for (StageEntry entry : entries) {
             stages.add(mapStage(entry, defaultLimit, errors));
         }
+        TrackerConfig tracker = mapTracker(config.tracker(), errors);
         if (!errors.isEmpty()) {
             return new Result(null, errors);
         }
         PipelineDefinition definition = new PipelineDefinition(
-                orEmpty(config.schemaVersion()),
-                new AutonomyLimits(defaultLimit),
-                stages,
-                mapTracker(config.tracker()));
+                orEmpty(config.schemaVersion()), new AutonomyLimits(defaultLimit), stages, tracker);
         return new Result(definition, List.of());
     }
 
     /**
-     * Maps the {@code tracker} core keys (FR17, FR9 of add-tracker-port): {@code
-     * null} when the whole section is absent from {@code config.yaml}; otherwise
-     * carries {@code type} through, defaults {@code abort-threshold} to 3 when
-     * the section is present but the key is omitted, and passes through the
-     * ONE raw subsection matching {@code type} (already schema-validated at the
-     * seam, task 3.2/4.2) for downstream short-ref expansion and adapter
-     * construction (task 5.15) to consume.
+     * Maps the {@code tracker} core keys (FR17, FR9 of add-tracker-port; FR3 of
+     * add-claim-heartbeat): {@code null} when the whole section is absent from
+     * {@code config.yaml}; otherwise carries {@code type} through, defaults
+     * {@code abort-threshold} to 3 and the heartbeat constants to 5 minutes / 3
+     * when the section is present but a key is omitted, parses the
+     * {@code heartbeat-interval} string to a {@link java.time.Duration} (a
+     * malformed string appends a located error to {@code errors} and discards
+     * the definition, mirroring the {@code external} timings), and passes
+     * through the ONE raw subsection matching {@code type} (already
+     * schema-validated at the seam, task 3.2/4.2) for downstream short-ref
+     * expansion and adapter construction (task 5.15) to consume.
      */
-    private static @Nullable TrackerConfig mapTracker(@Nullable TrackerDto tracker) {
+    private static @Nullable TrackerConfig mapTracker(@Nullable TrackerDto tracker, List<ConfigError> errors) {
         if (tracker == null) {
             return null;
         }
         int threshold = tracker.abortThreshold() == null ? DEFAULT_ABORT_THRESHOLD : tracker.abortThreshold();
+        Duration interval = tracker.heartbeatInterval() == null
+                ? TrackerConfig.DEFAULT_HEARTBEAT_INTERVAL
+                : DurationConfig.parse(TRACKER_FILE, HEARTBEAT_INTERVAL_WHERE, tracker.heartbeatInterval(), errors);
+        int multiplier = tracker.heartbeatTtlMultiplier() == null
+                ? TrackerConfig.DEFAULT_HEARTBEAT_TTL_MULTIPLIER
+                : tracker.heartbeatTtlMultiplier();
         String type = orEmpty(tracker.type());
         return new TrackerConfig(
-                type, threshold, castSubsection(tracker.subsections().get(type)));
+                type,
+                threshold,
+                interval,
+                multiplier,
+                castSubsection(tracker.subsections().get(type)));
     }
 
     /** Mirrors {@code TrackerSeamValidator.castSubsection}: the seam already guaranteed the shape. */

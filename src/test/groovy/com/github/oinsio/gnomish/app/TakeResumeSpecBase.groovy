@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -108,10 +109,12 @@ abstract class TakeResumeSpecBase extends Specification implements BareGitRepoFi
     protected TakeResumeRunner newTakeResumeRunner(
             InputStream input = new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')),
             FactoryProperties factoryProperties = testProperties(),
-            List<String> credentialEnvVarsToScrub = []) {
+            List<String> credentialEnvVarsToScrub = [],
+            ClaimLossFlag claimLossFlag = new ClaimLossFlag()) {
         def assembly = newAssembly(input, System.out, factoryProperties)
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
-        new TakeResumeRunner(assembly, worktreesRoot, 'taskId', abortHandler, ABORT_THRESHOLD, credentialEnvVarsToScrub)
+        new TakeResumeRunner(
+                assembly, worktreesRoot, 'taskId', abortHandler, ABORT_THRESHOLD, credentialEnvVarsToScrub, claimLossFlag)
     }
 
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */

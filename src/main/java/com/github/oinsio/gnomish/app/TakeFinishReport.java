@@ -1,14 +1,19 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.take.ClaimGuard;
 import com.github.oinsio.gnomish.app.take.TakeOutcomeMapper;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Closes the gap {@link TakeOutcomeMapper} deliberately leaves open for a fresh {@code Completed}
@@ -37,13 +42,21 @@ import com.github.oinsio.gnomish.status.StatusTextRenderer;
  */
 final class TakeFinishReport {
 
+    private static final Logger log = LoggerFactory.getLogger(TakeFinishReport.class);
+
     private TakeFinishReport() {}
 
     /**
      * Renders the final report for {@code completed} and finishes {@code ref} on the tracker with
      * it (FR18, D11), then returns the matching {@link TakeResult.Delivered}.
      *
-     * <p>Implements FR18, D11 of add-tracker-port.
+     * <p>The {@code tracker.finish} write is git-unfenced, so it is preceded by {@link
+     * ClaimGuard#stillOurs} (FR7, design D6 of add-claim-heartbeat): when the claim was reaped or
+     * taken over mid-run, the finish is skipped with a WARN rather than overwriting the new holder's
+     * tracker state — the run still returns the mapped {@link TakeResult.Delivered} (the branch
+     * carries the delivered outcome; the residual TOCTOU costs at most a stray label).
+     *
+     * <p>Implements FR18, D11 of add-tracker-port; FR7 of add-claim-heartbeat.
      *
      * @param completed the fresh engine completion to exit the run with; never null
      * @param context the task's identity and decisions, reflecting all decisions up to this run;
@@ -51,15 +64,54 @@ final class TakeFinishReport {
      * @param branchName the task branch's short name, appended as a report line; never null
      * @param tracker the tracker port the finish call is made through; never null
      * @param ref the task's tracker identity; never null
+     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
      * @return the {@link TakeResult.Delivered} the finish call was made with; never null
      */
     static TakeResult finish(
-            TaskOutcome.Completed completed, TaskContext context, String branchName, Tracker tracker, TaskRef ref) {
+            TaskOutcome.Completed completed,
+            TaskContext context,
+            String branchName,
+            Tracker tracker,
+            TaskRef ref,
+            InstanceId instanceId) {
+        return finish(completed, context, branchName, tracker, ref, instanceId, TerminalWriteRetry.system());
+    }
+
+    /**
+     * As {@link #finish(TaskOutcome.Completed, TaskContext, String, Tracker, TaskRef, InstanceId)},
+     * but wraps the git-unfenced {@code tracker.finish} write in {@code retry} so a tracker outage
+     * at the finish line is retried with backoff for the bounded hold-the-slot period (FR10, D10,
+     * NFR-R3 of add-claim-heartbeat). The delivered outcome is already durable in the branch (the
+     * {@code Completed} cleanup commit), so on give-up the run still returns {@link
+     * TakeResult.Delivered} and logs an ERROR naming the unreconciled finish — reconcile-on-resume
+     * (the {@code Completed} cleanup-detection path) completes the deferred write later. No
+     * "tracker-write pending" marker is set for a finish: {@code Completed}'s reconcile is decided
+     * by the stripped-tip cleanup detection, not by the marker (which serves the park case).
+     *
+     * <p>Implements FR18, D11 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat.
+     */
+    static TakeResult finish(
+            TaskOutcome.Completed completed,
+            TaskContext context,
+            String branchName,
+            Tracker tracker,
+            TaskRef ref,
+            InstanceId instanceId,
+            TerminalWriteRetry retry) {
         var report = StatusReport.build(context, completed.finalState(), null, LiveActivity.idle());
         String rendered = new StatusTextRenderer().renderFull(report);
         String summary = rendered + "\n" + "Branch: " + branchName;
 
-        tracker.finish(ref, summary);
+        if (ClaimGuard.stillOurs(tracker, ref, instanceId)) {
+            if (retry.confirm(() -> tracker.finish(ref, summary)) == TerminalWriteRetry.Result.DEFERRED) {
+                log.error(
+                        "finish of {} could not be written before the retry bound elapsed; the branch records the "
+                                + "delivery and a later resume will reconcile the deferred finish",
+                        ref.id());
+            }
+        } else {
+            log.warn("skipping finish of {}: claim is no longer held by this instance", ref.id());
+        }
         return new TakeResult.Delivered(completed.finalState(), summary);
     }
 }

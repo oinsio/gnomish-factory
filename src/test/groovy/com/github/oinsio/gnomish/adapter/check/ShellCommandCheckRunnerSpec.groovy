@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Files
 import java.nio.file.Path
@@ -105,7 +106,7 @@ class ShellCommandCheckRunnerSpec extends Specification {
     def "a workspace that is not a DirectoryWorkspace yields CannotVerify"() {
         given:
         def check = command('pwd')
-        def opaqueWorkspace = new com.github.oinsio.gnomish.domain.engine.port.Workspace() {}
+        def opaqueWorkspace = new Workspace() {}
 
         when:
         def verdict = runner.run(check, opaqueWorkspace)
@@ -265,6 +266,40 @@ exit 0''')
 
         then:
         !Files.exists(findingsPath)
+    }
+
+    // FR11, NFR-S1, D11 of add-claim-heartbeat: withCredentialScrub yields a runner whose check
+    // process has the declared credential vars removed from its inherited environment. Observed
+    // through the exit-1 synthetic finding's output tail (the runner exposes no env otherwise) and
+    // proven against real, always-present inherited vars (HOME/USER), mirroring the launcher spec.
+    def "FR11: withCredentialScrub removes the declared credential var from a check's environment"() {
+        given: 'a scrub-scoped runner for HOME and a check that reports HOME and USER, then exits 1'
+        def scrubbingRunner = runner.withCredentialScrub(['HOME'])
+        def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; '
+                + 'if [ -n "${USER:-}" ]; then echo USER=present; else echo USER=absent; fi; exit 1')
+
+        when:
+        def verdict = scrubbingRunner.run(check, workspace())
+
+        then: 'the scrubbed name is absent, an untouched inherited name still reaches the check'
+        verdict instanceof Verdict.Fail
+        def details = (verdict as Verdict.Fail).findings()[0].details()
+        details.readLines().contains('HOME=absent')
+        details.readLines().contains('USER=present')
+    }
+
+    // FR11 negative control: the base runner scrubs nothing (empty list = no tracker), so a var
+    // present in the factory environment is visible to the check — env inherited unchanged.
+    def "FR11: with no tracker configured the check environment is inherited unchanged"() {
+        given: 'the default runner (empty scrub list) and a check reporting HOME, then exiting 1'
+        def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; exit 1')
+
+        when:
+        def verdict = runner.run(check, workspace())
+
+        then:
+        verdict instanceof Verdict.Fail
+        (verdict as Verdict.Fail).findings()[0].details().readLines().contains('HOME=present')
     }
 
     def "deleteQuietly is a no-op when the findings file is null - createFindingsFile's own failure path"() {

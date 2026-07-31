@@ -97,8 +97,11 @@ Rules your adapter must uphold:
 
 ## 2. Per-operation port semantics
 
-The `Tracker` interface (`app/port/tracker/Tracker.java`) has exactly ten
-operations. Implement all ten; there is no partial adapter.
+The `Tracker` interface (`app/port/tracker/Tracker.java`) has exactly fourteen
+operations. Implement all fourteen; there is no partial adapter. Ten are the
+core feed/coordination/correspondence operations; `recordProgress` persists a
+durable-progress marker; and the three lease-maintenance operations `listOpen`,
+`heartbeat`, and `removeStaleClaim` keep and reap the claim lease.
 
 | Operation                                                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |--------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -110,8 +113,12 @@ operations. Implement all ten; there is no partial adapter.
 | `void park(TaskRef ref, ParkReason reason, String report)`   | Transitions to `AwaitingHuman(reason)`, publishing `report` as finished text. `report` is already-rendered prose — your adapter never receives an engine domain object.                                                                                                                                                                                                                                                            |
 | `void finish(TaskRef ref, String summary)`                   | Transitions to `Finished`, publishing `summary` as the final report. Once finished, a task is never touched again by the factory.                                                                                                                                                                                                                                                                                                  |
 | `void recordAbort(TaskRef ref, AbortRecord record)`          | **One operation**: persist a structural abort marker (cause, instance, time) **and** return the task to `Ready`. The facts must be reconstructable by any instance from the tracker alone — a fresh `fetchTask`/`listReady` call from a different instance must observe the updated count and last-abort time. Your adapter reports facts; it must **never** apply backoff or the K-abort fuse policy itself — that is core's job. |
+| `void recordProgress(TaskRef ref)`                           | Persists a structural durable-progress marker **without changing the logical state or claim holder** — it is the anchor from which a fresh `fetchTask`/`listReady` reconstructs `AbortFacts` as "aborts since this marker". Emission is idempotent within a claim: a second marker is harmless, since reconstruction always anchors to the latest one. Your adapter persists the marker only; core decides when to emit it and how the reset arithmetic works.                                                                                                             |
 | `void acknowledgeDecision(TaskRef ref, String decisionText)` | Posts an "acting on decision" marker such that a subsequent `collectDecisions` is empty until a new reply arrives. This is the single mechanism that both records what was acted on and anchors future collection.                                                                                                                                                                                                                 |
 | `void postNote(TaskRef ref, String text)`                    | Posts free text without changing logical state — the catch-all for anything that is neither a park report, a finish summary, nor a decision ack.                                                                                                                                                                                                                                                                                   |
+| `List<OpenTask> listOpen()`                                  | Returns the **open** tasks — `Working` and `AwaitingHuman` only — each with its logical state; a `Working` entry additionally carries its holder (read from `Working(holder)` inside the state, not duplicated on `OpenTask`) and an opaque **claim version** `ClaimVersion(markerId, updatedAt)`. Never returns `Ready`/`Finished`/`Gone`, and never non-task artifacts (e.g. GitHub pull requests). A `Working` task whose claim marker is missing is reported with an **absent (null)** claim version — core decides what that means. Report version **facts only**; the TTL/staleness policy and observation memory live in core. There is **no `limit`** parameter — the reaper needs the full open set. |
+| `HeartbeatResult heartbeat(TaskRef ref, String progressPayload)` | Updates the caller's **existing** claim marker in place — refreshing its version and the human-readable `progressPayload` — with **no new coordination artifact**, one write. Returns `Beaten(newVersion)` on success or `ClaimGone()` when the claim was reaped or taken over — a protocol **signal**, a distinct result, **not** an exception. A task the tracker **no longer holds at all** is the strongest form of this and also returns `ClaimGone()`, never an exception. An infrastructure failure (network, 5xx) is retryable and is signalled by **throwing**; do **not** model it as `ClaimGone`, so a transient outage is never confused with a lost claim.                                                                                                          |
+| `RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion)` | As **one** operation, given the observed stale version: record a structural holder-transition marker ("stale claim removed") naming the dead holder, remove the dead claim marker, and return the task to `Ready`. It **never** claims the task for the caller. On version mismatch (the claim was beaten, already removed, or replaced) it is a **safe no-op** returning `Mismatch(currentVersion)` — this is what makes concurrent removals converge; when the claim is already gone (or the task itself no longer exists) the current version is **absent (`null`)**. Used by **both** the reaper and a confirmed operator takeover.                                                                                    |
 
 Two cross-cutting rules apply to every operation:
 
@@ -123,25 +130,61 @@ Two cross-cutting rules apply to every operation:
 - **`instanceId`/`holder`/`otherInstance` are plain `String`s** in the current
   port shape (task 1.2 of this change); treat them as opaque identifiers.
 
+### Claim-version obligations
+
+The claim version (`ClaimVersion`) is an **opaque pair** `(markerId,
+updatedAt)`: a stable marker identity that survives a beat, plus a last-update
+fact that advances on every beat. Core treats the whole pair as an opaque token
+compared only by content — it never parses either field. Your adapter must:
+
+- **(a) keep the marker identity stable across beats.** A beat is an *in-place
+  refresh* of the one claim marker, never a fresh marker — `markerId` must be
+  the same before and after a `heartbeat`.
+- **(b) advance the version on every beat**, so that another instance's
+  `listOpen` observes a different version after the beat. (If nothing observably
+  changes, core cannot tell a live lease from a stalled one.)
+- **(c) report version facts only — never compute staleness or compare
+  clocks.** Core does all timing on its own monotonic clock; it never does
+  `now − updatedAt`, and neither may your adapter. `updatedAt` is a fact you
+  report, not a deadline you enforce.
+
+### Removal-marker boundary semantics
+
+The "stale claim removed" marker `removeStaleClaim` writes is a **claim
+boundary**: it anchors subsequent claim verify-reads exactly like the
+release/park/abort/finish boundary markers. After a removal, the next claim
+round must consider **only claim markers posted after the removal marker** — so
+a dead holder's original claim marker, if a best-effort delete of it failed and
+it is still physically present, can **never** win the next earliest-id race. An
+adapter's claim/verify logic must therefore treat the removal marker as a
+boundary; getting this wrong lets a reaped claim resurrect itself on the next
+lease round.
+
 ## 3. The contract suite is law
 
 The abstract Spock base classes under
-`src/test/groovy/com/github/oinsio/gnomish/app/port/tracker/contract/` —
-`TrackerContract`, extended by `TrackerMarkerContract`, extended by
-`TrackerFetchContract` — are the **single, authoritative** specification of
-adapter behavior. Every shipped adapter is required to pass the exact same
-suite with zero adapter-specific exemptions. If your adapter passes this
-suite, it is a conforming `Tracker` adapter; if it does not, no amount of
-prose documentation makes it one.
+`src/test/groovy/com/github/oinsio/gnomish/app/port/tracker/contract/` form one
+chain — `TrackerContract → TrackerMarkerContract → TrackerFetchContract →
+TrackerLeaseContract → TrackerHeartbeatContract → TrackerReapContract` — that is
+the **single, authoritative** specification of adapter behavior. Every shipped
+adapter is required to pass the exact same suite with zero adapter-specific
+exemptions. If your adapter passes this suite, it is a conforming `Tracker`
+adapter; if it does not, no amount of prose documentation makes it one.
 
-To bind your adapter to the suite, extend `TrackerFetchContract` (which
-transitively pulls in the other two) and implement its three seams:
+To bind your adapter to the suite, extend the **most-derived**
+`TrackerReapContract` (which transitively pulls in the whole chain — not
+`TrackerFetchContract`, which stops short of the lease properties) and implement
+its four seams:
 
 ```groovy
 abstract class TrackerContract extends Specification implements PortContractSupport {
     protected abstract Optional<Tracker> arrange()
     protected abstract void seedTask(Tracker adapter, TaskRef ref, TrackerTaskState state, AbortFacts abortFacts)
     protected abstract void seedReply(Tracker adapter, TaskRef ref, HumanReply reply)
+}
+
+abstract class TrackerLeaseContract extends TrackerFetchContract {
+    protected abstract void seedWorkingWithClaim(Tracker adapter, TaskRef ref, String holder)
 }
 ```
 
@@ -154,6 +197,13 @@ abstract class TrackerContract extends Specification implements PortContractSupp
   (in-memory map, pre-stubbed HTTP responses, ...).
 - `seedReply(...)` posts one pending human reply on a task, as if a human had
   just replied in the tracker UI.
+- `seedWorkingWithClaim(...)` seeds a `Working(holder)` task **with a
+  resolvable claim marker** — distinct from `seedTask`, which guarantees only
+  that the logical `Working` state round-trips, not that a claim marker with a
+  resolvable version exists (a `Working` task whose claim marker is missing is a
+  legitimate state the port reports with an absent version). The lease
+  properties need an actual marker so `listOpen` reports a **non-null** claim
+  version read back through the port.
 
 The properties the suite checks, verbatim:
 
@@ -182,6 +232,25 @@ The properties the suite checks, verbatim:
 7. **Gone is universal** — both an explicitly-seeded closed task and a
    `TaskRef` your adapter has never heard of report `Gone`, never an
    exception.
+8. **`listOpen` filtering** — `listOpen` returns only `Working` and
+   `AwaitingHuman` tasks; the `Working` entry carries its holder and a non-null
+   claim version, the `AwaitingHuman` entry a null version; `Ready`, `Finished`,
+   and `Gone` tasks are excluded, and `listOpen`/`listReady` partition the feed
+   (a `Ready` task shows in `listReady` only, a `Working` task in `listOpen`
+   only).
+9. **Heartbeat versioning** — a beat changes the version another instance reads
+   via `listOpen` while the marker identity (`markerId`) stays stable, and the
+   version the `Beaten` result reports is exactly the one a later `listOpen`
+   shows; a beat after the claim marker was removed reports `ClaimGone` rather
+   than throwing.
+10. **`removeStaleClaim`** — the round-trip (task back to `Ready`, the dead
+    claim gone from `listOpen`, the holder transition recoverable, proved
+    port-agnostically by a fresh claim from another instance succeeding with a
+    version distinct from the removed one); the version-mismatch no-op (a beaten
+    version yields `Mismatch` carrying the live version, task stays `Working`);
+    and concurrent-removal convergence (two reapers racing the same observed
+    version both return without error, at least one `Removed`, the task ends
+    `Ready` exactly once).
 
 `InMemoryTracker` (`adapter/tracker/inmemory/InMemoryTracker.java`) is the
 **worked reference implementation** — read it as the model of "the smallest
@@ -256,9 +325,10 @@ text — rendered and parsed by `GithubMarker`:
 GitHub renders HTML comments invisibly, so a human sees only the prose line
 while a fresh adapter instance parses `kind`/`instance`/`at`/`version` back out of
 the raw comment body. The marker-kind vocabulary (`GithubMarkerKind`) is
-`claim`, `abort`, `ack`, `note`, `report` — the wire value is always the
-lowercase enum name, decoupled from Java constant naming so the JSON is stable
-across refactors. A `report`-kind marker used for a park additionally carries
+`claim`, `abort`, `ack`, `note`, `report`, `progress` (a durable-progress
+anchor that is not a claim boundary), and `stale_claim_removed` (a reaper's
+removal boundary marker) — the wire value is always the lowercase enum name,
+decoupled from Java constant naming so the JSON is stable across refactors. A `report`-kind marker used for a park additionally carries
 an optional `reason` field (the wire value of `ParkReason`), so a fresh
 instance's `fetchTask` can recover the park reason without inferring it from
 free-text wording. This exact wire shape is a **recommendation**, not a
@@ -269,7 +339,46 @@ Redmine sketch below).
 
 **Claim lease.** `GithubClaimLease` implements `claim` as a lease sequence; the
 atomicity properties and race edge cases it must satisfy are the contract law
-in §3 (claim atomicity, claim-against-non-Ready).
+in §3 (claim atomicity, claim-against-non-Ready). The live claim comment for a
+task is resolved by `GithubClaimComment`: the **earliest-comment-id `claim`
+marker posted after the latest boundary marker** — the same "earliest id since
+the newest boundary" rule the lease race uses, carrying the comment's `id` and
+`updated_at` so a `ClaimVersion` can be reported. `listOpen`, `heartbeat`, and
+`removeStaleClaim` all reuse this one resolver rather than each re-deriving the
+winner.
+
+**Lease maintenance.** The three lease operations map onto GitHub as follows,
+all built on the claim comment resolved above:
+
+- **`heartbeat`** (`GithubHeartbeat`) = a **PATCH (edit) of the existing claim
+  comment**. The comment id — the earliest-id lease anchor — never changes; the
+  body keeps the structural `claim` marker and refreshes the human-readable
+  progress line. It is **one write**, and the reported claim version is
+  `(comment id, updated_at)` read from the PATCH response. A **404** on the edit
+  (the comment was deleted by a reaper or takeover), an unresolvable claim
+  comment, or a **404** on the comment listing (the issue itself is gone) all map
+  to `ClaimGone`; a non-404 non-2xx, 5xx, and network failures are retried and,
+  once exhausted, propagate as a **thrown** infrastructure failure — never a
+  lost-claim result.
+- **`listOpen`** (`GithubOpenQuery`) = **List Issues by the working label and by
+  the needs-human label** — two conditional GETs with `If-None-Match`/ETag, so
+  an unchanged poll is a free `304` that consumes no rate limit, with PR entries
+  excluded. For each `Working` issue it resolves the claim comment → holder plus
+  `(comment id, updated_at)`; a working-labeled issue with **no** claim comment
+  is reported with an **absent** version.
+- **`removeStaleClaim`** (`GithubStaleClaimRemoval`) = **re-read the claim
+  comment fresh, compare `(id, updated_at)` to the observed version** (mismatch
+  → no-op `Mismatch`); on a match: **POST** the `stale_claim_removed` boundary
+  marker (hidden-JSON convention, naming the dead holder), **DELETE** the dead
+  claim comment (all instances operate under one token, so deletion is
+  physically possible), and **flip the working label back to ready** — all point
+  calls. Racing removals converge: a second remover finds the comment already
+  gone and the label already flipped, both harmless — as does a **404** on the
+  re-read (the issue itself is gone), a no-op `Mismatch(null)`, never an
+  infrastructure failure. The `stale_claim_removed`
+  marker kind joins the **claim-boundary set** (`abort`, `report`,
+  `stale_claim_removed`) the re-claim verify-read anchors on, so a dead claim
+  comment whose delete did not land can never win the next lease round.
 
 ### 4.2 Redmine statuses — a thought-through sketch (NOT implemented)
 
@@ -308,7 +417,7 @@ provisioned per-project ahead of time, unlike GitHub's issue comments which
 need no upfront schema.
 
 This sketch is meant to illustrate that the *port's* three-level model and its
-ten operations transfer cleanly to a tracker with very different physical
+fourteen operations transfer cleanly to a tracker with very different physical
 primitives (scalar status vs. label set, optimistic-lock PUT vs. comment-order
 race, visible journal notes vs. invisible HTML comments) — the adapter's job
 is exactly this translation, and the contract suite is what proves the
@@ -398,7 +507,12 @@ public List<String> credentialEnvVars() {
 Why this matters: the wiring hands the *active* adapter's declared list to the
 agent process launcher, which strips every named variable from the gnome's CLI
 subprocess environment — regardless of the
-`factory.agent-cli-env-passthrough` setting. This is a hard security boundary:
+`factory.agent-cli-env-passthrough` setting. The **same declared-scrub list also
+applies to command checks**: a command-check subprocess (the `command` verify
+type) runs with the factory environment minus the active adapter's declared
+credential variables, so your declared vars are excluded from **both** the agent
+process **and** command-check processes — neither untrusted subprocess ever sees
+tracker credentials. This is a hard security boundary:
 the gnome (the untrusted agent-CLI subprocess doing the actual task work) must
 never see tracker credentials, because it could otherwise exfiltrate them or
 use them to manipulate the tracker directly, bypassing the factory's
@@ -408,7 +522,7 @@ other safety net — there is no hardcoded fallback list in the launcher. This
 is by design (design decision D17): a hardcoded list in the launcher would
 mean every new adapter has to edit executor code; declaring the names on your
 own adapter's registration seam keeps the `Tracker` runtime port at exactly
-its ten operations while staying extensible.
+its fourteen operations while staying extensible.
 
 ## 7. Known limitations
 

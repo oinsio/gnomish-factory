@@ -28,7 +28,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     Path worktreesRoot
 
     private TakeCommand newTakeCommand() {
-        new TakeCommand(
+        TakeCommandFactory.of(
                 newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, 'taskId',
                 testProperties(), Clock.systemUTC(), [:],
                 TrackerValidatorStub.acceptingGithub())

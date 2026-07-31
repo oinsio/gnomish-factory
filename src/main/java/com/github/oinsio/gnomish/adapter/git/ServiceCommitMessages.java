@@ -62,6 +62,17 @@ public final class ServiceCommitMessages {
         return PREFIX + "cleanup";
     }
 
+    /**
+     * The tracker-write-confirmed commit message: fixed, no parameters (FR10 of
+     * add-claim-heartbeat). Written when a terminal park's tracker write has landed and the
+     * durable "tracker-write pending" marker is cleared from {@code task.json}.
+     *
+     * @return {@code "gnomish: task write-confirmed"}
+     */
+    public static String trackerWriteConfirmed() {
+        return PREFIX + "task write-confirmed";
+    }
+
     private static String eventName(TaskLifecycleEvent event) {
         return switch (event) {
             case STARTED -> "started";

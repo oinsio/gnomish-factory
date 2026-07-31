@@ -103,8 +103,16 @@ The `files_exist` runner SHALL check existence of the literal workspace-relative
 - **THEN** the verdict is CannotVerify naming the offending path
 
 ### Requirement: Command check runner
-The command runner SHALL execute the manifest command via `sh -c` with the workspace as working directory and inherited environment, merging stderr into stdout and retaining a bounded output tail (~200 lines / 10 KB). Exit 0 → Pass; exit 126/127 → CannotVerify (shell convention for not-executable / not-found); any other non-zero exit → Fail.
+The command runner SHALL execute the manifest command via `sh -c` with the
+workspace as working directory, merging stderr into stdout and retaining a
+bounded output tail (~200 lines / 10 KB). The child environment SHALL be the
+factory environment minus the credential variables declared by the active
+tracker adapter — the same declared-scrub-list the agent launcher applies;
+when no tracker is configured, the environment is inherited unchanged.
+Exit 0 → Pass; exit 126/127 → CannotVerify (shell convention for
+not-executable / not-found); any other non-zero exit → Fail.
 <!-- implements FR7 of add-manual-run -->
+<!-- implements FR11, NFR-S1 of add-claim-heartbeat -->
 
 #### Scenario: Red check carries feedback
 - **WHEN** the command exits 1 without a findings file
@@ -113,6 +121,12 @@ The command runner SHALL execute the manifest command via `sh -c` with the works
 #### Scenario: Missing binary is infrastructure
 - **WHEN** the command exits 127
 - **THEN** the verdict is CannotVerify, honoring the engine's classification table
+
+#### Scenario: Tracker credentials never reach a check
+- **WHEN** a command check runs while `GNOMISH_GITHUB_TOKEN` is set in the
+  factory environment and the GitHub tracker is active
+- **THEN** the check's process environment contains no variable declared as a
+  credential by the active tracker adapter
 
 ### Requirement: Findings-JSON wire format
 Before starting the command, the runner SHALL create a temp file path outside the workspace and pass it as `GNOMISH_FINDINGS_FILE`. After a non-zero exit (other than 126/127), a valid `{"findings":[{message, location?, details?}]}` file SHALL replace the synthetic finding; a malformed file SHALL degrade to the synthetic finding plus a logged warning — the exit-code verdict always stands; a findings file on exit 0 SHALL be ignored with a warning.

@@ -55,17 +55,6 @@ final class UsageArgumentsParser {
      * the leading {@code usage} subcommand token itself.
      */
     private @Nullable String firstPositionalAfterSubcommand(ApplicationArguments args) {
-        boolean skippedSubcommand = false;
-        for (String raw : args.getSourceArgs()) {
-            if (raw.startsWith("--")) {
-                continue;
-            }
-            if (!skippedSubcommand && raw.equals(USAGE_TOKEN)) {
-                skippedSubcommand = true;
-                continue;
-            }
-            return raw;
-        }
-        return null;
+        return ArgumentsParsingSupport.firstPositionalAfterSubcommand(args, USAGE_TOKEN);
     }
 }

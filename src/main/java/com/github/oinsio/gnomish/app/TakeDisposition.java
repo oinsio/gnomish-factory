@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
@@ -10,27 +12,30 @@ import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The explicit-mode ({@code take <ref>}) disposition matrix (proposal FR9, UX2; design D2, D3):
  * given an already-fetched {@link TrackerTask}, dispatches per its {@link TrackerTaskState} —
- * {@code Ready} claims and works it (fresh or resumed), {@code AwaitingHuman}/{@code Working}
- * refuse without mutating the tracker, {@code Finished}/{@code Gone} skip. The operator mandate
- * overrides the readiness criterion and abort backoff (FR9) simply by never consulting either:
- * this class only reads the state {@code fetchTask} already reported.
+ * {@code Ready} claims and works it (fresh or resumed), {@code AwaitingHuman} refuses without
+ * mutating the tracker, {@code Working} (held by another instance) enters the {@link TakeTakeover}
+ * confirmation path (task 6.2 of add-claim-heartbeat, FR6), {@code Finished}/{@code Gone} skip. The
+ * operator mandate overrides the readiness criterion and abort backoff (FR9) simply by never
+ * consulting either: this class only reads the state {@code fetchTask} already reported.
  *
  * <p>Short-ref expansion (`42`, `#42`) is a later concern (task 5.14, not built here) — {@link
  * #dispose} takes an already-resolved {@link TaskRef}. Argument parsing and Spring wiring for the
  * {@code take} CLI surface belong to task 5.13; this class is the plain, constructor-injectable
  * entry point that command wiring calls into.
  *
- * <p>Implements FR9, UX2, D2, D3 of add-tracker-port.
+ * <p>Implements FR9, UX2, D2, D3 of add-tracker-port; FR6 of add-claim-heartbeat.
  */
 final class TakeDisposition {
 
     private final TakeClaimAndWork claimAndWork;
+    private final TakeTakeover takeover;
 
     /**
      * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
@@ -44,6 +49,57 @@ final class TakeDisposition {
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
      *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded down to
      *     every {@link TakeEngineExecution} this disposition eventually constructs; never null
+     * @param heartbeat the instance heartbeat lifecycle registered/unregistered around the claimed
+     *     run (task 6.1 of add-claim-heartbeat, FR1); {@link ClaimBeat#NONE} when no beat runs
+     * @param takeoverFlag whether {@code --takeover} authorized a headless {@code Working} takeover
+     *     (task 6.2, FR6): bypasses the {@code confirmation} seam
+     * @param confirmation the pre-claim takeover-confirmation seam (task 6.2, FR6, design D9); never null
+     * @param clock the run's clock, used only to render the display-only last-beat age in the
+     *     takeover facts (design D9); never null
+     * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
+     *     add-claim-heartbeat), threaded down to every {@link TakeEngineExecution} this disposition
+     *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
+     */
+    TakeDisposition(
+            ManualRunAssembly assembly,
+            Path worktreesRoot,
+            AbortHandler abortHandler,
+            int abortThreshold,
+            String taskIdMdcKey,
+            List<String> credentialEnvVarsToScrub,
+            ClaimBeat heartbeat,
+            boolean takeoverFlag,
+            TakeoverConfirmation confirmation,
+            Clock clock,
+            ClaimLossFlag claimLossFlag) {
+        var resumeRunner = new TakeResumeRunner(
+                assembly,
+                worktreesRoot,
+                taskIdMdcKey,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                claimLossFlag);
+        var dispositionResume =
+                new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner), worktreesRoot);
+        this.claimAndWork = new TakeClaimAndWork(
+                assembly,
+                worktreesRoot,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                dispositionResume,
+                heartbeat,
+                claimLossFlag);
+        this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
+    }
+
+    /**
+     * The heartbeat- and takeover-free construction used where neither a beat nor an explicit
+     * takeover runs (the {@code Ready}/{@code AwaitingHuman}/{@code Finished}/{@code Gone}
+     * disposition unit specs): delegates with {@link ClaimBeat#NONE}, no {@code --takeover}, the
+     * {@link TakeoverConfirmation#UNAVAILABLE} headless default on a system clock, and a fresh empty
+     * {@link ClaimLossFlag} that never trips, so those call sites are unaffected by the added seams.
      */
     TakeDisposition(
             ManualRunAssembly assembly,
@@ -52,11 +108,18 @@ final class TakeDisposition {
             int abortThreshold,
             String taskIdMdcKey,
             List<String> credentialEnvVarsToScrub) {
-        var resumeRunner = new TakeResumeRunner(
-                assembly, worktreesRoot, taskIdMdcKey, abortHandler, abortThreshold, credentialEnvVarsToScrub);
-        var dispositionResume = new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner));
-        this.claimAndWork = new TakeClaimAndWork(
-                assembly, worktreesRoot, abortHandler, abortThreshold, credentialEnvVarsToScrub, dispositionResume);
+        this(
+                assembly,
+                worktreesRoot,
+                abortHandler,
+                abortThreshold,
+                taskIdMdcKey,
+                credentialEnvVarsToScrub,
+                ClaimBeat.NONE,
+                false,
+                TakeoverConfirmation.UNAVAILABLE,
+                Clock.systemUTC(),
+                new ClaimLossFlag());
     }
 
     /**
@@ -93,7 +156,17 @@ final class TakeDisposition {
             case TrackerTaskState.Ready ignored ->
                 claimAndWork.claimAndWork(
                         cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
-            case TrackerTaskState.Working working -> TakeClaimAndWork.refuseHeld(working.holder());
+            case TrackerTaskState.Working working ->
+                takeover.take(
+                        cloneDir,
+                        base,
+                        definition,
+                        interactiveMode,
+                        discardWork,
+                        trackerTask,
+                        tracker,
+                        instanceId,
+                        working.holder());
             case TrackerTaskState.AwaitingHuman awaitingHuman -> refuseParked(awaitingHuman.reason());
             case TrackerTaskState.Finished ignored ->
                 new TakeResult.Skipped("Task " + ref.id() + " is already done (Finished) — nothing to take.");

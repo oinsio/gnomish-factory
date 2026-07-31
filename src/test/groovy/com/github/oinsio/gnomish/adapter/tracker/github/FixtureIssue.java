@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 final class FixtureIssue {
 
     private final int number;
-    private final List<String> labels = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<String> labels = new CopyOnWriteArrayList<>();
     private final List<FixtureComment> comments = new CopyOnWriteArrayList<>();
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicReference<String> title = new AtomicReference<>("fixture title");
@@ -39,7 +39,10 @@ final class FixtureIssue {
     }
 
     void addLabel(String label) {
-        labels.add(label);
+        // addIfAbsent mirrors GitHub, where a label is present at most once: two racing
+        // removeStaleClaim callers each re-add the ready label (working→ready transition),
+        // and GitHub coalesces that to a single label rather than a duplicate.
+        labels.addIfAbsent(label);
     }
 
     void removeLabel(String label) {
@@ -81,7 +84,32 @@ final class FixtureIssue {
 
     /** Appends a comment with an explicit {@code createdAt} (e.g. a seeded human reply's own posting time). */
     void appendComment(String rawBody, long commentId, Instant createdAt) {
-        comments.add(new FixtureComment(commentId, rawBody, createdAt));
+        appendComment(rawBody, commentId, createdAt, createdAt);
+    }
+
+    /**
+     * Appends a comment with distinct {@code createdAt}/{@code updatedAt} — a seeded claim comment
+     * carries an {@code updatedAt} advanced past its creation so its {@code ClaimVersion} is a live,
+     * beatable fact (a beat then refreshes {@code updatedAt} again via {@link #patchComment}).
+     */
+    void appendComment(String rawBody, long commentId, Instant createdAt, Instant updatedAt) {
+        comments.add(new FixtureComment(commentId, rawBody, createdAt, updatedAt));
+    }
+
+    /**
+     * Refreshes a comment's body and {@code updatedAt} in place (GitHub's "edit comment"), keeping
+     * its id and {@code createdAt} — the heartbeat PATCH path. Returns whether the comment was found;
+     * a miss means it was already deleted (a reaper won the race), which the caller maps to a 404.
+     */
+    boolean patchComment(long commentId, String newBody, Instant newUpdatedAt) {
+        for (int i = 0; i < comments.size(); i++) {
+            FixtureComment c = comments.get(i);
+            if (c.id() == commentId) {
+                comments.set(i, new FixtureComment(commentId, newBody, c.createdAt(), newUpdatedAt));
+                return true;
+            }
+        }
+        return false;
     }
 
     void removeComment(long commentId) {
@@ -92,6 +120,6 @@ final class FixtureIssue {
         return List.copyOf(comments);
     }
 
-    /** One raw comment as GitHub would report it: id, body, and posting time, in posting order. */
-    record FixtureComment(long id, String body, Instant createdAt) {}
+    /** One raw comment as GitHub would report it: id, body, posting time, and last-edit time, in posting order. */
+    record FixtureComment(long id, String body, Instant createdAt, Instant updatedAt) {}
 }

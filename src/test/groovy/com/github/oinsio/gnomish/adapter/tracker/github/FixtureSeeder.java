@@ -85,6 +85,25 @@ record FixtureSeeder(FixtureIssueRegistry registry, String instanceId) {
         }
     }
 
+    /**
+     * Seeds {@code issue} to {@code Working(holder)} WITH a live, resolvable claim comment, per
+     * {@code TrackerLeaseContract.seedWorkingWithClaim}. Unlike {@link #seedTask}'s {@code Working}
+     * branch (which pins the CLAIM's {@code at} against a seeded abort streak), this seeds a clean
+     * claim with no abort history: the working label plus one CLAIM marker carrying a real comment
+     * id and an advanced {@code updated_at}, so {@code GithubClaimComment} resolves a non-null {@link
+     * com.github.oinsio.gnomish.app.port.tracker.ClaimVersion} that {@code heartbeat} can beat and
+     * {@code removeStaleClaim} can reap. The comment id is minted from the shared sequence (its
+     * earliest-id-since-boundary total order), and the {@code updated_at} from {@link
+     * FixtureIssueRegistry#nextUpdatedAt()} so a later beat reads a strictly newer version.
+     */
+    void seedWorkingWithClaim(FixtureIssue issue, String holder) {
+        issue.addLabel(WORKING_LABEL);
+        long id = registry.nextCommentId();
+        Instant at = SEED_CLOCK_BASE.plusSeconds(id);
+        String body = GithubMarker.render(GithubMarkerKind.CLAIM, holder, at, "🤖 gnomish: claimed by " + holder);
+        issue.appendComment(body, id, at, registry.nextUpdatedAt());
+    }
+
     /** Seeds a pending human reply comment, per {@code TrackerContract.seedReply}. */
     void seedReply(FixtureIssue issue, HumanReply reply) {
         long id = registry.nextCommentId();

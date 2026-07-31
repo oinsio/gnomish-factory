@@ -52,17 +52,6 @@ final class StatusArgumentsParser {
      * nor the leading {@code status} subcommand token itself.
      */
     private @Nullable String firstPositionalAfterSubcommand(ApplicationArguments args) {
-        boolean skippedSubcommand = false;
-        for (String raw : args.getSourceArgs()) {
-            if (raw.startsWith("--")) {
-                continue;
-            }
-            if (!skippedSubcommand && raw.equals(STATUS_TOKEN)) {
-                skippedSubcommand = true;
-                continue;
-            }
-            return raw;
-        }
-        return null;
+        return ArgumentsParsingSupport.firstPositionalAfterSubcommand(args, STATUS_TOKEN);
     }
 }

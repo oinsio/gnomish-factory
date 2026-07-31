@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
@@ -115,16 +114,6 @@ public final class RunArgumentsParser {
      * {@code --task=a --task=b} and hand back the last one, hiding an operator mistake.
      */
     private @Nullable String singleValue(ApplicationArguments args, String name) {
-        if (!args.containsOption(name)) {
-            return null;
-        }
-        List<String> values = args.getOptionValues(name);
-        if (values == null || values.isEmpty()) {
-            throw new UsageException("--" + name + " requires a value (e.g. --" + name + "=value)");
-        }
-        if (values.size() > 1) {
-            throw new UsageException("--" + name + " may be given only once");
-        }
-        return values.getFirst();
+        return ArgumentsParsingSupport.singleValue(args, name);
     }
 }

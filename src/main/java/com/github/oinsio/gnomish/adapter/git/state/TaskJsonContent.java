@@ -29,10 +29,14 @@ import org.jspecify.annotations.Nullable;
  *     visit is in progress
  * @param lastEscalation the last escalation report, or {@code null} if the task
  *     was never escalated
+ * @param trackerWritePending {@code true} when a recorded terminal park's tracker
+ *     write is still outstanding — the durable "tracker-write pending" marker
+ *     reconcile-on-resume reads (FR10 of add-claim-heartbeat)
  */
 public record TaskJsonContent(
         TaskContext context,
         String baseCommit,
         Instant createdAt,
         @Nullable TaskOutcomeDto outcome,
-        @Nullable EscalationReport lastEscalation) {}
+        @Nullable EscalationReport lastEscalation,
+        boolean trackerWritePending) {}

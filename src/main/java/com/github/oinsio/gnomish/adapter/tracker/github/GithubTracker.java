@@ -3,9 +3,13 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
+import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
+import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
+import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
@@ -38,6 +42,9 @@ import java.util.List;
  *     recordProgress}
  * @param correspondence implements {@code release}/{@code postNote}
  * @param decisions implements {@code collectDecisions}/{@code acknowledgeDecision}
+ * @param heartbeat implements {@code heartbeat}
+ * @param openQuery implements {@code listOpen}
+ * @param staleClaimRemoval implements {@code removeStaleClaim}
  */
 public record GithubTracker(
         GithubFeedQuery feedQuery,
@@ -45,7 +52,10 @@ public record GithubTracker(
         GithubClaimLease claimLease,
         GithubStateWrites stateWrites,
         GithubCorrespondence correspondence,
-        GithubDecisions decisions)
+        GithubDecisions decisions,
+        GithubHeartbeat heartbeat,
+        GithubOpenQuery openQuery,
+        GithubStaleClaimRemoval staleClaimRemoval)
         implements Tracker {
 
     @Override
@@ -109,5 +119,20 @@ public record GithubTracker(
     @Override
     public void postNote(TaskRef ref, String text) {
         correspondence.postNote(ref, text);
+    }
+
+    @Override
+    public List<OpenTask> listOpen() {
+        return openQuery.listOpen();
+    }
+
+    @Override
+    public HeartbeatResult heartbeat(TaskRef ref, String progressPayload) {
+        return heartbeat.heartbeat(ref, progressPayload);
+    }
+
+    @Override
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
+        return staleClaimRemoval.removeStaleClaim(ref, observedVersion);
     }
 }

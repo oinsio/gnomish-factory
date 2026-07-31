@@ -30,17 +30,43 @@ flowchart LR
    ```yaml
    tracker:
      type: github
-     abort-threshold: 3          # optional, defaults to 3
+     abort-threshold: 3               # optional, defaults to 3
+     heartbeat-interval: 5m           # optional, defaults to 5m
+     heartbeat-ttl-multiplier: 3      # optional, ≥ 3, defaults to 3
      github:
        api-url: https://api.github.com
        repo: acme/widgets
        # labels: entirely optional — see the label dictionary below
    ```
 
-   `type` and `abort-threshold` are the only keys the core loader understands;
-   everything under `github:` is validated by the GitHub adapter itself. An
-   absent `tracker` section is valid — `take` is simply unavailable and `run`
-   is unaffected.
+   `type`, `abort-threshold`, and the two `heartbeat-*` keys are the only keys
+   the core loader understands; everything under `github:` is validated by the
+   GitHub adapter itself. An absent `tracker` section is valid — `take` is
+   simply unavailable and `run` is unaffected.
+
+   The two heartbeat keys are **protocol constants shared by every instance** of
+   the project — they live only in this file, never in anything the gnome can
+   write:
+
+   - **`heartbeat-interval`** (a duration, default `5m`) — how often a live
+     instance re-beats every `Working` claim it holds, so other instances can
+     tell the holder process is still alive.
+   - **`heartbeat-ttl-multiplier`** (an integer ≥ 3, default `3`) — how many
+     beat intervals an unbeaten claim survives before it is considered dead and
+     reaped. The time-to-live is `multiplier × interval`, so the defaults give a
+     **15-minute TTL**. Pinning it to a multiple of the interval makes an
+     inconsistent beat/TTL pair impossible to express.
+
+   **The beat interval is your throughput knob (mind the shared write budget).**
+   Each held `Working` task costs one tracker write per beat — 12 writes/hour
+   per task at the `5m` default — and every instance shares the *same* token's
+   write budget (GitHub's secondary-limit ballpark is ~500 writes/hour). So
+   `beat interval × number of concurrent working tasks` is what bounds how many
+   tasks you can run at once before that shared budget, not compute, is the
+   constraint. Shortening the interval buys faster stale-claim recovery at the
+   cost of spending more of that budget per task; lengthening it frees budget
+   for more concurrency at the cost of a longer TTL before a dead instance's
+   task comes back.
 
 2. **`GNOMISH_GITHUB_TOKEN`** is an environment variable on the machine running
    the factory — never in yaml, never visible to the gnome. Give it a
@@ -145,17 +171,52 @@ neither of which is "edit the issue and hope":
   the next round boundary and releases the claim) and open a fresh issue with
   the corrected body.
 
-## Stuck `Working`: The Manual Escape Hatch
+## Stuck `Working`: Three Ways Back
 
-There is no heartbeat or stale-claim protocol yet — that lands with the
-factory-loop change. If an instance dies mid-task (process killed, machine
-lost) the issue stays `gnomish:working` forever as far as the tracker can see,
-with no automatic timeout. Until heartbeats exist, recovery is a manual label
-flip: remove `gnomish:working`, add `gnomish:ready` yourself. The task branch
-still holds every committed round, so the next `take` (bare or explicit) picks
-up from the last durable point, not from scratch. Do this only when you're
-sure the claiming instance is actually gone — flipping the label out from
-under a live instance races it.
+When an instance dies mid-task (process killed, machine lost), its claim stops
+being beaten but the issue stays `gnomish:working`. Recovery has three modes,
+and which ones apply depends on how you run the factory.
+
+**1. Automatic reaping (whenever a long-lived instance is running).** Any
+instance that holds a live claim runs a heartbeat thread, and that same thread
+also *reaps*: on every tick it lists the open tasks and checks each `Working`
+claim against the TTL (multiplier × beat interval, 15 minutes by default). A
+claim whose heartbeat has been silent for the TTL — measured on the observer's
+own clock, so a fresh instance always grants a full grace period — is returned
+to `gnomish:ready` automatically, with an audit marker in the thread naming the
+dead holder. No human is involved. So a task stranded by a dead instance comes
+back on its own as soon as *some* other instance is working long enough to
+observe that claim past the TTL. The reaper never claims the task for itself —
+it just returns it to the queue for the next `take`.
+
+**2. Explicit confirmed takeover (any time, no waiting).** You don't have to
+wait out the TTL for a visibly-stuck task. Run `gnomish take <ref>` on a
+`Working` task and it shows who holds the claim and how stale the last beat is,
+then asks you to confirm:
+
+- On a terminal it prompts `[y/N]`.
+- Headless (cron, CI, no TTY), pass `--takeover` to authorize it up front.
+
+Confirming records the holder transition in the thread, removes the old claim,
+then claims and resumes from the branch exactly like any other task. Declining
+(or a headless run without `--takeover`) changes nothing and refuses, naming
+the holder.
+
+**3. The manual escape hatch (cron-only operation, until `serve` exists).**
+Automatic reaping only happens while some instance is *holding a claim long
+enough* to observe a foreign one past the TTL. A one-shot cron `take` that
+claims a task, works it, and exits cannot watch a foreign claim for longer than
+its own (short) run, so it never accumulates the TTL needed to reap. If you run
+the factory *only* as periodic one-shot `take`s — no long-lived instance — a
+task stranded by a dead instance still needs a manual label flip: remove
+`gnomish:working`, add `gnomish:ready` yourself. The task branch still holds
+every committed round, so the next `take` (bare or explicit) picks up from the
+last durable point, not from scratch. Do this only when you're sure the
+claiming instance is actually gone — if you're wrong, the git non-fast-forward
+fence still protects the branch: a stale instance that thaws and tries to push
+is refused and aborts, so the worst case is a wasted round, never corruption.
+This is the one gap `serve` (a future change) closes — a long-lived serving
+instance always has a reaper running, so mode 1 covers the cron case too.
 
 ## Projects v2 Boards: Display Only
 
@@ -207,6 +268,7 @@ from the command line.
 | `--interactive[=executor\|judge]` | both                            | human stands in for the named role instead of the real adapter     |
 | `--base=<ref>`                    | explicit mode only, fresh claim | override the branch base; rejected on the bare form                |
 | `--discard-work`                  | explicit mode only, resume      | discard an interrupted round's leftovers instead of salvaging them |
+| `--takeover`                      | explicit mode only, `Working` task | confirm taking over a task held by another (possibly dead) instance without a TTY prompt |
 
 Short refs (`42`, `#42`) expand into the canonical `github:owner/repo#42` form
 using the configured `tracker.github` binding. A full canonical id naming a
@@ -216,10 +278,15 @@ the fork warning above).
 **Explicit mode (`take <ref>`)** is an operator mandate: it claims and works a
 `Ready` task even past an unmet readiness criterion or unexpired abort
 backoff (without resetting the abort counter), and resumes a task whose branch
-already carries an outcome. It refuses a `Working` task held by another
-instance (naming the holder) and a parked `AwaitingHuman` task (naming the
-reason and return path) without changing anything. It skips a `Finished` task
-("already done") and a `Gone` (closed or nonexistent) task with a clear error.
+already carries an outcome. On a `Working` task held by another instance it
+takes the confirmed-takeover path (see "Stuck `Working`" above): it shows the
+holder and the age of the last beat and asks for confirmation — a `[y/N]`
+prompt on a TTY, or the `--takeover` flag when headless — and only on
+confirmation removes the old claim and resumes; declining or a headless run
+without the flag refuses, naming the holder, and changes nothing. It refuses a
+parked `AwaitingHuman` task (naming the reason and return path) without
+changing anything, skips a `Finished` task ("already done"), and skips a `Gone`
+(closed or nonexistent) task with a clear error.
 
 **Bare mode (`take`)** takes the head of the ready queue (adapter order,
 oldest first), hides tasks still inside their abort backoff window, claims

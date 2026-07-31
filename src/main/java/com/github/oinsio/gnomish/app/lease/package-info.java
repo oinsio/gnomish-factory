@@ -1,0 +1,19 @@
+/**
+ * Core lease-maintenance policy over the {@code Tracker} port (add-claim-heartbeat):
+ * the pure staleness judgment that decides which held claims have gone stale by
+ * local observation of claim versions (design D2), plus the monotonic-time seam it
+ * measures TTL on, and the instance heartbeat thread (task 4.2) that beats every held
+ * claim on the interval with an engine-event-derived progress payload (design D1, D3).
+ * The reaper duty (task 4.3) rides that thread through the {@code ReaperDuty} seam, and a
+ * lost claim (a {@code ClaimGone} beat, task 4.4) is surfaced through the {@code
+ * ClaimLostSink} into a thread-safe {@code ClaimLossFlag} the take run polls at each round
+ * boundary. It holds only policy — no HTTP, no tracker physics; the sole thread here is the
+ * instance-level beat thread, which reaches the tracker only through the port.
+ *
+ * <p>Null-marked (JSpecify): every type usage in this package is non-null by
+ * default; nullable ones must carry an explicit {@code @Nullable}.
+ */
+@NullMarked
+package com.github.oinsio.gnomish.app.lease;
+
+import org.jspecify.annotations.NullMarked;

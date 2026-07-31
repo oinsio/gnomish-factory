@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository;
 import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage;
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -15,6 +16,7 @@ import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
 import com.github.oinsio.gnomish.app.take.RevocationDetectedException;
 import com.github.oinsio.gnomish.app.take.RevocationHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -69,6 +71,10 @@ import java.util.List;
  * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
  *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into
  *     {@link ManualRunAssembly#assemble}; never null
+ * @param claimLossFlag the per-run heartbeat claim-loss flag consulted at each round boundary by
+ *     {@link RevocationCheckingAttemptPersistence} in addition to its {@code fetchTask} check
+ *     (FR8, design D7 of add-claim-heartbeat): a set flag means a beat already proved the claim
+ *     gone, so the boundary reacts as a revocation; never null (an empty flag never trips)
  */
 record TakeEngineExecution(
         ManualRunAssembly assembly,
@@ -77,7 +83,8 @@ record TakeEngineExecution(
         Path worktreesRoot,
         AbortHandler abortHandler,
         int abortThreshold,
-        List<String> credentialEnvVarsToScrub) {
+        List<String> credentialEnvVarsToScrub,
+        ClaimLossFlag claimLossFlag) {
 
     /**
      * Runs the engine exactly once against {@code context}/{@code state}, wrapping the round
@@ -119,7 +126,7 @@ record TakeEngineExecution(
         String taskId = bootstrap.taskId();
         var taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot);
         var delegate = new GitAttemptPersistence(runner, worktree, taskId);
-        var persistence = new RevocationCheckingAttemptPersistence(delegate, tracker, ref, instanceId);
+        var persistence = new RevocationCheckingAttemptPersistence(delegate, tracker, ref, instanceId, claimLossFlag);
         var workspace = new DirectoryWorkspace(worktree);
         var assembled =
                 assembly.assemble(definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub);
@@ -137,17 +144,25 @@ record TakeEngineExecution(
         }
 
         GitOutcomeRecorder.recordAndCleanUp(runner, taskRepository, cloneDir, worktree, taskId, outcome);
+        // The durable "tracker-write pending" marker recordOutcome set for a park (Escalated/Paused)
+        // is cleared only once its git-unfenced tracker write confirms — clearTerminalMarker is the
+        // onConfirmed callback the park exits run (FR10, D10 of add-claim-heartbeat). A give-up leaves
+        // the marker set for reconcile-on-resume; a finish uses no marker (cleanup-detection reconcile).
+        var retry = TerminalWriteRetry.system();
+        Runnable clearMarker = () -> taskRepository.confirmTerminalWrite(taskId);
         return switch (outcome) {
             case TaskOutcome.Aborted aborted -> {
                 var facts = tracker.fetchTask(ref).abortFacts();
                 yield abortHandler.handle(
                         ref, aborted.finalState(), aborted.cause(), facts, abortThreshold, instanceId);
             }
-            case TaskOutcome.Escalated escalated -> TakeEscalationExit.exit(escalated, tracker, ref);
+            case TaskOutcome.Escalated escalated ->
+                TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker);
             case TaskOutcome.Completed completed ->
-                TakeFinishReport.finish(completed, context, bootstrap.branchName(), tracker, ref);
+                TakeFinishReport.finish(completed, context, bootstrap.branchName(), tracker, ref, instanceId, retry);
             case TaskOutcome.Paused paused ->
-                TakePauseExit.finish(paused, context, bootstrap.branchName(), tracker, ref);
+                TakePauseExit.finish(
+                        paused, context, bootstrap.branchName(), tracker, ref, instanceId, retry, clearMarker);
         };
     }
 
