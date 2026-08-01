@@ -40,6 +40,11 @@ import java.util.Map;
  *     integer floor of 3 makes an inconsistent beat/TTL pair inexpressible;
  *     defaults to {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER} (3) when the section
  *     is present but the key is omitted (FR3 of add-claim-heartbeat)
+ * @param wipLimit the resolved WIP limit — a protocol constant shared by all
+ *     instances, read only from the factory's own clone (NFR-S3 of
+ *     add-factory-serve: a gnome working a task branch cannot raise it);
+ *     defaults to {@link #DEFAULT_WIP_LIMIT} (10) when the section is present
+ *     but the key is omitted (FR6 of add-factory-serve)
  * @param subsection the raw, already-schema-validated subsection matching
  *     {@code type} (e.g. {@code tracker.github}'s {@code api-url}/{@code
  *     repo}/{@code labels} keys); empty when absent
@@ -49,6 +54,7 @@ public record TrackerConfig(
         int abortThreshold,
         Duration heartbeatInterval,
         int heartbeatTtlMultiplier,
+        int wipLimit,
         Map<String, Object> subsection) {
 
     /** FR3 of add-claim-heartbeat, design D8: the beat interval default (5 minutes). */
@@ -57,18 +63,23 @@ public record TrackerConfig(
     /** FR3 of add-claim-heartbeat, design D8: the TTL multiplier default (×3 ⇒ 15-minute TTL). */
     public static final int DEFAULT_HEARTBEAT_TTL_MULTIPLIER = 3;
 
+    /** FR6 of add-factory-serve, design D3: the WIP limit default. */
+    public static final int DEFAULT_WIP_LIMIT = 10;
+
     public TrackerConfig {
         subsection = subsection == null ? Map.of() : Map.copyOf(subsection);
     }
 
     /**
      * Convenience constructor for callers that need neither the heartbeat
-     * constants nor the adapter subsection (most existing tests predating those
-     * fields) — the heartbeat keys default to {@link #DEFAULT_HEARTBEAT_INTERVAL}
-     * / {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER} and {@link #subsection()}
-     * defaults to an empty map.
+     * constants, the WIP limit, nor the adapter subsection (most existing tests
+     * predating those fields) — the heartbeat keys default to
+     * {@link #DEFAULT_HEARTBEAT_INTERVAL} / {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER},
+     * {@link #wipLimit()} defaults to {@link #DEFAULT_WIP_LIMIT}, and
+     * {@link #subsection()} defaults to an empty map.
      *
-     * <p>Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat.
+     * <p>Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat, FR6 of
+     * add-factory-serve.
      */
     public TrackerConfig(String type, int abortThreshold) {
         this(type, abortThreshold, DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_HEARTBEAT_TTL_MULTIPLIER, Map.of());
@@ -76,12 +87,27 @@ public record TrackerConfig(
 
     /**
      * Convenience constructor for callers that carry an adapter subsection but
-     * not the heartbeat constants — the heartbeat keys default to
-     * {@link #DEFAULT_HEARTBEAT_INTERVAL} / {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER}.
+     * not the heartbeat constants or the WIP limit — the heartbeat keys default to
+     * {@link #DEFAULT_HEARTBEAT_INTERVAL} / {@link #DEFAULT_HEARTBEAT_TTL_MULTIPLIER}
+     * and {@link #wipLimit()} defaults to {@link #DEFAULT_WIP_LIMIT}.
      *
-     * <p>Implements FR9 of add-tracker-port, FR3 of add-claim-heartbeat.
+     * <p>Implements FR9 of add-tracker-port, FR3 of add-claim-heartbeat, FR6 of
+     * add-factory-serve.
      */
     public TrackerConfig(String type, int abortThreshold, Map<String, Object> subsection) {
         this(type, abortThreshold, DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_HEARTBEAT_TTL_MULTIPLIER, subsection);
+    }
+
+    /**
+     * Back-compat convenience predating {@code wip-limit} (task 3.1 of add-factory-serve):
+     * {@link #wipLimit()} defaults to {@link #DEFAULT_WIP_LIMIT}.
+     */
+    public TrackerConfig(
+            String type,
+            int abortThreshold,
+            Duration heartbeatInterval,
+            int heartbeatTtlMultiplier,
+            Map<String, Object> subsection) {
+        this(type, abortThreshold, heartbeatInterval, heartbeatTtlMultiplier, DEFAULT_WIP_LIMIT, subsection);
     }
 }

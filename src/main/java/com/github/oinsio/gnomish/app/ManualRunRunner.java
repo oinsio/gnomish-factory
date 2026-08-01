@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.console.DialogConsole;
@@ -9,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.engine.SystemClock;
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
+import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -99,7 +101,8 @@ public final class ManualRunRunner implements ApplicationRunner {
             UsageCommand usageCommand,
             Clock javaTimeClock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry) {
+            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
+            ServeProperties serveProperties) {
         this.argumentsParser = argumentsParser;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
@@ -120,13 +123,25 @@ public final class ManualRunRunner implements ApplicationRunner {
                 factoryProperties,
                 javaTimeClock,
                 trackerAdapterRegistry,
-                trackerValidatorRegistry);
-        this.subcommandDispatch = new SubcommandDispatch(statusCommand, usageCommand, takeCommand);
+                trackerValidatorRegistry,
+                serveProperties);
+        var serveCommand = new ServeCommand(
+                assembly,
+                worktreesRoot,
+                TASK_ID_KEY,
+                factoryProperties,
+                serveProperties,
+                javaTimeClock,
+                systemClock,
+                trackerAdapterRegistry,
+                trackerValidatorRegistry,
+                FeedAutomaton::run);
+        this.subcommandDispatch = new SubcommandDispatch(statusCommand, usageCommand, takeCommand, serveCommand);
     }
 
     /** No relevant flag present → no-op (FR12); otherwise drives the run (see class javadoc). */
     @Override
-    public void run(ApplicationArguments args) throws IOException {
+    public void run(ApplicationArguments args) throws IOException, InterruptedException {
         try {
             RunExceptionReporting.run(
                     () -> {

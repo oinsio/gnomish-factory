@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
@@ -18,6 +19,11 @@ import java.util.Map;
  * {@code of} overloads replace the former telescoping constructors one-for-one.
  */
 final class TakeCommandFactory {
+
+    // Every overload but the fully-explicit one below defaults batch mode's concurrency limit N to
+    // ServeProperties's own unset-slots default (2, design D3) — production wiring (ManualRunRunner)
+    // passes the project's real, possibly-configured ServeProperties instead (task 6.2, FR2).
+    private static final ServeProperties DEFAULT_SERVE_PROPERTIES = new ServeProperties(0, null, null, null);
 
     private TakeCommandFactory() {}
 
@@ -39,6 +45,31 @@ final class TakeCommandFactory {
                 trackerAdapterRegistry,
                 trackerValidatorRegistry,
                 new ThreadSleeper());
+    }
+
+    /** Production wiring (task 6.2 of add-factory-serve): as above, plus the project's real {@link
+     * ServeProperties} so batch mode's concurrency limit N tracks {@code serve}'s own (FR2). */
+    static TakeCommand of(
+            ManualRunAssembly assembly,
+            Path worktreesRoot,
+            String taskIdMdcKey,
+            FactoryProperties factoryProperties,
+            Clock clock,
+            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
+            ServeProperties serveProperties) {
+        return of(
+                assembly,
+                worktreesRoot,
+                taskIdMdcKey,
+                factoryProperties,
+                clock,
+                trackerAdapterRegistry,
+                trackerValidatorRegistry,
+                new ThreadSleeper(),
+                new SystemMonotonicTime(),
+                ConsoleTakeoverConfirmation.systemTty(),
+                serveProperties);
     }
 
     /** Explicit beat sleeper (task 6.1); production monotonic time and TTY-detecting takeover. */
@@ -87,7 +118,7 @@ final class TakeCommandFactory {
                 takeoverConfirmation);
     }
 
-    /** Fully explicit (task 6.6): a controlled-clock integration test steps a held claim past its TTL. */
+    /** Fully explicit up to task 6.6: a controlled-clock integration test steps a held claim past its TTL. */
     static TakeCommand of(
             ManualRunAssembly assembly,
             Path worktreesRoot,
@@ -99,6 +130,34 @@ final class TakeCommandFactory {
             Sleeper heartbeatSleeper,
             MonotonicTime heartbeatMonotonicTime,
             TakeoverConfirmation takeoverConfirmation) {
+        return of(
+                assembly,
+                worktreesRoot,
+                taskIdMdcKey,
+                factoryProperties,
+                clock,
+                trackerAdapterRegistry,
+                trackerValidatorRegistry,
+                heartbeatSleeper,
+                heartbeatMonotonicTime,
+                takeoverConfirmation,
+                DEFAULT_SERVE_PROPERTIES);
+    }
+
+    /** Fully explicit (task 6.2 of add-factory-serve): production wiring supplies the project's real
+     * {@link ServeProperties} so batch mode's concurrency limit N tracks {@code serve}'s own (FR2). */
+    static TakeCommand of(
+            ManualRunAssembly assembly,
+            Path worktreesRoot,
+            String taskIdMdcKey,
+            FactoryProperties factoryProperties,
+            Clock clock,
+            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
+            Sleeper heartbeatSleeper,
+            MonotonicTime heartbeatMonotonicTime,
+            TakeoverConfirmation takeoverConfirmation,
+            ServeProperties serveProperties) {
         return new TakeCommand(
                 assembly,
                 worktreesRoot,
@@ -109,6 +168,7 @@ final class TakeCommandFactory {
                 trackerValidatorRegistry,
                 heartbeatSleeper,
                 heartbeatMonotonicTime,
-                takeoverConfirmation);
+                takeoverConfirmation,
+                serveProperties);
     }
 }

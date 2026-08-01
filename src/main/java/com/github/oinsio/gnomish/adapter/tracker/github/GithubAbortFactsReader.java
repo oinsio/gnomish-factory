@@ -33,6 +33,12 @@ import java.util.Optional;
  * {@code fetchTask}. Without a PROGRESS marker, every ABORT marker currently
  * on the issue folds in, unchanged from before.
  *
+ * <p>{@link #fetchMarkers} is also reused by {@link GithubFeedQuery} to
+ * derive the {@code returned} fact ({@link GithubReturnedFactReader}) from
+ * the SAME comments fetch, rather than issuing a second GitHub API read for
+ * the same thread (NFR-P1 of add-factory-serve: no new GitHub API calls
+ * beyond what {@code listReady} already pays for).
+ *
  * <p>Implements FR8, FR14 of add-tracker-port; FR3 of
  * fix-abort-progress-reset.
  */
@@ -45,6 +51,17 @@ record GithubAbortFactsReader(GithubHttpClient httpClient) {
      * @return {@link AbortFacts#none()} if no abort marker is present
      */
     AbortFacts read(String owner, String repo, int issueNumber) {
+        return foldAbortMarkers(fetchMarkers(owner, repo, issueNumber));
+    }
+
+    /**
+     * Fetches and parses the structural markers from {@code
+     * owner/repo#issueNumber}'s comments, without folding them into any
+     * particular fact — the shared read {@link GithubFeedQuery} reuses for
+     * both {@link AbortFacts} and the {@code returned} fact so the comments
+     * thread is fetched only once per issue.
+     */
+    List<ParsedMarker> fetchMarkers(String owner, String repo, int issueNumber) {
         String path = "/repos/%s/%s/issues/%d/comments?per_page=100".formatted(owner, repo, issueNumber);
         HttpRequest.Builder request = httpClient.newRequest(path).GET();
         HttpResponse<String> response = httpClient.send(request);
@@ -52,10 +69,10 @@ record GithubAbortFactsReader(GithubHttpClient httpClient) {
             throw new GithubFeedQueryException("Failed to fetch comments for %s/%s#%d: HTTP %d"
                     .formatted(owner, repo, issueNumber, response.statusCode()));
         }
-        return foldAbortMarkers(GithubCommentParser.parseMarkers(response.body()));
+        return GithubCommentParser.parseMarkers(response.body());
     }
 
-    private static AbortFacts foldAbortMarkers(List<ParsedMarker> markers) {
+    static AbortFacts foldAbortMarkers(List<ParsedMarker> markers) {
         Optional<Integer> progressIndex = GithubCommentBoundary.latestProgressIndex(markers);
         if (progressIndex.isPresent()) {
             return GithubCommentBoundary.foldAbortsAfter(markers, progressIndex.get());

@@ -54,8 +54,22 @@ public class InMemoryTracker implements Tracker {
         return withLock(() -> store.entrySet().stream()
                 .filter(entry -> entry.getValue().state() instanceof TrackerTaskState.Ready)
                 .limit(limit)
-                .map(entry -> new ReadyTask(entry.getKey(), entry.getValue().abortFacts()))
+                .map(entry -> new ReadyTask(entry.getKey(), entry.getValue().abortFacts(), returned(entry.getValue())))
                 .toList());
+    }
+
+    /**
+     * Derives the "returned" fact (FR7 of add-factory-serve) from a task's recorded correspondence
+     * history rather than a dedicated field: true when the thread carries a {@code PARK} entry
+     * (human-returned: claimed, then given back with a report) or a {@code STALE_CLAIM_REMOVED} entry
+     * (reaper-returned); false otherwise, including never-claimed tasks and tasks delivered without
+     * either marker (which would not reappear via {@code listReady} anyway).
+     */
+    private static boolean returned(TrackedTask task) {
+        return task.thread().stream()
+                .map(CorrespondenceEntry::kind)
+                .anyMatch(kind ->
+                        kind == CorrespondenceEntry.Kind.PARK || kind == CorrespondenceEntry.Kind.STALE_CLAIM_REMOVED);
     }
 
     @Override

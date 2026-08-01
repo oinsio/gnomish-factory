@@ -62,7 +62,7 @@ class BackoffPolicySpec extends Specification {
     // D10: isBackedOff is true while now - lastAbortAt < delay
     def "isBackedOff is true when the backoff window has not expired"() {
         given: 'one prior abort (delay = base = 2m), aborted 1 minute ago'
-        def facts = new AbortFacts(1, NOW.minus(Duration.ofMinutes(1)))
+        def facts = new AbortFacts(1, NOW - Duration.ofMinutes(1))
 
         expect:
         BackoffPolicy.isBackedOff(facts, BASE, CAP, NOW)
@@ -71,7 +71,7 @@ class BackoffPolicySpec extends Specification {
     // D10: isBackedOff is false once now - lastAbortAt >= delay
     def "isBackedOff is false once the backoff window has expired"() {
         given: 'one prior abort (delay = base = 2m), aborted 5 minutes ago'
-        def facts = new AbortFacts(1, NOW.minus(Duration.ofMinutes(5)))
+        def facts = new AbortFacts(1, NOW - Duration.ofMinutes(5))
 
         expect:
         !BackoffPolicy.isBackedOff(facts, BASE, CAP, NOW)
@@ -87,9 +87,9 @@ class BackoffPolicySpec extends Specification {
     // backed-off entries
     def "filterEligible preserves order and drops only backed-off entries"() {
         given: 'a mix of fresh, backed-off, and expired-backoff tasks in queue order'
-        def fresh = new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none())
-        def backedOff = new ReadyTask(new TaskRef('PROJ-2'), new AbortFacts(1, NOW.minus(Duration.ofMinutes(1))))
-        def expired = new ReadyTask(new TaskRef('PROJ-3'), new AbortFacts(1, NOW.minus(Duration.ofMinutes(5))))
+        def fresh = new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false)
+        def backedOff = new ReadyTask(new TaskRef('PROJ-2'), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false)
+        def expired = new ReadyTask(new TaskRef('PROJ-3'), new AbortFacts(1, NOW - Duration.ofMinutes(5)), false)
         def tasks = [fresh, backedOff, expired]
 
         when:

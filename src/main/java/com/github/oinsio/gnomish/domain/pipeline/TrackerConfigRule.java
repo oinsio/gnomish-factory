@@ -17,10 +17,14 @@ import org.jspecify.annotations.Nullable;
  * D3) — mirroring how {@link StageSanityRule} flags a non-positive resolved
  * attempt limit or poll interval.
  *
+ * <p>Also checks the shared {@code wip-limit} (an integer &ge; 1, default 10;
+ * FR6, NFR-S3 of add-factory-serve) — a protocol constant read only from the
+ * factory's own clone, alongside {@code abort-threshold}.
+ *
  * <p>All applicable errors are aggregated into one list (FR8, honouring the
  * single-pass aggregation contract) in a fixed order — abort-threshold, then
- * TTL multiplier, then interval — so an author sees every core-key fault at
- * once rather than one per load.
+ * wip-limit, then TTL multiplier, then interval — so an author sees every
+ * core-key fault at once rather than one per load.
  *
  * <p>Default contract: {@link com.github.oinsio.gnomish.adapter.pipeline.PipelineMapper}
  * substitutes the defaults only when
@@ -34,17 +38,22 @@ import org.jspecify.annotations.Nullable;
  * (task 3.2), not here; and an absent {@code tracker} section ({@code null})
  * yields no error — the section is optional (FR17).
  *
- * <p>Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat.
+ * <p>Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat, FR6,
+ * NFR-S3 of add-factory-serve.
  */
 public final class TrackerConfigRule {
 
     private static final String FILE = "config.yaml";
     private static final String ABORT_THRESHOLD_WHERE = "tracker.abort-threshold";
+    private static final String WIP_LIMIT_WHERE = "tracker.wip-limit";
     private static final String TTL_MULTIPLIER_WHERE = "tracker.heartbeat-ttl-multiplier";
     private static final String INTERVAL_WHERE = "tracker.heartbeat-interval";
 
     /** FR3 of add-claim-heartbeat, design D8: the TTL multiplier floor. */
     private static final int MIN_TTL_MULTIPLIER = 3;
+
+    /** FR6 of add-factory-serve, design D3: the WIP limit floor. */
+    private static final int MIN_WIP_LIMIT = 1;
 
     private TrackerConfigRule() {}
 
@@ -52,9 +61,10 @@ public final class TrackerConfigRule {
      * Validates the model's tracker core keys: an absent section, or a section
      * whose keys are all in range, yields no errors; each out-of-range core key
      * yields exactly one located {@link ConfigError}, all aggregated in
-     * abort-threshold, TTL-multiplier, interval order.
+     * abort-threshold, wip-limit, TTL-multiplier, interval order.
      *
-     * <p>Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat.
+     * <p>Implements FR17 of add-tracker-port, FR3 of add-claim-heartbeat, FR6
+     * of add-factory-serve.
      *
      * @param tracker the carried tracker core config, or {@code null} when
      *     {@code config.yaml} declares no {@code tracker} section
@@ -70,6 +80,13 @@ public final class TrackerConfigRule {
                     FILE,
                     ABORT_THRESHOLD_WHERE,
                     "non-positive abort-threshold %d; the threshold must be a positive integer".formatted(threshold)));
+        }
+        int wipLimit = tracker.wipLimit();
+        if (wipLimit < MIN_WIP_LIMIT) {
+            errors.add(new ConfigError(
+                    FILE,
+                    WIP_LIMIT_WHERE,
+                    "non-positive wip-limit %d; the limit must be at least %d".formatted(wipLimit, MIN_WIP_LIMIT)));
         }
         int multiplier = tracker.heartbeatTtlMultiplier();
         if (multiplier < MIN_TTL_MULTIPLIER) {

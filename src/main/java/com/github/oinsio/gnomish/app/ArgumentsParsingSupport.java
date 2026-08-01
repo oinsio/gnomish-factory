@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
@@ -51,5 +52,27 @@ final class ArgumentsParsingSupport {
             return raw;
         }
         return null;
+    }
+
+    /**
+     * Every raw source argument that is neither a {@code --}-prefixed option nor the leading
+     * {@code subcommandToken} itself, in order; empty if none exist. Used by {@code take}'s batch
+     * form (FR2 of add-factory-serve), which — unlike {@link #firstPositionalAfterSubcommand} —
+     * needs every ref, not just the first.
+     */
+    static List<String> allPositionalsAfterSubcommand(ApplicationArguments args, String subcommandToken) {
+        List<String> positionals = new ArrayList<>();
+        boolean skippedSubcommand = false;
+        for (String raw : args.getSourceArgs()) {
+            if (raw.startsWith("--")) {
+                continue;
+            }
+            if (!skippedSubcommand && raw.equals(subcommandToken)) {
+                skippedSubcommand = true;
+                continue;
+            }
+            positionals.add(raw);
+        }
+        return positionals;
     }
 }

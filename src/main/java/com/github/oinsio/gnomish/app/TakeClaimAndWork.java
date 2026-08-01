@@ -32,9 +32,17 @@ import org.jspecify.annotations.Nullable;
  * TakeDisposition#dispose} still delegates here for its {@code Ready} case. Split purely to respect
  * the file-size guidance (`.claude/rules/process-invariants.md`).
  *
- * <p>Implements FR9, FR10, D3 of add-tracker-port.
+ * <p>The class and {@link #dispatchAfterClaim} are {@code public} — the only members widened
+ * beyond this package's usual package-private convention (see the sibling {@code Take*} claim/
+ * resume helpers) — so {@code com.github.oinsio.gnomish.app.serve.TakeSlotRunner} (task 4.3 of
+ * add-factory-serve) can invoke the identical "already-claimed, dispatch the take cycle" sequence
+ * a {@code serve} slot needs, without duplicating this logic or relocating scheduler code out of
+ * its established {@code app.serve} package. {@link #claimAndWork} stays package-private: no
+ * caller outside {@code app} claims fresh itself.
+ *
+ * <p>Implements FR9, FR10, D3 of add-tracker-port. Implements FR1, M2 of add-factory-serve.
  */
-final class TakeClaimAndWork {
+public final class TakeClaimAndWork {
 
     private final ManualRunAssembly assembly;
     private final Path worktreesRoot;
@@ -64,6 +72,47 @@ final class TakeClaimAndWork {
         this.heartbeat = heartbeat;
         this.claimLossFlag = claimLossFlag;
         this.crashAbort = new TakeCrashAbort(abortHandler, abortThreshold);
+    }
+
+    /**
+     * Builds a ready-to-use {@link TakeClaimAndWork} from just the ingredients {@link
+     * TakeBareAuto} itself takes, wiring the same {@link TakeResumeRunner}/{@link
+     * TakeDispositionResume}/{@link TakeDecisionResume} chain {@link TakeBareAuto}'s constructor
+     * builds inline. Exists so a caller outside this package (only {@code
+     * com.github.oinsio.gnomish.app.serve.TakeSlotRunner}, task 4.3 of add-factory-serve) can get
+     * a working instance without those three package-private resume-machinery classes needing to
+     * be widened too — this factory method is the sole crossing point.
+     *
+     * <p>Implements FR1, M2 of add-factory-serve.
+     */
+    public static TakeClaimAndWork forSlot(
+            ManualRunAssembly assembly,
+            Path worktreesRoot,
+            String taskIdMdcKey,
+            AbortHandler abortHandler,
+            int abortThreshold,
+            List<String> credentialEnvVarsToScrub,
+            ClaimBeat heartbeat,
+            ClaimLossFlag claimLossFlag) {
+        var resumeRunner = new TakeResumeRunner(
+                assembly,
+                worktreesRoot,
+                taskIdMdcKey,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                claimLossFlag);
+        var dispositionResume =
+                new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner), worktreesRoot);
+        return new TakeClaimAndWork(
+                assembly,
+                worktreesRoot,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                dispositionResume,
+                heartbeat,
+                claimLossFlag);
     }
 
     /**
@@ -117,9 +166,10 @@ final class TakeClaimAndWork {
      * terminal result, exception, or crash-abort. A path that never holds a claim (a lost race,
      * an empty queue) never reaches this method, so it never beats.
      *
-     * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port; FR1 of add-claim-heartbeat.
+     * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port; FR1 of add-claim-heartbeat; FR1
+     * of add-factory-serve.
      */
-    TakeResult dispatchAfterClaim(
+    public TakeResult dispatchAfterClaim(
             Path cloneDir,
             @Nullable String base,
             PipelineDefinition definition,

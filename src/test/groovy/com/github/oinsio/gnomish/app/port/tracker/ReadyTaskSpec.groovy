@@ -16,11 +16,22 @@ class ReadyTaskSpec extends Specification {
         def facts = new AbortFacts(1, null)
 
         when:
-        def readyTask = new ReadyTask(ref, facts)
+        def readyTask = new ReadyTask(ref, facts, false)
 
         then:
         readyTask.ref() == ref
         readyTask.abortFacts() == facts
+    }
+
+    // FR7: returned round-trips exactly as constructed, both true and false
+    def "exposes returned exactly as constructed"() {
+        given:
+        def ref = new TaskRef('github:owner/repo#42')
+        def facts = AbortFacts.none()
+
+        expect:
+        new ReadyTask(ref, facts, true).returned()
+        !new ReadyTask(ref, facts, false).returned()
     }
 
     // FR1: ready tasks are values — equal content means equal entries
@@ -29,9 +40,12 @@ class ReadyTaskSpec extends Specification {
         def ref = new TaskRef('github:owner/repo#42')
 
         expect:
-        new ReadyTask(ref, AbortFacts.none()) == new ReadyTask(ref, AbortFacts.none())
+        new ReadyTask(ref, AbortFacts.none(), false) == new ReadyTask(ref, AbortFacts.none(), false)
 
         and: 'a differing abortFacts makes them unequal'
-        new ReadyTask(ref, AbortFacts.none()) != new ReadyTask(ref, new AbortFacts(1, null))
+        new ReadyTask(ref, AbortFacts.none(), false) != new ReadyTask(ref, new AbortFacts(1, null), false)
+
+        and: 'FR7: a differing returned makes them unequal'
+        new ReadyTask(ref, AbortFacts.none(), false) != new ReadyTask(ref, AbortFacts.none(), true)
     }
 }

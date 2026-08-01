@@ -78,6 +78,37 @@ class TrackerDtoSpec extends Specification {
         dto.heartbeatTtlMultiplier() == null
     }
 
+    // FR6 of add-factory-serve: the kebab-case wip-limit key binds directly to
+    // the explicit DTO field and is NOT swept into the subsections any-setter —
+    // it is a loader-owned protocol constant, not an adapter subsection
+    def "a tracker block deserializes the kebab-case wip-limit as a core field"() {
+        given:
+        def body = '''\
+            type: github
+            wip-limit: 20
+            '''.stripIndent()
+
+        when:
+        def dto = yaml.readValue(body, TrackerDto)
+
+        then:
+        dto.wipLimit() == 20
+        dto.subsections() == [:]
+    }
+
+    // FR6 of add-factory-serve: an omitted wip-limit leaves the DTO field null
+    // for the mapper to default (10)
+    def "a tracker block with no wip-limit leaves it null"() {
+        given:
+        def body = 'type: github\n'
+
+        when:
+        def dto = yaml.readValue(body, TrackerDto)
+
+        then:
+        dto.wipLimit() == null
+    }
+
     // The core loader stays adapter-agnostic (task 3.1 scope): any unrecognized
     // top-level key — the adapter-owned subsection named after `type` — is
     // captured raw rather than causing a hard Jackson parse failure, since

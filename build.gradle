@@ -207,6 +207,14 @@ tasks.named('compileTestJava', JavaCompile) {
     options.errorprone.enabled = false
 }
 
+// The Groovy compiler forks its own worker daemon that does NOT inherit
+// org.gradle.jvmargs from gradle.properties; as the Spock spec tree has grown,
+// its default heap started overflowing (java.lang.OutOfMemoryError: Java heap
+// space) on joint Groovy/Java compilation. Give it explicit headroom.
+tasks.named('compileTestGroovy', GroovyCompile) {
+    groovyOptions.forkOptions.memoryMaximumSize = '2g'
+}
+
 // JaCoCo coverage reporting (FR6, NFR-O1 of add-project-skeleton):
 // XML for machine consumption (CI, future quality gates), HTML for humans.
 // The 'jacoco' plugin is a Gradle core plugin; only its tool version is
@@ -384,7 +392,20 @@ pitest {
     // FR6 documented exception: the application bootstrap class is only
     // main() + SpringApplication.run(), unreachable by unit tests by design
     // (design D5, D10). Everything else must reach 100%.
-    excludedClasses = ['com.github.oinsio.gnomish.FactoryApplication']
+    //
+    // FR11/D9 documented exception (add-factory-serve, task 5.5): RealProcessTreeKiller walks
+    // ProcessHandle.current().descendants() and destroys them — spawning and killing real OS
+    // processes in a unit test would be heavy and flaky for no coverage benefit. The sequencing
+    // that decides whether/when it runs (ServeShutdown: interrupt feed, flag occupied claims,
+    // wait the grace window, then always call the process-tree killer) is fully covered by
+    // ServeShutdownSpec against a fake ProcessTreeKiller, so excluding this thin real
+    // implementation removes no production DECISION from mutation coverage, only the
+    // unverifiable OS-process bytes themselves — the same "main()/bootstrap wiring" category as
+    // FactoryApplication above.
+    excludedClasses = [
+        'com.github.oinsio.gnomish.FactoryApplication',
+        'com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller',
+    ]
     // M1/M4 documented exception: the E2E layer (task 9.1 of add-manual-run)
     // spawns the real `gnomish run` process via `java -jar`, reading the jar
     // path from the `e2e.jarPath` system property that only the `test` task
@@ -478,6 +499,17 @@ pitest {
     // This whole-tree mutation gate (with the JaCoCo coverage report above) is
     // what M5 of add-claim-heartbeat relies on: the same coverage/mutation gates
     // per .claude/rules/testing.md hold for the new heartbeat production code.
+    //
+    // M5 documented exception (add-factory-serve, task 9.2): TakeBatchExitCode's private
+    // isNewSmallestNonZero(int, int) carries @DoNotMutate for a different reason than the
+    // JVMTI/record class above — a genuine SURVIVED, not a RUN_ERROR. Its `<` is provably
+    // equivalent to `<=` here: the caller only ever reassigns its running minimum to the
+    // returned boolean's value, so when code == currentSmallest the mutated `<=` branch
+    // reassigns to the exact int already held — an internal no-op with zero externally
+    // observable difference, since aggregate() surfaces nothing but that one final int. No
+    // covering test can kill a mutation with no observable effect (the classic strict-vs-
+    // non-strict equivalent mutant in a running-minimum loop), and no restructuring changes
+    // that fact — see the method's own comment for the full trace.
     mutationThreshold = 100 // 100% mutation score gate (FR6)
     // Per-mutation timeout budget (allowed = recorded test time × factor +
     // const). PIT records test times during the single-threaded coverage pass,
@@ -504,6 +536,25 @@ pitest {
     // register/unregister mutants also gained a millisecond-fast interaction
     // killer in TakeDispositionSpec so the slow rehearsals are no longer the
     // deciding test for them.
+    // Third calibration attempt (add-factory-serve, task 9.2) — NOT a budget issue, const kept
+    // at 20000: full-tree and scoped runs both reproduced 10 TIMED_OUT, identically, in
+    // FeedAutomaton.drain/step, FeedCycle's claimOrAbandon/startSlot lambdas, and
+    // ServeCommand.provisionTracker/run, and raising the const to 45000 changed nothing —
+    // because those mutants make the code genuinely NON-TERMINATING, not slow. Two shapes:
+    // a permit-accounting mutant (a dropped SlotLedger abandon/assign/release or startSlot
+    // call, a negated drain empty-poll check) parks the covering spec forever in the ledger's
+    // unbounded Semaphore.acquire/awaitDrained; and any mutant that turns a bug into a
+    // RuntimeException inside a tracker call spins FeedOutageRetry's deliberate retry-forever
+    // (NFR-R3) indefinitely. No budget kills a genuine hang — fixed at the source instead,
+    // same as TrackerContract above: the serve specs run every hang-capable call (drain,
+    // repeated step, ServeCommand.run) on a bounded worker thread, use a budget-capped
+    // virtual sleeper (BudgetedVirtualSleeper), and assert SlotLedger permit counts directly,
+    // so each such mutant dies as an ordinary red assertion (KILLED) within seconds. An 11th,
+    // intermittent member of the same category: CloneMutationLock's dropped-unlock mutant parks
+    // a second same-clone acquisition forever in the non-interruptible ReentrantLock.lock() —
+    // its specs' bounded get()/await() went red fine, but their `executor.close()` cleanup then
+    // joined the parked thread forever, hanging the minion after the failure; those cleanups now
+    // use shutdownNow() + a bounded awaitTermination instead.
     timeoutFactor = 3.0
     timeoutConstInMillis = 20000
     timestampedReports = false // stable report path for CI artifact upload

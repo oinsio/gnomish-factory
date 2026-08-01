@@ -14,16 +14,9 @@ import org.springframework.stereotype.Component;
  * <p>Implements FR9, FR10, FR15, D16 of add-tracker-port.
  */
 @Component
-public final class TakeExitCodeExceptionMapper implements ExitCodeExceptionMapper {
+public final class TakeExitCodeExceptionMapper extends SingleExceptionExitCodeMapper<TakeExitCodeException> {
 
-    /**
-     * @param exception the uncaught exception the {@code take} command terminated with; never null
-     * @return {@link TakeExitCodeException#exitCode()} when {@code exception} is a {@link
-     *     TakeExitCodeException}, or 1 as the generic internal-error fallback for anything else —
-     *     this mapper never claims another mapper's exception type with a different code
-     */
-    @Override
-    public int getExitCode(Throwable exception) {
-        return exception instanceof TakeExitCodeException e ? e.exitCode() : 1;
+    public TakeExitCodeExceptionMapper() {
+        super(TakeExitCodeException.class, TakeExitCodeException::exitCode);
     }
 }

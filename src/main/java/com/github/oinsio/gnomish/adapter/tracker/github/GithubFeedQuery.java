@@ -81,8 +81,12 @@ public final class GithubFeedQuery {
             }
             TaskRef ref = new TaskRef(
                     GithubTaskId.build(apiUrl, owner, repo, issueNumber).canonicalId());
-            var abortFacts = abortFactsReader.read(owner, repo, issueNumber);
-            readyTasks.add(new ReadyTask(ref, abortFacts));
+            // FR7, NFR-P1: one comments fetch per issue, reused for both facts —
+            // no extra GitHub API read for the returned fact.
+            List<ParsedMarker> markers = abortFactsReader.fetchMarkers(owner, repo, issueNumber);
+            var abortFacts = GithubAbortFactsReader.foldAbortMarkers(markers);
+            boolean returned = GithubReturnedFactReader.derive(markers);
+            readyTasks.add(new ReadyTask(ref, abortFacts, returned));
         }
         return List.copyOf(readyTasks);
     }

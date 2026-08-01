@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReapContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReturnedFactContract
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
@@ -18,11 +18,12 @@ import java.net.http.HttpResponse
  * GithubFeedQuery}, {@link GithubTaskFetcher}, {@link GithubClaimLease},
  * {@link GithubStateWrites}, {@link GithubCorrespondence}, {@link
  * GithubDecisions} — every one of them unmodified) against a WireMock server
- * into the full port contract suite (task 4.16 / task 3.5, FR4, M1, M2):
- * {@link TrackerReapContract} — the most-derived link in the lease chain —
- * transitively runs every property from {@code TrackerContract}, {@code
- * TrackerMarkerContract}, {@code TrackerFetchContract}, {@code
- * TrackerLeaseContract}, {@code TrackerHeartbeatContract}, and itself against
+ * into the full port contract suite (task 4.16 / task 3.5 / 1.2 of
+ * add-factory-serve, FR4, M1, M2): {@link TrackerReturnedFactContract} — the
+ * most-derived link in the chain — transitively runs every property from
+ * {@code TrackerContract}, {@code TrackerMarkerContract}, {@code
+ * TrackerFetchContract}, {@code TrackerLeaseContract}, {@code
+ * TrackerHeartbeatContract}, {@code TrackerReapContract}, and itself against
  * this one adapter, with zero adapter-specific exemptions — the SAME whole
  * suite the in-memory reference passes (M1), including the reap/beat race
  * scenarios (M2).
@@ -67,7 +68,7 @@ import java.net.http.HttpResponse
  * <p>Implements FR4, NFR-R1 of add-tracker-port; FR1, FR4, FR5, FR8, NFR-R2,
  * M1 of add-claim-heartbeat (the extended contract passes on the GitHub adapter).
  */
-class GithubTrackerContractSpec extends TrackerReapContract {
+class GithubTrackerContractSpec extends TrackerReturnedFactContract {
 
     private static final String OWNER = 'acme'
     private static final String REPO = 'widgets'
@@ -137,5 +138,10 @@ class GithubTrackerContractSpec extends TrackerReapContract {
     @Override
     protected void seedWorkingWithClaim(Tracker adapter, TaskRef ref, String holder) {
         fixtureAdapter.seedWorkingWithClaim(ref, holder)
+    }
+
+    @Override
+    protected void returnToReady(Tracker adapter, TaskRef ref) {
+        fixtureAdapter.returnToReady(ref)
     }
 }

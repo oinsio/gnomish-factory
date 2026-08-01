@@ -6,16 +6,18 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReapContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReturnedFactContract
 
 /**
  * Wires the production {@link InMemoryTracker} (via {@link
  * InMemoryTrackerHarness}) into the full port contract suite (task 2.4/2.7,
- * FR3, FR4, FR5, M1, M2): {@link TrackerReapContract} — the most-derived link
- * in the lease chain — transitively runs every property from {@code
- * TrackerContract}, {@code TrackerMarkerContract}, {@code TrackerFetchContract},
- * {@code TrackerLeaseContract}, {@code TrackerHeartbeatContract}, and itself
- * against this one adapter, with zero adapter-specific exemptions.
+ * 1.2 of add-factory-serve; FR3, FR4, FR5, M1, M2): {@link
+ * TrackerReturnedFactContract} — the most-derived link in the chain —
+ * transitively runs every property from {@code TrackerContract}, {@code
+ * TrackerMarkerContract}, {@code TrackerFetchContract}, {@code
+ * TrackerLeaseContract}, {@code TrackerHeartbeatContract}, {@code
+ * TrackerReapContract}, and itself against this one adapter, with zero
+ * adapter-specific exemptions.
  *
  * <p>Spock instantiates a fresh spec instance per feature method by default,
  * so {@link #arrange} runs once per property and the {@link #harness} field
@@ -27,7 +29,7 @@ import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReapContract
  * <p>Implements FR3, FR4, FR5 of add-tracker-port and add-claim-heartbeat;
  * M1 of add-claim-heartbeat (the extended contract passes on this adapter).
  */
-class InMemoryTrackerContractSpec extends TrackerReapContract {
+class InMemoryTrackerContractSpec extends TrackerReturnedFactContract {
 
     private InMemoryTrackerHarness harness
 
@@ -50,5 +52,10 @@ class InMemoryTrackerContractSpec extends TrackerReapContract {
     @Override
     protected void seedWorkingWithClaim(Tracker adapter, TaskRef ref, String holder) {
         harness.seedWorkingWithClaim(adapter, ref, holder)
+    }
+
+    @Override
+    protected void returnToReady(Tracker adapter, TaskRef ref) {
+        harness.returnToReady(ref)
     }
 }

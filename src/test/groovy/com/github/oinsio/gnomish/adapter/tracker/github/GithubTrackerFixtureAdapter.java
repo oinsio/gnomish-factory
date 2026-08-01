@@ -105,7 +105,7 @@ final class GithubTrackerFixtureAdapter implements Tracker {
     @Override
     public List<ReadyTask> listReady(int limit) {
         return delegate.listReady(limit).stream()
-                .map(rt -> new ReadyTask(toFixture(rt.ref()), rt.abortFacts()))
+                .map(rt -> new ReadyTask(toFixture(rt.ref()), rt.abortFacts(), rt.returned()))
                 .toList();
     }
 
@@ -214,5 +214,18 @@ final class GithubTrackerFixtureAdapter implements Tracker {
      */
     void seedWorkingWithClaim(TaskRef ref, String holder) {
         seeder.seedWorkingWithClaim(issueFor(ref), holder);
+    }
+
+    /**
+     * Simulates a human moving a parked issue back to {@code Ready} directly in the
+     * tracker UI, per {@code TrackerReturnedFactContract.returnToReady}: swaps the
+     * needs-human label for the ready label, exactly as a human's own edit would,
+     * without touching any comment — the park report and prior claim markers stay in
+     * the issue's history for an adapter's returned-fact derivation to observe.
+     */
+    void returnToReady(TaskRef ref) {
+        FixtureIssue issue = issueFor(ref);
+        issue.removeLabel(FixtureSeeder.NEEDS_HUMAN_LABEL);
+        issue.addLabel(FixtureSeeder.READY_LABEL);
     }
 }

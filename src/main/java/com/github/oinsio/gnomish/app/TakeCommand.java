@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -15,6 +16,8 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.boot.ApplicationArguments;
 
@@ -39,6 +42,8 @@ import org.springframework.boot.ApplicationArguments;
  */
 final class TakeCommand {
 
+    private static final Logger log = LoggerFactory.getLogger(TakeCommand.class);
+
     private final TakeArgumentsParser argumentsParser = new TakeArgumentsParser();
     private final ManualRunAssembly assembly;
     private final Path worktreesRoot;
@@ -50,11 +55,13 @@ final class TakeCommand {
     private final Sleeper heartbeatSleeper;
     private final MonotonicTime heartbeatMonotonicTime;
     private final TakeoverConfirmation takeoverConfirmation;
+    private final ServeProperties serveProperties;
 
     /**
      * The canonical construction; {@link TakeCommandFactory} supplies the {@code heartbeatSleeper}
-     * (task 6.1), {@code heartbeatMonotonicTime} (task 6.6), and {@code takeoverConfirmation} (task
-     * 6.2) test seams, defaulting them to production values for the {@link ManualRunRunner} wiring.
+     * (task 6.1), {@code heartbeatMonotonicTime} (task 6.6), {@code takeoverConfirmation} (task
+     * 6.2), and {@code serveProperties} (task 6.2) test seams, defaulting them to production values
+     * for the {@link ManualRunRunner} wiring.
      *
      * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
      * @param worktreesRoot the root directory under which per-task worktrees are created; never null
@@ -69,6 +76,9 @@ final class TakeCommand {
      * @param heartbeatMonotonicTime the monotonic time the per-invocation reaper's TTL is measured on
      *     (FR4, M2)
      * @param takeoverConfirmation the pre-claim {@code Working}-takeover confirmation seam (FR6, D9)
+     * @param serveProperties supplies batch mode's concurrency limit N ({@code factory.serve.slots}
+     *     — FR2 of add-factory-serve: "the N limit applies to batch and serve", no separate batch
+     *     flag); never null
      */
     TakeCommand(
             ManualRunAssembly assembly,
@@ -80,7 +90,8 @@ final class TakeCommand {
             Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
             Sleeper heartbeatSleeper,
             MonotonicTime heartbeatMonotonicTime,
-            TakeoverConfirmation takeoverConfirmation) {
+            TakeoverConfirmation takeoverConfirmation,
+            ServeProperties serveProperties) {
         this.assembly = assembly;
         this.worktreesRoot = worktreesRoot;
         this.taskIdMdcKey = taskIdMdcKey;
@@ -91,6 +102,7 @@ final class TakeCommand {
         this.heartbeatSleeper = heartbeatSleeper;
         this.heartbeatMonotonicTime = heartbeatMonotonicTime;
         this.takeoverConfirmation = takeoverConfirmation;
+        this.serveProperties = serveProperties;
     }
 
     /**
@@ -102,8 +114,9 @@ final class TakeCommand {
      *     (FR17), or {@code tracker.type} names no registered adapter
      * @throws PipelineLoadFailedException if {@code .gnomish/} fails to load
      * @throws TakeExitCodeException always, on a completed run — carrying the computed exit code (D16)
+     * @throws InterruptedException if a batch run is interrupted while waiting on its scheduler
      */
-    void run(ApplicationArguments args) throws IOException {
+    void run(ApplicationArguments args) throws IOException, InterruptedException {
         try {
             TakeArguments takeArguments = argumentsParser.parse(args);
             PipelineDefinition definition =
@@ -129,28 +142,54 @@ final class TakeCommand {
                     clock,
                     trackerAdapterRegistry,
                     takeoverConfirmation);
-            String ref = takeArguments.ref();
-            TakeResult result = ref == null
-                    ? dispatcher.runBare(
-                            takeArguments,
-                            definition,
-                            trackerConfig,
-                            tracker,
-                            instanceId,
-                            credentialEnvVarsToScrub,
-                            takeAssembly,
-                            heartbeat)
-                    : dispatcher.runExplicit(
-                            takeArguments,
-                            ref,
-                            definition,
-                            trackerConfig,
-                            tracker,
-                            instanceId,
-                            credentialEnvVarsToScrub,
-                            factory,
-                            takeAssembly,
-                            heartbeat);
+            List<String> refs = takeArguments.refs();
+            if (refs.size() >= 2) {
+                // Batch take (2+ refs), validated by TakeArgumentsParser (FR2, FR3 of
+                // add-factory-serve): every ref through the disposition matrix, up to
+                // serveProperties.slots() concurrently (FR2: "the N limit applies to batch and
+                // serve" — no separate batch flag).
+                int slots = serveProperties.slots();
+                List<TakeBatchOutcome> outcomes = dispatcher.runBatch(
+                        takeArguments,
+                        definition,
+                        trackerConfig,
+                        tracker,
+                        instanceId,
+                        credentialEnvVarsToScrub,
+                        factory,
+                        takeAssembly,
+                        heartbeat,
+                        slots);
+                // FR3, NFR-O2, UX3: the checklist summary is logged before the aggregate exit
+                // code is thrown, so it is visible regardless of how the caller handles the
+                // exit code.
+                TakeBatchSummary.log(outcomes, log);
+                throw new TakeExitCodeException(TakeBatchExitCode.aggregate(outcomes));
+            }
+            TakeResult result;
+            if (refs.isEmpty()) {
+                result = dispatcher.runBare(
+                        takeArguments,
+                        definition,
+                        trackerConfig,
+                        tracker,
+                        instanceId,
+                        credentialEnvVarsToScrub,
+                        takeAssembly,
+                        heartbeat);
+            } else {
+                result = dispatcher.runExplicit(
+                        takeArguments,
+                        refs.getFirst(),
+                        definition,
+                        trackerConfig,
+                        tracker,
+                        instanceId,
+                        credentialEnvVarsToScrub,
+                        factory,
+                        takeAssembly,
+                        heartbeat);
+            }
 
             throw new TakeExitCodeException(TakeExitCodeMapper.exitCodeFor(result));
         } finally {

@@ -23,14 +23,20 @@ import org.jspecify.annotations.Nullable;
  * mutating the tracker, {@code Working} (held by another instance) enters the {@link TakeTakeover}
  * confirmation path (task 6.2 of add-claim-heartbeat, FR6), {@code Finished}/{@code Gone} skip. The
  * operator mandate overrides the readiness criterion and abort backoff (FR9) simply by never
- * consulting either: this class only reads the state {@code fetchTask} already reported.
+ * consulting either: this class only reads the state {@code fetchTask} already reported. The same
+ * omission pierces the WIP limit for {@code Ready} tasks (FR8 of add-factory-serve): neither
+ * {@link com.github.oinsio.gnomish.app.take.OpenFrontGate} nor any open-front count is ever
+ * consulted here, so the explicit mandate is unconditional for a {@code Ready} target; {@code
+ * AwaitingHuman} keeps the existing refusal and {@code Working} keeps the takeover protocol,
+ * unaffected by this bypass.
  *
  * <p>Short-ref expansion (`42`, `#42`) is a later concern (task 5.14, not built here) — {@link
  * #dispose} takes an already-resolved {@link TaskRef}. Argument parsing and Spring wiring for the
  * {@code take} CLI surface belong to task 5.13; this class is the plain, constructor-injectable
  * entry point that command wiring calls into.
  *
- * <p>Implements FR9, UX2, D2, D3 of add-tracker-port; FR6 of add-claim-heartbeat.
+ * <p>Implements FR9, UX2, D2, D3 of add-tracker-port; FR6 of add-claim-heartbeat; FR8 of
+ * add-factory-serve.
  */
 final class TakeDisposition {
 

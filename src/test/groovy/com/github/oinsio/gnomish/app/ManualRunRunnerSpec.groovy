@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
@@ -63,7 +64,8 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
                 new UsageCommand(),
                 Clock.systemUTC(),
                 [:],
-                [:])
+                [:],
+                new ServeProperties(0, null, null, null))
     }
 
     private void write(String relative, String text) {
