@@ -78,8 +78,9 @@ in revocation context.
 Claim, abort, ack, note, park, finish, progress, and stale-claim-removal
 comments SHALL carry a machine-recognizable structural marker plus
 human-readable text (recommended shape: leading hidden HTML comment with
-one-line JSON — kind, instance, time, format version). Park and finish SHALL be distinct marker kinds — the park
-marker additionally carries the park reason as its payload; no marker kind is
+one-line JSON — kind, instance, time, format version). Park and finish
+SHALL be distinct marker kinds — the park marker additionally carries the
+park reason as its payload; no marker kind is
 shared between lifecycle events, and the retired dual-use `report` kind SHALL
 NOT be recognized. The round-trip law of the port contract SHALL hold over
 these markers: abort facts readable back by any instance; decisions collected

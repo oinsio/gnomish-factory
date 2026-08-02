@@ -71,6 +71,11 @@ port accepts finished text plus structural fields, never engine domain models.
   class references an adapter type or a tracker-specific concept (label, issue,
   transition id)
 
+#### Scenario: Adapter receives rendered text
+- **WHEN** the factory parks a task with an escalation report
+- **THEN** the adapter receives the report as finished text plus structural fields,
+  not an engine report object
+
 ### Requirement: Ready listing carries the returned fact
 Each `listReady` entry SHALL carry an adapter-derived "returned" fact — true
 when the task's recorded history shows it was previously worked and given
