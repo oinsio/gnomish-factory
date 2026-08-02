@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.console.DialogConsole;
@@ -41,10 +42,9 @@ import org.springframework.stereotype.Component;
  * collaborator. Exception reporting (UX3) is delegated to {@link RunExceptionReporting}; the
  * {@code taskId} MDC key is cleared in {@code finally}.
  *
- * <p>{@code --resume} (FR8) delegates to {@link GitResumeRunner#run}. Otherwise {@link
- * RunArguments#mode()} gates the drive (design D8): {@code IN_PLACE} prints {@link
- * #IN_PLACE_REMINDER} then runs {@link #driveInPlace}; {@code GIT} delegates to {@link
- * GitModeRunner}.
+ * <p>{@code --resume} (FR8) delegates to {@link GitResumeRunner#run}; otherwise {@link
+ * RunArguments#mode()} gates the drive (design D8): {@code IN_PLACE} prints {@link #IN_PLACE_REMINDER}
+ * then runs {@link #driveInPlace}, {@code GIT} delegates to {@link GitModeRunner}.
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3, D9, D10 of add-manual-run; FR5-FR8, FR13,
  * FR14, UX1-UX4, design D8, D9 of add-git-workflow.
@@ -99,7 +99,8 @@ public final class ManualRunRunner implements ApplicationRunner {
             UsageCommand usageCommand,
             Clock javaTimeClock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry) {
+            Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
+            ServeProperties serveProperties) {
         this.argumentsParser = argumentsParser;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
@@ -113,20 +114,23 @@ public final class ManualRunRunner implements ApplicationRunner {
                 factoryProperties);
         this.gitModeRunner = new GitModeRunner(assembly, worktreesRoot);
         this.gitResumeRunner = new GitResumeRunner(assembly, worktreesRoot, TASK_ID_KEY);
-        var takeCommand = TakeCommandFactory.of(
+        this.subcommandDispatch = SubcommandDispatchFactory.of(
                 assembly,
                 worktreesRoot,
                 TASK_ID_KEY,
                 factoryProperties,
+                serveProperties,
                 javaTimeClock,
+                systemClock,
                 trackerAdapterRegistry,
-                trackerValidatorRegistry);
-        this.subcommandDispatch = new SubcommandDispatch(statusCommand, usageCommand, takeCommand);
+                trackerValidatorRegistry,
+                statusCommand,
+                usageCommand);
     }
 
     /** No relevant flag present → no-op (FR12); otherwise drives the run (see class javadoc). */
     @Override
-    public void run(ApplicationArguments args) throws IOException {
+    public void run(ApplicationArguments args) throws IOException, InterruptedException {
         try {
             RunExceptionReporting.run(
                     () -> {

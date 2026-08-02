@@ -202,21 +202,37 @@ then claims and resumes from the branch exactly like any other task. Declining
 (or a headless run without `--takeover`) changes nothing and refuses, naming
 the holder.
 
-**3. The manual escape hatch (cron-only operation, until `serve` exists).**
-Automatic reaping only happens while some instance is *holding a claim long
-enough* to observe a foreign one past the TTL. A one-shot cron `take` that
-claims a task, works it, and exits cannot watch a foreign claim for longer than
-its own (short) run, so it never accumulates the TTL needed to reap. If you run
-the factory *only* as periodic one-shot `take`s — no long-lived instance — a
-task stranded by a dead instance still needs a manual label flip: remove
-`gnomish:working`, add `gnomish:ready` yourself. The task branch still holds
-every committed round, so the next `take` (bare or explicit) picks up from the
-last durable point, not from scratch. Do this only when you're sure the
-claiming instance is actually gone — if you're wrong, the git non-fast-forward
-fence still protects the branch: a stale instance that thaws and tries to push
-is refused and aborts, so the worst case is a wasted round, never corruption.
-This is the one gap `serve` (a future change) closes — a long-lived serving
-instance always has a reaper running, so mode 1 covers the cron case too.
+**3. The manual escape hatch (last resort, only when nothing long-lived is
+running).** Automatic reaping only happens while some instance is *holding a
+claim long enough* to observe a foreign one past the TTL. A one-shot cron
+`take` that claims a task, works it, and exits cannot watch a foreign claim for
+longer than its own (short) run, so it never accumulates the TTL needed to
+reap. `serve --drain` closes this gap for cron operation — see
+"Running Continuously" below — because it keeps the heartbeat/reaper thread
+alive for the whole run, not just one task's round, so mode 1 covers the cron
+case too. The manual flip is now demoted to genuinely last-resort operation:
+reach for it only if you are deliberately running bare one-shot `take` outside
+`serve` (e.g. a single manual invocation) and a task is visibly stranded. If
+so: remove `gnomish:working`, add `gnomish:ready` yourself. The task branch
+still holds every committed round, so the next `take` (bare or explicit) picks
+up from the last durable point, not from scratch. Do this only when you're
+sure the claiming instance is actually gone — if you're wrong, the git
+non-fast-forward fence still protects the branch: a stale instance that thaws
+and tries to push is refused and aborts, so the worst case is a wasted round,
+never corruption.
+
+## Running Continuously: serve, Batch, and Drain
+
+<!-- implements NFR-P2, UX1, UX2, UX4 of add-factory-serve -->
+
+Bare `take` and explicit `take <ref>` work one task and exit. Two more run
+modes — `gnomish serve` (a long-lived feeding daemon) and batch
+`take <ref> <ref> ...` — turn that into an autonomous factory, with drain
+mode as the recommended cron path. See
+[`docs/operator-guide-serve.md`](operator-guide-serve.md) for the full
+command reference, lifecycle (SIGTERM/drain), feed states and the WIP-limit
+message, instance knobs vs. protocol constants, the write-budget coupling,
+and the WIP method boundary.
 
 ## Projects v2 Boards: Display Only
 

@@ -21,7 +21,7 @@ final class RunExceptionReporting {
     /** A block that may throw the same checked/unchecked exceptions {@link #run} classifies. */
     @FunctionalInterface
     interface ThrowingAction {
-        void run() throws IOException;
+        void run() throws IOException, InterruptedException;
     }
 
     /**
@@ -30,8 +30,11 @@ final class RunExceptionReporting {
      * @param action the drive call to wrap; never null
      * @param log the logger the generic-fallback branch warns to; never null
      * @throws IOException propagated unchanged from {@code action}
+     * @throws InterruptedException propagated unchanged from {@code action} — a {@code gnomish
+     *     serve} feed loop interrupted mid-run (FR2 of add-factory-serve); not otherwise
+     *     classified, since interruption is a lifecycle signal, not a reportable failure
      */
-    static void run(ThrowingAction action, Logger log) throws IOException {
+    static void run(ThrowingAction action, Logger log) throws IOException, InterruptedException {
         try {
             action.run();
         } catch (UsageException | PipelineLoadFailedException | InternalErrorException ex) {

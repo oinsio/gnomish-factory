@@ -42,6 +42,8 @@ public class InMemoryTracker implements Tracker {
     final ClaimClock claimClock = new ClaimClock();
     /** Lease-maintenance trio (listOpen/heartbeat/removeStaleClaim), split out for file size. */
     final InMemoryLeaseOps leaseOps = new InMemoryLeaseOps(this);
+    /** Coordination writes (release/park/finish/recordAbort/recordProgress/ack/note), split out for file size. */
+    final InMemoryWriteOps writeOps = new InMemoryWriteOps(this);
     /** Race-interleaving hook (FR3): run by {@link #claim} before the lock (see harness {@code armClaimGate}). */
     @Nullable
     Runnable claimGate;
@@ -54,8 +56,22 @@ public class InMemoryTracker implements Tracker {
         return withLock(() -> store.entrySet().stream()
                 .filter(entry -> entry.getValue().state() instanceof TrackerTaskState.Ready)
                 .limit(limit)
-                .map(entry -> new ReadyTask(entry.getKey(), entry.getValue().abortFacts()))
+                .map(entry -> new ReadyTask(entry.getKey(), entry.getValue().abortFacts(), returned(entry.getValue())))
                 .toList());
+    }
+
+    /**
+     * Derives the "returned" fact (FR7 of add-factory-serve) from a task's recorded correspondence
+     * history rather than a dedicated field: true when the thread carries a {@code PARK} entry
+     * (human-returned: claimed, then given back with a report) or a {@code STALE_CLAIM_REMOVED} entry
+     * (reaper-returned); false otherwise, including never-claimed tasks and tasks delivered without
+     * either marker (which would not reappear via {@code listReady} anyway).
+     */
+    private static boolean returned(TrackedTask task) {
+        return task.thread().stream()
+                .map(CorrespondenceEntry::kind)
+                .anyMatch(kind ->
+                        kind == CorrespondenceEntry.Kind.PARK || kind == CorrespondenceEntry.Kind.STALE_CLAIM_REMOVED);
     }
 
     @Override
@@ -93,68 +109,39 @@ public class InMemoryTracker implements Tracker {
         });
     }
 
-    /** Leaves the logical state untouched (design D2, FR15) but drops any claim marker (FR5). */
     @Override
     public void release(TaskRef ref) {
-        withLock(() -> requireTask(ref).clearClaim());
+        writeOps.release(ref);
     }
 
     @Override
     public void park(TaskRef ref, ParkReason reason, String report) {
-        withLock(() -> {
-            TrackedTask task = requireTask(ref);
-            task.state(new TrackerTaskState.AwaitingHuman(reason));
-            task.clearClaim();
-            task.report(report);
-            task.note(CorrespondenceEntry.Kind.PARK, "parked (" + reason + "): " + report);
-        });
+        writeOps.park(ref, reason, report);
     }
 
     @Override
     public void finish(TaskRef ref, String summary) {
-        withLock(() -> {
-            TrackedTask task = requireTask(ref);
-            task.state(new TrackerTaskState.Finished());
-            task.clearClaim();
-            task.summary(summary);
-            task.note(CorrespondenceEntry.Kind.FINISH, summary);
-        });
+        writeOps.finish(ref, summary);
     }
 
     @Override
     public void recordAbort(TaskRef ref, AbortRecord record) {
-        withLock(() -> {
-            TrackedTask task = requireTask(ref);
-            task.recordAbort(record.at());
-            task.state(new TrackerTaskState.Ready());
-            task.clearClaim();
-            task.note(CorrespondenceEntry.Kind.ABORT, "abort: " + record.cause());
-        });
+        writeOps.recordAbort(ref, record);
     }
 
-    /** Resets abort history only; leaves the logical state untouched (D1-D4, FR3/UX1 of fix-abort-progress-reset). */
     @Override
     public void recordProgress(TaskRef ref) {
-        withLock(() -> {
-            TrackedTask task = requireTask(ref);
-            task.recordProgress();
-            task.note(CorrespondenceEntry.Kind.PROGRESS, "progress recorded");
-        });
+        writeOps.recordProgress(ref);
     }
 
     @Override
     public void acknowledgeDecision(TaskRef ref, String decisionText) {
-        withLock(() -> {
-            TrackedTask task = requireTask(ref);
-            task.acknowledge();
-            task.note(CorrespondenceEntry.Kind.ACK, "acting on decision: " + decisionText);
-        });
+        writeOps.acknowledgeDecision(ref, decisionText);
     }
 
-    /** No read-side fact, but still belongs in the thread (UX4). */
     @Override
     public void postNote(TaskRef ref, String text) {
-        withLock(() -> requireTask(ref).note(CorrespondenceEntry.Kind.NOTE, text));
+        writeOps.postNote(ref, text);
     }
 
     @Override
@@ -181,7 +168,8 @@ public class InMemoryTracker implements Tracker {
         }
     }
 
-    private void withLock(Runnable body) {
+    /** Void variant of {@link #withLock(Supplier)} for mutations with no result to return. */
+    void withLock(Runnable body) {
         lock.lock();
         try {
             body.run();

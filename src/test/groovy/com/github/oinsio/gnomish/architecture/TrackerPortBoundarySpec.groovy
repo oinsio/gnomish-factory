@@ -4,6 +4,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
+import com.tngtech.archunit.core.importer.ImportOption
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -26,10 +27,17 @@ class TrackerPortBoundarySpec extends Specification {
 
     /**
      * Compiled production bytecode, imported once from the test runtime
-     * classpath, mirroring {@link DomainPuritySpec}.
+     * classpath, mirroring {@link DomainPuritySpec} — but with test classes
+     * excluded (unlike {@code DomainPuritySpec}'s {@code ..domain..}-scoped
+     * rule, this rule's {@code resideOutsideOfPackage('..adapter.tracker..')}
+     * selector is broad enough to otherwise catch ordinary test fixtures
+     * (e.g. {@code app.lease}/{@code app.serve} specs) that legitimately
+     * construct concrete tracker adapters for test wiring.
      */
     @Shared
-    JavaClasses productionClasses = new ClassFileImporter().importPackages('com.github.oinsio.gnomish')
+    JavaClasses productionClasses = new ClassFileImporter()
+    .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+    .importPackages('com.github.oinsio.gnomish')
 
     def "FR1: no core class depends on adapter.tracker"() {
         given: 'the boundary rule forbidding core -> adapter.tracker dependencies'

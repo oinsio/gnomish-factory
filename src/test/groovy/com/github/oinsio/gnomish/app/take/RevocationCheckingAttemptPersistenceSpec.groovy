@@ -196,6 +196,27 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         0 * tracker.fetchTask(*_)
     }
 
+    // FR11, D9 of add-factory-serve: a flag set with an explicit reason (the SIGTERM shutdown
+    // sequence's call) surfaces that exact reason in the revocation, not the heartbeat's generic
+    // "claim marker gone" wording — proving message accuracy for a graceful stop, not a real loss.
+    def "a claim-loss flag set with an explicit reason surfaces that reason in the revocation"() {
+        given: 'the shutdown sequence flagged this task stopped, not the heartbeat'
+        def flag = new ClaimLossFlag()
+        flag.claimLost(REF, 'daemon shutting down (SIGTERM)')
+        def guarded = new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, flag)
+
+        when:
+        guarded.persist('PROJ-1', STATE, TRACE)
+
+        then:
+        1 * delegate.persist('PROJ-1', STATE, TRACE)
+        def ex = thrown(RevocationDetectedException)
+        ex.message.contains('PROJ-1')
+        ex.message.contains('daemon shutting down (SIGTERM)')
+        !ex.message.contains('claim marker gone')
+        guarded.revocation().get() == ex
+    }
+
     // FR8, D7: an empty flag never trips — the boundary decision reduces to the fetchTask check.
     def "an unset claim-loss flag leaves the fetchTask check as the sole boundary decision"() {
         given:

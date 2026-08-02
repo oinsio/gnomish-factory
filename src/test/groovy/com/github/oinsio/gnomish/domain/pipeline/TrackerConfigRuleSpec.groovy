@@ -22,6 +22,10 @@ class TrackerConfigRuleSpec extends Specification {
         new TrackerConfig('github', threshold, interval, multiplier, [:])
     }
 
+    private static TrackerConfig tracker(int threshold, Duration interval, int multiplier, int wipLimit) {
+        new TrackerConfig('github', threshold, interval, multiplier, wipLimit, [:])
+    }
+
     // FR17: an absent tracker section is valid — no errors
     def "an absent tracker section produces no errors"() {
         expect: 'validating a null tracker yields an empty error list'
@@ -48,6 +52,41 @@ class TrackerConfigRuleSpec extends Specification {
 
         where:
         threshold << [0, -1, -3, Integer.MIN_VALUE]
+    }
+
+    // FR6 delta-spec "Default applies" / positive-integer contract: a positive wip-limit is accepted
+    def "a positive wip-limit #limit produces no errors"() {
+        expect: 'validating a positive wip-limit yields an empty error list'
+        TrackerConfigRule.validate(tracker(3, Duration.ofMinutes(5), 3, limit)) == []
+
+        where:
+        limit << [1, 5, 100]
+    }
+
+    // FR6 delta-spec scenario "Zero limit is a load error": a declared 0 or negative wip-limit is a
+    // located error naming config.yaml and the minimum of 1
+    def "a non-positive wip-limit #limit is a located error naming the minimum of 1"() {
+        expect: 'exactly one error locating config.yaml: tracker.wip-limit'
+        TrackerConfigRule.validate(tracker(3, Duration.ofMinutes(5), 3, limit)) == [
+            new ConfigError('config.yaml', 'tracker.wip-limit',
+            "non-positive wip-limit $limit; the limit must be at least 1" as String)
+        ]
+
+        where:
+        limit << [0, -1, -3, Integer.MIN_VALUE]
+    }
+
+    // FR6 of add-factory-serve: a wip-limit fault aggregates alongside an abort-threshold fault, in
+    // wip-limit-after-abort-threshold order
+    def "wip-limit and abort-threshold faults aggregate together"() {
+        expect: 'both located errors, abort-threshold then wip-limit'
+        TrackerConfigRule.validate(new TrackerConfig(
+                'github', 0, Duration.ofMinutes(5), 3, 0, [:])) == [
+                    new ConfigError('config.yaml', 'tracker.abort-threshold',
+                    'non-positive abort-threshold 0; the threshold must be a positive integer'),
+                    new ConfigError('config.yaml', 'tracker.wip-limit',
+                    'non-positive wip-limit 0; the limit must be at least 1')
+                ]
     }
 
     // FR3 delta-spec: a multiplier at or above the floor of 3 is accepted

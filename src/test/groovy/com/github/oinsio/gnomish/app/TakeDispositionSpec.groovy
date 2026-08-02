@@ -59,7 +59,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     }
 
     // Scenario: Mandate overrides readiness and backoff — a Ready task with no prior branch is
-    // claimed and worked from scratch (fresh claim path).
+    // claimed and worked from scratch (fresh claim path). FR8 of add-factory-serve: the explicit
+    // mandate pierces the abort-backoff filter and the WIP limit for this Ready target — neither
+    // is ever consulted on this path.
     def "Ready with no existing branch claims and works the task from scratch, delivering it"() {
         given:
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
@@ -350,7 +352,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working with a TTY shows holder and last-beat age, declining refuses untouched"() {
         given:
         def confirmation = Mock(TakeoverConfirmation)
-        tracker.listOpen() >> [
+        openFronts = [
             workingOpenTask('gnomish-other-x1y2z3')
         ]
         def disposition = newTakeoverDisposition(confirmation, false)
@@ -379,7 +381,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "takeover facts render the last-beat age as '#expectedAge'"() {
         given:
         def confirmation = Mock(TakeoverConfirmation)
-        tracker.listOpen() >> openTasks
+        openFronts = openTasks
         def disposition = newTakeoverDisposition(confirmation, false)
 
         when:
@@ -417,7 +419,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // --takeover flag → refuse, naming the holder AND mentioning the flag; nothing is mutated.
     def "Working headless without the flag refuses naming the holder and the --takeover flag"() {
         given:
-        tracker.listOpen() >> [
+        openFronts = [
             workingOpenTask('gnomish-other-x1y2z3')
         ]
         def disposition = newTakeoverDisposition(TakeoverConfirmation.UNAVAILABLE, false)
@@ -448,7 +450,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), null)
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
-        tracker.listOpen() >> [
+        openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
         ]
         def confirmation = { r, h, a -> TakeoverConfirmation.Decision.CONFIRMED } as TakeoverConfirmation
@@ -476,7 +478,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), null)
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
-        tracker.listOpen() >> [
+        openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
         ]
         def confirmation = Mock(TakeoverConfirmation)
@@ -501,7 +503,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // skipped and the ordinary claim decides: still Working → Held → refuse naming the holder.
     def "Working confirmed with no observable claim version skips removeStaleClaim and refuses on Held"() {
         given:
-        tracker.listOpen() >> []
+        openFronts = []
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held('gnomish-dead-x1')
         def disposition = newTakeoverDisposition(TakeoverConfirmation.UNAVAILABLE, true)
 
@@ -522,7 +524,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working confirmed but the takeover loses the race refuses naming the current holder"() {
         given:
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
-        tracker.listOpen() >> [
+        openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
         ]
         tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Mismatch(observed)

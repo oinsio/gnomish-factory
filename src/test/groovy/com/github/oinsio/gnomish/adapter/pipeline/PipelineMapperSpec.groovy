@@ -603,4 +603,32 @@ class PipelineMapperSpec extends Specification {
             "malformed duration 'oops'; use e.g. '30s', '15m', '2h'")
         ]
     }
+
+    // FR6 of add-factory-serve, delta-spec scenario "Default applies": a tracker section declaring
+    // type but no wip-limit resolves to 10 (design D3)
+    def "defaults the wip limit to 10 when the tracker section omits it"() {
+        given:
+        def cfg = new ConfigDto('1', null, new TrackerDto('github', null))
+
+        when:
+        def definition = PipelineMapper.map(cfg, []).definition()
+
+        then:
+        definition.tracker().wipLimit() == 10
+    }
+
+    // FR6 of add-factory-serve: a declared wip-limit overrides the default. NFR-S3: this value is
+    // read exclusively from the TrackerDto the loader parsed out of the factory's OWN clone's
+    // .gnomish/config.yaml — a gnome working a task branch has no way to raise it, since the mapper
+    // never consults the task branch or any other source for this key.
+    def "carries a declared wip limit through unchanged, sourced only from the factory's own clone"() {
+        given:
+        def cfg = new ConfigDto('1', null, new TrackerDto('github', 3, null, null, 15, [:]))
+
+        when:
+        def definition = PipelineMapper.map(cfg, []).definition()
+
+        then:
+        definition.tracker().wipLimit() == 15
+    }
 }

@@ -64,6 +64,9 @@ public final class PipelineMapper {
     /** FR17 of add-tracker-port: the core abort-fuse threshold default when the key is omitted. */
     private static final int DEFAULT_ABORT_THRESHOLD = 3;
 
+    /** FR6 of add-factory-serve, design D3: the core WIP limit default when the key is omitted. */
+    private static final int DEFAULT_WIP_LIMIT = 10;
+
     /** FR3 of add-claim-heartbeat: the {@code config.yaml} location stamped onto a bad heartbeat interval. */
     private static final String TRACKER_FILE = "config.yaml";
 
@@ -131,8 +134,10 @@ public final class PipelineMapper {
      * when the section is present but a key is omitted, parses the
      * {@code heartbeat-interval} string to a {@link java.time.Duration} (a
      * malformed string appends a located error to {@code errors} and discards
-     * the definition, mirroring the {@code external} timings), and passes
-     * through the ONE raw subsection matching {@code type} (already
+     * the definition, mirroring the {@code external} timings), defaults
+     * {@code wip-limit} to 10 (FR6, NFR-S3 of add-factory-serve — read only
+     * from the DTO the loader parsed out of the factory's own clone), and
+     * passes through the ONE raw subsection matching {@code type} (already
      * schema-validated at the seam, task 3.2/4.2) for downstream short-ref
      * expansion and adapter construction (task 5.15) to consume.
      */
@@ -147,12 +152,14 @@ public final class PipelineMapper {
         int multiplier = tracker.heartbeatTtlMultiplier() == null
                 ? TrackerConfig.DEFAULT_HEARTBEAT_TTL_MULTIPLIER
                 : tracker.heartbeatTtlMultiplier();
+        int wipLimit = tracker.wipLimit() == null ? DEFAULT_WIP_LIMIT : tracker.wipLimit();
         String type = orEmpty(tracker.type());
         return new TrackerConfig(
                 type,
                 threshold,
                 interval,
                 multiplier,
+                wipLimit,
                 castSubsection(tracker.subsections().get(type)));
     }
 

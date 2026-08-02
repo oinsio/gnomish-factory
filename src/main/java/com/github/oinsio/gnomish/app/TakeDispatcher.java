@@ -14,6 +14,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import org.slf4j.MDC;
 
 /**
@@ -59,11 +60,43 @@ final class TakeDispatcher {
             TrackerAdapterFactory factory,
             ManualRunAssembly takeAssembly,
             TakeHeartbeat heartbeat) {
+        return runOneRef(
+                takeArguments,
+                rawRef,
+                definition,
+                trackerConfig,
+                tracker,
+                instanceId,
+                credentialEnvVarsToScrub,
+                factory,
+                takeAssembly,
+                heartbeat,
+                takeoverConfirmation);
+    }
+
+    /**
+     * The per-ref disposition body shared by {@link #runExplicit} (this invocation's own {@link
+     * #takeoverConfirmation}) and batch (always {@link TakeoverConfirmation#UNAVAILABLE} — FR4).
+     *
+     * <p>Implements FR9 of add-tracker-port; FR3, FR4 of add-factory-serve.
+     */
+    TakeResult runOneRef(
+            TakeArguments takeArguments,
+            String rawRef,
+            PipelineDefinition definition,
+            TrackerConfig trackerConfig,
+            Tracker tracker,
+            InstanceId instanceId,
+            List<String> credentialEnvVarsToScrub,
+            TrackerAdapterFactory factory,
+            ManualRunAssembly takeAssembly,
+            TakeHeartbeat heartbeat,
+            TakeoverConfirmation confirmation) {
         // NFR-O1: the canonical ref is known as soon as short-ref expansion resolves it, before
         // fetchTask/dispose ever run — so every explicit-mode disposition outcome, including a
         // refusal (AwaitingHuman/Working/Finished/Gone in TakeDisposition, none of which reach any
         // deeper resume/fresh-claim MDC-setting code), is logged under the correct taskId.
-        TaskRef ref = resolveExplicitRef(rawRef, trackerConfig);
+        TaskRef ref = TakeRefResolution.resolve(rawRef, trackerConfig, trackerAdapterRegistry);
         MDC.put(taskIdMdcKey, ref.id());
         // FR9, design D8: a full canonical id naming a repo the adapter cannot reconcile to the
         // configured binding (GitHub: neither the configured repo nor a rename predecessor of it)
@@ -83,7 +116,7 @@ final class TakeDispatcher {
                 credentialEnvVarsToScrub,
                 heartbeat.instance(),
                 takeArguments.takeover(),
-                takeoverConfirmation,
+                confirmation,
                 clock,
                 heartbeat.flag());
         return disposition.dispose(
@@ -95,27 +128,6 @@ final class TakeDispatcher {
                 trackerTask,
                 tracker,
                 instanceId);
-    }
-
-    /**
-     * Builds the {@link TaskRef} for explicit mode from the raw {@code <ref>} string (FR9): a ref
-     * matching the short-ref shape (`42`, `#42`) is expanded via the registered adapter factory for
-     * {@code trackerConfig.type()}; anything else (an already-canonical ref) is wrapped as-is.
-     *
-     * @throws UsageException if {@code ref} looks like a short ref but no adapter factory is
-     *     registered for {@code trackerConfig.type()}
-     */
-    private TaskRef resolveExplicitRef(String ref, TrackerConfig trackerConfig) {
-        if (!ShortRef.isShortRef(ref)) {
-            return new TaskRef(ref);
-        }
-        TrackerAdapterFactory factory = trackerAdapterRegistry.get(trackerConfig.type());
-        if (factory == null) {
-            throw new UsageException("cannot expand short ref '" + ref + "': unknown tracker type '"
-                    + trackerConfig.type() + "' — supported: "
-                    + TakeCommandSupport.supportedTypes(trackerAdapterRegistry));
-        }
-        return factory.expandRef(trackerConfig, ref);
     }
 
     TakeResult runBare(
@@ -139,8 +151,47 @@ final class TakeDispatcher {
                 clock,
                 credentialEnvVarsToScrub,
                 heartbeat.instance(),
-                heartbeat.flag());
+                heartbeat.flag(),
+                trackerConfig.wipLimit(),
+                new Random());
         return bareAuto.run(takeArguments.dir(), definition, takeArguments.interactiveMode(), tracker, instanceId);
+    }
+
+    /**
+     * Batch mode ({@code take <ref> <ref> ...}, two or more refs), validated by {@link
+     * TakeArgumentsParser}: delegates to {@link TakeBatch#dispatch} for the scheduler-driven
+     * per-ref disposition matrix (see its Javadoc for the full contract).
+     *
+     * <p>Implements FR3, FR4, D6 of add-factory-serve.
+     *
+     * @param slots the concurrency limit N (design D3's {@code factory.serve.slots}); positive
+     * @throws InterruptedException if interrupted while waiting for a free slot or an in-flight ref
+     */
+    List<TakeBatchOutcome> runBatch(
+            TakeArguments takeArguments,
+            PipelineDefinition definition,
+            TrackerConfig trackerConfig,
+            Tracker tracker,
+            InstanceId instanceId,
+            List<String> credentialEnvVarsToScrub,
+            TrackerAdapterFactory factory,
+            ManualRunAssembly takeAssembly,
+            TakeHeartbeat heartbeat,
+            int slots)
+            throws InterruptedException {
+        return TakeBatch.dispatch(
+                this,
+                taskIdMdcKey,
+                takeArguments,
+                definition,
+                trackerConfig,
+                tracker,
+                instanceId,
+                credentialEnvVarsToScrub,
+                factory,
+                takeAssembly,
+                heartbeat,
+                slots);
     }
 
     private AbortHandler newAbortHandler(Tracker tracker) {

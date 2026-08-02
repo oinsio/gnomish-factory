@@ -5,7 +5,8 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * The entrypoint's top-level dispatch: {@code gnomish run} | {@code status} | {@code usage} |
- * {@code take} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port). The subcommand is the
+ * {@code take} | {@code serve} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of
+ * add-factory-serve). The subcommand is the
  * first raw source argument that is not a Spring Boot option (does not start with {@code --}) —
  * {@link ApplicationArguments} has no built-in concept of a leading positional subcommand, so this
  * reads {@link ApplicationArguments#getSourceArgs()} directly, the same raw-args seam {@link
@@ -27,18 +28,21 @@ enum Subcommand {
     /** {@code gnomish usage --dir <dir> <task> [--json]} — read-only per-round usage report. */
     USAGE,
     /** {@code gnomish take [<ref>]} — single-task tracker mode, its own flag set entirely. */
-    TAKE;
+    TAKE,
+    /** {@code gnomish serve [--dir] [--slots] [--drain]} — the continuous scheduler daemon. */
+    SERVE;
 
     private static final String RUN_TOKEN = "run";
     private static final String STATUS_TOKEN = "status";
     private static final String USAGE_TOKEN = "usage";
     private static final String TAKE_TOKEN = "take";
+    private static final String SERVE_TOKEN = "serve";
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
      * @return the requested subcommand, or {@link #RUN} when no positional token is present
      * @throws UsageException if the first positional token is present but names none of {@code
-     *     run}, {@code status}, {@code usage}, {@code take}
+     *     run}, {@code status}, {@code usage}, {@code take}, {@code serve}
      */
     static Subcommand parse(ApplicationArguments args) {
         String token = firstPositionalToken(args);
@@ -50,9 +54,11 @@ enum Subcommand {
             case STATUS_TOKEN -> STATUS;
             case USAGE_TOKEN -> USAGE;
             case TAKE_TOKEN -> TAKE;
+            case SERVE_TOKEN -> SERVE;
             default ->
                 throw new UsageException("'" + token + "' is not a gnomish subcommand: accepted forms are"
-                        + " 'gnomish run', 'gnomish status', 'gnomish usage', or 'gnomish take'");
+                        + " 'gnomish run', 'gnomish status', 'gnomish usage', 'gnomish take', or"
+                        + " 'gnomish serve'");
         };
     }
 

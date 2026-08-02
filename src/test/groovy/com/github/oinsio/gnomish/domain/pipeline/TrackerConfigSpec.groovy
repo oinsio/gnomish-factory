@@ -93,4 +93,28 @@ class TrackerConfigSpec extends Specification {
         then:
         config.subsection() == [:]
     }
+
+    // FR6 of add-factory-serve: the canonical constructor carries the WIP limit through exactly
+    def "the canonical constructor exposes the wip limit exactly"() {
+        when:
+        def config = new TrackerConfig('github', 5, Duration.ofMinutes(2), 4, 7, [:])
+
+        then:
+        config.wipLimit() == 7
+    }
+
+    // FR6 of add-factory-serve: the convenience constructors predating wip-limit default it to 10
+    // (design D3), mirroring how they default the heartbeat constants
+    def "the convenience constructors default the wip limit to 10"() {
+        expect:
+        new TrackerConfig('github', 5).wipLimit() == 10
+        new TrackerConfig('github', 5, [k: 'v']).wipLimit() == 10
+        new TrackerConfig('github', 5, Duration.ofMinutes(2), 4, [:]).wipLimit() == 10
+    }
+
+    // FR6 of add-factory-serve, design D3: the public default constant pins the WIP limit default
+    def "the public default WIP limit constant is 10"() {
+        expect:
+        TrackerConfig.DEFAULT_WIP_LIMIT == 10
+    }
 }

@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.http.RequestMethod
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
@@ -117,6 +118,8 @@ class GithubFeedQuerySpec extends Specification {
         result[0].ref().id() == 'github:localhost/acme/widgets#7'
         result[0].abortFacts().count() == 2
         result[0].abortFacts().lastAbortAt() == Instant.parse('2026-07-20T12:30:00Z')
+        // FR8: listReady is a read-only poll — no write (POST/PATCH/DELETE) may reach the tracker
+        wireMock.allServeEvents.every { it.request.method == RequestMethod.GET }
     }
 
     def "counts only abort markers strictly after the latest PROGRESS marker (FR3, D3 of fix-abort-progress-reset)"() {
@@ -158,6 +161,72 @@ class GithubFeedQuerySpec extends Specification {
 
         then:
         result[0].abortFacts() == AbortFacts.none()
+    }
+
+    // FR7, NFR-P1: a REPORT marker (park report) anywhere in the thread sets returned = true,
+    //     derived from the SAME comments fetch used for abort facts — no extra API call
+    def "reports returned = true when the thread carries a REPORT (park) marker"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":11}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/11/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 stuck: needs a human decision"}
+                        ]
+                        ''')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        result[0].returned()
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/11/comments?per_page=100')))
+    }
+
+    // FR7, NFR-P1: a STALE_CLAIM_REMOVED marker (reaper's holder-transition boundary) sets
+    //     returned = true, from the same fetch — one comments call per issue, never two
+    def "reports returned = true when the thread carries a STALE_CLAIM_REMOVED marker"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":12}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"stale_claim_removed\\",\\"instance\\":\\"reaper\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 stale claim removed"}
+                        ]
+                        ''')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        result[0].returned()
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100')))
+    }
+
+    // FR7: a task never claimed or parked carries no REPORT/STALE_CLAIM_REMOVED history —
+    //     returned stays false
+    def "reports returned = false when the thread carries neither a REPORT nor a STALE_CLAIM_REMOVED marker"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":13}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/13/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        !result[0].returned()
     }
 
     def "listReady rejects a zero limit at the exact boundary, not just negative values"() {

@@ -85,7 +85,7 @@ class TakeArgumentsParserSpec extends Specification {
     }
 
     @Unroll
-    def "--interactive#suffix parses to #expected"() {
+    def "--interactive#suffix parses to #expected"(String suffix, List<String> flags, RunArguments.InteractiveMode expected) {
         when:
         TakeArguments result = parser.parse(args(*(['take', '42'] + flags)))
 
@@ -103,7 +103,7 @@ class TakeArgumentsParserSpec extends Specification {
     // Flag validation scenario: take is always git mode, has no ad-hoc task source, no --resume,
     // and no --from-stage — each rejected before the tracker is ever touched.
     @Unroll
-    def "explicit take rejects --#flag before touching the tracker"() {
+    def "explicit take rejects --#flag before touching the tracker"(String flag) {
         when:
         parser.parse(args(*(['take', '42'] + ["--$flag=x".toString()])))
 
@@ -122,7 +122,7 @@ class TakeArgumentsParserSpec extends Specification {
     }
 
     @Unroll
-    def "bare take rejects --#flag before touching the tracker"() {
+    def "bare take rejects --#flag before touching the tracker"(String flag) {
         when:
         parser.parse(args(*(['take'] + ["--$flag=x".toString()])))
 
@@ -164,5 +164,72 @@ class TakeArgumentsParserSpec extends Specification {
         then:
         noExceptionThrown()
         result.base() == 'main'
+    }
+
+    // FR2 of add-factory-serve: 'take <ref> <ref> ...' (two or more positional refs) is a distinct
+    // batch form, parsed without error and carrying every ref in order.
+    def "batch take accepts two or more refs"() {
+        when:
+        TakeArguments result = parser.parse(args('take', '42', '43', '44'))
+
+        then:
+        result.refs() == ['42', '43', '44']
+        !result.discardWork()
+    }
+
+    def "single explicit ref still parses as a one-element refs list"() {
+        when:
+        TakeArguments result = parser.parse(args('take', '42'))
+
+        then:
+        result.refs() == ['42']
+    }
+
+    def "bare take parses refs as an empty list"() {
+        when:
+        TakeArguments result = parser.parse(args('take'))
+
+        then:
+        result.refs() == []
+    }
+
+    // Spec requirement text: "the batch form SHALL reject --interactive and --base". Scenario
+    // "Batch rejects interactivity": take 42 43 --interactive fails validation before touching the
+    // tracker (FR3 of add-factory-serve).
+    def "batch take rejects --interactive"() {
+        when:
+        parser.parse(args('take', '42', '43', '--interactive'))
+
+        then:
+        thrown(UsageException)
+    }
+
+    def "batch take rejects --interactive=executor"() {
+        when:
+        parser.parse(args('take', '42', '43', '--interactive=executor'))
+
+        then:
+        thrown(UsageException)
+    }
+
+    // FR3 of add-factory-serve: --base is a start modifier for a single fresh explicit-mode claim,
+    // meaningless once two or more refs are being worked.
+    def "batch take rejects --base"() {
+        when:
+        parser.parse(args('take', '42', '43', '--base=main'))
+
+        then:
+        thrown(UsageException)
+    }
+
+    // --takeover is not in the batch-rejected set (spec text names only --interactive and --base);
+    // it stays available so a headless batch run can take over Working refs without a TTY prompt.
+    def "batch take accepts --takeover without error"() {
+        when:
+        TakeArguments result = parser.parse(args('take', '42', '43', '--takeover'))
+
+        then:
+        noExceptionThrown()
+        result.takeover()
     }
 }

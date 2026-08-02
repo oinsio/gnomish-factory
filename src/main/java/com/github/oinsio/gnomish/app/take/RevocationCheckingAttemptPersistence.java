@@ -63,10 +63,17 @@ import org.slf4j.LoggerFactory;
  * sets a {@link ClaimLossFlag}, and {@link #persist} consults it here beside the {@code fetchTask}
  * check, so a lost claim throws the very same {@link RevocationDetectedException} and takes the
  * revocation-identical reaction (salvage, best-effort push, release, no park/finish/abort). An
- * empty flag never trips, so a run without a live heartbeat behaves exactly as before.
+ * empty flag never trips, so a run without a live heartbeat behaves exactly as before. The SAME
+ * flag is also how {@code serve}'s SIGTERM shutdown sequence stops an in-flight slot at its next
+ * round boundary (FR11, D9 of add-factory-serve): {@link ClaimLossFlag#reason} — not a hardcoded
+ * string — supplies the exception's message, so a claim flagged for a graceful shutdown posts an
+ * accurate "daemon shutting down" note instead of the heartbeat's "claim marker gone" wording,
+ * while every existing heartbeat-loss caller keeps that exact wording via {@code ClaimLossFlag
+ * #DEFAULT_REASON}.
  *
  * <p>Implements FR15, D2 of add-tracker-port. Implements FR2, NFR-R1, NFR-O1 of
- * fix-abort-progress-reset. Implements FR8, D7 of add-claim-heartbeat.
+ * fix-abort-progress-reset. Implements FR8, D7 of add-claim-heartbeat. Implements FR11, D9 of
+ * add-factory-serve.
  */
 public final class RevocationCheckingAttemptPersistence implements AttemptPersistence {
 
@@ -137,7 +144,7 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
         // the beat's 404 is authoritative even when this instance's (ETag-cached) fetchTask would
         // still report the claim as ours.
         if (claimLossFlag.isLost(ref)) {
-            var exception = new RevocationDetectedException(taskId, "claim marker gone (heartbeat reported loss)");
+            var exception = new RevocationDetectedException(taskId, claimLossFlag.reason(ref));
             detected = exception;
             throw exception;
         }
@@ -146,7 +153,7 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
 
         TrackerTaskState current = tracker.fetchTask(ref).state();
         if (!(current instanceof TrackerTaskState.Working(String holder)) || !holder.equals(instanceId.value())) {
-            var exception = new RevocationDetectedException(taskId, describe(current));
+            var exception = new RevocationDetectedException(taskId, RevocationReason.describe(current));
             detected = exception;
             throw exception;
         }
@@ -182,19 +189,5 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
      */
     public Optional<RevocationDetectedException> revocation() {
         return Optional.ofNullable(detected);
-    }
-
-    private static String describe(TrackerTaskState state) {
-        return switch (state) {
-            case TrackerTaskState.Gone gone ->
-                gone.closureReason() == null
-                        ? "task closed or nonexistent"
-                        : "task closed or nonexistent (" + gone.closureReason() + ")";
-            case TrackerTaskState.AwaitingHuman awaitingHuman ->
-                "task parked awaiting human (" + awaitingHuman.reason() + ")";
-            case TrackerTaskState.Ready ignored -> "task released back to ready";
-            case TrackerTaskState.Finished ignored -> "task already finished";
-            case TrackerTaskState.Working working -> "claim held by another instance (" + working.holder() + ")";
-        };
     }
 }

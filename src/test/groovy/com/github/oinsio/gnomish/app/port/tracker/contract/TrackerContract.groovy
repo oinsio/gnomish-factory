@@ -138,7 +138,7 @@ abstract class TrackerContract extends Specification implements PortContractSupp
 
         then: 'the task is present, still carrying its unfiltered abort facts'
         result == [
-            new ReadyTask(ref, UNEXPIRED_BACKOFF)
+            new ReadyTask(ref, UNEXPIRED_BACKOFF, false)
         ]
     }
 

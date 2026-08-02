@@ -56,6 +56,55 @@ class ClaimLossFlagSpec extends Specification {
         flag.isLost(A)
     }
 
+    // FR8: an unflagged ref answers the default reason (never actually surfaces in practice —
+    //     callers only consult reason() after isLost() has already answered true).
+    def "an unflagged ref answers the default reason"() {
+        expect:
+        flag.reason(A) == 'claim marker gone (heartbeat reported loss)'
+    }
+
+    // FR8: claimLost(ref) with no explicit reason records the default reason.
+    def "claimLost with no explicit reason records the default reason"() {
+        when:
+        flag.claimLost(A)
+
+        then:
+        flag.reason(A) == 'claim marker gone (heartbeat reported loss)'
+    }
+
+    // FR11, D9 of add-factory-serve: the SIGTERM shutdown sequence flags a claim lost with an
+    //     explicit, accurate reason instead of the heartbeat's generic wording.
+    def "claimLost with an explicit reason records and reads it back"() {
+        when:
+        flag.claimLost(A, 'daemon shutting down (SIGTERM)')
+
+        then:
+        flag.isLost(A)
+        flag.reason(A) == 'daemon shutting down (SIGTERM)'
+    }
+
+    // FR8, FR11: the flag latches on the FIRST reason recorded — a claim once flagged never
+    //     changes its cause within a run, whether the second call supplies a reason or not.
+    def "the first recorded reason sticks even if a later call supplies a different one"() {
+        when:
+        flag.claimLost(A, 'daemon shutting down (SIGTERM)')
+        flag.claimLost(A)
+
+        then:
+        flag.reason(A) == 'daemon shutting down (SIGTERM)'
+    }
+
+    // FR11: an explicit-reason flag for one task never leaks its reason onto another.
+    def "an explicit reason for one task does not affect another"() {
+        when:
+        flag.claimLost(A, 'daemon shutting down (SIGTERM)')
+        flag.claimLost(B)
+
+        then:
+        flag.reason(A) == 'daemon shutting down (SIGTERM)'
+        flag.reason(B) == 'claim marker gone (heartbeat reported loss)'
+    }
+
     // FR8: a beat thread may set the flag while the engine thread reads it — the set is
     //     always eventually visible to the reader across threads.
     def "a concurrent set is visible to a reader on another thread"() {

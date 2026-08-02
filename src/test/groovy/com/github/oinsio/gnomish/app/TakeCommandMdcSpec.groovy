@@ -59,6 +59,10 @@ advancement: auto
 ''')
         commitAll(projectDir)
         worktreesRoot = tempDir.resolve('worktrees')
+        // FR6, D5 of add-factory-serve: TakeBareAuto reads the open-front count unconditionally now
+        // (FeedPolicy snapshot + OpenFrontGate per-claim re-check); default to no open fronts so
+        // specs unconcerned with the WIP limit are unaffected.
+        tracker.listOpen() >> []
     }
 
     def cleanup() {
@@ -211,7 +215,7 @@ tracker:
         given:
         writeConfig()
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none())
+            new ReadyTask(REF, AbortFacts.none(), false)
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -231,12 +235,11 @@ tracker:
     def "bare mode successful claim sets taskId MDC to the claimed ref during dispatch, cleared after"() {
         given:
         writeConfig()
-        String claimedBy = null
         String mdcDuringFetch = 'UNSET'
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none())
+            new ReadyTask(REF, AbortFacts.none(), false)
         ]
-        tracker.claim(_, _) >> { TaskRef ref, String instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> new ClaimResult.Acquired()
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
             new TrackerTask(
@@ -263,12 +266,12 @@ tracker:
         writeConfig()
         String claimedBy = null
         List<String> mdcDuringFetch = []
-        tracker.claim(_, _) >> { TaskRef ref, String instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> { ref, instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
         tracker.fetchTask(_) >> {
             mdcDuringFetch << MDC.get(TASK_ID_KEY)
             new TrackerTask(
                     REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
-                    claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
+                    claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working((String) claimedBy),
                     AbortFacts.none())
         }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]

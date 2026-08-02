@@ -49,6 +49,15 @@ class SubcommandSpec extends Specification {
         Subcommand.parse(args) == Subcommand.USAGE
     }
 
+    // FR2 of add-factory-serve (task 5.1): a 'serve' token dispatches to SERVE
+    def "parse() recognizes a 'serve' token"() {
+        given:
+        def args = new DefaultApplicationArguments('serve', '--dir=/tmp/x')
+
+        expect:
+        Subcommand.parse(args) == Subcommand.SERVE
+    }
+
     // FR13, FR14: an unrecognized first positional token is a usage error (exit 2 family)
     def "parse() rejects an unrecognized subcommand"() {
         given:

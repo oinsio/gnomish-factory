@@ -48,13 +48,19 @@ import org.jspecify.annotations.Nullable;
  * manual-run and git paths keep the {@code null} default and are unaffected.
  * <p>Implements FR7, FR10, NFR-O1, UX1, D6, D10 of add-agent-executor; D10 of add-manual-run; FR7
  * of add-git-workflow; FR1, FR11 of add-claim-heartbeat.
+ *
+ * <p>The class itself (not its constructors or methods, which stay package-private — every call
+ * site that builds or mutates one remains inside {@code app}) is {@code public} so {@code
+ * com.github.oinsio.gnomish.app.serve.TakeSlotRunner} (task 4.3 of add-factory-serve) can hold and
+ * pass through an already-built instance, mirroring {@link TakeBareAuto}'s own constructor
+ * parameter of this type. Implements FR1, M2 of add-factory-serve.
  */
 // A final class, not a record: PIT's Gregor engine RUN_ERRORs (crashes its minion JVM) when mutating
 // a record here — the JVMTI RedefineClasses restriction on record classes (hcoles/pitest#1285),
 // test-independent, not a real coverage gap. This is a stateful assembly holder, never compared or
 // hashed, so as a plain class its methods mutate and are killed normally by
 // ManualRunAssemblyWiringSpec (M5).
-final class ManualRunAssembly {
+public final class ManualRunAssembly {
 
     private final SystemConsoleIO systemConsoleIO;
     private final FilesExistCheckRunner filesExistCheckRunner;

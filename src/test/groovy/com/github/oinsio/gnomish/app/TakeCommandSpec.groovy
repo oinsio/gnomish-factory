@@ -39,6 +39,10 @@ class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAs
     Path worktreesRoot
     Tracker tracker = Mock()
 
+    // FR6 of add-factory-serve: mutable so a test can set open fronts before command.run() runs,
+    // read lazily (the closure form) so the per-test override takes effect over this default
+    List<com.github.oinsio.gnomish.app.port.tracker.OpenTask> openTasks = []
+
     def setup() {
         // A real git repo (not just a bare .gnomish/ tree): explicit-mode's fresh claim goes
         // through TakeFreshClaim -> GitFreshTaskSupport, which creates a task branch off the
@@ -57,6 +61,10 @@ advancement: auto
 ''')
         commitAll(projectDir)
         worktreesRoot = tempDir.resolve('worktrees')
+        // FR6, D5 of add-factory-serve: TakeBareAuto reads the open-front count unconditionally now
+        // (FeedPolicy snapshot + OpenFrontGate per-claim re-check); default to no open fronts so
+        // specs unconcerned with the WIP limit are unaffected.
+        tracker.listOpen() >> { openTasks }
     }
 
     /** Writes config.yaml with the given tracker section appended verbatim (FR17). */
@@ -252,7 +260,7 @@ tracker:
     repo: acme/widgets
 ''')
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none())
+            new ReadyTask(REF, AbortFacts.none(), false)
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -264,6 +272,39 @@ tracker:
         then:
         def ex = thrown(TakeExitCodeException)
         ex.exitCode() == 15
+    }
+
+    // FR6 of add-factory-serve (task 3.1): a configured wip-limit lower than design D3's default of
+    // 10 blocks a fresh claim once open fronts reach it, proving TakeDispatcher.runBare sources the
+    // limit from the parsed tracker.wip-limit config rather than a hardcoded default
+    def "bare mode blocked by a configured wip-limit below the design default (FR6)"() {
+        given:
+        writeConfig('''
+tracker:
+  type: github
+  wip-limit: 1
+  github:
+    api-url: https://api.github.com
+    repo: acme/widgets
+''')
+        openTasks = [
+            new com.github.oinsio.gnomish.app.port.tracker.OpenTask(
+            new TaskRef('github:acme/widgets#1'),
+            new TrackerTaskState.Working('someone-else'), null)
+        ]
+        tracker.listReady(_) >> [
+            new ReadyTask(REF, AbortFacts.none(), false)
+        ]
+        Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
+        def command = newCommand(registry)
+
+        when:
+        command.run(args('take', "--dir=$projectDir"))
+
+        then:
+        def ex = thrown(TakeExitCodeException)
+        ex.exitCode() == 15
+        0 * tracker.claim(_, _)
     }
 
     // FR9 of add-tracker-port (task 5.14): explicit mode with a short ref ('42') calls into the
