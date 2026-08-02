@@ -39,7 +39,7 @@ autonomy.
   operation without a long-lived process; occupied slots finish their tasks
   first.
 - Feed automaton with four states — Filling (poll → claim → again, no pause),
-  Idle-empty, Idle-blocked (WIP limit reached), Full (no polling at all;
+  Idle-empty, Idle-blocked (eligible work held back by the WIP limit), Full (no polling at all;
   wakes on the local slot-freed event). Claiming happens in the feed, slots
   receive already-claimed tasks; a single idle-poll interval (factory config,
   default ~30 s) covers both Idle states.
@@ -217,8 +217,10 @@ autonomy.
   be available only via its explicit headless flag.
 - **FR5**: The feed SHALL be an automaton with four states: Filling (a free
   slot and an eligible task: poll → claim → immediately again, no pause),
-  Idle-empty (free slot, open < W, no eligible ready task), Idle-blocked
-  (free slot, open ≥ W), and Full (no free slot: no tracker polling at all;
+  Idle-empty (free slot but no backoff-eligible ready work: an empty or fully
+  backoff-suppressed queue), Idle-blocked (free slot and backoff-eligible ready
+  work exists, but open ≥ W holds back the fresh start), and Full (no free
+  slot: no tracker polling at all;
   wakes on the local slot-freed event). One idle-poll interval — factory
   configuration, default ~30 s — SHALL apply in both Idle states; Filling
   has no pause and Full no timer.
@@ -267,12 +269,14 @@ autonomy.
   returning stale claims in every feed state — including Full and
   Idle-blocked, where a reaped front also releases W budget without human
   involvement.
-- **FR14**: The worktree cleaner SHALL dispose of worktrees belonging to
-  ended (delivered, escalated, revoked) tasks past a configured age, as a
-  localized "dispose of a task's environment by age" responsibility whose
-  callers do not know the environment is a host worktree (the future
-  sandbox seam); a same-instance resume SHALL keep reusing a still-present
-  worktree.
+- **FR14**: The worktree cleaner SHALL dispose of task environments by age
+  of last file activity, sparing tasks currently occupying a slot of this
+  instance; ended (delivered, escalated, revoked) tasks are the population
+  this targets, but tracker status is not consulted — a too-eager disposal
+  costs a re-clone, never correctness. Disposal is a localized "dispose of
+  a task's environment by age" responsibility whose callers do not know
+  the environment is a host worktree (the future sandbox seam); a
+  same-instance resume SHALL keep reusing a still-present worktree.
 
 ### Non-Functional — Reliability
 

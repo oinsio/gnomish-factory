@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.ManualRunAssembly;
 import com.github.oinsio.gnomish.app.RunArguments;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
+import com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -31,7 +32,7 @@ import org.slf4j.MDC;
  * takes the same collaborators {@code TakeBareAuto} does — a shared {@link ManualRunAssembly}, the
  * worktrees root, an {@link AbortHandler}, the abort-fuse threshold, the MDC key, the credential
  * env vars to scrub, a {@link ClaimBeat} heartbeat, and a {@link ClaimLossFlag} — and wires a
- * single {@link TakeClaimAndWork} via {@link TakeClaimAndWork#forSlot} up front. {@code serve} is
+ * single {@link TakeClaimAndWork} via {@link TakeClaimAndWorkFactory#forSlot} up front. {@code serve} is
  * unconditionally non-interactive (FR4): {@link RunArguments.InteractiveMode#NONE} is hardcoded,
  * never wired to a TTY dialog.
  *
@@ -99,7 +100,7 @@ public final class TakeSlotRunner implements SlotRunner {
             ClaimLossFlag claimLossFlag,
             Tracker tracker,
             InstanceId instanceId) {
-        this.claimAndWork = TakeClaimAndWork.forSlot(
+        this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 worktreesRoot,
                 taskIdMdcKey,

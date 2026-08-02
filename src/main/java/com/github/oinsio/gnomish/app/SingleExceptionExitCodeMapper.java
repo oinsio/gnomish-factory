@@ -8,6 +8,10 @@ import org.springframework.boot.ExitCodeExceptionMapper;
  * type and unwrap an already-computed exit code from it, falling back to 1 for anything else.
  * Extracted from the identical {@code getExitCode} bodies of {@link
  * ServeExitCodeExceptionMapper} and {@link TakeExitCodeExceptionMapper}.
+ *
+ * <p>Implements the exit-code-unwrap contract behind {@link ServeExitCodeExceptionMapper}
+ * (FR12, D7 of add-factory-serve) and {@link TakeExitCodeExceptionMapper} (FR9, FR10, FR15,
+ * D16 of add-tracker-port).
  */
 abstract class SingleExceptionExitCodeMapper<T extends Throwable> implements ExitCodeExceptionMapper {
 

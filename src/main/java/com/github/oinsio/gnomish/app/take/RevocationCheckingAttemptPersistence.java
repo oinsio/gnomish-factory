@@ -153,7 +153,7 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
 
         TrackerTaskState current = tracker.fetchTask(ref).state();
         if (!(current instanceof TrackerTaskState.Working(String holder)) || !holder.equals(instanceId.value())) {
-            var exception = new RevocationDetectedException(taskId, describe(current));
+            var exception = new RevocationDetectedException(taskId, RevocationReason.describe(current));
             detected = exception;
             throw exception;
         }
@@ -189,19 +189,5 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
      */
     public Optional<RevocationDetectedException> revocation() {
         return Optional.ofNullable(detected);
-    }
-
-    private static String describe(TrackerTaskState state) {
-        return switch (state) {
-            case TrackerTaskState.Gone gone ->
-                gone.closureReason() == null
-                        ? "task closed or nonexistent"
-                        : "task closed or nonexistent (" + gone.closureReason() + ")";
-            case TrackerTaskState.AwaitingHuman awaitingHuman ->
-                "task parked awaiting human (" + awaitingHuman.reason() + ")";
-            case TrackerTaskState.Ready ignored -> "task released back to ready";
-            case TrackerTaskState.Finished ignored -> "task already finished";
-            case TrackerTaskState.Working working -> "claim held by another instance (" + working.holder() + ")";
-        };
     }
 }

@@ -19,6 +19,8 @@ import java.nio.file.attribute.FileTime
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
+import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.util.concurrent.PollingConditions
@@ -141,8 +143,8 @@ tracker:
                 starter)
     }
 
-    private static org.springframework.boot.DefaultApplicationArguments args(String... raw) {
-        new org.springframework.boot.DefaultApplicationArguments(raw)
+    private static DefaultApplicationArguments args(String... raw) {
+        new DefaultApplicationArguments(raw)
     }
 
     // Non-termination guard: run() assembles a REAL FeedAutomaton whose outage retry (NFR-R3)
@@ -152,7 +154,7 @@ tracker:
     // pitestVerifyAllKilled rejects. Running the command on a bounded virtual (daemon) thread
     // turns the hang into a red assertion instead.
     private static void runsToCompletion(Closure body) {
-        def failure = new java.util.concurrent.atomic.AtomicReference<Throwable>()
+        def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-command-under-test').start {
             try {
                 body()
@@ -262,8 +264,8 @@ tracker:
     // the slot runner it assembles, and joins the heartbeat's progress listener into the assembly
     // BEFORE the (reused-for-the-daemon's-lifetime) slot runner is built — not the ClaimBeat.NONE/
     // disposable-listener seam task 5.1 wired as a placeholder. Reaches through the private fields
-    // task 4.3's TakeSlotRunner/TakeClaimAndWork already carry (no new production seam needed) via
-    // Groovy's ".@" direct field access, since neither class exposes these for inspection otherwise.
+    // FeedCycle/TakeSlotRunner/TakeClaimAndWork already carry (no new production seam needed) via
+    // Groovy's ".@" direct field access, since none of these classes expose them for inspection.
     def "wires the real cross-slot heartbeat and claim-loss flag into the assembled slot runner (FR13)"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
@@ -276,7 +278,7 @@ tracker:
 
         then:
         noExceptionThrown()
-        TakeSlotRunner slotRunner = starter.captured.@slotRunner
+        TakeSlotRunner slotRunner = (TakeSlotRunner) starter.captured.@cycle.@slotRunner
         def claimAndWork = slotRunner.@claimAndWork
         ClaimBeat heartbeat = claimAndWork.@heartbeat
         def joinedAssembly = claimAndWork.@assembly

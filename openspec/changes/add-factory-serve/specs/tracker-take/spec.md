@@ -11,16 +11,19 @@ or more refs), and bare `take` (auto mode). Supported flags: `--dir`,
 diverged branches), and the headless takeover flag. `take` SHALL have no
 `--mode`, no ad-hoc source flags (`--task`, `--task-file`, `--task-id`,
 `--resume`), and no `--from-stage`; the bare form SHALL reject start
-modifiers (`--base`); the batch form SHALL reject `--interactive` and
-`--base`. The `gnomish run` flag matrix SHALL remain unchanged. Short refs
-(`42`, `#42`) expand via the configured binding; a full canonical id naming a
-foreign repo is an error (subject to the adapter's rename tolerance).
+modifiers (`--base`) and the headless takeover flag (which authorizes an
+explicit `take <ref>` takeover only); the batch form SHALL reject
+`--interactive` and `--base`. The `gnomish run` flag matrix SHALL remain
+unchanged. Short refs (`42`, `#42`) expand via the configured binding; a full
+canonical id naming a foreign repo is an error (subject to the adapter's rename
+tolerance).
 <!-- implements FR9 of add-tracker-port -->
+<!-- implements FR6 of add-claim-heartbeat -->
 <!-- implements FR2, FR3 of add-factory-serve -->
 
 #### Scenario: Flag validation
 - **WHEN** `take` is invoked with `--mode`, `--task`, `--resume`, or bare
-  `take` with `--base`
+  `take` with `--base` or `--takeover`
 - **THEN** each invocation fails with a validation error before touching the
   tracker
 

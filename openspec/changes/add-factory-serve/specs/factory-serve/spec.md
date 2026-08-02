@@ -51,9 +51,11 @@ startup with a clear error, before anything is claimed.
 
 ### Requirement: Feed automaton with a single idle interval
 The feed SHALL cycle through four states: Filling (free slot and an eligible
-task — poll, claim, immediately again, no pause), Idle-empty (free slot,
-open < W, nothing eligible), Idle-blocked (free slot, open ≥ W), and Full (no
-free slot — no queue polling at all; wakes on the local slot-freed event).
+task — poll, claim, immediately again, no pause), Idle-empty (free slot but no
+backoff-eligible ready work — an empty or fully backoff-suppressed queue),
+Idle-blocked (free slot and backoff-eligible ready work exists, but open ≥ W
+holds back the fresh start), and Full (no free slot — no queue polling at all;
+wakes on the local slot-freed event).
 One idle-poll interval — factory configuration, default 30 s — SHALL drive
 both Idle states; polls SHALL use conditional requests so an unchanged queue
 costs no rate-limit budget; the poll phase SHALL be jittered so instances do
@@ -173,13 +175,17 @@ verified by tests exercising overlapping slot lifecycles in one repository.
   corruption or spurious failure
 
 ### Requirement: Worktree cleaner disposes aged task environments
-The daemon SHALL dispose of worktrees belonging to ended tasks (delivered,
-escalated, revoked) past a configured age, as a localized "dispose of a
-task's environment by age" responsibility whose callers never assume the
+The daemon SHALL dispose of task environments whose last file activity is
+older than a configured age and which do not currently occupy a slot of
+this instance; ended tasks (delivered, escalated, revoked) stop touching
+their worktrees and are the population this policy targets, but tracker
+status SHALL NOT be consulted — a disposed-too-early worktree costs only a
+re-clone on resume, never correctness. Disposal is a localized "dispose of
+a task's environment by age" responsibility whose callers never assume the
 environment is a host worktree — the future sandbox change replaces its
-inside, not its callers. A worktree of a task currently `Working` SHALL
-never be disposed, and a same-instance resume SHALL keep reusing a
-still-present worktree.
+inside, not its callers. A task currently occupying a slot of this
+instance SHALL never be disposed regardless of age, and a same-instance
+resume SHALL keep reusing a still-present worktree.
 <!-- implements FR14 of add-factory-serve -->
 
 #### Scenario: Aged environment removed
@@ -188,5 +194,6 @@ still-present worktree.
   worktree from the branch
 
 #### Scenario: Working task untouched
-- **WHEN** the cleaner runs while a task is `Working` in a slot
+- **WHEN** the cleaner runs while a task is `Working` in a slot of this
+  instance
 - **THEN** that task's worktree is not considered for disposal

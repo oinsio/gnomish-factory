@@ -62,14 +62,6 @@ public final class FeedAutomaton {
     private static final double JITTER_MAX_FRACTION = 0.20;
 
     private final SlotLedger slotLedger;
-
-    // Not read directly by this class (only FeedCycle dispatches to it) — kept as a field rather
-    // than a constructor-local so ServeCommandSpec's ".@slotRunner" reflective field access (its
-    // only way to reach TakeSlotRunner's private collaborators for FR13's wiring assertions)
-    // keeps working.
-    @SuppressWarnings("unused")
-    private final SlotRunner slotRunner;
-
     private final Sleeper sleeper;
     private final Clock clock;
     private final Duration backoffBase;
@@ -110,7 +102,6 @@ public final class FeedAutomaton {
             int wipLimit,
             Random random) {
         this.slotLedger = slotLedger;
-        this.slotRunner = slotRunner;
         this.sleeper = sleeper;
         this.clock = clock;
         this.backoffBase = backoffBase;
@@ -140,6 +131,7 @@ public final class FeedAutomaton {
      * SlotLedger#acquire()} block or {@link Sleeper#sleep} return as an {@link
      * InterruptedException}.
      */
+    @SuppressWarnings("InfiniteLoopStatement") // intentional: runs until the caller interrupts
     public void run() throws InterruptedException {
         while (true) {
             step();

@@ -118,11 +118,16 @@ native calls for a guarantee the fence makes non-critical.
 **D10 — Worktree cleaner: one janitor component, startup + hourly tick, age
 threshold 14 days.** (FR14, Q4) A single component owns "dispose of a task's
 environment by age": it runs at daemon startup and on an hourly timer,
-disposes environments of ended tasks older than the threshold (factory
-config, default 14 days), and never touches tasks this instance currently
-holds. Worktrees are instance-local (each instance owns its clone), so no
-cross-instance coordination exists or is needed; a disposed worktree
-rematerializes from the branch on resume. *Rationale:* the sandbox notes ask
+disposes environments whose last file activity is older than the threshold
+(factory config, default 14 days), and never touches tasks currently
+occupying a slot of this instance. That pair — aged plus not held here — is
+the whole policy: tracker status is deliberately not consulted (no reverse
+mapping from a sanitized directory name to a task ref, no tracker
+dependency or outage handling in the janitor, and a status check would
+still be racy between read and dispose); ended tasks stop touching their
+worktrees, so age is the proxy. Worktrees are instance-local (each instance
+owns its clone), so no cross-instance coordination exists or is needed; a
+disposed worktree rematerializes from the branch on resume. *Rationale:* the sandbox notes ask
 for exactly this seam — callers say "dispose", only the janitor knows the
 environment is a host worktree, so the future sandbox change swaps the
 inside. *Alternative rejected:* piggybacking disposal on feed idle ticks — a
@@ -138,9 +143,14 @@ busy daemon (always Filling/Full) would never clean.
   zone always includes the head.
 - [W overshoot grows with the number of racing instances] → bounded to one
   per instance by D1/D5; W is policy, not a safety invariant.
-- [Cleaner races a concurrent resume of an aged task] → disposal targets
-  only ended tasks past a long threshold; the resume path rematerializes
-  from the branch, so the race costs a re-clone, not correctness.
+- [Cleaner disposes an environment of a task that is not ended, or races a
+  concurrent resume — including a co-located bare `take` on the same
+  `--dir`, whose `Working` task is invisible to this instance's slot
+  ledger] → the window is narrow (an active run keeps file mtimes fresh,
+  the threshold is 14 days, the tick hourly) and the cost is bounded: a
+  disrupted run fails and returns via TTL/reaper, branch state stays
+  durable, resume rematerializes from the branch — a re-clone, not a
+  correctness loss.
 - [`ProcessHandle` tree kill is best-effort (double-forking gnome escapes)]
   → the escaped process cannot push (fence) or write the tracker (claim
   gone); it is waste, not danger.

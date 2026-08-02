@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.http.RequestMethod
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
@@ -117,6 +118,8 @@ class GithubFeedQuerySpec extends Specification {
         result[0].ref().id() == 'github:localhost/acme/widgets#7'
         result[0].abortFacts().count() == 2
         result[0].abortFacts().lastAbortAt() == Instant.parse('2026-07-20T12:30:00Z')
+        // FR8: listReady is a read-only poll — no write (POST/PATCH/DELETE) may reach the tracker
+        wireMock.allServeEvents.every { it.request.method == RequestMethod.GET }
     }
 
     def "counts only abort markers strictly after the latest PROGRESS marker (FR3, D3 of fix-abort-progress-reset)"() {
@@ -180,7 +183,7 @@ class GithubFeedQuerySpec extends Specification {
         def result = feedQuery.listReady(10)
 
         then:
-        result[0].returned() == true
+        result[0].returned()
         wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/11/comments?per_page=100')))
     }
 
@@ -204,7 +207,7 @@ class GithubFeedQuerySpec extends Specification {
         def result = feedQuery.listReady(10)
 
         then:
-        result[0].returned() == true
+        result[0].returned()
         wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100')))
     }
 
@@ -223,7 +226,7 @@ class GithubFeedQuerySpec extends Specification {
         def result = feedQuery.listReady(10)
 
         then:
-        result[0].returned() == false
+        !result[0].returned()
     }
 
     def "listReady rejects a zero limit at the exact boundary, not just negative values"() {

@@ -16,14 +16,21 @@ import java.util.List;
  * issue with {@link com.github.oinsio.gnomish.app.port.tracker.AbortFacts}
  * read from its comments (FR8 of add-tracker-port).
  *
- * <p>The feed query itself goes through the shared {@link
- * GithubConditionalRequestCache} (constructor-injected, so the same instance
- * is reused across repeated polls), so steady-state polling of an unchanged
- * queue costs no rate-limit budget (NFR-P1). Abort-fact enrichment requires
- * one additional comments fetch per ready issue — acceptable for v1; a future
- * optimization could cache or batch these per NFR-P1 if issue volume grows.
+ * <p>Both reads go through the shared {@link GithubConditionalRequestCache}
+ * (constructor-injected, so the same instance is reused across repeated
+ * polls): the feed request itself, and the one additional comments fetch per
+ * ready issue that {@link GithubAbortFactsReader#fetchMarkers} does to enrich
+ * each entry. So steady-state polling of an unchanged queue of N tasks costs
+ * no rate-limit budget — the feed and each unchanged comment thread come back
+ * as a {@code 304 Not Modified} reusing the cached body (NFR-P1). The
+ * comments-thread ETag is keyed identically to {@code fetchTask}'s, so a claim
+ * that immediately re-reads the same issue reuses this enrichment fetch's
+ * cached body.
  *
- * <p>Implements FR8 of add-tracker-port.
+ * <p>Implements FR8 of add-tracker-port; also FR7 and NFR-P1 of
+ * add-factory-serve — the adapter-derived "returned" fact each entry
+ * carries ({@link GithubReturnedFactReader}) and the conditional-request
+ * idle polling the serve feed relies on.
  */
 public final class GithubFeedQuery {
 
@@ -44,7 +51,7 @@ public final class GithubFeedQuery {
      */
     public GithubFeedQuery(GithubConditionalRequestCache cache, String owner, String repo, String readyLabel) {
         this.cache = cache;
-        this.abortFactsReader = new GithubAbortFactsReader(cache.httpClient());
+        this.abortFactsReader = new GithubAbortFactsReader(cache);
         this.owner = owner;
         this.repo = repo;
         this.readyLabel = readyLabel;

@@ -2,10 +2,12 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import java.time.Instant
@@ -46,7 +48,7 @@ class GithubAbortFactsReaderSpec extends Specification {
 
     private GithubAbortFactsReader newReader() {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        new GithubAbortFactsReader(httpClient)
+        new GithubAbortFactsReader(new GithubConditionalRequestCache(httpClient))
     }
 
     def "read fetches the issue comments and folds abort markers into a non-null AbortFacts"() {
@@ -81,6 +83,34 @@ class GithubAbortFactsReaderSpec extends Specification {
         then:
         result != null
         result == AbortFacts.none()
+    }
+
+    def "re-reading an unchanged comment thread sends If-None-Match and reuses the 304 body (NFR-P1)"() {
+        given: 'the comments answer 200+ETag once, then 304 on the conditional re-read'
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/7/comments?per_page=100'))
+                .inScenario('comments-poll').whenScenarioStateIs('Started')
+                .willReturn(aResponse().withStatus(200).withHeader('ETag', '"com1"').withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 aborted"}
+                        ]
+                        '''))
+                .willSetStateTo('comments-cached'))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/7/comments?per_page=100'))
+                .inScenario('comments-poll').whenScenarioStateIs('comments-cached')
+                .willReturn(aResponse().withStatus(304)))
+        def reader = newReader()
+
+        when: 'the same reader (sharing one cache) polls the same issue twice'
+        def first = reader.read('acme', 'widgets', 7)
+        def second = reader.read('acme', 'widgets', 7)
+
+        then: 'the 304 re-read reuses the cached comments body, yielding the same facts'
+        first == new AbortFacts(1, Instant.parse('2026-07-20T11:00:00Z'))
+        second == first
+
+        and: 'the second poll carried If-None-Match with the cached ETag'
+        wireMock.verify(getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/7/comments?per_page=100'))
+                .withHeader('If-None-Match', WireMock.equalTo('"com1"')))
     }
 
     def "read propagates a GithubFeedQueryException when the comments fetch fails"() {

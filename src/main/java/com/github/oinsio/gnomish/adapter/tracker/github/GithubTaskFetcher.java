@@ -18,9 +18,12 @@ import java.util.Optional;
  * label names and boundary-anchors the claim holder, park reason, and abort
  * facts to the latest {@code claim}/{@code abort} structural marker (design
  * D13's boundary-anchoring idea, via {@link GithubCommentBoundary}) — never
- * folding the whole comment history unconditionally, unlike {@link
- * GithubAbortFactsReader}, which is safe to do so only for {@code Ready}
- * issues.
+ * folding the whole comment history unconditionally, unlike the unconditional
+ * fold {@link GithubAbortFactsReader#foldAbortMarkers} performs, which is safe
+ * to do so only for {@code Ready} issues. The comment fetch itself is shared:
+ * this fetcher delegates to {@link GithubAbortFactsReader#fetchMarkers} rather
+ * than duplicating the conditional-request read, so both readers stay on the
+ * same cache key and parsing logic.
  *
  * <p>A closed issue's {@code state_reason} ({@code completed}/{@code
  * not_planned}/{@code reopened}) is threaded into {@link
@@ -70,7 +73,8 @@ public record GithubTaskFetcher(GithubConditionalRequestCache cache, String work
         }
         TaskSnapshot snapshot = new TaskSnapshot(ref.id(), detail.title(), detail.bodyOrEmpty());
 
-        List<ParsedMarker> markers = fetchMarkers(id.owner(), id.repo(), id.issueNumber());
+        List<ParsedMarker> markers =
+                new GithubAbortFactsReader(cache).fetchMarkers(id.owner(), id.repo(), id.issueNumber());
         AbortFacts abortFacts = GithubCommentBoundary.abortFactsSinceBoundary(markers);
         TrackerTaskState state = stateFrom(detail, markers);
         return new TrackerTask(ref, snapshot, state, abortFacts);
@@ -112,23 +116,6 @@ public record GithubTaskFetcher(GithubConditionalRequestCache cache, String work
                 yield Optional.of(GithubIssueDetailParser.parse(fresh.body()));
             }
         };
-    }
-
-    private List<ParsedMarker> fetchMarkers(String owner, String repo, int issueNumber) {
-        String path = "/repos/%s/%s/issues/%d/comments?per_page=100".formatted(owner, repo, issueNumber);
-        String cacheKey = "comments:%s/%s#%d".formatted(owner, repo, issueNumber);
-        String body =
-                switch (cache.get(cache.httpClient().newRequest(path), cacheKey)) {
-                    case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
-                    case GithubConditionalRequestCache.Fresh fresh -> {
-                        if (fresh.statusCode() / 100 != 2) {
-                            throw new GithubFeedQueryException("Failed to fetch comments for %s/%s#%d: HTTP %d"
-                                    .formatted(owner, repo, issueNumber, fresh.statusCode()));
-                        }
-                        yield fresh.body();
-                    }
-                };
-        return GithubCommentParser.parseMarkers(body);
     }
 
     private static TaskSnapshot goneSnapshot(TaskRef ref) {

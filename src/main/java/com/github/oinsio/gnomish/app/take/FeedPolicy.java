@@ -26,12 +26,24 @@ import java.util.Random;
  * per-claim re-check of design D5) and reading {@code wipLimit} from
  * configuration are the caller's job.
  *
- * <p>Implements FR6, FR9, D2, D4 of add-factory-serve.
+ * <p>Implements FR6, FR9, NFR-C1, D2, D4 of add-factory-serve — the WIP
+ * gate that drops fresh entries once {@code openFrontCount >= wipLimit} is
+ * what caps the tokens a runaway queue can burn.
  */
 public final class FeedPolicy {
 
     /** Head-zone width per design D4: a fixed constant, not configuration. */
     public static final int HEAD_ZONE_K = 5;
+
+    /**
+     * Caps how many head-of-queue entries one {@code listReady} feed read returns, shared by bare
+     * auto {@code take} and every {@code serve} feed cycle (design D2). In the common case only
+     * the first entry is ever claimed; the rest exist to give the claim-race/backoff fallback walk
+     * enough candidates without a second tracker round-trip. No spec or design fixes a number: 20
+     * comfortably covers "several tasks concurrently backed off or raced" without over-fetching
+     * from the adapter on every read.
+     */
+    public static final int FEED_LIMIT = 20;
 
     private FeedPolicy() {}
 

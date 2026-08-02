@@ -78,23 +78,13 @@ final class TakeDisposition {
             TakeoverConfirmation confirmation,
             Clock clock,
             ClaimLossFlag claimLossFlag) {
-        var resumeRunner = new TakeResumeRunner(
+        this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 worktreesRoot,
                 taskIdMdcKey,
                 abortHandler,
                 abortThreshold,
                 credentialEnvVarsToScrub,
-                claimLossFlag);
-        var dispositionResume =
-                new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner), worktreesRoot);
-        this.claimAndWork = new TakeClaimAndWork(
-                assembly,
-                worktreesRoot,
-                abortHandler,
-                abortThreshold,
-                credentialEnvVarsToScrub,
-                dispositionResume,
                 heartbeat,
                 claimLossFlag);
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);

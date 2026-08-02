@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -39,10 +37,18 @@ import java.util.Optional;
  * the same thread (NFR-P1 of add-factory-serve: no new GitHub API calls
  * beyond what {@code listReady} already pays for).
  *
+ * <p>That per-issue comments fetch goes through the shared {@link
+ * GithubConditionalRequestCache} under the same {@code comments:owner/repo#n}
+ * key {@link GithubTaskFetcher} uses, so a steady-state poll of an unchanged
+ * queue pays no rate-limit budget for enrichment either: each unchanged
+ * comment thread comes back as a {@code 304 Not Modified} reusing the cached
+ * body, and the ETag is shared with {@code fetchTask}'s later re-read of the
+ * same issue (NFR-P1 of add-tracker-port / add-factory-serve).
+ *
  * <p>Implements FR8, FR14 of add-tracker-port; FR3 of
  * fix-abort-progress-reset.
  */
-record GithubAbortFactsReader(GithubHttpClient httpClient) {
+record GithubAbortFactsReader(GithubConditionalRequestCache cache) {
 
     /**
      * Fetches the comments of {@code owner/repo#issueNumber} and folds every
@@ -63,13 +69,19 @@ record GithubAbortFactsReader(GithubHttpClient httpClient) {
      */
     List<ParsedMarker> fetchMarkers(String owner, String repo, int issueNumber) {
         String path = "/repos/%s/%s/issues/%d/comments?per_page=100".formatted(owner, repo, issueNumber);
-        HttpRequest.Builder request = httpClient.newRequest(path).GET();
-        HttpResponse<String> response = httpClient.send(request);
-        if (response.statusCode() / 100 != 2) {
-            throw new GithubFeedQueryException("Failed to fetch comments for %s/%s#%d: HTTP %d"
-                    .formatted(owner, repo, issueNumber, response.statusCode()));
-        }
-        return GithubCommentParser.parseMarkers(response.body());
+        String cacheKey = "comments:%s/%s#%d".formatted(owner, repo, issueNumber);
+        String body =
+                switch (cache.get(cache.httpClient().newRequest(path), cacheKey)) {
+                    case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
+                    case GithubConditionalRequestCache.Fresh fresh -> {
+                        if (fresh.statusCode() / 100 != 2) {
+                            throw new GithubFeedQueryException("Failed to fetch comments for %s/%s#%d: HTTP %d"
+                                    .formatted(owner, repo, issueNumber, fresh.statusCode()));
+                        }
+                        yield fresh.body();
+                    }
+                };
+        return GithubCommentParser.parseMarkers(body);
     }
 
     static AbortFacts foldAbortMarkers(List<ParsedMarker> markers) {

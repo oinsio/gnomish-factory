@@ -75,47 +75,6 @@ public final class TakeClaimAndWork {
     }
 
     /**
-     * Builds a ready-to-use {@link TakeClaimAndWork} from just the ingredients {@link
-     * TakeBareAuto} itself takes, wiring the same {@link TakeResumeRunner}/{@link
-     * TakeDispositionResume}/{@link TakeDecisionResume} chain {@link TakeBareAuto}'s constructor
-     * builds inline. Exists so a caller outside this package (only {@code
-     * com.github.oinsio.gnomish.app.serve.TakeSlotRunner}, task 4.3 of add-factory-serve) can get
-     * a working instance without those three package-private resume-machinery classes needing to
-     * be widened too — this factory method is the sole crossing point.
-     *
-     * <p>Implements FR1, M2 of add-factory-serve.
-     */
-    public static TakeClaimAndWork forSlot(
-            ManualRunAssembly assembly,
-            Path worktreesRoot,
-            String taskIdMdcKey,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            List<String> credentialEnvVarsToScrub,
-            ClaimBeat heartbeat,
-            ClaimLossFlag claimLossFlag) {
-        var resumeRunner = new TakeResumeRunner(
-                assembly,
-                worktreesRoot,
-                taskIdMdcKey,
-                abortHandler,
-                abortThreshold,
-                credentialEnvVarsToScrub,
-                claimLossFlag);
-        var dispositionResume =
-                new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner), worktreesRoot);
-        return new TakeClaimAndWork(
-                assembly,
-                worktreesRoot,
-                abortHandler,
-                abortThreshold,
-                credentialEnvVarsToScrub,
-                dispositionResume,
-                heartbeat,
-                claimLossFlag);
-    }
-
-    /**
      * Claims {@code trackerTask.ref()} and, on success, either starts a fresh claim or resumes an
      * existing branch (see class javadoc). On a lost claim race, returns {@link #refuseHeld}.
      *
