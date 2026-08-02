@@ -85,8 +85,7 @@ thread; the heartbeat stays claim-driven — its death handler produces the
 
 - [ ] 6.1 Operator guide: observability files section + external dead-man's-
   switch monitor with the six alert rules over snapshot fields (UX1–UX4, D9)
-- [ ] 6.2 Traceability grep: every FR/NFR of the proposal has an implementing
-  spec/test reference (grep-based per `.claude/rules/traceability.md`; the
-  openspec CLI does not index root-level changes)
+- [ ] 6.2 Traceability: every FR/NFR of the proposal has an implementing
+  spec/test reference
 - [ ] 6.3 Coverage gate: JaCoCo + PIT green on new Java classes (100% target
   per testing rule; justify any exception)

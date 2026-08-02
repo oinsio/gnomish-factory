@@ -72,7 +72,7 @@ directory. The writer must be a new dedicated thread: the loops that do tick
 unconditionally (the hourly `WorktreeJanitor`, the standing reaper on the
 beat interval) have the wrong cadence and own other duties, and the feed
 legally sleeps in Full without a timer.
-*Rejected:* acting threads writing directly (races the atomic replace);
+*Rejected:* acting threads writing directly (races the atomic replacement);
 timer-only (late terminal records).
 
 **D5 — Ledger semantics: disposable history, write-only.** Not a cache to
