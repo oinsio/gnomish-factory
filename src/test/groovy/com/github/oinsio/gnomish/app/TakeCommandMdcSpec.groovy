@@ -124,7 +124,7 @@ tracker:
         String mdcDuringFetch = null
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
-            new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), state, AbortFacts.none())
+            new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), state, AbortFacts.none(), false)
         }
         // The Working row enters the takeover path (task 6.2), which reads facts via listOpen before
         // the headless (no-TTY) refusal; an empty listing renders the age as "unknown". Harmless for
@@ -215,7 +215,7 @@ tracker:
         given:
         writeConfig()
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false)
+            new ReadyTask(REF, AbortFacts.none(), false, false)
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -237,14 +237,14 @@ tracker:
         writeConfig()
         String mdcDuringFetch = 'UNSET'
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false)
+            new ReadyTask(REF, AbortFacts.none(), false, false)
         ]
         tracker.claim(_, _) >> new ClaimResult.Acquired()
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
             new TrackerTask(
                     REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
-                    new TrackerTaskState.Finished(), AbortFacts.none())
+                    new TrackerTaskState.Finished(), AbortFacts.none(), false)
         }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)
@@ -272,7 +272,7 @@ tracker:
             new TrackerTask(
                     REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
                     claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working((String) claimedBy),
-                    AbortFacts.none())
+                    AbortFacts.none(), false)
         }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)

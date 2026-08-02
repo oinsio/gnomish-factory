@@ -28,12 +28,14 @@ import java.util.Optional;
  * one answers "which comment IS the claim anchor" over the lease boundary set —
  * two boundaries for two questions, kept separate as the codebase already does.
  *
- * <p>The boundary set is {@code ABORT} and {@code REPORT} (park/finish), matching
- * {@link GithubClaimLease}'s lease boundary; {@link #isBoundary(GithubMarkerKind)}
- * is the single extension point where task 3.3's {@code stale-claim-removed} kind
- * will be added without touching the resolution loop.
+ * <p>The boundary set is {@code ABORT}, {@code PARK}, and {@code FINISH} — the two
+ * session-ending write paths {@link GithubStateWrites} posts, matching {@link
+ * GithubClaimLease}'s lease boundary, which reuses {@link
+ * #isBoundary(GithubMarkerKind)} rather than duplicating the set.
  *
- * <p>Implements FR1, FR5 of add-claim-heartbeat.
+ * <p>Implements FR1, FR5 of add-claim-heartbeat; enforce-finish-terminality
+ * task 3.2 (the claim-boundary set replaced the retired {@code REPORT} kind
+ * with {@code PARK} and {@code FINISH}).
  */
 final class GithubClaimComment {
 
@@ -105,15 +107,23 @@ final class GithubClaimComment {
     /**
      * The session-ending boundary kinds that void every claim posted before them
      * (design D13's boundary list, extended by add-claim-heartbeat design D12).
-     * A {@code STALE_CLAIM_REMOVED} marker — a reaper's removal boundary — voids
-     * the claim it removed so the next lease round's verify-read considers only
-     * claims posted after it (github-tracker spec "Marker anchors the next lease
-     * round"), even in the case where the dead claim comment's deletion did not
-     * land but the boundary marker did.
+     * {@code PARK} and {@code FINISH} both end a session the same way a plain
+     * {@code REPORT} marker used to (enforce-finish-terminality task 3.1 split
+     * the single {@code REPORT} kind into these two dedicated kinds; both still
+     * count as boundaries here). A {@code STALE_CLAIM_REMOVED} marker — a
+     * reaper's removal boundary — voids the claim it removed so the next lease
+     * round's verify-read considers only claims posted after it (github-tracker
+     * spec "Marker anchors the next lease round"), even in the case where the
+     * dead claim comment's deletion did not land but the boundary marker did.
+     *
+     * <p>Package-private: {@code GithubClaimLease.latestBoundaryIndex} reuses
+     * this exact set rather than duplicating it (the two boundary scans were
+     * textually identical).
      */
-    private static boolean isBoundary(GithubMarkerKind kind) {
+    static boolean isBoundary(GithubMarkerKind kind) {
         return kind == GithubMarkerKind.ABORT
-                || kind == GithubMarkerKind.REPORT
+                || kind == GithubMarkerKind.PARK
+                || kind == GithubMarkerKind.FINISH
                 || kind == GithubMarkerKind.STALE_CLAIM_REMOVED;
     }
 

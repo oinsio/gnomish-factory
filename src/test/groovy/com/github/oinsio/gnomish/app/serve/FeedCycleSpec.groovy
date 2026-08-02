@@ -9,6 +9,9 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 
@@ -32,7 +35,7 @@ class FeedCycleSpec extends Specification {
         // returned() == true so OpenFrontGate.isStillEligible short-circuits to eligible
         // without invoking the openFrontCount supplier — the scenario isolates the claim
         // race outcome, not the WIP-gate re-check (that is FeedAutomatonSpec's job).
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false)
     }
 
     private static FeedCycle cycle(Tracker tracker, SlotLedger ledger, SlotRunner runner = { TaskRef ref -> } as SlotRunner) {
@@ -107,7 +110,7 @@ class FeedCycleSpec extends Specification {
             listOpen: { -> [new Object(), new Object()] },
             claim   : { TaskRef ref, String instance -> claimCalls.incrementAndGet(); new ClaimResult.Acquired() },
         ] as Tracker
-        def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false)
+        def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false, false)
 
         when:
         cycle(tracker, ledger).claimOrAbandon([fresh])
@@ -129,20 +132,20 @@ class FeedCycleSpec extends Specification {
         Tracker tracker = [
             claim: { TaskRef ref, String instance -> new ClaimResult.Acquired() },
         ] as Tracker
-        def started = new java.util.concurrent.CopyOnWriteArrayList<TaskRef>()
-        def runnerStarted = new java.util.concurrent.CountDownLatch(1)
-        def releaseRunner = new java.util.concurrent.CountDownLatch(1)
+        def started = new CopyOnWriteArrayList<TaskRef>()
+        def runnerStarted = new CountDownLatch(1)
+        def releaseRunner = new CountDownLatch(1)
         // The runner blocks until the test says so, so the slot's finally-release() cannot
         // race ahead of the freeSlots() assertion below.
         SlotRunner runner = { TaskRef ref ->
             started.add(ref)
             runnerStarted.countDown()
-            releaseRunner.await(2, java.util.concurrent.TimeUnit.SECONDS)
+            releaseRunner.await(2, TimeUnit.SECONDS)
         } as SlotRunner
 
         when:
         cycle(tracker, ledger, runner).claimOrAbandon([returnedTask('github:o/r#1')])
-        runnerStarted.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        runnerStarted.await(2, TimeUnit.SECONDS)
 
         then: 'the permit stays occupied by the claimed task, not returned to the pool'
         started.collect { it.id() } == ['github:o/r#1']

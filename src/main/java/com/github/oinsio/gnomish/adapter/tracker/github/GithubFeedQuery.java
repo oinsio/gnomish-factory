@@ -29,8 +29,11 @@ import java.util.List;
  *
  * <p>Implements FR8 of add-tracker-port; also FR7 and NFR-P1 of
  * add-factory-serve — the adapter-derived "returned" fact each entry
- * carries ({@link GithubReturnedFactReader}) and the conditional-request
- * idle polling the serve feed relies on.
+ * carries ({@link GithubHistoryFactReader}) and the conditional-request
+ * idle polling the serve feed relies on. The "finished" fact (FR1 of
+ * enforce-finish-terminality) is derived from that same reader and the same
+ * per-issue comments fetch, so it costs no additional GitHub API call
+ * (NFR-P1 of enforce-finish-terminality).
  */
 public final class GithubFeedQuery {
 
@@ -88,12 +91,13 @@ public final class GithubFeedQuery {
             }
             TaskRef ref = new TaskRef(
                     GithubTaskId.build(apiUrl, owner, repo, issueNumber).canonicalId());
-            // FR7, NFR-P1: one comments fetch per issue, reused for both facts —
-            // no extra GitHub API read for the returned fact.
+            // FR7, NFR-P1: one comments fetch per issue, reused for all three facts —
+            // no extra GitHub API read for the returned or finished facts.
             List<ParsedMarker> markers = abortFactsReader.fetchMarkers(owner, repo, issueNumber);
             var abortFacts = GithubAbortFactsReader.foldAbortMarkers(markers);
-            boolean returned = GithubReturnedFactReader.derive(markers);
-            readyTasks.add(new ReadyTask(ref, abortFacts, returned));
+            boolean returned = GithubHistoryFactReader.derive(markers);
+            boolean finished = GithubHistoryFactReader.deriveFinished(markers);
+            readyTasks.add(new ReadyTask(ref, abortFacts, returned, finished));
         }
         return List.copyOf(readyTasks);
     }

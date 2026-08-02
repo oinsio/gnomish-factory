@@ -16,7 +16,7 @@ class ReadyTaskSpec extends Specification {
         def facts = new AbortFacts(1, null)
 
         when:
-        def readyTask = new ReadyTask(ref, facts, false)
+        def readyTask = new ReadyTask(ref, facts, false, false)
 
         then:
         readyTask.ref() == ref
@@ -30,8 +30,8 @@ class ReadyTaskSpec extends Specification {
         def facts = AbortFacts.none()
 
         expect:
-        new ReadyTask(ref, facts, true).returned()
-        !new ReadyTask(ref, facts, false).returned()
+        new ReadyTask(ref, facts, true, false).returned()
+        !new ReadyTask(ref, facts, false, false).returned()
     }
 
     // FR1: ready tasks are values — equal content means equal entries
@@ -40,12 +40,12 @@ class ReadyTaskSpec extends Specification {
         def ref = new TaskRef('github:owner/repo#42')
 
         expect:
-        new ReadyTask(ref, AbortFacts.none(), false) == new ReadyTask(ref, AbortFacts.none(), false)
+        new ReadyTask(ref, AbortFacts.none(), false, false) == new ReadyTask(ref, AbortFacts.none(), false, false)
 
         and: 'a differing abortFacts makes them unequal'
-        new ReadyTask(ref, AbortFacts.none(), false) != new ReadyTask(ref, new AbortFacts(1, null), false)
+        new ReadyTask(ref, AbortFacts.none(), false, false) != new ReadyTask(ref, new AbortFacts(1, null), false, false)
 
         and: 'FR7: a differing returned makes them unequal'
-        new ReadyTask(ref, AbortFacts.none(), false) != new ReadyTask(ref, AbortFacts.none(), true)
+        new ReadyTask(ref, AbortFacts.none(), false, false) != new ReadyTask(ref, AbortFacts.none(), true, false)
     }
 }

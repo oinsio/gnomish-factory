@@ -39,7 +39,7 @@ import java.util.List;
  * @param taskFetcher implements {@code fetchTask}
  * @param claimLease implements {@code claim}
  * @param stateWrites implements {@code park}/{@code finish}/{@code recordAbort}/{@code
- *     recordProgress}
+ *     recordProgress}/{@code declineFinished}
  * @param correspondence implements {@code release}/{@code postNote}
  * @param decisions implements {@code collectDecisions}/{@code acknowledgeDecision}
  * @param heartbeat implements {@code heartbeat}
@@ -98,6 +98,11 @@ public record GithubTracker(
     @Override
     public void finish(TaskRef ref, String summary) {
         stateWrites.finish(ref, summary);
+    }
+
+    @Override
+    public void declineFinished(TaskRef ref, String message) {
+        stateWrites.declineFinished(ref, message);
     }
 
     @Override

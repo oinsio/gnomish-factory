@@ -121,7 +121,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         def base = originTip()
         Tracker tracker = Stub {
             fetchTask(REF) >> new TrackerTask(
-            REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Working(HOLDER.value()), AbortFacts.none())
+            REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Working(HOLDER.value()), AbortFacts.none(), false)
         }
 
         when: 'the new holder persists a round: local commit plus a fast-forward push that lands on origin'

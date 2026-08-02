@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
+import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,49 +30,30 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve.
  */
-final class FeedCycle {
+record FeedCycle(
+        Tracker tracker,
+        InstanceId instanceId,
+        SlotLedger slotLedger,
+        SlotRunner slotRunner,
+        Duration backoffBase,
+        Duration backoffCap,
+        int wipLimit,
+        Random random,
+        FeedStateLogger stateLogger,
+        FeedOutageRetry outageRetry) {
 
     /** One poll's raw feed plus the eligibility-filtered candidates. */
     record Poll(List<ReadyTask> readyTasks, int openFrontCount, Instant now, List<ReadyTask> candidates) {}
-
-    private final Tracker tracker;
-    private final InstanceId instanceId;
-    private final SlotLedger slotLedger;
-    private final SlotRunner slotRunner;
-    private final Duration backoffBase;
-    private final Duration backoffCap;
-    private final int wipLimit;
-    private final Random random;
-    private final FeedStateLogger stateLogger;
-    private final FeedOutageRetry outageRetry;
-
-    FeedCycle(
-            Tracker tracker,
-            InstanceId instanceId,
-            SlotLedger slotLedger,
-            SlotRunner slotRunner,
-            Duration backoffBase,
-            Duration backoffCap,
-            int wipLimit,
-            Random random,
-            FeedStateLogger stateLogger,
-            FeedOutageRetry outageRetry) {
-        this.tracker = tracker;
-        this.instanceId = instanceId;
-        this.slotLedger = slotLedger;
-        this.slotRunner = slotRunner;
-        this.backoffBase = backoffBase;
-        this.backoffCap = backoffCap;
-        this.wipLimit = wipLimit;
-        this.random = random;
-        this.stateLogger = stateLogger;
-        this.outageRetry = outageRetry;
-    }
 
     /**
      * Polls the tracker once and applies the eligibility filter (design D2), at instant {@code
      * now}. The tracker reads run through {@link FeedOutageRetry} (NFR-R3): a sustained outage
      * retries with backoff instead of propagating.
+     *
+     * <p>Right after the read, every {@code finished} entry observed in {@code readyTasks} is
+     * declined via {@link FinishedDecline#declineObserved} (design D4 of
+     * enforce-finish-terminality) — best-effort per entry, so one failing decline is logged and
+     * left for the next poll cycle rather than counting as an outage or aborting this poll.
      *
      * @throws InterruptedException if the feed thread is interrupted mid-outage-retry (SIGTERM
      *     shutdown stop signal, FR11) — see {@link FeedOutageRetry#run}
@@ -79,6 +61,7 @@ final class FeedCycle {
     Poll poll(Instant now) throws InterruptedException {
         return outageRetry.run("feed poll", () -> {
             List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
+            FinishedDecline.declineObserved(tracker, readyTasks);
             int openFrontCount = tracker.listOpen().size();
             List<ReadyTask> candidates = FeedPolicy.selectClaimCandidates(
                     readyTasks, backoffBase, backoffCap, now, openFrontCount, wipLimit, random);

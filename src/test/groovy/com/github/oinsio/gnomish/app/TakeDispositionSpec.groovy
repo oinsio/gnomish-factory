@@ -55,7 +55,11 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     }
 
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
-        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
+    }
+
+    private static TrackerTask trackerTask(TrackerTaskState state, boolean finished, String taskId = 'PROJ-1') {
+        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), finished)
     }
 
     // Scenario: Mandate overrides readiness and backoff — a Ready task with no prior branch is
@@ -611,6 +615,43 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         (result as TakeResult.Skipped).reason().toLowerCase().contains('already done')
         0 * tracker.claim(*_)
         0 * tracker.finish(*_)
+    }
+
+    // Scenario: Ready but finished (a human reopened a previously-finished task) refuses the
+    // mandate rather than claiming it — the decline protocol runs instead (FR5 of
+    // enforce-finish-terminality).
+    def "Ready but finished refuses the mandate, declines, and does not claim"() {
+        given:
+        def disposition = newDisposition()
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Ready(), true), tracker, INSTANCE)
+
+        then:
+        result instanceof TakeResult.Skipped
+        (result as TakeResult.Skipped).reason().toLowerCase().contains('already finished')
+        1 * tracker.declineFinished(REF, _)
+        0 * tracker.claim(*_)
+    }
+
+    // Asymmetry with the best-effort feed sweep (FinishedDecline swallows and logs): the explicit
+    // take mandate declines LOUDLY — a declineFinished failure on this path is not caught, it
+    // propagates so the operator sees a hard failure of the mandate rather than a silent skip.
+    def "Ready but finished propagates a declineFinished failure instead of swallowing it"() {
+        given:
+        def disposition = newDisposition()
+        tracker.declineFinished(REF, _) >> { throw new RuntimeException('tracker down') }
+
+        when:
+        disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Ready(), true), tracker, INSTANCE)
+
+        then:
+        thrown(RuntimeException)
+        0 * tracker.claim(*_)
     }
 
     // Gone (closed or nonexistent) is skipped with a clear error, no tracker mutation.

@@ -9,36 +9,40 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The explicit-mode ({@code take <ref>}) disposition matrix (proposal FR9, UX2; design D2, D3):
  * given an already-fetched {@link TrackerTask}, dispatches per its {@link TrackerTaskState} —
- * {@code Ready} claims and works it (fresh or resumed), {@code AwaitingHuman} refuses without
- * mutating the tracker, {@code Working} (held by another instance) enters the {@link TakeTakeover}
- * confirmation path (task 6.2 of add-claim-heartbeat, FR6), {@code Finished}/{@code Gone} skip. The
- * operator mandate overrides the readiness criterion and abort backoff (FR9) simply by never
- * consulting either: this class only reads the state {@code fetchTask} already reported. The same
- * omission pierces the WIP limit for {@code Ready} tasks (FR8 of add-factory-serve): neither
- * {@link com.github.oinsio.gnomish.app.take.OpenFrontGate} nor any open-front count is ever
- * consulted here, so the explicit mandate is unconditional for a {@code Ready} target; {@code
- * AwaitingHuman} keeps the existing refusal and {@code Working} keeps the takeover protocol,
- * unaffected by this bypass.
+ * {@code Ready} claims and works it (fresh or resumed) unless also {@code finished} (reopened by a
+ * human), which refuses via the decline protocol instead (FR5); {@code AwaitingHuman} refuses
+ * without mutating the tracker, {@code Working} (held by another instance) enters the {@link
+ * TakeTakeover} confirmation path (task 6.2 of add-claim-heartbeat, FR6), {@code Finished}/{@code
+ * Gone} skip. The operator mandate overrides the readiness criterion and abort backoff (FR9)
+ * simply by never consulting either: this class only reads the state {@code fetchTask} already
+ * reported. The same omission pierces the WIP limit for {@code Ready} tasks (FR8 of
+ * add-factory-serve): neither {@link com.github.oinsio.gnomish.app.take.OpenFrontGate} nor any
+ * open-front count is consulted here, so the mandate is unconditional for a {@code Ready} target;
+ * {@code AwaitingHuman} keeps the existing refusal, {@code Working} keeps the takeover protocol.
  *
- * <p>Short-ref expansion (`42`, `#42`) is a later concern (task 5.14, not built here) — {@link
- * #dispose} takes an already-resolved {@link TaskRef}. Argument parsing and Spring wiring for the
- * {@code take} CLI surface belong to task 5.13; this class is the plain, constructor-injectable
- * entry point that command wiring calls into.
+ * <p>Short-ref expansion (`42`, `#42`) and CLI argument parsing/Spring wiring are later concerns
+ * (tasks 5.13/5.14, not built here) — {@link #dispose} takes an already-resolved {@link TaskRef};
+ * this class is the plain, constructor-injectable entry point command wiring calls into.
  *
  * <p>Implements FR9, UX2, D2, D3 of add-tracker-port; FR6 of add-claim-heartbeat; FR8 of
- * add-factory-serve.
+ * add-factory-serve; FR5 of enforce-finish-terminality.
  */
 final class TakeDisposition {
+
+    private static final Logger log = LoggerFactory.getLogger(TakeDisposition.class);
 
     private final TakeClaimAndWork claimAndWork;
     private final TakeTakeover takeover;
@@ -119,8 +123,7 @@ final class TakeDisposition {
     }
 
     /**
-     * Dispatches on {@code trackerTask.state()} per the explicit-mode disposition matrix (FR9,
-     * UX2).
+     * Dispatches on {@code trackerTask.state()} per the explicit-mode disposition matrix (FR9, UX2).
      *
      * <p>Implements FR9, UX2, D2, D3 of add-tracker-port.
      *
@@ -149,6 +152,7 @@ final class TakeDisposition {
             InstanceId instanceId) {
         TaskRef ref = trackerTask.ref();
         return switch (trackerTask.state()) {
+            case TrackerTaskState.Ready ignored when trackerTask.finished() -> refuseFinished(ref, tracker);
             case TrackerTaskState.Ready ignored ->
                 claimAndWork.claimAndWork(
                         cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
@@ -171,6 +175,13 @@ final class TakeDisposition {
         };
     }
 
+    /** A reopened-finished {@code Ready} task: refuses via the decline protocol, never claiming (FR5). */
+    private static TakeResult refuseFinished(TaskRef ref, Tracker tracker) {
+        log.info("declining reopened finished task {} refused under an explicit take <ref> mandate", ref.id());
+        tracker.declineFinished(ref, DeclineFinishedMessage.forTask(ref));
+        return new TakeResult.Skipped("Task " + ref.id() + " is already finished — nothing to take.");
+    }
+
     private static TakeResult refuseParked(ParkReason reason) {
         String returnPath =
                 switch (reason) {
@@ -182,10 +193,8 @@ final class TakeDisposition {
                         "An environment or pipeline problem is recorded; fix it, then move the task back to ready"
                                 + " to retry.";
                 };
-        // The actual original park report text is not retrievable here: the Tracker port has no
-        // "read current report" operation (fetchTask reports only state + holder/reason, never the
-        // report body). Naming the reason and the return path honestly, without inventing report
-        // content, is what UX2/FR9 require.
+        // The original park report text is not retrievable here (the Tracker port exposes no "read
+        // report" operation), so UX2/FR9 are met by naming the reason and return path honestly.
         return new TakeResult.Skipped("Task is parked awaiting a human (" + reason + "). " + returnPath);
     }
 }

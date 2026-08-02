@@ -174,7 +174,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
             claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
-            AbortFacts.none())
+            AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
         def command = newCommand(factoryProperties, [github: fakeFactoryDeclaringCredential()])
@@ -204,7 +204,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
             claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
-            AbortFacts.none())
+            AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
         def command = newCommand(factoryProperties, [github: fakeFactoryDeclaringNoCredential()])

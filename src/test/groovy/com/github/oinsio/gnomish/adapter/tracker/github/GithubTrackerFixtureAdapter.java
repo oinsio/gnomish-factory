@@ -105,7 +105,7 @@ final class GithubTrackerFixtureAdapter implements Tracker {
     @Override
     public List<ReadyTask> listReady(int limit) {
         return delegate.listReady(limit).stream()
-                .map(rt -> new ReadyTask(toFixture(rt.ref()), rt.abortFacts(), rt.returned()))
+                .map(rt -> new ReadyTask(toFixture(rt.ref()), rt.abortFacts(), rt.returned(), rt.finished()))
                 .toList();
     }
 
@@ -118,7 +118,7 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         // canonical ref it was called with (see GithubTaskFetcher.fetchTask), not the
         // fixture ref this wrapper hides underneath it.
         var snapshot = new TaskSnapshot(ref.id(), result.snapshot().title(), result.snapshot().body());
-        return new TrackerTask(ref, snapshot, result.state(), result.abortFacts());
+        return new TrackerTask(ref, snapshot, result.state(), result.abortFacts(), result.finished());
     }
 
     @Override
@@ -144,6 +144,11 @@ final class GithubTrackerFixtureAdapter implements Tracker {
     @Override
     public void finish(TaskRef ref, String summary) {
         delegate.finish(canonicalRefFor(ref), summary);
+    }
+
+    @Override
+    public void declineFinished(TaskRef ref, String message) {
+        delegate.declineFinished(canonicalRefFor(ref), message);
     }
 
     @Override
@@ -224,8 +229,37 @@ final class GithubTrackerFixtureAdapter implements Tracker {
      * the issue's history for an adapter's returned-fact derivation to observe.
      */
     void returnToReady(TaskRef ref) {
+        relabelToReady(ref, FixtureSeeder.NEEDS_HUMAN_LABEL);
+    }
+
+    /**
+     * Simulates a human moving a finished (Delivered) issue back to {@code Ready} directly in the
+     * tracker UI, per {@code TrackerFinishContract.reopenFinished}: swaps the delivered label for the
+     * ready label, exactly as a human's own edit would, without touching any comment — the finish
+     * report stays in the issue's history for an adapter's finished-fact derivation to observe.
+     */
+    void reopenFinished(TaskRef ref) {
+        relabelToReady(ref, FixtureSeeder.DELIVERED_LABEL);
+    }
+
+    /**
+     * Swaps {@code fromLabel} for the ready label on {@code ref}'s fixture issue, exactly as a human's
+     * own tracker-UI edit would — the shared mechanic behind {@link #returnToReady} (needs-human
+     * &rarr; ready) and {@link #reopenFinished} (delivered &rarr; ready). Touches no comment, so the
+     * issue's marker history survives for an adapter's returned/finished-fact derivation to observe.
+     */
+    private void relabelToReady(TaskRef ref, String fromLabel) {
         FixtureIssue issue = issueFor(ref);
-        issue.removeLabel(FixtureSeeder.NEEDS_HUMAN_LABEL);
+        issue.removeLabel(fromLabel);
         issue.addLabel(FixtureSeeder.READY_LABEL);
+    }
+
+    /**
+     * Reads back every comment body posted on {@code ref}'s fixture issue, in posting order, per
+     * {@code TrackerFinishContract.postedTexts}. Raw rendered bodies (structural markers included):
+     * good enough for a substring check against a posted decline explanation.
+     */
+    List<String> postedTexts(TaskRef ref) {
+        return issueFor(ref).comments().stream().map(FixtureIssue.FixtureComment::body).toList();
     }
 }

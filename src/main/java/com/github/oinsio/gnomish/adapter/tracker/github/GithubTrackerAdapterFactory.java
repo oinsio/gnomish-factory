@@ -18,12 +18,10 @@ import java.util.Optional;
  * GithubHttpClient}/{@link GithubConditionalRequestCache}/{@link GithubLabelOps}, exactly
  * mirroring {@code GithubTrackerContractSpec}'s production assembly.
  *
- * <p>Label defaults (FR5): names {@code gnomish:ready}/{@code gnomish:working}/{@code
- * gnomish:needs-human}/{@code gnomish:delivered}; colors from GitHub's own commonly-used label
- * palette — {@code 2ea44f} (green), {@code 1f6feb} (blue), {@code d73a4a} (red), {@code 8250df}
- * (purple); each with a short operator-hint description. Configured {@code labels.*} entries
- * (already schema-validated by {@link GithubLabelsValidator}) override the default for that
- * logical state only.
+ * <p>Label defaults (FR5): names {@code gnomish:ready}/{@code working}/{@code needs-human}/{@code
+ * delivered}; colors from GitHub's common palette — {@code 2ea44f}/{@code 1f6feb}/{@code
+ * d73a4a}/{@code 8250df}; each with a short operator-hint description. Configured {@code labels.*}
+ * entries (schema-validated by {@link GithubLabelsValidator}) override the default for that state.
  *
  * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port.
  */
@@ -41,15 +39,11 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     private static final GithubLabelDef DEFAULT_DELIVERED =
             new GithubLabelDef("gnomish:delivered", "8250df", "Gnomish factory: delivered for review");
 
-    // PIT M4 documented exception (build.gradle has the full rationale style): @DoNotMutate — this
-    // method's success path (the token resolves and construction proceeds) can only be exercised
-    // by a test where GNOMISH_GITHUB_TOKEN is genuinely present in the JVM's real process
-    // environment, which — per this class's own Javadoc above — is "not reliably possible on
-    // module-path JVMs without --add-opens"; GithubTrackerAdapterFactorySpec instead covers the
-    // 3-arg create(...) overload's success path directly (the actual assembly logic under test),
-    // and covers this method's failure path (missing token) via the real environment, which the
-    // "missing GNOMISH_GITHUB_TOKEN" scenario asserts only runs meaningfully when the real
-    // environment has no token set. A genuine integration boundary, not a coverage shortcut.
+    // PIT M4 documented exception: @DoNotMutate — this method's success path (token resolves,
+    // construction proceeds) needs GNOMISH_GITHUB_TOKEN genuinely present in the JVM's process
+    // environment, not reliably possible on module-path JVMs without --add-opens (see requireToken).
+    // GithubTrackerAdapterFactorySpec covers the 3-arg create(...) success path directly (the actual
+    // assembly logic) and this method's missing-token failure path via the real environment.
     @DoNotMutate
     @Override
     public Tracker create(TrackerConfig config, String instanceId) {
@@ -85,7 +79,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
 
         return new GithubTracker(
                 new GithubFeedQuery(cache, owner, repo, readyLabel.name()),
-                new GithubTaskFetcher(cache, workingLabel.name(), needsHumanLabel.name()),
+                new GithubTaskFetcher(cache, workingLabel.name(), needsHumanLabel.name(), deliveredLabel.name()),
                 new GithubClaimLease(httpClient, labelOps, readyLabel.name(), workingLabel.name()),
                 new GithubStateWrites(
                         httpClient,
@@ -108,12 +102,10 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         return GithubRefExpander.expand(config.subsection(), issueNumber);
     }
 
-    // PIT M4 documented exception (same integration-boundary rationale as create(config, id) and
-    // requireToken above): this public entry point only reads GNOMISH_GITHUB_TOKEN from the real
-    // process environment and delegates; its success path can be exercised only with a real env
-    // token, not reliably possible on a module-path JVM without --add-opens. The actual foreign-repo
-    // logic (the 3-arg overload's owner/repo threading, verify delegation, and exception→refusal
-    // translation) is fully covered via the explicit-token testing seam below.
+    // PIT M4 documented exception (same integration-boundary rationale as create(config, id)): this
+    // entry point only reads GNOMISH_GITHUB_TOKEN from the real environment and delegates. The
+    // foreign-repo logic (owner/repo threading, verify delegation, exception→refusal translation) is
+    // fully covered via the explicit-token testing seam below.
     @DoNotMutate
     @Override
     public Optional<String> refuseForeignRef(TrackerConfig config, TaskRef ref) {
@@ -122,12 +114,11 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
 
     /**
      * Package-private testing seam mirroring {@link #create(TrackerConfig, String, String)}:
-     * verifies {@code ref} against an explicit {@code token} instead of reading {@code
-     * GNOMISH_GITHUB_TOKEN} from the environment. Delegates to {@link GithubForeignRepoCheck}
-     * (design D8), which only issues a {@code GET /repos/{owner}/{repo}} when the ref's owner/repo
-     * differ from the configured binding — a matching id returns empty with no network call. A
-     * genuinely foreign id (or one whose rename redirect resolves elsewhere) is translated from the
-     * check's {@link GithubForeignRepoException} into the port's refusal message.
+     * verifies {@code ref} against an explicit {@code token} instead of the environment. Delegates to
+     * {@link GithubForeignRepoCheck} (design D8), which issues a {@code GET /repos/{owner}/{repo}}
+     * only when the ref's owner/repo differ from the configured binding — a matching id returns empty
+     * with no network call. A foreign id (or one whose rename redirect resolves elsewhere) is
+     * translated from {@link GithubForeignRepoException} into the port's refusal message.
      */
     Optional<String> refuseForeignRef(TrackerConfig config, TaskRef ref, String token) {
         Map<String, Object> subsection = config.subsection();
@@ -163,15 +154,12 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         return List.of(TOKEN_ENV_VAR);
     }
 
-    // PIT M4 documented exception (build.gradle has the full rationale style): @DoNotMutate — the
-    // null-check half of the guard is covered by GithubTrackerAdapterFactorySpec's
-    // "missing GNOMISH_GITHUB_TOKEN" scenario (a real, unset environment), but the blank-but-
-    // present half (token.isBlank()) and the success return can only be exercised by setting
-    // GNOMISH_GITHUB_TOKEN to a real value in the JVM's process environment — not reliably
-    // possible on a module-path JVM without --add-opens (see this class's own Javadoc). A genuine
-    // integration boundary over the real OS environment, not a coverage shortcut; the 3-arg
-    // create(...) overload (the actual construction logic that matters) is fully covered via its
-    // own explicit-token testing seam.
+    // PIT M4 documented exception: @DoNotMutate — GithubTrackerAdapterFactorySpec's "missing
+    // GNOMISH_GITHUB_TOKEN" scenario (a real, unset environment) covers the null branch, but the
+    // blank-but-present half (token.isBlank()) and the success return need GNOMISH_GITHUB_TOKEN set
+    // to a real value in the JVM's process environment — not reliably possible on a module-path JVM
+    // without --add-opens. A genuine integration boundary; the 3-arg create(...) overload (the actual
+    // construction logic) is fully covered via its own explicit-token seam.
     @DoNotMutate
     private static String requireToken() {
         String token = System.getenv(TOKEN_ENV_VAR);

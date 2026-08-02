@@ -33,7 +33,7 @@ class TakePauseExitSpec extends Specification {
     Tracker tracker = Mock()
 
     private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     // FR13, FR18, D12: the checkpoint park is written for real when the claim is still ours.

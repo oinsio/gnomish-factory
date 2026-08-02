@@ -7,8 +7,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 
 /**
  * The coordination writes of {@link InMemoryTracker} — {@code release}, {@code park}, {@code
- * finish}, {@code recordAbort}, {@code recordProgress}, {@code acknowledgeDecision}, {@code
- * postNote} — extracted from that class for file size. Each runs under the tracker's coarse lock via
+ * finish}, {@code declineFinished}, {@code recordAbort}, {@code recordProgress}, {@code
+ * acknowledgeDecision}, {@code postNote} — extracted from that class for file size. Each runs
+ * under the tracker's coarse lock via
  * {@link InMemoryTracker#withLock(java.util.function.Supplier)} and appends a {@link
  * CorrespondenceEntry} to the task's thread, except {@code release} (FR18, M3, UX4, D2 of
  * add-tracker-port). State, claim, and thread mutation stay on {@link TrackedTask}.
@@ -37,6 +38,24 @@ record InMemoryWriteOps(InMemoryTracker tracker) {
             task.clearClaim();
             task.summary(summary);
             task.note(CorrespondenceEntry.Kind.FINISH, summary);
+        });
+    }
+
+    /**
+     * Restores terminal status on a reopened-finished task, then posts {@code message} as a
+     * {@code NOTE} — never {@code PARK}/{@code FINISH} — so it carries no weight in the {@code
+     * returned}/{@code finished} derivations (design D3). D5: status is restored first, and the
+     * note posted only when the transition actually happened; an already-{@code Finished} task is
+     * a complete no-op (FR4, UX2 of enforce-finish-terminality).
+     */
+    void declineFinished(TaskRef ref, String message) {
+        runLocked(() -> {
+            TrackedTask task = tracker.requireTask(ref);
+            if (task.state() instanceof TrackerTaskState.Finished) {
+                return;
+            }
+            task.state(new TrackerTaskState.Finished());
+            task.note(CorrespondenceEntry.Kind.NOTE, message);
         });
     }
 

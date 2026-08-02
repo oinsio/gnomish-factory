@@ -47,16 +47,16 @@ class TakeParkRetrySpec extends Specification {
     Tracker tracker = Mock()
     AtomicReference<Instant> now = new AtomicReference<>(Instant.parse('2026-01-01T00:00:00Z'))
     Clock clock = { -> now.get() } as Clock
-    Sleeper sleeper = { Duration d -> now.set(now.get().plus(d)) } as Sleeper
+    Sleeper sleeper = { Duration d -> now.set(now.get() + d) } as Sleeper
     TerminalWriteRetry retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
     AtomicInteger confirmed = new AtomicInteger()
 
     private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     /** Runs {@code emit} with a {@link ListAppender} attached to {@code exitClass}'s logger, returning the events. */
-    private static List<ILoggingEvent> capture(Class<?> exitClass, Closure<Void> emit) {
+    private static List<ILoggingEvent> capture(Class<?> exitClass, Closure<?> emit) {
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(exitClass)
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
         appender.start()
@@ -85,7 +85,7 @@ class TakeParkRetrySpec extends Specification {
         Clock advancingClock = {
             ->
             def t = ticking.get()
-            ticking.set(t.plus(Duration.ofMinutes(2)))
+            ticking.set(t + Duration.ofMinutes(2))
             t
         } as Clock
         Sleeper noop = { Duration d -> } as Sleeper

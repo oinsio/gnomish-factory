@@ -75,7 +75,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     private static TrackerTask trackerTask(String taskId) {
         new TrackerTask(
                 new TaskRef(taskId), new TaskSnapshot(taskId, 'title', 'body'),
-                new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none())
+                new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none(), false)
     }
 
     private static StageDefinition stage() {

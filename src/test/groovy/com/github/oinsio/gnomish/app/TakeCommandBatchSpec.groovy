@@ -121,7 +121,7 @@ tracker:
     }
 
     private static TrackerTask trackerTask(TaskRef ref, TrackerTaskState state, String taskId) {
-        new TrackerTask(ref, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(ref, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     // FR2, FR3: 2+ refs reach batch mode, and the run's aggregate exit code is 0 when every ref

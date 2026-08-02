@@ -34,7 +34,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE)
 
     private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     def "persist delegates first, then passes when the task is still Working held by this instance"() {

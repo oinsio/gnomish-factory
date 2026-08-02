@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.port.contract.PortContractSupport
 import java.time.Instant
+import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -138,7 +139,7 @@ abstract class TrackerContract extends Specification implements PortContractSupp
 
         then: 'the task is present, still carrying its unfiltered abort facts'
         result == [
-            new ReadyTask(ref, UNEXPIRED_BACKOFF, false)
+            new ReadyTask(ref, UNEXPIRED_BACKOFF, false, false)
         ]
     }
 
@@ -163,16 +164,16 @@ abstract class TrackerContract extends Specification implements PortContractSupp
         // them indefinitely and hang the whole test run instead of failing it.
         // The 3s get() bound keeps that failure inside PIT's default per-mutation
         // budget (4000ms + 1.25x); the critical section itself is microseconds.
-        List<ClaimResult> results
+        List<ClaimResult> results = []
         def pool = Executors.newVirtualThreadPerTaskExecutor()
         try {
             def futures = callerIds.collect { callerId ->
                 pool.submit({
                     barrier.await(5, TimeUnit.SECONDS)
                     adapter.claim(ref, callerId)
-                } as java.util.concurrent.Callable)
+                } as Callable)
             }
-            results = futures.collect { it.get(3, TimeUnit.SECONDS) }
+            results = futures.collect { it.get(3, TimeUnit.SECONDS) as ClaimResult } as List<ClaimResult>
         } finally {
             pool.shutdownNow()
         }

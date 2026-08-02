@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReturnedFactContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerFinishContract
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
@@ -19,7 +19,7 @@ import java.net.http.HttpResponse
  * {@link GithubStateWrites}, {@link GithubCorrespondence}, {@link
  * GithubDecisions} — every one of them unmodified) against a WireMock server
  * into the full port contract suite (task 4.16 / task 3.5 / 1.2 of
- * add-factory-serve, FR4, M1, M2): {@link TrackerReturnedFactContract} — the
+ * add-factory-serve, FR4, M1, M2): {@link TrackerFinishContract} — the
  * most-derived link in the chain — transitively runs every property from
  * {@code TrackerContract}, {@code TrackerMarkerContract}, {@code
  * TrackerFetchContract}, {@code TrackerLeaseContract}, {@code
@@ -68,7 +68,7 @@ import java.net.http.HttpResponse
  * <p>Implements FR4, NFR-R1 of add-tracker-port; FR1, FR4, FR5, FR8, NFR-R2,
  * M1 of add-claim-heartbeat (the extended contract passes on the GitHub adapter).
  */
-class GithubTrackerContractSpec extends TrackerReturnedFactContract {
+class GithubTrackerContractSpec extends TrackerFinishContract {
 
     private static final String OWNER = 'acme'
     private static final String REPO = 'widgets'
@@ -91,7 +91,7 @@ class GithubTrackerContractSpec extends TrackerReturnedFactContract {
 
         def realTracker = new GithubTracker(
                 new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
-                new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL),
+                new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL),
                 new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL),
                 new GithubStateWrites(httpClient, labelOps, INSTANCE_ID,
                 FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
@@ -143,5 +143,15 @@ class GithubTrackerContractSpec extends TrackerReturnedFactContract {
     @Override
     protected void returnToReady(Tracker adapter, TaskRef ref) {
         fixtureAdapter.returnToReady(ref)
+    }
+
+    @Override
+    protected void reopenFinished(Tracker adapter, TaskRef ref) {
+        fixtureAdapter.reopenFinished(ref)
+    }
+
+    @Override
+    protected List<String> postedTexts(Tracker adapter, TaskRef ref) {
+        fixtureAdapter.postedTexts(ref)
     }
 }

@@ -71,7 +71,7 @@ class GithubMarkerSpec extends Specification {
         def humanText = 'line one\nline two\nline three'
 
         when:
-        def body = GithubMarker.render(GithubMarkerKind.REPORT, 'gnomish-factory-x7k2q1', at, humanText)
+        def body = GithubMarker.render(GithubMarkerKind.FINISH, 'gnomish-factory-x7k2q1', at, humanText)
         def parsed = GithubMarker.parse(body)
 
         then:
@@ -108,6 +108,14 @@ class GithubMarkerSpec extends Specification {
         expect:
         GithubMarkerKind.PROGRESS.wireValue() == 'progress'
         GithubMarkerKind.fromWireValue('progress') == GithubMarkerKind.PROGRESS
+    }
+
+    def "GithubMarkerKind.fromWireValue rejects the retired 'report' wire value"() {
+        when:
+        GithubMarkerKind.fromWireValue('report')
+
+        then:
+        thrown(IllegalArgumentException)
     }
 
     def "the format version is a fixed code constant, not a render parameter"() {

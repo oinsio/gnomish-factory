@@ -50,7 +50,7 @@ class TakeCrashAbortSpec extends Specification {
     private static TrackerTask claimedTask(AbortFacts facts) {
         new TrackerTask(
                 REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
-                new TrackerTaskState.Working(INSTANCE.value()), facts)
+                new TrackerTaskState.Working(INSTANCE.value()), facts, false)
     }
 
     // FR14 "Runner crash is an abort", D16 "never a bare 1": below the fuse, a crash records the

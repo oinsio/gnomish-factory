@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.delete
 import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor
+import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
@@ -21,14 +23,15 @@ import spock.lang.Specification
 /**
  * GithubStateWrites (FR14, FR18 of add-tracker-port; design D13):
  * {@code park} point-transitions working -> needs-human and posts a
- * REPORT-kind marker carrying the park reason; {@code finish}
- * point-transitions working -> delivered and posts a plain REPORT-kind
+ * PARK-kind marker carrying the park reason; {@code finish}
+ * point-transitions working -> delivered and posts a FINISH-kind
  * marker; {@code recordAbort} posts an ABORT-kind marker AND
  * point-transitions working -> ready, as one operation. {@code recordProgress}
  * posts a PROGRESS-kind marker only, with no label transition at all
  * (fix-abort-progress-reset design D3).
  *
- * Implements FR14, FR18 of add-tracker-port; FR1, FR4 of fix-abort-progress-reset.
+ * Implements FR14, FR18 of add-tracker-port; FR1, FR4 of fix-abort-progress-reset;
+ * FR1, FR2 of enforce-finish-terminality.
  */
 class GithubStateWritesSpec extends Specification {
 
@@ -75,7 +78,14 @@ class GithubStateWritesSpec extends Specification {
                 .willReturn(aResponse().withStatus(201).withBody('{"id":1,"body":"whatever"}')))
     }
 
-    def "park transitions working to needs-human and posts a REPORT marker carrying the reason"() {
+    private static void stubIssue(WireMockServer wireMock, int issueNumber, List<String> labelNames) {
+        def labelsJson = labelNames.collect { '{"name":"' + it + '"}' }.join(',')
+        wireMock.stubFor(get(urlEqualTo("/repos/acme/widgets/issues/${issueNumber}"))
+                .willReturn(aResponse().withStatus(200)
+                .withBody('{"title":"t","body":"b","state":"open","labels":[' + labelsJson + ']}')))
+    }
+
+    def "park transitions working to needs-human and posts a PARK marker carrying the reason"() {
         given:
         stubLabelTransition(wireMock, 40, 'gnomish%3Aworking')
         stubComment(wireMock, 40)
@@ -89,12 +99,12 @@ class GithubStateWritesSpec extends Specification {
                 .withRequestBody(WireMock.equalToJson('{"labels":["gnomish:needs-human"]}')))
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/40/labels/gnomish%3Aworking')))
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/40/comments'))
-                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"report"')))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"park"')))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"reason":"escalation"')))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('Need a decision on approach.'))))
     }
 
-    def "finish transitions working to delivered and posts a report comment with the summary"() {
+    def "finish transitions working to delivered and posts a FINISH comment with the summary"() {
         given:
         stubLabelTransition(wireMock, 41, 'gnomish%3Aworking')
         stubComment(wireMock, 41)
@@ -108,7 +118,7 @@ class GithubStateWritesSpec extends Specification {
                 .withRequestBody(WireMock.equalToJson('{"labels":["gnomish:delivered"]}')))
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/41/labels/gnomish%3Aworking')))
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/41/comments'))
-                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"report"')))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"finish"')))
                 .withRequestBody(WireMock.matchingJsonPath(
                 '$.body', WireMock.notMatching('.*"reason".*')))
                 .withRequestBody(WireMock.matchingJsonPath(
@@ -162,5 +172,55 @@ class GithubStateWritesSpec extends Specification {
 
         then:
         thrown(GithubStateWriteException)
+    }
+
+    def "declineFinished restores delivered and posts a NOTE marker explaining the decline"() {
+        given:
+        stubIssue(wireMock, 50, ['gnomish:ready'])
+        stubLabelTransition(wireMock, 50, 'gnomish%3Aready')
+        stubComment(wireMock, 50)
+        def writes = newWrites()
+
+        when:
+        writes.declineFinished(refFor(50), 'This task is already finished. Please open a new task or bug.')
+
+        then:
+        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/50/labels'))
+                .withRequestBody(WireMock.equalToJson('{"labels":["gnomish:delivered"]}')))
+        wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/50/labels/gnomish%3Aready')))
+        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/50/comments'))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"note"')))
+                .withRequestBody(WireMock.matchingJsonPath(
+                '$.body', WireMock.containing('This task is already finished. Please open a new task or bug.'))))
+    }
+
+    def "declineFinished on an already-delivered issue is a silent no-op"() {
+        given:
+        stubIssue(wireMock, 51, ['gnomish:delivered'])
+        def writes = newWrites()
+
+        when:
+        writes.declineFinished(refFor(51), 'This task is already finished. Please open a new task or bug.')
+
+        then:
+        wireMock.verify(0, postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/51/labels')))
+        wireMock.verify(0, deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/51/labels/gnomish%3Aready')))
+        wireMock.verify(0, postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/51/comments')))
+        wireMock.verify(getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/51')))
+    }
+
+    def "declineFinished never posts the comment when the label transition fails"() {
+        given:
+        stubIssue(wireMock, 52, ['gnomish:ready'])
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/52/labels'))
+                .willReturn(aResponse().withStatus(500)))
+        def writes = newWrites()
+
+        when:
+        writes.declineFinished(refFor(52), 'This task is already finished. Please open a new task or bug.')
+
+        then:
+        thrown(GithubLabelOpsException)
+        wireMock.verify(0, postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/52/comments')))
     }
 }

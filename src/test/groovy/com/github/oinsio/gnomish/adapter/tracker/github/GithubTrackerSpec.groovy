@@ -79,7 +79,7 @@ class GithubTrackerSpec extends Specification {
         def cache = new GithubConditionalRequestCache(httpClient)
         new GithubTracker(
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
-                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human'),
+                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered'),
                 new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
                 new GithubStateWrites(httpClient, labelOps, 'gnomish-factory-x7k2q1',
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
@@ -95,7 +95,7 @@ class GithubTrackerSpec extends Specification {
         new TaskRef(GithubTaskId.build(wireMock.baseUrl(), 'acme', 'widgets', ISSUE_NUMBER).canonicalId())
     }
 
-    def "park delegates to GithubStateWrites, posting a structural report marker"() {
+    def "park delegates to GithubStateWrites, posting a structural park marker"() {
         given:
         stubLabelTransition('gnomish%3Aworking')
         stubComment()
@@ -105,10 +105,10 @@ class GithubTrackerSpec extends Specification {
 
         then:
         wireMock.verify(postRequestedFor(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments"))
-                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"report"'))))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"park"'))))
     }
 
-    def "finish delegates to GithubStateWrites, posting a structural report marker"() {
+    def "finish delegates to GithubStateWrites, posting a structural finish marker"() {
         given:
         stubLabelTransition('gnomish%3Aworking')
         stubComment()
@@ -118,7 +118,7 @@ class GithubTrackerSpec extends Specification {
 
         then:
         wireMock.verify(postRequestedFor(urlEqualTo("/repos/acme/widgets/issues/${ISSUE_NUMBER}/comments"))
-                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"report"'))))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"finish"'))))
     }
 
     def "postNote delegates to GithubCorrespondence, posting a structural note marker"() {

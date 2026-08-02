@@ -69,6 +69,11 @@ abstract class DelegatingTracker implements Tracker {
     }
 
     @Override
+    void declineFinished(TaskRef ref, String message) {
+        delegate.declineFinished(ref, message)
+    }
+
+    @Override
     void recordAbort(TaskRef ref, AbortRecord record) {
         delegate.recordAbort(ref, record)
     }

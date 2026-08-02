@@ -154,6 +154,41 @@ a question is open; just move to ready if the fix was environmental (a
 `needs-human` from an infrastructure problem, or a manual pipeline checkpoint) —
 the human return itself is read as confirmation.
 
+## Finished Tasks Are Terminal
+
+The lifecycle is one-way: `Ready` → `Working` → `Finished` (delivered, or
+otherwise closed out by the pipeline), never back. There is no "reopen for
+rework" path — if a delivered task needs further changes, open a new task or
+bug that references it; the factory never resumes a finished one.
+
+If a human moves a `gnomish:delivered` task back to `gnomish:ready` — by
+relabeling it or reopening a closed issue — the factory does not treat that
+as new work. It recognizes that the task's history already contains a finish
+record and **declines** it instead of claiming it:
+
+```mermaid
+sequenceDiagram
+    participant H as Human
+    participant Gh as GitHub issue
+    participant F as Factory
+
+    H->>Gh: label -> ready (or reopen)
+    F->>Gh: sees a finish record in the history
+    F->>Gh: label -> delivered (status restored)
+    F->>Gh: comment: task already finished; open a new task/bug
+```
+
+This happens within one poll cycle — both for `serve`'s feed and for bare
+`take` — and it also applies to `gnomish take <ref>` run explicitly against
+that issue: the CLI refuses with the same explanation instead of claiming
+(see "Explicit mode" and the exit-code table below).
+
+Don't confuse this with the escalation return path above: a task moved from
+`gnomish:needs-human` back to `gnomish:ready` **is** genuinely resumable —
+that's the "returned" case the factory prioritizes and continues from where
+it parked. Declining only fires for a task whose history already contains a
+*finish* record; a park record never triggers it.
+
 ## Snapshot Behavior
 
 At the moment a task is first claimed, the factory reads its id, title, and
@@ -301,8 +336,10 @@ prompt on a TTY, or the `--takeover` flag when headless — and only on
 confirmation removes the old claim and resumes; declining or a headless run
 without the flag refuses, naming the holder, and changes nothing. It refuses a
 parked `AwaitingHuman` task (naming the reason and return path) without
-changing anything, skips a `Finished` task ("already done"), and skips a `Gone`
-(closed or nonexistent) task with a clear error.
+changing anything, declines a task whose history already carries a finish
+record — restoring its terminal status and posting the same explanation
+comment as the automatic path (see "Finished Tasks Are Terminal" above) — and
+skips a `Gone` (closed or nonexistent) task with a clear error.
 
 **Bare mode (`take`)** takes the head of the ready queue (adapter order,
 oldest first), hides tasks still inside their abort backoff window, claims

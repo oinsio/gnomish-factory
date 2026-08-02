@@ -32,7 +32,7 @@ import java.util.Optional;
  * on the issue folds in, unchanged from before.
  *
  * <p>{@link #fetchMarkers} is also reused by {@link GithubFeedQuery} to
- * derive the {@code returned} fact ({@link GithubReturnedFactReader}) from
+ * derive the {@code returned} fact ({@link GithubHistoryFactReader}) from
  * the SAME comments fetch, rather than issuing a second GitHub API read for
  * the same thread (NFR-P1 of add-factory-serve: no new GitHub API calls
  * beyond what {@code listReady} already pays for).

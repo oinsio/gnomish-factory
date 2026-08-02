@@ -10,10 +10,13 @@ import org.jspecify.annotations.Nullable;
  * timestamp, the marker format {@code version}, the {@code humanText}
  * remainder — the plain-text line(s) that followed the hidden HTML comment
  * in the original comment body, verbatim — and the optional {@code reason}
- * field a {@code report}-kind park marker carries (task 4.10 judgment call:
- * design D9's marker-kind vocabulary has no dedicated {@code park} kind, so a
- * park is a {@code report}-kind marker whose wire-level {@code reason} field
- * this type exposes; every other kind leaves it {@code null}).
+ * field a {@link GithubMarkerKind#PARK} marker carries (the dedicated
+ * park-kind marker's wire-level {@code reason} field, holding the lowercase
+ * wire value of a {@link com.github.oinsio.gnomish.app.port.tracker.ParkReason};
+ * every other kind, including {@link GithubMarkerKind#FINISH}, leaves it
+ * {@code null}). The dedicated {@code park}/{@code finish} kinds replaced the
+ * earlier dual-use {@code report} kind (enforce-finish-terminality design D1),
+ * so a park is never inferred from field presence.
  *
  * <p>Inert value data compared by content.
  *
@@ -24,8 +27,8 @@ import org.jspecify.annotations.Nullable;
  * @param at when the marker was created; never null
  * @param version the structural-JSON format version the marker was rendered with
  * @param humanText the human-readable text following the structural comment line
- * @param reason the wire value of the park reason for a {@code report}-kind park
- *     marker, or {@code null} for every other marker
+ * @param reason the wire value of the park reason for a {@code PARK} marker,
+ *     or {@code null} for every other marker
  */
 public record ParsedMarker(
         GithubMarkerKind kind,

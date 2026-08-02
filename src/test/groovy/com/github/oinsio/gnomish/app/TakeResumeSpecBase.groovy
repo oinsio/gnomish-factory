@@ -51,7 +51,7 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
         tracker.fetchTask(_) >> {
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
-            new TrackerTaskState.Working(workingHolder), AbortFacts.none())
+            new TrackerTaskState.Working(workingHolder), AbortFacts.none(), false)
         }
         tracker.listOpen() >> { openFronts }
     }

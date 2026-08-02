@@ -18,7 +18,7 @@ class TrackerTaskSpec extends Specification {
         def facts = new AbortFacts(2, null)
 
         when:
-        def task = new TrackerTask(ref, snapshot, state, facts)
+        def task = new TrackerTask(ref, snapshot, state, facts, false)
 
         then:
         task.ref() == ref
@@ -34,7 +34,7 @@ class TrackerTaskSpec extends Specification {
         def snapshot = new TaskSnapshot('github:owner/repo#42', 'Fix the thing', 'body')
 
         when:
-        def task = new TrackerTask(ref, snapshot, new TrackerTaskState.Gone(), AbortFacts.none())
+        def task = new TrackerTask(ref, snapshot, new TrackerTaskState.Gone(), AbortFacts.none(), false)
 
         then:
         task.state() == new TrackerTaskState.Gone()
@@ -48,11 +48,11 @@ class TrackerTaskSpec extends Specification {
         def state = new TrackerTaskState.Ready()
 
         expect:
-        new TrackerTask(ref, snapshot, state, AbortFacts.none()) ==
-                new TrackerTask(ref, snapshot, state, AbortFacts.none())
+        new TrackerTask(ref, snapshot, state, AbortFacts.none(), false) ==
+                new TrackerTask(ref, snapshot, state, AbortFacts.none(), false)
 
         and: 'a differing state makes them unequal'
-        new TrackerTask(ref, snapshot, state, AbortFacts.none()) !=
-                new TrackerTask(ref, snapshot, new TrackerTaskState.Finished(), AbortFacts.none())
+        new TrackerTask(ref, snapshot, state, AbortFacts.none(), false) !=
+                new TrackerTask(ref, snapshot, new TrackerTaskState.Finished(), AbortFacts.none(), false)
     }
 }

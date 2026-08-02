@@ -109,7 +109,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
     }
 
     private static TrackerTask trackerTask(TaskRef ref, TrackerTaskState state, String taskId) {
-        new TrackerTask(ref, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(ref, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     private TakeArguments batchArgs(List<String> refs, boolean takeover = false) {
