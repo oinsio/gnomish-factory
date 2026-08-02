@@ -4,11 +4,10 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger as LogbackLogger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
-import com.github.oinsio.gnomish.app.RunArguments
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -93,8 +92,13 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
 
     private TakeSlotRunner newSlotRunner() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
+        // The fake agent binary (plain-round: one delivering round) instead of the default
+        // `claude`: the stage's AGENT_CLI executor really spawns this binary, and CI has no real
+        // claude on PATH.
+        def properties = testProperties(
+                agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
         new TakeSlotRunner(
-                newAssembly(), cloneDir, worktreesRoot, pipeline(), abortHandler, ABORT_THRESHOLD, MDC_KEY,
+                newAssembly(properties), cloneDir, worktreesRoot, pipeline(), abortHandler, ABORT_THRESHOLD, MDC_KEY,
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE)
     }
 

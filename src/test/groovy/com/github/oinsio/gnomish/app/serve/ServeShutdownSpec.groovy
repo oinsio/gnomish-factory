@@ -343,6 +343,9 @@ class ServeShutdownSpec extends Specification {
             Thread.sleep(100) // let it get parked inside slotLedger.awaitDrained(grace)
             shutdownThread.interrupt()
             shutdownReturned.await(5, TimeUnit.SECONDS)
+            // The latch fires before the thread's last bytecode runs, so isAlive() can still race
+            // true on a loaded machine — join() is the only wait that means "fully terminated".
+            shutdownThread.join(5000)
             return
         }
 

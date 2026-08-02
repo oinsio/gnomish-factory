@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -95,12 +96,20 @@ tracker:
                 }
     }
 
+    // The fake agent binary (plain-round: one delivering round) instead of the default `claude`:
+    // the stage's AGENT_CLI executor really spawns this binary, and CI has no real claude on PATH.
+    private testProps() {
+        testProperties(
+                instanceName: INSTANCE_NAME,
+                agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
+    }
+
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry, ServeProperties serveProperties) {
         TakeCommandFactory.of(
-                newAssembly(testProperties(instanceName: INSTANCE_NAME)),
+                newAssembly(testProps()),
                 worktreesRoot,
                 'taskId',
-                testProperties(instanceName: INSTANCE_NAME),
+                testProps(),
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 TrackerValidatorStub.acceptingGithub(),

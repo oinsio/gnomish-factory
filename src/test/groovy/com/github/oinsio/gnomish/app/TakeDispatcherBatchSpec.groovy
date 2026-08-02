@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
@@ -7,6 +8,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -47,8 +49,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
     private static final TaskRef READY_REF = new TaskRef('github:acme/widgets#1')
     private static final TaskRef WORKING_REF = new TaskRef('github:acme/widgets#2')
     private static final TaskRef FINISHED_REF = new TaskRef('github:acme/widgets#3')
-    private static final com.github.oinsio.gnomish.app.port.tracker.InstanceId INSTANCE =
-    new com.github.oinsio.gnomish.app.port.tracker.InstanceId('gnomish', 'ab12cd')
+    private static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
     private static final int ABORT_THRESHOLD = 3
 
     @TempDir
@@ -79,9 +80,16 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
     }
 
+    // The fake agent binary (plain-round: one delivering round) instead of the default `claude`:
+    // the stage's AGENT_CLI executor really spawns this binary, and CI has no real claude on PATH.
+    private testProps() {
+        testProperties(
+                instanceName: 'gnomish',
+                agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
+    }
+
     private TakeDispatcher newDispatcher(TakeoverConfirmation confirmation = TakeoverConfirmation.UNAVAILABLE) {
-        new TakeDispatcher(
-                worktreesRoot, 'taskId', testProperties(instanceName: 'gnomish'), Clock.systemUTC(), [:], confirmation)
+        new TakeDispatcher(worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], confirmation)
     }
 
     private static TakeHeartbeat noopHeartbeat() {
@@ -131,7 +139,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
         when:
         def outcomes = dispatcher.runBatch(
                 batchArgs(refs), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD), tracker, INSTANCE,
-                [], passthroughFactory(), newAssembly(), noopHeartbeat(), 3)
+                [], passthroughFactory(), newAssembly(testProps()), noopHeartbeat(), 3)
 
         then: 'every ref is present, in order'
         outcomes*.ref() == refs
@@ -160,7 +168,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
         when:
         def outcomes = dispatcher.runBatch(
                 batchArgs([WORKING_REF.id()]), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD), tracker,
-                INSTANCE, [], passthroughFactory(), newAssembly(), noopHeartbeat(), 2)
+                INSTANCE, [], passthroughFactory(), newAssembly(testProps()), noopHeartbeat(), 2)
 
         then:
         outcomes[0].result() instanceof TakeResult.Skipped
@@ -181,7 +189,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
         when:
         def outcomes = dispatcher.runBatch(
                 batchArgs([WORKING_REF.id()], true), pipeline(), new TrackerConfig('github', ABORT_THRESHOLD),
-                tracker, INSTANCE, [], passthroughFactory(), newAssembly(), noopHeartbeat(), 2)
+                tracker, INSTANCE, [], passthroughFactory(), newAssembly(testProps()), noopHeartbeat(), 2)
 
         then: 'no observable claim version, so removeStaleClaim is skipped and the ordinary claim decides'
         0 * tracker.removeStaleClaim(*_)
