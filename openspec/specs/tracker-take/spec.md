@@ -362,8 +362,9 @@ off a task via the ready label and automatic label provisioning, the label
 dictionary with who moves what, the escalation/decision/ack flow (reply, return
 to ready, re-run), snapshot behavior (issue edits do not affect a taken
 task; influence via decisions or revoke-and-recreate), stuck-`Working`
-recovery — automatic reaping whenever an instance with a live claim is
-running, the confirmed `take <ref>` takeover with its headless flag, and the
+recovery — automatic reaping whenever any factory instance is running, claim
+in hand or not, bounded only by runs too short to observe a full TTL — the
+confirmed `take <ref>` takeover with its headless flag, and the
 honest limitation that one-shot cron runs cannot observe longer than TTL so
 cron-only operation keeps the manual label flip until `serve` exists — the
 heartbeat/TTL settings with the shared write-budget coupling (beat interval ×
@@ -374,6 +375,8 @@ cron workflow (`docs/examples/board-bridge.yml`), the fork warning ("fix
 <!-- implements FR19 of add-tracker-port -->
 <!-- implements FR6 of add-claim-heartbeat -->
 <!-- implements NFR-P1, UX2, UX3 of add-claim-heartbeat -->
+<!-- implements FR1 of fix-reaper-idle-liveness -->
+<!-- implements UX1 of fix-reaper-idle-liveness -->
 
 #### Scenario: Guide covers the operator surface
 - **WHEN** an operator follows the guide against a fresh repository
@@ -382,9 +385,10 @@ cron workflow (`docs/examples/board-bridge.yml`), the fork warning ("fix
 
 #### Scenario: Guide states when recovery is automatic
 - **WHEN** an operator reads the stuck-`Working` section
-- **THEN** it distinguishes automatic reaping (long-lived runs), explicit
-  takeover (any time, confirmed), and the cron-only manual escape hatch, and
-  names the write-budget consequence of shortening the beat interval
+- **THEN** it distinguishes automatic reaping (any running instance whose run
+  outlives a TTL — no claim of its own required), explicit takeover (any time,
+  confirmed), and the cron-only manual escape hatch, and names the
+  write-budget consequence of shortening the beat interval
 
 ### Requirement: Operator guide covers autonomous operation
 The operator guide SHALL gain the autonomous-operation surface: the
@@ -417,14 +421,17 @@ hatch.
   ready-label access with code execution on the factory host
 
 ### Requirement: Take runs the heartbeat thread and the reaper duty
-A take run SHALL start the instance heartbeat thread at its first successful
-claim and stop it when no claim is held (terminal result reached or claim
-lost). While running, the thread beats every held claim on the configured
-interval and performs the reaper duty each tick: list open tasks, update
-observations, remove stale claims. Reaping is a byproduct of holding a claim —
-a take run whose task outlives a foreign TTL returns that foreign task to
-circulation.
+A take run SHALL start the beat-only instance heartbeat thread at its first
+successful claim and stop it when no claim is held (terminal result reached or
+claim lost). Independently of any claim, the run SHALL start the standing
+reaper at the run start and stop it when the invocation ends: while the run
+lives, the reaper lists open tasks, updates observations, and removes stale
+claims on each tick, whether or not the run currently holds a claim of its
+own. Reaping is a duty of the run itself, never a byproduct of holding a
+claim — the same standing-reaper mechanism `serve` uses, scoped to one
+invocation; the heartbeat thread performs no reaper duty.
 <!-- implements FR1, FR4 of add-claim-heartbeat -->
+<!-- implements FR1, FR5 of fix-reaper-idle-liveness -->
 
 #### Scenario: Beat starts with the claim
 - **WHEN** bare `take` claims the queue head
@@ -436,6 +443,12 @@ circulation.
   holding a claim
 - **THEN** before the run ends, the dead claim is removed and its task is
   `Ready` — unclaimed by the reaping run
+
+#### Scenario: Reaping outlives the beat thread
+- **WHEN** a take run's heartbeat thread dies abnormally while a foreign
+  claim in the listing goes stale
+- **THEN** the standing reaper, on its own thread, still removes the stale
+  foreign claim before the run ends
 
 ### Requirement: Reconcile precedes resume
 Every claim of a task with an existing branch SHALL begin with the reconcile
