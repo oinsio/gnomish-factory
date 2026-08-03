@@ -212,17 +212,23 @@ When an instance dies mid-task (process killed, machine lost), its claim stops
 being beaten but the issue stays `gnomish:working`. Recovery has three modes,
 and which ones apply depends on how you run the factory.
 
-**1. Automatic reaping (whenever a long-lived instance is running).** Any
-instance that holds a live claim runs a heartbeat thread, and that same thread
-also *reaps*: on every tick it lists the open tasks and checks each `Working`
-claim against the TTL (multiplier × beat interval, 15 minutes by default). A
-claim whose heartbeat has been silent for the TTL — measured on the observer's
-own clock, so a fresh instance always grants a full grace period — is returned
-to `gnomish:ready` automatically, with an audit marker in the thread naming the
+**1. Automatic reaping (whenever any instance is running).** Every `take` or
+`serve` run starts a standing reaper thread at run start and stops it when the
+run ends — independent of whether the instance holds a claim of its own, and
+independent of the heartbeat thread that beats its own held claims. On every
+tick the reaper lists the open tasks and checks each `Working` claim against
+the TTL (multiplier × beat interval, 15 minutes by default). A claim whose
+heartbeat has been silent for the TTL — measured on the observer's own clock,
+so a fresh instance always grants a full grace period — is returned to
+`gnomish:ready` automatically, with an audit marker in the thread naming the
 dead holder. No human is involved. So a task stranded by a dead instance comes
-back on its own as soon as *some* other instance is working long enough to
-observe that claim past the TTL. The reaper never claims the task for itself —
-it just returns it to the queue for the next `take`.
+back on its own as soon as *any* other instance — holding claims of its own or
+not, including a `serve` daemon that just restarted with nothing claimed — has
+been running long enough to observe that claim past the TTL. The reaper never
+claims the task for itself — it just returns it to the queue for the next
+`take`. The only thing that can prevent this is a run that ends before a full
+TTL window elapses — a short-lived bare `take` may exit before it ever
+observes a foreign claim go stale; see mode 3.
 
 **2. Explicit confirmed takeover (any time, no waiting).** You don't have to
 wait out the TTL for a visibly-stuck task. Run `gnomish take <ref>` on a
@@ -237,21 +243,24 @@ then claims and resumes from the branch exactly like any other task. Declining
 (or a headless run without `--takeover`) changes nothing and refuses, naming
 the holder.
 
-**3. The manual escape hatch (last resort, only when nothing long-lived is
-running).** Automatic reaping only happens while some instance is *holding a
-claim long enough* to observe a foreign one past the TTL. A one-shot cron
-`take` that claims a task, works it, and exits cannot watch a foreign claim for
-longer than its own (short) run, so it never accumulates the TTL needed to
-reap. `serve --drain` closes this gap for cron operation — see
-"Running Continuously" below — because it keeps the heartbeat/reaper thread
-alive for the whole run, not just one task's round, so mode 1 covers the cron
-case too. The manual flip is now demoted to genuinely last-resort operation:
-reach for it only if you are deliberately running bare one-shot `take` outside
-`serve` (e.g. a single manual invocation) and a task is visibly stranded. If
-so: remove `gnomish:working`, add `gnomish:ready` yourself. The task branch
-still holds every committed round, so the next `take` (bare or explicit) picks
-up from the last durable point, not from scratch. Do this only when you're
-sure the claiming instance is actually gone — if you're wrong, the git
+**3. The manual escape hatch (last resort, for runs too short to observe a
+full TTL).** Mode 1 needs the reaping run to stay alive at least one TTL
+window past the moment the foreign claim actually goes stale — every `take`
+runs the standing reaper, but a one-shot cron `take` that claims a task, works
+it, and exits can still end before that window has elapsed, especially if its
+own task finishes quickly. In that case it never gets the chance to observe
+the foreign claim cross the TTL, and the queue can sit with a stranded task
+until some other run happens to stay up long enough. `serve --drain` closes
+this gap for cron operation — see "Running Continuously" below — because the
+daemon keeps its standing reaper alive for the whole run instead of one task's
+round, so it reliably outlives the TTL and mode 1 covers the cron case too.
+The manual flip is genuinely last-resort operation: reach for it only if you
+are deliberately running bare one-shot `take` outside `serve` (e.g. a single
+manual invocation) and a task is visibly stranded. If so: remove
+`gnomish:working`, add `gnomish:ready` yourself. The task branch still holds
+every committed round, so the next `take` (bare or explicit) picks up from the
+last durable point, not from scratch. Do this only when you're sure the
+claiming instance is actually gone — if you're wrong, the git
 non-fast-forward fence still protects the branch: a stale instance that thaws
 and tries to push is refused and aborts, so the worst case is a wasted round,
 never corruption.

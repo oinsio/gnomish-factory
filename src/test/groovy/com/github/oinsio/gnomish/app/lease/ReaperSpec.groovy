@@ -16,14 +16,16 @@ import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
- * Reaper: the real {@link ReaperDuty} riding the heartbeat tick (design D4). Each
- * reapOnce lists open tasks, feeds the {@link StalenessMemory}, and removes every
- * claim the memory just judged stale — never claiming a reaped task for itself
- * (removal alone returns it to Ready). Convergence is by the version guard, and a
- * listOpen outage forgets the observation windows so recovery restarts each claim's
- * TTL — no false staleness accrues and no live claim is reaped (FR9). These specs
- * drive reapOnce directly under a controlled monotonic clock with a mocked Tracker,
- * so the policy is exercised with no threading and no real time.
+ * Reaper: the policy behind the real {@link ReaperDuty}. Each reapOnce lists open
+ * tasks, feeds the {@link StalenessMemory}, and removes every claim the memory just
+ * judged stale — never claiming a reaped task for itself (removal alone returns it
+ * to Ready). Convergence is by the version guard, and a listOpen outage forgets the
+ * observation windows so recovery restarts each claim's TTL — no false staleness
+ * accrues and no live claim is reaped (FR9). These specs drive reapOnce directly
+ * under a controlled monotonic clock with a mocked Tracker, so the policy is
+ * exercised with no threading and no real time. `Reaper`/`StalenessMemory` behavior
+ * itself is unchanged by fix-reaper-idle-liveness — only who calls reapOnce and how
+ * often moved, from the beat tick to a standing thread (see {@link StandingReaper}).
  *
  * FR4, FR9, NFR-R2 of add-claim-heartbeat.
  */

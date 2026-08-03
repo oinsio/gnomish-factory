@@ -2,10 +2,14 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.lease.ReaperDuty
+import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.serve.ServeShutdown
 import com.github.oinsio.gnomish.app.serve.SlotLedger
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
+import java.util.function.Supplier
 import spock.lang.Specification
 
 /**
@@ -31,13 +35,16 @@ class ServeAssemblySpec extends Specification {
         slotLedger.assign(REF)
         def claimLossFlag = new ClaimLossFlag()
         def serveProperties = new ServeProperties(1, Duration.ofSeconds(30), Duration.ofMillis(50), Duration.ofDays(14))
+        def standingReaper = new StandingReaper(
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier)
 
         when:
-        def shutdown = ServeAssembly.shutdown(slotLedger, claimLossFlag, serveProperties)
+        def shutdown = ServeAssembly.shutdown(slotLedger, claimLossFlag, serveProperties, standingReaper)
 
-        then: 'a genuine, non-null ServeShutdown is returned'
+        then: 'a genuine, non-null ServeShutdown is returned, wired over the SAME standing reaper'
         shutdown != null
         shutdown instanceof ServeShutdown
+        shutdown.standingReaper().is(standingReaper)
 
         when: 'running it'
         shutdown.shutdown(null)

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.lease.Reaper;
 import com.github.oinsio.gnomish.app.lease.StalenessMemory;
+import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
@@ -39,14 +40,18 @@ import java.time.Duration;
  * @param progress the engine-event listener whose snapshot each beat renders; never null
  * @param flag the claim-loss flag the beat sets on {@code ClaimGone} and the take flow consults at
  *     each round boundary (task 6.3, FR8); the SAME instance wired as the beat's sink; never null
+ * @param standingReaper the standing reaper thread ticking on the same beat interval, independent
+ *     of held-claim count (task 3.1, fix-reaper-idle-liveness FR5, design D2); never null
  */
-record TakeHeartbeat(ClaimBeat instance, HeartbeatProgress progress, ClaimLossFlag flag) {
+record TakeHeartbeat(
+        ClaimBeat instance, HeartbeatProgress progress, ClaimLossFlag flag, StandingReaper standingReaper) {
 
     /**
      * Builds the heartbeat machinery for one {@code take} run against {@code tracker}, reading the
      * beat interval and TTL multiplier from {@code config} (design D8). The claim staleness TTL is
-     * {@code interval × multiplier}; the reaper and its per-run staleness memory ride the same beat
-     * thread (design D4).
+     * {@code interval × multiplier}; the reaper's per-run staleness memory is driven by the {@link
+     * StandingReaper}, which ticks on its own thread independent of held-claim count (task 3.1,
+     * fix-reaper-idle-liveness FR5, design D2).
      *
      * <p>Implements FR1, FR4, FR8 of add-claim-heartbeat.
      *
@@ -78,13 +83,45 @@ record TakeHeartbeat(ClaimBeat instance, HeartbeatProgress progress, ClaimLossFl
      * @return the assembled heartbeat views; never null
      */
     static TakeHeartbeat forRun(Tracker tracker, TrackerConfig config, Sleeper sleeper, MonotonicTime monotonicTime) {
+        return forRun(tracker, config, sleeper, sleeper, monotonicTime);
+    }
+
+    /**
+     * The fully explicit overload (fix-reaper-idle-liveness FR5, design D2): identical to {@link
+     * #forRun(Tracker, TrackerConfig, Sleeper, MonotonicTime)} but takes a SEPARATE interval sleeper
+     * for the {@link StandingReaper}, independent of the beat's own sleeper. Production wiring is
+     * unaffected — both overloads above simply pass the same {@code sleeper} for both roles, which is
+     * harmless because the production {@code ThreadSleeper} is stateless and reentrant. The split
+     * only matters to a test that drives the two threads' interval sleeps separately — e.g. a
+     * rendezvous {@code BlockingSleeper} per thread, so releasing the beat's sleep can never be
+     * mistaken for releasing the reaper's (and vice versa).
+     *
+     * <p>Implements FR1, FR4, FR8 of add-claim-heartbeat; FR5, NFR-S1 of fix-reaper-idle-liveness.
+     *
+     * @param tracker the port the beat writes through and the reaper lists/removes claims with
+     * @param config the resolved tracker config carrying the beat interval and TTL multiplier — the
+     *     sole source of the reaper's interval/TTL (NFR-S1 of fix-reaper-idle-liveness)
+     * @param sleeper the beat-interval sleeper; never null
+     * @param reaperSleeper the standing reaper's OWN interval sleeper, independent of {@code sleeper};
+     *     never null
+     * @param monotonicTime the monotonic time the reaper's staleness TTL is measured on — production
+     *     {@link SystemMonotonicTime}, a controllable source under test; never null
+     * @return the assembled heartbeat views; never null
+     */
+    static TakeHeartbeat forRun(
+            Tracker tracker,
+            TrackerConfig config,
+            Sleeper sleeper,
+            Sleeper reaperSleeper,
+            MonotonicTime monotonicTime) {
         Duration interval = config.heartbeatInterval();
         Duration ttl = interval.multipliedBy(config.heartbeatTtlMultiplier());
         var progress = new HeartbeatProgress();
         var flag = new ClaimLossFlag();
         var staleness = new StalenessMemory(monotonicTime, ttl);
         var reaper = new Reaper(tracker, staleness);
-        var heartbeat = new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), interval, flag, reaper);
-        return new TakeHeartbeat(heartbeat, progress, flag);
+        var heartbeat = new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), interval, flag);
+        var standingReaper = new StandingReaper(reaper, reaperSleeper, interval, heartbeat::liveClaimsSnapshot);
+        return new TakeHeartbeat(heartbeat, progress, flag, standingReaper);
     }
 }

@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import spock.lang.Specification
 
@@ -19,20 +18,23 @@ import spock.lang.Specification
  * <p>A "previous life" claims two tasks under an old instance id, seeded directly via {@link
  * InMemoryTrackerHarness#seedWorkingWithClaim} (bypassing {@code claim}, exactly like a claim a
  * now-dead process actually made). The "restart" then constructs a BRAND NEW {@link
- * StalenessMemory}, {@link Reaper}, and {@link InstanceHeartbeat} — nothing carried over from the
+ * StalenessMemory}, {@link Reaper}, and {@link StandingReaper} — nothing carried over from the
  * previous life's objects, mirroring two separate {@code ServeCommand.run} invocations that share
  * no static or instance-local state (there is none to share: {@link ServeCommand} mints {@link
  * InstanceId#generate} fresh and no claim-ownership file/cache exists anywhere in the app layer).
  *
- * <p>The new instance never {@link InstanceHeartbeat#register}s the old refs — it never held them
- * — so its tick beats nothing for them; the old claims are only ever visible to it as foreign
+ * <p>The reaper is a standing duty independent of any instance's own claims (design D1 of
+ * fix-reaper-idle-liveness, superseding the old beat-riding reaper of design D4): the new
+ * instance's live-claims snapshot supplier always returns empty, modelling "the new instance
+ * holding nothing", since it never claimed anything of its own before the restarted process's
+ * first {@code StandingReaper} tick. The old claims are only ever visible to it as foreign
  * entries through {@code listOpen}, indistinguishable from any other instance's stale claim
  * ({@link ReapingWhileSaturatedSpec}). Once the TTL elapses on the new instance's own monotonic
  * clock, the reaper removes them and the ordinary queue re-claims them for the new instance —
  * proving "left to the lease protocol... may well be re-claimed by the new process through the
  * ordinary queue" end to end, with no instance-local state anywhere.
  *
- * <p>Implements FR12 of add-factory-serve; FR1, FR2, FR4 of add-claim-heartbeat.
+ * <p>Implements FR12 of add-factory-serve; FR1, FR2 of fix-reaper-idle-liveness.
  */
 class RestartCleanlinessSpec extends Specification {
 
@@ -58,15 +60,16 @@ class RestartCleanlinessSpec extends Specification {
         def monotonic = new VirtualMonotonicTime()
         def staleness = new StalenessMemory(monotonic, TTL)
         def reaper = new Reaper(tracker, staleness)
-        def heartbeat = new InstanceHeartbeat(
-                tracker, new HeartbeatProgress(), new BlockingSleeper(), new VirtualClock(),
-                INTERVAL, ClaimLostSink.IGNORE, reaper)
+        // The new instance holds nothing of its own, so the standing reaper's live-claims
+        // snapshot supplier always returns empty — exactly the shape of a just-restarted process
+        // that has not claimed anything yet (FR1, FR2).
+        def standingReaper = new StandingReaper(reaper, { Duration d -> }, INTERVAL, { -> [] })
 
         expect: 'the restart alone mints a different id — the two lives are never confused'
         newInstanceId != oldInstanceId
 
-        when: 'the new instance ticks right after starting, having registered nothing of its own'
-        heartbeat.tick()
+        when: 'the new instance ticks right after starting, having claimed nothing of its own'
+        standingReaper.tick()
 
         then: 'the old claims are not adopted: still held by the old instance, untouched by a beat'
         tracker.fetchTask(TASK_A).state() == new TrackerTaskState.Working(oldInstanceId)
@@ -76,7 +79,7 @@ class RestartCleanlinessSpec extends Specification {
 
         when: 'the claims go stale on the new instance\'s own monotonic clock, past the TTL'
         monotonic.advance(TTL)
-        heartbeat.tick()
+        standingReaper.tick()
 
         then: 'the reaper returns both tasks to Ready — the ordinary lease protocol, not adoption'
         tracker.fetchTask(TASK_A).state() == new TrackerTaskState.Ready()

@@ -12,14 +12,12 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import org.slf4j.MDC
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -30,7 +28,7 @@ import spock.lang.TempDir
  * {@link TakeCommand#run} returns or throws, regardless of outcome. Mirrors {@link
  * TakeCommandSpec}'s fixture shape but asserts MDC state instead of exit codes.
  */
-class TakeCommandMdcSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class TakeCommandMdcSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -81,18 +79,6 @@ tracker:
                 "schemaVersion: \"1\"\nautonomy:\n  attemptLimit: 3\n$trackerSection")
     }
 
-    private static TrackerAdapterFactory fakeFactory(Tracker t) {
-        new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
-    }
-
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {
         // The Working row (task 6.2) reaches the takeover path; inject the headless UNAVAILABLE seam
         // rather than the production ConsoleTakeoverConfirmation so this MDC-focused spec never binds
@@ -106,12 +92,9 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 TrackerValidatorStub.acceptingGithub(),
-                new ThreadSleeper(),
-                TakeoverConfirmation.UNAVAILABLE)
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
+                TakeCommandSeams.DEFAULTS
+                .withHeartbeatSleeper(new ThreadSleeper())
+                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
     }
 
     // FR9, UX2, NFR-O1: every explicit-mode refusal disposition (Working/AwaitingHuman/Finished/

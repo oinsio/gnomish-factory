@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import java.nio.file.Path
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -14,13 +13,9 @@ import spock.lang.Unroll
  * (default unchanged: the current working directory) and {@code --mode git|in-place} was
  * added, defaulting to {@code git} when absent.
  */
-class RunArgumentsParserSpec extends Specification {
+class RunArgumentsParserSpec extends Specification implements ApplicationArgumentsFixture {
 
     private final RunArgumentsParser parser = new RunArgumentsParser()
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
-    }
 
     def "FR1: --dir and --task both present parse correctly"() {
         when:

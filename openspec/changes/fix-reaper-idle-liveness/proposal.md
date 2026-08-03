@@ -52,11 +52,11 @@ is precisely when the reaper is needed most and precisely when it is absent.
   is retargeted from the beat-thread reaper duty to a standing reaper thread
   that reaps in every feed state and with zero held claims; "Restart is a clean
   start" (FR12) gains an explicit guarantee that recovery does not depend on the
-  new process claiming a fresh task first; "Scheduler runs N slots" scopes its
-  no-double-assignment guarantee to live claims (a self-reaped task re-claimed
-  by the same instance follows the fence path, like any foreign re-claim);
-  "Daemon tolerates tracker outages" adds the standing reaper to the actors
-  that retry with backoff.
+  new process claiming a fresh task first; "Scheduler runs N slots" gains an
+  explicit feed guard: the feed never claims a task that still occupies one of
+  this instance's slots (a self-reaped task stays available to foreign
+  instances until the old slot ends); "Daemon tolerates tracker outages" adds
+  the standing reaper to the actors that retry with backoff.
 - `tracker-take`: "Take runs the heartbeat thread and the reaper duty" is
   retargeted from a per-tick beat duty ("byproduct of holding a claim") to the
   standing reaper scoped to the invocation; the "Operator guide" requirement's
@@ -105,8 +105,11 @@ is precisely when the reaper is needed most and precisely when it is absent.
   nothing and MAY reap prior-life stale claims left under its own former id.
   A claim whose heartbeat thread has died SHALL likewise stop being excluded
   and MAY be reaped by its own instance once stale; a slot still working such
-  a task becomes a zombie handled by the existing fence path, and a
-  same-instance re-claim of it is equivalent to a foreign re-claim.
+  a task becomes a zombie neutralized by the existing revocation/fence path.
+  The instance's own feed SHALL NOT re-claim a task that still occupies one of
+  its own slots — a same-instance re-claim is indistinguishable from the live
+  claim to the `InstanceId`-based fence, so it is prevented rather than fenced;
+  a foreign instance may claim such a task at any time, fenced as usual.
 - **FR3**: The reaper's loop SHALL catch every `Throwable` around both the reap
   tick and the interval wait, so an `Error` or a throwing sleeper is logged and
   the next tick still runs; only an intentional stop exits the loop.
@@ -121,7 +124,9 @@ is precisely when the reaper is needed most and precisely when it is absent.
 
 - **NFR-R1**: A restarted single-instance `serve` with zero own claims and
   either a saturated WIP limit or an empty ready queue SHALL still reap its
-  previous life's stale claims within one TTL window and recover autonomously.
+  previous life's stale claims within one TTL of the standing reaper's first
+  post-restart observation (i.e. one beat interval after restart, plus one
+  TTL) and recover autonomously.
 - **NFR-R2**: Reaping SHALL remain available for the life of the process after
   any single abnormal reaper fault (FR3/FR4 guarantee).
 
@@ -174,7 +179,8 @@ is precisely when the reaper is needed most and precisely when it is absent.
   standing reaper and a beat-only heartbeat; `TakeCommand` starts/stops the
   reaper around the invocation; `ServeCommand`/`ServeShutdown` start/stop it for
   the daemon lifetime; `ReaperDuty` ownership moves from `InstanceHeartbeat` to
-  the standing reaper.
+  the standing reaper; `FeedCycle` skips claim candidates still occupying one of
+  this instance's slots (FR2, design D6).
 - **Specs**: modifies `claim-heartbeat` (the reaper machinery),
   `factory-serve` (FR13 "reaps in every state", FR12 "restart is a clean
   start", the scheduler's no-double-assignment scoping, tracker-outage
@@ -186,6 +192,7 @@ is precisely when the reaper is needed most and precisely when it is absent.
 - **Tests**: `ReaperSpec`, `RestartCleanlinessSpec`, and
   `ReapingWhileSaturatedSpec` are repointed from the manually-driven heartbeat
   tick to the standing reaper; new specs cover zero-claim reaping, abnormal-death
-  resilience, supervision, `stop()`, the live-claims snapshot, and both-mode
-  wiring.
+  resilience, supervision, `stop()`, the live-claims snapshot, both-mode
+  wiring, and the feed's skip of own-occupied claim candidates
+  (`FeedCycleSpec`).
 - **No new dependencies.**

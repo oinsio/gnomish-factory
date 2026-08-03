@@ -12,7 +12,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * One feed cycle's poll-and-claim mechanics (design D1, D2, D5): the tracker poll, {@link
@@ -28,7 +31,13 @@ import org.jspecify.annotations.Nullable;
  * and {@link FeedAutomaton#drain()} call through this one class, the outage tolerance covers both
  * automatically.
  *
- * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve.
+ * <p>The claim walk also guards the one shape the zombie fence cannot: a candidate that still
+ * occupies a local slot (its claim was self-reaped after an abnormal heartbeat death while the old
+ * slot keeps running) is skipped with a WARN, never re-claimed by this instance (FR2 of
+ * fix-reaper-idle-liveness, design D6).
+ *
+ * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve. Implements FR2 of
+ * fix-reaper-idle-liveness (design D6).
  */
 record FeedCycle(
         Tracker tracker,
@@ -41,6 +50,8 @@ record FeedCycle(
         Random random,
         FeedStateLogger stateLogger,
         FeedOutageRetry outageRetry) {
+
+    private static final Logger log = LoggerFactory.getLogger(FeedCycle.class);
 
     /** One poll's raw feed plus the eligibility-filtered candidates. */
     record Poll(List<ReadyTask> readyTasks, int openFrontCount, Instant now, List<ReadyTask> candidates) {}
@@ -98,7 +109,24 @@ record FeedCycle(
     }
 
     private @Nullable TaskRef attemptClaim(List<ReadyTask> candidates) {
+        // One occupancy snapshot per walk: only the feed thread assigns, so a ref absent here
+        // cannot become occupied before this walk's own assign; a ref released mid-walk is just
+        // skipped until the next cycle.
+        Set<TaskRef> occupied = slotLedger.occupiedRefs();
         for (ReadyTask candidate : candidates) {
+            if (occupied.contains(candidate.ref())) {
+                // A Ready task still occupying a local slot is this instance's own zombie's task:
+                // the heartbeat died and the standing reaper returned it while the old slot still
+                // runs (fix-reaper-idle-liveness FR2, design D6). Never re-claim it — the
+                // InstanceId-based fence cannot tell the old slot from a new same-instance claim,
+                // and assign() would reject the ref. A foreign instance may claim it, fenced as
+                // usual; this instance may again once the old slot releases.
+                log.warn(
+                        "feed skips claim candidate {}: it still occupies a local slot"
+                                + " (self-reaped after an abnormal heartbeat death?)",
+                        candidate.ref().id());
+                continue;
+            }
             if (!OpenFrontGate.isStillEligible(
                     candidate, () -> tracker.listOpen().size(), wipLimit)) {
                 continue;

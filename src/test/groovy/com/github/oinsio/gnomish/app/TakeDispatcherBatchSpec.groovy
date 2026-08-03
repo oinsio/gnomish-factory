@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
+import com.github.oinsio.gnomish.app.lease.ReaperDuty
+import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -24,6 +26,7 @@ import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -93,7 +96,8 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
     }
 
     private static TakeHeartbeat noopHeartbeat() {
-        new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag())
+        def standingReaper = new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), { [] })
+        new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag(), standingReaper)
     }
 
     private static TrackerAdapterFactory passthroughFactory() {

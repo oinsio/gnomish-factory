@@ -1,28 +1,20 @@
 package com.github.oinsio.gnomish.app.lease
 
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicInteger
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
  * InstanceHeartbeat, the beat itself (design D1, D3): one tick beats every held claim with
- * the latest engine-event-derived payload and the injected alive-at instant, then runs the
- * reaper seam once. A beat failure never breaks the tick; a ClaimGone is surfaced and the
+ * the latest engine-event-derived payload and the injected alive-at instant — this instance's
+ * own claims only. A beat failure never breaks the tick; a ClaimGone is surfaced and the
  * claim dropped. These specs drive tick() directly under a parked sleeper, so the beat
  * logic is exercised with no threading and no real time.
  *
@@ -38,7 +30,6 @@ class InstanceHeartbeatSpec extends Specification {
     private final HeartbeatProgress progress = new HeartbeatProgress()
     private final VirtualClock clock = new VirtualClock()
     private final List<TaskRef> lost = []
-    private final AtomicInteger reaps = new AtomicInteger()
     // A parked sleeper: the auto-started worker blocks in its first sleep, so the only ticks
     // are the direct hb.tick() calls below — no background beating races these assertions.
     private final InstanceHeartbeat hb = new InstanceHeartbeat(
@@ -47,13 +38,12 @@ class InstanceHeartbeatSpec extends Specification {
     new BlockingSleeper(),
     clock,
     INTERVAL,
-    { TaskRef ref -> lost << ref } as ClaimLostSink,
-    { reaps.incrementAndGet() } as ReaperDuty)
+    { TaskRef ref -> lost << ref } as ClaimLostSink)
 
     private static final HeartbeatResult BEATEN = new HeartbeatResult.Beaten(new ClaimVersion('m', Instant.EPOCH))
 
     private void progressAt(TaskRef ref, String stage, int attempt) {
-        progress.onEvent(new EngineEvent.AttemptStarted(new AttemptKey(ref.id(), stage, attempt)))
+        ProgressFixtures.progressAt(progress, ref, stage, attempt)
     }
 
     def cleanup() {
@@ -230,7 +220,7 @@ class InstanceHeartbeatSpec extends Specification {
             heartbeat: { TaskRef ref, String payload -> new HeartbeatResult.ClaimGone() }
         ] as Tracker
         def loopHb = new InstanceHeartbeat(
-                gone, progress, recordingSleeper, clock, INTERVAL, ClaimLostSink.IGNORE, ReaperDuty.NONE)
+                gone, progress, recordingSleeper, clock, INTERVAL, ClaimLostSink.IGNORE)
         progressAt(A, 'plan', 0)
         loopHb.seedHeldForTest(A)
 
@@ -239,80 +229,5 @@ class InstanceHeartbeatSpec extends Specification {
 
         then: 'it slept the interval before beating A, then once more before finding the set drained and stopping'
         recorded == [INTERVAL, INTERVAL]
-    }
-
-    // FR1, FR4, D4: a per-tick failure (here the reaper throwing) is caught and logged WARN, the loop
-    //     survives it and runs to completion. Driven synchronously: a first beat that loses the claim
-    //     drains the held set so the loop terminates, while the reaper throws every tick so the catch
-    //     and its WARN line are exercised — a mutant that drops the catch propagates the throw out of
-    //     loop() (failing the run), and one that drops the WARN leaves no log event.
-    def "the loop catches and logs a per-tick failure and still runs to completion"() {
-        given:
-        def gone = [
-            heartbeat: { TaskRef ref, String payload -> new HeartbeatResult.ClaimGone() }
-        ] as Tracker
-        def boom = { throw new IllegalStateException('reaper down') } as ReaperDuty
-        int cycles = 0
-        Sleeper safety = { Duration d ->
-            if (++cycles > 20) {
-                throw new IllegalStateException('loop did not terminate')
-            }
-        } as Sleeper
-        def loopHb = new InstanceHeartbeat(gone, progress, safety, clock, INTERVAL, ClaimLostSink.IGNORE, boom)
-        progressAt(A, 'plan', 0)
-        loopHb.seedHeldForTest(A)
-
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(InstanceHeartbeat)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-
-        when: 'the loop runs to completion despite the reaper throwing each tick'
-        try {
-            loopHb.loop()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-
-        then: 'the loop terminated (no exception escaped) and logged the tick failure as a WARN'
-        appender.list.any { it.level == Level.WARN && it.formattedMessage.contains('heartbeat tick failed') }
-    }
-
-    // FR4: each tick runs the reaper duty exactly once, after beating (the task-4.3 seam).
-    def "each tick runs the reaper duty once after beating"() {
-        given:
-        progressAt(A, 'plan', 0)
-        hb.register(A)
-
-        when:
-        hb.tick()
-        hb.tick()
-
-        then:
-        2 * tracker.heartbeat(A, _) >> BEATEN
-        reaps.get() == 2
-    }
-
-    // FR4, D13: the tick hands the reaper exactly the claims the instance holds, so the reaper
-    //     can exclude its own live claims from staleness observation and never reap itself.
-    //     Seeded via seedHeldForTest so no worker thread starts (the parked-sleeper races nothing).
-    def "each tick passes the held claims to the reaper so its own claims are never reaped"() {
-        given:
-        ReaperDuty capturingReaper = Mock()
-        def hb2 = new InstanceHeartbeat(
-                tracker, progress, new BlockingSleeper(), clock, INTERVAL, ClaimLostSink.IGNORE, capturingReaper)
-        progressAt(A, 'plan', 0)
-        progressAt(B, 'review', 1)
-        hb2.seedHeldForTest(A)
-        hb2.seedHeldForTest(B)
-
-        when:
-        hb2.tick()
-
-        then:
-        1 * tracker.heartbeat(A, _) >> BEATEN
-        1 * tracker.heartbeat(B, _) >> BEATEN
-        1 * capturingReaper.reapOnce({ (it as Set) == ([A, B] as Set) })
     }
 }

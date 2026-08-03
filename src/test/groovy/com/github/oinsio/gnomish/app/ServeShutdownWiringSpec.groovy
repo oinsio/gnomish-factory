@@ -5,10 +5,12 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.lease.ReaperDuty
+import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
-import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller
+import com.github.oinsio.gnomish.app.serve.RecordingKiller
 import com.github.oinsio.gnomish.app.serve.ServeShutdown
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
@@ -25,8 +27,8 @@ import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import java.util.function.Supplier
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -51,15 +53,6 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     Path cloneDir
     Path worktreesRoot
     Tracker tracker = Mock()
-
-    private static class RecordingKiller implements ProcessTreeKiller {
-        final AtomicInteger calls = new AtomicInteger()
-
-        @Override
-        void killDescendants() {
-            calls.incrementAndGet()
-        }
-    }
 
     def setup() {
         def gitRunner = new GitProcessRunner()
@@ -97,8 +90,13 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 Duration.ofMillis(1), 1, new Random(0))
     }
 
+    // This spec is about ServeShutdownWiring's hook registration/drain/join plumbing, not the
+    // standing reaper (fix-reaper-idle-liveness FR4, covered by ServeShutdownSpec) — an inert,
+    // never-started StandingReaper is a harmless collaborator here.
     private static ServeShutdown newShutdown(RecordingKiller killer) {
-        new ServeShutdown(new SlotLedger(1), new ClaimLossFlag(), Duration.ofMillis(10), killer)
+        def inertReaper = new StandingReaper(
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier)
+        new ServeShutdown(new SlotLedger(1), new ClaimLossFlag(), Duration.ofMillis(10), killer, inertReaper)
     }
 
     // FR10, FR11, NFR-O2, D9: proves the three void calls PIT found survived on runDrain's own

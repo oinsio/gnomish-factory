@@ -30,18 +30,20 @@ import spock.lang.TempDir
  * a task X held by a DEAD instance A returns to circulation automatically — reaped by ANOTHER
  * instance's ordinary run — and is later resumed from A's branch, with no human in the loop.
  *
- * <p>The scenario, all deterministic — a controlled beat sleeper ({@link BlockingSleeper}) steps the
- * reaper one tick at a time and a controlled {@link VirtualMonotonicTime} moves X's claim past its
- * TTL between two observations, so no real time passes:
+ * <p>The scenario, all deterministic — a controlled reaper sleeper ({@link BlockingSleeper}, separate
+ * from B's beat sleeper per fix-reaper-idle-liveness FR5) steps B's STANDING reaper one tick at a
+ * time, independent of B's beat thread, and a controlled {@link VirtualMonotonicTime} moves X's
+ * claim past its TTL between two observations, so no real time passes:
  *
  * <ol>
  *   <li>Instance A delivers X for real, leaving a {@code Completed} task branch; then A "dies"
  *       holding X — modelled by the finish tracker-write being lost, so X still shows {@code
  *       Working(instance-a)} with a claim that is now never beaten again ({@link #deadenClaim}).
- *   <li>Instance B runs its OWN take of a separate Ready task Y. B's heartbeat beats Y and runs the
- *       reaper each tick; across two ticks spanning more than the TTL, X's unchanged claim is judged
- *       stale and {@code removeStaleClaim}d — X returns to {@code Ready} with the {@code
- *       stale-claim-removed} marker naming instance-a, and B never claims X for itself (FR4, D5).
+ *   <li>Instance B runs its OWN take of a separate Ready task Y. B's standing reaper ticks
+ *       independently of B's beat thread; across two reap ticks spanning more than the TTL, X's
+ *       unchanged claim is judged stale and {@code removeStaleClaim}d — X returns to {@code Ready}
+ *       with the {@code stale-claim-removed} marker naming instance-a, and B never claims X for
+ *       itself (FR4, D5; fix-reaper-idle-liveness FR5).
  *   <li>A later take of X claims it by ordinary lease and reconciles from A's branch — the recorded
  *       delivery drives a zero-engine-round finish, not a fresh start from the pipeline's first stage.
  * </ol>
@@ -55,7 +57,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR4, G1, M2 of add-claim-heartbeat.
  */
-abstract class TakeDeathAndRecoverySpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+abstract class TakeDeathAndRecoverySpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     protected static final TaskRef X = new TaskRef('PROJ-1')
     protected static final TaskRef Y = new TaskRef('PROJ-2')
@@ -68,6 +70,9 @@ abstract class TakeDeathAndRecoverySpecBase extends Specification implements Bar
     Tracker tracker
     TrackerAdapterFactory trackerFactory
     BlockingSleeper sleeper = new BlockingSleeper()
+    // B's standing reaper gets its OWN sleeper (fix-reaper-idle-liveness FR5), independent of the
+    // beat's: this spec steps the reaper's ticks directly and never drives the beat sleeper.
+    BlockingSleeper reaperSleeper = new BlockingSleeper()
     VirtualMonotonicTime monotonic = new VirtualMonotonicTime()
 
     /** @return {@code [Tracker, TrackerAdapterFactory]} for two fresh Ready tasks seeded at {@link #X} and {@link #Y} */
@@ -130,7 +135,8 @@ tracker:
                 TrackerValidatorStub.acceptingGithub())
     }
 
-    /** Instance B's {@link TakeCommand}: the beat sleeper and the reaper's monotonic clock are both controllable. */
+    /** Instance B's {@link TakeCommand}: the standing reaper's own sleeper and its monotonic clock
+     * are both controllable, independent of B's beat sleeper (fix-reaper-idle-liveness FR5). */
     private TakeCommand steppableCommand(FactoryProperties factoryProperties) {
         TakeCommandFactory.of(
                 newAssembly(factoryProperties),
@@ -140,9 +146,11 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
                 TrackerValidatorStub.acceptingGithub(),
-                sleeper,
-                monotonic,
-                TakeoverConfirmation.UNAVAILABLE)
+                TakeCommandSeams.DEFAULTS
+                .withHeartbeatSleeper(sleeper)
+                .withReaperSleeper(reaperSleeper)
+                .withHeartbeatMonotonicTime(monotonic)
+                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
     }
 
     private static int runExitCode(TakeCommand command, DefaultApplicationArguments appArgs) {
@@ -154,10 +162,6 @@ tracker:
         }
     }
 
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
-    }
-
     def "M2: a dead instance's Working claim is reaped by another run and later resumed from its branch"() {
         given: 'instance A delivers X for real, leaving a Completed task branch'
         assert runExitCode(productionCommand(props('instance-a', 'plain-round')), args('take', 'PROJ-1', "--dir=$projectDir")) == 0
@@ -166,19 +170,19 @@ tracker:
         and: 'A then "dies" holding X: the finish write is lost, X still shows Working(instance-a) with a claim never beaten again'
         deadenClaim(X, 'instance-a')
 
-        when: 'instance B runs its OWN take of Y on another thread so the test can step B\'s reaper mid-round'
+        when: 'instance B runs its OWN take of Y on another thread so the test can step B\'s standing reaper mid-round'
         def commandB = steppableCommand(props('instance-b', 'plain-round-slow'))
         def executor = Executors.newSingleThreadExecutor()
         def appArgs = args('take', 'PROJ-2', "--dir=$projectDir")
         Future<?> runB = executor.submit({ commandB.run(appArgs) } as Callable)
 
-        and: 'the reaper observes X\'s frozen claim twice, the monotonic clock advancing past the TTL between observations'
-        assert sleeper.awaitEntered(10000) != null: 'B\'s beat thread never entered its first interval sleep'
-        sleeper.releaseOne() // tick 1: beat Y, reaper first-sees X (fresh grace window)
-        assert sleeper.awaitEntered(10000) != null: 'B\'s beat thread stopped before the second tick'
+        and: 'B\'s standing reaper — independent of B\'s beat thread — observes X\'s frozen claim twice, the monotonic clock advancing past the TTL between observations'
+        assert reaperSleeper.awaitEntered(10000) != null: 'B\'s standing reaper never entered its first interval sleep'
+        reaperSleeper.releaseOne() // reap tick 1: reaper first-sees X (fresh grace window)
+        assert reaperSleeper.awaitEntered(10000) != null: 'B\'s standing reaper stopped before the second reap tick'
         monotonic.advance(Duration.ofHours(1)) // > TTL (default 5 min x 3)
-        sleeper.releaseOne() // tick 2: X\'s unchanged claim is now stale -> removeStaleClaim
-        assert sleeper.awaitEntered(10000) != null: 'B\'s beat thread stopped before parking after the second tick'
+        reaperSleeper.releaseOne() // reap tick 2: X\'s unchanged claim is now stale -> removeStaleClaim
+        assert reaperSleeper.awaitEntered(10000) != null: 'B\'s standing reaper stopped before parking after the second reap tick'
 
         then: 'X is back to Ready, carrying the stale-claim-removed marker naming instance-a, and was NOT claimed by B'
         tracker.fetchTask(X).state() instanceof TrackerTaskState.Ready

@@ -15,14 +15,12 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import org.slf4j.LoggerFactory
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -38,7 +36,7 @@ import spock.lang.Timeout
  * Implements FR2, FR3, NFR-O2, UX3, D7 of add-factory-serve.
  */
 @Timeout(30)
-class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     private static final String INSTANCE_NAME = 'gnomish-factory'
 
@@ -84,18 +82,6 @@ tracker:
         tracker.listOpen() >> []
     }
 
-    private static TrackerAdapterFactory fakeFactory(Tracker t) {
-        new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
-    }
-
     // The fake agent binary (plain-round: one delivering round) instead of the default `claude`:
     // the stage's AGENT_CLI executor really spawns this binary, and CI has no real claude on PATH.
     private testProps() {
@@ -113,11 +99,7 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 TrackerValidatorStub.acceptingGithub(),
-                serveProperties)
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
+                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
     }
 
     private static TrackerTask trackerTask(TaskRef ref, TrackerTaskState state, String taskId) {

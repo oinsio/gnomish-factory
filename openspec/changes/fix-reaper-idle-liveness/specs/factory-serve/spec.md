@@ -55,13 +55,15 @@ The scheduler SHALL run up to N concurrent slots, each executing the existing
 take cycle (claim → run → react to the outcome) unchanged; N SHALL be instance
 configuration with a modest default. Claiming SHALL happen in the feed — a
 slot receives an already-claimed task — the scheduler SHALL never hand one
-task to two slots of the same instance while the instance's claim on it is
-live, and concurrent claim attempts SHALL never exceed the instance's free
-slots. A task whose claim was reaped after the instance's heartbeat thread
-died abnormally is no longer this instance's work: if the feed later
-re-claims it, the new slot proceeds under the new lease while any old slot
-still running it is a zombie neutralized by the ordinary fence path, exactly
-as if a foreign instance had re-claimed it.
+task to two slots of the same instance, and concurrent claim attempts SHALL
+never exceed the instance's free slots. The feed SHALL NOT claim a task that
+still occupies one of this instance's slots, even when it shows `Ready` — the
+shape left behind when the heartbeat thread died abnormally and the instance's
+own standing reaper returned a still-running slot's task: the skip SHALL be
+logged, the old slot is neutralized by the ordinary revocation check at its
+next round boundary (its task is no longer `Working` under this instance), and
+the task stays claimable by a foreign instance at any time — or by this
+instance once the old slot ends.
 <!-- implements FR1, FR9 of add-factory-serve -->
 <!-- implements NFR-R1 of add-factory-serve -->
 <!-- implements FR2 of fix-reaper-idle-liveness -->
@@ -77,14 +79,15 @@ as if a foreign instance had re-claimed it.
 - **THEN** park, report, and exit-state handling behave exactly as a single
   `take` of that task would
 
-#### Scenario: Self-reaped task re-claimed by the same instance
+#### Scenario: Self-reaped task is not re-claimed while its old slot lives
 - **WHEN** the daemon's heartbeat thread dies abnormally, its own standing
   reaper returns a still-running slot's task to `Ready` after TTL, and the
-  feed later re-claims that task into a new slot
-- **THEN** the new slot works it under the new claim, and the old slot's next
-  push or tracker write is fenced (non-fast-forward refusal or the pre-write
-  claim check) and ends via the ordinary abort path — no data corruption, no
-  double delivery
+  feed's next poll offers that task as a claim candidate
+- **THEN** the feed skips it, logging the skip, and claims other candidates
+  instead; the old slot stops via the ordinary revocation path at its next
+  round boundary, and only after its slot is released may this instance claim
+  the task again — a foreign instance may claim it at any time, fenced as
+  usual
 
 ### Requirement: Daemon tolerates tracker outages
 A tracker outage SHALL not kill the daemon: the feed, the heartbeat, and the

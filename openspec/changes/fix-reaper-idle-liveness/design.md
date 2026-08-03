@@ -78,11 +78,9 @@ they are not stale anyway). If the heartbeat dies abnormally
 (`onWorkerDeath` sets `running=false`), the snapshot goes empty, so the reaper
 stops shielding the now-unbeaten claims and returns them after TTL — a slot
 still working one then hits the existing claim-loss / fence path (D3 of
-`claim-heartbeat`). The feed may even re-claim a self-reaped task into another
-slot of the same instance; that is equivalent to a foreign re-claim — the old
-slot is a zombie and the fence arbitrates. The scheduler's no-double-assignment
-guarantee is therefore scoped to live claims (see the factory-serve delta).
-`held` semantics and `unregister` are untouched.
+`claim-heartbeat`). The same instance's feed, however, never re-claims a
+self-reaped task while the old slot still runs it — see D6. `held` semantics
+and `unregister` are untouched.
 
 *Alternative:* clear `held` in `onWorkerDeath` — rejected: mutates the beat
 lifecycle's state for a reader's benefit; the running-gated snapshot is local
@@ -120,6 +118,34 @@ reaper. (b) fixed small delay — rejected: a permanently-failing cause would
 busy-loop restart/log; the cap-10-min backoff bounds the churn while keeping
 recovery bounded too.
 
+### D6 — The feed skips its own occupied refs; no claim-epoch fence
+A self-reaped task (heartbeat dead, own standing reaper returned it after TTL —
+the D3 path) can reappear as `Ready` while the old slot still runs it. The
+entire zombie fence rests on one question — "is this task `Working` under MY
+`InstanceId`?" — which cannot tell the old slot from a new same-instance claim,
+and `SlotLedger.assign` would throw on the already-occupied ref, killing the
+feed thread. So the feed prevents the situation instead of fencing it:
+`FeedCycle.attemptClaim` skips any claim candidate whose ref is still in
+`SlotLedger.occupiedRefs()`, logging the skip at WARN (it is a symptom of an
+abnormal heartbeat death, and logs are the only exposure surface). The old slot
+is neutralized by the ordinary round-boundary revocation check — its task is no
+longer `Working` under this instance — and its `release` frees the ref, after
+which this instance may claim the task again as an ordinary fresh claim. A
+foreign instance may claim it at any time; that is the ordinary foreign
+re-claim the fence already arbitrates. The cost: in a single-instance run the
+task waits in `Ready` until the zombie slot's next round boundary — bounded by
+one round, and strictly better than either pre-change permanent `Working` or a
+crashed feed. `assign`'s throw stays as the last-resort invariant guard.
+
+*Alternatives:* (a) a claim epoch/token distinguishing claim incarnations, so a
+same-instance re-claim trips the fence exactly like a foreign one — rejected:
+reworks the claim-marker protocol across the tracker port and every adapter to
+legalize two slots of one process racing on one task branch, a situation with
+no operational value that skipping avoids outright. (b) catch the
+`IllegalStateException` from `assign` and release the tracker claim — rejected:
+claims-then-unclaims churns tracker state on every poll cycle and demotes the
+ledger's invariant guard to control flow.
+
 ## Risks / Trade-offs
 
 - [A supervised respawn could loop tightly on a permanent fault] → bounded
@@ -133,6 +159,9 @@ recovery bounded too.
 - [`factory-serve` FR13/FR12 phrasing referenced "the reaper duty on that
   thread"] → this change's `factory-serve` delta retargets both requirements to
   the standing reaper, so the spec and code stay in step.
+- [A self-reaped task waits in `Ready` until its zombie slot's next round
+  boundary in a single-instance run (D6)] → bounded by one round; other tasks
+  and foreign instances are never blocked, and the skip is WARN-logged.
 
 ## Migration Plan
 

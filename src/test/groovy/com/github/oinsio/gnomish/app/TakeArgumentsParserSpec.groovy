@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import java.nio.file.Path
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -11,13 +10,9 @@ import spock.lang.Unroll
  * {@code --resume}, no {@code --from-stage} (design D4); the bare form additionally rejects
  * {@code --base}. Mirrors {@link RunArgumentsParserSpec}'s style.
  */
-class TakeArgumentsParserSpec extends Specification {
+class TakeArgumentsParserSpec extends Specification implements ApplicationArgumentsFixture {
 
     private final TakeArgumentsParser parser = new TakeArgumentsParser()
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
-    }
 
     def "explicit ref parses into TakeArguments.ref"() {
         when:

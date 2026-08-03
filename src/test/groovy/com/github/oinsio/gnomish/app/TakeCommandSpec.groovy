@@ -17,7 +17,6 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -28,7 +27,7 @@ import spock.lang.TempDir
  * bare-mode dispatch reaching {@link TakeBareAuto}, each converted to the right
  * {@link TakeExitCodeException}.
  */
-class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -75,18 +74,6 @@ advancement: auto
                 "schemaVersion: \"1\"\nautonomy:\n  attemptLimit: 3\n$trackerSection")
     }
 
-    private static TrackerAdapterFactory fakeFactory(Tracker t) {
-        new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
-    }
-
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {
         TakeCommandFactory.of(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
@@ -96,10 +83,6 @@ advancement: auto
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 TrackerValidatorStub.acceptingGithub())
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
     }
 
     def "no tracker section in config.yaml refuses with UsageException (FR17)"() {
