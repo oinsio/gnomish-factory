@@ -35,10 +35,12 @@ import org.springframework.boot.ApplicationArguments;
  *
  * <p>Once the tracker is live, one {@link TakeHeartbeat} is built via {@link TakeHeartbeat#forRun}
  * (FR13): its {@link ClaimBeat} and {@link ClaimLossFlag} are the SAME instances threaded into
- * every slot's {@link TakeSlotRunner}, so one heartbeat thread beats every slot's held claim and
- * runs the reaper duty on its own tick, independent of the feed automaton's state — a foreign claim
- * still goes stale and is reaped while every slot is busy (Full) or the feed is Idle-blocked (design
- * D3/D4, FR13's "Reaping while saturated" scenario). Its {@link HeartbeatProgress} joins the
+ * every slot's {@link TakeSlotRunner}, so one heartbeat thread beats every slot's held claim. The
+ * reaper duty itself is a STANDING thread on its OWN interval, started here beside {@link
+ * com.github.oinsio.gnomish.app.lease.StandingReaper} and independent of both the heartbeat's tick
+ * and the feed automaton's state — a foreign claim still goes stale and is reaped while every slot
+ * is busy (Full) or the feed is Idle-blocked (fix-reaper-idle-liveness FR1, FR5, design D1/D2;
+ * design D3/D4, FR13's "Reaping while saturated" scenario). Its {@link HeartbeatProgress} joins the
  * assembly ONCE, before {@link TakeSlotRunner} is built, since the runner is reused for the
  * daemon's whole lifetime unlike {@link TakeCommand}'s per-invocation join. One {@link
  * TakeSlotRunner}, one {@link SlotLedger}, one {@link FeedAutomaton}, and one {@link ServeShutdown}
@@ -144,9 +146,13 @@ final class ServeCommand {
                 instanceId,
                 slotLedger,
                 slotRunner);
-        ServeShutdown shutdown = ServeAssembly.shutdown(slotLedger, heartbeat.flag(), serveProperties);
+        ServeShutdown shutdown =
+                ServeAssembly.shutdown(slotLedger, heartbeat.flag(), serveProperties, heartbeat.standingReaper());
         ServeAssembly.worktreeJanitor(serveArguments, worktreesRoot, serveProperties, slotLedger)
                 .start();
+        // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs for the daemon's whole
+        // lifetime, exactly like WorktreeJanitor above — ServeShutdown.shutdown() stops it (FR4).
+        heartbeat.standingReaper().start();
 
         if (serveArguments.drain()) {
             ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown);

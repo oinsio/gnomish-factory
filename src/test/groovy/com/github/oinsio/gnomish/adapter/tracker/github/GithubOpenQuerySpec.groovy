@@ -112,7 +112,7 @@ class GithubOpenQuerySpec extends Specification {
         stubNeedsHumanFeed('[{"number":9}]')
         stubComments(9, '''
                 [
-                  {"id":1,"updated_at":"2026-07-23T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 needs a decision"}
+                  {"id":1,"updated_at":"2026-07-23T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 needs a decision"}
                 ]
                 ''')
 
@@ -137,7 +137,7 @@ class GithubOpenQuerySpec extends Specification {
         stubComments(7, claimComment(501L, 'gnomish-factory-a1', '2026-07-23T10:00:00Z'))
         stubComments(9, '''
                 [
-                  {"id":1,"updated_at":"2026-07-23T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 needs a decision"}
+                  {"id":1,"updated_at":"2026-07-23T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 needs a decision"}
                 ]
                 ''')
 

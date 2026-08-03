@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.WorktreeEnvironmentDisposal;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
@@ -95,9 +96,13 @@ final class ServeAssembly {
      * assembled, so flagging a slot's claim here reacts at the SAME round-boundary check every
      * other claim-loss reaches.
      */
-    static ServeShutdown shutdown(SlotLedger slotLedger, ClaimLossFlag claimLossFlag, ServeProperties serveProperties) {
+    static ServeShutdown shutdown(
+            SlotLedger slotLedger,
+            ClaimLossFlag claimLossFlag,
+            ServeProperties serveProperties,
+            StandingReaper standingReaper) {
         return new ServeShutdown(
-                slotLedger, claimLossFlag, serveProperties.sigtermGrace(), new RealProcessTreeKiller());
+                slotLedger, claimLossFlag, serveProperties.sigtermGrace(), new RealProcessTreeKiller(), standingReaper);
     }
 
     /**

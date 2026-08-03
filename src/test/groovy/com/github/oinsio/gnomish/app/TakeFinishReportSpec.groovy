@@ -47,7 +47,7 @@ class TakeFinishReportSpec extends Specification {
     Tracker tracker = Mock()
 
     private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     private static List<ILoggingEvent> capture(Closure<?> emit) {

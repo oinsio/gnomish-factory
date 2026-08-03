@@ -184,6 +184,13 @@ a stale-claim-removal marker in the task's history — i.e. a human answered an
 escalation, or the reaper recovered a dead claim) are claimed ahead of fresh
 ones and outside the limit entirely ("stop starting, start finishing").
 
+A task whose history already carries a *finish* record is not a claim
+candidate at all, even if a human moves it back to `gnomish:ready` — the feed
+declines it (restores its terminal status and posts an explanation comment)
+before candidate selection runs, so it never occupies a slot and never counts
+toward or against W. This is a different case from a returned task above: see
+"Finished Tasks Are Terminal" in [`operator-guide.md`](operator-guide.md).
+
 ## Instance knobs vs. protocol constants
 
 Two different kinds of numbers govern `serve`, and mixing them up is the

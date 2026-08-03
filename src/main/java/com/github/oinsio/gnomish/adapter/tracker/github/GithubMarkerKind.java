@@ -1,16 +1,26 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
+
 /**
  * The structural-marker kind vocabulary the GitHub adapter recognizes in a
- * comment body (design D9, FR7 of add-tracker-port): {@code claim} (lease
- * claim), {@code abort} (infrastructure abort marker), {@code ack}
- * ("acting on decision" acknowledgment), {@code note} (best-effort
- * out-of-band note, e.g. a revocation salvage note), {@code report}
- * (a finished-stage or final report), {@code progress} (a durable-progress
- * marker that anchors abort-count reconstruction without itself acting as a
- * claim boundary; design D3 of fix-abort-progress-reset), and {@code
- * stale_claim_removed} (a reaper's stale-claim-removal boundary marker; design
- * D12 of add-claim-heartbeat).
+ * comment body (design D9, FR7 of add-tracker-port; split into {@code park}
+ * and {@code finish} by design D1 of enforce-finish-terminality): {@code
+ * claim} (lease claim), {@code abort} (infrastructure abort marker), {@code
+ * ack} ("acting on decision" acknowledgment), {@code note} (best-effort
+ * out-of-band note, e.g. a revocation salvage note), {@code park} (a
+ * working &rarr; needs-human report carrying a {@link ParkReason} payload),
+ * {@code finish} (a working &rarr; delivered final report), {@code
+ * progress} (a durable-progress marker that anchors abort-count
+ * reconstruction without itself acting as a claim boundary; design D3 of
+ * fix-abort-progress-reset), and {@code stale_claim_removed} (a reaper's
+ * stale-claim-removal boundary marker; design D12 of add-claim-heartbeat).
+ *
+ * <p>{@code park} and {@code finish} are structurally distinct kinds rather
+ * than a single dual-use marker discriminated by an optional field, because
+ * a later "decline finished task" feature acts autonomously on this
+ * distinction and a misread would be destructive (design D1 of
+ * enforce-finish-terminality).
  *
  * <p>The wire value is the lowercase enum name (e.g. {@code "claim"}), never
  * the Java constant name, so the JSON stays stable regardless of enum
@@ -22,14 +32,16 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
  * and keeping the uniform {@code name().toLowerCase(ROOT)} mapping avoids a
  * per-constant override with no observable benefit.
  *
- * <p>Implements FR7 of add-tracker-port, FR4 of add-claim-heartbeat.
+ * <p>Implements FR7 of add-tracker-port, FR4 of add-claim-heartbeat, FR1 FR2
+ * of enforce-finish-terminality.
  */
 public enum GithubMarkerKind {
     CLAIM,
     ABORT,
     ACK,
     NOTE,
-    REPORT,
+    PARK,
+    FINISH,
     PROGRESS,
     STALE_CLAIM_REMOVED;
 

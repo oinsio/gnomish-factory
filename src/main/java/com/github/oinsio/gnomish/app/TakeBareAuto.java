@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
+import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
@@ -125,12 +126,14 @@ public final class TakeBareAuto {
     }
 
     /**
-     * Runs one bare auto {@code take} attempt: reads the ready-queue snapshot and open-front count,
-     * then delegates the candidate selection, walk, and claim to {@link BareTakeClaimWalk} (see
-     * class javadoc).
+     * Runs one bare auto {@code take} attempt: reads the ready-queue snapshot, declines every
+     * {@code finished} entry observed in it via {@link FinishedDecline#declineObserved} (design D4
+     * of enforce-finish-terminality, best-effort per entry), then reads the open-front count and
+     * delegates the candidate selection, walk, and claim to {@link BareTakeClaimWalk} (see class
+     * javadoc).
      *
      * <p>Implements FR10, NFR-C1 of add-tracker-port. Implements FR6, FR9, NFR-C1, D2, D5 of
-     * add-factory-serve.
+     * add-factory-serve. Implements FR3, FR4, NFR-R2, NFR-R3, NFR-O1 of enforce-finish-terminality.
      *
      * @param cloneDir the project clone; never mutated outside a task worktree
      * @param definition the loaded pipeline the run advances through; never null
@@ -149,6 +152,7 @@ public final class TakeBareAuto {
             Tracker tracker,
             InstanceId instanceId) {
         List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
+        FinishedDecline.declineObserved(tracker, readyTasks);
         int openFrontCount = tracker.listOpen().size();
         return walk.resolve(cloneDir, definition, interactiveMode, tracker, instanceId, readyTasks, openFrontCount);
     }

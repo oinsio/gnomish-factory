@@ -59,13 +59,13 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
     }
 
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none(), boolean returned = false) {
-        new ReadyTask(new TaskRef(taskId), facts, returned)
+        new ReadyTask(new TaskRef(taskId), facts, returned, false)
     }
 
     private static TrackerTask trackerTask(String taskId) {
         new TrackerTask(
                 new TaskRef(taskId), new TaskSnapshot(taskId, 'title', 'body'),
-                new TrackerTaskState.Ready(), AbortFacts.none())
+                new TrackerTaskState.Ready(), AbortFacts.none(), false)
     }
 
     // Scenario: One task per run — three ready tasks, the oldest eligible one is claimed and
@@ -254,6 +254,27 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         then:
         0 * tracker.claim(*_)
         result instanceof TakeResult.Skipped
+    }
+
+    // Scenario: a finished entry observed in listReady is declined before the walk resolves,
+    // and never reaches the claim step (FR3, FR4, D4 of enforce-finish-terminality, task 4.2).
+    def "a finished entry observed in the feed is declined and never claimed"() {
+        given:
+        tracker.listReady(_) >> [
+            new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, true),
+            ready('PROJ-2')
+        ]
+        tracker.fetchTask(new TaskRef('PROJ-2')) >> trackerTask('PROJ-2')
+        def bareAuto = newBareAuto()
+
+        when:
+        def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
+
+        then:
+        1 * tracker.declineFinished(new TaskRef('PROJ-1'), _)
+        0 * tracker.claim(new TaskRef('PROJ-1'), _)
+        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired()
+        result instanceof TakeResult.Delivered
     }
 
     // Scenario: head-zone pick — a non-head candidate within the first K = 5 eligible entries can

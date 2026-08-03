@@ -12,7 +12,6 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -43,7 +42,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR1, FR3, FR18, M3, UX4 of add-tracker-port.
  */
-abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
 
@@ -114,10 +113,6 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
                 TrackerValidatorStub.acceptingGithub())
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
     }
 
     def "ready -> claim -> work -> delivered with a final report, told end to end by the tracker's own thread"() {

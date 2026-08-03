@@ -33,13 +33,24 @@ import java.util.Optional;
  * issue (a 404) has no reason and yields the no-arg {@link
  * TrackerTaskState.Gone}.
  *
- * <p>Judgment call (task 4.10): design D9's marker-kind vocabulary has no
- * {@code park} kind. A park is represented as a {@code report}-kind marker
- * whose structural JSON carries an additional {@code reason} field (see
- * {@link GithubMarker#render(GithubMarkerKind, String, java.time.Instant,
- * String, String)}), holding the lowercase wire value of a {@link
- * ParkReason}. Task 4.14 (the {@code park} write path) MUST post this same
- * field for {@code fetchTask} to keep recovering the reason correctly.
+ * <p>A park is represented as a dedicated {@code PARK}-kind marker (design D9,
+ * refined by enforce-finish-terminality task 3.1's split of the former single
+ * {@code REPORT} kind into {@code PARK} and {@code FINISH}) whose structural
+ * JSON carries an additional {@code reason} field (see {@link
+ * GithubMarker#render(GithubMarkerKind, String, java.time.Instant, String,
+ * String)}), holding the lowercase wire value of a {@link ParkReason}. {@link
+ * GithubStateWrites#park} MUST post this same field for {@code fetchTask} to
+ * keep recovering the reason correctly.
+ *
+ * <p>{@code finished} is derived the same way {@link GithubFeedQuery} derives
+ * it for {@code listReady} — via {@link
+ * GithubHistoryFactReader#deriveFinished} over the same fetched {@code
+ * markers}, true iff the thread carries a {@code FINISH} structural marker
+ * anywhere in its history — never from adapter-local state (design D1, D2,
+ * FR1 of enforce-finish-terminality). A {@link TrackerTaskState.Gone} result
+ * (issue closed or missing) reports {@code finished = false} unconditionally,
+ * without fetching comments for that branch: a gone issue has no meaningful
+ * finished fact from this read.
  *
  * <p>Both reads {@code fetchTask} makes — the issue and its comments — go
  * through the shared {@link GithubConditionalRequestCache}, so the round-boundary
@@ -56,20 +67,23 @@ import java.util.Optional;
  *     per-issue and per-comment-thread ETags survive between round-boundary checks (NFR-P1)
  * @param workingLabel the configured working-label name (e.g. {@code gnomish:working})
  * @param needsHumanLabel the configured needs-human-label name (e.g. {@code gnomish:needs-human})
+ * @param deliveredLabel the configured delivered-label name (e.g. {@code gnomish:delivered}), mapped to
+ *     {@link TrackerTaskState.Finished}
  */
-public record GithubTaskFetcher(GithubConditionalRequestCache cache, String workingLabel, String needsHumanLabel) {
+public record GithubTaskFetcher(
+        GithubConditionalRequestCache cache, String workingLabel, String needsHumanLabel, String deliveredLabel) {
 
     /** Implements {@code Tracker.fetchTask} for GitHub (FR2, FR5). */
     public TrackerTask fetchTask(TaskRef ref) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
-        Optional<GithubIssueDetail> issue = fetchIssueDetail(ref);
+        Optional<GithubIssueDetail> issue = fetchIssueDetail(id);
         if (issue.isEmpty()) {
-            return new TrackerTask(ref, goneSnapshot(ref), new TrackerTaskState.Gone(), AbortFacts.none());
+            return new TrackerTask(ref, goneSnapshot(ref), new TrackerTaskState.Gone(), AbortFacts.none(), false);
         }
         GithubIssueDetail detail = issue.get();
         if (detail.isClosed()) {
             return new TrackerTask(
-                    ref, goneSnapshot(ref), new TrackerTaskState.Gone(detail.stateReason()), AbortFacts.none());
+                    ref, goneSnapshot(ref), new TrackerTaskState.Gone(detail.stateReason()), AbortFacts.none(), false);
         }
         TaskSnapshot snapshot = new TaskSnapshot(ref.id(), detail.title(), detail.bodyOrEmpty());
 
@@ -77,7 +91,8 @@ public record GithubTaskFetcher(GithubConditionalRequestCache cache, String work
                 new GithubAbortFactsReader(cache).fetchMarkers(id.owner(), id.repo(), id.issueNumber());
         AbortFacts abortFacts = GithubCommentBoundary.abortFactsSinceBoundary(markers);
         TrackerTaskState state = stateFrom(detail, markers);
-        return new TrackerTask(ref, snapshot, state, abortFacts);
+        boolean finished = GithubHistoryFactReader.deriveFinished(markers);
+        return new TrackerTask(ref, snapshot, state, abortFacts, finished);
     }
 
     private TrackerTaskState stateFrom(GithubIssueDetail detail, List<ParsedMarker> markers) {
@@ -91,6 +106,9 @@ public record GithubTaskFetcher(GithubConditionalRequestCache cache, String work
         if (detail.labelNames().contains(needsHumanLabel)) {
             return new TrackerTaskState.AwaitingHuman(GithubParkReason.latest(markers));
         }
+        if (detail.labelNames().contains(deliveredLabel)) {
+            return new TrackerTaskState.Finished();
+        }
         return new TrackerTaskState.Ready();
     }
 
@@ -98,8 +116,7 @@ public record GithubTaskFetcher(GithubConditionalRequestCache cache, String work
      * Returns empty for a 404 (missing issue); never throws for that case. Goes through the
      * conditional cache, so an unchanged issue re-read at a round boundary is a free {@code 304}.
      */
-    private Optional<GithubIssueDetail> fetchIssueDetail(TaskRef ref) {
-        GithubTaskId id = GithubTaskId.parse(ref.id());
+    private Optional<GithubIssueDetail> fetchIssueDetail(GithubTaskId id) {
         String path = "/repos/%s/%s/issues/%d".formatted(id.owner(), id.repo(), id.issueNumber());
         String cacheKey = "issue:%s/%s#%d".formatted(id.owner(), id.repo(), id.issueNumber());
         return switch (cache.get(cache.httpClient().newRequest(path), cacheKey)) {

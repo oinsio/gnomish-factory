@@ -43,7 +43,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         }
     ] as Tracker
     private final InstanceHeartbeat hb = new InstanceHeartbeat(
-    tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE, ReaperDuty.NONE)
+    tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
 
     def setup() {
         progress.onEvent(new EngineEvent.AttemptStarted(new AttemptKey(REF.id(), 'plan', 0)))
@@ -101,25 +101,6 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         beats.get() == 0
     }
 
-    // FR1, FR4: a reaper-duty failure on a tick does not kill the beat thread — the beat
-    //     still landed and the loop survives to beat again (the outer per-tick guard, D4).
-    def "a reaper failure does not kill the beat thread"() {
-        given:
-        def boom = { throw new IllegalStateException('reaper down') } as ReaperDuty
-        def guarded = new InstanceHeartbeat(
-                tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE, boom)
-        guarded.register(REF)
-        sleeper.awaitEntered()
-
-        when: 'the first tick beats, then the reaper throws'
-        sleeper.releaseOne()
-        sleeper.awaitEntered()
-
-        then: 'the beat still landed and the thread survived the reaper failure'
-        beats.get() == 1
-        guarded.worker().isAlive()
-    }
-
     // FR1, D3: a claim registered after a stop restarts the thread — proving the stop truly
     //     ended the thread and the running flag was reset.
     def "a new claim after a stop restarts beating"() {
@@ -159,7 +140,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
             base.sleep(d)
         } as Sleeper
         def dying = new InstanceHeartbeat(
-                tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE, ReaperDuty.NONE)
+                tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
 
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(InstanceHeartbeat)
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
@@ -196,5 +177,44 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         dying.unregister(REF)
         base.releaseOne()
         restarted.join()
+    }
+
+    // FR2, D3: liveClaimsSnapshot() reflects the claims a running worker is actively beating —
+    //     a StandingReaper reads this to exclude actively-beaten claims from staleness checks.
+    def "liveClaimsSnapshot returns the held claims while the worker is running"() {
+        when: 'the claim registers and the worker is running'
+        hb.register(REF)
+        sleeper.awaitEntered()
+
+        then: 'the snapshot reports the held claim'
+        hb.liveClaimsSnapshot() == [REF] as Set
+    }
+
+    // FR2, D3: a dead heartbeat (worker died abnormally, running cleared) must stop shielding
+    //     its claims — liveClaimsSnapshot() returns empty once running == false, even though the
+    //     claim is still registered/held, so a StandingReaper can treat it as stale again.
+    def "liveClaimsSnapshot is empty after the worker dies abnormally"() {
+        given: 'a sleeper that throws an Error on its second call, otherwise the rendezvous sleeper'
+        def base = new BlockingSleeper()
+        def calls = new AtomicInteger()
+        def sleeper = { Duration d ->
+            if (calls.incrementAndGet() == 2) {
+                throw new StackOverflowError('adapter blew the stack')
+            }
+            base.sleep(d)
+        } as Sleeper
+        def dying = new InstanceHeartbeat(
+                tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+
+        when: 'the claim registers and the worker beats once, then dies on the second sleep'
+        dying.register(REF)
+        def deadWorker = dying.worker()
+        base.awaitEntered()
+        base.releaseOne()
+        deadWorker.join()
+
+        then: 'the worker is dead and the snapshot is empty despite the claim still being held'
+        !deadWorker.isAlive()
+        dying.liveClaimsSnapshot().isEmpty()
     }
 }

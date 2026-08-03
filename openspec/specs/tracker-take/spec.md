@@ -54,7 +54,11 @@ tolerance).
 criterion and abort backoff without resetting the abort counter — resuming from
 the branch outcome when one is recorded (a pending reply is collected and
 acknowledged; a recorded `DecisionNeeded` with no reply parks again restating
-the question; any other recorded outcome continues on the return alone);
+the question; any other recorded outcome continues on the return alone) —
+UNLESS the task's history carries a finish report: then the mandate is
+refused, the decline protocol runs (terminal status restored, explanation
+posted directing the operator to open a new task or bug), and the run exits
+with a clear non-success outcome;
 `AwaitingHuman` (any reason) → refuse, naming the pending report and the return
 path (reply if needed, move the task back to ready);
 `Working` held by another
@@ -69,6 +73,7 @@ wait. `Finished` → skip reporting "already done"; `Gone` (closed or
 nonexistent) → skip with a clear error.
 <!-- implements FR9 of add-tracker-port -->
 <!-- implements FR6 of add-claim-heartbeat -->
+<!-- implements FR5 of enforce-finish-terminality -->
 
 #### Scenario: Mandate overrides readiness and backoff
 - **WHEN** `take <ref>` targets an open task without the ready label and with
@@ -105,20 +110,29 @@ nonexistent) → skip with a clear error.
 - **WHEN** `take <ref>` targets a delivered task
 - **THEN** the run reports it as already done and does not resume it
 
+#### Scenario: Reopened finished task is declined, not worked
+- **WHEN** `take <ref>` targets a task a human moved back to ready after it
+  was finished
+- **THEN** the run refuses even under the explicit mandate: the terminal
+  status is restored, the explanation comment is posted, and the exit
+  outcome clearly signals the refusal
+
 ### Requirement: Bare auto mode takes the head of the queue
 Bare `gnomish take` SHALL fetch the ready queue via `listReady`, hide tasks
 whose abort backoff (exponential from base, capped; computed by core from
-adapter abort facts) has not expired, prefer returned tasks over fresh ones,
-respect the WIP limit for fresh tasks (claimed only while open fronts < W;
-returned tasks always claimable), claim from the head zone — a random pick
-among the first K eligible, oldest-first as a soft preference — process
-exactly one task to its terminal result, and exit. An empty or fully blocked
-queue SHALL be a clean no-op run naming the reason (nothing eligible, or the
-WIP limit). Losing the claim race SHALL fall through to the next eligible
-task.
+adapter abort facts) has not expired, exclude finished tasks entirely —
+declining each via the decline protocol instead of claiming — prefer
+returned tasks over fresh ones, respect the WIP limit for fresh tasks
+(claimed only while open fronts < W; returned tasks always claimable), claim
+from the head zone — a random pick among the first K eligible, oldest-first
+as a soft preference — process exactly one task to its terminal result, and
+exit. An empty or fully blocked queue SHALL be a clean no-op run naming the
+reason (nothing eligible, or the WIP limit). Losing the claim race SHALL
+fall through to the next eligible task.
 <!-- implements FR10 of add-tracker-port -->
 <!-- implements NFR-C1 of add-tracker-port -->
 <!-- implements FR6, FR9 of add-factory-serve -->
+<!-- implements FR3 of enforce-finish-terminality -->
 
 #### Scenario: One task per run
 - **WHEN** the queue holds three ready tasks and bare `take` runs
@@ -136,6 +150,10 @@ task.
 #### Scenario: Returned task preferred
 - **WHEN** the queue holds an older fresh task and a younger returned task
 - **THEN** bare `take` claims the returned task
+
+#### Scenario: Finished task never claimed from the feed
+- **WHEN** the queue lists a reopened finished task ahead of a fresh task
+- **THEN** bare `take` declines the finished task and claims the fresh one
 
 ### Requirement: Batch take works the list with a summary and one exit code
 Batch `take <ref> <ref> ...` SHALL apply the explicit-mode disposition matrix
@@ -344,8 +362,9 @@ off a task via the ready label and automatic label provisioning, the label
 dictionary with who moves what, the escalation/decision/ack flow (reply, return
 to ready, re-run), snapshot behavior (issue edits do not affect a taken
 task; influence via decisions or revoke-and-recreate), stuck-`Working`
-recovery — automatic reaping whenever an instance with a live claim is
-running, the confirmed `take <ref>` takeover with its headless flag, and the
+recovery — automatic reaping whenever any factory instance is running, claim
+in hand or not, bounded only by runs too short to observe a full TTL — the
+confirmed `take <ref>` takeover with its headless flag, and the
 honest limitation that one-shot cron runs cannot observe longer than TTL so
 cron-only operation keeps the manual label flip until `serve` exists — the
 heartbeat/TTL settings with the shared write-budget coupling (beat interval ×
@@ -356,6 +375,8 @@ cron workflow (`docs/examples/board-bridge.yml`), the fork warning ("fix
 <!-- implements FR19 of add-tracker-port -->
 <!-- implements FR6 of add-claim-heartbeat -->
 <!-- implements NFR-P1, UX2, UX3 of add-claim-heartbeat -->
+<!-- implements FR1 of fix-reaper-idle-liveness -->
+<!-- implements UX1 of fix-reaper-idle-liveness -->
 
 #### Scenario: Guide covers the operator surface
 - **WHEN** an operator follows the guide against a fresh repository
@@ -364,9 +385,10 @@ cron workflow (`docs/examples/board-bridge.yml`), the fork warning ("fix
 
 #### Scenario: Guide states when recovery is automatic
 - **WHEN** an operator reads the stuck-`Working` section
-- **THEN** it distinguishes automatic reaping (long-lived runs), explicit
-  takeover (any time, confirmed), and the cron-only manual escape hatch, and
-  names the write-budget consequence of shortening the beat interval
+- **THEN** it distinguishes automatic reaping (any running instance whose run
+  outlives a TTL — no claim of its own required), explicit takeover (any time,
+  confirmed), and the cron-only manual escape hatch, and names the
+  write-budget consequence of shortening the beat interval
 
 ### Requirement: Operator guide covers autonomous operation
 The operator guide SHALL gain the autonomous-operation surface: the
@@ -399,14 +421,17 @@ hatch.
   ready-label access with code execution on the factory host
 
 ### Requirement: Take runs the heartbeat thread and the reaper duty
-A take run SHALL start the instance heartbeat thread at its first successful
-claim and stop it when no claim is held (terminal result reached or claim
-lost). While running, the thread beats every held claim on the configured
-interval and performs the reaper duty each tick: list open tasks, update
-observations, remove stale claims. Reaping is a byproduct of holding a claim —
-a take run whose task outlives a foreign TTL returns that foreign task to
-circulation.
+A take run SHALL start the beat-only instance heartbeat thread at its first
+successful claim and stop it when no claim is held (terminal result reached or
+claim lost). Independently of any claim, the run SHALL start the standing
+reaper at the run start and stop it when the invocation ends: while the run
+lives, the reaper lists open tasks, updates observations, and removes stale
+claims on each tick, whether or not the run currently holds a claim of its
+own. Reaping is a duty of the run itself, never a byproduct of holding a
+claim — the same standing-reaper mechanism `serve` uses, scoped to one
+invocation; the heartbeat thread performs no reaper duty.
 <!-- implements FR1, FR4 of add-claim-heartbeat -->
+<!-- implements FR1, FR5 of fix-reaper-idle-liveness -->
 
 #### Scenario: Beat starts with the claim
 - **WHEN** bare `take` claims the queue head
@@ -418,6 +443,12 @@ circulation.
   holding a claim
 - **THEN** before the run ends, the dead claim is removed and its task is
   `Ready` — unclaimed by the reaping run
+
+#### Scenario: Reaping outlives the beat thread
+- **WHEN** a take run's heartbeat thread dies abnormally while a foreign
+  claim in the listing goes stale
+- **THEN** the standing reaper, on its own thread, still removes the stale
+  foreign claim before the run ends
 
 ### Requirement: Reconcile precedes resume
 Every claim of a task with an existing branch SHALL begin with the reconcile

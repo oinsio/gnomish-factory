@@ -70,21 +70,22 @@ public final class GithubMarker {
 
     /**
      * Renders a structural comment body carrying an optional {@code reason}
-     * field alongside kind/instance/at/version. This is used by {@code report}-kind
-     * park markers to carry the wire value of a {@link
-     * com.github.oinsio.gnomish.app.port.tracker.ParkReason} (design D9's
-     * marker-kind vocabulary has no dedicated {@code park} kind; a park is a
-     * {@code report}-kind marker whose {@code reason} field this class adds
-     * specifically so {@code fetchTask} — task 4.10 — can read it back
-     * without inferring it from free-text human wording). Task 4.14, which
-     * implements the {@code park} write path, SHOULD post this same field
-     * when it posts a park marker, so a fresh instance's {@code fetchTask}
-     * can recover the reason.
+     * field alongside kind/instance/at/version. This is used by {@link
+     * GithubMarkerKind#PARK} markers to carry the wire value of a {@link
+     * com.github.oinsio.gnomish.app.port.tracker.ParkReason}, so a fresh
+     * instance's {@code fetchTask} recovers the reason from the marker kind
+     * without inferring it from free-text human wording. {@link
+     * GithubStateWrites#park} posts this field when it writes a {@code PARK}
+     * marker; {@link GithubStateWrites#finish} writes a {@code FINISH} marker
+     * carrying no reason. The dedicated {@code park}/{@code finish} kinds
+     * replaced the earlier dual-use {@code report} kind (enforce-finish-terminality
+     * design D1), so the distinction is structural rather than inferred from
+     * whether {@code reason} happens to be present.
      *
      * @param reason the wire value of the park reason (e.g. {@code
      *     "escalation"}, {@code "checkpoint"}, {@code "infra"}), or {@code
-     *     null} when this marker carries no reason (every kind other than a
-     *     park report)
+     *     null} when this marker carries no reason (every kind other than
+     *     {@code PARK})
      * @return the full comment body ready to post
      */
     public static String render(
@@ -147,7 +148,7 @@ public final class GithubMarker {
      * Jackson-bound carrier for the structural JSON; field declaration order
      * fixes wire-key order. {@code reason} is omitted from the rendered JSON
      * entirely when {@code null} (via {@link JsonInclude}), so every marker
-     * kind other than a park report keeps the original four-field shape.
+     * kind other than a {@code PARK} marker keeps the original four-field shape.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record StructuralFields(

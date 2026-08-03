@@ -30,8 +30,8 @@ class TakeEscalationExitSpec extends Specification {
 
     Tracker tracker = Mock()
 
-    private TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none())
+    private static TrackerTask taskWith(TrackerTaskState state) {
+        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     // FR13, D12: AttemptsExhausted needs a human decision — ESCALATION reason, reply-and-return message.

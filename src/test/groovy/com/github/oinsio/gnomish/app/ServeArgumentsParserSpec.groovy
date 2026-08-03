@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import java.nio.file.Path
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 
 /**
@@ -12,13 +11,9 @@ import spock.lang.Specification
  * tracker is ever touched — including {@code --interactive}, since {@code serve} is
  * unconditionally non-interactive.
  */
-class ServeArgumentsParserSpec extends Specification {
+class ServeArgumentsParserSpec extends Specification implements ApplicationArgumentsFixture {
 
     def parser = new ServeArgumentsParser()
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
-    }
 
     def "defaults --dir to the current directory when absent"() {
         when:

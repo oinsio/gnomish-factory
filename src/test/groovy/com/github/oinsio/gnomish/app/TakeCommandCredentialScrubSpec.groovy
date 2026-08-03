@@ -17,7 +17,6 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,7 +37,7 @@ import spock.lang.TempDir
  *
  * <p>Implements NFR-S1, D17 of add-tracker-port.
  */
-class TakeCommandCredentialScrubSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class TakeCommandCredentialScrubSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -159,10 +158,6 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                 TrackerValidatorStub.acceptingGithub())
     }
 
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
-    }
-
     // NFR-S1, D17: a fresh claim actually spawns the agent-cli stage executor's subprocess
     // (InteractiveMode.NONE, no console fallback) — the strongest available proof that the
     // declared credential never reaches the gnome, since this drives the real launcher.
@@ -174,7 +169,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
             claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
-            AbortFacts.none())
+            AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
         def command = newCommand(factoryProperties, [github: fakeFactoryDeclaringCredential()])
@@ -204,7 +199,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
             claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
-            AbortFacts.none())
+            AbortFacts.none(), false)
         }
         def factoryProperties = fakeAgentProperties()
         def command = newCommand(factoryProperties, [github: fakeFactoryDeclaringNoCredential()])

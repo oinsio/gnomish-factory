@@ -6,12 +6,16 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
+import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * One feed cycle's poll-and-claim mechanics (design D1, D2, D5): the tracker poll, {@link
@@ -27,51 +31,40 @@ import org.jspecify.annotations.Nullable;
  * and {@link FeedAutomaton#drain()} call through this one class, the outage tolerance covers both
  * automatically.
  *
- * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve.
+ * <p>The claim walk also guards the one shape the zombie fence cannot: a candidate that still
+ * occupies a local slot (its claim was self-reaped after an abnormal heartbeat death while the old
+ * slot keeps running) is skipped with a WARN, never re-claimed by this instance (FR2 of
+ * fix-reaper-idle-liveness, design D6).
+ *
+ * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve. Implements FR2 of
+ * fix-reaper-idle-liveness (design D6).
  */
-final class FeedCycle {
+record FeedCycle(
+        Tracker tracker,
+        InstanceId instanceId,
+        SlotLedger slotLedger,
+        SlotRunner slotRunner,
+        Duration backoffBase,
+        Duration backoffCap,
+        int wipLimit,
+        Random random,
+        FeedStateLogger stateLogger,
+        FeedOutageRetry outageRetry) {
+
+    private static final Logger log = LoggerFactory.getLogger(FeedCycle.class);
 
     /** One poll's raw feed plus the eligibility-filtered candidates. */
     record Poll(List<ReadyTask> readyTasks, int openFrontCount, Instant now, List<ReadyTask> candidates) {}
-
-    private final Tracker tracker;
-    private final InstanceId instanceId;
-    private final SlotLedger slotLedger;
-    private final SlotRunner slotRunner;
-    private final Duration backoffBase;
-    private final Duration backoffCap;
-    private final int wipLimit;
-    private final Random random;
-    private final FeedStateLogger stateLogger;
-    private final FeedOutageRetry outageRetry;
-
-    FeedCycle(
-            Tracker tracker,
-            InstanceId instanceId,
-            SlotLedger slotLedger,
-            SlotRunner slotRunner,
-            Duration backoffBase,
-            Duration backoffCap,
-            int wipLimit,
-            Random random,
-            FeedStateLogger stateLogger,
-            FeedOutageRetry outageRetry) {
-        this.tracker = tracker;
-        this.instanceId = instanceId;
-        this.slotLedger = slotLedger;
-        this.slotRunner = slotRunner;
-        this.backoffBase = backoffBase;
-        this.backoffCap = backoffCap;
-        this.wipLimit = wipLimit;
-        this.random = random;
-        this.stateLogger = stateLogger;
-        this.outageRetry = outageRetry;
-    }
 
     /**
      * Polls the tracker once and applies the eligibility filter (design D2), at instant {@code
      * now}. The tracker reads run through {@link FeedOutageRetry} (NFR-R3): a sustained outage
      * retries with backoff instead of propagating.
+     *
+     * <p>Right after the read, every {@code finished} entry observed in {@code readyTasks} is
+     * declined via {@link FinishedDecline#declineObserved} (design D4 of
+     * enforce-finish-terminality) — best-effort per entry, so one failing decline is logged and
+     * left for the next poll cycle rather than counting as an outage or aborting this poll.
      *
      * @throws InterruptedException if the feed thread is interrupted mid-outage-retry (SIGTERM
      *     shutdown stop signal, FR11) — see {@link FeedOutageRetry#run}
@@ -79,6 +72,7 @@ final class FeedCycle {
     Poll poll(Instant now) throws InterruptedException {
         return outageRetry.run("feed poll", () -> {
             List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
+            FinishedDecline.declineObserved(tracker, readyTasks);
             int openFrontCount = tracker.listOpen().size();
             List<ReadyTask> candidates = FeedPolicy.selectClaimCandidates(
                     readyTasks, backoffBase, backoffCap, now, openFrontCount, wipLimit, random);
@@ -115,7 +109,24 @@ final class FeedCycle {
     }
 
     private @Nullable TaskRef attemptClaim(List<ReadyTask> candidates) {
+        // One occupancy snapshot per walk: only the feed thread assigns, so a ref absent here
+        // cannot become occupied before this walk's own assign; a ref released mid-walk is just
+        // skipped until the next cycle.
+        Set<TaskRef> occupied = slotLedger.occupiedRefs();
         for (ReadyTask candidate : candidates) {
+            if (occupied.contains(candidate.ref())) {
+                // A Ready task still occupying a local slot is this instance's own zombie's task:
+                // the heartbeat died and the standing reaper returned it while the old slot still
+                // runs (fix-reaper-idle-liveness FR2, design D6). Never re-claim it — the
+                // InstanceId-based fence cannot tell the old slot from a new same-instance claim,
+                // and assign() would reject the ref. A foreign instance may claim it, fenced as
+                // usual; this instance may again once the old slot releases.
+                log.warn(
+                        "feed skips claim candidate {}: it still occupies a local slot"
+                                + " (self-reaped after an abnormal heartbeat death?)",
+                        candidate.ref().id());
+                continue;
+            }
             if (!OpenFrontGate.isStillEligible(
                     candidate, () -> tracker.listOpen().size(), wipLimit)) {
                 continue;

@@ -56,7 +56,11 @@ public class InMemoryTracker implements Tracker {
         return withLock(() -> store.entrySet().stream()
                 .filter(entry -> entry.getValue().state() instanceof TrackerTaskState.Ready)
                 .limit(limit)
-                .map(entry -> new ReadyTask(entry.getKey(), entry.getValue().abortFacts(), returned(entry.getValue())))
+                .map(entry -> new ReadyTask(
+                        entry.getKey(),
+                        entry.getValue().abortFacts(),
+                        returned(entry.getValue()),
+                        finished(entry.getValue())))
                 .toList());
     }
 
@@ -74,15 +78,28 @@ public class InMemoryTracker implements Tracker {
                         kind == CorrespondenceEntry.Kind.PARK || kind == CorrespondenceEntry.Kind.STALE_CLAIM_REMOVED);
     }
 
+    /**
+     * Derives the "finished" fact (FR1, FR2 of enforce-finish-terminality) from a task's recorded
+     * correspondence history rather than adapter-local state (design D2): true when the thread carries
+     * a {@code FINISH} entry; false otherwise. A {@code FINISH} entry never counts as {@link
+     * #returned(TrackedTask)}, so a finish-then-reopen task reports {@code finished = true, returned =
+     * false}.
+     */
+    private static boolean finished(TrackedTask task) {
+        return task.thread().stream()
+                .map(CorrespondenceEntry::kind)
+                .anyMatch(kind -> kind == CorrespondenceEntry.Kind.FINISH);
+    }
+
     @Override
     public TrackerTask fetchTask(TaskRef ref) {
         return withLock(() -> {
             TrackedTask task = store.get(ref);
             if (task == null) {
                 TaskSnapshot gone = new TaskSnapshot(ref.id(), ref.id(), "");
-                return new TrackerTask(ref, gone, new TrackerTaskState.Gone(), AbortFacts.none());
+                return new TrackerTask(ref, gone, new TrackerTaskState.Gone(), AbortFacts.none(), false);
             }
-            return new TrackerTask(ref, task.snapshot(), task.state(), task.abortFacts());
+            return new TrackerTask(ref, task.snapshot(), task.state(), task.abortFacts(), finished(task));
         });
     }
 
@@ -122,6 +139,11 @@ public class InMemoryTracker implements Tracker {
     @Override
     public void finish(TaskRef ref, String summary) {
         writeOps.finish(ref, summary);
+    }
+
+    @Override
+    public void declineFinished(TaskRef ref, String message) {
+        writeOps.declineFinished(ref, message);
     }
 
     @Override

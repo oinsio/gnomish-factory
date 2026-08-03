@@ -12,14 +12,12 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import org.slf4j.MDC
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -30,7 +28,7 @@ import spock.lang.TempDir
  * {@link TakeCommand#run} returns or throws, regardless of outcome. Mirrors {@link
  * TakeCommandSpec}'s fixture shape but asserts MDC state instead of exit codes.
  */
-class TakeCommandMdcSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class TakeCommandMdcSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -81,18 +79,6 @@ tracker:
                 "schemaVersion: \"1\"\nautonomy:\n  attemptLimit: 3\n$trackerSection")
     }
 
-    private static TrackerAdapterFactory fakeFactory(Tracker t) {
-        new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
-    }
-
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {
         // The Working row (task 6.2) reaches the takeover path; inject the headless UNAVAILABLE seam
         // rather than the production ConsoleTakeoverConfirmation so this MDC-focused spec never binds
@@ -106,12 +92,9 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 TrackerValidatorStub.acceptingGithub(),
-                new ThreadSleeper(),
-                TakeoverConfirmation.UNAVAILABLE)
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
+                TakeCommandSeams.DEFAULTS
+                .withHeartbeatSleeper(new ThreadSleeper())
+                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
     }
 
     // FR9, UX2, NFR-O1: every explicit-mode refusal disposition (Working/AwaitingHuman/Finished/
@@ -124,7 +107,7 @@ tracker:
         String mdcDuringFetch = null
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
-            new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), state, AbortFacts.none())
+            new TrackerTask(REF, new TaskSnapshot('PROJ-1', 'title', 'body'), state, AbortFacts.none(), false)
         }
         // The Working row enters the takeover path (task 6.2), which reads facts via listOpen before
         // the headless (no-TTY) refusal; an empty listing renders the age as "unknown". Harmless for
@@ -215,7 +198,7 @@ tracker:
         given:
         writeConfig()
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false)
+            new ReadyTask(REF, AbortFacts.none(), false, false)
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -237,14 +220,14 @@ tracker:
         writeConfig()
         String mdcDuringFetch = 'UNSET'
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false)
+            new ReadyTask(REF, AbortFacts.none(), false, false)
         ]
         tracker.claim(_, _) >> new ClaimResult.Acquired()
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
             new TrackerTask(
                     REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
-                    new TrackerTaskState.Finished(), AbortFacts.none())
+                    new TrackerTaskState.Finished(), AbortFacts.none(), false)
         }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)
@@ -272,7 +255,7 @@ tracker:
             new TrackerTask(
                     REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
                     claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working((String) claimedBy),
-                    AbortFacts.none())
+                    AbortFacts.none(), false)
         }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)

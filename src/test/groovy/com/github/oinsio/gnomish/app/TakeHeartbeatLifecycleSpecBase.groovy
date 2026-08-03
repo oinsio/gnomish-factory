@@ -19,7 +19,6 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -32,6 +31,11 @@ import spock.lang.TempDir
  * sleeping; the "long round" is the {@code plain-round-slow} fake-agent scenario, which stays in
  * flight for a couple of seconds so the claim is genuinely held while the beats land.
  *
+ * <p>The standing reaper (fix-reaper-idle-liveness) gets its OWN {@link BlockingSleeper}, separate
+ * from the beat's — this spec never drives it (never calls {@code awaitEntered}/{@code releaseOne}
+ * on it), so the reaper thread parks on it forever, quietly, and can never steal a release meant for
+ * the beat thread being driven below.
+ *
  * <p>Abstract for the same reason as {@link TakeLifecycleReadyToDeliveredSpecBase}: a concrete
  * adapter's seeding and thread-reading name the concrete adapter type, so they live in a subclass
  * inside {@code adapter.tracker} while this base — which constructs the package-private {@link
@@ -41,7 +45,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR1 of add-claim-heartbeat.
  */
-abstract class TakeHeartbeatLifecycleSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+abstract class TakeHeartbeatLifecycleSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
 
@@ -53,6 +57,9 @@ abstract class TakeHeartbeatLifecycleSpecBase extends Specification implements B
     Tracker tracker
     TrackerAdapterFactory trackerFactory
     BlockingSleeper sleeper
+    // The standing reaper's own sleeper (fix-reaper-idle-liveness FR5): never driven by this spec, so
+    // the reaper thread parks on it forever and can never steal a release meant for the beat thread.
+    BlockingSleeper reaperSleeper
 
     /** @return {@code [Tracker, TrackerAdapterFactory]} for one fresh Ready task seeded at {@link #REF} */
     abstract List seededReadyTrackerAndFactory(TaskRef ref, String title, String body)
@@ -65,6 +72,7 @@ abstract class TakeHeartbeatLifecycleSpecBase extends Specification implements B
         tracker = seeded[0] as Tracker
         trackerFactory = seeded[1] as TrackerAdapterFactory
         sleeper = new BlockingSleeper()
+        reaperSleeper = new BlockingSleeper()
 
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
@@ -105,11 +113,9 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
                 TrackerValidatorStub.acceptingGithub(),
-                sleeper)
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
+                TakeCommandSeams.DEFAULTS
+                .withHeartbeatSleeper(sleeper)
+                .withReaperSleeper(reaperSleeper))
     }
 
     def "FR1: the held claim is beaten during a long round and beating stops at the terminal result"() {

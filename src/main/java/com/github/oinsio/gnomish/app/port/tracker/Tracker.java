@@ -3,19 +3,18 @@ package com.github.oinsio.gnomish.app.port.tracker;
 import java.util.List;
 
 /**
- * The application layer's single abstraction over any task tracker: fourteen
+ * The application layer's single abstraction over any task tracker: fifteen
  * operations of feed, coordination, and correspondence (design D1 of
  * add-tracker-port; the lease-maintenance trio {@link #listOpen()}, {@link
  * #heartbeat(TaskRef, String)}, {@link #removeStaleClaim(TaskRef, ClaimVersion)}
- * was added by add-claim-heartbeat). It speaks only the factory's own vocabulary
- * — tasks, states, decisions, abort facts, claim versions — never a
- * tracker-specific concept; all mapping is confined to adapters under {@code
+ * added by add-claim-heartbeat). Speaks only the factory's own vocabulary —
+ * tasks, states, decisions, abort facts, claim versions — never a
+ * tracker-specific concept; mapping is confined to adapters under {@code
  * adapter.tracker.*}.
  *
- * <p>Transitions between {@link TrackerTaskState}s are initiated only by the
- * factory or by a human in the tracker UI, never by the gnome (FR2). Methods
- * carrying a report or note accept finished text plus structural fields, never
- * an engine domain model (FR1).
+ * <p>Transitions between {@link TrackerTaskState}s are initiated only by the factory or by a
+ * human in the tracker UI, never by the gnome (FR2). Methods carrying a report or note
+ * accept finished text plus structural fields, never an engine domain model (FR1).
  * <p>Implements FR1 of add-tracker-port.
  */
 public interface Tracker {
@@ -96,6 +95,20 @@ public interface Tracker {
     void finish(TaskRef ref, String summary);
 
     /**
+     * Declines a Ready task whose history already has a finish report — a terminal task a
+     * human reopened — restoring its terminal status and explaining why (FR4). Design D5:
+     * SHALL restore status FIRST, only then post {@code message}, bounding duplicate
+     * comments under a concurrent-decline race (NFR-R1, NFR-R2). Idempotent (NFR-R1): if
+     * {@code ref} is already terminal, a no-op — status unchanged, {@code message} NOT
+     * posted. Out-of-band like {@link #postNote(TaskRef, String)}: never a park report or
+     * finish summary, no derivation weight for {@code returned}/{@code finished} (D1, D3).
+     * <p>Implements FR4 of enforce-finish-terminality.
+     * @param ref the task's canonical identity; never null
+     * @param message finished decline explanation composed by core; never blank
+     */
+    void declineFinished(TaskRef ref, String message);
+
+    /**
      * Persists {@code record} as a structural abort marker and returns {@code ref}
      * to {@link TrackerTaskState.Ready}, as one operation. The marker SHALL be
      * reconstructable from the tracker alone: another instance's {@code fetchTask}/
@@ -153,13 +166,12 @@ public interface Tracker {
     List<OpenTask> listOpen();
 
     /**
-     * Updates the caller's claim marker on {@code ref} in place — refreshing its
-     * version and writing {@code progressPayload} — without creating a new artifact
-     * (design D1). Returns {@link HeartbeatResult.Beaten} with the refreshed {@link
-     * ClaimVersion}, or {@link HeartbeatResult.ClaimGone} when the marker is gone
-     * (reaped or taken over) — a protocol signal, not an error. An infrastructure
-     * failure is retryable and thrown, never a result, so an outage is never
-     * confused with a lost claim (FR8, design D7).
+     * Updates the caller's claim marker on {@code ref} in place — refreshing its version and
+     * writing {@code progressPayload} — without creating a new artifact (design D1). Returns
+     * {@link HeartbeatResult.Beaten} with the refreshed {@link ClaimVersion}, or {@link
+     * HeartbeatResult.ClaimGone} when the marker is gone (reaped or taken over) — a protocol
+     * signal, not an error. An infrastructure failure is retryable and thrown, never a
+     * result, so an outage is never confused with a lost claim (FR8, design D7).
      * <p>Implements FR5, FR8 of add-claim-heartbeat.
      * @param ref the task's canonical identity; never null
      * @param progressPayload finished text to write into the claim marker; never blank

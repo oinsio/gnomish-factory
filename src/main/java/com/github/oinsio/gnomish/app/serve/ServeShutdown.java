@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.time.Duration;
 import java.util.Set;
@@ -35,10 +36,20 @@ import org.slf4j.LoggerFactory;
  * possibly occupied) and the ordinary post-drain normal-exit path (no feed thread, slots already
  * empty — see {@code ServeCommand}'s wiring).
  *
- * <p>Implements FR11, D9, M3 of add-factory-serve.
+ * <p>Also stops the {@link StandingReaper} (fix-reaper-idle-liveness FR4) as part of the sequence,
+ * right alongside the claim-loss flagging: {@link StandingReaper#stop()} is itself idempotent and
+ * safe under concurrent/repeated calls (a {@code volatile stopping} flag plus a worker interrupt),
+ * so its exact ordering relative to the other steps is not safety-critical — it just needs to run
+ * once per shutdown so the reaper's virtual thread does not outlive the daemon.
+ *
+ * <p>Implements FR11, D9, M3 of add-factory-serve; FR4 of fix-reaper-idle-liveness.
  */
 public record ServeShutdown(
-        SlotLedger slotLedger, ClaimLossFlag claimLossFlag, Duration grace, ProcessTreeKiller processTreeKiller) {
+        SlotLedger slotLedger,
+        ClaimLossFlag claimLossFlag,
+        Duration grace,
+        ProcessTreeKiller processTreeKiller,
+        StandingReaper standingReaper) {
 
     private static final Logger log = LoggerFactory.getLogger(ServeShutdown.class);
 
@@ -54,13 +65,16 @@ public record ServeShutdown(
      * @param grace the configured SIGTERM grace window ({@code factory.serve.sigterm-grace});
      *     positive
      * @param processTreeKiller the final "kill any gnome subprocess" step; never null
+     * @param standingReaper the daemon-lifetime standing reaper (fix-reaper-idle-liveness FR1)
+     *     stopped as part of this sequence (FR4); never null
      */
     public ServeShutdown {}
 
     /**
      * Runs the full sequence once: interrupt {@code feedThread} (stop claiming immediately, FR11),
-     * flag every occupied slot's claim as gracefully stopping, wait up to the configured grace
-     * window for them to release, then unconditionally kill the process tree.
+     * flag every occupied slot's claim as gracefully stopping, stop the standing reaper
+     * (fix-reaper-idle-liveness FR4), wait up to the configured grace window for the slots to
+     * release, then unconditionally kill the process tree.
      *
      * @param feedThread the running feed thread to interrupt first; {@code null} when the caller
      *     has nothing to interrupt (the drain path, whose feed loop already stopped itself before
@@ -75,6 +89,7 @@ public record ServeShutdown(
         for (TaskRef ref : occupied) {
             claimLossFlag.claimLost(ref, SHUTDOWN_REASON);
         }
+        standingReaper.stop();
 
         boolean allReleased = awaitDrainedQuietly();
         if (!occupied.isEmpty()) {

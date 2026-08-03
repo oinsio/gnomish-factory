@@ -69,6 +69,21 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         lockIsFreeFromAnotherThread(tracker)
     }
 
+    def "reopenFinished moves a Finished task back to Ready and fully releases the store lock"() {
+        given: 'a tracker and harness with one seeded finished task'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:reopen-finished')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Finished(), AbortFacts.none())
+
+        when: 'a human reopens the finished task'
+        harness.reopenFinished(ref)
+
+        then: 'the task is Ready again, and a different thread can immediately acquire the lock'
+        tracker.fetchTask(ref).state() == new TrackerTaskState.Ready()
+        lockIsFreeFromAnotherThread(tracker)
+    }
+
     def "close moves a task to Gone and fully releases the store lock"() {
         given: 'a tracker and harness with one seeded task'
         def tracker = new InMemoryTracker()

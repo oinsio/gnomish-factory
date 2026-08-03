@@ -163,9 +163,9 @@ class GithubFeedQuerySpec extends Specification {
         result[0].abortFacts() == AbortFacts.none()
     }
 
-    // FR7, NFR-P1: a REPORT marker (park report) anywhere in the thread sets returned = true,
+    // FR7, NFR-P1: a PARK marker (park report) anywhere in the thread sets returned = true,
     //     derived from the SAME comments fetch used for abort facts — no extra API call
-    def "reports returned = true when the thread carries a REPORT (park) marker"() {
+    def "reports returned = true when the thread carries a PARK marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
                 '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
@@ -174,7 +174,7 @@ class GithubFeedQuerySpec extends Specification {
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
                           {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 stuck: needs a human decision"}
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 stuck: needs a human decision"}
                         ]
                         ''')))
         def feedQuery = newFeedQuery()
@@ -211,9 +211,9 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100')))
     }
 
-    // FR7: a task never claimed or parked carries no REPORT/STALE_CLAIM_REMOVED history —
+    // FR7: a task never claimed or parked carries no PARK/STALE_CLAIM_REMOVED history —
     //     returned stays false
-    def "reports returned = false when the thread carries neither a REPORT nor a STALE_CLAIM_REMOVED marker"() {
+    def "reports returned = false when the thread carries neither a PARK nor a STALE_CLAIM_REMOVED marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
                 '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
@@ -227,6 +227,72 @@ class GithubFeedQuerySpec extends Specification {
 
         then:
         !result[0].returned()
+    }
+
+    // FR1, NFR-P1 of enforce-finish-terminality: a FINISH marker anywhere in the thread sets
+    //     finished = true, derived from the SAME comments fetch used for abort/returned facts —
+    //     no extra API call
+    def "reports finished = true when the thread carries a FINISH marker"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":14}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/14/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"finish\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 delivered"}
+                        ]
+                        ''')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        result[0].finished()
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/14/comments?per_page=100')))
+    }
+
+    // FR1: a PARK marker alone (no FINISH) is a returned task, not a finished one — the two
+    //     facts are independent
+    def "reports finished = false and returned = true when the thread carries only a PARK marker"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":15}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/15/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"checkpoint\\"} -->\\n🤖 parked"}
+                        ]
+                        ''')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        !result[0].finished()
+        result[0].returned()
+    }
+
+    // FR1: a plain empty-history task reports finished = false
+    def "reports finished = false for a task with no markers at all"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":16}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/16/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        !result[0].finished()
     }
 
     def "listReady rejects a zero limit at the exact boundary, not just negative values"() {

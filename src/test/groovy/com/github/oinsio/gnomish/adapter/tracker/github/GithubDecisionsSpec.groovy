@@ -67,7 +67,7 @@ class GithubDecisionsSpec extends Specification {
                 [
                   {"id":1,"created_at":"2026-07-20T09:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
                   {"id":2,"created_at":"2026-07-20T09:05:00Z","body":"Please use approach B instead."},
-                  {"id":3,"created_at":"2026-07-20T09:06:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:06:00Z\\",\\"version\\":1} -->\\n🤖 report"},
+                  {"id":3,"created_at":"2026-07-20T09:06:00Z","body":"<!-- gnomish {\\"kind\\":\\"finish\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:06:00Z\\",\\"version\\":1} -->\\n🤖 finished"},
                   {"id":4,"created_at":"2026-07-20T09:07:00Z","body":"Actually go with C."}
                 ]
                 ''')
@@ -76,7 +76,7 @@ class GithubDecisionsSpec extends Specification {
         when:
         def replies = decisions.collectDecisions(refFor(30))
 
-        then: 'both plain-text replies count, structural markers (claim/report) are skipped, order preserved'
+        then: 'both plain-text replies count, structural markers (claim/finish) are skipped, order preserved'
         replies == [
             new HumanReply('Please use approach B instead.', Instant.parse('2026-07-20T09:05:00Z')),
             new HumanReply('Actually go with C.', Instant.parse('2026-07-20T09:07:00Z')),
@@ -104,12 +104,12 @@ class GithubDecisionsSpec extends Specification {
     }
 
     def "stale replies never resurface: nothing before the latest ack reappears, even past a later marker"() {
-        given: 'an old decision was acked, then a new escalation posted a report marker with no new human reply'
+        given: 'an old decision was acked, then a new escalation posted a park marker with no new human reply'
         stubComments(wireMock, 32, '''
                 [
                   {"id":1,"created_at":"2026-07-20T09:00:00Z","body":"Old decision."},
                   {"id":2,"created_at":"2026-07-20T09:01:00Z","body":"<!-- gnomish {\\"kind\\":\\"ack\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T09:01:00Z\\",\\"version\\":1} -->\\n🤖 acting on decision: Old decision."},
-                  {"id":3,"created_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 new escalation report"}
+                  {"id":3,"created_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 new escalation report"}
                 ]
                 ''')
         def decisions = newDecisions()

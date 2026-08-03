@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
@@ -16,7 +17,6 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -27,7 +27,7 @@ import spock.lang.TempDir
  * bare-mode dispatch reaching {@link TakeBareAuto}, each converted to the right
  * {@link TakeExitCodeException}.
  */
-class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     private static final TaskRef REF = new TaskRef('github:acme/widgets#42')
     private static final String INSTANCE_NAME = 'gnomish-factory'
@@ -41,7 +41,7 @@ class TakeCommandSpec extends Specification implements BareGitRepoFixture, AppAs
 
     // FR6 of add-factory-serve: mutable so a test can set open fronts before command.run() runs,
     // read lazily (the closure form) so the per-test override takes effect over this default
-    List<com.github.oinsio.gnomish.app.port.tracker.OpenTask> openTasks = []
+    List<OpenTask> openTasks = []
 
     def setup() {
         // A real git repo (not just a bare .gnomish/ tree): explicit-mode's fresh claim goes
@@ -74,18 +74,6 @@ advancement: auto
                 "schemaVersion: \"1\"\nautonomy:\n  attemptLimit: 3\n$trackerSection")
     }
 
-    private static TrackerAdapterFactory fakeFactory(Tracker t) {
-        new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
-    }
-
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {
         TakeCommandFactory.of(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
@@ -95,10 +83,6 @@ advancement: auto
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 TrackerValidatorStub.acceptingGithub())
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
     }
 
     def "no tracker section in config.yaml refuses with UsageException (FR17)"() {
@@ -144,7 +128,7 @@ tracker:
     repo: acme/widgets
 ''')
         tracker.fetchTask(_) >> new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none())
+                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none(), false)
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)
 
@@ -177,7 +161,7 @@ tracker:
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
             claimedBy == null ? new TrackerTaskState.Ready() : new TrackerTaskState.Working(claimedBy),
-            AbortFacts.none())
+            AbortFacts.none(), false)
         }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)
@@ -260,7 +244,7 @@ tracker:
     repo: acme/widgets
 ''')
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false)
+            new ReadyTask(REF, AbortFacts.none(), false, false)
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -288,12 +272,12 @@ tracker:
     repo: acme/widgets
 ''')
         openTasks = [
-            new com.github.oinsio.gnomish.app.port.tracker.OpenTask(
+            new OpenTask(
             new TaskRef('github:acme/widgets#1'),
             new TrackerTaskState.Working('someone-else'), null)
         ]
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false)
+            new ReadyTask(REF, AbortFacts.none(), false, false)
         ]
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)
@@ -320,7 +304,7 @@ tracker:
     repo: acme/widgets
 ''')
         tracker.fetchTask(REF) >> new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none())
+                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none(), false)
         def factory = new TrackerAdapterFactory() {
                     Tracker create(TrackerConfig config, String instanceId) {
                         tracker
@@ -358,7 +342,7 @@ tracker:
     repo: acme/widgets
 ''')
         tracker.fetchTask(REF) >> new TrackerTask(
-                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none())
+                REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none(), false)
         // No expandRef call expected: registry has ONLY 'create' wired via the single-closure
         // coercion; if resolveExplicitRef wrongly tried to expand this canonical ref it would
         // invoke the closure for expandRef too, returning 'tracker' (not a TaskRef) and blowing

@@ -4,8 +4,6 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import java.time.Instant
@@ -40,11 +38,10 @@ class BeatFailureTaxonomySpec extends Specification {
     new BlockingSleeper(),
     clock,
     INTERVAL,
-    flag,
-    ReaperDuty.NONE)
+    flag)
 
     private void progressAt(TaskRef ref, String stage, int attempt) {
-        progress.onEvent(new EngineEvent.AttemptStarted(new AttemptKey(ref.id(), stage, attempt)))
+        ProgressFixtures.progressAt(progress, ref, stage, attempt)
     }
 
     // FR8: transient outage does not stop work — three consecutive 5xx beats are each caught,

@@ -17,7 +17,10 @@ import java.util.Random;
  * (design D4): a uniformly random draw among the first {@link #HEAD_ZONE_K}
  * eligible entries becomes the first claim candidate, with the remaining
  * eligible entries following in their original relative order for
- * claim-race fallthrough (FR9).
+ * claim-race fallthrough (FR9). {@code finished} entries are excluded
+ * defensively before that split (FR3, D4 of enforce-finish-terminality):
+ * they are neither returned-priority nor fresh, and never interact with
+ * the WIP gate.
  *
  * <p>This class is pure logic — like {@link BackoffPolicy}, it takes
  * {@code openFrontCount} and {@code wipLimit} as explicit parameters rather
@@ -26,9 +29,11 @@ import java.util.Random;
  * per-claim re-check of design D5) and reading {@code wipLimit} from
  * configuration are the caller's job.
  *
- * <p>Implements FR6, FR9, NFR-C1, D2, D4 of add-factory-serve — the WIP
- * gate that drops fresh entries once {@code openFrontCount >= wipLimit} is
- * what caps the tokens a runaway queue can burn.
+ * <p>Implements FR6, FR9, NFR-C1, D2, D4 of add-factory-serve, and FR3, D4
+ * of enforce-finish-terminality — the WIP gate that drops fresh entries
+ * once {@code openFrontCount >= wipLimit} is what caps the tokens a runaway
+ * queue can burn, and the defensive {@code finished} exclusion keeps
+ * terminated tasks out of both the returned and fresh paths.
  */
 public final class FeedPolicy {
 
@@ -50,8 +55,10 @@ public final class FeedPolicy {
     /**
      * Computes the ordered list of claim candidates for one feed cycle.
      *
-     * <p>Order: {@code readyTasks} is backoff-filtered (D10), split into
-     * returned and fresh preserving each group's relative adapter order,
+     * <p>Order: {@code readyTasks} is backoff-filtered (D10), then any
+     * {@code finished} entry is dropped defensively (FR3, D4 of
+     * enforce-finish-terminality) before the remainder is split into
+     * returned and fresh preserving each group's relative adapter order;
      * fresh entries are dropped entirely when {@code openFrontCount >=
      * wipLimit} (FR6), and the two groups are concatenated returned-first.
      * A head-zone pick (D4) is then applied over the first
@@ -94,6 +101,9 @@ public final class FeedPolicy {
         List<ReadyTask> returned = new ArrayList<>();
         List<ReadyTask> fresh = new ArrayList<>();
         for (ReadyTask task : eligible) {
+            if (task.finished()) {
+                continue;
+            }
             if (task.returned()) {
                 returned.add(task);
             } else {

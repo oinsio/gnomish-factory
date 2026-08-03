@@ -325,13 +325,16 @@ text — rendered and parsed by `GithubMarker`:
 GitHub renders HTML comments invisibly, so a human sees only the prose line
 while a fresh adapter instance parses `kind`/`instance`/`at`/`version` back out of
 the raw comment body. The marker-kind vocabulary (`GithubMarkerKind`) is
-`claim`, `abort`, `ack`, `note`, `report`, `progress` (a durable-progress
-anchor that is not a claim boundary), and `stale_claim_removed` (a reaper's
-removal boundary marker) — the wire value is always the lowercase enum name,
-decoupled from Java constant naming so the JSON is stable across refactors. A `report`-kind marker used for a park additionally carries
-an optional `reason` field (the wire value of `ParkReason`), so a fresh
-instance's `fetchTask` can recover the park reason without inferring it from
-free-text wording. This exact wire shape is a **recommendation**, not a
+`claim`, `abort`, `ack`, `note`, `park`, `finish`, `progress` (a
+durable-progress anchor that is not a claim boundary), and
+`stale_claim_removed` (a reaper's removal boundary marker) — the wire value is
+always the lowercase enum name, decoupled from Java constant naming so the JSON
+is stable across refactors. `park` and `finish` are dedicated, structurally
+distinct kinds (the `enforce-finish-terminality` change split the retired
+dual-use `report` kind into them): a `park` marker additionally carries a
+`reason` field (the wire value of `ParkReason`), so a fresh instance's
+`fetchTask` recovers the park reason from the marker kind alone — never by
+inferring park-vs-finish from whether a `reason` field happens to be present. This exact wire shape is a **recommendation**, not a
 contract-spec mandate — the contract spec only requires that abort facts and
 decision-ack semantics round-trip; a Jira/Redmine renderer that strips or
 mangles HTML comments is free to use a different structural encoding (see the
@@ -376,7 +379,7 @@ all built on the claim comment resolved above:
   gone and the label already flipped, both harmless — as does a **404** on the
   re-read (the issue itself is gone), a no-op `Mismatch(null)`, never an
   infrastructure failure. The `stale_claim_removed`
-  marker kind joins the **claim-boundary set** (`abort`, `report`,
+  marker kind joins the **claim-boundary set** (`abort`, `park`, `finish`,
   `stale_claim_removed`) the re-claim verify-read anchors on, so a dead claim
   comment whose delete did not land can never win the next lease round.
 

@@ -6,6 +6,9 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
 import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
+import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 
 /**
  * Shared factory methods for the one construction block twenty-one app-layer
@@ -102,5 +105,39 @@ trait AppAssemblyFixture {
      */
     private static InputStream defaultConsoleInput() {
         new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8'))
+    }
+
+    /**
+     * A {@link TrackerAdapterFactory} whose {@code create} always returns the
+     * given fake/mock {@code Tracker} and whose {@code expandRef} always
+     * throws, since no spec using this fixture exercises short-ref expansion
+     * through a real tracker adapter.
+     */
+    static TrackerAdapterFactory fakeFactory(Tracker t) {
+        new FixedTrackerAdapterFactory(t)
+    }
+}
+
+/**
+ * A {@link TrackerAdapterFactory} whose {@code create} always returns the
+ * fixed {@code tracker} it was built with and whose {@code expandRef} always
+ * throws. Groovy traits cannot declare an anonymous inner class directly, so
+ * this is the named class {@link AppAssemblyFixture#fakeFactory} delegates
+ * to.
+ */
+class FixedTrackerAdapterFactory implements TrackerAdapterFactory {
+
+    private final Tracker tracker
+
+    FixedTrackerAdapterFactory(Tracker tracker) {
+        this.tracker = tracker
+    }
+
+    Tracker create(TrackerConfig config, String instanceId) {
+        tracker
+    }
+
+    TaskRef expandRef(TrackerConfig config, String rawRef) {
+        throw new UnsupportedOperationException('not used by this fixture')
     }
 }

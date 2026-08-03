@@ -11,9 +11,9 @@ import java.util.Locale;
 /**
  * Implements the three label-changing {@code Tracker} write operations for
  * the GitHub adapter (design D13's boundary list, github-tracker spec):
- * {@code park} (working &rarr; needs-human, {@code report}-kind marker
+ * {@code park} (working &rarr; needs-human, {@code park}-kind marker
  * carrying the {@link ParkReason} wire value), {@code finish} (working
- * &rarr; delivered, plain {@code report}-kind marker), and {@code
+ * &rarr; delivered, {@code finish}-kind marker), and {@code
  * recordAbort} (working &rarr; ready, {@code abort}-kind marker). Each
  * method performs the point label transition via {@link GithubLabelOps}
  * plus one structural comment POST, copying the request-building shape
@@ -25,17 +25,19 @@ import java.util.Locale;
  * marker only, with no label transition at all — it anchors abort-count
  * reconstruction without acting as a label-state boundary.
  *
- * <p>Judgment call (task 4.14): design D9's marker-kind vocabulary has no
- * dedicated {@code park}/{@code finish} kind. A park is a {@code
- * report}-kind marker carrying the optional {@code reason} field (task
- * 4.10's resolution, {@link GithubMarker#render(GithubMarkerKind, String,
- * Instant, String, String)}); a finish is a {@code report}-kind marker with
- * no reason, matching {@link GithubMarkerKind}'s own Javadoc ("a
- * finished-stage or final report") — there is no behavioral difference a
- * fresh instance would need to tell a park report from a finish report
- * apart from the label state itself, which each method already changes.
+ * <p>{@code park} and {@code finish} write dedicated {@link
+ * GithubMarkerKind#PARK} and {@link GithubMarkerKind#FINISH} markers rather
+ * than sharing a single dual-use kind, so the distinction is structural, not
+ * inferred from whether a {@code reason} field happens to be present (design
+ * D1 of enforce-finish-terminality).
  *
- * <p>Implements FR14, FR18 of add-tracker-port.
+ * <p>{@code declineFinished} (enforce-finish-terminality FR4, NFR-R1, design
+ * D3/D5) restores the ready&rarr;delivered terminal transition and posts a
+ * {@code note}-kind marker explaining the decline, only after the transition
+ * succeeds, and is a silent no-op when the issue is already terminal.
+ *
+ * <p>Implements FR14, FR18 of add-tracker-port, FR1, FR2, FR4, NFR-R1, UX2 of
+ * enforce-finish-terminality.
  */
 // Not a record: this is a behavior-bearing state-write service (a collaborator holding an HTTP
 // client and label ops, not immutable data), kept as a plain final class.
@@ -72,7 +74,7 @@ public final class GithubStateWrites {
         GithubTaskId id = GithubTaskId.parse(ref.id());
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, needsHumanLabel);
         String body = GithubMarker.render(
-                GithubMarkerKind.REPORT,
+                GithubMarkerKind.PARK,
                 instanceId,
                 Instant.now(),
                 report,
@@ -84,7 +86,7 @@ public final class GithubStateWrites {
     public void finish(TaskRef ref, String summary) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, deliveredLabel);
-        String body = GithubMarker.render(GithubMarkerKind.REPORT, instanceId, Instant.now(), summary);
+        String body = GithubMarker.render(GithubMarkerKind.FINISH, instanceId, Instant.now(), summary);
         postComment(id, body);
     }
 
@@ -109,6 +111,41 @@ public final class GithubStateWrites {
         String body = GithubMarker.render(
                 GithubMarkerKind.PROGRESS, instanceId, Instant.now(), "🤖 gnomish: progress recorded");
         postComment(id, body);
+    }
+
+    /**
+     * Implements {@code Tracker.declineFinished} for GitHub (FR4, NFR-R1,
+     * UX2, design D3/D5). Restores the terminal status (ready &rarr; delivered)
+     * and, only once that transition succeeds, posts a {@link
+     * GithubMarkerKind#NOTE}-kind marker carrying {@code message} — NOTE
+     * rather than PARK/FINISH so this out-of-band explanation carries no
+     * derivation weight (design D3). Ordering matches design D5: a failure
+     * of the label transition propagates without ever reaching the comment
+     * POST, so a crash never leaves a dangling half-decline that also
+     * posted noise. If the issue already carries {@code deliveredLabel} the
+     * task is already terminal and this method does nothing at all — no
+     * label change, no comment (NFR-R1's state-level idempotency).
+     */
+    public void declineFinished(TaskRef ref, String message) {
+        GithubTaskId id = GithubTaskId.parse(ref.id());
+        if (isAlreadyTerminal(id)) {
+            return;
+        }
+        labelOps.transition(id.owner(), id.repo(), id.issueNumber(), readyLabel, deliveredLabel);
+        String body = GithubMarker.render(GithubMarkerKind.NOTE, instanceId, Instant.now(), message);
+        postComment(id, body);
+    }
+
+    private boolean isAlreadyTerminal(GithubTaskId id) {
+        String path = "/repos/%s/%s/issues/%d".formatted(id.owner(), id.repo(), id.issueNumber());
+        HttpRequest.Builder request = httpClient.newRequest(path).GET();
+        HttpResponse<String> response = httpClient.send(request);
+        if (response.statusCode() / 100 != 2) {
+            throw new GithubStateWriteException("Failed to fetch issue %s/%s#%d: HTTP %d"
+                    .formatted(id.owner(), id.repo(), id.issueNumber(), response.statusCode()));
+        }
+        GithubIssueDetail detail = GithubIssueDetailParser.parse(response.body());
+        return detail.labelNames().contains(deliveredLabel);
     }
 
     private void postComment(GithubTaskId id, String body) {

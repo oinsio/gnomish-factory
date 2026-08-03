@@ -162,11 +162,12 @@ public final class GithubClaimLease {
      * marker that ended the prior working session and so voids every claim
      * posted before it (design D13: "since the newest boundary marker —
      * release/park/abort/finish — whichever is newest"): an {@code abort}
-     * (task returned to {@code Ready}), a {@code report} — {@link
-     * GithubStateWrites} posts both {@code park} and {@code finish} as
-     * REPORT-kind markers, the only REPORT markers this adapter writes — or a
-     * {@code stale_claim_removed} marker (a reaper's stale-claim-removal
-     * boundary; add-claim-heartbeat design D5, FR4): the removal marker
+     * (task returned to {@code Ready}), a {@code park} or {@code finish} — the
+     * two session-ending kinds {@link GithubStateWrites} writes (enforce-
+     * finish-terminality task 3.1 split the former single {@code REPORT} kind
+     * into these two) — or a {@code stale_claim_removed} marker (a reaper's
+     * stale-claim-removal boundary; add-claim-heartbeat design D5, FR4): the
+     * removal marker
      * anchors the next lease round exactly like release/park/abort/finish, so
      * a re-claim after a reaper freed the task ignores the dead holder's
      * original CLAIM comment even when a best-effort delete failure left it
@@ -180,14 +181,16 @@ public final class GithubClaimLease {
      * comments-listing order already reflects the server-side total order
      * (design D13), so this scans by list position rather than by parsed
      * timestamp — immune to clock skew between racing instances.
+     *
+     * <p>The boundary-kind set itself is {@link GithubClaimComment#isBoundary};
+     * this class reuses it rather than keeping its own copy of the same
+     * {@code ABORT}/{@code PARK}/{@code FINISH}/{@code STALE_CLAIM_REMOVED}
+     * condition.
      */
     private static Optional<Integer> latestBoundaryIndex(List<CommentAndMarker> comments) {
         Integer index = null;
         for (int i = 0; i < comments.size(); i++) {
-            GithubMarkerKind kind = comments.get(i).marker().kind();
-            if (kind == GithubMarkerKind.ABORT
-                    || kind == GithubMarkerKind.REPORT
-                    || kind == GithubMarkerKind.STALE_CLAIM_REMOVED) {
+            if (GithubClaimComment.isBoundary(comments.get(i).marker().kind())) {
                 index = i;
             }
         }

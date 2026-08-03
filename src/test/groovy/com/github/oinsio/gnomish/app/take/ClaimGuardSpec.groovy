@@ -23,7 +23,7 @@ class ClaimGuardSpec extends Specification {
     private Tracker tracker = Mock()
 
     private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none())
+        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     // FR7: the only "still ours" verdict is Working held by this instance's own id.

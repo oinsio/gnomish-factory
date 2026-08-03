@@ -42,7 +42,7 @@ final class SubcommandDispatchFactory {
                 javaTimeClock,
                 trackerAdapterRegistry,
                 trackerValidatorRegistry,
-                serveProperties);
+                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties));
         var serveCommand = new ServeCommand(
                 assembly,
                 worktreesRoot,

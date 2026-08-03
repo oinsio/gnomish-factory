@@ -78,7 +78,7 @@ record FixtureSeeder(FixtureIssueRegistry registry, String instanceId) {
             case TrackerTaskState.AwaitingHuman awaitingHuman -> {
                 issue.addLabel(NEEDS_HUMAN_LABEL);
                 String reasonWire = awaitingHuman.reason().name().toLowerCase(Locale.ROOT);
-                postMarker(issue, GithubMarkerKind.REPORT, instanceId, reasonWire, "awaiting human: " + reasonWire);
+                postMarker(issue, GithubMarkerKind.PARK, instanceId, reasonWire, "awaiting human: " + reasonWire);
             }
             case TrackerTaskState.Finished ignored -> issue.addLabel(DELIVERED_LABEL);
             case TrackerTaskState.Gone ignored -> issue.close();

@@ -47,6 +47,26 @@ public record InMemoryTrackerHarness(InMemoryTracker adapter) {
      * -> Ready} happens. Does not touch abort facts or pending replies.
      */
     public void returnToReady(TaskRef ref) {
+        moveToReady(ref);
+    }
+
+    /**
+     * Simulates a human moving a finished task back to {@code Ready} — the ONLY way {@code Finished
+     * -> Ready} happens (the factory itself never resumes a finished task). Does not touch the
+     * recorded correspondence history (the finish report stays intact).
+     */
+    public void reopenFinished(TaskRef ref) {
+        moveToReady(ref);
+    }
+
+    /**
+     * The shared {@code * -> Ready} move behind {@link #returnToReady} and {@link #reopenFinished}:
+     * both simulate a human relabeling the issue back to {@code Ready} in the tracker UI, touching
+     * only the logical state and never the recorded correspondence history. The two public seams stay
+     * distinct because they model two different human actions from two different terminal states
+     * (park-return vs finish-reopen), but the mechanics are identical.
+     */
+    private void moveToReady(TaskRef ref) {
         adapter.lock.lock();
         try {
             requireSeeded(ref).state(new TrackerTaskState.Ready());

@@ -20,7 +20,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.util.concurrent.PollingConditions
@@ -33,7 +32,7 @@ import spock.util.concurrent.PollingConditions
  * {@link FeedAutomatonStarter} (this task's own test seam) captures the assembled automaton
  * instead of running it, so these specs never block on a real feed loop.
  */
-class ServeCommandSpec extends Specification implements AppAssemblyFixture, BareGitRepoFixture {
+class ServeCommandSpec extends Specification implements AppAssemblyFixture, BareGitRepoFixture, ApplicationArgumentsFixture {
 
     private static final String INSTANCE_NAME = 'gnomish-factory'
 
@@ -141,10 +140,6 @@ tracker:
                 registry,
                 TrackerValidatorStub.acceptingGithub(),
                 starter)
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
     }
 
     // Non-termination guard: run() assembles a REAL FeedAutomaton whose outage retry (NFR-R3)
@@ -355,6 +350,44 @@ tracker:
         then: 'the janitor thread actually ran its startup tick and removed the aged worktree'
         new PollingConditions(timeout: 5, initialDelay: 0, delay: 0.1).eventually {
             assert !Files.exists(worktreePath)
+        }
+    }
+
+    // fix-reaper-idle-liveness FR1, FR5: serve starts the standing reaper as its own
+    //     daemon-lifetime thread, ticking on its own interval independently of the feed automaton
+    //     (never actually driven here — CapturingStarter only captures it). A short
+    //     heartbeat-interval makes the reaper's own first tick observable well within the test
+    //     timeout: it calls tracker.listOpen() on every tick (Reaper#reapOnce), which nothing else
+    //     in this run ever calls (the feed loop that would call listReady/claim never runs), so
+    //     any listOpen() call can only be the standing reaper.
+    def "starts the standing reaper as a daemon-lifetime thread ticking independently of the feed automaton (fix-reaper-idle-liveness FR1)"() {
+        given:
+        writeConfig('''
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+    repo: acme/widgets
+  heartbeat-interval: 20ms
+''')
+        def listOpenCalls = new java.util.concurrent.atomic.AtomicInteger()
+        Tracker fakeTracker = [
+            listOpen: { listOpenCalls.incrementAndGet(); [] },
+        ] as Tracker
+        def factory = factoryReturning(fakeTracker)
+        def starter = new CapturingStarter()
+        def command = newCommand([github: factory], starter)
+
+        when:
+        runsToCompletion { command.run(args('serve', "--dir=$projectDir")) }
+
+        then: 'the automaton was merely captured, never run — nothing but the reaper can call listOpen'
+        noExceptionThrown()
+        starter.captured != null
+
+        and: 'the standing reaper genuinely ticked on its own thread shortly after startup'
+        new PollingConditions(timeout: 5, initialDelay: 0, delay: 0.05).eventually {
+            assert listOpenCalls.get() > 0
         }
     }
 

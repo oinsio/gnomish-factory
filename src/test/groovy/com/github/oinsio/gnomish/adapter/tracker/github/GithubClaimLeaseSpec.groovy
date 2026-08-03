@@ -239,8 +239,8 @@ class GithubClaimLeaseSpec extends Specification {
         result == new ClaimResult.Acquired()
     }
 
-    def "boundary-anchors the race past a park report so a returned task can be re-claimed (FR6, D13)"() {
-        given: 'a held task was parked (a report marker), then returned to ready by a human; the old claim lingers'
+    def "boundary-anchors the race past a park marker so a returned task can be re-claimed (FR6, D13)"() {
+        given: 'a held task was parked (a park marker), then returned to ready by a human; the old claim lingers'
         stubLabelCalls(wireMock, 27)
         wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/27/comments'))
                 .willReturn(aResponse().withStatus(201).withBody('{"id":910,"body":"whatever"}')))
@@ -248,7 +248,7 @@ class GithubClaimLeaseSpec extends Specification {
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
                           {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-old\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-old\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"checkpoint\\"} -->\\n🤖 parked for review"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-old\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"checkpoint\\"} -->\\n🤖 parked for review"},
                           {"id":910,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-fresh\\",\\"at\\":\\"2026-07-24T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed by gnomish-factory-fresh"}
                         ]
                         ''')))
@@ -257,12 +257,12 @@ class GithubClaimLeaseSpec extends Specification {
         when:
         def result = lease.claim(refFor(27), 'gnomish-factory-fresh')
 
-        then: 'the pre-park claim (id 1) is voided by the park report boundary; the fresh claim wins instead of Held(old)'
+        then: 'the pre-park claim (id 1) is voided by the park boundary; the fresh claim wins instead of Held(old)'
         result == new ClaimResult.Acquired()
     }
 
-    def "boundary-anchors the race past a finish report so a reopened task can be re-claimed (FR6, D13)"() {
-        given: 'a task was finished (a plain report marker), then reopened to ready; the old claim lingers'
+    def "boundary-anchors the race past a finish marker so a reopened task can be re-claimed (FR6, D13)"() {
+        given: 'a task was finished (a finish marker), then reopened to ready; the old claim lingers'
         stubLabelCalls(wireMock, 28)
         wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/28/comments'))
                 .willReturn(aResponse().withStatus(201).withBody('{"id":920,"body":"whatever"}')))
@@ -270,7 +270,7 @@ class GithubClaimLeaseSpec extends Specification {
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
                           {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-old\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-old\\",\\"at\\":\\"2026-07-20T12:00:00Z\\",\\"version\\":1} -->\\n🤖 delivered"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"finish\\",\\"instance\\":\\"gnomish-factory-old\\",\\"at\\":\\"2026-07-20T12:00:00Z\\",\\"version\\":1} -->\\n🤖 delivered"},
                           {"id":920,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-fresh\\",\\"at\\":\\"2026-07-24T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed by gnomish-factory-fresh"}
                         ]
                         ''')))
@@ -279,7 +279,7 @@ class GithubClaimLeaseSpec extends Specification {
         when:
         def result = lease.claim(refFor(28), 'gnomish-factory-fresh')
 
-        then: 'the pre-finish claim (id 1) is voided by the finish report boundary; the fresh claim wins'
+        then: 'the pre-finish claim (id 1) is voided by the finish boundary; the fresh claim wins'
         result == new ClaimResult.Acquired()
     }
 

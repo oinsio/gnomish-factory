@@ -66,7 +66,7 @@ class FeedAutomatonSpec extends Specification {
     }
 
     private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false)
     }
 
     private static SlotRunner capturing(List<TaskRef> sink) {

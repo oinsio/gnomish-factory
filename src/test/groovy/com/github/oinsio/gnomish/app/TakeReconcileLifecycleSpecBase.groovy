@@ -37,7 +37,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR10, D10, NFR-C1, M4 of add-claim-heartbeat.
  */
-abstract class TakeReconcileLifecycleSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+abstract class TakeReconcileLifecycleSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
 
@@ -106,10 +106,6 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
                 TrackerValidatorStub.acceptingGithub())
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
     }
 
     private static int runExitCode(TakeCommand command, DefaultApplicationArguments appArgs) {

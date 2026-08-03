@@ -12,7 +12,6 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -44,7 +43,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR15 of add-tracker-port.
  */
-abstract class TakeLifecycleRevocationSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+abstract class TakeLifecycleRevocationSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
     protected static final String LEFTOVER_FILE = 'leftover-uncommitted.txt'
@@ -138,10 +137,6 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
                 TrackerValidatorStub.acceptingGithub())
-    }
-
-    private static DefaultApplicationArguments args(String... raw) {
-        new DefaultApplicationArguments(raw)
     }
 
     def "ready -> claim -> work -> human closes mid-run -> revoked: salvage, push, note, release; branch and worktree kept"() {

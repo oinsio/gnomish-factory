@@ -50,8 +50,8 @@ class GithubTaskFetcherSpec extends Specification {
     }
 
     private GithubTaskFetcher newFetcher(String workingLabel = 'gnomish:working',
-            String needsHumanLabel = 'gnomish:needs-human') {
-        new GithubTaskFetcher(newCache(), workingLabel, needsHumanLabel)
+            String needsHumanLabel = 'gnomish:needs-human', String deliveredLabel = 'gnomish:delivered') {
+        new GithubTaskFetcher(newCache(), workingLabel, needsHumanLabel, deliveredLabel)
     }
 
     private GithubConditionalRequestCache newCache() {
@@ -80,6 +80,24 @@ class GithubTaskFetcherSpec extends Specification {
         then:
         result.state() == new TrackerTaskState.Ready()
         result.snapshot() == new TaskSnapshot(refFor(5).id(), 'Fix the widget', 'details')
+    }
+
+    def "reports Finished when the delivered label is present"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/9'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        {"number":9,"title":"Fix the widget","body":"details","state":"open",
+                         "labels":[{"name":"gnomish:delivered"}]}
+                        ''')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/9/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        def fetcher = newFetcher()
+
+        when:
+        def result = fetcher.fetchTask(refFor(9))
+
+        then:
+        result.state() == new TrackerTaskState.Finished()
     }
 
     def "maps a null body to an empty string in the snapshot"() {
@@ -165,7 +183,7 @@ class GithubTaskFetcherSpec extends Specification {
         thrown(GithubFeedQueryException)
     }
 
-    def "reports AwaitingHuman with the reason from the latest report marker"() {
+    def "reports AwaitingHuman with the reason from the latest park marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/9'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -175,7 +193,7 @@ class GithubTaskFetcherSpec extends Specification {
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/9/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
-                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"report\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 needs a decision"}
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 needs a decision"}
                         ]
                         ''')))
         def fetcher = newFetcher()
@@ -185,6 +203,72 @@ class GithubTaskFetcherSpec extends Specification {
 
         then:
         result.state() == new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
+    }
+
+    // FR1, NFR-P1 of enforce-finish-terminality: fetchTask derives finished from the same
+    //     comments fetch already made for the state/abort facts — no extra API call
+    def "reports finished = true on a Ready issue whose thread carries a FINISH marker"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/18'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        {"number":18,"title":"t","body":"b","state":"open",
+                         "labels":[{"name":"gnomish:ready"}]}
+                        ''')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/18/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"finish\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 delivered"}
+                        ]
+                        ''')))
+        def fetcher = newFetcher()
+
+        when:
+        def result = fetcher.fetchTask(refFor(18))
+
+        then:
+        result.finished()
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/18/comments?per_page=100')))
+    }
+
+    def "reports finished = false on an ordinary Ready issue with no FINISH marker"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/19'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        {"number":19,"title":"t","body":"b","state":"open",
+                         "labels":[{"name":"gnomish:ready"}]}
+                        ''')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/19/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        def fetcher = newFetcher()
+
+        when:
+        def result = fetcher.fetchTask(refFor(19))
+
+        then:
+        !result.finished()
+    }
+
+    // enforce-finish-terminality design Q2 / risk: a CLOSED (Gone) issue reports finished = false and
+    //     never reaches the decline path while closed — the Gone branch short-circuits before the
+    //     comments are even fetched, so a lingering FINISH marker in the thread cannot flip the fact.
+    //     The finished fact re-derives to true only once a human reopens the issue back to Ready.
+    def "reports finished = false for a closed issue without fetching its comments"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        {"number":12,"title":"t","body":"b","state":"closed","state_reason":"completed",
+                         "labels":[{"name":"gnomish:delivered"}]}
+                        ''')))
+        def fetcher = newFetcher()
+
+        when:
+        def result = fetcher.fetchTask(refFor(12))
+
+        then:
+        result.state() instanceof TrackerTaskState.Gone
+        !result.finished()
+        wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100')))
     }
 
     def "reports Gone for a closed issue, carrying state_reason as the closure reason (revocation context)"() {

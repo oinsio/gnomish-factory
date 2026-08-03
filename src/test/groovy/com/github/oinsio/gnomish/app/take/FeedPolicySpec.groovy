@@ -10,10 +10,12 @@ import spock.lang.Specification
 /**
  * FeedPolicy: the shared claim-eligibility policy for serve and bare auto
  * take (design D2) — backoff filtering delegated to BackoffPolicy,
- * returned-tasks-first / WIP-gated-fresh ordering (FR6), and the head-zone
- * pick over the first K = 5 eligible entries (FR9, D4).
+ * returned-tasks-first / WIP-gated-fresh ordering (FR6), the head-zone
+ * pick over the first K = 5 eligible entries (FR9, D4), and defensive
+ * exclusion of finished entries (FR3, D4 of enforce-finish-terminality).
  *
- * Implements FR6, FR9, D2, D4 of add-factory-serve.
+ * Implements FR6, FR9, D2, D4 of add-factory-serve, and FR3, D4 of
+ * enforce-finish-terminality.
  */
 class FeedPolicySpec extends Specification {
 
@@ -33,15 +35,19 @@ class FeedPolicySpec extends Specification {
     }
 
     private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false)
     }
 
     private static ReadyTask returned(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false)
     }
 
     private static ReadyTask backedOff(String id) {
-        new ReadyTask(new TaskRef(id), new AbortFacts(1, NOW.minus(Duration.ofMinutes(1))), false)
+        new ReadyTask(new TaskRef(id), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false)
+    }
+
+    private static ReadyTask finished(String id, boolean returned = false) {
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, true)
     }
 
     // FR10, D10 (delegate correctness): backed-off entries never appear among candidates
@@ -171,6 +177,42 @@ class FeedPolicySpec extends Specification {
             fresh('F1'),
             returned('R1'),
             fresh('F2')
+        ]
+
+        when:
+        def candidates = FeedPolicy.selectClaimCandidates(tasks, BASE, CAP, NOW, 10, 10, fixedPick(0))
+
+        then:
+        candidates*.ref()*.id() == ['R1']
+    }
+
+    // FR3, D4: finished entries are excluded defensively - neither returned-priority
+    // nor fresh, and they never interact with the WIP gate
+    def "finished entries never appear among candidates regardless of returned flag or WIP state"() {
+        given: 'a mixed feed: fresh, returned, a finished-but-returned entry, and a finished-fresh entry'
+        def tasks = [
+            fresh('F1'),
+            returned('R1'),
+            finished('DoneReturned', true),
+            finished('DoneFresh', false)
+        ]
+
+        when: 'WIP is wide open so a finished-fresh entry could otherwise slip in as fresh'
+        def candidates = FeedPolicy.selectClaimCandidates(tasks, BASE, CAP, NOW, 0, 10, fixedPick(0))
+
+        then:
+        !candidates*.ref()*.id().contains('DoneReturned')
+        !candidates*.ref()*.id().contains('DoneFresh')
+        candidates*.ref()*.id() as Set == ['R1', 'F1'] as Set
+    }
+
+    // FR3, D4: finished entries stay excluded even when the WIP limit is reached,
+    // proving they never count toward or against the WIP gate
+    def "finished entries stay excluded even when the WIP limit is reached"() {
+        given:
+        def tasks = [
+            returned('R1'),
+            finished('DoneReturned', true)
         ]
 
         when:
