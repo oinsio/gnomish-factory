@@ -23,9 +23,18 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.serveobservability.InstanceInfo
+import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
+import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
+import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator
+import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
+import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
+import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
+import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.LocalDate
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import spock.lang.Specification
@@ -154,6 +163,65 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         report.entries().size() == 1
         report.entries().first().ref() == new TaskRef('PROJ-4')
         report.summary().contains('delivered')
+    }
+
+    // FR13, design D6 (task 4.5): a slot with a RunSummaryAccumulator attached records its
+    //     terminal result into it, beside the DrainReport call — the in-memory totals a drain
+    //     run's runSummary ledger line is built from once it completes.
+    def "accumulates its outcome into an attached RunSummaryAccumulator"() {
+        given:
+        tracker.fetchTask(new TaskRef('PROJ-8')) >> trackerTask('PROJ-8')
+        def slotRunner = newSlotRunner()
+        def accumulator = new RunSummaryAccumulator()
+        slotRunner.attachRunSummaryAccumulator(accumulator)
+
+        when:
+        slotRunner.run(new TaskRef('PROJ-8'))
+
+        then:
+        accumulator.counts() == new OutcomeCounts(1, 0, 0, 0)
+    }
+
+    // FR13: with no RunSummaryAccumulator attached (the ordinary, non-drain path) a slot behaves
+    //     exactly as before — no accumulation side effect to worry about.
+    def "does not require a RunSummaryAccumulator to be attached"() {
+        given:
+        tracker.fetchTask(new TaskRef('PROJ-9')) >> trackerTask('PROJ-9')
+        def slotRunner = newSlotRunner()
+
+        when:
+        slotRunner.run(new TaskRef('PROJ-9'))
+
+        then:
+        noExceptionThrown()
+    }
+
+    // FR11, design D6 (task 4.3): a slot with a TaskOutcomeLedgerWriter attached appends its
+    //     terminal outcome as a taskOutcome ledger line, with startedAt read from the SlotLedger
+    //     entry assigned before the slot ran — exactly the sequence FeedCycle drives in production
+    //     (assign, then start the slot thread, release only after it returns).
+    def "appends a taskOutcome ledger line via an attached TaskOutcomeLedgerWriter"() {
+        given:
+        tracker.fetchTask(new TaskRef('PROJ-7')) >> trackerTask('PROJ-7')
+        def slotRunner = newSlotRunner()
+        def slotLedger = new SlotLedger(1)
+        def ref = new TaskRef('PROJ-7')
+        slotLedger.assign(ref)
+        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
+        def appender = new RotatingLedgerAppender(
+                new LedgerAppender(tempDir.resolve('placeholder'), new LedgerJsonMapper()),
+                tempDir, 'gnomish', Clock.systemUTC())
+        slotRunner.attachLedgerWriter(new TaskOutcomeLedgerWriter(slotLedger, appender, instance, Clock.systemUTC()))
+
+        when:
+        slotRunner.run(ref)
+
+        then:
+        def ledgerFile = ObservabilityPaths.ledgerFile(tempDir, 'gnomish', LocalDate.now(java.time.ZoneOffset.UTC))
+        def lines = Files.readString(ledgerFile).split('\n').findAll { !it.isBlank() }
+        lines.size() == 1
+        lines[0].contains('"taskId":"PROJ-7"')
+        lines[0].contains('"outcome":"delivered"')
     }
 
     // FR10: with no DrainReport attached (the ordinary, non-drain path) a slot behaves exactly as

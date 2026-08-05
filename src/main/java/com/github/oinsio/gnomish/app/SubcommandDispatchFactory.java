@@ -25,6 +25,7 @@ final class SubcommandDispatchFactory {
     static SubcommandDispatch of(
             ManualRunAssembly assembly,
             Path worktreesRoot,
+            Path homeDir,
             String taskIdMdcKey,
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
@@ -46,6 +47,7 @@ final class SubcommandDispatchFactory {
         var serveCommand = new ServeCommand(
                 assembly,
                 worktreesRoot,
+                homeDir,
                 taskIdMdcKey,
                 factoryProperties,
                 serveProperties,

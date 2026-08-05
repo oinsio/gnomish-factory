@@ -226,6 +226,9 @@ jacoco {
 tasks.named('test') {
     // Spock 2 runs on the JUnit Platform.
     useJUnitPlatform()
+    // The suite has grown past Gradle's default test-worker heap; without this the worker JVM
+    // OOMs during JUnit-Platform teardown even though every individual spec has already passed.
+    maxHeapSize = '3g'
     // Generate coverage reports whenever tests run, so `check` produces them
     // as part of the single-command verification (FR5 of add-project-skeleton).
     finalizedBy tasks.named('jacocoTestReport')

@@ -68,7 +68,6 @@ public final class ManualRunRunner implements ApplicationRunner {
 
     /** The MDC key this runner sets once {@code taskId} is known (design D9, task 8.2). */
     private static final String TASK_ID_KEY = "taskId";
-
     /** Printed at the start of an in-place run, before the pipeline loads (FR7, UX4). */
     private static final String IN_PLACE_REMINDER =
             "in-place mode: no git, no resume — the task's progress lives only in this process;"
@@ -95,6 +94,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             ThreadSleeper threadSleeper,
             FactoryProperties factoryProperties,
             Path worktreesRoot,
+            Path homeDir,
             StatusCommand statusCommand,
             UsageCommand usageCommand,
             Clock javaTimeClock,
@@ -117,6 +117,7 @@ public final class ManualRunRunner implements ApplicationRunner {
         this.subcommandDispatch = SubcommandDispatchFactory.of(
                 assembly,
                 worktreesRoot,
+                homeDir,
                 TASK_ID_KEY,
                 factoryProperties,
                 serveProperties,
@@ -158,7 +159,6 @@ public final class ManualRunRunner implements ApplicationRunner {
         }
         var loaded = (PipelineLoadOutcome.Loaded) loadOutcome;
         PipelineDefinition definition = loaded.definition();
-
         String resume = runArguments.resume();
         if (resume != null) {
             gitResumeRunner.run(

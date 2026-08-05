@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
@@ -26,7 +27,7 @@ class StandingReaperSpec extends Specification {
     private static final Duration TTL = Duration.ofMinutes(15)
     private static final Duration INTERVAL = Duration.ofMinutes(5)
     private static final Instant ANCIENT = Instant.parse('2000-01-01T00:00:00Z')
-    private static final TaskRef FOREIGN = new TaskRef('github:o/r#1')
+    private static final TaskRef FOREIGN = new TaskRef('T-foreign')
 
     private final Tracker tracker = Mock()
     private final VirtualMonotonicTime time = new VirtualMonotonicTime()
@@ -37,7 +38,7 @@ class StandingReaperSpec extends Specification {
     // ticks even though this instance holds nothing (FR1), unlike the old beat-riding reaper
     // which only ran while InstanceHeartbeat's thread was alive.
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, { [] })
+    new StandingReaper(reaper, { Duration d -> }, INTERVAL, { [] }, new SystemClock())
 
     private static OpenTask working(String ref, ClaimVersion version) {
         new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('other-instance'), version)

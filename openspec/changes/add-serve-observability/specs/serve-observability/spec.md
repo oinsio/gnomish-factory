@@ -90,10 +90,12 @@ assign/release are immediate-write triggers.
 
 ### Requirement: Vitals cover heartbeat, reaper, and janitor
 `vitals.heartbeat` SHALL be `state: idle | running | died` with `lastTickAt`
-and `heldClaims`; `vitals.reaper` SHALL carry `lastRunAt` and
-`restartCount`; `vitals.janitor` SHALL carry `lastRunAt`. The feed and the
-writer SHALL NOT have vitals entries (feed health lives in `feed`;
-`writtenAt` is the writer's pulse).
+and `heldClaims`; `vitals.reaper` SHALL carry `lastRunAt`, `restartCount`,
+and `intervalSeconds` (the reaper's own tick cadence, distinct from the
+top-level `intervalSeconds` snapshot-write cadence, so a reader can judge
+`lastRunAt` staleness from the file alone — M1); `vitals.janitor` SHALL
+carry `lastRunAt`. The feed and the writer SHALL NOT have vitals entries
+(feed health lives in `feed`; `writtenAt` is the writer's pulse).
 <!-- implements FR7 of add-serve-observability -->
 
 #### Scenario: Heartbeat death is a field

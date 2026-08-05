@@ -1,0 +1,54 @@
+{
+  "version" : 1,
+  "writtenAt" : "2026-08-02T09:00:00Z",
+  "intervalSeconds" : 30,
+  "instance" : {
+    "instanceId" : "gnomish-factory-x7k2q1",
+    "host" : "worker-1.internal",
+    "factoryVersion" : "0.1.0-SNAPSHOT"
+  },
+  "lifecycle" : {
+    "state" : "running",
+    "reason" : null
+  },
+  "feed" : {
+    "state" : "filling",
+    "since" : "2026-08-02T08:59:50Z",
+    "lastPollAt" : "2026-08-02T08:59:55Z",
+    "openFronts" : 2,
+    "wipLimit" : 3
+  },
+  "slots" : {
+    "capacity" : 3,
+    "entries" : [ {
+      "taskId" : "task-42",
+      "stage" : "implement",
+      "attempt" : 1,
+      "since" : "2026-08-02T08:45:00Z"
+    }, {
+      "taskId" : "task-43",
+      "stage" : null,
+      "attempt" : 0,
+      "since" : "2026-08-02T08:50:00Z"
+    } ]
+  },
+  "vitals" : {
+    "heartbeat" : {
+      "state" : "running",
+      "lastTickAt" : "2026-08-02T08:59:58Z",
+      "heldClaims" : 2
+    },
+    "reaper" : {
+      "lastRunAt" : "2026-08-02T08:55:00Z",
+      "restartCount" : 0,
+      "intervalSeconds" : 300
+    },
+    "janitor" : {
+      "lastRunAt" : "2026-08-02T08:00:00Z"
+    }
+  },
+  "tracker" : {
+    "lastSuccessAt" : "2026-08-02T08:59:55Z",
+    "consecutiveFailures" : 0
+  }
+}

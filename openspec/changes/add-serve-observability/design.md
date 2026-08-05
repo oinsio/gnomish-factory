@@ -52,9 +52,12 @@ per-task detail (canon = task branch / `gnomish status <id>`), since-start
 counters (ledger territory). Vitals follow the thread inventory: heartbeat
 (three-valued: `idle`/`running`/`died` — claim-heartbeat's designed
 degradation death path, documented in its Risks section, becomes a field, not
-just an ERROR line); reaper (`lastRunAt`, `restartCount` — after
-`fix-reaper-idle-liveness` it is a standing supervised thread with unbounded
-restarts whose only other surface is ERROR logs); janitor (`lastRunAt`). Feed
+just an ERROR line); reaper (`lastRunAt`, `restartCount`, `intervalSeconds` —
+after `fix-reaper-idle-liveness` it is a standing supervised thread with
+unbounded restarts whose only other surface is ERROR logs; `intervalSeconds`
+carries its tick cadence so a reader can judge `lastRunAt` staleness against
+the reaper's own cadence, not the faster snapshot-write cadence — M1); janitor
+(`lastRunAt`). Feed
 has no vitals entry — the `feed` section fully describes its health and is
 only readable together with its state (`lastPollAt` freshness is mandatory in
 Filling/Idle, meaningless in Full). The writer is its own vital: `writtenAt`
@@ -121,8 +124,10 @@ invariants and sends an outbound ping (healthchecks style); a missed ping
 alerts. Documented rules (UX3): stale `writtenAt` at `running` → daemon dead;
 occupied slots with heartbeat not `running` → claims dying under a live
 daemon; long `idleBlocked` → escalations not being handled; growing
-`consecutiveFailures` → tracker outage; stale `reaper.lastRunAt` or growing
-`restartCount` → reaping degraded, stale claims will linger; `heldClaims ≠
+`consecutiveFailures` → tracker outage; `reaper.lastRunAt` older than
+`k × reaper.intervalSeconds` (the reaper's own cadence, not the snapshot-write
+interval) or growing `restartCount` → reaping degraded, stale claims will
+linger; `heldClaims ≠
 slots.entries.length` beyond seconds → desync. *Rationale:* outbound-only
 respects NG3/G4. *Rejected:* alerting in the daemon (delivery config
 in-process, NG6).
@@ -142,12 +147,13 @@ therefore lag up to `intervalSeconds`; occupancy itself never lags
 triggers (write amplification for a purely informational field).
 
 **D12 — Tracker health counters wrap the port, not the feed.**
-`lastSuccessAt`/`consecutiveFailures` are updated by a thin decorator over
-the `Tracker` port shared by every daemon caller — feed, heartbeat, reaper —
-not at the feed's call boundary alone. In Full the feed legally stops
-polling; heartbeat and reaper keep calling, so an outage under saturation
-still moves the counters — exactly when D9's tracker rule must fire.
-*Rejected:* feed-boundary counters (blind in Full, understating outages).
+`lastSuccessAt`/`consecutiveFailures` (FR8) are updated by a thin decorator
+over the `Tracker` port shared by every daemon caller — feed, heartbeat,
+reaper — not at the feed's call boundary alone. In Full the feed legally
+stops polling; heartbeat and reaper keep calling, so an outage under
+saturation still moves the counters — exactly when D9's tracker rule must
+fire. *Rejected:* feed-boundary counters (blind in Full, understating
+outages).
 
 ## Risks / Trade-offs
 

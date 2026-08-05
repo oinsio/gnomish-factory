@@ -55,6 +55,11 @@ final class RestartBackoff {
         return restartCount.incrementAndGet();
     }
 
+    /** The lifetime restart count so far, without incrementing (task 2.5's vitals reader). */
+    int restartCount() {
+        return restartCount.get();
+    }
+
     /** Resets the consecutive-failure count: a respawned worker completed one full clean tick. */
     void markCleanTick() {
         consecutiveFailures.set(0);

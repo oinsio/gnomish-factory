@@ -33,6 +33,9 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     @TempDir
     Path worktreesRoot
 
+    @TempDir
+    Path homeDir
+
     private TakeCommand newTakeCommand() {
         TakeCommandFactory.of(
                 newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, 'taskId',
@@ -42,8 +45,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
 
     private ServeCommand newServeCommand() {
         new ServeCommand(
-                newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, 'taskId',
-                testProperties(), new ServeProperties(0, null, null, null), Clock.systemUTC(),
+                newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, homeDir, 'taskId',
+                testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [:], TrackerValidatorStub.acceptingGithub(),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter)
     }
@@ -184,8 +187,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def serveDispatch = new SubcommandDispatch(
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 new ServeCommand(
-                newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, 'taskId',
-                testProperties(), new ServeProperties(0, null, null, null), Clock.systemUTC(),
+                newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, homeDir, 'taskId',
+                testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [github: factoryReturning(Stub(Tracker))],
                 TrackerValidatorStub.acceptingGithub(),
                 { FeedAutomaton automaton -> starterInvoked.set(true) } as FeedAutomatonStarter))

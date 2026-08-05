@@ -131,7 +131,7 @@ tracker:
         tracker.claim(refA, _) >> { TaskRef r, String instanceId -> claimedByA = instanceId; new ClaimResult.Acquired() }
         tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -157,7 +157,7 @@ tracker:
         }
         tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -205,7 +205,7 @@ tracker:
         // fixture) — a short ref like '42' reaches it, so the ref fails for a reason outside this
         // fixture's control, exactly the "tool could not operate" shape.
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
         def appender = attachAppender()
 
         when:
@@ -242,7 +242,7 @@ tracker:
         }
         tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
         def appender = attachAppender()
 
         when:

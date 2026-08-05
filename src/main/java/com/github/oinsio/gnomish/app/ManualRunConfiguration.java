@@ -87,4 +87,15 @@ public class ManualRunConfiguration {
     public Path worktreesRoot() {
         return Path.of(System.getProperty("user.home"), ".gnomish", "worktrees");
     }
+
+    /**
+     * The user's home directory, injected rather than read inline by {@code serve}'s wiring (task
+     * 5.1 of add-serve-observability) so {@link ObservabilityAssembly} — and its callers' tests —
+     * can substitute a temp directory instead of touching the real {@code ~/.gnomish/serve/}
+     * (FR9, design D2).
+     */
+    @Bean
+    public Path homeDir() {
+        return Path.of(System.getProperty("user.home"));
+    }
 }

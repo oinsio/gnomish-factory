@@ -142,7 +142,7 @@ tracker:
         def z = new TaskRef('PROJ-Z')
         harness.seedWorkingWithClaim(tracker, z, 'other-instance')
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null))
 
         when: 'take runs X on another thread, in flight for ~2s'
         Future<?> run = executor.submit({ command.run(args('take', x.id(), "--dir=$projectDir")) } as Callable)
@@ -185,7 +185,7 @@ tracker:
         harness.seed(x1, new TaskSnapshot(x1.id(), 'Add widgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         harness.seed(x2, new TaskSnapshot(x2.id(), 'Add gadgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null))
 
         when: 'the batch runs both refs sequentially, on another thread'
         Future<?> run = executor.submit({ command.run(args('take', x1.id(), x2.id(), "--dir=$projectDir")) } as Callable)

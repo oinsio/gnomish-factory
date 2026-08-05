@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
-import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
@@ -44,21 +43,22 @@ import org.springframework.boot.ApplicationArguments;
  * assembly ONCE, before {@link TakeSlotRunner} is built, since the runner is reused for the
  * daemon's whole lifetime unlike {@link TakeCommand}'s per-invocation join. One {@link
  * TakeSlotRunner}, one {@link SlotLedger}, one {@link FeedAutomaton}, and one {@link ServeShutdown}
- * (sharing the SAME {@link SlotLedger}/{@link ClaimLossFlag}) are then assembled, and {@link
- * ServeShutdownWiring} drives either the drain path (FR10, NFR-O2, M3) or the ordinary forever
- * loop (FR11, design D9) — see its Javadoc for the full SIGTERM/shutdown-hook sequence.
+ * are then assembled, alongside the {@link ObservabilityWiring} {@link ObservabilityAssembly}
+ * builds (FR1, FR4, FR9, FR12 of add-serve-observability) — snapshot writer + ledger appender,
+ * started beside the worktree janitor and stopped by {@link ServeShutdownWiring}, which also
+ * drives either the drain path (FR10, NFR-O2, M3) or the forever loop (FR11, design D9) — see its
+ * Javadoc for the full sequence. Not a Spring {@code @Component}: {@link ManualRunRunner}
+ * constructs it imperatively, exactly like {@link TakeCommand}.
  *
- * <p>Not a Spring {@code @Component}: {@link ManualRunRunner} constructs it imperatively, exactly
- * like {@link TakeCommand}.
- *
- * <p>Implements FR2, FR4, FR10, FR12, FR13, NFR-O2, M3, D3, D7 of add-factory-serve. Implements
- * FR11, D9, M3 of add-factory-serve.
+ * <p>Implements FR2, FR4, FR10, FR11, FR12, FR13, NFR-O2, M3, D3, D7, D9 of add-factory-serve.
+ * Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of add-serve-observability.
  */
 final class ServeCommand {
 
     private final ServeArgumentsParser argumentsParser = new ServeArgumentsParser();
     private final ManualRunAssembly assembly;
     private final Path worktreesRoot;
+    private final Path homeDir;
     private final String taskIdMdcKey;
     private final FactoryProperties factoryProperties;
     private final ServeProperties serveProperties;
@@ -67,7 +67,6 @@ final class ServeCommand {
     private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
     private final Map<String, TrackerSubsectionValidator> trackerValidatorRegistry;
     private final FeedAutomatonStarter starter;
-
     /**
      * @param starter drives the assembled {@link FeedAutomaton} (task 5.1's test seam — see its
      *     Javadoc); production wiring passes {@link FeedAutomaton#run} itself
@@ -75,6 +74,7 @@ final class ServeCommand {
     ServeCommand(
             ManualRunAssembly assembly,
             Path worktreesRoot,
+            Path homeDir,
             String taskIdMdcKey,
             FactoryProperties factoryProperties,
             ServeProperties serveProperties,
@@ -85,6 +85,7 @@ final class ServeCommand {
             FeedAutomatonStarter starter) {
         this.assembly = assembly;
         this.worktreesRoot = worktreesRoot;
+        this.homeDir = homeDir;
         this.taskIdMdcKey = taskIdMdcKey;
         this.factoryProperties = factoryProperties;
         this.serveProperties = serveProperties;
@@ -96,9 +97,8 @@ final class ServeCommand {
     }
 
     /**
-     * Runs one {@code gnomish serve} invocation up to and through the startup smoke test, then
-     * hands off to {@link ServeShutdownWiring} for either the drain path or the ordinary forever
-     * loop — see the class Javadoc for the full SIGTERM/shutdown-hook sequence (FR11, design D9).
+     * Runs one {@code gnomish serve} invocation up to the startup smoke test, then hands off to
+     * {@link ServeShutdownWiring} — see the class Javadoc for the full wiring/shutdown sequence.
      *
      * @param args the raw application arguments, including the leading {@code serve} token
      * @throws UsageException if the flags are malformed or the project has no {@code tracker:}
@@ -116,56 +116,44 @@ final class ServeCommand {
         InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
         TrackerAdapterFactory factory = TakeCommandSupport.resolveFactory(trackerConfig, trackerAdapterRegistry);
 
-        Tracker tracker = provisionTracker(factory, trackerConfig, instanceId);
-
-        // FR13: one heartbeat/reaper over this run's tracker+config, shared by every slot — its
-        // progress listener must join the assembly BEFORE TakeSlotRunner is built, since the runner
-        // is reused for the daemon's whole lifetime (unlike TakeCommand's per-invocation join).
-        TakeHeartbeat heartbeat = TakeHeartbeat.forRun(tracker, trackerConfig, new ThreadSleeper());
-        ManualRunAssembly serveAssembly = assembly.withExtraListener(heartbeat.progress());
-
-        SlotLedger slotLedger = new SlotLedger(effectiveSlots);
-        TakeSlotRunner slotRunner = ServeAssembly.slotRunner(
+        // FR12, D7: the startup smoke test stays here (the command owns the exit-code failure);
+        // ServeAssembly.runtime wires everything else off the live tracker (process-invariants.md).
+        Tracker liveTracker = provisionTracker(factory, trackerConfig, instanceId);
+        ServeRuntime runtime = ServeRuntimeAssembly.assemble(
                 serveArguments,
                 worktreesRoot,
+                homeDir,
                 taskIdMdcKey,
                 definition,
                 trackerConfig,
                 factory,
-                tracker,
+                liveTracker,
                 instanceId,
-                serveAssembly,
-                heartbeat,
-                clock);
-        FeedAutomaton automaton = ServeAssembly.feedAutomaton(
+                effectiveSlots,
+                assembly,
                 factoryProperties,
                 serveProperties,
-                feedClock,
-                trackerConfig,
-                tracker,
-                instanceId,
-                slotLedger,
-                slotRunner);
-        ServeShutdown shutdown =
-                ServeAssembly.shutdown(slotLedger, heartbeat.flag(), serveProperties, heartbeat.standingReaper());
-        ServeAssembly.worktreeJanitor(serveArguments, worktreesRoot, serveProperties, slotLedger)
-                .start();
+                clock,
+                feedClock);
+
+        runtime.worktreeJanitor().start();
         // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs for the daemon's whole
         // lifetime, exactly like WorktreeJanitor above — ServeShutdown.shutdown() stops it (FR4).
-        heartbeat.standingReaper().start();
+        runtime.standingReaper().start();
+        runtime.observability().start(); // FR1, FR12: started beside the worktree janitor
 
         if (serveArguments.drain()) {
-            ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown);
+            ServeShutdownWiring.runDrain(
+                    runtime.slotRunner(), runtime.automaton(), runtime.shutdown(), runtime.observability());
             return;
         }
-        ServeShutdownWiring.runForever(automaton, shutdown, starter);
+        ServeShutdownWiring.runForever(runtime.automaton(), runtime.shutdown(), starter, runtime.observability());
     }
 
     /**
-     * FR12, design D7: the startup label-provisioning smoke test. {@code factory.create} is the
-     * same call {@link TakeCommand} makes — for the GitHub adapter it provisions the four gnomish
-     * labels on the configured repo before returning, so an unreachable repo or a bad token
-     * surfaces here, before any task is claimed.
+     * FR12, design D7: the startup label-provisioning smoke test — the same {@code factory.create}
+     * call {@link TakeCommand} makes, so an unreachable repo or bad token surfaces here, before any
+     * task is claimed.
      */
     private Tracker provisionTracker(
             TrackerAdapterFactory factory, TrackerConfig trackerConfig, InstanceId instanceId) {
@@ -178,7 +166,7 @@ final class ServeCommand {
         }
     }
 
-    /** Names the binding in the startup-failure message: {@code type} plus {@code repo}, if configured. */
+    /** Names the binding in the failure message: {@code type} plus {@code repo}, if configured. */
     private static String bindingDescription(TrackerConfig trackerConfig) {
         Object repo = trackerConfig.subsection().get("repo");
         return repo == null ? "'" + trackerConfig.type() + "'" : "'" + trackerConfig.type() + "' (" + repo + ")";

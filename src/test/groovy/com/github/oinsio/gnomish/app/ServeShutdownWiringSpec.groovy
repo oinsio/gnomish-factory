@@ -21,10 +21,31 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.serveobservability.FeedPhase
+import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
+import com.github.oinsio.gnomish.serveobservability.HeartbeatState
+import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
+import com.github.oinsio.gnomish.serveobservability.InstanceInfo
+import com.github.oinsio.gnomish.serveobservability.JanitorVital
+import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler
+import com.github.oinsio.gnomish.serveobservability.ReaperVital
+import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
+import com.github.oinsio.gnomish.serveobservability.Snapshot
+import com.github.oinsio.gnomish.serveobservability.TrackerHealth
+import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
+import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
+import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
+import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
+import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
+import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
+import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
+import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -95,8 +116,62 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // never-started StandingReaper is a harmless collaborator here.
     private static ServeShutdown newShutdown(RecordingKiller killer) {
         def inertReaper = new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier)
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier, new SystemClock())
         new ServeShutdown(new SlotLedger(1), new ClaimLossFlag(), Duration.ofMillis(10), killer, inertReaper)
+    }
+
+    // FR1, FR4, FR12 of add-serve-observability (task 5.1): a real ObservabilityWiring, built
+    // exactly like ObservabilityWiringSpec's own fixture, so runDrain/runForever's new observability
+    // arguments exercise genuine collaborators rather than a mock.
+    private ObservabilityWiring newObservability() {
+        def clock = Clock.systemUTC()
+        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
+        def lifecycleTracker = new com.github.oinsio.gnomish.app.serve.LifecycleStateTracker(clock.instant())
+        def snapshotWriter = new SnapshotWriter(
+                tempDir.resolve('snapshot.json'),
+                { -> fixtureSnapshot(lifecycleTracker) },
+                new SnapshotJsonMapper(), Duration.ofSeconds(30), clock, 0)
+        def appender = new RotatingLedgerAppender(
+                new LedgerAppender(tempDir.resolve('placeholder'), new LedgerJsonMapper()), tempDir, 'gnomish', clock)
+        def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
+        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
+        snapshotWriter.start()
+        new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, instance, clock)
+    }
+
+    // Task 6.3: same as newObservability(), but the lifecycleTracker's DirtyNotifier records every
+    // state it actually transitioned THROUGH, in order, into recordedStates — since
+    // LifecycleStateTracker#stop can jump straight from RUNNING to STOPPED with no validation, the
+    // final view() alone cannot prove an intermediate beginDraining()/beginStopping() call actually
+    // ran; the recorded sequence can.
+    private ObservabilityWiring newObservability(List<com.github.oinsio.gnomish.app.serve.DaemonLifecycleState> recordedStates) {
+        def clock = Clock.systemUTC()
+        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
+        def lifecycleTracker
+        def notifier = { -> recordedStates << lifecycleTracker.view().state() } as com.github.oinsio.gnomish.app.serve.DirtyNotifier
+        lifecycleTracker = new com.github.oinsio.gnomish.app.serve.LifecycleStateTracker(clock.instant(), notifier)
+        def snapshotWriter = new SnapshotWriter(
+                tempDir.resolve('snapshot-recording.json'),
+                { -> fixtureSnapshot(lifecycleTracker) },
+                new SnapshotJsonMapper(), Duration.ofSeconds(30), clock, 0)
+        def appender = new RotatingLedgerAppender(
+                new LedgerAppender(tempDir.resolve('placeholder-recording'), new LedgerJsonMapper()),
+                tempDir, 'gnomish-recording', clock)
+        def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
+        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
+        snapshotWriter.start()
+        new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, instance, clock)
+    }
+
+    private static Snapshot fixtureSnapshot(com.github.oinsio.gnomish.app.serve.LifecycleStateTracker tracker) {
+        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
+        def feed = new FeedSnapshot(FeedPhase.IDLE_EMPTY, Instant.EPOCH, Instant.EPOCH, 0, 1)
+        def slots = new SlotsSnapshot(1, [])
+        def vitals = new VitalsSnapshot(
+                new HeartbeatVital(HeartbeatState.RUNNING, Instant.EPOCH, 0),
+                new ReaperVital(Instant.EPOCH, 0, 300L),
+                new JanitorVital(Instant.EPOCH))
+        new Snapshot(1, Instant.EPOCH, 0L, instance, LifecycleSnapshotAssembler.assemble(tracker), feed, slots, vitals, new TrackerHealth(null, 0))
     }
 
     // FR10, FR11, NFR-O2, D9: proves the three void calls PIT found survived on runDrain's own
@@ -111,7 +186,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
 
         when:
-        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, registrar)
+        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, newObservability(), registrar)
 
         then: 'a fresh drain report was attached to the slot runner before draining (FR10)'
         slotRunner.@drainReport != null
@@ -123,6 +198,104 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         and: 'the shutdown hook was registered, named as production expects (FR11, D9)'
         capturedHook != null
         capturedHook.name == ServeShutdownWiring.SHUTDOWN_HOOK_THREAD_NAME
+    }
+
+    // FR4, FR12, FR13 of add-serve-observability (task 5.1): runDrain drives the SAME observability
+    // wiring through draining -> stopping -> stopped(drainComplete), and writes the drain run's
+    // runSummary line — proving the ledger writer is genuinely reached, not merely constructed.
+    def "runDrain writes a runSummary line and a stopped(drainComplete) lifecycle line"() {
+        given:
+        def slotRunner = newSlotRunner()
+        def automaton = newAutomaton(slotRunner)
+        def shutdown = newShutdown(new RecordingKiller())
+        def observability = newObservability()
+        tracker.listReady(_) >> []
+        tracker.listOpen() >> []
+
+        when:
+        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, observability, { Thread hook -> })
+
+        then: 'the lifecycle tracker landed on stopped(drainComplete) — not left mid-sequence'
+        observability.@lifecycleTracker.view().state() == com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED
+        observability.@lifecycleTracker.view().reason() == 'drainComplete'
+
+        and: 'a runSummary line and a stopped lifecycle line both landed in the ledger'
+        def ledgerFile = com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile(
+                tempDir, 'gnomish', java.time.LocalDate.now(ZoneOffset.UTC))
+        def lines = Files.readString(ledgerFile)
+        lines.contains('"type":"runSummary"')
+        lines.contains('"event":"stopped"')
+        lines.contains('"reason":"drainComplete"')
+    }
+
+    // Task 6.3, FR4: runDrain's own body must actually MOVE the daemon through DRAINING then
+    // STOPPING before finalizing — not just land on STOPPED (which LifecycleStateTracker#stop can
+    // reach directly from RUNNING with no validation, so the terminal state alone cannot prove the
+    // intermediate calls ran). The recording observability captures every state the tracker
+    // actually passed through, in order.
+    def "runDrain moves the daemon through DRAINING then STOPPING before finalizing to STOPPED"() {
+        given:
+        def slotRunner = newSlotRunner()
+        def automaton = newAutomaton(slotRunner)
+        def shutdown = newShutdown(new RecordingKiller())
+        def recordedStates = []
+        def observability = newObservability(recordedStates)
+        tracker.listReady(_) >> []
+        tracker.listOpen() >> []
+
+        when: 'the hook is registered but never fired — only runDrain own direct calls can act'
+        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, observability, { Thread hook -> })
+
+        then:
+        recordedStates == [
+            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.DRAINING,
+            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPING,
+            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED,
+        ]
+    }
+
+    // Task 6.3, FR1, FR13: proves attachRunSummaryAccumulator really attaches a non-null
+    // accumulator to the slot runner — the class Javadoc's own PIT survivor.
+    def "runDrain attaches a RunSummaryAccumulator to the slot runner"() {
+        given:
+        def slotRunner = newSlotRunner()
+        def automaton = newAutomaton(slotRunner)
+        def shutdown = newShutdown(new RecordingKiller())
+        tracker.listReady(_) >> []
+        tracker.listOpen() >> []
+
+        when:
+        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, newObservability(), { Thread hook -> })
+
+        then:
+        slotRunner.@runSummaryAccumulator != null
+    }
+
+    // Task 6.3, FR4, D9, FR12/FR13/UX4: proves the hook's OWN observability.finalizeStopped call
+    // (not just runDrain's main-body call after it) genuinely finalizes — by making the hook fire
+    // BEFORE the main body reaches its own calls (a SIGTERM landing before drain completes). The
+    // drainCompleted flag is still clear, so the hook finalizes with reason "sigterm", not
+    // "drainComplete" — an interrupted drain is not a completed one (П1). STOPPED is terminal, so
+    // the main body's later beginDraining()/beginStopping() are no-ops and cannot drag the final
+    // snapshot back to a non-terminal state (П2, FR4). Both assertions are possible ONLY if the
+    // hook's finalizeStopped call actually ran first: were it removed (the mutant), the main body
+    // would finalize normally to stopped("drainComplete").
+    def "runDrain's shutdown hook finalizes first as stopped(sigterm) when SIGTERM lands before drain completes"() {
+        given:
+        def slotRunner = newSlotRunner()
+        def automaton = newAutomaton(slotRunner)
+        def shutdown = newShutdown(new RecordingKiller())
+        def observability = newObservability()
+        ServeShutdownWiring.ShutdownHookRegistrar immediateRegistrar = { Thread hook -> hook.run() }
+        tracker.listReady(_) >> []
+        tracker.listOpen() >> []
+
+        when:
+        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, observability, immediateRegistrar)
+
+        then: 'the hook won the finalize with reason sigterm, and STOPPED is terminal — not dragged back'
+        observability.@lifecycleTracker.view().state() == com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED
+        observability.@lifecycleTracker.view().reason() == 'sigterm'
     }
 
     // FR11, D9: drain runs on the calling thread — there is no feed thread to interrupt — so the
@@ -139,7 +312,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         tracker.listOpen() >> []
 
         when:
-        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, registrar)
+        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, newObservability(), registrar)
         capturedHook.run()
 
         then: 'the real ServeShutdown sequence ran to completion (proves shutdown(null) was called)'
@@ -158,7 +331,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         FeedAutomatonStarter starter = { FeedAutomaton a -> }
 
         when:
-        ServeShutdownWiring.runForever(automaton, shutdown, starter, registrar)
+        ServeShutdownWiring.runForever(automaton, shutdown, starter, newObservability(), registrar)
 
         then: 'the shutdown hook was registered, named as production expects (FR11, D9)'
         capturedHook != null
@@ -177,11 +350,47 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         FeedAutomatonStarter starter = { FeedAutomaton a -> Thread.sleep(50) }
 
         when:
-        ServeShutdownWiring.runForever(automaton, shutdown, starter, registrar)
+        ServeShutdownWiring.runForever(automaton, shutdown, starter, newObservability(), registrar)
         capturedHook.run()
 
         then: 'the real ServeShutdown sequence ran to completion (proves shutdown(feedThread) was called)'
         killer.calls.get() == 1
+    }
+
+    // FR4, FR12 of add-serve-observability (task 5.1): the SIGTERM hook drives observability
+    // through draining -> stopping -> stopped(sigterm) and appends the stopped ledger line —
+    // exactly the sequence the class Javadoc describes for the forever-loop path.
+    def "runForever's shutdown hook moves observability through draining, stopping, and stopped(sigterm)"() {
+        given:
+        def slotRunner = newSlotRunner()
+        def automaton = newAutomaton(slotRunner)
+        def shutdown = newShutdown(new RecordingKiller())
+        def recordedStates = []
+        def observability = newObservability(recordedStates)
+        Thread capturedHook = null
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
+        FeedAutomatonStarter starter = { FeedAutomaton a -> Thread.sleep(50) }
+
+        when:
+        ServeShutdownWiring.runForever(automaton, shutdown, starter, observability, registrar)
+        capturedHook.run()
+
+        then:
+        observability.@lifecycleTracker.view().state() == com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED
+        observability.@lifecycleTracker.view().reason() == 'sigterm'
+
+        and: 'the hook actually MOVED the tracker through draining then stopping (task 6.3) — not ' +
+        'just landed on stopped, which #stop() can reach directly from any prior state'
+        recordedStates == [
+            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.DRAINING,
+            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPING,
+            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED,
+        ]
+
+        and:
+        def ledgerFile = com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile(
+                tempDir, 'gnomish-recording', java.time.LocalDate.now(ZoneOffset.UTC))
+        Files.readString(ledgerFile).contains('"reason":"sigterm"')
     }
 
     // FR11, D9: runForever must not return until the feed thread has actually finished (kills the
@@ -200,7 +409,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         }
 
         when:
-        ServeShutdownWiring.runForever(automaton, shutdown, starter, registrar)
+        ServeShutdownWiring.runForever(automaton, shutdown, starter, newObservability(), registrar)
 
         then: 'the starter had already completed by the time runForever returned'
         starterFinished.get()
@@ -230,7 +439,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         }
 
         when: 'runForever is driven on its own thread, since it blocks joining the feed thread'
-        def runnerThread = new Thread({ ServeShutdownWiring.runForever(automaton, shutdown, starter, registrar) })
+        def runnerThread = new Thread({ ServeShutdownWiring.runForever(automaton, shutdown, starter, newObservability(), registrar) })
         runnerThread.start()
 
         and: 'wait until the feed thread is actually blocked inside the starter'

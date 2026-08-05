@@ -24,14 +24,11 @@ import java.time.Clock;
 import java.util.Random;
 
 /**
- * Builds the per-invocation collaborators {@link ServeCommand#run} assembles once the tracker
- * is live: the reused-for-the-daemon's-whole-lifetime {@link TakeSlotRunner} (FR13's shared
- * {@code ClaimBeat}/{@code ClaimLossFlag} wiring), the {@link FeedAutomaton} that drives it, and
- * the {@link ServeShutdown} SIGTERM sequence (FR11, D9) that shares the same {@link SlotLedger}
- * and {@link ClaimLossFlag}. Extracted purely to keep {@link ServeCommand} within the file-size
- * limit (process-invariants.md) — holds no state of its own.
+ * The leaf builders {@link ServeRuntimeAssembly} composes into the {@code serve} daemon runtime,
+ * split out so both stay within the file-size limit (process-invariants.md) and so the specs can
+ * drive each builder in isolation. Holds no state of its own.
  *
- * <p>Implements FR2, FR13 of add-factory-serve. Implements FR11, D9 of add-factory-serve.
+ * <p>Implements FR2, FR11, FR13, D9 of add-factory-serve.
  */
 final class ServeAssembly {
 
@@ -74,7 +71,8 @@ final class ServeAssembly {
             Tracker tracker,
             InstanceId instanceId,
             SlotLedger slotLedger,
-            TakeSlotRunner slotRunner) {
+            TakeSlotRunner slotRunner,
+            com.github.oinsio.gnomish.app.serve.DirtyNotifier dirtyNotifier) {
         FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
         return new FeedAutomaton(
                 tracker,
@@ -87,14 +85,14 @@ final class ServeAssembly {
                 trackerProperties.abortBackoffCap(),
                 serveProperties.idlePollInterval(),
                 trackerConfig.wipLimit(),
-                new Random());
+                new Random(),
+                dirtyNotifier);
     }
 
     /**
      * FR11, D9: the SIGTERM shutdown coordinator, sharing {@code slotLedger} and {@code
-     * claimLossFlag} with the {@link FeedAutomaton}/{@link TakeSlotRunner} this invocation already
-     * assembled, so flagging a slot's claim here reacts at the SAME round-boundary check every
-     * other claim-loss reaches.
+     * claimLossFlag} with the {@link FeedAutomaton}/{@link TakeSlotRunner}, so flagging a slot's
+     * claim here reacts at the SAME round-boundary check every other claim-loss reaches.
      */
     static ServeShutdown shutdown(
             SlotLedger slotLedger,
@@ -107,9 +105,8 @@ final class ServeAssembly {
 
     /**
      * FR14, D10: the worktree janitor, wired over a fresh {@link GitProcessRunner} and disposing
-     * through {@link WorktreeEnvironmentDisposal} (a host worktree, today's only realization of
-     * {@code TaskEnvironmentDisposal}). Held tasks are read fresh from {@code slotLedger} on every
-     * tick, so a task claimed after the janitor starts is still protected.
+     * through {@link WorktreeEnvironmentDisposal}. Held tasks are read fresh from {@code slotLedger}
+     * every tick, so a task claimed after the janitor starts is still protected.
      */
     static WorktreeJanitor worktreeJanitor(
             ServeArguments serveArguments, Path worktreesRoot, ServeProperties serveProperties, SlotLedger slotLedger) {

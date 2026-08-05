@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app.serve
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.engine.port.Clock
 import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -371,5 +373,103 @@ class SlotLedgerSpec extends Specification {
 
         cleanup:
         ledger.release(A)
+    }
+
+    // FR6, FR11: occupiedEntries is empty on a fresh ledger.
+    def "occupiedEntries is empty on a fresh ledger"() {
+        expect:
+        new SlotLedger(2).occupiedEntries().isEmpty()
+    }
+
+    // FR6, FR11: assign captures 'since' from the injected clock at assignment time, and
+    //     occupiedEntries exposes it alongside the occupying task's ref — the pointer FR6's
+    //     slots section and FR11's taskOutcome.startedAt both read.
+    def "assign captures since from the injected clock and occupiedEntries exposes it"() {
+        given:
+        def fixedInstant = Instant.parse('2026-08-03T10:15:30Z')
+        def clock = Stub(Clock) { now() >> fixedInstant }
+        def ledger = new SlotLedger(2, clock)
+
+        when:
+        ledger.acquire()
+        ledger.assign(A)
+
+        then:
+        ledger.occupiedEntries() == [
+            new OccupiedSlot(A, fixedInstant)
+        ] as Set
+    }
+
+    // FR6, FR11: each assign() reads the clock again, so two slots assigned at different
+    //     instants carry their own 'since' rather than a ledger-wide timestamp.
+    def "each assigned slot carries its own since from the moment it was assigned"() {
+        given:
+        def first = Instant.parse('2026-08-03T10:00:00Z')
+        def second = Instant.parse('2026-08-03T10:05:00Z')
+        def clock = Mock(Clock) {
+            now() >>> [first, second]
+        }
+        def ledger = new SlotLedger(2, clock)
+
+        when:
+        ledger.acquire()
+        ledger.assign(A)
+        ledger.acquire()
+        ledger.assign(B)
+
+        then:
+        ledger.occupiedEntries() == [
+            new OccupiedSlot(A, first),
+            new OccupiedSlot(B, second)
+        ] as Set
+
+        cleanup:
+        ledger.release(A)
+        ledger.release(B)
+    }
+
+    // FR6, FR11: release clears the entry, and occupiedEntries is an independent snapshot,
+    //     mirroring occupiedRefs' snapshot contract.
+    def "occupiedEntries reflects release and is an independent snapshot"() {
+        given:
+        def ledger = new SlotLedger(2)
+        ledger.acquire()
+        ledger.assign(A)
+
+        when:
+        def snapshotWithOneOccupied = ledger.occupiedEntries()
+        ledger.acquire()
+        ledger.assign(B)
+
+        then: 'the earlier snapshot is untouched by the later assign'
+        snapshotWithOneOccupied.collect { it.taskId() } == [A]
+
+        when:
+        ledger.release(A)
+
+        then:
+        ledger.occupiedEntries().collect { it.taskId() } == [B]
+
+        cleanup:
+        ledger.release(B)
+    }
+
+    // FR6, FR11: the single-arg constructor (used by every existing caller) still assigns a
+    //     real-time 'since' via a default system clock.
+    def "the single-arg constructor assigns since from the system clock"() {
+        given:
+        def before = Instant.now()
+        def ledger = new SlotLedger(1)
+
+        when:
+        ledger.acquire()
+        ledger.assign(A)
+        def after = Instant.now()
+
+        then:
+        def entry = ledger.occupiedEntries().find { it.taskId() == A }
+        entry != null
+        !entry.since().isBefore(before)
+        !entry.since().isAfter(after)
     }
 }
