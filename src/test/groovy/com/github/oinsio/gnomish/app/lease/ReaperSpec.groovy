@@ -40,7 +40,7 @@ class ReaperSpec extends Specification {
     private final Reaper reaper = new Reaper(tracker, memory)
 
     private static OpenTask working(String ref, ClaimVersion version) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version)
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, 'fixture title')
     }
 
     private static ClaimVersion version(String marker = 'm1', String updatedAt = ANCIENT.toString()) {

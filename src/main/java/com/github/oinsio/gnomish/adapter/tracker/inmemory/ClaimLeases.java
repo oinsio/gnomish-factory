@@ -34,7 +34,11 @@ final class ClaimLeases {
         TrackerTaskState state = task.state();
         if (state instanceof TrackerTaskState.Working || state instanceof TrackerTaskState.AwaitingHuman) {
             ClaimMarker marker = task.claimMarker();
-            return new OpenTask(ref, state, marker == null ? null : marker.version());
+            return new OpenTask(
+                    ref,
+                    state,
+                    marker == null ? null : marker.version(),
+                    task.snapshot().title());
         }
         return null;
     }

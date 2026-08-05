@@ -66,6 +66,7 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
                 homeDir,
                 new StatusCommand(worktreesRoot),
                 new UsageCommand(),
+                new BoardCommand(Clock.systemUTC(), testProperties(), [:], [:]),
                 Clock.systemUTC(),
                 [:],
                 [:],

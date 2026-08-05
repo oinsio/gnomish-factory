@@ -41,7 +41,7 @@ class StandingReaperSpec extends Specification {
     new StandingReaper(reaper, { Duration d -> }, INTERVAL, { [] }, new SystemClock())
 
     private static OpenTask working(String ref, ClaimVersion version) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('other-instance'), version)
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('other-instance'), version, 'fixture title')
     }
 
     private static ClaimVersion version() {

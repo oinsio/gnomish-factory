@@ -59,7 +59,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
     }
 
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none(), boolean returned = false) {
-        new ReadyTask(new TaskRef(taskId), facts, returned, false)
+        new ReadyTask(new TaskRef(taskId), facts, returned, false, 'fixture title')
     }
 
     private static TrackerTask trackerTask(String taskId) {
@@ -261,7 +261,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
     def "a finished entry observed in the feed is declined and never claimed"() {
         given:
         tracker.listReady(_) >> [
-            new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, true),
+            new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, true, 'fixture title'),
             ready('PROJ-2')
         ]
         tracker.fetchTask(new TaskRef('PROJ-2')) >> trackerTask('PROJ-2')

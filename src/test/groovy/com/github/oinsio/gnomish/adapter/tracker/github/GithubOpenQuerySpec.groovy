@@ -213,6 +213,33 @@ class GithubOpenQuerySpec extends Specification {
         result.isEmpty()
     }
 
+    // FR7, NFR-P1, M2 of add-board-command: the title rides the SAME List Issues response body
+    //     that named the issue number, for both open states — no issue-detail request is added
+    def "carries each open task's title from the List Issues response, with no extra request"() {
+        given:
+        stubWorkingFeed('[{"number":7,"title":"Fix the widget"}]')
+        stubNeedsHumanFeed('[{"number":9,"title":"Escalated widget"}]')
+        stubComments(7, claimComment(501L, 'gnomish-factory-a1', '2026-07-23T10:00:00Z'))
+        stubComments(9, '''
+                [
+                  {"id":1,"updated_at":"2026-07-23T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 needs a decision"}
+                ]
+                ''')
+
+        when:
+        def result = newOpenQuery().listOpen()
+
+        then:
+        result.find { it.ref().id() == 'github:localhost/acme/widgets#7' }.title() == 'Fix the widget'
+        result.find { it.ref().id() == 'github:localhost/acme/widgets#9' }.title() == 'Escalated widget'
+        // one working-label feed call, one needs-human-label feed call, one comments call per issue —
+        // no issue-detail (GET /issues/{n}) request added by title enrichment
+        wireMock.verify(1, getRequestedFor(urlEqualTo(WORKING_URL)))
+        wireMock.verify(1, getRequestedFor(urlEqualTo(NEEDS_HUMAN_URL)))
+        wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/7')))
+        wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/9')))
+    }
+
     def "NFR-P1: an unchanged poll re-sends If-None-Match and handles 304 as no change"() {
         given: 'the working feed answers 200+ETag once, then 304 on the conditional re-read'
         wireMock.stubFor(get(urlEqualTo(WORKING_URL))

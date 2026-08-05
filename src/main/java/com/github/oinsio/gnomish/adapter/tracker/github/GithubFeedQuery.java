@@ -84,12 +84,13 @@ public final class GithubFeedQuery {
                     case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
                 };
 
-        List<Integer> issueNumbers = GithubIssueFeedParser.parseIssueNumbers(body);
+        List<GithubIssueFeedParser.IssueRef> issues = GithubIssueFeedParser.parseIssues(body);
         List<ReadyTask> readyTasks = new ArrayList<>();
-        for (int issueNumber : issueNumbers) {
+        for (GithubIssueFeedParser.IssueRef issue : issues) {
             if (readyTasks.size() >= limit) {
                 break;
             }
+            int issueNumber = issue.number();
             TaskRef ref = new TaskRef(
                     GithubTaskId.build(apiUrl, owner, repo, issueNumber).canonicalId());
             // FR7, NFR-P1: one comments fetch per issue, reused for all three facts —
@@ -98,7 +99,9 @@ public final class GithubFeedQuery {
             var abortFacts = GithubAbortFactsReader.foldAbortMarkers(markers);
             boolean returned = GithubHistoryFactReader.derive(markers);
             boolean finished = GithubHistoryFactReader.deriveFinished(markers);
-            readyTasks.add(new ReadyTask(ref, abortFacts, returned, finished));
+            // FR7, NFR-P1 of add-board-command: the title rides the same list-issues response —
+            // no per-task fetchTask fan-out.
+            readyTasks.add(new ReadyTask(ref, abortFacts, returned, finished, issue.title()));
         }
         return List.copyOf(readyTasks);
     }

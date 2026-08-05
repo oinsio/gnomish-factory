@@ -117,7 +117,11 @@ record FixtureGithubTransformer(FixtureIssueRegistry registry) implements Respon
                 body.append(',');
             }
             first = false;
-            body.append("{\"number\":").append(candidate.number()).append('}');
+            body.append("{\"number\":")
+                    .append(candidate.number())
+                    .append(",\"title\":")
+                    .append(quote(candidate.title()))
+                    .append('}');
         }
         body.append(']');
         return json(200, body.toString());

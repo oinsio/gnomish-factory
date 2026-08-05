@@ -19,7 +19,7 @@ class OpenTaskSpec extends Specification {
         def version = new ClaimVersion('claim-comment-991', Instant.parse('2026-07-29T10:15:30Z'))
 
         when:
-        def entry = new OpenTask(REF, state, version)
+        def entry = new OpenTask(REF, state, version, 'fixture title')
 
         then:
         entry.ref() == REF
@@ -33,7 +33,7 @@ class OpenTaskSpec extends Specification {
     // FR5: an AwaitingHuman entry has no claim version — it carries no live claim
     def "carries a null claim version for an AwaitingHuman task"() {
         when:
-        def entry = new OpenTask(REF, new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null)
+        def entry = new OpenTask(REF, new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'fixture title')
 
         then:
         entry.state() == new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
@@ -43,7 +43,7 @@ class OpenTaskSpec extends Specification {
     // FR5, D2: a Working task whose claim marker is missing has an absent (null) version
     def "allows a null claim version for a Working task with a missing claim marker"() {
         when:
-        def entry = new OpenTask(REF, new TrackerTaskState.Working('gnomish-factory-x7k2q1'), null)
+        def entry = new OpenTask(REF, new TrackerTaskState.Working('gnomish-factory-x7k2q1'), null, 'fixture title')
 
         then:
         entry.claimVersion() == null
@@ -56,13 +56,13 @@ class OpenTaskSpec extends Specification {
         def version = new ClaimVersion('m1', Instant.parse('2026-07-29T10:15:30Z'))
 
         expect:
-        new OpenTask(REF, state, version) == new OpenTask(REF, state, version)
+        new OpenTask(REF, state, version, 'fixture title') == new OpenTask(REF, state, version, 'fixture title')
 
         and: 'a differing version makes them unequal'
-        new OpenTask(REF, state, version) !=
-                new OpenTask(REF, state, new ClaimVersion('m2', Instant.parse('2026-07-29T10:15:30Z')))
+        new OpenTask(REF, state, version, 'fixture title') !=
+                new OpenTask(REF, state, new ClaimVersion('m2', Instant.parse('2026-07-29T10:15:30Z')), 'fixture title')
 
         and: 'a present versus absent version makes them unequal'
-        new OpenTask(REF, state, version) != new OpenTask(REF, state, null)
+        new OpenTask(REF, state, version, 'fixture title') != new OpenTask(REF, state, null, 'fixture title')
     }
 }

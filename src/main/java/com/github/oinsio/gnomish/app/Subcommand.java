@@ -5,8 +5,8 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * The entrypoint's top-level dispatch: {@code gnomish run} | {@code status} | {@code usage} |
- * {@code take} | {@code serve} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of
- * add-factory-serve). The subcommand is the
+ * {@code take} | {@code serve} | {@code board} (FR13, FR14 of add-git-workflow; FR9 of
+ * add-tracker-port; FR2 of add-factory-serve; FR1 of add-board-command). The subcommand is the
  * first raw source argument that is not a Spring Boot option (does not start with {@code --}) —
  * {@link ApplicationArguments} has no built-in concept of a leading positional subcommand, so this
  * reads {@link ApplicationArguments#getSourceArgs()} directly, the same raw-args seam {@link
@@ -30,19 +30,22 @@ enum Subcommand {
     /** {@code gnomish take [<ref>]} — single-task tracker mode, its own flag set entirely. */
     TAKE,
     /** {@code gnomish serve [--dir] [--slots] [--drain]} — the continuous scheduler daemon. */
-    SERVE;
+    SERVE,
+    /** {@code gnomish board [--dir] [--json] [--limit]} — read-only tracker board. */
+    BOARD;
 
     private static final String RUN_TOKEN = "run";
     private static final String STATUS_TOKEN = "status";
     private static final String USAGE_TOKEN = "usage";
     private static final String TAKE_TOKEN = "take";
     private static final String SERVE_TOKEN = "serve";
+    private static final String BOARD_TOKEN = "board";
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
      * @return the requested subcommand, or {@link #RUN} when no positional token is present
      * @throws UsageException if the first positional token is present but names none of {@code
-     *     run}, {@code status}, {@code usage}, {@code take}, {@code serve}
+     *     run}, {@code status}, {@code usage}, {@code take}, {@code serve}, {@code board}
      */
     static Subcommand parse(ApplicationArguments args) {
         String token = firstPositionalToken(args);
@@ -55,10 +58,11 @@ enum Subcommand {
             case USAGE_TOKEN -> USAGE;
             case TAKE_TOKEN -> TAKE;
             case SERVE_TOKEN -> SERVE;
+            case BOARD_TOKEN -> BOARD;
             default ->
                 throw new UsageException("'" + token + "' is not a gnomish subcommand: accepted forms are"
-                        + " 'gnomish run', 'gnomish status', 'gnomish usage', 'gnomish take', or"
-                        + " 'gnomish serve'");
+                        + " 'gnomish run', 'gnomish status', 'gnomish usage', 'gnomish take', 'gnomish serve',"
+                        + " or 'gnomish board'");
         };
     }
 

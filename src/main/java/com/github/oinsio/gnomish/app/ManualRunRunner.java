@@ -97,6 +97,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             Path homeDir,
             StatusCommand statusCommand,
             UsageCommand usageCommand,
+            BoardCommand boardCommand,
             Clock javaTimeClock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
@@ -126,7 +127,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                 trackerAdapterRegistry,
                 trackerValidatorRegistry,
                 statusCommand,
-                usageCommand);
+                usageCommand,
+                boardCommand);
     }
 
     /** No relevant flag present → no-op (FR12); otherwise drives the run (see class javadoc). */

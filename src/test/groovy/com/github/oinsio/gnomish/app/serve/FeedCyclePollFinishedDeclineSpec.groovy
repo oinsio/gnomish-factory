@@ -30,7 +30,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
     private static final Instant NOW = Instant.parse('2026-08-02T12:00:00Z')
 
     private static ReadyTask task(String id, boolean finished, boolean returned = false) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, finished)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, finished, 'fixture title')
     }
 
     private static FeedCycle cycle(Tracker tracker, int wipLimit = 2) {

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve
 
+import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -51,7 +52,7 @@ class FeedAutomatonViewSpec extends Specification {
     private final def sleeper = new BudgetedVirtualSleeper(clock)
 
     private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), com.github.oinsio.gnomish.app.port.tracker.AbortFacts.none(), false, false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
     }
 
     private static SlotRunner noop() {
@@ -79,7 +80,7 @@ class FeedAutomatonViewSpec extends Specification {
     def "a Filling cycle reports FILLING with the poll's open-front count and the poll instant as lastPollAt"() {
         given: 'open fronts below the WIP limit, so the fresh candidate is claim-eligible'
         def openFronts = [
-            new OpenTask(new TaskRef('github:o/r#open-1'), new TrackerTaskState.Working('other'), null)
+            new OpenTask(new TaskRef('github:o/r#open-1'), new TrackerTaskState.Working('other'), null, 'fixture title')
         ]
         Tracker tracker = [
             listReady: { int limit -> [fresh('github:o/r#1')] },

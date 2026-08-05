@@ -58,6 +58,15 @@ class SubcommandSpec extends Specification {
         Subcommand.parse(args) == Subcommand.SERVE
     }
 
+    // FR1 of add-board-command (design D1): a 'board' token dispatches to BOARD
+    def "parse() recognizes a 'board' token"() {
+        given:
+        def args = new DefaultApplicationArguments('board', '--dir=/tmp/x')
+
+        expect:
+        Subcommand.parse(args) == Subcommand.BOARD
+    }
+
     // FR13, FR14: an unrecognized first positional token is a usage error (exit 2 family)
     def "parse() rejects an unrecognized subcommand"() {
         given:

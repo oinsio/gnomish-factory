@@ -1,12 +1,20 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
+import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
+import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
+import com.github.oinsio.gnomish.app.port.tracker.OpenTask
+import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
+import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SlotLedger
@@ -26,6 +34,7 @@ import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppende
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -84,11 +93,11 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         List<ReadyTask> listReady(int limit) {
             calls << "listReady($limit)".toString()
             finishedCount.get() == 0 ? [
-                new ReadyTask(REF, AbortFacts.none(), false, false)
+                new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
             ] : []
         }
 
-        List<com.github.oinsio.gnomish.app.port.tracker.OpenTask> listOpen() {
+        List<OpenTask> listOpen() {
             calls << 'listOpen()'
             []
         }
@@ -98,7 +107,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
             new ClaimResult.Acquired()
         }
 
-        com.github.oinsio.gnomish.app.port.tracker.TrackerTask fetchTask(TaskRef ref) {
+        TrackerTask fetchTask(TaskRef ref) {
             calls << "fetchTask(${ref.id()})".toString()
             null
         }
@@ -108,21 +117,23 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
             finishedCount.incrementAndGet()
         }
 
-        List<com.github.oinsio.gnomish.app.port.tracker.HumanReply> collectDecisions(TaskRef ref) {
+        List<HumanReply> collectDecisions(TaskRef ref) {
             []
         }
         void release(TaskRef ref) { }
-        void park(TaskRef ref, com.github.oinsio.gnomish.app.port.tracker.ParkReason reason, String report) { }
-        void recordAbort(TaskRef ref, com.github.oinsio.gnomish.app.port.tracker.AbortRecord record) { }
+        void park(TaskRef ref, ParkReason reason, String report) { }
+        void recordAbort(TaskRef ref, AbortRecord record) { }
         void recordProgress(TaskRef ref) { }
         void acknowledgeDecision(TaskRef ref, String decisionText) { }
         void postNote(TaskRef ref, String text) { }
         void declineFinished(TaskRef ref, String message) { }
-        com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult heartbeat(TaskRef ref, String p) {
+
+        HeartbeatResult heartbeat(TaskRef ref, String p) {
             null
         }
-        com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult removeStaleClaim(
-                TaskRef ref, com.github.oinsio.gnomish.app.port.tracker.ClaimVersion v) {
+
+        RemoveStaleClaimResult removeStaleClaim(
+                TaskRef ref, ClaimVersion v) {
             null
         }
     }
@@ -166,7 +177,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         def observedLedger = new SlotLedger(1, observedClock, notifier)
         // TaskOutcomeLedgerWriter/RotatingLedgerAppender take a java.time.Clock, distinct from the
         // domain Clock FeedAutomaton/SlotLedger/TrackerHealthTracker use; fixed to the same instant.
-        def ledgerClock = java.time.Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC)
+        def ledgerClock = Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC)
         def appender = new RotatingLedgerAppender(
                 new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()), homeDir, INSTANCE_NAME, ledgerClock)
         def ledgerWriter = new TaskOutcomeLedgerWriter(observedLedger, appender, INSTANCE_INFO, ledgerClock)

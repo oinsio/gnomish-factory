@@ -156,7 +156,7 @@ class TrackerHealthTrackerSpec extends Specification {
             new HumanReply('looks good', Instant.EPOCH)
         ]
         def openTasks = [
-            new OpenTask(REF, new TrackerTaskState.Gone(), null)
+            new OpenTask(REF, new TrackerTaskState.Gone(), null, 'fixture title')
         ]
         def heartbeatResult = new HeartbeatResult.Beaten(new ClaimVersion('marker-1', Instant.EPOCH))
         def removeResult = new RemoveStaleClaimResult.Removed()

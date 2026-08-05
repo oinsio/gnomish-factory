@@ -17,6 +17,13 @@ import java.time.Instant;
  * measures staleness on its own monotonic clock, never against {@code updatedAt}
  * (design D2 — no cross-host clock arithmetic).
  *
+ * <p><b>Display-only exception (design D6 of add-board-command):</b> {@code gnomish board}
+ * renders {@code now - updatedAt} as a plain age for its Working column, purely for display — it
+ * emits no stale/healthy verdict and drives no coordination decision. That rendering derives no
+ * verdict from {@code updatedAt}, so it does not breach the "never against {@code updatedAt}"
+ * rule above; the rule still forbids deriving a staleness *verdict* from this field anywhere in
+ * core.
+ *
  * <p>Inert value data compared by content.
  *
  * <p>Implements FR5 of add-claim-heartbeat.

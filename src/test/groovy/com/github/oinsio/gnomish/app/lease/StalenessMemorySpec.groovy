@@ -27,11 +27,11 @@ class StalenessMemorySpec extends Specification {
     private final StalenessMemory memory = new StalenessMemory(time, TTL)
 
     private static OpenTask working(String ref, ClaimVersion version) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version)
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, 'fixture title')
     }
 
     private static OpenTask awaitingHuman(String ref) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null)
+        new OpenTask(new TaskRef(ref), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'fixture title')
     }
 
     private static ClaimVersion version(String updatedAt = ANCIENT.toString()) {

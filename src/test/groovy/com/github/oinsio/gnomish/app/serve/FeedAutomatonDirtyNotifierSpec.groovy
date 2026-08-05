@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve
 
+import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
@@ -41,7 +42,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             listReady: { int limit ->
                 [
                     new ReadyTask(new TaskRef('github:o/r#1'),
-                    com.github.oinsio.gnomish.app.port.tracker.AbortFacts.none(), false, false)
+                    AbortFacts.none(), false, false, 'fixture title')
                 ]
             },
             listOpen : { -> [] },

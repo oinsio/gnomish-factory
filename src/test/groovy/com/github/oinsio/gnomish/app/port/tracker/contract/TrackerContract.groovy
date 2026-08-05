@@ -139,8 +139,29 @@ abstract class TrackerContract extends Specification implements PortContractSupp
 
         then: 'the task is present, still carrying its unfiltered abort facts'
         result == [
-            new ReadyTask(ref, UNEXPIRED_BACKOFF, false, false)
+            new ReadyTask(ref, UNEXPIRED_BACKOFF, false, false, 'fixture title')
         ]
+    }
+
+    // FR7, NFR-P1, M3 of add-board-command: listReady carries each task's title, sourced from
+    //     data the adapter's list call already receives — no per-task fetchTask fan-out; run
+    //     through this shared contract suite so both adapters satisfy it identically
+    def "listReady carries each task's title from its seeded snapshot"() {
+        given: 'a tracker seeded with two Ready tasks carrying distinct titles'
+        def tracker = arrange()
+        assumeProducible(tracker, 'Tracker', 'listReady title fixture')
+        def adapter = tracker.get()
+        def refA = new TaskRef('fixture:ready-title-a')
+        def refB = new TaskRef('fixture:ready-title-b')
+        seedTask(adapter, refA, new TaskSnapshot(refA.id(), 'Fix the widget', 'body a'), new TrackerTaskState.Ready(), AbortFacts.none())
+        seedTask(adapter, refB, new TaskSnapshot(refB.id(), 'Polish the gadget', 'body b'), new TrackerTaskState.Ready(), AbortFacts.none())
+
+        when: 'listReady is called'
+        List<ReadyTask> result = adapter.listReady(10)
+
+        then: 'each entry carries its own task title'
+        result.find { it.ref() == refA }.title() == 'Fix the widget'
+        result.find { it.ref() == refB }.title() == 'Polish the gadget'
     }
 
     // FR4, NFR-R1: concurrent claim() race on one Ready task yields exactly one Acquired,

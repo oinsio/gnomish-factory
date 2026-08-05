@@ -22,6 +22,6 @@ class ClaimFixtures {
     }
 
     static OpenTask workingBy(TaskRef ref, String instance, ClaimVersion v) {
-        new OpenTask(ref, new TrackerTaskState.Working(instance), v)
+        new OpenTask(ref, new TrackerTaskState.Working(instance), v, 'fixture title')
     }
 }

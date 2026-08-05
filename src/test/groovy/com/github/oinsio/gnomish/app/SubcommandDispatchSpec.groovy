@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.util.concurrent.atomic.AtomicBoolean
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -51,8 +52,13 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter)
     }
 
+    private BoardCommand newBoardCommand() {
+        new BoardCommand(Clock.systemUTC(), testProperties(), [:], TrackerValidatorStub.acceptingGithub())
+    }
+
     def dispatch = new SubcommandDispatch(
-    new StatusCommand(worktreesRoot), new UsageCommand(), newTakeCommand(), newServeCommand())
+    new StatusCommand(worktreesRoot), new UsageCommand(), newTakeCommand(), newServeCommand(),
+    newBoardCommand())
 
     // FR13: 'status' actually reaches StatusCommand#run (PIT: VoidMethodCallMutator survivor) —
     // proven by its list-mode output, and reports the invocation as handled.
@@ -183,7 +189,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     def "dispatchNonRun() routes to ServeCommand for the 'serve' subcommand and returns true"() {
         given: 'a serve-only dispatch, wired with a reachable tracker factory and a starter that records invocation'
         writeMinimalPipeline(worktreesRoot)
-        def starterInvoked = new java.util.concurrent.atomic.AtomicBoolean(false)
+        def starterInvoked = new AtomicBoolean(false)
         def serveDispatch = new SubcommandDispatch(
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 new ServeCommand(
@@ -191,7 +197,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [github: factoryReturning(Stub(Tracker))],
                 TrackerValidatorStub.acceptingGithub(),
-                { FeedAutomaton automaton -> starterInvoked.set(true) } as FeedAutomatonStarter))
+                { FeedAutomaton automaton -> starterInvoked.set(true) } as FeedAutomatonStarter),
+                dispatch.boardCommand())
         def args = new DefaultApplicationArguments('serve', "--dir=${worktreesRoot}".toString())
 
         when:
@@ -201,5 +208,48 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         noExceptionThrown()
         starterInvoked.get()
         handled
+    }
+
+    // FR1 of add-board-command (design D1), task 3.1/3.2: 'board' reaches BoardCommand#run —
+    // proven by its own distinct failure mode (worktreesRoot has no .gnomish/, so pipeline load
+    // fails with an IOException, distinct from every other subcommand's failure shape here); the
+    // real board behavior itself is BoardCommandSpec's job, not this routing spec's.
+    def "dispatchNonRun() routes to BoardCommand for the 'board' subcommand"() {
+        given:
+        def args = new DefaultApplicationArguments('board', "--dir=${worktreesRoot}".toString())
+
+        when:
+        dispatch.dispatchNonRun(args)
+
+        then:
+        thrown(IOException)
+    }
+
+    // FR1 of add-board-command (design D1), PIT NO_COVERAGE + BooleanFalseReturnVals: the routing
+    // scenario above throws before ever reaching dispatchNonRun's own `return true` for BOARD. This
+    // scenario drives a 'board' invocation that finds a real .gnomish/ tree and a reachable
+    // read-only tracker, so BoardCommand#run completes normally and execution actually reaches and
+    // returns `true`.
+    def "dispatchNonRun() returns true for a 'board' subcommand that completes without error"() {
+        given: 'a board-only dispatch with a valid pipeline and a tracker returning empty listings'
+        writeMinimalPipeline(worktreesRoot)
+        def boardDispatch = new SubcommandDispatch(
+                dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
+                dispatch.serveCommand(),
+                new BoardCommand(Clock.systemUTC(), testProperties(),
+                [github: factoryReturning(Stub(Tracker))], TrackerValidatorStub.acceptingGithub()))
+        def args = new DefaultApplicationArguments('board', "--dir=${worktreesRoot}".toString())
+        def originalOut = System.out
+        System.out = new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8')
+
+        when:
+        def handled = boardDispatch.dispatchNonRun(args)
+
+        then:
+        noExceptionThrown()
+        handled
+
+        cleanup:
+        System.out = originalOut
     }
 }

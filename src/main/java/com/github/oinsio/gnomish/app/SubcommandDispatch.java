@@ -6,9 +6,10 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Routes {@link ManualRunRunner#run} to {@link StatusCommand}, {@link UsageCommand}, {@link
- * TakeCommand}, or {@link ServeCommand} when the invocation's subcommand (design {@link
- * Subcommand#parse}) is {@code status}/{@code usage}/{@code take}/{@code serve} (FR13, FR14 of
- * add-git-workflow; FR9 of add-tracker-port; FR2 of add-factory-serve); a {@code run} subcommand —
+ * TakeCommand}, {@link ServeCommand}, or {@link BoardCommand} when the invocation's subcommand
+ * (design {@link Subcommand#parse}) is {@code status}/{@code usage}/{@code take}/{@code
+ * serve}/{@code board} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of
+ * add-factory-serve; FR1 of add-board-command); a {@code run} subcommand —
  * explicit or implicit — is left for {@link ManualRunRunner}'s own flow. {@code take}/{@code
  * serve} are dispatched here rather than treated as {@code run} variants (unlike how {@code
  * status}/{@code usage} always were): each has an entirely separate flag set and must never fall
@@ -21,16 +22,21 @@ import org.springframework.boot.ApplicationArguments;
  * (task 5.1's seam) can make it return normally — {@link #dispatchNonRun} reports {@code true}
  * either way, so a normal return is not mistaken for the unhandled {@code run} subcommand.
  *
- * <p>Implements FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of add-factory-serve.
+ * <p>Implements FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of add-factory-serve;
+ * FR1 of add-board-command.
  */
 record SubcommandDispatch(
-        StatusCommand statusCommand, UsageCommand usageCommand, TakeCommand takeCommand, ServeCommand serveCommand) {
+        StatusCommand statusCommand,
+        UsageCommand usageCommand,
+        TakeCommand takeCommand,
+        ServeCommand serveCommand,
+        BoardCommand boardCommand) {
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
-     * @return {@code true} if {@code status}, {@code usage}, {@code take}, or {@code serve}
-     *     handled the invocation (the caller must not also drive the run flow); {@code false} for
-     *     the {@code run} subcommand
+     * @return {@code true} if {@code status}, {@code usage}, {@code take}, {@code serve}, or
+     *     {@code board} handled the invocation (the caller must not also drive the run flow);
+     *     {@code false} for the {@code run} subcommand
      * @throws UsageException if the first positional token names no known subcommand
      * @throws IOException if {@code take}'s or {@code serve}'s pipeline load fails with a genuine
      *     I/O fault
@@ -40,6 +46,10 @@ record SubcommandDispatch(
         Subcommand subcommand = Subcommand.parse(args);
         if (subcommand == Subcommand.STATUS) {
             statusCommand.run(args);
+            return true;
+        }
+        if (subcommand == Subcommand.BOARD) {
+            boardCommand.run(args);
             return true;
         }
         if (subcommand == Subcommand.USAGE) {
