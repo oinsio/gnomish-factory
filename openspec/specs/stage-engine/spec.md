@@ -24,16 +24,35 @@ Verify checks SHALL run strictly in manifest order; the first non-Pass verdict s
 - **THEN** checks three and four are never invoked and the attempt is a quality failure
 
 ### Requirement: External check poll loop
-The engine SHALL poll an `external` check via single-poll port calls returning `PollStatus` (Pass | Fail with findings | Running | CannotVerify with reason and details) at the manifest interval until a verdict or the manifest timeout, using an injected sleeper/clock; timeout SHALL be a quality failure. The engine SHALL NOT submit external checks: they are assumed to be triggered by the task-branch push (submission is deferred — proposal NG8).
+The engine SHALL poll an `external` check via single-poll port calls
+returning `PollStatus` (Pass | Fail with findings | Running | CannotVerify
+with reason and details) at the manifest interval until a verdict or the
+manifest timeout, using an injected sleeper/clock. A timeout SHALL classify
+per the check's declared timeout class: `quality` (the default) fails the
+check as a quality failure with a timeout finding; `infrastructure`
+resolves the check as CannotVerify naming the elapsed timeout — no stage
+attempt is burned. The engine SHALL NOT submit external checks: they are
+assumed to be triggered by the task-branch push (submission is deferred —
+add-stage-engine NG8).
 <!-- implements FR3, NFR-R3 of add-stage-engine -->
+<!-- implements FR9 of add-external-check-github-actions -->
 
 #### Scenario: Verdict within timeout
 - **WHEN** the poll port returns Running twice and then Pass
-- **THEN** the engine sleeps the manifest interval between polls and the check passes
+- **THEN** the engine sleeps the manifest interval between polls and the
+  check passes
 
-#### Scenario: Timeout burns the attempt
-- **WHEN** the poll port still returns Running when the timeout elapses (per the injected clock)
+#### Scenario: Timeout burns the attempt by default
+- **WHEN** the poll port still returns Running when the timeout elapses
+  (per the injected clock) and the check declares no timeout class
 - **THEN** the check fails as a quality failure with a timeout finding
+
+#### Scenario: Infrastructure-classed timeout burns no attempt
+- **WHEN** the poll port still returns Running when the timeout elapses
+  and the check declares its timeout class `infrastructure`
+- **THEN** the check resolves as CannotVerify naming the elapsed timeout
+- **AND** no stage attempt is burned and the task escalates with a
+  "cannot verify" report
 
 ### Requirement: Judge majority voting
 The engine SHALL cast up to the manifest `votes` count of sequential single-vote calls, stopping as soon as the majority is mathematically decided, and resolve the check by that majority; findings of failing cast votes are aggregated; any CannotVerify among cast votes SHALL fail the whole check as infrastructure. Manifest validation guarantees an odd `votes` count, so a decided majority is always reached; should all cast votes complete without one (an even count that ties), the check SHALL resolve to Pass — the defensive `pass >= fail` tie-break — never leaving the verdict undefined.

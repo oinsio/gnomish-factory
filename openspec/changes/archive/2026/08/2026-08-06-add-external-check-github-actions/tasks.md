@@ -104,7 +104,7 @@ guard exists to enforce it.
   runner queues) and the escalation trade-off (UX2, NG6, FR9) — docs
   written, but UX2 itself is unmet: no factory wiring exists for the base
   URL config the docs describe. See 8.4.
-- [ ] 8.4 **Follow-up, not done here**: wire the adapter into the factory —
+- [x] 8.4 **Follow-up, not done here**: wire the adapter into the factory —
   a `GithubCheckExternalClient` construction entry point (analog of
   `GithubTrackerAdapterFactory`: a YAML key for the base URL, resolving
   the token via `SecretsProvider`) that injects the client into the stage

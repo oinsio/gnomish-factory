@@ -157,6 +157,23 @@ The loader SHALL apply catalog-free sanity rules that do not require a live targ
 - **WHEN** an `external` check names a CI check, or a `judge`/executor declares a model, that does not exist in any live system
 - **THEN** validation does not attempt to confirm its existence and does not fail on that ground
 
+### Requirement: External check declarations carry a timeout class
+The external check declaration SHALL accept an optional timeout class —
+`quality` or `infrastructure` — defaulting to `quality` when absent. The
+value SHALL load into the typed model; a value outside the two known
+classes SHALL be a located validation error identifying the check.
+<!-- implements FR9 of add-external-check-github-actions -->
+
+#### Scenario: Absent timeout class defaults to quality
+- **WHEN** an `external` check declares no timeout class
+- **THEN** the typed model carries the `quality` class and engine behavior
+  is unchanged
+
+#### Scenario: Unknown timeout class is rejected
+- **WHEN** an `external` check declares a timeout class other than
+  `quality` or `infrastructure`
+- **THEN** validation reports a located error identifying the check
+
 ### Requirement: No execution and no path traversal
 The loader SHALL NOT execute any command, model call, or external check defined in the configuration, and SHALL reject file references that resolve outside the `.gnomish/` directory root.
 <!-- implements NFR-S1, NFR-S2, NFR-C1 of load-pipeline-config -->
