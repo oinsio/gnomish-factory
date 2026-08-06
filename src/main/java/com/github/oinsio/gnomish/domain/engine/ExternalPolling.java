@@ -19,15 +19,21 @@ import java.util.List;
  * decided poll maps straight through to the matching {@link Verdict}; {@link
  * PollStatus.Running} keeps waiting. On {@code Running} the timeout is checked
  * <em>before</em> sleeping: once {@code clock.now()} is no longer before the deadline
- * the loop returns a quality {@link Verdict.Fail} with a single timeout {@link
- * Finding}; otherwise it sleeps the interval on the injected {@link Sleeper} and polls
- * again. Checking before sleeping keeps the loop deterministic (NFR-R3).
+ * the loop resolves the check's declared {@link VerifyCheck.External#timeoutClass()}
+ * — {@link VerifyCheck.TimeoutClass#QUALITY} (the default) returns a quality {@link
+ * Verdict.Fail} with a single timeout {@link Finding}, unchanged prior behavior;
+ * {@link VerifyCheck.TimeoutClass#INFRASTRUCTURE} returns a {@link
+ * Verdict.CannotVerify} naming the elapsed timeout instead, so the stage escalates
+ * without burning an attempt (FR9). Otherwise the loop sleeps the interval on the
+ * injected {@link Sleeper} and polls again. Checking before sleeping keeps the loop
+ * deterministic (NFR-R3).
  *
  * <p>Package-private and reentrant: it holds only its immutable injected collaborators
  * and no mutable state, so one instance drives concurrent external checks safely — all
  * loop state is local to {@link #poll} (NFR-R1).
  *
- * <p>Implements FR3, NFR-R3 of add-stage-engine.
+ * <p>Implements FR3, NFR-R3 of add-stage-engine; FR9 of
+ * add-external-check-github-actions.
  */
 final class ExternalPolling {
 
@@ -54,11 +60,15 @@ final class ExternalPolling {
      * Polls {@code check} until it decides or its timeout elapses, collapsing the poll
      * sequence into one {@link Verdict}. The deadline is {@code clock.now() +
      * check.timeout()} captured once at entry; a {@link PollStatus.Running} that never
-     * resolves times out into a quality {@link Verdict.Fail} once {@code clock.now()} is
-     * no longer before the deadline. The timeout is checked before sleeping so virtual
-     * time never overshoots (NFR-R3); all loop state is local.
+     * resolves times out once {@code clock.now()} is no longer before the deadline,
+     * classified per {@code check.timeoutClass()}: {@link VerifyCheck.TimeoutClass#QUALITY}
+     * (default) into a quality {@link Verdict.Fail}, {@link
+     * VerifyCheck.TimeoutClass#INFRASTRUCTURE} into a {@link Verdict.CannotVerify} (FR9).
+     * The timeout is checked before sleeping so virtual time never overshoots (NFR-R3);
+     * all loop state is local.
      *
-     * <p>Implements FR3, NFR-R3 of add-stage-engine.
+     * <p>Implements FR3, NFR-R3 of add-stage-engine; FR9 of
+     * add-external-check-github-actions.
      *
      * @param check the external check to poll, carrying its interval, timeout and id
      * @param workspace the opaque working copy the check relates to
@@ -79,7 +89,7 @@ final class ExternalPolling {
                 }
                 case PollStatus.Running ignored -> {
                     if (!clock.now().isBefore(deadline)) {
-                        return timeoutFailure(check);
+                        return timeoutVerdict(check);
                     }
                     sleeper.sleep(check.interval());
                 }
@@ -88,12 +98,21 @@ final class ExternalPolling {
     }
 
     /**
-     * Builds the quality {@link Verdict.Fail} for a timed-out external check — a poll
-     * timeout is a quality failure that burns the attempt; its single {@link Finding}
-     * names the check id and timeout (NFR-O1).
+     * Classifies a timed-out external check's verdict per its declared {@link
+     * VerifyCheck.External#timeoutClass()} (design D7): {@link
+     * VerifyCheck.TimeoutClass#QUALITY} (default) into a quality {@link Verdict.Fail}
+     * carrying a single timeout {@link Finding} naming the check id and timeout,
+     * burning the attempt (NFR-O1, unchanged prior behavior); {@link
+     * VerifyCheck.TimeoutClass#INFRASTRUCTURE} into a {@link Verdict.CannotVerify}
+     * naming the same elapsed timeout, escalating without burning an attempt.
+     *
+     * <p>Implements FR9 of add-external-check-github-actions.
      */
-    private static Verdict timeoutFailure(VerifyCheck.External check) {
+    private static Verdict timeoutVerdict(VerifyCheck.External check) {
         var message = "external check '" + check.checkId() + "' did not complete within " + check.timeout();
-        return new Verdict.Fail(List.of(new Finding(message, null, null)));
+        return switch (check.timeoutClass()) {
+            case QUALITY -> new Verdict.Fail(List.of(new Finding(message, null, null)));
+            case INFRASTRUCTURE -> new Verdict.CannotVerify(message, message);
+        };
     }
 }

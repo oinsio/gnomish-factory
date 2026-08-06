@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.tracker.github;
+package com.github.oinsio.gnomish.adapter.github;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import io.github.resilience4j.retry.Retry;
@@ -55,6 +55,7 @@ public final class GithubHttpClient {
         this.httpClient = HttpClient.newBuilder()
                 .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .connectTimeout(Duration.ofSeconds(10))
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
         this.retry = Retry.of("github-api", retryConfig);
     }
@@ -71,7 +72,7 @@ public final class GithubHttpClient {
     /**
      * The configured {@code tracker.github.api-url} this client sends
      * requests against, exposed for callers that need it beyond request
-     * building — e.g. {@link GithubTaskId#build} to decide default-host
+     * building — e.g. {@link com.github.oinsio.gnomish.adapter.tracker.github.GithubTaskId#build} to decide default-host
      * omission (design D7).
      */
     public String apiUrl() {

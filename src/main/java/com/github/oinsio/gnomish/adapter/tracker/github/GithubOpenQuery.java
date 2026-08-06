@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
@@ -94,8 +95,14 @@ public final class GithubOpenQuery {
         String cacheKey = cacheKeyPrefix + ":" + owner + "/" + repo;
         String body =
                 switch (cache.get(cache.httpClient().newRequest(path), cacheKey)) {
-                    case GithubConditionalRequestCache.Fresh fresh -> fresh.body();
                     case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
+                    case GithubConditionalRequestCache.Fresh fresh -> {
+                        if (fresh.statusCode() / 100 != 2) {
+                            throw new GithubFeedQueryException("Failed to fetch open %s issues for %s/%s: HTTP %d"
+                                    .formatted(label, owner, repo, fresh.statusCode()));
+                        }
+                        yield fresh.body();
+                    }
                 };
         return GithubIssueFeedParser.parseIssueNumbers(body);
     }

@@ -23,8 +23,14 @@ Testcontainers-class suites run in CI instead of inside the box.
 
 Depends on add-sandbox-core artifacts: unified findings funnel (FR15),
 pin-check guard (FR16), attempt-commit verification semantics (FR21/D15),
-`SecretsProvider` (FR18). Implement after those land. The base branch is
-assumed reviewed-clean — the trust anchor stated in add-sandbox-core.
+`SecretsProvider` (FR18). **add-sandbox-core is not yet implemented** (its
+sections 5 and 8 exist only as proposal/design/spec artifacts, not in
+`src/`); this change proceeds ahead of it with four adapter-local,
+explicitly-marked provisional stand-ins in place of those pieces (see
+tasks.md Prerequisites and the delta specs), to be replaced once
+add-sandbox-core lands. The base branch is assumed reviewed-clean — the
+trust anchor stated in add-sandbox-core, itself unenforced until that
+change's pin-check guard exists.
 
 ## What Changes
 
@@ -160,6 +166,13 @@ assumed reviewed-clean — the trust anchor stated in add-sandbox-core.
 - NFR-R2: polling SHALL be stateless and idempotent: after a crash or
   takeover any instance re-polls the same attempt commit and observes the
   same run set; no poll state is persisted.
+- NFR-R3: a client-side rejection that no retry can resolve — an invalid or
+  expired token (401), a token lacking Actions read scope (403), a checkId
+  naming no existing workflow (404), or any other non-2xx that is not a
+  transient infrastructure failure — SHALL classify as CannotVerify
+  immediately (fail-fast, not polled to the timeout), naming the likely
+  misconfiguration so the escalation report is actionable, and SHALL burn no
+  stage attempt. Such a response is never read as an empty runs listing.
 - NFR-O1: every poll SHALL log its outcome with the run identifier;
   Pass/Fail records SHALL carry the platform run URL for the tracker
   report.
@@ -194,7 +207,59 @@ assumed reviewed-clean — the trust anchor stated in add-sandbox-core.
   settled by the spike (task 1.1); on insufficient parity the live E2E is
   deferred, the E2E falls back to a WireMock-scripted platform, and the
   gap is recorded here.
+  **Resolved — GO (task 1.1, spike against Gitea's published Swagger spec,
+  `gitea.com/swagger.v1.json`):** full parity for every surface the adapter
+  needs.
+  - `GET /repos/{owner}/{repo}/actions/runs` and the workflow-scoped
+    `GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs` both
+    accept a `head_sha` query parameter directly (no client-side filtering
+    needed); the latter is scoped by `workflow_id` = the workflow file's
+    **base name** (e.g. `ci.yml`), which the adapter derives from `checkId`
+    (D1, D2). *(Corrected in task 7.1 against a live Gitea: the Swagger spec
+    read as "the workflow file path"; the running API accepts only the base
+    name, and the runs listing reports each run's `path` as
+    `<name>@refs/heads/<branch>`, not the plain file path. The adapter now
+    reduces both the query segment and the run-match filter to the base
+    name — cross-platform correct for GitHub and Gitea alike.)*
+  - `ActionWorkflowRun` carries `conclusion`, `status`, `head_sha`, `path`
+    (the workflow file, base name derived for the pin-set contribution, D3)
+    and `run_attempt` (latest-attempt selection, FR5).
+  - `GET /repos/{owner}/{repo}/actions/runs/{run}/jobs` returns
+    `ActionWorkflowJob` with `name`, `status`, `conclusion` and a `steps`
+    array (`ActionWorkflowStep`: `name`, `status`, `conclusion`) — enough
+    for FR6's failed-jobs/steps findings.
+  - `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs` returns the raw
+    log blob (added in Gitea 1.24.0; the fixture's pinned `gitea/gitea:1.27.0`
+    postdates it) — covers FR6's log-tail requirement.
+  - Caveat carried into task 7.1: the Gitea server container does not
+    execute workflows by itself — a registered `gitea/act_runner` container
+    is required alongside it (`GITEA__actions__ENABLED=true` on the server,
+    a runner registration token, and the runner's Docker socket mounted).
+    This is fixture setup, not an API-parity gap.
+  - Decision: proceed with the live E2E on Gitea Actions (D6); no WireMock
+    fallback needed for section 7 — task 7.3 is not required.
 - Q2: named reusable check definitions in pipeline config — worth a
   separate change?
 - Q3: which platform is next (SonarQube quality gate?) — informs how much
   of this adapter generalizes into shared external-check plumbing.
+- Q4: NFR-O1 is only half met — the Fail leg carries the platform run URL
+  into the tracker report via finding `details` (`GithubWorkflowJobsFetcher`),
+  but the Pass leg has nowhere to carry it: `PollStatus.Pass` is a bare
+  marker (see `GithubWorkflowRunPoll` javadoc), so a green run's URL
+  reaches only the log line, never the tracker report. U3 is unmet for the
+  green case. Fixing this needs a domain-model change to `PollStatus.Pass`
+  that is out of this change's scope. **Deferred to add-sandbox-core**
+  (tracked there as Q4) — resolve alongside that change's findings-funnel
+  work, or split into its own follow-up if add-sandbox-core doesn't pick
+  it up.
+- Q5: UX2 ("enabling the adapter needs no factory configuration beyond the
+  token and base URL") is unmet: no factory entry point constructs a
+  `GithubCheckExternalClient` and injects it into the stage engine — there
+  is no analog of `GithubTrackerAdapterFactory` for external checks, no
+  YAML key for the base URL, no wiring task ever covered this in
+  tasks.md. An operator cannot enable this adapter under any
+  configuration today; G1 holds only at the E2E-harness level. **Deferred
+  to add-sandbox-core** (tracked there as Q5), whose task 8.4 already
+  wires the pin-check guard around every `ExternalCheckClient` assembly —
+  the natural place to also add the missing factory/config wiring for
+  this adapter.

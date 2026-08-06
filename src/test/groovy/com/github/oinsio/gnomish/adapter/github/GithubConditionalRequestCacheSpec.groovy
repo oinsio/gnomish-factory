@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.tracker.github
+package com.github.oinsio.gnomish.adapter.github
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
@@ -80,6 +80,45 @@ class GithubConditionalRequestCacheSpec extends Specification {
         first.statusCode() == 404
         wireMock.verify(2, getRequestedFor(urlEqualTo('/issues/99'))
                 .withoutHeader('If-None-Match'))
+    }
+
+    def "a 403 carrying x-ratelimit-remaining: 0 is surfaced as rate limited"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/issues/1'))
+                .willReturn(aResponse().withStatus(403).withHeader('x-ratelimit-remaining', '0').withBody('{"message":"rate limit"}')))
+        def cache = new GithubConditionalRequestCache(newClient())
+
+        when:
+        def result = cache.get(cache.httpClient().newRequest('/issues/1'), 'issues/1')
+
+        then:
+        result.rateLimited()
+    }
+
+    def "a 403 carrying Retry-After (secondary rate limit) is surfaced as rate limited"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/issues/2'))
+                .willReturn(aResponse().withStatus(403).withHeader('Retry-After', '30').withBody('{"message":"secondary rate limit"}')))
+        def cache = new GithubConditionalRequestCache(newClient())
+
+        when:
+        def result = cache.get(cache.httpClient().newRequest('/issues/2'), 'issues/2')
+
+        then:
+        result.rateLimited()
+    }
+
+    def "a plain permission-denied 403 is not surfaced as rate limited"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/issues/3'))
+                .willReturn(aResponse().withStatus(403).withBody('{"message":"Forbidden"}')))
+        def cache = new GithubConditionalRequestCache(newClient())
+
+        when:
+        def result = cache.get(cache.httpClient().newRequest('/issues/3'), 'issues/3')
+
+        then:
+        !result.rateLimited()
     }
 
     def "a 2xx response without an ETag is not cached"() {

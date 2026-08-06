@@ -63,8 +63,28 @@ public sealed interface VerifyCheck {
      *     check name); liveness of the target is deliberately not validated (NG7)
      * @param interval how often to poll for the verdict
      * @param timeout how long to poll before giving up (a quality failure by default)
+     * @param timeoutClass how a poll timeout at {@code timeout} classifies —
+     *     {@link TimeoutClass#QUALITY} (default) burns a stage attempt,
+     *     {@link TimeoutClass#INFRASTRUCTURE} does not (FR9); classification
+     *     itself is an engine concern, out of scope here
      */
-    record External(String checkId, Duration interval, Duration timeout) implements VerifyCheck {}
+    record External(String checkId, Duration interval, Duration timeout, TimeoutClass timeoutClass)
+            implements VerifyCheck {}
+
+    /**
+     * How an {@link External} check's poll timeout classifies when the poll
+     * deadline is reached without a verdict (design D7). {@link #QUALITY} is the
+     * default — a timeout burns a stage attempt, unchanged prior behavior.
+     * {@link #INFRASTRUCTURE} marks a timeout as unable to verify rather than a
+     * quality failure — no attempt burned, escalated instead (stage-description.md
+     * §7).
+     *
+     * <p>Implements FR9 of add-external-check-github-actions.
+     */
+    enum TimeoutClass {
+        QUALITY,
+        INFRASTRUCTURE
+    }
 
     /**
      * An LLM-as-judge verification via the executor port: acceptance criteria plus

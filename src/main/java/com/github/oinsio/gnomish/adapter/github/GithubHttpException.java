@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.tracker.github;
+package com.github.oinsio.gnomish.adapter.github;
 
 /**
  * Thrown by {@link GithubHttpClient#send(java.net.http.HttpRequest.Builder)}

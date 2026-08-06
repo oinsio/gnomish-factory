@@ -5,6 +5,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
+import com.tngtech.archunit.core.importer.ImportOption
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -17,12 +18,18 @@ import spock.lang.Specification
 class DomainPuritySpec extends Specification {
 
     /**
-     * Compiled production bytecode, imported once from the test runtime
-     * classpath. Groovy test classes under the same root package are also
-     * picked up, but the rules only constrain {@code ..domain..}.
+     * Compiled <em>production</em> bytecode, imported once from the runtime
+     * classpath. {@link ImportOption.Predefined#DO_NOT_INCLUDE_TESTS} drops the
+     * compiled Spock specs (which share the root package tree, and legitimately
+     * wire adapters and {@code java.nio.file} — e.g. the Gitea stage-verify E2E
+     * lives in {@code ..domain.engine} to reach package-private engine wiring):
+     * the purity gate constrains production {@code ..domain..} classes only, as
+     * this spec's rules intend, not the tests that exercise them.
      */
     @Shared
-    JavaClasses productionClasses = new ClassFileImporter().importPackages('com.github.oinsio.gnomish')
+    JavaClasses productionClasses = new ClassFileImporter()
+    .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+    .importPackages('com.github.oinsio.gnomish')
 
     def "FR10: no domain class depends on #forbiddenPackage"() {
         given: 'the purity rule forbidding the dependency'

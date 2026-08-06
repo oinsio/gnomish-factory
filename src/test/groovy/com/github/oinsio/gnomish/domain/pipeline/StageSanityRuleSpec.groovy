@@ -46,7 +46,7 @@ class StageSanityRuleSpec extends Specification {
     }
 
     private static VerifyCheck ext(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, interval, timeout)
+        new VerifyCheck.External(checkId, interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     private static VerifyCheck judge(String model, int votes) {

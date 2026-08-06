@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.put
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -41,7 +42,11 @@ class GithubLabelOpsSpec extends Specification {
         RetryConfig.custom()
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ it instanceof GithubHttpUncheckedIOException })
+                // Matches everything rather than naming the adapter's package-private
+                // GithubHttpUncheckedIOException (illegal cross-package access from this spec's
+                // package, see FeedAutomatonOutageIntegrationSpec) -- harmless here since the only
+                // exception this predicate ever actually sees is a real transport failure.
+                .retryOnException({ true })
                 .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
                 .build()
     }

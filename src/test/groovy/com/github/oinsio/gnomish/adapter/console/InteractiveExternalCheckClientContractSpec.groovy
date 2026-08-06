@@ -22,7 +22,7 @@ import java.time.Duration
 class InteractiveExternalCheckClientContractSpec extends ExternalCheckClientContract {
 
     private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci-build', Duration.ofSeconds(30), Duration.ofMinutes(5))
+        new VerifyCheck.External('ci-build', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
     private static Workspace sampleWorkspace() {

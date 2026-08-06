@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Optional;

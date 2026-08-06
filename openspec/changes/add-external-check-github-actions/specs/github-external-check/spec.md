@@ -61,11 +61,40 @@ retried without consuming a stage attempt.
 - **THEN** the poll returns CannotVerify naming the outage, and no quality
   failure is recorded
 
+### Requirement: Misconfiguration fails fast without burning an attempt
+A client-side rejection the retry policy cannot resolve — a 401 (invalid or
+expired token), a non-rate-limited 403 (token lacks Actions read scope), a
+404 (checkId names no existing workflow), or any other non-2xx that is not a
+transient infrastructure failure — SHALL classify as CannotVerify
+immediately, without polling to the check's timeout, naming the likely
+misconfiguration; no stage attempt is burned. The error body SHALL never be
+parsed as a runs listing (where its missing `workflow_runs` array would read
+as an empty, still-Running list).
+<!-- implements NFR-R3 of add-external-check-github-actions -->
+
+#### Scenario: A mistyped checkId is diagnosed, not silently polled
+- **WHEN** the runs query for the declared checkId returns 404
+- **THEN** the poll returns CannotVerify at once, its reason naming the check
+  and that no workflow by that file name exists, and no quality failure is
+  recorded
+
+#### Scenario: An expired token escalates immediately
+- **WHEN** the runs query returns 401
+- **THEN** the poll returns CannotVerify naming the invalid or expired token,
+  without waiting for the check's timeout, and burns no stage attempt
+
 ### Requirement: Failure findings carry jobs and capped log tails
 On Fail the adapter SHALL emit findings naming each failed job and step plus
 the tail of each failed job's log, within the funnel's size caps; the
 findings travel through the unified funnel like every other check's.
 <!-- implements FR6, NFR-C1, UX1 of add-external-check-github-actions -->
+
+**Provisional until add-sandbox-core lands:** the unified findings funnel
+(FR15) does not exist in `src/` yet. `GithubWorkflowJobsFetcher` applies a
+local, adapter-specific tail cap (`LOG_TAIL_CAP_CHARS`) as a stand-in for
+the funnel's centrally-tuned size caps. "Within the funnel's size caps" and
+"travel through the unified funnel" describe the target design, not the
+current adapter, until add-sandbox-core's funnel replaces this local cap.
 
 #### Scenario: The gnome sees why CI failed
 - **WHEN** a matching run concludes `failure` with two failed jobs
@@ -77,6 +106,14 @@ The pin set checked by the pin-check guard SHALL be the union of the
 user-declared paths from the stage law and the `checkId` workflow file
 contributed by the adapter.
 <!-- implements FR4 of add-external-check-github-actions -->
+
+**Provisional until add-sandbox-core lands:** the pin-check guard (FR16,
+design D10) does not exist in `src/` yet. `GithubCheckPinPaths` implements
+only the adapter's contribution — the `checkId` workflow file — as a small
+static method; the union with law-declared paths and the byte-compare
+against the base branch described below are the guard's responsibility and
+are not implemented. This requirement and its scenario describe the target
+design once the guard lands; they are not exercised end-to-end today.
 
 #### Scenario: Early substitution is caught at the point of use
 - **WHEN** the gnome modified the declared workflow file during an earlier
@@ -90,6 +127,15 @@ poll state SHALL be persisted, so any factory instance can resume polling
 after a crash or takeover and observe the same runs.
 <!-- implements NFR-R2 of add-external-check-github-actions -->
 
+**Provisional until add-sandbox-core lands:** no production `Workspace`
+implementation in this codebase carries a git SHA yet — that is
+add-sandbox-core's attempt-commit round protocol (FR21/D15). Until it
+lands, `GithubCheckWorkspace` is an adapter-local `Workspace` stand-in
+carrying `owner`/`repo`/`attemptCommitSha`, downcast internally by
+`GithubCheckExternalClient`. It is expected to be replaced by
+add-sandbox-core's real environment/workspace type; the statelessness
+property itself is already exercised by the adapter's contract test.
+
 #### Scenario: Another instance resumes mid-poll
 - **WHEN** the polling instance dies and another instance resumes the task
 - **THEN** the new instance polls the same attempt commit and reaches the
@@ -99,6 +145,16 @@ after a crash or takeover and observe the same runs.
 The adapter SHALL obtain its token through `SecretsProvider`, require read
 scope only, and never include token material in logs or findings.
 <!-- implements FR8, NFR-S1 of add-external-check-github-actions -->
+
+**Provisional until add-sandbox-core lands:** the `SecretsProvider` port
+(FR18) does not exist in `src/` yet. `GithubCheckToken` resolves the token
+from the `GNOMISH_GITHUB_ACTIONS_TOKEN` environment variable once, at
+wiring time, mirroring the tracker adapter's own pre-`SecretsProvider`
+pattern. The read-only-scope and never-leaks-into-findings/logs properties
+hold today regardless of resolution mechanism; only the *source* of the
+token is a stand-in, replaced by a `SecretsProvider`-backed factory once
+that port lands — nothing downstream of token resolution is expected to
+change.
 
 #### Scenario: Token never leaks into findings
 - **WHEN** a poll fails and CannotVerify details preserve the HTTP exception

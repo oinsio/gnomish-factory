@@ -6,6 +6,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -49,7 +51,11 @@ class GithubOpenQuerySpec extends Specification {
         RetryConfig.custom()
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ it instanceof GithubHttpUncheckedIOException })
+                // Matches everything rather than naming the adapter's package-private
+                // GithubHttpUncheckedIOException (illegal cross-package access from this spec's
+                // package, see FeedAutomatonOutageIntegrationSpec) -- harmless here since the only
+                // exception this predicate ever actually sees is a real transport failure.
+                .retryOnException({ true })
                 .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
                 .build()
     }
@@ -237,6 +243,19 @@ class GithubOpenQuerySpec extends Specification {
         stubNeedsHumanFeed('[]')
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/7/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(403).withBody('{"message":"Forbidden"}')))
+
+        when:
+        newOpenQuery().listOpen()
+
+        then:
+        thrown(GithubFeedQueryException)
+    }
+
+    def "reports an infrastructure failure when the List Issues call for an open-state label returns a non-2xx status"() {
+        given: 'the working-label feed itself fails, before any comment is ever read'
+        wireMock.stubFor(get(urlEqualTo(WORKING_URL))
+                .willReturn(aResponse().withStatus(500).withBody('{"message":"Internal Server Error"}')))
+        stubNeedsHumanFeed('[]')
 
         when:
         newOpenQuery().listOpen()

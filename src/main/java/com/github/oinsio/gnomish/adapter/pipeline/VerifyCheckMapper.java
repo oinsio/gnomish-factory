@@ -25,7 +25,14 @@ import org.jspecify.annotations.Nullable;
  * <p>Opaque {@code params}/{@code settings} maps flow through as defensive
  * plain-JDK copies (FR11, D5a) via {@link PipelineMapper#copySettings}.
  *
- * <p>Implements FR2, FR11, D2, D5, D5a of load-pipeline-config.
+ * <p>This mapper also parses the {@code external} check's optional raw
+ * {@code timeout-class} string into {@link VerifyCheck.TimeoutClass}: absent
+ * defaults to {@code QUALITY} (unchanged behavior), and an unrecognized value
+ * is a located {@link ConfigError} (task 6.1, FR9 of
+ * add-external-check-github-actions).
+ *
+ * <p>Implements FR2, FR11, D2, D5, D5a of load-pipeline-config; FR9 of
+ * add-external-check-github-actions.
  */
 final class VerifyCheckMapper {
 
@@ -77,6 +84,32 @@ final class VerifyCheckMapper {
                 DurationConfig.parse(manifest, "verify[%d].interval".formatted(index), external.interval(), errors);
         Duration timeout =
                 DurationConfig.parse(manifest, "verify[%d].timeout".formatted(index), external.timeout(), errors);
-        return new VerifyCheck.External(PipelineMapper.orEmpty(external.checkId()), interval, timeout);
+        VerifyCheck.TimeoutClass timeoutClass = mapTimeoutClass(manifest, index, external.timeoutClass(), errors);
+        return new VerifyCheck.External(PipelineMapper.orEmpty(external.checkId()), interval, timeout, timeoutClass);
+    }
+
+    /**
+     * Parses the raw {@code timeout-class} string (FR9): {@code null} (absent)
+     * defaults to {@link VerifyCheck.TimeoutClass#QUALITY} — unchanged behavior
+     * for checks that declare nothing (D7); {@code "quality"}/{@code
+     * "infrastructure"} map to their enum constants; any other value is a
+     * located {@link ConfigError}, mirroring {@link DurationConfig#parse}'s
+     * convention of still returning a safe fallback ({@code QUALITY}) since the
+     * accumulated error means {@link PipelineMapper} discards the whole
+     * definition anyway.
+     */
+    private static VerifyCheck.TimeoutClass mapTimeoutClass(
+            String manifest, int index, @Nullable String raw, List<ConfigError> errors) {
+        if (raw == null || raw.equals("quality")) {
+            return VerifyCheck.TimeoutClass.QUALITY;
+        }
+        if (raw.equals("infrastructure")) {
+            return VerifyCheck.TimeoutClass.INFRASTRUCTURE;
+        }
+        errors.add(new ConfigError(
+                manifest,
+                "verify[%d].timeout-class".formatted(index),
+                "unknown timeout class '%s'; use 'quality' or 'infrastructure'".formatted(raw)));
+        return VerifyCheck.TimeoutClass.QUALITY;
     }
 }

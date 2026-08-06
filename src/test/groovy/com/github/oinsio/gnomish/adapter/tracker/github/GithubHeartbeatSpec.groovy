@@ -8,6 +8,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import static com.github.tomakehurst.wiremock.http.Fault.CONNECTION_RESET_BY_PEER
 
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.adapter.github.GithubHttpException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -50,7 +52,11 @@ class GithubHeartbeatSpec extends Specification {
         RetryConfig.custom()
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ it instanceof GithubHttpUncheckedIOException })
+                // Matches everything rather than naming the adapter's package-private
+                // GithubHttpUncheckedIOException (illegal cross-package access from this spec's
+                // package, see FeedAutomatonOutageIntegrationSpec) -- harmless here since the only
+                // exception this predicate ever actually sees is a real transport failure.
+                .retryOnException({ true })
                 .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
                 .build()
     }

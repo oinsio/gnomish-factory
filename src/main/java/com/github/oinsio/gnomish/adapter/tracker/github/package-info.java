@@ -9,13 +9,14 @@
  * com.github.oinsio.gnomish.adapter.tracker.github.GithubLabelsValidator}
  * (config subsection validation, task 4.2); {@link
  * com.github.oinsio.gnomish.adapter.tracker.github.GithubTaskId} (canonical id
- * build/parse, task 4.3); {@link
- * com.github.oinsio.gnomish.adapter.tracker.github.GithubHttpClient} and its
- * retry policy {@link
- * com.github.oinsio.gnomish.adapter.tracker.github.GithubRetryConfig} (HTTP
- * client core with auth header and Resilience4j retry, task 4.4); {@link
- * com.github.oinsio.gnomish.adapter.tracker.github.GithubConditionalRequestCache}
- * (ETag conditional-request cache, task 4.5); {@link
+ * build/parse, task 4.3); the shared HTTP core ({@link
+ * com.github.oinsio.gnomish.adapter.github.GithubHttpClient}, its retry
+ * policy {@link com.github.oinsio.gnomish.adapter.github.GithubRetryConfig},
+ * and the ETag conditional-request cache {@link
+ * com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache},
+ * task 4.4-4.5) was extracted into {@link com.github.oinsio.gnomish.adapter.github}
+ * as tracker-agnostic plumbing (task 2.1 of
+ * add-external-check-github-actions); {@link
  * com.github.oinsio.gnomish.adapter.tracker.github.GithubLabelOps} (point
  * label add/remove and the exclusive-transition composite, task 4.6); {@link
  * com.github.oinsio.gnomish.adapter.tracker.github.GithubLabelProvisioner}
@@ -31,8 +32,16 @@
  * {@code fetchTask}: snapshot, label-derived state, boundary-anchored claim
  * holder/park reason/abort facts via {@link
  * com.github.oinsio.gnomish.adapter.tracker.github.GithubCommentBoundary},
- * {@code Gone} for closed/missing, task 4.10); claim lease and state writes
- * land in later tasks (4.11–4.15).
+ * {@code Gone} for closed/missing, task 4.10); {@link
+ * com.github.oinsio.gnomish.adapter.tracker.github.GithubClaimLease} and its
+ * claim/release/renew exceptions over the lease-comment protocol (tasks
+ * 4.11–4.13); {@link
+ * com.github.oinsio.gnomish.adapter.tracker.github.GithubCorrespondence}
+ * (post-succeeded-but-verify-fails release judgment call, task 4.14); {@link
+ * com.github.oinsio.gnomish.adapter.tracker.github.GithubTaskId} rename-
+ * redirect handling (task 4.15); and {@link
+ * com.github.oinsio.gnomish.adapter.tracker.github.GithubTracker} (the
+ * {@code Tracker} composition root, task 4.16).
  *
  * <p>Implements FR16, FR17, NFR-S1 of add-tracker-port.
  *

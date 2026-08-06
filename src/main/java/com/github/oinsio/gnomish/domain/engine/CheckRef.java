@@ -49,7 +49,8 @@ public record CheckRef(int index, String label) {
                 switch (check) {
                     case VerifyCheck.Builtin(String name, var params) -> "builtin:" + name;
                     case VerifyCheck.Command(String command) -> "command:" + command;
-                    case VerifyCheck.External(String checkId, var interval, var timeout) -> "external:" + checkId;
+                    case VerifyCheck.External(String checkId, var interval, var timeout, var timeoutClass) ->
+                        "external:" + checkId;
                     case VerifyCheck.Judge(String criteriaFile, var model, var settings, var votes) ->
                         "judge:" + criteriaFile;
                 };
