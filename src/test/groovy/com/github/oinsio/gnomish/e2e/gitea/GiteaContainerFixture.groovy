@@ -5,6 +5,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.util.Base64
 import org.testcontainers.containers.GenericContainer
+import org.testcontainers.containers.Network
 import org.testcontainers.containers.wait.strategy.Wait
 
 /**
@@ -25,7 +26,15 @@ import org.testcontainers.containers.wait.strategy.Wait
  * {@link GiteaAvailability#dockerAvailable()} and skip (e.g. via Spock {@code @IgnoreIf}) rather
  * than construct this fixture when Docker is absent.
  *
- * <p>Implements FR11 of add-git-workflow (G2 infra).
+ * <p>The {@code actionsEnabled} constructor (task 7.1, M1) additionally sets {@code
+ * GITEA__actions__ENABLED=true} and attaches the container to a shared Testcontainers {@link
+ * Network} under the fixed alias {@link #NETWORK_ALIAS}, so a sibling {@code act_runner} container
+ * (see {@code GiteaActionsRunnerFixture}) can reach it by container-to-container hostname rather
+ * than the host-mapped port. The plain no-arg constructor is unchanged — no network, Actions off —
+ * so the existing plain-Gitea E2E specs keep their exact prior behavior.
+ *
+ * <p>Implements FR11 of add-git-workflow (G2 infra); the {@code actionsEnabled} path implements M1
+ * of add-external-check-github-actions.
  */
 class GiteaContainerFixture {
 
@@ -34,14 +43,29 @@ class GiteaContainerFixture {
     static final String ADMIN_EMAIL = 'gnomish-e2e@example.invalid'
     static final String REPO_NAME = 'gnomish-e2e-repo'
 
+    /** Container-network hostname alias other containers on the same {@link #network()} use to reach this one. */
+    static final String NETWORK_ALIAS = 'gitea'
+
     private static final String IMAGE = 'gitea/gitea:1.27.0'
     private static final int HTTP_PORT = 3000
 
     private final GenericContainer<?> container
+    private final Network network
 
     private String token
 
     GiteaContainerFixture() {
+        this(false)
+    }
+
+    /**
+     * @param actionsEnabled when {@code true}, enables Gitea Actions ({@code
+     *     GITEA__actions__ENABLED=true}) and attaches the container to a fresh {@link Network}
+     *     under {@link #NETWORK_ALIAS}, for a sibling {@code act_runner} container to join
+     *     (task 7.1, M1 of add-external-check-github-actions)
+     */
+    GiteaContainerFixture(boolean actionsEnabled) {
+        network = actionsEnabled ? Network.newNetwork() : null
         container = new GenericContainer<>(IMAGE)
                 .withExposedPorts(HTTP_PORT)
                 .withEnv('GITEA__security__INSTALL_LOCK', 'true')
@@ -49,6 +73,25 @@ class GiteaContainerFixture {
                 .withEnv('USER_UID', '1000')
                 .withEnv('USER_GID', '1000')
                 .waitingFor(Wait.forHttp('/').forStatusCode(200))
+        if (actionsEnabled) {
+            container.withEnv('GITEA__actions__ENABLED', 'true')
+                    .withNetwork(network)
+                    .withNetworkAliases(NETWORK_ALIAS)
+        }
+    }
+
+    /** @return the shared network this container joined, or {@code null} when built with the plain constructor */
+    Network network() {
+        network
+    }
+
+    /**
+     * @return this container's base API URL reachable from a sibling container on {@link
+     *     #network()} (container-to-container, not the host-mapped port), e.g. {@code
+     *     http://gitea:3000}
+     */
+    String internalUrl() {
+        "http://${NETWORK_ALIAS}:${HTTP_PORT}"
     }
 
     /** Starts the container, then bootstraps the admin user, token, and empty repository. */
@@ -81,6 +124,21 @@ class GiteaContainerFixture {
     /** @return the bootstrapped admin's API access token, for direct REST calls beyond git push/pull */
     String adminToken() {
         token
+    }
+
+    /**
+     * Generates a one-shot global Actions runner registration token via the {@code gitea} CLI
+     * (same {@code docker exec} pattern as {@link #createAdminUser()}), for a sibling {@code
+     * act_runner} container to self-register with on startup.
+     *
+     * <p>Implements M1 of add-external-check-github-actions.
+     *
+     * @return the registration token, trimmed of any trailing newline
+     */
+    String createRunnerRegistrationToken() {
+        def result = container.execInContainerWithUser('git', 'gitea', 'actions', 'generate-runner-token')
+        assert result.exitCode == 0: "gitea actions generate-runner-token failed: ${result.stderr}"
+        result.stdout.trim()
     }
 
     private void createAdminUser() {

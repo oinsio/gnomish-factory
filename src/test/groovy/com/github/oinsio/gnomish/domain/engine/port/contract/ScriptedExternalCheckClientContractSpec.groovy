@@ -36,7 +36,7 @@ class ScriptedExternalCheckClientContractSpec extends ExternalCheckClientContrac
     @Override
     protected Optional<PollStatus> arrange(ExternalCheckClientContract.PollVariant variant) {
         def client = new ScriptedExternalCheckClient([scriptedStatus(variant)])
-        def check = new VerifyCheck.External('ci', Duration.ofSeconds(1), Duration.ofSeconds(10))
+        def check = new VerifyCheck.External('ci', Duration.ofSeconds(1), Duration.ofSeconds(10), VerifyCheck.TimeoutClass.QUALITY)
         Optional.of(client.poll(check, new FakeWorkspace()))
     }
 }

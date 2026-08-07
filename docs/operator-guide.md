@@ -74,6 +74,17 @@ flowchart LR
    write access on the target repo. If it's missing or blank, `take` fails
    fast at startup with a named error, before any task is touched.
 
+   A stage's GitHub Actions `external` check (add-external-check-github-actions)
+   uses a separate token, **`GNOMISH_GITHUB_ACTIONS_TOKEN`**, scoped read-only:
+   `actions: read` on a fine-grained PAT, or a classic token's `repo` scope used
+   read-only — enough to list workflow runs and fetch job logs, nothing more.
+   Keep it separate from `GNOMISH_GITHUB_TOKEN` so a leaked CI-check credential
+   can't write to the tracker. See
+   [`docs/operator-guide-github-actions-check.md`](operator-guide-github-actions-check.md)
+   for the full operator write-up (base URL config — including what isn't
+   wired yet, CI hygiene for the residual gnome-modified-workflow threat, and
+   the `timeout-class` trade-off).
+
 3. **`factory.*` properties** are per-instance/installation tuning, set the
    same way as the existing `factory.instance-name`/`factory.agent-cli-binary`
    properties (Spring `--key=value` or `application.yaml`):

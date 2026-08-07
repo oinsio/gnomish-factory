@@ -115,7 +115,7 @@ class VerifyClassificationSpec extends Specification {
     }
 
     static VerifyCheck.External external(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, interval, timeout)
+        new VerifyCheck.External(checkId, interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     static VerifyCheck.Judge judge(int votes) {

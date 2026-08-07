@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;

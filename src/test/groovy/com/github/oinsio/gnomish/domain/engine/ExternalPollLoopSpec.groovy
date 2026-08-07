@@ -3,14 +3,18 @@ package com.github.oinsio.gnomish.domain.engine
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
 
 /**
  * VerifyOrchestrator external poll loop, task 4.3 — an external check polls until it reaches
  * a verdict within its timeout, sleeping exactly the interval between polls (FR3); an
  * unresolved Running times out at the deadline into a quality Fail (FR3, NFR-R3); a Fail or
- * CannotVerify on the first poll maps straight through without sleeping. Implements FR3,
- * NFR-R3 of add-stage-engine.
+ * CannotVerify on the first poll maps straight through without sleeping. Also covers the
+ * FR9 timeout classification (add-external-check-github-actions, task 6.2): an undeclared or
+ * QUALITY-classed timeout keeps the unchanged quality Fail, an INFRASTRUCTURE-classed timeout
+ * escalates as a CannotVerify naming the elapsed timeout instead. Implements FR3, NFR-R3 of
+ * add-stage-engine; FR9 of add-external-check-github-actions.
  */
 class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
 
@@ -44,9 +48,10 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
     }
 
     // FR3, NFR-R3: a Running that never resolves times out at the deadline into a quality
-    //      Fail carrying a single finding naming the check id and timeout — and stops
+    //      Fail carrying a single finding naming the check id and timeout — and stops.
+    //      FR9: the undeclared/default timeout class is QUALITY, so this is unchanged.
     def "times an unresolved external check out into a quality Fail once the deadline elapses"() {
-        given: 'a poller that stays Running past the deadline, on a 1s/3s check'
+        given: 'a poller that stays Running past the deadline, on a 1s/3s check with the default timeout class'
         def interval = Duration.ofSeconds(1)
         def timeout = Duration.ofSeconds(3)
         // deadline is EPOCH+3s: polls at t=0,1,2 sleep; the t=3 poll is at the deadline and fails
@@ -69,6 +74,38 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         verdict.findings().size() == 1
         verdict.findings()[0].message().contains('ci/slow')
         verdict.findings()[0].message().contains(timeout.toString())
+
+        and: 'the loop stopped rather than polling forever, having slept up to the timeout'
+        externalClient.pollCount == 4
+        sleeper.slept.size() == 3
+        sleeper.slept.inject(Duration.ZERO) { acc, d -> acc.plus(d) } >= timeout
+    }
+
+    // FR9: an INFRASTRUCTURE-classed timeout escalates as a CannotVerify naming the elapsed
+    //      timeout, rather than a quality Fail — the check adapter is agnostic (add-external-
+    //      check-github-actions "Infrastructure-classed timeout burns no attempt")
+    def "times an unresolved INFRASTRUCTURE-classed external check out into a CannotVerify"() {
+        given: 'a poller that stays Running past the deadline, on a 1s/3s check classed INFRASTRUCTURE'
+        def interval = Duration.ofSeconds(1)
+        def timeout = Duration.ofSeconds(3)
+        def externalClient = new ScriptedExternalCheckClient([
+            new PollStatus.Running(),
+            new PollStatus.Running(),
+            new PollStatus.Running(),
+            new PollStatus.Running()
+        ])
+        def check = external('ci/flaky-runner', interval, timeout, VerifyCheck.TimeoutClass.INFRASTRUCTURE)
+
+        when: 'the single external check is verified'
+        def result = orchestrator(new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(), externalClient)
+                .verify([check], CONTEXT, WORKSPACE, KEY)
+
+        then: 'the verdict is a CannotVerify naming the check id and the elapsed timeout, not a quality Fail'
+        result.results.size() == 1
+        def verdict = result.results[0].verdict
+        verdict instanceof Verdict.CannotVerify
+        verdict.reason().contains('ci/flaky-runner')
+        verdict.reason().contains(timeout.toString())
 
         and: 'the loop stopped rather than polling forever, having slept up to the timeout'
         externalClient.pollCount == 4

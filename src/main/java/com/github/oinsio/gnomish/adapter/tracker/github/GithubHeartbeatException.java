@@ -6,10 +6,10 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
  * response that is not a {@code 404} (the "claim gone" protocol signal, a {@link
  * com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult.ClaimGone}), or when a
  * beat response body cannot be parsed for its {@code updated_at} version fact. This
- * includes a persistent 5xx: {@link GithubHttpClient} retries it and, once the budget
- * is exhausted, returns it as a non-2xx the beat throws on here. A network/transport
- * failure is different — it surfaces earlier as an infrastructure {@link
- * GithubHttpException}, never this exception.
+ * includes a persistent 5xx: {@link com.github.oinsio.gnomish.adapter.github.GithubHttpClient}
+ * retries it and, once the budget is exhausted, returns it as a non-2xx the beat throws on here.
+ * A network/transport failure is different — it surfaces earlier as an infrastructure {@link
+ * com.github.oinsio.gnomish.adapter.github.GithubHttpException}, never this exception.
  *
  * <p>Implements FR1, FR8 of add-claim-heartbeat.
  */

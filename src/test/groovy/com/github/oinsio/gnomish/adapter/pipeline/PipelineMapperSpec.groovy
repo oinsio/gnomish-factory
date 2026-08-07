@@ -69,7 +69,7 @@ class PipelineMapperSpec extends Specification {
                 'stages/build/instructions.md',
                 [
                     new VerifyCheckDto.Command('./gradlew check'),
-                    new VerifyCheckDto.External('ci/build', '30s', '15m'),
+                    new VerifyCheckDto.External('ci/build', '30s', '15m', null),
                     new VerifyCheckDto.Judge('criteria.md', 'claude-opus-4-1', [maxTokens: 1000], 3),
                 ] as List<VerifyCheckDto>,
                 new AutonomyDto(5),
@@ -119,7 +119,8 @@ class PipelineMapperSpec extends Specification {
         s1.executor() == new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-opus-4-1', [:])
         s1.verify() == [
             new VerifyCheck.Command('./gradlew check'),
-            new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(15)),
+            new VerifyCheck.External(
+            'ci/build', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
             new VerifyCheck.Judge('criteria.md', 'claude-opus-4-1', [maxTokens: 1000], 3),
         ]
         s1.limits() == new AutonomyLimits(5) // override wins
@@ -225,7 +226,7 @@ class PipelineMapperSpec extends Specification {
         def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
         new ExecutorDto('api', 'm', null), 'i.md',
         [
-            new VerifyCheckDto.External('ci', interval, timeout)
+            new VerifyCheckDto.External('ci', interval, timeout, null)
         ], null, 'auto')
 
         when:
@@ -250,7 +251,7 @@ class PipelineMapperSpec extends Specification {
         def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
         new ExecutorDto('api', 'm', null), 'i.md',
         [
-            new VerifyCheckDto.External('ci', interval, timeout)
+            new VerifyCheckDto.External('ci', interval, timeout, null)
         ], null, 'auto')
 
         when:
@@ -277,7 +278,7 @@ class PipelineMapperSpec extends Specification {
         def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
         new ExecutorDto('api', 'm', null), 'i.md',
         [
-            new VerifyCheckDto.External('ci', interval, timeout)
+            new VerifyCheckDto.External('ci', interval, timeout, null)
         ], null, 'auto')
 
         when:
@@ -295,6 +296,67 @@ class PipelineMapperSpec extends Specification {
         'timeout'  | '30s'     | 'nonsense'|| 'verify[0].timeout'  | "malformed duration 'nonsense'; use e.g. '30s', '15m', '2h'"
     }
 
+    // FR9: absent timeout-class defaults to quality — unchanged engine behavior
+    // (delta-spec scenario "Absent timeout class defaults to quality")
+    def "defaults an absent external timeout-class to quality"() {
+        given:
+        def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
+        new ExecutorDto('api', 'm', null), 'i.md',
+        [
+            new VerifyCheckDto.External('ci', '30s', '15m', null)
+        ], null, 'auto')
+
+        when:
+        def check = PipelineMapper.map(config('1', 1), [entry('p', stage)])
+        .definition().stages()[0].verify()[0] as VerifyCheck.External
+
+        then:
+        check.timeoutClass() == VerifyCheck.TimeoutClass.QUALITY
+    }
+
+    // FR9: a declared 'infrastructure' timeout-class loads into the typed model
+    def "loads a declared external timeout-class #raw to #expected"() {
+        given:
+        def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
+        new ExecutorDto('api', 'm', null), 'i.md',
+        [
+            new VerifyCheckDto.External('ci', '30s', '15m', raw)
+        ], null, 'auto')
+
+        when:
+        def check = PipelineMapper.map(config('1', 1), [entry('p', stage)])
+        .definition().stages()[0].verify()[0] as VerifyCheck.External
+
+        then:
+        check.timeoutClass() == expected
+
+        where:
+        raw               || expected
+        'quality'         || VerifyCheck.TimeoutClass.QUALITY
+        'infrastructure'  || VerifyCheck.TimeoutClass.INFRASTRUCTURE
+    }
+
+    // FR9: an unrecognized timeout-class is a located error identifying the check
+    // (delta-spec scenario "Unknown timeout class is rejected")
+    def "reports an unrecognized external timeout-class as a located error"() {
+        given:
+        def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
+        new ExecutorDto('api', 'm', null), 'i.md',
+        [
+            new VerifyCheckDto.External('ci', '30s', '15m', 'urgent')
+        ], null, 'auto')
+
+        when:
+        def result = PipelineMapper.map(config('1', 1), [entry('build', stage)])
+
+        then: 'exactly one located error, no definition'
+        result.definition() == null
+        result.errors() == [
+            new ConfigError('stages/build/stage.yaml', 'verify[0].timeout-class',
+            "unknown timeout class 'urgent'; use 'quality' or 'infrastructure'"),
+        ]
+    }
+
     // Aggregation: malformed durations across stages/checks all collected,
     // located by stage manifest and verify index, in stage then check order
     def "aggregates all malformed durations across stages in order"() {
@@ -302,13 +364,13 @@ class PipelineMapperSpec extends Specification {
         def s0 = new StageDto('p', null, [new ArtifactOutputDto('o0')],
         new ExecutorDto('api', 'm', null), 'i.md',
         [
-            new VerifyCheckDto.External('a', 'bad1', '1m')
+            new VerifyCheckDto.External('a', 'bad1', '1m', null)
         ], null, 'auto')
         def s1 = new StageDto('p', null, [new ArtifactOutputDto('o1')],
         new ExecutorDto('api', 'm', null), 'i.md',
         [
             new VerifyCheckDto.Command('x'),
-            new VerifyCheckDto.External('b', '1s', 'bad2'),
+            new VerifyCheckDto.External('b', '1s', 'bad2', null),
         ] as List<VerifyCheckDto>, null, 'auto')
 
         when:
@@ -406,7 +468,7 @@ class PipelineMapperSpec extends Specification {
                 new ExecutorDto('api', 'm', null), 'i.md',
                 [
                     new VerifyCheckDto.Command(null),
-                    new VerifyCheckDto.External(null, '1s', '1m'),
+                    new VerifyCheckDto.External(null, '1s', '1m', null),
                     new VerifyCheckDto.Judge(null, 'jm', null, 1),
                 ] as List<VerifyCheckDto>, null, 'auto')
 
@@ -587,7 +649,7 @@ class PipelineMapperSpec extends Specification {
         def stage = new StageDto('p', null, null,
                 new ExecutorDto('api', 'm', null), 'i.md',
                 [
-                    new VerifyCheckDto.External('ci', 'bad', '15m')
+                    new VerifyCheckDto.External('ci', 'bad', '15m', null)
                 ], null, 'auto')
         def cfg = new ConfigDto('1', null, new TrackerDto('github', 3, 'oops', 3, [:]))
 

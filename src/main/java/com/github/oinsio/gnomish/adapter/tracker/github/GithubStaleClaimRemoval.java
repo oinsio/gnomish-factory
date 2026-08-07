@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
@@ -37,7 +38,8 @@ import java.util.Optional;
  * treats 404 as success, re-adding ready is harmless). Both a network failure and a
  * persistent 5xx are retried inside {@link GithubHttpClient} (NFR-R2), but surface
  * differently once retries are exhausted: a network failure propagates as an
- * infrastructure {@link GithubHttpException}, whereas an exhausted 5xx is returned as a
+ * infrastructure {@link com.github.oinsio.gnomish.adapter.github.GithubHttpException},
+ * whereas an exhausted 5xx is returned as a
  * non-2xx response and throws a {@link GithubStaleClaimException} from the failing step.
  *
  * <p>Implements FR4, FR5 of add-claim-heartbeat.

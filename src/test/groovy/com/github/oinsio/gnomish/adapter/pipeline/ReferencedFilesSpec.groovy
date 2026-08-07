@@ -149,7 +149,7 @@ class ReferencedFilesSpec extends Specification {
             stage('plan', 'stages/plan/instructions.md', [
                 command(),
                 new VerifyCheck.Builtin('files_exist', [:]),
-                new VerifyCheck.External('ci', Duration.ofSeconds(5), Duration.ofSeconds(60))
+                new VerifyCheck.External('ci', Duration.ofSeconds(5), Duration.ofSeconds(60), VerifyCheck.TimeoutClass.QUALITY)
             ] as List<VerifyCheck>)
         ]
 

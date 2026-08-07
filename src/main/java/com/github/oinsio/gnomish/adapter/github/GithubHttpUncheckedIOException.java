@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.tracker.github;
+package com.github.oinsio.gnomish.adapter.github;
 
 import java.io.IOException;
 

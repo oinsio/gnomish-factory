@@ -5,9 +5,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.tracker.github.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubFeedQuery
-import com.github.oinsio.gnomish.adapter.tracker.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef

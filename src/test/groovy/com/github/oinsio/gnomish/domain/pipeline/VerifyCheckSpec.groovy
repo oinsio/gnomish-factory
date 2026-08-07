@@ -83,7 +83,7 @@ class VerifyCheckSpec extends Specification {
     def "External exposes the check identifier, poll interval and timeout"() {
         when: 'an external check is modeled'
         VerifyCheck check = new VerifyCheck.External(
-                'ci/build', Duration.ofSeconds(30), Duration.ofMinutes(15))
+                'ci/build', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY)
 
         then: 'the variant exposes exactly the identifier and both durations'
         check.checkId() == 'ci/build'
@@ -96,7 +96,7 @@ class VerifyCheckSpec extends Specification {
     // carry an insane value so the validator can still see and report it
     def "External carries insane timing (#reason) without throwing"() {
         when: 'an external check is modeled with timing that violates FR11'
-        def check = new VerifyCheck.External('ci/build', interval, timeout)
+        def check = new VerifyCheck.External('ci/build', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
 
         then: 'the record carries the values untouched for the validator to report'
         notThrown(Exception)
@@ -171,8 +171,8 @@ class VerifyCheckSpec extends Specification {
         new VerifyCheck.Builtin('files_exist', [paths: []]) ==
         new VerifyCheck.Builtin('files_exist', [paths: []])
         new VerifyCheck.Command('make test') == new VerifyCheck.Command('make test')
-        new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(5)) ==
-                new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(5))
+        new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) ==
+                new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
         new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3) ==
         new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3)
     }

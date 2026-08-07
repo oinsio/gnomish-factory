@@ -60,7 +60,7 @@ class ReferenceRunSpec extends Specification {
     }
 
     static VerifyCheck.External external(String checkId) {
-        new VerifyCheck.External(checkId, SECOND, TIMEOUT)
+        new VerifyCheck.External(checkId, SECOND, TIMEOUT, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     static VerifyCheck.Judge judge(int votes) {
@@ -202,7 +202,7 @@ class ReferenceRunSpec extends Specification {
         // FR15: each recorded round is stamped with the Clock reading taken when it began; with the
         //     VirtualClock starting at EPOCH and only the ci poll loop advancing it, every round begins
         //     at or after EPOCH and no round is left without a begin instant.
-        persistence2.entries.each { entry ->
+        persistence2.entries.every { entry ->
             entry.state.attempts().every { it.startedAt() != null && !it.startedAt().isBefore(Instant.EPOCH) }
         }
     }

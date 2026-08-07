@@ -9,6 +9,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.tomakehurst.wiremock.WireMockServer
 import org.slf4j.LoggerFactory
 import spock.lang.Specification

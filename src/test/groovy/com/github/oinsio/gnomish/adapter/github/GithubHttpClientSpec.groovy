@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.tracker.github
+package com.github.oinsio.gnomish.adapter.github
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
@@ -123,6 +123,23 @@ class GithubHttpClientSpec extends Specification {
         then:
         response.statusCode() == 404
         wireMock.verify(1, getRequestedFor(urlEqualTo('/missing')))
+    }
+
+    def "follows a 302 redirect and returns the target's body (e.g. workflow job logs)"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/actions/jobs/1/logs'))
+                .willReturn(aResponse().withStatus(302)
+                .withHeader('Location', wireMock.baseUrl() + '/blob-storage/log-1')))
+        wireMock.stubFor(get(urlEqualTo('/blob-storage/log-1'))
+                .willReturn(aResponse().withStatus(200).withBody('log tail contents')))
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+
+        when:
+        def response = client.send(client.newRequest('/repos/acme/widgets/actions/jobs/1/logs'))
+
+        then:
+        response.statusCode() == 200
+        response.body() == 'log tail contents'
     }
 
     def "a persistent connection failure exhausts retries and throws GithubHttpException"() {

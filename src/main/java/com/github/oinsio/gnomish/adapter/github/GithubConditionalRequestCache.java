@@ -1,9 +1,10 @@
-package com.github.oinsio.gnomish.adapter.tracker.github;
+package com.github.oinsio.gnomish.adapter.github;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -23,8 +24,23 @@ import org.jspecify.annotations.Nullable;
  */
 public final class GithubConditionalRequestCache {
 
+    /**
+     * Bound on the number of tracked cache keys. This cache is held for the lifetime of its
+     * owning adapter instance (design D15) and accumulates one key per polled resource — a
+     * long-lived instance polling many task attempts over its life would otherwise grow this
+     * map without limit. 500 comfortably covers the working set of a single in-flight poll
+     * (a handful of run/jobs/log keys per attempt) with headroom for several attempts at
+     * once; the eldest key is evicted once the bound is exceeded (NFR-C1).
+     */
+    private static final int MAX_ENTRIES = 500;
+
     private final GithubHttpClient httpClient;
-    private final Map<String, CachedEntry> entries = new ConcurrentHashMap<>();
+    private final Map<String, CachedEntry> entries = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, CachedEntry> eldest) {
+            return size() > MAX_ENTRIES;
+        }
+    });
 
     public GithubConditionalRequestCache(GithubHttpClient httpClient) {
         this.httpClient = httpClient;
@@ -47,7 +63,8 @@ public final class GithubConditionalRequestCache {
      * {@code ETag}) clears the entry instead. Caching only successful bodies
      * keeps {@link NotModified} an unambiguous "the resource is still there and
      * unchanged" signal for callers that key behavior on the status code (e.g.
-     * {@link GithubTaskFetcher} distinguishing a {@code 404} from a live issue).
+     * {@link com.github.oinsio.gnomish.adapter.tracker.github.GithubTaskFetcher} distinguishing a {@code 404} from a
+     * live issue).
      */
     public ConditionalResult get(HttpRequest.Builder requestBuilder, String cacheKey) {
         CachedEntry cached = entries.get(cacheKey);
@@ -67,7 +84,7 @@ public final class GithubConditionalRequestCache {
         } else {
             entries.remove(cacheKey);
         }
-        return new Fresh(response.statusCode(), response.body(), eTag);
+        return new Fresh(response.statusCode(), response.body(), eTag, GithubRateLimit.isRateLimited(response));
     }
 
     private record CachedEntry(String eTag, String body) {}
@@ -81,10 +98,15 @@ public final class GithubConditionalRequestCache {
      * statusCode} is the HTTP status of that fresh response, so callers can
      * distinguish e.g. a {@code 404} from a live {@code 200}. {@code eTag} is
      * {@code null} only if the server omitted the {@code ETag} header, in which
-     * case no conditional caching is possible for this key.
+     * case no conditional caching is possible for this key. {@code
+     * rateLimited} is true when {@code statusCode} is a {@code 403} carrying
+     * GitHub's rate-limit signal (see {@link GithubRateLimit}) — a caller that
+     * classifies infrastructure failures (NFR-R1 of
+     * add-external-check-github-actions) must not mistake this for a
+     * business-outcome {@code 403}.
      */
     public record Fresh(
-            int statusCode, String body, @Nullable String eTag) implements ConditionalResult {}
+            int statusCode, String body, @Nullable String eTag, boolean rateLimited) implements ConditionalResult {}
 
     /** The resource is unchanged since the cached ETag; reuse {@link #previousBody()}. */
     public record NotModified(String previousBody) implements ConditionalResult {}

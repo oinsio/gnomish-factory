@@ -54,11 +54,17 @@ public sealed interface VerifyCheckDto {
      * @param checkId the external check identifier, or {@code null} when omitted
      * @param interval the raw poll-interval string, or {@code null} when omitted
      * @param timeout the raw poll-timeout string, or {@code null} when omitted
+     * @param timeoutClass the raw timeout-class string ({@code quality} or
+     *     {@code infrastructure}), or {@code null} when omitted (defaults to
+     *     {@code quality}, FR9); parsing and the unknown-value error are the
+     *     mapper's concern (task 6.1)
      */
     record External(
             @Nullable String checkId,
             @Nullable String interval,
-            @Nullable String timeout) implements VerifyCheckDto {}
+            @Nullable String timeout,
+            @Nullable String timeoutClass)
+            implements VerifyCheckDto {}
 
     /**
      * A {@code judge} check: acceptance-criteria file, pinned model, opaque
