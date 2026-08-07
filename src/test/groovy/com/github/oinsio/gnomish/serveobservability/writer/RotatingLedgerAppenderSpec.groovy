@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.writer
 
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
+import com.github.oinsio.gnomish.testsupport.StepClock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -87,23 +88,5 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
         // before anything is ever written to it.
         def placeholder = homeDir.resolve('ledger-uninitialized.jsonl')
         new RotatingLedgerAppender(new LedgerAppender(placeholder, new LedgerJsonMapper()), homeDir, INSTANCE_NAME, clock)
-    }
-
-    // A minimal Clock stub returning a pre-scripted sequence of instants, one per call —
-    // mirrors SnapshotWriterSpec's StepClock to make the UTC day boundary deterministic.
-    static class StepClock extends Clock {
-        private final Iterator<Instant> instants
-        StepClock(List<Instant> instants) {
-            this.instants = instants.iterator()
-        }
-        @Override Instant instant() {
-            instants.next()
-        }
-        @Override ZoneOffset getZone() {
-            ZoneOffset.UTC
-        }
-        @Override Clock withZone(java.time.ZoneId zone) {
-            throw new UnsupportedOperationException()
-        }
     }
 }

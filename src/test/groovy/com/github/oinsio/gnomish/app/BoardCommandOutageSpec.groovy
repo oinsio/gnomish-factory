@@ -96,6 +96,8 @@ tracker:
                 new StatusCommand(worktreesRoot),
                 new UsageCommand(),
                 boardCommand,
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir,
+                new FactoryProperties(INSTANCE_NAME, null, null, null), [:], [:]),
                 Clock.systemUTC(),
                 [:],
                 [:],

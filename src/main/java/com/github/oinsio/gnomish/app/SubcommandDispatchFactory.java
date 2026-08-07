@@ -13,10 +13,11 @@ import java.util.Map;
  * Builds the {@link SubcommandDispatch} for {@link ManualRunRunner}: wires the {@code take} command
  * ({@link TakeCommandFactory#of}) and the {@code serve} command ({@link ServeCommand}, driving
  * {@link FeedAutomaton#run}), then bundles them with the pre-built {@code status}/{@code
- * usage}/{@code board} commands. Extracted from {@link ManualRunRunner}'s constructor for file
- * size; the runner keeps the per-invocation assembly and the run-drive flow.
+ * usage}/{@code board}/{@code dashboard} commands. Extracted from {@link ManualRunRunner}'s
+ * constructor for file size; the runner keeps the per-invocation assembly and the run-drive flow.
  *
- * <p>Implements FR9 of add-tracker-port; FR1 of add-factory-serve; FR1 of add-board-command.
+ * <p>Implements FR9 of add-tracker-port; FR1 of add-factory-serve; FR1 of add-board-command; FR1
+ * of add-dashboard-page.
  */
 final class SubcommandDispatchFactory {
 
@@ -35,7 +36,8 @@ final class SubcommandDispatchFactory {
             Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
             StatusCommand statusCommand,
             UsageCommand usageCommand,
-            BoardCommand boardCommand) {
+            BoardCommand boardCommand,
+            DashboardCommand dashboardCommand) {
         var takeCommand = TakeCommandFactory.of(
                 assembly,
                 worktreesRoot,
@@ -57,6 +59,7 @@ final class SubcommandDispatchFactory {
                 trackerAdapterRegistry,
                 trackerValidatorRegistry,
                 FeedAutomaton::run);
-        return new SubcommandDispatch(statusCommand, usageCommand, takeCommand, serveCommand, boardCommand);
+        return new SubcommandDispatch(
+                statusCommand, usageCommand, takeCommand, serveCommand, boardCommand, dashboardCommand);
     }
 }

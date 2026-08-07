@@ -6,10 +6,11 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Routes {@link ManualRunRunner#run} to {@link StatusCommand}, {@link UsageCommand}, {@link
- * TakeCommand}, {@link ServeCommand}, or {@link BoardCommand} when the invocation's subcommand
- * (design {@link Subcommand#parse}) is {@code status}/{@code usage}/{@code take}/{@code
- * serve}/{@code board} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of
- * add-factory-serve; FR1 of add-board-command); a {@code run} subcommand —
+ * TakeCommand}, {@link ServeCommand}, {@link BoardCommand}, or {@link DashboardCommand} when the
+ * invocation's subcommand (design {@link Subcommand#parse}) is {@code status}/{@code usage}/{@code
+ * take}/{@code serve}/{@code board}/{@code dashboard} (FR13, FR14 of add-git-workflow; FR9 of
+ * add-tracker-port; FR2 of add-factory-serve; FR1 of add-board-command; FR1 of
+ * add-dashboard-page); a {@code run} subcommand —
  * explicit or implicit — is left for {@link ManualRunRunner}'s own flow. {@code take}/{@code
  * serve} are dispatched here rather than treated as {@code run} variants (unlike how {@code
  * status}/{@code usage} always were): each has an entirely separate flag set and must never fall
@@ -23,14 +24,15 @@ import org.springframework.boot.ApplicationArguments;
  * either way, so a normal return is not mistaken for the unhandled {@code run} subcommand.
  *
  * <p>Implements FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of add-factory-serve;
- * FR1 of add-board-command.
+ * FR1 of add-board-command; FR1 of add-dashboard-page.
  */
 record SubcommandDispatch(
         StatusCommand statusCommand,
         UsageCommand usageCommand,
         TakeCommand takeCommand,
         ServeCommand serveCommand,
-        BoardCommand boardCommand) {
+        BoardCommand boardCommand,
+        DashboardCommand dashboardCommand) {
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
@@ -50,6 +52,10 @@ record SubcommandDispatch(
         }
         if (subcommand == Subcommand.BOARD) {
             boardCommand.run(args);
+            return true;
+        }
+        if (subcommand == Subcommand.DASHBOARD) {
+            dashboardCommand.run(args);
             return true;
         }
         if (subcommand == Subcommand.USAGE) {

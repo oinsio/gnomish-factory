@@ -5,8 +5,9 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * The entrypoint's top-level dispatch: {@code gnomish run} | {@code status} | {@code usage} |
- * {@code take} | {@code serve} | {@code board} (FR13, FR14 of add-git-workflow; FR9 of
- * add-tracker-port; FR2 of add-factory-serve; FR1 of add-board-command). The subcommand is the
+ * {@code take} | {@code serve} | {@code board} | {@code dashboard} (FR13, FR14 of add-git-workflow;
+ * FR9 of add-tracker-port; FR2 of add-factory-serve; FR1 of add-board-command; FR1 of
+ * add-dashboard-page). The subcommand is the
  * first raw source argument that is not a Spring Boot option (does not start with {@code --}) —
  * {@link ApplicationArguments} has no built-in concept of a leading positional subcommand, so this
  * reads {@link ApplicationArguments#getSourceArgs()} directly, the same raw-args seam {@link
@@ -32,7 +33,9 @@ enum Subcommand {
     /** {@code gnomish serve [--dir] [--slots] [--drain]} — the continuous scheduler daemon. */
     SERVE,
     /** {@code gnomish board [--dir] [--json] [--limit]} — read-only tracker board. */
-    BOARD;
+    BOARD,
+    /** {@code gnomish dashboard [--dir] [--out] [--watch]} — renders the HTML dashboard page. */
+    DASHBOARD;
 
     private static final String RUN_TOKEN = "run";
     private static final String STATUS_TOKEN = "status";
@@ -40,6 +43,7 @@ enum Subcommand {
     private static final String TAKE_TOKEN = "take";
     private static final String SERVE_TOKEN = "serve";
     private static final String BOARD_TOKEN = "board";
+    private static final String DASHBOARD_TOKEN = "dashboard";
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
@@ -59,10 +63,11 @@ enum Subcommand {
             case TAKE_TOKEN -> TAKE;
             case SERVE_TOKEN -> SERVE;
             case BOARD_TOKEN -> BOARD;
+            case DASHBOARD_TOKEN -> DASHBOARD;
             default ->
                 throw new UsageException("'" + token + "' is not a gnomish subcommand: accepted forms are"
                         + " 'gnomish run', 'gnomish status', 'gnomish usage', 'gnomish take', 'gnomish serve',"
-                        + " or 'gnomish board'");
+                        + " 'gnomish board', or 'gnomish dashboard'");
         };
     }
 

@@ -50,7 +50,7 @@ public record ReadySummary(
      * @param readyRows the Ready column's rows; never null
      * @return the reconciled summary over {@code readyRows}
      */
-    static ReadySummary tally(List<ReadyRow> readyRows) {
+    public static ReadySummary tally(List<ReadyRow> readyRows) {
         int eligibleNow = 0;
         int inBackoff = 0;
         int finished = 0;

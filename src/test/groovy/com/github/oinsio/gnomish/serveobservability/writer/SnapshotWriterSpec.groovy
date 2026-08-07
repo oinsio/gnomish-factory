@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
+import com.github.oinsio.gnomish.testsupport.StepClock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -79,25 +80,6 @@ class SnapshotWriterSpec extends Specification {
         firstText != secondText
         firstText.contains('2026-08-02T10:00:00Z')
         secondText.contains('2026-08-02T10:00:31Z')
-    }
-
-    // A minimal Clock stub returning a pre-scripted sequence of instants, one per
-    // call — used to prove writer-driven ticks pick up a fresh wall-clock reading
-    // on every write rather than reusing a cached one (FR2).
-    static class StepClock extends Clock {
-        private final Iterator<Instant> instants
-        StepClock(List<Instant> instants) {
-            this.instants = instants.iterator()
-        }
-        @Override Instant instant() {
-            instants.next()
-        }
-        @Override ZoneOffset getZone() {
-            ZoneOffset.UTC
-        }
-        @Override Clock withZone(java.time.ZoneId zone) {
-            throw new UnsupportedOperationException()
-        }
     }
 
     // FR2: intervalSeconds must reflect the writer's configured interval so a

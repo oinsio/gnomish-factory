@@ -483,6 +483,17 @@ jq -n --argjson q "$queued" --argjson s "$seen" '{queued: $q, seen: $s}' > "$STA
 This satisfies U3: alerting on queue growth and escalation age from the
 documented JSON fields alone, without reading factory source.
 
+## The `dashboard` Command: One Page Over Daemon, History, and Board
+
+<!-- implements UX1-UX4, U1, U2 of add-dashboard-page -->
+
+`gnomish dashboard` renders one self-contained HTML page composing the daemon
+snapshot, ledger history, and tracker board — a wall display with `--watch`,
+or a portable point-in-time snapshot for a ticket with `--out`. See
+[`docs/operator-guide-dashboard.md`](operator-guide-dashboard.md) for the full
+recipe, the two independent staleness layers, and the documented cadence
+constants.
+
 ## Projects v2 Boards: Display Only
 
 *(This is the GitHub Projects board — the display view mirrored into labels,

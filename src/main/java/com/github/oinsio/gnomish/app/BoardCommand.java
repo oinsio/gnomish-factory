@@ -3,17 +3,14 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
-import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.board.BoardComposition;
 import com.github.oinsio.gnomish.board.BoardModel;
 import com.github.oinsio.gnomish.board.json.BoardJsonMapper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.io.IOException;
 import java.time.Clock;
-import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.stereotype.Component;
@@ -69,21 +66,8 @@ final class BoardCommand {
         InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
         Tracker tracker = TakeCommandSupport.resolveTracker(trackerConfig, trackerAdapterRegistry, instanceId.value());
 
-        List<ReadyTask> ready = tracker.listReady(boardArguments.limit());
-        List<OpenTask> open = tracker.listOpen();
-        boolean truncated = ready.size() == boardArguments.limit();
-        Instant now = clock.instant();
-        FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
-        BoardModel model = BoardModel.build(
-                ready,
-                open,
-                truncated,
-                now,
-                trackerProperties.abortBackoffBase(),
-                trackerProperties.abortBackoffCap(),
-                now,
-                open.size(),
-                trackerConfig.wipLimit());
+        BoardModel model = BoardComposition.compose(
+                tracker, trackerConfig, factoryProperties.tracker(), clock, boardArguments.limit());
 
         String output = boardArguments.json()
                 ? jsonMapper.serialize(model, trackerConfig.wipLimit())
