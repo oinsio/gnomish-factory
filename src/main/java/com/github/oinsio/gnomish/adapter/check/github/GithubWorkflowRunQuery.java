@@ -102,10 +102,17 @@ public final class GithubWorkflowRunQuery {
      * a {@code @refs/heads/<branch>} ref suffix (e.g. {@code ci.yml@refs/heads/main}). Dropping any
      * {@code @ref} suffix, then any directory prefix, yields the same file name on both — the live
      * Gitea E2E (task 7.1) surfaced this shape gap the Swagger-only spike missed (design D1, D2).
+     *
+     * <p>{@code split("@", 2)[0]} takes the segment before the first {@code @} (the whole string
+     * when there is none), then {@code lastIndexOf('/') + 1} drops any directory prefix. Written
+     * this way rather than as an {@code indexOf('@') < 0 ? ...} ternary on purpose: the ternary's
+     * boundary is unobservable — its only divergent input is a {@code @} at index 0 (a path with no
+     * file name before the ref), which neither platform ever emits, so a {@code < 0} vs {@code <= 0}
+     * boundary mutation would be a permanent equivalent-mutant survivor against the 100% gate; the
+     * {@code split} form carries the identical behavior on every input with no such conditional.
      */
     private static String workflowFileName(String workflowPath) {
-        int refSeparator = workflowPath.indexOf('@');
-        String withoutRef = refSeparator < 0 ? workflowPath : workflowPath.substring(0, refSeparator);
+        String withoutRef = workflowPath.split("@", 2)[0];
         return withoutRef.substring(withoutRef.lastIndexOf('/') + 1);
     }
 }
