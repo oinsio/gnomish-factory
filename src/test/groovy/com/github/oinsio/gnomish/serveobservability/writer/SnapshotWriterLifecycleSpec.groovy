@@ -87,9 +87,18 @@ class SnapshotWriterLifecycleSpec extends Specification {
     def "markDirty triggers a prompt write without waiting for the timer"() {
         given:
         def calls = new AtomicInteger()
-        def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'),
-                { -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot() },
+        // Self-stop after a bound the real (sleeping) writer never reaches: an awaitNextWake mutant
+        // that busy-spins instead of waiting would otherwise write in a tight loop for the poll's
+        // whole timeout, and under full-suite PIT load that runaway I/O surfaces as a TIMED_OUT/
+        // MEMORY_ERROR rather than the fast red assertion below. The bound caps the spin at a few
+        // ticks so the mutant dies as a clean kill.
+        SnapshotWriter writer
+        writer = new SnapshotWriter(
+                tempDir.resolve('snapshot.json'), {
+                    -> if (calls.incrementAndGet() > 8) {
+                        writer.stop()
+                    }; SnapshotWriterSpec.fixtureSnapshot()
+                },
                 mapper,
                 Duration.ofSeconds(30),
                 Clock.systemUTC(),
@@ -112,9 +121,15 @@ class SnapshotWriterLifecycleSpec extends Specification {
     def "a burst of rapid dirty triggers coalesces into a bounded number of writes"() {
         given:
         def calls = new AtomicInteger()
-        def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'),
-                { -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot() },
+        // Self-stop past the real coalesced count so a busy-spin awaitNextWake mutant caps its runaway
+        // writes at a few ticks (fast red kill) instead of looping for the settle window under load.
+        SnapshotWriter writer
+        writer = new SnapshotWriter(
+                tempDir.resolve('snapshot.json'), {
+                    -> if (calls.incrementAndGet() > 8) {
+                        writer.stop()
+                    }; SnapshotWriterSpec.fixtureSnapshot()
+                },
                 mapper,
                 Duration.ofSeconds(30),
                 Clock.systemUTC(),

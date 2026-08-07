@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.take.TakeResult
@@ -9,12 +10,14 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
+import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -47,8 +50,8 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
     }
 
     private Path ledgerFile(Instant now) {
-        def date = java.time.LocalDate.ofInstant(now, ZoneOffset.UTC)
-        return com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, date)
+        def date = LocalDate.ofInstant(now, ZoneOffset.UTC)
+        return ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, date)
     }
 
     private static TaskState finalState(Position position) {
@@ -86,7 +89,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
         def now = Instant.parse('2026-08-03T10:01:00Z')
         def result = new TakeResult.AwaitingHuman(
                 finalState(new Position.AtStage('build')),
-                com.github.oinsio.gnomish.app.port.tracker.ParkReason.ESCALATION,
+                ParkReason.ESCALATION,
                 'needs a human')
 
         when:
@@ -127,9 +130,12 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
     }
 
     // PIT: startedAtFor's filter must match the SPECIFIC claimed task, not just return the first
-    // occupied entry — kills a "filter always true" mutant that would make every lookup return the
-    // first-assigned slot's since regardless of which task is actually finishing.
-    def "matches the correct occupied slot's startedAt when multiple tasks occupy slots"() {
+    // occupied entry — kills a "filter always true" mutant that collapses every lookup to the
+    // first-iterated slot's since. Both tasks are finished and each line must carry ITS OWN since;
+    // under the mutant both lines would share one since, so at least one mismatches — an assertion
+    // that holds regardless of occupiedEntries() iteration order (looking up only one task would
+    // pass whenever that task happened to iterate first, leaving the mutant flakily alive).
+    def "matches each finishing task's own occupied-slot startedAt, not a shared first-entry one"() {
         given:
         def refA = new TaskRef('PROJ-A')
         def refB = new TaskRef('PROJ-B')
@@ -140,13 +146,18 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
         def now = Instant.parse('2026-08-03T10:00:00Z')
         def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
 
-        when: 'looking up refB specifically, not the first-assigned refA'
-        writer(now).write(refB, result)
+        when: 'both occupied tasks finish, each looked up specifically'
+        def w = writer(now)
+        w.write(refA, result)
+        w.write(refB, result)
 
-        then:
-        def json = JSON.readTree(Files.readString(ledgerFile(now)).trim())
-        json.get('taskId').asText() == 'PROJ-B'
-        json.get('startedAt').asText() == '2026-08-03T09:30:00Z'
+        then: 'each line carries its own slot since (distinct), never a single shared first-entry since'
+        def startedByTask = Files.readString(ledgerFile(now)).split('\n')
+                .findAll { !it.isBlank() }
+                .collect { JSON.readTree(it) }
+                .collectEntries { [(it.get('taskId').asText()): it.get('startedAt').asText()] }
+        startedByTask['PROJ-A'] == '2026-08-03T09:00:00Z'
+        startedByTask['PROJ-B'] == '2026-08-03T09:30:00Z'
     }
 
     // NFR-R1: a write failure (a blocked ledger directory) must never escape write() and crash

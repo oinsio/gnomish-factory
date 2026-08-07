@@ -94,6 +94,16 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
         'nope'  | TakeoverConfirmation.Decision.DECLINED
     }
 
+    // FR6, D9: the production wiring factory returns a real, ready confirmation — its return value
+    // must not be null (kills the NullReturnValsMutator on systemTty()). Constructing it only wires
+    // the System.console()/SystemConsoleIO method-reference suppliers; neither is invoked here, so
+    // this is deterministic even under a headless test JVM — no terminal is touched until confirm()
+    // consults the probe.
+    def "systemTty wires a non-null production confirmation without touching the terminal"() {
+        expect:
+        ConsoleTakeoverConfirmation.systemTty() != null
+    }
+
     // FR6: EOF at the prompt (Ctrl-D) is a non-confirming answer, never an escaping exception.
     def "EOF at the TTY prompt declines rather than throwing"() {
         given:

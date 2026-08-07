@@ -4,6 +4,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -208,6 +209,43 @@ class GithubConditionalRequestCacheSpec extends Specification {
                 .withHeader('If-None-Match', WireMock.equalTo('"v2"')))
         third instanceof GithubConditionalRequestCache.NotModified
         third.previousBody() == '{"n":2}'
+    }
+
+    // NFR-C1 of add-tracker-port: the LRU bound evicts strictly ABOVE capacity (size() > MAX_ENTRIES),
+    //     not at it — MAX_ENTRIES is the private 500-entry bound; these two tests pin the boundary so a
+    //     `>` -> `>=` mutant (which would evict one entry too early, at exactly capacity) is observable.
+    private static final int MAX_ENTRIES = 500
+
+    private void seedKeys(GithubConditionalRequestCache cache, int count) {
+        wireMock.stubFor(get(urlMatching('/cap/.*'))
+                .willReturn(aResponse().withStatus(200).withHeader('ETag', '"e"').withBody('x')))
+        (0..<count).each { cache.get(cache.httpClient().newRequest("/cap/${it}"), "/cap/${it}") }
+    }
+
+    def "retains every entry exactly at capacity: the eldest key is still cached at MAX_ENTRIES entries"() {
+        given: 'exactly MAX_ENTRIES distinct keys are cached, the eldest inserted first'
+        def cache = new GithubConditionalRequestCache(newClient())
+        seedKeys(cache, MAX_ENTRIES)
+
+        when: 're-requesting the eldest key'
+        cache.get(cache.httpClient().newRequest('/cap/0'), '/cap/0')
+
+        then: 'it was never evicted (size() == MAX_ENTRIES does not trip eviction), so its ETag is replayed'
+        wireMock.verify(getRequestedFor(urlEqualTo('/cap/0'))
+                .withHeader('If-None-Match', WireMock.equalTo('"e"')))
+    }
+
+    def "evicts the eldest entry once capacity is exceeded (MAX_ENTRIES + 1)"() {
+        given: 'one key beyond capacity is inserted, so the eldest key is evicted'
+        def cache = new GithubConditionalRequestCache(newClient())
+        seedKeys(cache, MAX_ENTRIES + 1)
+
+        when: 're-requesting the evicted eldest key'
+        cache.get(cache.httpClient().newRequest('/cap/0'), '/cap/0')
+
+        then: 'no cached ETag remains for it, so both its requests (seed + re-request) are unconditional'
+        wireMock.verify(2, getRequestedFor(urlEqualTo('/cap/0'))
+                .withoutHeader('If-None-Match'))
     }
 
     def "independent cache keys carry independent ETags"() {

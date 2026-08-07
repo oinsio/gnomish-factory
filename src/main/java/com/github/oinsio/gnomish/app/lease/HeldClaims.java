@@ -29,16 +29,21 @@ final class HeldClaims {
     boolean registerAndMaybeStart(TaskRef ref, Runnable loopBody, Thread.UncaughtExceptionHandler onDeath) {
         synchronized (lock) {
             held.add(ref);
-            if (running) {
-                return false;
+            // Single dynamic return (not two `return true/false` constants): inside this synchronized
+            // block a constant boolean return compiles to a store-across-monitorexit-then-reload,
+            // which defeats PIT's no-op-return elision and would emit an unkillable equivalent mutant
+            // ("replace return with the same constant"). Returning a computed boolean keeps both
+            // return-value mutants killable.
+            boolean willStart = !running;
+            if (willStart) {
+                running = true;
+                died = false;
+                worker = Thread.ofVirtual()
+                        .name("gnomish-heartbeat")
+                        .uncaughtExceptionHandler(onDeath)
+                        .start(loopBody);
             }
-            running = true;
-            died = false;
-            worker = Thread.ofVirtual()
-                    .name("gnomish-heartbeat")
-                    .uncaughtExceptionHandler(onDeath)
-                    .start(loopBody);
-            return true;
+            return willStart;
         }
     }
 
@@ -59,11 +64,13 @@ final class HeldClaims {
     // the RUNNING → IDLE state trigger outside the lock).
     boolean stopIfEmpty() {
         synchronized (lock) {
-            if (held.isEmpty()) {
+            // Single dynamic return (see registerAndMaybeStart): a constant `return true/false` inside
+            // this synchronized block emits an unkillable no-op return mutant under PIT.
+            boolean empty = held.isEmpty();
+            if (empty) {
                 running = false;
-                return true;
             }
-            return false;
+            return empty;
         }
     }
 

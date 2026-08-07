@@ -95,7 +95,9 @@ final class DashboardHistorySectionRenderer {
     }
 
     private static void appendBarCell(StringBuilder out, long value, long max) {
-        long width = max <= 0 ? 0 : Math.round((double) value / max * BAR_MAX_PX);
+        // max is the largest of non-negative row totals starting from 0, so it is always >= 0;
+        // the guard's exact intent is "the table is empty of volume", i.e. max == 0.
+        long width = max == 0 ? 0 : Math.round((double) value / max * BAR_MAX_PX);
         out.append("<td><span class=\"bar\" style=\"width:").append(width).append("px\"></span></td>");
     }
 }

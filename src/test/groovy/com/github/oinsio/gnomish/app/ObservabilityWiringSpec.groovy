@@ -10,7 +10,9 @@ import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.JanitorVital
 import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler
+import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
+import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
 import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth
@@ -27,9 +29,11 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
+import spock.lang.Timeout
 
 /**
  * {@link ObservabilityWiring}: the daemon-lifetime handle {@code ServeCommand}/{@code
@@ -42,6 +46,9 @@ import spock.lang.TempDir
  *
  * <p>Implements FR1, FR4, FR12 of add-serve-observability.
  */
+// Bound every feature: a real SnapshotWriter thread on a 30s interval is started here, so a dropped
+// wake/stop mutant must fail fast rather than block a test on the worker into a PIT TIMED_OUT.
+@Timeout(10)
 class ObservabilityWiringSpec extends Specification {
 
     @TempDir
@@ -51,7 +58,7 @@ class ObservabilityWiringSpec extends Specification {
     private static final InstanceInfo INSTANCE = new InstanceInfo('gnomish-wiring-test-ab12cd', 'worker-1', '0.1.0')
 
     private Path ledgerFile(Instant at) {
-        com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, java.time.LocalDate.ofInstant(at, ZoneOffset.UTC))
+        ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(at, ZoneOffset.UTC))
     }
 
     private ObservabilityWiring newWiring(Clock clock, LifecycleStateTracker lifecycleTracker) {
@@ -148,7 +155,7 @@ class ObservabilityWiringSpec extends Specification {
         def now = Instant.parse('2026-08-03T10:00:00Z')
         def clock = Clock.fixed(now, ZoneOffset.UTC)
         def wiring = newWiring(clock, new LifecycleStateTracker(now))
-        def accumulator = new com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator()
+        def accumulator = new RunSummaryAccumulator()
 
         when:
         wiring.newRunSummaryLedgerWriter().write(accumulator, now)

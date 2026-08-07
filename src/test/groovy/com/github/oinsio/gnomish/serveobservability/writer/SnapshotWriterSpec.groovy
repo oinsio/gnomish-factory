@@ -20,9 +20,14 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.TempDir
+import spock.lang.Timeout
+import spock.util.concurrent.PollingConditions
 
 /**
  * {@link SnapshotWriter#tick}: the single write point, driven directly with no
@@ -34,6 +39,11 @@ import spock.lang.TempDir
  *
  * <p>Implements FR1, FR2 of add-serve-observability.
  */
+// Bound every feature (matching SnapshotWriterLifecycleSpec/InterruptedStopSpec): the real-thread
+// stopAfterFinalWrite/interrupt tests must fail fast, never hang, so a broken wake/stop mutant
+// surfaces as a red assertion within budget rather than a PIT TIMED_OUT (which the mutation gate
+// treats as a failure, not a kill).
+@Timeout(10)
 class SnapshotWriterSpec extends Specification {
 
     @TempDir
@@ -171,10 +181,10 @@ class SnapshotWriterSpec extends Specification {
     def "stopAfterFinalWrite() writes the content current at call time, after the background thread has fully stopped"() {
         given:
         def target = tempDir.resolve('snapshot.json')
-        def stopped = new java.util.concurrent.atomic.AtomicBoolean(false)
+        def stopped = new AtomicBoolean(false)
         def writer = new SnapshotWriter(target, { -> stopped.get() ? stoppedSnapshot() : fixtureSnapshot() }, mapper, Duration.ofMillis(20), Clock.systemUTC(), 0)
         writer.start()
-        new spock.util.concurrent.PollingConditions(timeout: 2).eventually {
+        new PollingConditions(timeout: 2).eventually {
             assert Files.exists(target)
         }
 
@@ -199,9 +209,9 @@ class SnapshotWriterSpec extends Specification {
     def "stopAfterFinalWrite() waits for the background thread's in-flight tick to finish before writing"() {
         given:
         def target = tempDir.resolve('snapshot.json')
-        def calls = new java.util.concurrent.atomic.AtomicInteger()
-        def firstCallStarted = new java.util.concurrent.CountDownLatch(1)
-        def releaseFirstCall = new java.util.concurrent.CountDownLatch(1)
+        def calls = new AtomicInteger()
+        def firstCallStarted = new CountDownLatch(1)
+        def releaseFirstCall = new CountDownLatch(1)
         def writer = new SnapshotWriter(target, {
             ->
             if (calls.incrementAndGet() == 1) {
@@ -212,7 +222,7 @@ class SnapshotWriterSpec extends Specification {
             return stoppedSnapshot()
         }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
         writer.start()
-        assert firstCallStarted.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        assert firstCallStarted.await(2, TimeUnit.SECONDS)
 
         when: 'stopAfterFinalWrite is invoked while the background thread is still blocked mid-tick'
         def stopper = Thread.ofVirtual().start { writer.stopAfterFinalWrite() }
@@ -238,7 +248,7 @@ class SnapshotWriterSpec extends Specification {
     def "awaitNextWake restores the interrupt status after being interrupted while waiting"() {
         given:
         def target = tempDir.resolve('snapshot.json')
-        def calls = new java.util.concurrent.atomic.AtomicInteger()
+        def calls = new AtomicInteger()
         SnapshotWriter writer
         writer = new SnapshotWriter(target, {
             ->
@@ -250,7 +260,7 @@ class SnapshotWriterSpec extends Specification {
         writer.start()
 
         when: 'wait until the worker thread is genuinely parked waiting for its next tick'
-        new spock.util.concurrent.PollingConditions(timeout: 2).eventually {
+        new PollingConditions(timeout: 2).eventually {
             assert writer.worker().getState() == Thread.State.TIMED_WAITING
         }
 
@@ -258,7 +268,7 @@ class SnapshotWriterSpec extends Specification {
         writer.worker().interrupt()
 
         and: 'wait for the thread to run its self-stopping second tick and terminate'
-        new spock.util.concurrent.PollingConditions(timeout: 2).eventually {
+        new PollingConditions(timeout: 2).eventually {
             assert !writer.worker().isAlive()
         }
 

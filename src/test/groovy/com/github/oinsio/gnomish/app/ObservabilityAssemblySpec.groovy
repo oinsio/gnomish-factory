@@ -21,16 +21,19 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
-import java.net.InetAddress
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.function.Supplier
 import spock.lang.Specification
 import spock.lang.TempDir
+import spock.lang.Timeout
 import spock.util.concurrent.PollingConditions
 
 /**
@@ -41,6 +44,9 @@ import spock.util.concurrent.PollingConditions
  *
  * <p>Implements FR1, FR4, FR7, FR9, FR12 of add-serve-observability.
  */
+// Bound every feature: observability.start() spins up a real SnapshotWriter thread (30s interval in
+// one scenario), so a dropped wake/stop mutant must fail fast rather than block into a PIT TIMED_OUT.
+@Timeout(10)
 class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixture {
 
     @TempDir
@@ -54,7 +60,7 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
                 instanceId,
                 slotLedger,
                 { TaskRef ref -> } as SlotRunner,
-                { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper,
+                { Duration d -> } as Sleeper,
                 { -> Instant.now() } as com.github.oinsio.gnomish.domain.engine.port.Clock,
                 Duration.ofSeconds(1),
                 Duration.ofSeconds(60),
@@ -68,7 +74,7 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
         new InstanceHeartbeat(
                 tracker,
                 new HeartbeatProgress(),
-                { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper,
+                { Duration d -> } as Sleeper,
                 clock,
                 Duration.ofSeconds(30),
                 ClaimLostSink.IGNORE)
@@ -77,9 +83,9 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
     private static StandingReaper newStandingReaper(com.github.oinsio.gnomish.domain.engine.port.Clock clock) {
         new StandingReaper(
                 ReaperDuty.NONE,
-                { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper,
+                { Duration d -> } as Sleeper,
                 Duration.ofSeconds(30),
-                { [] } as java.util.function.Supplier,
+                { [] } as Supplier,
                 clock)
     }
 
@@ -90,8 +96,8 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
                 clock,
-                { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper,
-                { -> Set.of() } as java.util.function.Supplier)
+                { Duration d -> } as Sleeper,
+                { -> Set.of() } as Supplier)
     }
 
     def "assembles a functional ObservabilityWiring: binds the dirty notifier and writes a snapshot reflecting the given collaborators"() {
@@ -151,7 +157,7 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
         json.contains('"factoryVersion" : "dev"')
 
         and: 'the started ledger line landed too'
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, java.time.LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
         Files.readString(ledgerFile).contains('"event":"started"')
     }
 
@@ -190,7 +196,7 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
 
         then: 'a taskOutcome line lands for the SAME ref this test assigned to the slot ledger'
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, java.time.LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
         new PollingConditions(timeout: 2).eventually {
             assert Files.exists(ledgerFile)
         }

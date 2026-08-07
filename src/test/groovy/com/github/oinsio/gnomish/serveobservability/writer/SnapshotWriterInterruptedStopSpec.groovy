@@ -3,7 +3,10 @@ package com.github.oinsio.gnomish.serveobservability.writer
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Clock
 import java.time.Duration
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -25,15 +28,31 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
 
     def mapper = new SnapshotJsonMapper()
 
-    // Thread.join() throws InterruptedException immediately if the calling thread's interrupt
-    // status is already set on entry — no timing race needed to hit this deterministically.
+    // Thread.join() throws InterruptedException only if the joined thread is still ALIVE when the
+    // (already-interrupted) caller enters join — a dead thread makes join() return without ever
+    // calling wait(), so the catch (and its interrupt-restore) would never run. A supplier blocked
+    // on a latch pins the worker mid-tick, guaranteeing it is alive at join() and the catch path is
+    // exercised deterministically (otherwise the interrupt-restore mutant flakily survives).
     def "still performs the final write when the join is interrupted, and restores the interrupt flag"() {
         given:
         def target = tempDir.resolve('snapshot.json')
-        def writer = new SnapshotWriter(target, { -> SnapshotWriterSpec.fixtureSnapshot() }, mapper, Duration.ofSeconds(30), java.time.Clock.systemUTC(), 0)
+        def calls = new AtomicInteger()
+        def firstCallStarted = new CountDownLatch(1)
+        def releaseTick = new CountDownLatch(1)
+        // Only the worker's first tick blocks (pinning it alive); stopAfterFinalWrite's own final
+        // writeOnce() re-invokes the supplier and must NOT block, or the method would never return.
+        def writer = new SnapshotWriter(target, {
+            ->
+            if (calls.incrementAndGet() == 1) {
+                firstCallStarted.countDown()
+                releaseTick.await()
+            }
+            SnapshotWriterSpec.fixtureSnapshot()
+        }, mapper, Duration.ofSeconds(30), Clock.systemUTC(), 0)
         writer.start()
+        assert firstCallStarted.await(2, TimeUnit.SECONDS) // worker now pinned mid-tick
 
-        when:
+        when: 'the caller is interrupted and stops while the worker is provably still alive'
         Thread.currentThread().interrupt()
         writer.stopAfterFinalWrite()
 
@@ -45,6 +64,8 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
 
         cleanup:
         Thread.interrupted() // clear the flag so it doesn't leak into other tests
+        releaseTick.countDown()
+        writer.worker()?.join(2000)
     }
 
     // The background loop's own wait — awaitNextWake()'s lock.wait(remainingMillis) — must
@@ -58,7 +79,7 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
                 { -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot() },
                 mapper,
                 Duration.ofSeconds(30),
-                java.time.Clock.systemUTC(),
+                Clock.systemUTC(),
                 0)
         writer.start()
         new PollingConditions(timeout: 3).eventually { assert calls.get() >= 1 }

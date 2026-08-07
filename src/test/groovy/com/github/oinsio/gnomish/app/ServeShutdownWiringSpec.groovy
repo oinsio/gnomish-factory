@@ -9,7 +9,10 @@ import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
+import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
 import com.github.oinsio.gnomish.app.serve.RecordingKiller
 import com.github.oinsio.gnomish.app.serve.ServeShutdown
 import com.github.oinsio.gnomish.app.serve.SlotLedger
@@ -28,6 +31,7 @@ import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.JanitorVital
 import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler
+import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
 import com.github.oinsio.gnomish.serveobservability.Snapshot
@@ -45,6 +49,7 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -52,6 +57,7 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
 import spock.lang.Specification
 import spock.lang.TempDir
+import spock.lang.Timeout
 
 /**
  * FR10, FR11, NFR-O2, M3, D9 of add-factory-serve: {@link ServeShutdownWiring}'s two entry points
@@ -64,6 +70,10 @@ import spock.lang.TempDir
  * project (no mockito-inline on the classpath) — this spec builds real instances (same pattern as
  * {@code TakeSlotRunnerSpec}) rather than mocking them.
  */
+// Bound every feature: these start a real SnapshotWriter thread on a 30s interval, so a wake/stop
+// mutant that drops the immediate wake would otherwise leave a shutdown test blocked on the worker
+// for the full interval — surfacing as a PIT TIMED_OUT (a gate failure) rather than a fast red kill.
+@Timeout(10)
 class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     private static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
@@ -126,7 +136,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     private ObservabilityWiring newObservability() {
         def clock = Clock.systemUTC()
         def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
-        def lifecycleTracker = new com.github.oinsio.gnomish.app.serve.LifecycleStateTracker(clock.instant())
+        def lifecycleTracker = new LifecycleStateTracker(clock.instant())
         def snapshotWriter = new SnapshotWriter(
                 tempDir.resolve('snapshot.json'),
                 { -> fixtureSnapshot(lifecycleTracker) },
@@ -144,12 +154,12 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // LifecycleStateTracker#stop can jump straight from RUNNING to STOPPED with no validation, the
     // final view() alone cannot prove an intermediate beginDraining()/beginStopping() call actually
     // ran; the recorded sequence can.
-    private ObservabilityWiring newObservability(List<com.github.oinsio.gnomish.app.serve.DaemonLifecycleState> recordedStates) {
+    private ObservabilityWiring newObservability(List<DaemonLifecycleState> recordedStates) {
         def clock = Clock.systemUTC()
         def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         def lifecycleTracker
-        def notifier = { -> recordedStates << lifecycleTracker.view().state() } as com.github.oinsio.gnomish.app.serve.DirtyNotifier
-        lifecycleTracker = new com.github.oinsio.gnomish.app.serve.LifecycleStateTracker(clock.instant(), notifier)
+        def notifier = { -> recordedStates << lifecycleTracker.view().state() } as DirtyNotifier
+        lifecycleTracker = new LifecycleStateTracker(clock.instant(), notifier)
         def snapshotWriter = new SnapshotWriter(
                 tempDir.resolve('snapshot-recording.json'),
                 { -> fixtureSnapshot(lifecycleTracker) },
@@ -163,7 +173,39 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, instance, clock)
     }
 
-    private static Snapshot fixtureSnapshot(com.github.oinsio.gnomish.app.serve.LifecycleStateTracker tracker) {
+    // Task 6.3, FR12/FR13: an observability whose lifecycleTracker fires the captured shutdown hook
+    // the moment it transitions to STOPPING — i.e. AFTER runDrain's body has run
+    // drainCompleted.set(true) (that set sits between automaton.drain() and beginStopping()). This
+    // lets a synchronous spec drive the hook inside the one window where the drainCompleted flag it
+    // reads is already true, so the flag's value is observable in the finalized reason.
+    private ObservabilityWiring newObservabilityFiringHookOnStopping(AtomicReference<Thread> hookRef) {
+        def clock = Clock.systemUTC()
+        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
+        def lifecycleTracker
+        def notifier = {
+            ->
+            if (lifecycleTracker.view().state() == DaemonLifecycleState.STOPPING) {
+                def hook = hookRef.getAndSet(null)
+                if (hook != null) {
+                    hook.run()
+                }
+            }
+        } as DirtyNotifier
+        lifecycleTracker = new LifecycleStateTracker(clock.instant(), notifier)
+        def snapshotWriter = new SnapshotWriter(
+                tempDir.resolve('snapshot-hookfire.json'),
+                { -> fixtureSnapshot(lifecycleTracker) },
+                new SnapshotJsonMapper(), Duration.ofSeconds(30), clock, 0)
+        def appender = new RotatingLedgerAppender(
+                new LedgerAppender(tempDir.resolve('placeholder-hookfire'), new LedgerJsonMapper()),
+                tempDir, 'gnomish-hookfire', clock)
+        def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
+        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
+        snapshotWriter.start()
+        new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, instance, clock)
+    }
+
+    private static Snapshot fixtureSnapshot(LifecycleStateTracker tracker) {
         def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         def feed = new FeedSnapshot(FeedPhase.IDLE_EMPTY, Instant.EPOCH, Instant.EPOCH, 0, 1)
         def slots = new SlotsSnapshot(1, [])
@@ -216,12 +258,12 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, observability, { Thread hook -> })
 
         then: 'the lifecycle tracker landed on stopped(drainComplete) — not left mid-sequence'
-        observability.@lifecycleTracker.view().state() == com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED
+        observability.@lifecycleTracker.view().state() == DaemonLifecycleState.STOPPED
         observability.@lifecycleTracker.view().reason() == 'drainComplete'
 
         and: 'a runSummary line and a stopped lifecycle line both landed in the ledger'
-        def ledgerFile = com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile(
-                tempDir, 'gnomish', java.time.LocalDate.now(ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(
+                tempDir, 'gnomish', LocalDate.now(ZoneOffset.UTC))
         def lines = Files.readString(ledgerFile)
         lines.contains('"type":"runSummary"')
         lines.contains('"event":"stopped"')
@@ -248,9 +290,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
         then:
         recordedStates == [
-            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.DRAINING,
-            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPING,
-            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED,
+            DaemonLifecycleState.DRAINING,
+            DaemonLifecycleState.STOPPING,
+            DaemonLifecycleState.STOPPED,
         ]
     }
 
@@ -294,8 +336,33 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, observability, immediateRegistrar)
 
         then: 'the hook won the finalize with reason sigterm, and STOPPED is terminal — not dragged back'
-        observability.@lifecycleTracker.view().state() == com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED
+        observability.@lifecycleTracker.view().state() == DaemonLifecycleState.STOPPED
         observability.@lifecycleTracker.view().reason() == 'sigterm'
+    }
+
+    // Task 6.3, FR12/FR13/UX4: runDrain sets drainCompleted BETWEEN the drain finishing and the
+    // beginStopping() transition, so a hook that fires after drain completes truthfully reports
+    // "drainComplete". Firing the captured hook exactly at the STOPPING transition (via the tracker's
+    // notifier) lands it in that window with drainCompleted already true, so it finalizes
+    // "drainComplete". Remove the drainCompleted.set(true) call (the surviving VoidMethodCall mutant)
+    // and the same hook would read false and finalize "sigterm" — flipping this assertion.
+    def "runDrain sets drainCompleted before stopping, so a hook firing after drain finalizes drainComplete not sigterm"() {
+        given:
+        def slotRunner = newSlotRunner()
+        def automaton = newAutomaton(slotRunner)
+        def shutdown = newShutdown(new RecordingKiller())
+        def hookRef = new AtomicReference<Thread>()
+        def observability = newObservabilityFiringHookOnStopping(hookRef)
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> hookRef.set(hook) }
+        tracker.listReady(_) >> []
+        tracker.listOpen() >> []
+
+        when:
+        ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, observability, registrar)
+
+        then: 'the hook won the finalize while drainCompleted was already true — reason drainComplete'
+        observability.@lifecycleTracker.view().state() == DaemonLifecycleState.STOPPED
+        observability.@lifecycleTracker.view().reason() == 'drainComplete'
     }
 
     // FR11, D9: drain runs on the calling thread — there is no feed thread to interrupt — so the
@@ -376,20 +443,20 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         capturedHook.run()
 
         then:
-        observability.@lifecycleTracker.view().state() == com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED
+        observability.@lifecycleTracker.view().state() == DaemonLifecycleState.STOPPED
         observability.@lifecycleTracker.view().reason() == 'sigterm'
 
         and: 'the hook actually MOVED the tracker through draining then stopping (task 6.3) — not ' +
         'just landed on stopped, which #stop() can reach directly from any prior state'
         recordedStates == [
-            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.DRAINING,
-            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPING,
-            com.github.oinsio.gnomish.app.serve.DaemonLifecycleState.STOPPED,
+            DaemonLifecycleState.DRAINING,
+            DaemonLifecycleState.STOPPING,
+            DaemonLifecycleState.STOPPED,
         ]
 
         and:
-        def ledgerFile = com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile(
-                tempDir, 'gnomish-recording', java.time.LocalDate.now(ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(
+                tempDir, 'gnomish-recording', LocalDate.now(ZoneOffset.UTC))
         Files.readString(ledgerFile).contains('"reason":"sigterm"')
     }
 
