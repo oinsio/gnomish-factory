@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
@@ -25,6 +26,7 @@ import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
+import spock.util.concurrent.PollingConditions
 
 /**
  * Task 7.2 (M1, G1, G4 of add-external-check-github-actions): the capstone live stage-level E2E.
@@ -108,7 +110,15 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         git.run(work, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
         // Two attempt commits on a linear history: each push is a distinct head SHA, so the two
         // runs are keyed independently and the adapter matches each by its own commit (see 7.1).
+        //
+        // Gitea Actions auto-cancels an in-progress/queued run when a newer commit is pushed to the
+        // same branch (go-gitea/gitea#25716). Pushing the red attempt while the green run is still
+        // queued cancels green — concluding it 'cancelled', a non-success the adapter maps to a
+        // stage Fail, flaking the green case (fast locally, reliably lost on a slower CI runner).
+        // So wait for the green run to conclude before pushing red: a concluded run is never
+        // auto-cancelled, so red's push then cancels nothing.
         greenSha = pushWorkflow(work, git, GREEN_YAML, 'green attempt commit')
+        awaitGreenConcluded(greenSha)
         redSha = pushWorkflow(work, git, RED_YAML, 'red attempt commit')
     }
 
@@ -166,6 +176,19 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
 
     private static VerifyCheck.External check() {
         new VerifyCheck.External(CHECK_ID, Duration.ofSeconds(5), Duration.ofMinutes(8), VerifyCheck.TimeoutClass.QUALITY)
+    }
+
+    // Blocks until the green run for {@code sha} has concluded green, polling through the same
+    // adapter the stage uses. Serializing the two pushes this way keeps Gitea's auto-cancellation
+    // (see setupSpec) from ever reaching the green run. Host-mode `echo ok` concludes in about a
+    // second once picked up; the generous timeout only absorbs runner registration and job pickup.
+    private void awaitGreenConcluded(String sha) {
+        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()))
+        def workspace = new GithubCheckWorkspace(GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, sha)
+        new PollingConditions(timeout: 300, initialDelay: 5, delay: 5).eventually {
+            def status = client.poll(check(), workspace)
+            assert status instanceof PollStatus.Pass: "green run not concluded green yet: ${status} — runner logs: ${runner.logs()}"
+        }
     }
 
     private String pushWorkflow(Path work, GitProcessRunner git, String yaml, String message) {
