@@ -24,7 +24,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import spock.lang.Specification
-import spock.lang.TempDir
 import spock.lang.Timeout
 import spock.util.concurrent.PollingConditions
 
@@ -58,7 +57,10 @@ import spock.util.concurrent.PollingConditions
 @Timeout(30)
 class TakeCommandStandingReaperWiringSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
-    @TempDir
+    // A hand-managed temp dir, NOT @TempDir (see cleanup()): Spock's @TempDir deletion rethrows a
+    // NoSuchFileException if its retry walk races an entry vanishing under the tree, which this
+    // real-thread, real-git spec can trip under CI load once the run has returned. We own teardown
+    // instead, race-tolerantly.
     Path tempDir
 
     Path projectDir
@@ -67,6 +69,7 @@ class TakeCommandStandingReaperWiringSpec extends Specification implements BareG
     InMemoryTrackerHarness harness
 
     def setup() {
+        tempDir = Files.createTempDirectory('reaper-wiring-spec')
         tracker = new InMemoryTracker()
         harness = new InMemoryTrackerHarness(tracker)
 
@@ -219,5 +222,42 @@ tracker:
 
         cleanup:
         executor.shutdownNow()
+    }
+
+    def cleanup() {
+        deleteResiliently(tempDir)
+    }
+
+    // Best-effort, race-tolerant recursive delete, replacing @TempDir's throwing cleanup. This spec
+    // runs a real batch on real threads over a real git clone; the instant the run returns, an OS
+    // directory-flush or the last worktree teardown can still be settling, so a naive one-shot walk
+    // can race an entry vanishing mid-delete. Deleting deepest-first, ignoring entries that vanish
+    // under us, and retrying a fresh walk removes that teardown flake without touching any
+    // behavioural assertion — all of which have already run by the time this fires.
+    private static void deleteResiliently(Path root) {
+        if (root == null) {
+            return
+        }
+        for (int attempt = 0; attempt < 5; attempt++) {
+            if (Files.notExists(root)) {
+                return
+            }
+            try (var paths = Files.walk(root)) {
+                paths.sorted(Comparator.reverseOrder()).forEach { path ->
+                    try {
+                        Files.deleteIfExists(path)
+                    } catch (IOException ignored) {
+                        // A concurrent flush/teardown removed it first — it is gone, which is the goal.
+                    }
+                }
+            } catch (IOException ignored) {
+                // The walk itself raced a concurrent deletion; a fresh walk next attempt sees a
+                // settled tree.
+            }
+            if (Files.notExists(root)) {
+                return
+            }
+            Thread.sleep(20)
+        }
     }
 }
