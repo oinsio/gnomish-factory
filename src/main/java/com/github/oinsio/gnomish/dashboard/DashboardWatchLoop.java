@@ -53,16 +53,21 @@ public final class DashboardWatchLoop {
     }
 
     /**
-     * Runs cycles forever: render, write, sleep {@link #RENDER_CADENCE}, repeat.
+     * Runs cycles until the calling thread is interrupted: render, write, sleep {@link
+     * #RENDER_CADENCE}, repeat. The interrupt check on every cycle is what makes the documented
+     * "runs until the calling thread is interrupted" contract real — {@code ThreadSleeper}
+     * restores the interrupt flag rather than throwing, so without the check nothing between
+     * cycles would ever observe the interrupt and the loop could only die with the process. It
+     * also keeps every covering test bounded: a PIT mutant that drops the {@code sleep} call
+     * turns this into a busy-render loop that only an interrupt can stop.
      *
      * @param homeDir the user's home directory the observability files live under; never null
      * @param instanceName the configured instance name; never null
      * @param outputFile the page's output path; never null
      * @param boardFetch the board composition call, re-run on {@link #BOARD_CADENCE}; never null
      */
-    @SuppressWarnings("InfiniteLoopStatement") // intentional: runs until the process is killed
     public void run(Path homeDir, String instanceName, Path outputFile, Supplier<BoardModel> boardFetch) {
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
             renderOnce(homeDir, instanceName, outputFile, boardFetch);
             sleeper.sleep(RENDER_CADENCE);
         }

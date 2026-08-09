@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard
 
+import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.board.BoardModel
 import com.github.oinsio.gnomish.board.ReadySummary
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
@@ -11,6 +12,7 @@ import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
+import spock.util.concurrent.PollingConditions
 
 /**
  * FR7, FR8, FR9, NFR-P1, NFR-R1, NFR-R2, M2 of add-dashboard-page (task 4.4, design D4, D9):
@@ -117,6 +119,25 @@ class DashboardWatchLoopSpec extends Specification {
         sleptDurations == [
             DashboardWatchLoop.RENDER_CADENCE
         ]
+    }
+
+    @Timeout(10)
+    def "run() exits when the calling thread is interrupted"() {
+        given: 'a loop on the production sleeper, whose real 10s sleep only an interrupt can cut short'
+        def loop = new DashboardWatchLoop(
+                new DashboardRenderCycle(), new ThreadSleeper(), new StepClock([T0, T0.plusSeconds(10)]))
+
+        and: 'the loop runs on its own thread, exactly like gnomish dashboard --watch'
+        def thread = new Thread({ loop.run(homeDir, INSTANCE_NAME, outputFile, { -> model }) })
+
+        when: 'the first cycle lands and the calling thread is then interrupted mid-sleep'
+        thread.start()
+        new PollingConditions(timeout: 5).eventually { assert Files.exists(outputFile) }
+        thread.interrupt()
+        thread.join(3000)
+
+        then: 'the loop observed the interrupt and returned instead of sleeping on forever'
+        !thread.alive
     }
 
     def "each cycle atomically replaces the output file with a complete, self-contained page"() {

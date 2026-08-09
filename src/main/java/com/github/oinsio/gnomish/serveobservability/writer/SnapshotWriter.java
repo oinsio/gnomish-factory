@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -16,13 +18,14 @@ import org.slf4j.LoggerFactory;
  * thread that wakes either on the configured timer beat or on an immediate {@link #markDirty()}
  * trigger, and on every wake runs exactly one {@link SnapshotWriteCycle} — the extracted write
  * half (serialize + atomic overwrite + retention sweep), so this class owns only the thread
- * lifecycle and dirty-flag coalescing. Two trigger points (timer, dirty flag), one write point
+ * lifecycle and wake-signal coalescing. Two trigger points (timer, dirty trigger), one write point
  * (FR1): no other thread ever writes the target file, so {@link AtomicFileWriter}'s "reader never
  * sees a partial file" guarantee is never raced by a second concurrent writer.
  *
- * <p>Rapid {@link #markDirty()} calls coalesce: {@code dirty} is a single boolean, not a counter
- * or queue, so any number of triggers landing while the writer is asleep or mid-write produce at
- * most one more write after the current wake finishes (design D4 Risks).
+ * <p>Rapid {@link #markDirty()} calls coalesce: the wake signal is a semaphore whose surplus
+ * permits are drained after every wake, so any number of triggers landing while the writer is
+ * asleep or mid-write produce at most one more write after the current wake finishes (design D4
+ * Risks).
  *
  * <p>Implements FR1, FR2, FR15, NFR-R1 of add-serve-observability.
  */
@@ -32,8 +35,12 @@ public final class SnapshotWriter {
 
     private final SnapshotWriteCycle writeCycle;
     private final Duration interval;
-    private final Object lock = new Object();
-    private boolean dirty;
+    // Wake-signal semaphore instead of wait/notify on a monitor: tryAcquire (non-void) cannot be
+    // dropped by PIT's VoidMethodCallMutator the way a lock.wait() call can — that mutant turned
+    // awaitNextWake into a monitor-holding busy-spin that hung wake() callers for a full interval
+    // and TIMED_OUT the CI mutation gate. Permits also never block a wake() caller: release() is
+    // non-blocking, so markDirty()/stop() stay prompt whatever state the worker is in.
+    private final Semaphore wakeSignal = new Semaphore(0);
     private volatile boolean running;
     private @Nullable Thread worker;
 
@@ -109,10 +116,7 @@ public final class SnapshotWriter {
     }
 
     private void wake() {
-        synchronized (lock) {
-            dirty = true;
-            lock.notifyAll();
-        }
+        wakeSignal.release();
     }
 
     // Package-private: lifecycle specs drive the real thread; write-content specs drive tick().
@@ -136,23 +140,19 @@ public final class SnapshotWriter {
         }
     }
 
+    // Blocks until a wake() lands or the timer interval elapses, whichever first. Draining the
+    // leftover permits AFTER the acquire is what coalesces rapid markDirty() bursts into at most
+    // one extra write (design D4 Risks): permits released while the writer was mid-write satisfy
+    // the immediate next tryAcquire (one more wake), and the surplus is discarded here so the
+    // wake after THAT blocks for the full interval again.
     private void awaitNextWake() {
-        synchronized (lock) {
-            long deadlineNanos = System.nanoTime() + interval.toNanos();
-            while (!dirty && running) {
-                long remainingMillis = (deadlineNanos - System.nanoTime()) / 1_000_000L;
-                if (remainingMillis <= 0) {
-                    break;
-                }
-                try {
-                    lock.wait(remainingMillis);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
-            dirty = false;
+        try {
+            wakeSignal.tryAcquire(interval.toNanos(), TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
         }
+        wakeSignal.drainPermits();
     }
 
     // Package-private: write-content specs call this directly, with no thread and no waiting.
