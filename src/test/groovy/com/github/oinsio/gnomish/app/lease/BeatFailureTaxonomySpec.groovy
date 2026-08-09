@@ -44,6 +44,13 @@ class BeatFailureTaxonomySpec extends Specification {
         ProgressFixtures.progressAt(progress, ref, stage, attempt)
     }
 
+    def cleanup() {
+        // Drain the held set so the register()-started beat worker terminates on its next pass. This
+        // bounds a sleep-dropping mutant's busy-spin (the worker checks the held set each cycle)
+        // rather than leaking a spinning thread into PIT's reused minion — see InstanceHeartbeatSpec.
+        hb.unregister(A)
+    }
+
     // FR8: transient outage does not stop work — three consecutive 5xx beats are each caught,
     //     the claim stays held and flagged nothing, and beats resume once the tracker recovers.
     def "a transient outage does not stop work and beats resume on recovery"() {

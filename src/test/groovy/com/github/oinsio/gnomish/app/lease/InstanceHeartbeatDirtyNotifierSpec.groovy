@@ -39,6 +39,15 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     private final VirtualClock clock = new VirtualClock()
     private final AtomicInteger fired = new AtomicInteger()
     private final HeartbeatStateListener listener = { -> fired.incrementAndGet() } as HeartbeatStateListener
+    // Every heartbeat a test starts a real worker on, drained in cleanup (see cleanup()).
+    private final List<InstanceHeartbeat> started = []
+
+    def cleanup() {
+        // Drain every started worker's held set so it terminates on its next pass. This bounds a
+        // sleep-dropping mutant's busy-spin (the worker checks the held set each cycle) rather than
+        // leaking a spinning thread into PIT's reused minion — see InstanceHeartbeatSpec.
+        started.each { it.unregister(A); it.unregister(B) }
+    }
 
     // FR7: the worker's abnormal death — the death handler firing — is an immediate write trigger.
     //     Isolated from the earlier worker-start signal by resetting the counter once the worker is
@@ -54,6 +63,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
             base.sleep(d)
         } as Sleeper
         def dying = new InstanceHeartbeat(tracker, progress, dyingSleeper, clock, INTERVAL, ClaimLostSink.IGNORE, listener)
+        started << dying
 
         when: 'the claim registers, the worker parks, then dies on its second sleep'
         dying.register(A)
@@ -123,6 +133,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
         HeartbeatStateListener boom = { -> throw new RuntimeException('listener boom') }
         def sleeper = new BlockingSleeper()
         def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE, boom)
+        started << hb
 
         when:
         hb.register(A)
@@ -145,6 +156,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
         given:
         def sleeper = new BlockingSleeper()
         def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE)
+        started << hb
 
         when:
         hb.register(A)
@@ -158,6 +170,8 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     }
 
     private InstanceHeartbeat hbWith(Sleeper sleeper) {
-        new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE, listener)
+        def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE, listener)
+        started << hb
+        hb
     }
 }
