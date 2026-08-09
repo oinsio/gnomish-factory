@@ -198,7 +198,7 @@ tracker:
         given:
         writeConfig()
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false, false)
+            new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -220,7 +220,7 @@ tracker:
         writeConfig()
         String mdcDuringFetch = 'UNSET'
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false, false)
+            new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
         ]
         tracker.claim(_, _) >> new ClaimResult.Acquired()
         tracker.fetchTask(_) >> {

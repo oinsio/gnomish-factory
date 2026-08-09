@@ -47,6 +47,9 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
     @TempDir
     Path worktreesRoot
 
+    @TempDir
+    Path homeDir
+
     private ManualRunRunner newRunner() {
         new ManualRunRunner(
                 new RunArgumentsParser(),
@@ -60,12 +63,15 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
                 new ThreadSleeper(),
                 testProperties(),
                 worktreesRoot,
+                homeDir,
                 new StatusCommand(worktreesRoot),
                 new UsageCommand(),
+                new BoardCommand(Clock.systemUTC(), testProperties(), [:], [:]),
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:], [:]),
                 Clock.systemUTC(),
                 [:],
                 [:],
-                new ServeProperties(0, null, null, null))
+                new ServeProperties(0, null, null, null, null, null))
     }
 
     private void write(String relative, String text) {

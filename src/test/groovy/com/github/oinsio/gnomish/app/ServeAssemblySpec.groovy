@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
@@ -34,9 +35,10 @@ class ServeAssemblySpec extends Specification {
         slotLedger.acquire()
         slotLedger.assign(REF)
         def claimLossFlag = new ClaimLossFlag()
-        def serveProperties = new ServeProperties(1, Duration.ofSeconds(30), Duration.ofMillis(50), Duration.ofDays(14))
+        def serveProperties = new ServeProperties(
+                1, Duration.ofSeconds(30), Duration.ofMillis(50), Duration.ofDays(14), null, null)
         def standingReaper = new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier)
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier, new SystemClock())
 
         when:
         def shutdown = ServeAssembly.shutdown(slotLedger, claimLossFlag, serveProperties, standingReaper)

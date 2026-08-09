@@ -226,6 +226,9 @@ jacoco {
 tasks.named('test') {
     // Spock 2 runs on the JUnit Platform.
     useJUnitPlatform()
+    // The suite has grown past Gradle's default test-worker heap; without this the worker JVM
+    // OOMs during JUnit-Platform teardown even though every individual spec has already passed.
+    maxHeapSize = '3g'
     // Generate coverage reports whenever tests run, so `check` produces them
     // as part of the single-command verification (FR5 of add-project-skeleton).
     finalizedBy tasks.named('jacocoTestReport')
@@ -455,11 +458,29 @@ pitest {
     // "a single instance-level thread serves all claims", and beat()'s ClaimGone branch via the
     // direct-tick specs — so the mutation gate still holds; only the timing-sensitive lifecycle
     // rehearsal (which stays green under plain `test`) is kept out of PIT's per-mutation re-runs.
+    //
+    // M1/M2 documented exception (add-tracker-port / add-claim-heartbeat): GithubTrackerContractSpec
+    // runs the full port contract against the real GitHub adapter over WireMock, including the 12-way
+    // concurrent `claim` race (5 repetitions x 12 caller threads on distinct issues). Under PIT's
+    // single-JVM coverage minion — every one of ~2500 test classes loaded and instrumented together —
+    // that race is timing-sensitive: it intermittently fails PIT's pre-mutation green-suite check
+    // (the minion reported the spec's first feature failing on one run, then passed the identical
+    // suite on the next), which PIT treats as a hard "suite not green" abort rather than a mutation
+    // result. The spec is deterministically green under plain `test` (verified across repeated runs);
+    // this is the same "timing-sensitive concurrency rehearsal under instrumentation" category as
+    // InstanceHeartbeatLifecycleSpec above. Excluding it removes NO production line from mutation
+    // coverage: every Github* class the contract exercises has its own dedicated unit spec feeding the
+    // gate (GithubClaimLeaseSpec, GithubHeartbeatSpec, GithubStateWritesSpec, GithubCorrespondenceSpec,
+    // GithubDecisionsSpec, GithubFeedQuerySpec, GithubTaskFetcherSpec, GithubOpenQuerySpec,
+    // GithubStaleClaimRemovalSpec), and the composed GithubTracker by GithubTrackerSpec — so the
+    // whole-tree mutation gate still holds; only the cross-adapter contract rehearsal is kept out of
+    // PIT's per-mutation re-runs.
     excludedTestClasses = [
         'com.github.oinsio.gnomish.e2e.*',
         'com.github.oinsio.gnomish.adapter.agent.ReferenceDumpHygieneSpec',
         'com.github.oinsio.gnomish.FactoryApplicationSpec',
         'com.github.oinsio.gnomish.app.lease.InstanceHeartbeatLifecycleSpec',
+        'com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerContractSpec',
     ]
     // M4 documented exception: a handful of methods on `record` classes
     // (ExecutorUsage, StatusReport, Finding, Decision, UsageTotals of add-git-workflow;
@@ -703,14 +724,33 @@ tasks.named('check') {
 
 // Formatting layer 2 of 3 (UX3, design D7): a git pre-commit hook running
 // spotlessApply as a safety net. The hook source is versioned under
-// config/git-hooks/; this task copies it into .git/hooks/ with the exec bit.
-// Wired into `check` so the hook is installed by the first build — no
+// config/git-hooks/; this task copies it into the git hooks dir with the exec
+// bit. Wired into `check` so the hook is installed by the first build — no
 // separate setup ritual (Copy task, configuration-cache compatible).
+//
+// Resolve the real hooks directory: in a plain clone `.git` is a directory, but
+// in a git worktree `.git` is a file (`gitdir: <path>`) and the hooks live in
+// the shared common git dir. Hardcoding `.git/hooks` breaks under a worktree.
+def gitHooksDir = { ->
+    def dotGit = layout.projectDirectory.file('.git').asFile
+    if (dotGit.isDirectory()) {
+        return new File(dotGit, 'hooks')
+    }
+    // Worktree: `.git` is a file pointing at the per-worktree gitdir; the
+    // sibling `commondir` file (usually `../..`) locates the shared git dir.
+    def gitDir = new File(dotGit.text.replaceFirst(/(?s)^gitdir:\s*/, '').trim())
+    def commonDirMarker = new File(gitDir, 'commondir')
+    def commonDir = commonDirMarker.isFile()
+        ? new File(gitDir, commonDirMarker.text.trim()).canonicalFile
+        : gitDir
+    return new File(commonDir, 'hooks')
+}()
+
 tasks.register('installGitHooks', Copy) {
-    description = 'Installs the versioned git pre-commit hook into .git/hooks/.'
+    description = 'Installs the versioned git pre-commit hook into the git hooks dir.'
     group = 'build setup'
     from layout.projectDirectory.file('config/git-hooks/pre-commit')
-    into layout.projectDirectory.dir('.git/hooks')
+    into gitHooksDir
     filePermissions { unix(0755) }
 }
 

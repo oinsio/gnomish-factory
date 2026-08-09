@@ -87,9 +87,9 @@ class BackoffPolicySpec extends Specification {
     // backed-off entries
     def "filterEligible preserves order and drops only backed-off entries"() {
         given: 'a mix of fresh, backed-off, and expired-backoff tasks in queue order'
-        def fresh = new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, false)
-        def backedOff = new ReadyTask(new TaskRef('PROJ-2'), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false)
-        def expired = new ReadyTask(new TaskRef('PROJ-3'), new AbortFacts(1, NOW - Duration.ofMinutes(5)), false, false)
+        def fresh = new ReadyTask(new TaskRef('PROJ-1'), AbortFacts.none(), false, false, 'fixture title')
+        def backedOff = new ReadyTask(new TaskRef('PROJ-2'), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false, 'fixture title')
+        def expired = new ReadyTask(new TaskRef('PROJ-3'), new AbortFacts(1, NOW - Duration.ofMinutes(5)), false, false, 'fixture title')
         def tasks = [fresh, backedOff, expired]
 
         when:

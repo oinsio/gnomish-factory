@@ -35,19 +35,19 @@ class FeedPolicySpec extends Specification {
     }
 
     private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
     }
 
     private static ReadyTask returned(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
     }
 
     private static ReadyTask backedOff(String id) {
-        new ReadyTask(new TaskRef(id), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false)
+        new ReadyTask(new TaskRef(id), new AbortFacts(1, NOW - Duration.ofMinutes(1)), false, false, 'fixture title')
     }
 
     private static ReadyTask finished(String id, boolean returned = false) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, true)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), returned, true, 'fixture title')
     }
 
     // FR10, D10 (delegate correctness): backed-off entries never appear among candidates

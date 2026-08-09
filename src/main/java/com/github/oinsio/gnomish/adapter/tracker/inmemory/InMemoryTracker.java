@@ -60,7 +60,8 @@ public class InMemoryTracker implements Tracker {
                         entry.getKey(),
                         entry.getValue().abortFacts(),
                         returned(entry.getValue()),
-                        finished(entry.getValue())))
+                        finished(entry.getValue()),
+                        entry.getValue().snapshot().title()))
                 .toList());
     }
 

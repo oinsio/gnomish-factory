@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve
 import ch.qos.logback.classic.Logger as LogbackLogger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -37,7 +38,8 @@ abstract class ServeShutdownSpecBase extends Specification {
     // standing reaper (fix-reaper-idle-liveness FR4, covered by its own scenario) — an inert,
     // never-started StandingReaper is a harmless collaborator for all of them.
     protected static StandingReaper inertReaper() {
-        new StandingReaper(ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier)
+        new StandingReaper(
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier, new SystemClock())
     }
 
     // Captures ServeShutdown's log output so the grace-window summary line — the only observable

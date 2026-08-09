@@ -186,7 +186,7 @@ sequenceDiagram
     H->>Gh: label -> ready (or reopen)
     F->>Gh: sees a finish record in the history
     F->>Gh: label -> delivered (status restored)
-    F->>Gh: comment: task already finished; open a new task/bug
+    F->>Gh: comment: task already finished, open a new task/bug
 ```
 
 This happens within one poll cycle — both for `serve`'s feed and for bare
@@ -289,7 +289,215 @@ command reference, lifecycle (SIGTERM/drain), feed states and the WIP-limit
 message, instance knobs vs. protocol constants, the write-budget coupling,
 and the WIP method boundary.
 
+## The `board` Command: Tracker as a Kanban View
+
+<!-- implements UX1, G3 of add-board-command -->
+
+`gnomish board` renders the tracker as a three-column read-only board — the
+operator's mental model made literal: **Ready** (the queue), **Working** (who
+holds what), **AwaitingHuman** (what is parked for you). It reads the tracker
+and nothing else: no task branches, no daemon files, no `serve` instance
+required, so it works identically whether a daemon is running or not. Like
+`gnomish status`, it prints text by default and a stable JSON document under
+`--json`; both are projections of one model, so nothing is text-only or
+JSON-only.
+
+> **Not the same "board" as the GitHub Projects mirror below.** `gnomish
+> board` is this local CLI view (tracker → text/JSON, read-only). The
+> "[Projects v2 Boards: Display Only](#projects-v2-boards-display-only)"
+> section that follows is about a *GitHub Projects* board and the
+> `board-bridge.yml` workflow that mirrors a project column into the
+> `gnomish:ready` label — a different thing, running in the other direction
+> (board UI → label). The CLI is always written out as "`gnomish board`".
+
+The command issues exactly two tracker reads — one `listReady`, one
+`listOpen` — and never writes (no claim, park, comment, or marker); it needs
+only the tracker credentials already configured for `take`/`serve`, resolved
+from the `--dir` config root.
+
+```mermaid
+flowchart LR
+    LR["listReady<br/>(queue order)"] --> B["board model<br/>(3 columns)"]
+    LO["listOpen<br/>(Working + parked)"] --> B
+    B --> T["text (default)"]
+    B --> J["--json"]
+```
+
+### The Three Columns
+
+| Column            | Source                      | Row shows                                                |
+|-------------------|-----------------------------|----------------------------------------------------------|
+| **Ready**         | `listReady`, queue order    | id, title, returned/fresh mark, eligibility annotation   |
+| **Working**       | `listOpen`, `Working` state | id, title, holder, claim freshness (age or unknown)      |
+| **AwaitingHuman** | `listOpen`, parked          | id, title, park reason (escalation / infra / checkpoint) |
+
+A representative run (text mode):
+
+```
+Ready (4 queued, 1 eligible, 1 in backoff, 1 finished, 1 WIP-held) [truncated: showing first 4 only]
+  github:g/r#1 - Fix flaky OrderServiceSpec — in backoff until 2026-08-05T09:01:00Z
+  github:g/r#2 - Old reopened task — finished
+  github:g/r#3 - Add new feature flag — WIP-held
+  github:g/r#4 - Returned after park (returned)
+Working (2)
+  github:g/w#1 - Refactor retry module (holder=factory-a-1b2c, updated 3m ago)
+  github:g/w#2 - Update operator docs (holder=factory-b-9f00, freshness unknown)
+AwaitingHuman (3)
+  github:h/1 - Needs operator decision (reason=escalation)
+  github:h/2 - Environment broken (reason=infra)
+  github:h/3 - Checkpoint pause (reason=checkpoint)
+```
+
+### Ready Eligibility and the Summary Line
+
+A task can sit in `gnomish:ready` yet the daemon still won't claim it — this
+is the log-archaeology the board exists to remove. The Ready column names why,
+in the feed's own precedence order, and each queued task counts under exactly
+one reason:
+
+- **in backoff until `<instant>`** — the task aborted recently and is inside
+  its exponential backoff window. The deadline is *materialized* (computed
+  from the task's abort facts by the same core policy the feed uses, so the
+  board cannot disagree with the daemon).
+- **finished** — the task carries a finish record (terminal, or reopened after
+  delivery); the feed defensively drops it, so the eligible count does too.
+  See "[Finished Tasks Are Terminal](#finished-tasks-are-terminal)".
+- **WIP-held** — a *fresh* task the feed skips because the open-front count is
+  at or above the WIP limit. Returned tasks bypass the WIP gate and are never
+  WIP-held.
+
+The header reconciles the window as `N queued, E eligible, <breakdown by
+reason>` (e.g. `4 queued, 1 eligible, 1 in backoff, 1 finished, 1 WIP-held`);
+since every task counts once, the reasons sum to `N`. "eligible" is exactly
+what the feed would claim right now.
+
+The board predicts *claimability*, not the claim order: it does not say which
+eligible task the feed picks next or how deep it reads — the feed's random
+head-zone pick is deliberately outside the board's remit.
+
+### Known Behavior
+
+- **Missing claim marker.** A `Working` task whose `listOpen` row carries a
+  null claim version shows the holder with **freshness unknown** and no age
+  (JSON: `claimUpdatedAt: null`). The holder is still known; only the
+  last-beat instant is gone.
+- **Mislabel omission.** A `gnomish:working` issue carrying *no* claim
+  footprint at all — a human mislabel, no holder to name — is **absent** from
+  the board by design. The board reports exactly what `listOpen` returns and
+  never invents a holder. (Contrast the missing-marker case above, which still
+  has a holder to show.)
+- **Age is display-only.** Claim freshness is a plain age ("updated 3m ago")
+  with **no stale/healthy verdict** — staleness is the reaper's judgment and
+  depends on `serve` TTL config the board may not have. External monitors
+  apply their own threshold to the JSON `claimUpdatedAt` instant.
+- **Truncated window.** The Ready column is a window, not an export: it
+  defaults to the first 50 (`--limit`). When `listReady` returns exactly
+  `--limit` entries the board says so (`[truncated: showing first N only]`)
+  and `--json` sets `truncated: true`; the summary counts then describe the
+  *shown window*, not the whole queue.
+
+### CLI Flags
+
+| Flag           | Default | Meaning                                                                                                            |
+|----------------|---------|--------------------------------------------------------------------------------------------------------------------|
+| `--dir=<path>` | `.`     | project clone whose `.gnomish/config.yaml` names the tracker (config root only — the board reads no task branches) |
+| `--json`       | off     | emit the v1 JSON document instead of text                                                                          |
+| `--limit=<n>`  | `50`    | Ready window size (the `listReady` bound); must be a positive integer                                              |
+
+### Monitoring the Queue over `--json` (external alerts)
+
+<!-- implements G3 of add-board-command; scenario U3 -->
+
+`--json` gives a cron script a stable, self-describing feed for tracker-side
+alert rules — the **tracker-owner complement** to the daemon-side dead-man's-
+switch monitor in
+[`operator-guide-observability.md`](operator-guide-observability.md): that one
+watches a `serve` daemon's `snapshot.json`; this one watches the *tracker* and
+works even when no daemon is running. Run both side by side for full coverage.
+
+The document is versioned (`version: 1`), stamped (`generatedAt`), and needs
+no factory config to interpret. Fields a monitor uses:
+
+| Field                                                                    | Meaning                                                                   |
+|--------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `.generatedAt`                                                           | observation instant (ISO-8601 UTC)                                        |
+| `.truncated`                                                             | true when the Ready window hit `--limit` — treat `queuedCount` as a floor |
+| `.ready.queuedCount`                                                     | ready tasks in the shown window                                           |
+| `.ready.eligibleNowCount`                                                | of those, what the feed would claim now                                   |
+| `.ready.inBackoffCount` / `.ready.finishedCount` / `.ready.wipHeldCount` | the ineligible breakdown                                                  |
+| `.ready.openFrontCount` / `.ready.wipLimit`                              | the WIP gate, as observed count vs. limit                                 |
+| `.ready.rows[].eligibility.reason`                                       | per row: `inBackoff` \| `finished` \| `wipHeld` \| `null`                 |
+| `.ready.rows[].eligibility.deadline`                                     | materialized backoff deadline (when `reason == "inBackoff"`)              |
+| `.working[].holder` / `.working[].claimUpdatedAt`                        | holder and last-beat instant (`null` = marker missing)                    |
+| `.awaitingHuman[].id` / `.awaitingHuman[].parkReason`                    | parked task and why (`escalation` \| `infra` \| `checkpoint`)             |
+
+**Escalation age is monitor-derived.** AwaitingHuman rows deliberately carry
+no timestamp — the board is a snapshot, not a history. To alert on a
+long-waiting escalation, the monitor remembers when it *first saw* each id (in
+its own state file, exactly like the dead-man's-switch script) and ages it
+from there. Queue growth is the same shape: compare `queuedCount` against the
+previous check's value.
+
+```bash
+#!/usr/bin/env bash
+# board-watch.sh <clone-dir> — tracker-side alerting over `gnomish board --json`.
+# Fires on (a) the ready window growing since the last check and (b) an
+# escalation parked longer than a threshold. Age is derived here because the
+# board exposes no per-row timestamp for parked tasks. Requires: bash, jq.
+set -euo pipefail
+
+CLONE_DIR="${1:?usage: board-watch.sh <clone-dir>}"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/gnomish-board-watch.json"
+ESCALATION_MAX_S=$((4 * 3600))          # tune to your escalation SLA
+now=$(date -u +%s)
+
+board=$(gnomish board --json --dir "$CLONE_DIR")
+queued=$(jq -r '.ready.queuedCount' <<<"$board")
+truncated=$(jq -r '.truncated' <<<"$board")
+
+prev_queued=0
+[[ -f "$STATE" ]] && prev_queued=$(jq -r '.queued // 0' "$STATE")
+
+alert() { echo "BOARD ALERT: $1" >&2; }   # swap for your paging hook
+
+# (a) queue growth — with a truncated window `queued` is a floor, so growth is real
+(( queued > prev_queued )) && alert "ready queue grew ${prev_queued} -> ${queued} (truncated=${truncated})"
+
+# (b) long-waiting escalations — first-seen ages tracked in this script's own state
+prev_seen="{}"; [[ -f "$STATE" ]] && prev_seen=$(jq -c '.seen // {}' "$STATE")
+seen=$(jq -c --argjson now "$now" --argjson prev "$prev_seen" '
+  [ .awaitingHuman[] | select(.parkReason == "escalation") ]
+  | reduce .[] as $r ({}; .[$r.id] = ($prev[$r.id] // $now))' <<<"$board")
+jq -r --argjson now "$now" --argjson max "$ESCALATION_MAX_S" '
+  to_entries[] | select($now - .value > $max) | .key' <<<"$seen" |
+  while read -r id; do alert "escalation $id parked > ${ESCALATION_MAX_S}s"; done
+
+jq -n --argjson q "$queued" --argjson s "$seen" '{queued: $q, seen: $s}' > "$STATE"
+```
+
+```bash
+# crontab: poll every few minutes; no daemon need be running
+*/5 * * * * /path/to/board-watch.sh /srv/acme/widgets >>/var/log/gnomish-board-watch.log 2>&1
+```
+
+This satisfies U3: alerting on queue growth and escalation age from the
+documented JSON fields alone, without reading factory source.
+
+## The `dashboard` Command: One Page Over Daemon, History, and Board
+
+<!-- implements UX1-UX4, U1, U2 of add-dashboard-page -->
+
+`gnomish dashboard` renders one self-contained HTML page composing the daemon
+snapshot, ledger history, and tracker board — a wall display with `--watch`,
+or a portable point-in-time snapshot for a ticket with `--out`. See
+[`docs/operator-guide-dashboard.md`](operator-guide-dashboard.md) for the full
+recipe, the two independent staleness layers, and the documented cadence
+constants.
+
 ## Projects v2 Boards: Display Only
+
+*(This is the GitHub Projects board — the display view mirrored into labels,
+not the `gnomish board` CLI command [above](#the-board-command-tracker-as-a-kanban-view).)*
 
 GitHub Projects v2 boards are not a source of truth for the factory — only
 issue labels and structural comments are. A board is a convenient *view*
@@ -333,12 +541,12 @@ gnomish take github:acme/widgets#42   # explicit mode with a full canonical id
 and resume position always come from the tracker and the task branch, never
 from the command line.
 
-| Flag                              | Applies to                      | Meaning                                                            |
-|-----------------------------------|---------------------------------|--------------------------------------------------------------------|
-| `--dir=<path>`                    | both                            | project clone directory and `.gnomish/` location; defaults to `.`  |
-| `--interactive[=executor\|judge]` | both                            | human stands in for the named role instead of the real adapter     |
-| `--base=<ref>`                    | explicit mode only, fresh claim | override the branch base; rejected on the bare form                |
-| `--discard-work`                  | explicit mode only, resume      | discard an interrupted round's leftovers instead of salvaging them |
+| Flag                              | Applies to                         | Meaning                                                                                  |
+|-----------------------------------|------------------------------------|------------------------------------------------------------------------------------------|
+| `--dir=<path>`                    | both                               | project clone directory and `.gnomish/` location; defaults to `.`                        |
+| `--interactive[=executor\|judge]` | both                               | human stands in for the named role instead of the real adapter                           |
+| `--base=<ref>`                    | explicit mode only, fresh claim    | override the branch base; rejected on the bare form                                      |
+| `--discard-work`                  | explicit mode only, resume         | discard an interrupted round's leftovers instead of salvaging them                       |
 | `--takeover`                      | explicit mode only, `Working` task | confirm taking over a task held by another (possibly dead) instance without a TTY prompt |
 
 Short refs (`42`, `#42`) expand into the canonical `github:owner/repo#42` form

@@ -51,7 +51,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
-        new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt))
+        new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt), 'fixture title')
     }
 
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
@@ -455,7 +455,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
         openFronts = [
-            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]
         def confirmation = { r, h, a -> TakeoverConfirmation.Decision.CONFIRMED } as TakeoverConfirmation
         def disposition = newTakeoverDisposition(confirmation, false)
@@ -483,7 +483,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
         openFronts = [
-            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]
         def confirmation = Mock(TakeoverConfirmation)
         def disposition = newTakeoverDisposition(confirmation, true)
@@ -529,7 +529,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         given:
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
         openFronts = [
-            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed)
+            new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]
         tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Mismatch(observed)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held('gnomish-live-x2')

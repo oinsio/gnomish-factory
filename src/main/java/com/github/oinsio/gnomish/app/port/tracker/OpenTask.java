@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker;
 
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -22,15 +23,27 @@ import org.jspecify.annotations.Nullable;
  * observation memory, TTL policy, and the staleness judgment live in core, never
  * in adapters (FR5).
  *
+ * <p>{@code title} is the task's title, populated by every adapter from data
+ * already present in its list response — enriching {@code listOpen} with a
+ * title SHALL NOT add tracker requests (no per-task {@code fetchTask}
+ * fan-out; FR7, NFR-P1 of add-board-command).
+ *
  * <p>Inert value data compared by content.
  *
- * <p>Implements FR5 of add-claim-heartbeat.
+ * <p>Implements FR5 of add-claim-heartbeat. Implements FR7, NFR-P1 of
+ * add-board-command (the {@code title} component).
  *
  * @param ref the task's canonical identity; never null
  * @param state the task's current logical state ({@code Working} or {@code
  *     AwaitingHuman}); never null
  * @param claimVersion the live claim version, or {@code null} when the task
  *     carries no observable claim marker
+ * @param title the task's title, populated from the adapter's list response; never null
  */
 public record OpenTask(
-        TaskRef ref, TrackerTaskState state, @Nullable ClaimVersion claimVersion) {}
+        TaskRef ref, TrackerTaskState state, @Nullable ClaimVersion claimVersion, String title) {
+
+    public OpenTask {
+        Objects.requireNonNull(title, "title");
+    }
+}

@@ -44,9 +44,18 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
     ] as Tracker
     private final InstanceHeartbeat hb = new InstanceHeartbeat(
     tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+    // Every heartbeat a test starts a real worker on, drained in cleanup (see cleanup()).
+    private final List<InstanceHeartbeat> started = [hb]
 
     def setup() {
         progress.onEvent(new EngineEvent.AttemptStarted(new AttemptKey(REF.id(), 'plan', 0)))
+    }
+
+    def cleanup() {
+        // Drain every started worker's held set so it terminates on its next pass. This bounds a
+        // sleep-dropping mutant's busy-spin (the worker checks the held set each cycle) rather than
+        // leaking a spinning thread into PIT's reused minion — see InstanceHeartbeatSpec.
+        started.each { it.unregister(REF) }
     }
 
     // FR1, D3: the beat starts with the first claim — the thread starts, sleeps the interval,
@@ -141,6 +150,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         } as Sleeper
         def dying = new InstanceHeartbeat(
                 tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+        started << dying
 
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(InstanceHeartbeat)
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
@@ -205,6 +215,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         } as Sleeper
         def dying = new InstanceHeartbeat(
                 tracker, progress, sleeper, new VirtualClock(), INTERVAL, ClaimLostSink.IGNORE)
+        started << dying
 
         when: 'the claim registers and the worker beats once, then dies on the second sleep'
         dying.register(REF)

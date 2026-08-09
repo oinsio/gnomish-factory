@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.engine.SystemClock;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
+import com.github.oinsio.gnomish.app.lease.HeartbeatStateListener;
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.lease.Reaper;
@@ -66,6 +67,27 @@ record TakeHeartbeat(
     }
 
     /**
+     * The serve overload (add-serve-observability FR1, FR7, design D4): identical to {@link
+     * #forRun(Tracker, TrackerConfig, Sleeper)} but wires {@code stateListener} into the {@link
+     * InstanceHeartbeat} so its {@link InstanceHeartbeat#state()} transitions — worker start,
+     * abnormal death, idle stop — wake the snapshot writer immediately, landing {@code
+     * vitals.heartbeat.state: died} without waiting for the timer beat. The {@code take} overloads
+     * pass {@link HeartbeatStateListener#IGNORE}: no observability writer exists there to wake.
+     *
+     * <p>Implements FR1, FR4, FR8 of add-claim-heartbeat; FR1, FR7 of add-serve-observability.
+     *
+     * @param tracker the port the beat writes through and the reaper lists/removes claims with
+     * @param config the resolved tracker config carrying the beat interval and TTL multiplier
+     * @param sleeper the beat-interval sleeper; never null
+     * @param stateListener woken after every heartbeat-state transition; never null
+     * @return the assembled heartbeat views; never null
+     */
+    static TakeHeartbeat forRun(
+            Tracker tracker, TrackerConfig config, Sleeper sleeper, HeartbeatStateListener stateListener) {
+        return forRun(tracker, config, sleeper, sleeper, new SystemMonotonicTime(), stateListener);
+    }
+
+    /**
      * The {@link MonotonicTime}-injecting overload: identical to {@link #forRun(Tracker,
      * TrackerConfig, Sleeper)} but drives the reaper's {@link StalenessMemory} on the supplied
      * monotonic time source instead of the production {@link SystemMonotonicTime}, so a
@@ -114,14 +136,43 @@ record TakeHeartbeat(
             Sleeper sleeper,
             Sleeper reaperSleeper,
             MonotonicTime monotonicTime) {
+        return forRun(tracker, config, sleeper, reaperSleeper, monotonicTime, HeartbeatStateListener.IGNORE);
+    }
+
+    /**
+     * The full builder: {@link #forRun(Tracker, TrackerConfig, Sleeper, Sleeper, MonotonicTime)}
+     * plus the {@link HeartbeatStateListener} threaded into the {@link InstanceHeartbeat} (FR1, FR7
+     * of add-serve-observability). Every other overload funnels here, defaulting the listener to
+     * {@link HeartbeatStateListener#IGNORE} except the serve overload above.
+     *
+     * <p>Implements FR1, FR4, FR8 of add-claim-heartbeat; FR5, NFR-S1 of fix-reaper-idle-liveness;
+     * FR1, FR7 of add-serve-observability.
+     *
+     * @param tracker the port the beat writes through and the reaper lists/removes claims with
+     * @param config the resolved tracker config carrying the beat interval and TTL multiplier
+     * @param sleeper the beat-interval sleeper; never null
+     * @param reaperSleeper the standing reaper's OWN interval sleeper, independent of {@code sleeper}
+     * @param monotonicTime the monotonic time the reaper's staleness TTL is measured on; never null
+     * @param stateListener woken after every heartbeat-state transition; never null
+     * @return the assembled heartbeat views; never null
+     */
+    static TakeHeartbeat forRun(
+            Tracker tracker,
+            TrackerConfig config,
+            Sleeper sleeper,
+            Sleeper reaperSleeper,
+            MonotonicTime monotonicTime,
+            HeartbeatStateListener stateListener) {
         Duration interval = config.heartbeatInterval();
         Duration ttl = interval.multipliedBy(config.heartbeatTtlMultiplier());
         var progress = new HeartbeatProgress();
         var flag = new ClaimLossFlag();
         var staleness = new StalenessMemory(monotonicTime, ttl);
         var reaper = new Reaper(tracker, staleness);
-        var heartbeat = new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), interval, flag);
-        var standingReaper = new StandingReaper(reaper, reaperSleeper, interval, heartbeat::liveClaimsSnapshot);
+        var heartbeat =
+                new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), interval, flag, stateListener);
+        var standingReaper =
+                new StandingReaper(reaper, reaperSleeper, interval, heartbeat::liveClaimsSnapshot, new SystemClock());
         return new TakeHeartbeat(heartbeat, progress, flag, standingReaper);
     }
 }

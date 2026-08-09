@@ -66,7 +66,7 @@ class FeedAutomatonSpec extends Specification {
     }
 
     private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
     }
 
     private static SlotRunner capturing(List<TaskRef> sink) {
@@ -252,7 +252,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(1)
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null)
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
         }
         Tracker tracker = [
             listReady: { int limit -> [blockedFresh] },
@@ -396,7 +396,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(1)
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null)
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
         }
         Tracker tracker = [
             listReady: { int limit -> [blockedFresh] },
@@ -421,7 +421,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(1)
         def blockedFresh = fresh('github:o/r#1')
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null)
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
         }
         Tracker tracker = [
             listReady: { int limit -> [blockedFresh] },
@@ -451,7 +451,7 @@ class FeedAutomatonSpec extends Specification {
         def ledger = new SlotLedger(2)
         def fillingCounter = new AtomicInteger()
         def openFronts = (1..WIP_LIMIT).collect {
-            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null)
+            new OpenTask(new TaskRef("github:o/r#open-${it}" as String), new TrackerTaskState.Working('other'), null, 'fixture title')
         }
         def blockedFresh = fresh('github:o/r#blocked')
         Tracker tracker = [

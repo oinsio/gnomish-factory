@@ -34,8 +34,22 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class HeartbeatProgress implements EngineEventListener {
 
-    /** The line shown for a freshly claimed task before any engine event has arrived. */
-    static final Progress PENDING = new Progress("(pending)", 0);
+    /**
+     * The line shown for a freshly claimed task before any engine event has arrived.
+     *
+     * <p>Made public (beyond add-claim-heartbeat's original package-private scope) for
+     * add-serve-observability's slot-entry enrichment (FR6, D11): the assembler that turns this
+     * sentinel into a {@code null} {@code SlotEntry.stage} lives outside this package.
+     */
+    public static final Progress PENDING = new Progress("(pending)", 0);
+
+    /**
+     * The stage recorded when {@code RunStarted} carries a resolved {@link
+     * Position.PipelineEnd} position — the task has finished the pipeline. Public for the same
+     * reason as {@link #PENDING}: add-serve-observability's slot-entry enrichment (FR6, D11)
+     * maps it to a {@code null} {@code SlotEntry.stage}.
+     */
+    public static final String PIPELINE_END_STAGE = "(end)";
 
     private final Map<String, Progress> byTask = new ConcurrentHashMap<>();
 
@@ -86,7 +100,7 @@ public final class HeartbeatProgress implements EngineEventListener {
     private static String stageOf(Position position) {
         return switch (position) {
             case Position.AtStage atStage -> atStage.name();
-            case Position.PipelineEnd ignored -> "(end)";
+            case Position.PipelineEnd ignored -> PIPELINE_END_STAGE;
         };
     }
 

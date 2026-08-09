@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve
 
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
@@ -142,7 +143,8 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         def tickCount = new AtomicInteger()
         def reaperDuty = { Collection refs -> tickCount.incrementAndGet() } as ReaperDuty
         def sleeper = { Duration d -> Thread.sleep(5) } as Sleeper
-        def standingReaper = new StandingReaper(reaperDuty, sleeper, Duration.ofMillis(5), { [] } as Supplier)
+        def standingReaper =
+                new StandingReaper(reaperDuty, sleeper, Duration.ofMillis(5), { [] } as Supplier, new SystemClock())
         standingReaper.start()
         def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, standingReaper)
 

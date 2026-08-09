@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
+import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
@@ -12,10 +13,12 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.Callable
@@ -23,8 +26,8 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
-import spock.lang.TempDir
 import spock.lang.Timeout
 import spock.util.concurrent.PollingConditions
 
@@ -58,7 +61,10 @@ import spock.util.concurrent.PollingConditions
 @Timeout(30)
 class TakeCommandStandingReaperWiringSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
 
-    @TempDir
+    // A hand-managed temp dir, NOT @TempDir (see cleanup()): Spock's @TempDir deletion rethrows a
+    // NoSuchFileException if its retry walk races an entry vanishing under the tree, which this
+    // real-thread, real-git spec can trip under CI load once the run has returned. We own teardown
+    // instead, race-tolerantly.
     Path tempDir
 
     Path projectDir
@@ -67,6 +73,7 @@ class TakeCommandStandingReaperWiringSpec extends Specification implements BareG
     InMemoryTrackerHarness harness
 
     def setup() {
+        tempDir = Files.createTempDirectory('reaper-wiring-spec')
         tracker = new InMemoryTracker()
         harness = new InMemoryTrackerHarness(tracker)
 
@@ -132,7 +139,33 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: fixedFactory(tracker)],
                 TrackerValidatorStub.acceptingGithub(),
-                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
+                TakeCommandSeams.DEFAULTS
+                .withServeProperties(serveProperties)
+                .withHeartbeatSleeper(budgetedRealSleeper(600))
+                .withReaperSleeper(budgetedRealSleeper(600)))
+    }
+
+    /**
+     * The production {@link ThreadSleeper} under a hard real-sleep budget — the real-time analogue
+     * of {@code BudgetedVirtualSleeper}, for the same reason: this spec's heartbeat and reaper
+     * loops run on a REAL 100ms interval, and a PIT mutant that breaks their stop condition (a
+     * dropped {@code unregister}, a negated {@code stopIfEmpty}) leaks a forever-looping thread
+     * into the minion JVM, whose accumulated allocations then starve the mutants that share the
+     * minion (observed as a MEMORY_ERROR on a sibling mutant with zero tests run). A legitimate
+     * run sleeps a few dozen times; 600 sleeps (~60s of loop life) is far above any green path,
+     * so the budget only converts an already-broken leaked loop into a loud, bounded abnormal
+     * death that the heartbeat's own supervision is designed to absorb.
+     */
+    private static Sleeper budgetedRealSleeper(int budget) {
+        def real = new ThreadSleeper()
+        def sleeps = new AtomicInteger()
+        return { Duration d ->
+            if (sleeps.incrementAndGet() > budget) {
+                throw new IllegalStateException(
+                "real-sleep budget of ${budget} exceeded — a leaked heartbeat/reaper loop under a PIT mutant")
+            }
+            real.sleep(d)
+        } as Sleeper
     }
 
     def "FR1, FR5: take starts the standing reaper independent of the claim, and stops it once the run returns"() {
@@ -142,7 +175,7 @@ tracker:
         def z = new TaskRef('PROJ-Z')
         harness.seedWorkingWithClaim(tracker, z, 'other-instance')
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null))
 
         when: 'take runs X on another thread, in flight for ~2s'
         Future<?> run = executor.submit({ command.run(args('take', x.id(), "--dir=$projectDir")) } as Callable)
@@ -185,7 +218,7 @@ tracker:
         harness.seed(x1, new TaskSnapshot(x1.id(), 'Add widgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         harness.seed(x2, new TaskSnapshot(x2.id(), 'Add gadgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null))
 
         when: 'the batch runs both refs sequentially, on another thread'
         Future<?> run = executor.submit({ command.run(args('take', x1.id(), x2.id(), "--dir=$projectDir")) } as Callable)
@@ -219,5 +252,42 @@ tracker:
 
         cleanup:
         executor.shutdownNow()
+    }
+
+    def cleanup() {
+        deleteResiliently(tempDir)
+    }
+
+    // Best-effort, race-tolerant recursive delete, replacing @TempDir's throwing cleanup. This spec
+    // runs a real batch on real threads over a real git clone; the instant the run returns, an OS
+    // directory-flush or the last worktree teardown can still be settling, so a naive one-shot walk
+    // can race an entry vanishing mid-delete. Deleting deepest-first, ignoring entries that vanish
+    // under us, and retrying a fresh walk removes that teardown flake without touching any
+    // behavioural assertion — all of which have already run by the time this fires.
+    private static void deleteResiliently(Path root) {
+        if (root == null) {
+            return
+        }
+        for (int attempt = 0; attempt < 5; attempt++) {
+            if (Files.notExists(root)) {
+                return
+            }
+            try (var paths = Files.walk(root)) {
+                paths.sorted(Comparator.reverseOrder()).forEach { path ->
+                    try {
+                        Files.deleteIfExists(path)
+                    } catch (IOException ignored) {
+                        // A concurrent flush/teardown removed it first — it is gone, which is the goal.
+                    }
+                }
+            } catch (IOException ignored) {
+                // The walk itself raced a concurrent deletion; a fresh walk next attempt sees a
+                // settled tree.
+            }
+            if (Files.notExists(root)) {
+                return
+            }
+            Thread.sleep(20)
+        }
     }
 }

@@ -68,6 +68,23 @@ class GithubCommentBoundarySpec extends Specification {
         facts.lastAbortAt() == Instant.parse('2026-07-20T09:00:00Z')
     }
 
+    def "abortFactsSinceBoundary keeps folding across the holder's own self-reclaim within one streak"() {
+        given: 'the same holder aborts, self-reclaims, aborts again, then holds the active claim — one streak'
+        def markers = [
+            abortMarker('instance-a', '2026-07-20T08:00:00Z'),
+            claimMarker('instance-a', '2026-07-20T08:30:00Z'),
+            abortMarker('instance-a', '2026-07-20T09:00:00Z'),
+            claimMarker('instance-a', '2026-07-20T10:00:00Z'),
+        ]
+
+        when: 'abort facts are folded backward from the active claim'
+        def facts = GithubCommentBoundary.abortFactsSinceBoundary(markers)
+
+        then: 'the self-reclaim CLAIM is skipped (not a stop), so BOTH earlier aborts stay in the streak'
+        facts.count() == 2
+        facts.lastAbortAt() == Instant.parse('2026-07-20T09:00:00Z')
+    }
+
     def "abortFactsSinceBoundary stops the streak at a different instance's claim"() {
         given: 'an abort by instance-a, then a claim by a different instance-b'
         def markers = [

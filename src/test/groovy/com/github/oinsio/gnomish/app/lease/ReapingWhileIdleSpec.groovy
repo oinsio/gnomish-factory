@@ -38,7 +38,7 @@ class ReapingWhileIdleSpec extends Specification {
     tracker, new HeartbeatProgress(), new BlockingSleeper(), new VirtualClock(),
     INTERVAL, ClaimLostSink.IGNORE)
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot)
+    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot, new VirtualClock())
 
     // FR13 "Reaping while idle with no claims of its own": with the instance holding nothing —
     // its heartbeat never started, so the live-claims snapshot is empty on every tick — a

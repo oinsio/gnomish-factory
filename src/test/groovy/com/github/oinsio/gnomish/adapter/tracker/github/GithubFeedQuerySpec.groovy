@@ -301,6 +301,31 @@ class GithubFeedQuerySpec extends Specification {
         !result[0].finished()
     }
 
+    // FR7, NFR-P1, M2 of add-board-command: the title rides the SAME List Issues response body
+    //     that named the issue number — enriching the entry with a title adds no issue-detail
+    //     request beyond the pre-enrichment shape (one feed call, one comments call per issue)
+    def "carries each ready task's title from the List Issues response, with no extra request"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[{"number":20,"title":"Fix the widget"}]')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/20/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        def feedQuery = newFeedQuery()
+
+        when:
+        def result = feedQuery.listReady(10)
+
+        then:
+        result.size() == 1
+        result[0].title() == 'Fix the widget'
+        // exactly one feed request and one comments request — no issue-detail (GET /issues/20) call
+        wireMock.verify(1, getRequestedFor(urlEqualTo(
+                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/20/comments?per_page=100')))
+        wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/20')))
+    }
+
     def "listReady rejects a zero limit at the exact boundary, not just negative values"() {
         given:
         def feedQuery = newFeedQuery()

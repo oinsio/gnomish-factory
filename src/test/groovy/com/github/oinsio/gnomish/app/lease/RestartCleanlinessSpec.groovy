@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
@@ -63,7 +64,7 @@ class RestartCleanlinessSpec extends Specification {
         // The new instance holds nothing of its own, so the standing reaper's live-claims
         // snapshot supplier always returns empty — exactly the shape of a just-restarted process
         // that has not claimed anything yet (FR1, FR2).
-        def standingReaper = new StandingReaper(reaper, { Duration d -> }, INTERVAL, { -> [] })
+        def standingReaper = new StandingReaper(reaper, { Duration d -> }, INTERVAL, { -> [] }, new SystemClock())
 
         expect: 'the restart alone mints a different id — the two lives are never confused'
         newInstanceId != oldInstanceId

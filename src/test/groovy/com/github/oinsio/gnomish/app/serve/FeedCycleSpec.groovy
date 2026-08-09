@@ -43,7 +43,7 @@ class FeedCycleSpec extends Specification {
         // returned() == true so OpenFrontGate.isStillEligible short-circuits to eligible
         // without invoking the openFrontCount supplier — the scenario isolates the claim
         // race outcome, not the WIP-gate re-check (that is FeedAutomatonSpec's job).
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
     }
 
     private static FeedCycle cycle(Tracker tracker, SlotLedger ledger, SlotRunner runner = { TaskRef ref -> } as SlotRunner) {
@@ -118,7 +118,7 @@ class FeedCycleSpec extends Specification {
             listOpen: { -> [new Object(), new Object()] },
             claim   : { TaskRef ref, String instance -> claimCalls.incrementAndGet(); new ClaimResult.Acquired() },
         ] as Tracker
-        def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false, false)
+        def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false, false, 'fixture title')
 
         when:
         cycle(tracker, ledger).claimOrAbandon([fresh])

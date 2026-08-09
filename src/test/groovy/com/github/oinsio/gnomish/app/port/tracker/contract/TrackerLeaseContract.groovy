@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 
@@ -20,12 +21,12 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
  * property set of the whole chain would exceed the project's per-file line
  * cap.
  *
- * <p>No concrete adapter spec extends this class yet: the in-memory reference
- * is wired in task 2.4 and the GitHub adapter in task 3.5, once their
- * adapters implement {@code listOpen}/{@code heartbeat}/{@code removeStaleClaim}
- * and the {@link #seedWorkingWithClaim} seam below. Until then this abstract
- * spec is never instantiated and therefore does not run — intentional, and it
- * keeps the build green for both adapters between tasks.
+ * <p>Both the in-memory reference ({@link
+ * com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerContractSpec})
+ * and the GitHub adapter ({@link
+ * com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerContractSpec})
+ * extend this class through the contract chain, so the full suite below runs
+ * against both.
  *
  * <p>This file covers task 2.1: {@code listOpen} filtering and claim-version
  * carry ("Listing carries versions"). Tasks 2.2 (heartbeat) and 2.3
@@ -90,6 +91,30 @@ abstract class TrackerLeaseContract extends TrackerFetchContract {
         def awaiting = result.find { it.ref() == awaitingRef }
         awaiting.state() == new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
         awaiting.claimVersion() == null
+    }
+
+    // FR7, NFR-P1, M3 of add-board-command: listOpen carries each open task's title, sourced from
+    //     data the adapter's list call already receives — no per-task fetchTask fan-out; run
+    //     through this shared contract suite so both adapters satisfy it identically
+    def "listOpen carries each open task's title from its seeded snapshot"() {
+        given: 'a tracker seeded with one Working and one AwaitingHuman task, each with a distinct title'
+        def tracker = arrange()
+        assumeProducible(tracker, 'Tracker', 'listOpen title fixture')
+        def adapter = tracker.get()
+        def workingRef = new TaskRef('fixture:open-title-working')
+        def awaitingRef = new TaskRef('fixture:open-title-awaiting')
+        seedWorkingWithClaim(adapter, workingRef, 'instance-a')
+        seedTask(adapter, awaitingRef, new TaskSnapshot(awaitingRef.id(), 'Escalated widget', 'body'),
+                new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), AbortFacts.none())
+
+        when: 'listOpen is called'
+        List<OpenTask> result = adapter.listOpen()
+
+        then: 'the AwaitingHuman entry carries its own seeded title'
+        result.find { it.ref() == awaitingRef }.title() == 'Escalated widget'
+
+        and: 'the Working entry carries a non-null title'
+        result.find { it.ref() == workingRef }.title() != null
     }
 
     // FR5, FR4: listOpen and listReady partition the feed — a Ready task shows in

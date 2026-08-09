@@ -52,7 +52,7 @@ class ReapingWhileSaturatedSpec extends Specification {
     // this SAME heartbeat, so OWN_A/OWN_B are excluded from staleness observation only while the
     // heartbeat is actively beating them.
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot)
+    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot, new VirtualClock())
 
     def cleanup() {
         heartbeat.unregister(OWN_A)

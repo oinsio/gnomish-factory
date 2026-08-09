@@ -318,6 +318,8 @@ class GithubTaskFetcherSpec extends Specification {
 
         then:
         result.state() == new TrackerTaskState.Gone()
+        and: 'the gone snapshot is a real snapshot (id echoed as both id and title, empty body), never null'
+        result.snapshot() == new TaskSnapshot(refFor(404).id(), refFor(404).id(), '')
     }
 
     def "abort facts fold only markers posted after the latest claim (boundary anchoring)"() {

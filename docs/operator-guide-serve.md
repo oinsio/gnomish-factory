@@ -293,6 +293,17 @@ demoted to a genuine last resort: reach for it only if you are deliberately
 running plain one-shot `take` outside `serve` for some reason and a task is
 visibly stranded with no long-lived instance around to reap it.
 
+## Observability files and alerting
+
+While it runs, `serve` also publishes its state as local files under
+`~/.gnomish/serve/<instance-name>/` — a `snapshot.json` gauge (alive? busy?
+what are the slots doing?) and daily `ledger-YYYY-MM-DD.jsonl` history
+files (what ran overnight, and what it cost) — with no added tracker
+writes and no inbound port. See
+[`docs/operator-guide-observability.md`](operator-guide-observability.md)
+for the file formats and a ready-to-adapt cron script that turns snapshot
+staleness and invariant checks into an outbound dead-man's-switch alert.
+
 ## Autonomy gate and CI hygiene
 
 Running `serve` unattended raises the stakes on two things covered in a

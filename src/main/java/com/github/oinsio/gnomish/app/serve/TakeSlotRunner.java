@@ -13,6 +13,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
+import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
 import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -29,33 +31,20 @@ import org.slf4j.MDC;
  *
  * <p>Built once and reused across every slot invocation over the daemon's lifetime (unlike {@code
  * TakeBareAuto}, which {@code TakeDispatcher} builds fresh per bare-take run): the constructor
- * takes the same collaborators {@code TakeBareAuto} does — a shared {@link ManualRunAssembly}, the
- * worktrees root, an {@link AbortHandler}, the abort-fuse threshold, the MDC key, the credential
- * env vars to scrub, a {@link ClaimBeat} heartbeat, and a {@link ClaimLossFlag} — and wires a
- * single {@link TakeClaimAndWork} via {@link TakeClaimAndWorkFactory#forSlot} up front. {@code serve} is
- * unconditionally non-interactive (FR4): {@link RunArguments.InteractiveMode#NONE} is hardcoded,
- * never wired to a TTY dialog.
+ * wires a single {@link TakeClaimAndWork} via {@link TakeClaimAndWorkFactory#forSlot} up front.
+ * {@code serve} is unconditionally non-interactive (FR4): {@link RunArguments.InteractiveMode#NONE}.
  *
- * <p>MDC: since {@link FeedAutomaton} starts one fresh virtual thread per slot and calls {@link
- * #run(TaskRef)} directly on it, and MDC is thread-local, setting the {@code taskId} key inside
- * {@link #run(TaskRef)} is correct by construction — each slot thread tags only its own logs. The
- * key is cleared in a {@code finally}, matching {@code TakeCommand#run}'s existing clear pattern,
- * even though these threads are never reused.
+ * <p>MDC: since {@link FeedAutomaton} starts one fresh virtual thread per slot and MDC is
+ * thread-local, setting the {@code taskId} key inside {@link #run(TaskRef)} tags only that slot's
+ * own logs, cleared in a {@code finally} even though these threads are never reused.
  *
  * <p><b>Exception boundary (deliberate).</b> {@link TakeClaimAndWork#dispatchAfterClaim} already
  * funnels ordinary {@code RuntimeException}s through its own crash-abort protocol, rethrowing only
  * {@code UsageException}/{@code DivergedBranchException} unchanged — but a slot must never let
- * anything, including those two, escape {@link #run(TaskRef)}: {@link FeedAutomaton} installs no
- * uncaught-exception handler on the virtual thread it starts, so an escaping throwable would
- * surface only as a JVM-logged uncaught exception, silently dropping the slot without ever
- * releasing visible state beyond the ledger permit ({@link FeedAutomaton} always releases that in
- * its own {@code finally}, regardless). This class therefore catches every {@link Throwable} at
- * this boundary, logs it at ERROR, and swallows it — a failed slot must not take down the daemon
- * or any other slot. This boundary decision may be worth revisiting once the SIGTERM/lifecycle
- * task (section 5) exists: a daemon-level policy might want to count or react to repeated slot
- * crashes rather than silently absorbing every one of them.
- *
- * <p>Implements FR1, M2 of add-factory-serve.
+ * anything escape {@link #run(TaskRef)}: {@link FeedAutomaton} installs no uncaught-exception
+ * handler on its virtual thread. This class catches every {@link Throwable} here, logs it at
+ * ERROR, and swallows it — a failed slot must not take down the daemon. Implements FR1, M2 of
+ * add-factory-serve.
  */
 public final class TakeSlotRunner implements SlotRunner {
 
@@ -68,24 +57,22 @@ public final class TakeSlotRunner implements SlotRunner {
     private final InstanceId instanceId;
     private final String taskIdMdcKey;
     private @Nullable DrainReport drainReport;
+    private @Nullable TaskOutcomeLedgerWriter ledgerWriter;
+    private @Nullable RunSummaryAccumulator runSummaryAccumulator;
 
     /**
-     * @param assembly                 the shared engine/ports assembly, reused across every slot; never null
-     * @param cloneDir                 the project clone every slot dispatches against; never null
-     * @param worktreesRoot            the root directory under which {@code <project-name>/<taskId>/}
-     *                                 worktrees are created; never null
-     * @param definition               the loaded pipeline every slot advances through; never null
-     * @param abortHandler             the infrastructure-abort protocol; never null
-     * @param abortThreshold           the configured abort-fuse threshold (K); positive
-     * @param taskIdMdcKey             the MDC key this class sets to the claimed ref's id for the duration of
-     *                                 the slot, and clears once it terminates
-     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
-     *                                 environment variable names, threaded down to every engine execution; never null
-     * @param heartbeat                the instance heartbeat lifecycle registered/unregistered around the run;
-     *                                 {@link ClaimBeat#NONE} when no beat runs
-     * @param claimLossFlag            the per-run heartbeat claim-loss flag; never null
-     * @param tracker                  the tracker port every slot fetches and dispatches through; never null
-     * @param instanceId               this factory instance's identity; never null
+     * @param assembly the shared engine/ports assembly, reused across every slot; never null
+     * @param cloneDir the project clone every slot dispatches against; never null
+     * @param worktreesRoot the root under which {@code <project-name>/<taskId>/} worktrees are created; never null
+     * @param definition the loaded pipeline every slot advances through; never null
+     * @param abortHandler the infrastructure-abort protocol; never null
+     * @param abortThreshold the configured abort-fuse threshold (K); positive
+     * @param taskIdMdcKey the MDC key set to the claimed ref's id for the slot's duration, cleared once it terminates
+     * @param credentialEnvVarsToScrub the active tracker adapter's declared credential env var names; never null
+     * @param heartbeat the heartbeat lifecycle registered/unregistered around the run; {@link ClaimBeat#NONE} when none
+     * @param claimLossFlag the per-run heartbeat claim-loss flag; never null
+     * @param tracker the tracker port every slot fetches and dispatches through; never null
+     * @param instanceId this factory instance's identity; never null
      */
     public TakeSlotRunner(
             ManualRunAssembly assembly,
@@ -118,10 +105,9 @@ public final class TakeSlotRunner implements SlotRunner {
 
     /**
      * Attaches {@code report} so every future {@link #run(TaskRef)} call also records its
-     * terminal outcome into it, alongside the existing log line. Drain-only (task 5.4 of
-     * add-factory-serve): {@code ServeCommand} calls this before {@link FeedAutomaton#drain()}
-     * only when {@code --drain} is set; an ordinary run never attaches one, so this stays a
-     * no-op for the normal {@code serve} path.
+     * terminal outcome into it, alongside the existing log line. Drain-only: {@code
+     * ServeShutdownWiring} attaches one only when {@code --drain} is set; an ordinary run never
+     * attaches one, so this stays a no-op for the normal {@code serve} path.
      *
      * <p>Implements FR10, NFR-O2 of add-factory-serve.
      *
@@ -129,6 +115,29 @@ public final class TakeSlotRunner implements SlotRunner {
      */
     public void attachDrainReport(DrainReport report) {
         this.drainReport = report;
+    }
+
+    /**
+     * Attaches {@code writer} so a future {@link #run(TaskRef)} also appends a {@code
+     * taskOutcome} ledger line beside the existing log line; mirrors {@link #attachDrainReport}'s
+     * optional style. Implements FR11.
+     * @param writer the ledger write point; never null
+     */
+    public void attachLedgerWriter(TaskOutcomeLedgerWriter writer) {
+        this.ledgerWriter = writer;
+    }
+
+    /**
+     * Attaches {@code accumulator} so every future {@link #run(TaskRef)} call also records its
+     * terminal result into it, beside {@link #attachDrainReport}'s own call — the totals a {@code
+     * runSummary} line is built from once the drain run completes (design D6, FR13). Drain-only,
+     * mirroring {@link #attachDrainReport}: unattached on an ordinary run, so standing-mode stop
+     * can never produce a {@code runSummary} line. Implements FR13, D6 of add-serve-observability.
+     *
+     * @param accumulator the drain run's in-memory {@code runSummary} accumulator; never null
+     */
+    public void attachRunSummaryAccumulator(RunSummaryAccumulator accumulator) {
+        this.runSummaryAccumulator = accumulator;
     }
 
     /**
@@ -156,6 +165,12 @@ public final class TakeSlotRunner implements SlotRunner {
             logOutcome(claimed, result);
             if (drainReport != null) {
                 drainReport.record(claimed, result);
+            }
+            if (runSummaryAccumulator != null) {
+                runSummaryAccumulator.record(result);
+            }
+            if (ledgerWriter != null) {
+                ledgerWriter.write(claimed, result);
             }
         } catch (Throwable crash) {
             // Deliberate boundary: see class javadoc. A slot never crashes the daemon.

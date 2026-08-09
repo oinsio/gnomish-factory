@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -41,6 +42,7 @@ class ServeCommandSpec extends Specification implements AppAssemblyFixture, Bare
 
     Path projectDir
     Path worktreesRoot
+    Path homeDir
     Tracker tracker = Mock()
 
     def setup() {
@@ -57,6 +59,7 @@ instructions: stages/build/instructions.md
 advancement: auto
 ''')
         worktreesRoot = tempDir.resolve('worktrees')
+        homeDir = tempDir.resolve('home')
     }
 
     private void writeConfig(String trackerSection = '') {
@@ -132,9 +135,10 @@ tracker:
         new ServeCommand(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 worktreesRoot,
+                homeDir,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(0, null, null, null),
+                new ServeProperties(0, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 registry,
@@ -247,12 +251,20 @@ tracker:
         noExceptionThrown()
         starter.captured != null
 
-        and: 'the assembled feed polls the very tracker the startup smoke test created (FR12) — not a null'
-        starter.captured.@cycle.@tracker.is(tracker)
+        and: 'the assembled feed polls through the FR8/D12 health decorator wrapping the startup ' +
+        'smoke test tracker (add-serve-observability) — not a null and not the raw mock'
+        def wrappedTracker = starter.captured.@cycle.@tracker
+        wrappedTracker instanceof TrackerHealthTracker
 
         and: 'no claim attempt was ever made — the scheduler was assembled but never actually run'
         0 * tracker.listReady(_)
         0 * tracker.claim(_, _)
+
+        when: 'a call is made through the decorator captured above'
+        wrappedTracker.listReady(3)
+
+        then: 'it forwards to the very tracker the startup smoke test created (FR12)'
+        1 * tracker.listReady(3) >> []
     }
 
     // FR13: serve wires the REAL cross-slot heartbeat/claim-loss-flag (TakeHeartbeat.forRun) into
@@ -283,6 +295,26 @@ tracker:
 
         and: "the heartbeat's progress listener already joined the assembly handed to the slot runner"
         joinedAssembly.@extraListener instanceof HeartbeatProgress
+    }
+
+    // FR1, FR11 of add-serve-observability (task 6.3): proves ServeCommand#run actually calls
+    // TakeSlotRunner::attachLedgerWriter with the observability wiring's taskOutcomeLedgerWriter —
+    // not merely assembles the wiring — the only externally observable seam being the slot
+    // runner's own (package-private) ledgerWriter field.
+    def "the observability taskOutcomeLedgerWriter is attached to the assembled slot runner (FR11)"() {
+        given:
+        writeConfig(GITHUB_TRACKER_SECTION)
+        def factory = factoryReturning(tracker)
+        def starter = new CapturingStarter()
+        def command = newCommand([github: factory], starter)
+
+        when:
+        runsToCompletion { command.run(args('serve', "--dir=$projectDir")) }
+
+        then:
+        noExceptionThrown()
+        def slotRunner = starter.captured.@cycle.@slotRunner
+        slotRunner.@ledgerWriter != null
     }
 
     // FR10, NFR-O2, M3 (task 5.4): --drain takes a wholly different path than the ordinary
@@ -335,9 +367,10 @@ tracker:
         def command = new ServeCommand(
                 newAssembly(testProperties(instanceName: INSTANCE_NAME)),
                 worktreesRoot,
+                homeDir,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(0, null, null, Duration.ofMillis(1)),
+                new ServeProperties(0, null, null, Duration.ofMillis(1), null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: factory],

@@ -244,7 +244,7 @@ tracker:
     repo: acme/widgets
 ''')
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false, false)
+            new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
         ]
         tracker.claim(REF, _) >> new ClaimResult.Held('someone-else')
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
@@ -274,10 +274,10 @@ tracker:
         openTasks = [
             new OpenTask(
             new TaskRef('github:acme/widgets#1'),
-            new TrackerTaskState.Working('someone-else'), null)
+            new TrackerTaskState.Working('someone-else'), null, 'fixture title')
         ]
         tracker.listReady(_) >> [
-            new ReadyTask(REF, AbortFacts.none(), false, false)
+            new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
         ]
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)

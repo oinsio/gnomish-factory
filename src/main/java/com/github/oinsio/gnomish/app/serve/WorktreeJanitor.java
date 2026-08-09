@@ -51,6 +51,7 @@ public final class WorktreeJanitor {
     private final Clock clock;
     private final Sleeper sleeper;
     private final Supplier<Set<TaskRef>> heldRefs;
+    private volatile Instant lastRunAt;
 
     /**
      * @param worktreesRoot the root directory under which {@code <project-name>/<key>/} worktrees
@@ -80,6 +81,7 @@ public final class WorktreeJanitor {
         this.clock = clock;
         this.sleeper = sleeper;
         this.heldRefs = heldRefs;
+        this.lastRunAt = clock.now();
     }
 
     /**
@@ -106,6 +108,7 @@ public final class WorktreeJanitor {
     // Package-private: the policy spec drives this directly, with no thread and no real sleeping.
     void tick() {
         Path projectRoot = worktreesRoot.resolve(projectName());
+        lastRunAt = clock.now();
         if (!Files.isDirectory(projectRoot)) {
             return;
         }
@@ -116,6 +119,19 @@ public final class WorktreeJanitor {
         } catch (IOException e) {
             log.warn("worktree janitor: failed to scan {}", projectRoot, e);
         }
+    }
+
+    /**
+     * The last time a tick completed (whether or not the project's worktree directory existed
+     * yet), or this janitor's construction instant if it has never ticked (task 2.5,
+     * add-serve-observability FR7).
+     *
+     * <p>Implements FR7 of add-serve-observability.
+     *
+     * @return the last completed-tick instant; never null
+     */
+    public Instant lastRunAt() {
+        return lastRunAt;
     }
 
     private void disposeIfAged(Path dir, Set<String> held, Instant now) {

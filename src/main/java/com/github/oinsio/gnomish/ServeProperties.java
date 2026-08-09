@@ -13,11 +13,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * {@code @ConfigurationPropertiesScan} on {@link FactoryApplication} picks it up automatically —
  * no extra wiring needed.
  *
- * <p>These four knobs are deliberately few and all instance-level with CLI override (design D3,
- * D10): {@code --drain} itself is a per-invocation runtime flag on the future {@code serve}
- * command, not a persistent default, and is therefore not modeled here.
+ * <p>These knobs are deliberately few and all instance-level with CLI override (design D3, D10):
+ * {@code --drain} itself is a per-invocation runtime flag on the future {@code serve} command, not
+ * a persistent default, and is therefore not modeled here.
  *
- * <p>Implements FR1, FR5, FR11, FR14 of add-factory-serve.
+ * <p>{@code snapshotInterval} and {@code ledgerRetentionDays} are the observability cadence knobs
+ * (design D10): the status-snapshot write period and the number of days a completed-task ledger
+ * entry is kept before pruning, with {@code 0} meaning "keep forever". {@code ledgerRetentionDays}
+ * is bound as boxed {@code Integer} rather than primitive {@code int} because, unlike the other
+ * fields, {@code 0} is a valid explicit value here (not an "unset" sentinel) — only {@code null}
+ * (property absent) means unset.
+ *
+ * <p>Implements FR1, FR5, FR11, FR14 of add-factory-serve; FR1, FR15 of add-serve-observability.
  *
  * @param slots number of concurrent claim/work slots ({@code factory.serve.slots}); defaults to
  *     {@code 2} when unset (FR1, design D3); rejected if non-positive
@@ -30,15 +37,28 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param worktreeAgeThreshold minimum age of an unclaimed task worktree before the janitor
  *     disposes of it ({@code factory.serve.worktree-age-threshold}); defaults to {@code 14d} when
  *     unset (FR14, design D10); rejected if non-positive
+ * @param snapshotInterval period between status-snapshot writes ({@code
+ *     factory.serve.snapshot-interval}); defaults to {@code 30s} when unset, matching the idle poll
+ *     cadence (design D10); rejected if non-positive
+ * @param ledgerRetentionDays number of days a completed-task ledger entry is retained before
+ *     pruning ({@code factory.serve.ledger-retention-days}); defaults to {@code 30} when unset;
+ *     {@code 0} means keep forever (design D10); rejected if negative
  */
 @ConfigurationProperties("factory.serve")
 public record ServeProperties(
-        int slots, Duration idlePollInterval, Duration sigtermGrace, Duration worktreeAgeThreshold) {
+        int slots,
+        Duration idlePollInterval,
+        Duration sigtermGrace,
+        Duration worktreeAgeThreshold,
+        Duration snapshotInterval,
+        Integer ledgerRetentionDays) {
 
     private static final int DEFAULT_SLOTS = 2;
     private static final Duration DEFAULT_IDLE_POLL_INTERVAL = Duration.ofSeconds(30);
     private static final Duration DEFAULT_SIGTERM_GRACE = Duration.ofSeconds(30);
     private static final Duration DEFAULT_WORKTREE_AGE_THRESHOLD = Duration.ofDays(14);
+    private static final Duration DEFAULT_SNAPSHOT_INTERVAL = Duration.ofSeconds(30);
+    private static final int DEFAULT_LEDGER_RETENTION_DAYS = 30;
 
     // slots is a primitive int, so it must match the record component type exactly to remain the
     // canonical constructor (unlike the Duration components, it cannot be @Nullable); Spring's
@@ -48,11 +68,15 @@ public record ServeProperties(
             int slots,
             @Nullable Duration idlePollInterval,
             @Nullable Duration sigtermGrace,
-            @Nullable Duration worktreeAgeThreshold) {
+            @Nullable Duration worktreeAgeThreshold,
+            @Nullable Duration snapshotInterval,
+            @Nullable Integer ledgerRetentionDays) {
         this.slots = defaultSlots(slots);
         this.idlePollInterval = defaultIdlePollInterval(idlePollInterval);
         this.sigtermGrace = defaultSigtermGrace(sigtermGrace);
         this.worktreeAgeThreshold = defaultWorktreeAgeThreshold(worktreeAgeThreshold);
+        this.snapshotInterval = defaultSnapshotInterval(snapshotInterval);
+        this.ledgerRetentionDays = defaultLedgerRetentionDays(ledgerRetentionDays);
     }
 
     /**
@@ -109,5 +133,37 @@ public record ServeProperties(
             throw new IllegalArgumentException("factory.serve.worktree-age-threshold must be positive");
         }
         return worktreeAgeThreshold;
+    }
+
+    /**
+     * Resolves the unset case to the design D10 default of 30 seconds, matching the idle poll
+     * cadence (FR1 of add-serve-observability). Kept as an explicit method for the same PIT
+     * record-constructor reason as {@link #defaultSlots}.
+     */
+    private static Duration defaultSnapshotInterval(@Nullable Duration snapshotInterval) {
+        if (snapshotInterval == null) {
+            return DEFAULT_SNAPSHOT_INTERVAL;
+        }
+        if (snapshotInterval.isZero() || snapshotInterval.isNegative()) {
+            throw new IllegalArgumentException("factory.serve.snapshot-interval must be positive");
+        }
+        return snapshotInterval;
+    }
+
+    /**
+     * Resolves the unset case to the design D10 default of 30 days (FR15 of
+     * add-serve-observability); {@code 0} is a valid explicit value meaning "keep forever", so only
+     * {@code null} (property absent) is treated as unset — unlike {@link #defaultSlots}, where 0 is
+     * itself the unset sentinel. Kept as an explicit method for the same PIT record-constructor
+     * reason as {@link #defaultSlots}.
+     */
+    private static int defaultLedgerRetentionDays(@Nullable Integer ledgerRetentionDays) {
+        if (ledgerRetentionDays == null) {
+            return DEFAULT_LEDGER_RETENTION_DAYS;
+        }
+        if (ledgerRetentionDays < 0) {
+            throw new IllegalArgumentException("factory.serve.ledger-retention-days must not be negative");
+        }
+        return ledgerRetentionDays;
     }
 }

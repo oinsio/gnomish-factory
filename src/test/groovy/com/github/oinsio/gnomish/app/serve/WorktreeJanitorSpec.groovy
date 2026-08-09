@@ -178,6 +178,25 @@ class WorktreeJanitorSpec extends Specification {
         0 * sleeper._
     }
 
+    // task 2.5, add-serve-observability FR7: lastRunAt starts at construction time and is
+    //     stamped from the injected clock on every completed tick, whether or not the project's
+    //     worktree directory exists yet — the vitals reader must never see a stale placeholder.
+    def "lastRunAt starts at construction time and advances with every completed tick, even with no worktrees yet"() {
+        given:
+        def instance = janitor()
+
+        expect:
+        instance.lastRunAt() == NOW
+
+        when: 'a tick completes on a clock set one minute later'
+        def laterClock = { -> NOW + Duration.ofMinutes(1) } as Clock
+        def later = new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, disposal, laterClock, sleeper, { -> Set.of() })
+        later.tick()
+
+        then:
+        later.lastRunAt() == NOW + Duration.ofMinutes(1)
+    }
+
     // FR14, D10: several environments in one project folder are each judged independently.
     def "judges every environment in the project folder independently"() {
         given:

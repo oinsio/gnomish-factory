@@ -18,11 +18,11 @@ import spock.lang.Specification
 class OpenFrontGateSpec extends Specification {
 
     private static ReadyTask fresh(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, false, 'fixture title')
     }
 
     private static ReadyTask returned(String id) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
     }
 
     // FR6, D5: a fresh candidate is claimable while the re-read count is below the limit

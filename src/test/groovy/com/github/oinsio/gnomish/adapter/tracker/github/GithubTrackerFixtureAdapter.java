@@ -105,7 +105,7 @@ final class GithubTrackerFixtureAdapter implements Tracker {
     @Override
     public List<ReadyTask> listReady(int limit) {
         return delegate.listReady(limit).stream()
-                .map(rt -> new ReadyTask(toFixture(rt.ref()), rt.abortFacts(), rt.returned(), rt.finished()))
+                .map(rt -> new ReadyTask(toFixture(rt.ref()), rt.abortFacts(), rt.returned(), rt.finished(), rt.title()))
                 .toList();
     }
 
@@ -176,7 +176,7 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         // Like listReady, each returned entry's canonical ref translates back to the fixture ref the
         // contract suite seeded; the opaque ClaimVersion and the state carry through unchanged.
         return delegate.listOpen().stream()
-                .map(open -> new OpenTask(toFixture(open.ref()), open.state(), open.claimVersion()))
+                .map(open -> new OpenTask(toFixture(open.ref()), open.state(), open.claimVersion(), open.title()))
                 .toList();
     }
 

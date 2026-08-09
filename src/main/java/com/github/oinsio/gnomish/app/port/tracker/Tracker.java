@@ -21,9 +21,13 @@ public interface Tracker {
 
     /**
      * Returns up to {@code limit} unclaimed tasks in adapter queue order, each
-     * paired with its {@link AbortFacts}. Raw feed only: abort-backoff filtering
-     * is core policy over these facts, never the adapter's job (FR1, FR10, D10).
-     * <p>Implements FR1, FR10 of add-tracker-port.
+     * paired with its {@link AbortFacts} and title. Raw feed only: abort-backoff
+     * filtering is core policy over these facts, never the adapter's job (FR1,
+     * FR10, D10). The title is populated from data the list call already
+     * receives — never a per-task {@code fetchTask} fan-out (FR7, NFR-P1 of
+     * add-board-command).
+     * <p>Implements FR1, FR10 of add-tracker-port. Implements FR7, NFR-P1 of
+     * add-board-command.
      * @param limit the maximum number of entries to return; must be positive
      * @return unclaimed tasks in queue order, possibly empty; never null
      */
@@ -154,13 +158,16 @@ public interface Tracker {
 
     /**
      * Returns the open tasks — {@link TrackerTaskState.Working} or {@link
-     * TrackerTaskState.AwaitingHuman} — each with its state and, for a {@code
-     * Working} task carrying a live claim marker, its opaque {@link ClaimVersion}.
-     * {@code Ready}/{@code Finished}/{@code Gone} never appear. Unlike {@link
-     * #listReady(int)} this takes no limit: the reaper needs the full open set.
-     * Adapters report version facts only; TTL policy and the staleness judgment
-     * live in core (FR5, design D2, D4).
-     * <p>Implements FR5 of add-claim-heartbeat.
+     * TrackerTaskState.AwaitingHuman} — each with its state, title and, for a
+     * {@code Working} task carrying a live claim marker, its opaque {@link
+     * ClaimVersion}. {@code Ready}/{@code Finished}/{@code Gone} never appear.
+     * Unlike {@link #listReady(int)} this takes no limit: the reaper needs the
+     * full open set. Adapters report version facts only; TTL policy and the
+     * staleness judgment live in core (FR5, design D2, D4). The title is
+     * populated from data the list call already receives — never a per-task
+     * {@code fetchTask} fan-out (FR7, NFR-P1 of add-board-command).
+     * <p>Implements FR5 of add-claim-heartbeat. Implements FR7, NFR-P1 of
+     * add-board-command.
      * @return the open tasks with states and claim versions, possibly empty; never null
      */
     List<OpenTask> listOpen();

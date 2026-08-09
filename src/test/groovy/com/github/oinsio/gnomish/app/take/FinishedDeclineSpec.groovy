@@ -16,7 +16,7 @@ import spock.lang.Specification
 class FinishedDeclineSpec extends Specification {
 
     private static ReadyTask task(String id, boolean finished) {
-        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, finished)
+        new ReadyTask(new TaskRef(id), AbortFacts.none(), false, finished, 'fixture title')
     }
 
     // FR3, FR4: only finished entries trigger a decline call; non-finished entries are never

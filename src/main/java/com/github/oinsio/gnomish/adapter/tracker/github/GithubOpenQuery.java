@@ -77,19 +77,19 @@ public final class GithubOpenQuery {
     /** Implements {@code Tracker.listOpen} for GitHub (FR5, NFR-P1). */
     public List<OpenTask> listOpen() {
         List<OpenTask> open = new ArrayList<>();
-        for (int issueNumber : issueNumbers(workingLabel, "open-working")) {
-            OpenTask task = workingTask(issueNumber);
+        for (GithubIssueFeedParser.IssueRef issue : issueRefs(workingLabel, "open-working")) {
+            OpenTask task = workingTask(issue.number(), issue.title());
             if (task != null) {
                 open.add(task);
             }
         }
-        for (int issueNumber : issueNumbers(needsHumanLabel, "open-needs-human")) {
-            open.add(awaitingHumanTask(issueNumber));
+        for (GithubIssueFeedParser.IssueRef issue : issueRefs(needsHumanLabel, "open-needs-human")) {
+            open.add(awaitingHumanTask(issue.number(), issue.title()));
         }
         return List.copyOf(open);
     }
 
-    private List<Integer> issueNumbers(String label, String cacheKeyPrefix) {
+    private List<GithubIssueFeedParser.IssueRef> issueRefs(String label, String cacheKeyPrefix) {
         String path = "/repos/%s/%s/issues?state=open&labels=%s&sort=created&direction=asc&per_page=100"
                 .formatted(owner, repo, URLEncoder.encode(label, StandardCharsets.UTF_8));
         String cacheKey = cacheKeyPrefix + ":" + owner + "/" + repo;
@@ -104,10 +104,12 @@ public final class GithubOpenQuery {
                         yield fresh.body();
                     }
                 };
-        return GithubIssueFeedParser.parseIssueNumbers(body);
+        return GithubIssueFeedParser.parseIssues(body);
     }
 
-    private @Nullable OpenTask workingTask(int issueNumber) {
+    // FR7, NFR-P1 of add-board-command: title rides the same list-issues response that named this
+    //     issue's number — no per-task fetchTask fan-out.
+    private @Nullable OpenTask workingTask(int issueNumber, String title) {
         TaskRef ref = refFor(issueNumber);
         List<GithubClaimComment.Candidate> candidates = GithubClaimComment.parse(fetchComments(issueNumber));
         Optional<GithubClaimComment.Candidate> live = GithubClaimComment.resolve(candidates);
@@ -116,17 +118,18 @@ public final class GithubOpenQuery {
             return new OpenTask(
                     ref,
                     new TrackerTaskState.Working(claim.marker().instance()),
-                    new ClaimVersion(Long.toString(claim.id()), claim.updatedAt()));
+                    new ClaimVersion(Long.toString(claim.id()), claim.updatedAt()),
+                    title);
         }
         return lastClaimHolder(candidates)
-                .map(holder -> new OpenTask(ref, new TrackerTaskState.Working(holder), null))
+                .map(holder -> new OpenTask(ref, new TrackerTaskState.Working(holder), null, title))
                 .orElse(null);
     }
 
-    private OpenTask awaitingHumanTask(int issueNumber) {
+    private OpenTask awaitingHumanTask(int issueNumber, String title) {
         List<ParsedMarker> markers = GithubCommentParser.parseMarkers(fetchComments(issueNumber));
         ParkReason reason = GithubParkReason.latest(markers);
-        return new OpenTask(refFor(issueNumber), new TrackerTaskState.AwaitingHuman(reason), null);
+        return new OpenTask(refFor(issueNumber), new TrackerTaskState.AwaitingHuman(reason), null, title);
     }
 
     /** The instance of the last claim marker still visible in the thread, or empty when none exists. */

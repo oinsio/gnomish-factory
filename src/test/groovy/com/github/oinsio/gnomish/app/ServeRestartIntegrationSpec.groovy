@@ -6,10 +6,8 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -54,10 +52,12 @@ class ServeRestartIntegrationSpec extends Specification implements AppAssemblyFi
 
     Path projectDir
     Path worktreesRoot
+    Path homeDir
     InMemoryTracker tracker = new InMemoryTracker()
     InMemoryTrackerHarness harness = new InMemoryTrackerHarness(tracker)
 
     def setup() {
+        homeDir = tempDir.resolve('home')
         projectDir = tempDir.resolve('project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
@@ -89,29 +89,18 @@ tracker:
         harness.seedWorkingWithClaim(tracker, TASK_B, OLD_INSTANCE_ID)
     }
 
-    private static TrackerAdapterFactory factoryReturning(Tracker t) {
-        new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
-    }
-
     def "a restarted serve never adopts the previous life's claims, and the standing reaper alone returns both to circulation (FR12, UX1)"() {
         given: 'a fresh serve daemon, its own instance id, over the seeded tracker — ready queue empty'
         def command = new ServeCommand(
                 newAssembly(testProperties(instanceName: 'gnomish-factory')),
                 worktreesRoot,
+                homeDir,
                 'taskId',
                 testProperties(instanceName: 'gnomish-factory'),
-                new ServeProperties(2, Duration.ofMillis(20), null, null),
+                new ServeProperties(2, Duration.ofMillis(20), null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
-                [github: factoryReturning(tracker)],
+                [github: fakeFactory(tracker)],
                 TrackerValidatorStub.acceptingGithub(),
                 { FeedAutomaton automaton -> automaton.run() } as FeedAutomatonStarter)
         def failure = new AtomicReference<Throwable>()

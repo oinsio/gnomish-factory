@@ -1,0 +1,75 @@
+{
+  "version" : 1,
+  "generatedAt" : "2026-08-05T09:00:00Z",
+  "truncated" : true,
+  "ready" : {
+    "queuedCount" : 4,
+    "eligibleNowCount" : 1,
+    "inBackoffCount" : 1,
+    "finishedCount" : 1,
+    "wipHeldCount" : 1,
+    "openFrontCount" : 5,
+    "wipLimit" : 3,
+    "rows" : [ {
+      "id" : "github:g/r#1",
+      "title" : "Fix flaky OrderServiceSpec",
+      "returned" : false,
+      "eligibility" : {
+        "eligible" : false,
+        "reason" : "inBackoff",
+        "deadline" : "2026-08-05T09:01:00Z"
+      }
+    }, {
+      "id" : "github:g/r#2",
+      "title" : "Old reopened task",
+      "returned" : false,
+      "eligibility" : {
+        "eligible" : false,
+        "reason" : "finished",
+        "deadline" : null
+      }
+    }, {
+      "id" : "github:g/r#3",
+      "title" : "Add new feature flag",
+      "returned" : false,
+      "eligibility" : {
+        "eligible" : false,
+        "reason" : "wipHeld",
+        "deadline" : null
+      }
+    }, {
+      "id" : "github:g/r#4",
+      "title" : "Returned after park",
+      "returned" : true,
+      "eligibility" : {
+        "eligible" : true,
+        "reason" : null,
+        "deadline" : null
+      }
+    } ]
+  },
+  "working" : [ {
+    "id" : "github:g/w#1",
+    "title" : "Refactor retry module",
+    "holder" : "factory-a-1b2c",
+    "claimUpdatedAt" : "2026-08-05T08:57:00Z"
+  }, {
+    "id" : "github:g/w#2",
+    "title" : "Update operator docs",
+    "holder" : "factory-b-9f00",
+    "claimUpdatedAt" : null
+  } ],
+  "awaitingHuman" : [ {
+    "id" : "github:h/1",
+    "title" : "Needs operator decision",
+    "parkReason" : "escalation"
+  }, {
+    "id" : "github:h/2",
+    "title" : "Environment broken",
+    "parkReason" : "infra"
+  }, {
+    "id" : "github:h/3",
+    "title" : "Checkpoint pause",
+    "parkReason" : "checkpoint"
+  } ]
+}

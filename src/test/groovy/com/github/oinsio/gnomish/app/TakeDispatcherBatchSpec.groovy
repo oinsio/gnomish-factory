@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
@@ -96,7 +97,8 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
     }
 
     private static TakeHeartbeat noopHeartbeat() {
-        def standingReaper = new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), { [] })
+        def standingReaper =
+                new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), { [] }, new SystemClock())
         new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag(), standingReaper)
     }
 

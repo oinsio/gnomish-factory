@@ -64,7 +64,7 @@ class DeadHeartbeatReapingSpec extends Specification {
     // SAME heartbeat, so OWN is excluded from staleness observation only while it is actually
     // beating.
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot)
+    new StandingReaper(reaper, { Duration d -> }, INTERVAL, heartbeat.&liveClaimsSnapshot, new VirtualClock())
 
     def cleanup() {
         heartbeat.unregister(OWN)

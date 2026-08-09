@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import java.time.Duration
 import org.slf4j.LoggerFactory
@@ -62,7 +63,7 @@ class StandingReaperSupervisionSpec extends Specification {
     //     starting at the base interval, until the cap stops further growth.
     def "consecutive deaths double the backoff up to the 10-minute cap"() {
         given: 'a reaper parked in its first interval sleep'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] })
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
 
@@ -92,7 +93,7 @@ class StandingReaperSupervisionSpec extends Specification {
     //     double from where it left off.
     def "a clean tick after a respawn resets the backoff to the base interval"() {
         given: 'a reaper whose first worker has already died twice in a row (backoff at 2x)'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] })
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
 
@@ -125,7 +126,7 @@ class StandingReaperSupervisionSpec extends Specification {
     //     restart count, the only surface a persistent fault is visible through.
     def "each respawn logs an ERROR line with a monotonically increasing restart count"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] })
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
 
@@ -144,6 +145,9 @@ class StandingReaperSupervisionSpec extends Specification {
         errorMessages[1].contains('restart #2')
         errorMessages[2].contains('restart #3')
 
+        and: 'the vitals reader (task 2.5, FR7) reports the same lifetime count'
+        reaper.restartCount() == 3
+
         cleanup:
         reaper.stop()
     }
@@ -152,7 +156,7 @@ class StandingReaperSupervisionSpec extends Specification {
     //     never leaks a second ticking worker (the first would otherwise be overwritten and leak).
     def "a second start() while a worker already runs is a no-op"() {
         given: 'a reaper whose worker is parked in its first interval sleep'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] })
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
         def firstWorker = reaper.worker()
@@ -171,7 +175,7 @@ class StandingReaperSupervisionSpec extends Specification {
     //     the death-handling thread checks stopping again once the backoff sleep returns.
     def "stop() during the backoff wait does not respawn"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] })
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
         def dyingWorker = reaper.worker()
