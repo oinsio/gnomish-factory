@@ -21,17 +21,17 @@ jacoco = "0.8.15"
 pitest-tool = "1.25.7"
 pitest-junit5-plugin = "1.2.3"
 pitest-plugin = "1.19.0"
-spotless = "8.8.0"
+spotless = "8.9.0"
 palantir-java-format = "2.96.0"
 errorprone = "2.50.0"
 errorprone-plugin = "5.1.0"
 nullaway = "0.13.8"
-jspecify = "1.0.0"
-dependency-analysis = "3.17.0"
+jspecify = "1.0.1"
+dependency-analysis = "3.18.0"
 # ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
 # design D7). 1.4.2 verified on Maven Central 2026-07-15; its shaded ASM
 # supports Java 25 bytecode (class-file version 69).
-archunit = "1.4.2"
+archunit = "1.5.0"
 # WireMock for tracker/AI API contract tests, in-JVM, no Docker (.claude/rules/testing.md,
 # NFR-R2 of add-tracker-port). 3.13.2 is the latest stable line on Maven Central (2026-07-28);
 # 4.0.0 is still beta. Plain JDK artifact, so no JDK-version-specific classifier is needed.
@@ -65,7 +65,7 @@ jackson = "2.22.1"
 # injection, CVSS 2.9); fixed in 1.5.35. 1.6.0 is the latest stable release on
 # Maven Central (2026-07-28) and stays on the fixed line. classic is kept on
 # the same version.
-logback = "1.6.0"
+logback = "1.6.1"
 
 [libraries]
 # Spring Boot BOM imported via platform() in build.gradle (design D3);
