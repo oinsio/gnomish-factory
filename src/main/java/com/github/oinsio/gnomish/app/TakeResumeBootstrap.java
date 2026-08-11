@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.git.BranchLocation;
+import com.github.oinsio.gnomish.adapter.git.FactoryCloneHardening;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.TaskBranchLocator;
 import com.github.oinsio.gnomish.adapter.git.TaskIdSanitizer;
@@ -41,6 +42,10 @@ record TakeResumeBootstrap(Path worktreesRoot, String taskIdMdcKey) {
      */
     ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
         GitProcessRunner runner = new GitProcessRunner();
+        // Runner-start hygiene for both resume flows: neutralize hooks on the clone before the
+        // worktree materializes, so the shared .git/config carries core.hooksPath from the start
+        // (FR17, design D11) — the config-write twin of the fresh path's pruneWorktrees hardening.
+        new FactoryCloneHardening(runner).harden(cloneDir);
         BranchLocation location = new TaskBranchLocator(runner).locate(cloneDir, taskId);
         if (location instanceof BranchLocation.NotFound) {
             throw new UsageException("could not resume task \"" + taskId + "\": no branch \""

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The result of a single poll of an {@code external} verify check, modeled as one
@@ -25,13 +26,25 @@ public sealed interface PollStatus
         permits PollStatus.Pass, PollStatus.Fail, PollStatus.Running, PollStatus.CannotVerify {
 
     /**
-     * The external check reported success. A component-less record, so any two
-     * passes are the same value — there is nothing to distinguish one passing poll
-     * from another.
+     * The external check reported success, optionally carrying the URL of the
+     * authoritative platform run that decided it, so a green check is auditable from
+     * the tracker report without leaving the tracker (NFR-O2 of add-sandbox-core):
+     * the engine preserves the URL into the recorded check result through the same
+     * channel a failing check's findings travel. {@code runUrl} is {@code null} when
+     * the platform exposes none — the no-arg constructor keeps the plain "it passed"
+     * observation available to adapters with no run to point at.
      *
-     * <p>Implements FR3, D2 of add-stage-engine.
+     * <p>Implements FR3, D2 of add-stage-engine; NFR-O2 of add-sandbox-core.
+     *
+     * @param runUrl the authoritative platform run's URL, or {@code null} if none
      */
-    record Pass() implements PollStatus {}
+    record Pass(@Nullable String runUrl) implements PollStatus {
+
+        /** A pass with no platform run to point at. */
+        public Pass() {
+            this(null);
+        }
+    }
 
     /**
      * A quality failure: the external check reported a non-pass verdict, carrying
@@ -82,7 +95,7 @@ public sealed interface PollStatus
     record CannotVerify(String reason, String details) implements PollStatus {
 
         public CannotVerify {
-            reason = requireNonBlank(reason, "reason");
+            reason = requireNonBlankReason(reason);
         }
 
         /**
@@ -93,9 +106,9 @@ public sealed interface PollStatus
          * record's canonical constructor, which would silently exempt this
          * validation from the 100% mutation gate.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static String requireNonBlankReason(String value) {
             if (value.isBlank()) {
-                throw new IllegalArgumentException("CannotVerify." + component + " must not be blank");
+                throw new IllegalArgumentException("CannotVerify.reason must not be blank");
             }
             return value;
         }

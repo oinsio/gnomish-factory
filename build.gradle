@@ -481,6 +481,29 @@ pitest {
         'com.github.oinsio.gnomish.FactoryApplicationSpec',
         'com.github.oinsio.gnomish.app.lease.InstanceHeartbeatLifecycleSpec',
         'com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerContractSpec',
+        // add-sandbox-core (tasks 4.5, 4.6, 5.5, 6.5, 9.2-9.4): the container-mode
+        // adapter is proven against a real Docker daemon — real containers,
+        // volumes, networks, and (for the E2E layer) a real Gitea remote, driven
+        // through subprocess `docker`/`git`. Same category as
+        // RealProcessTreeKiller/InstanceHeartbeatLifecycleSpec above: a mutant
+        // that breaks a wait/retry/kill loop in this territory doesn't fail
+        // fast, it blocks on real OS/Docker I/O that PIT's per-mutation timeout
+        // cannot always interrupt (observed: a killed-container resume mutant
+        // hung a minion for 30+ minutes with zero CPU progress, well past its
+        // computed timeout budget, leaving an orphaned box). Excluding them
+        // removes no production line from mutation coverage — every adapter
+        // class they exercise is also covered by fast, Docker-free unit specs
+        // (DockerCommandsSpec, ContainerTaskExecutionEnvironmentUnitSpec,
+        // EgressGuardSpec, ContainerResumeBranch/ContainerRunSupportSpec, etc.)
+        // that already feed the mutation gate; only the slow, hang-prone
+        // whole-daemon rehearsal is kept out of PIT's per-mutant re-run.
+        'com.github.oinsio.gnomish.app.ContainerModePipelineE2ESpec',
+        'com.github.oinsio.gnomish.app.ContainerModeIsolationE2ESpec',
+        'com.github.oinsio.gnomish.app.ContainerModeResumeE2ESpec',
+        'com.github.oinsio.gnomish.adapter.environment.EgressGuardIntegrationSpec',
+        'com.github.oinsio.gnomish.adapter.environment.ContainerGitMechanicsSpec',
+        'com.github.oinsio.gnomish.adapter.environment.ContainerReadOnlySurfacesSpec',
+        'com.github.oinsio.gnomish.adapter.environment.ContainerTaskExecutionEnvironmentContractSpec',
     ]
     // M4 documented exception: a handful of methods on `record` classes
     // (ExecutorUsage, StatusReport, Finding, Decision, UsageTotals of add-git-workflow;
@@ -583,6 +606,20 @@ pitest {
 }
 
 tasks.named('pitest') {
+    // PIT's own coverage-calculation pass re-runs the whole covering test suite
+    // in a separate minion JVM — including the Docker-backed container-mode E2E
+    // specs (task 9.2-9.4), which materialize real containers/volumes/networks
+    // named after a fixed per-test taskId. With no ordering declared between
+    // `pitest` and `test`, org.gradle.parallel lets Gradle run them
+    // concurrently, so both processes race to create the same-named Docker
+    // objects: `docker run --name` conflicts, or a seed-clone helper's `.git`
+    // guard sees the other process's still-in-progress clone and skips
+    // re-seeding, leaving the volume without the identity config `seedClone`
+    // was supposed to write — surfacing downstream as "unable to auto-detect
+    // email address" or a container-name conflict, nondeterministically.
+    // `mustRunAfter` serializes them without adding a real dependency (`pitest`
+    // does not need `test`'s output — jacocoTestReport is the one that does).
+    mustRunAfter tasks.named('test')
     // PIT hard-fails ("No mutations found", exit 1) when there is nothing to
     // mutate. Until the first production class lands (task 3.x of
     // add-project-skeleton) the task is skipped instead of weakening the gate

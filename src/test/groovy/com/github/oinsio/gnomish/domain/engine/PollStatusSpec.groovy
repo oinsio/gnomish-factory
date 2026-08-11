@@ -12,10 +12,15 @@ import spock.lang.Specification
  */
 class PollStatusSpec extends Specification {
 
-    // FR3: Pass carries nothing — any two Pass instances are the same value
+    // FR3: Pass carries only the optional run URL — two passes with the same URL are the same value
     def "Pass instances are value-equal"() {
         expect: 'two independently constructed passes are equal'
         new PollStatus.Pass() == new PollStatus.Pass()
+
+        and: 'the no-arg pass is the null-URL pass (NFR-O2 of add-sandbox-core)'
+        new PollStatus.Pass() == new PollStatus.Pass(null)
+        new PollStatus.Pass('https://ci.example/runs/1') == new PollStatus.Pass('https://ci.example/runs/1')
+        new PollStatus.Pass('https://ci.example/runs/1') != new PollStatus.Pass()
     }
 
     // FR3: Running carries nothing — any two Running instances are the same value

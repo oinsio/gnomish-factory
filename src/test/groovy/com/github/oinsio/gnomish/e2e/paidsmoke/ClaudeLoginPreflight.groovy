@@ -1,13 +1,13 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.AgentProcessLauncher
 import com.github.oinsio.gnomish.adapter.agent.AgentRoundResultExtractor
-import com.github.oinsio.gnomish.adapter.agent.LaunchedAgentProcess
 import com.github.oinsio.gnomish.adapter.agent.StreamJsonParser
+import com.github.oinsio.gnomish.adapter.agent.TimestampedEvent
 import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.adapter.environment.ExecHandle
+import com.github.oinsio.gnomish.adapter.environment.ProcessStartException
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 
@@ -18,15 +18,15 @@ import java.time.Duration
  * because Ollama never validates the auth token).
  *
  * <p>There is no documented, side-effect-free "am I logged in" flag on the {@code claude} CLI, so
- * this class proves login the only way available: a trivial, cheap {@code claude -p} round with a
- * short timeout that must produce a real stream-json {@code result} event. Any of "binary not on
+ * this class proves login the only way available: a trivial, cheap {@code claude -p} round (prompt
+ * on stdin — FR24, D18 of add-sandbox-core) with a short timeout that must produce a real
+ * stream-json {@code result} event. The round runs through the {@code TaskExecutionEnvironment}
+ * port, the same seam {@code CliStageExecutor}/{@code CliJudgeVoter} use. Any of "binary not on
  * PATH", "process fails to start", "round times out" (typically an interactive login prompt
- * blocking on stdin), or "no result event parsed" is treated as "not logged in" and reported with
- * a specific, actionable reason — never a hang, never a bare stack trace. This trivial round is a
- * deliberate, small real spend, acceptable here because task 11.3 as a whole is designed to spend a
- * small amount of real money (M4).
+ * blocking on stdin), or "no result event parsed" is treated as "not logged in" and reported with a
+ * specific, actionable reason — never a hang, never a bare stack trace.
  *
- * <p>Implements M4, D11, Q1 of add-agent-executor.
+ * <p>Implements M4, D11, Q1 of add-agent-executor; FR4, FR24 of add-sandbox-core.
  */
 final class ClaudeLoginPreflight {
 
@@ -39,42 +39,34 @@ final class ClaudeLoginPreflight {
     /**
      * @param binary the CLI binary name or path to check; defaults to {@code claude}
      * @param workspaceRoot an existing directory to run the preflight round in
-     * @return a {@link Result} carrying either the resolved model id (proof of a working, logged-in
+     * @return a {@link Result} carrying either the resolved session id (proof of a working, logged-in
      *     CLI) or a human-readable reason the preflight failed — never throws
      */
     static Result check(String binary = 'claude', Path workspaceRoot) {
-        def factoryProperties = new FactoryProperties('paid-smoke-preflight', binary, List.of(), null)
         def clock = new SystemClock()
-        def launcher = new AgentProcessLauncher(clock)
-        DirectoryWorkspace workspace
-        try {
-            workspace = new DirectoryWorkspace(workspaceRoot)
-        } catch (IllegalArgumentException ignored) {
+        if (!Files.isDirectory(workspaceRoot)) {
             return Result.failure("workspace root is not a directory: ${workspaceRoot}")
         }
-
-        LaunchedAgentProcess launched
+        ExecHandle launched
         try {
-            launched = launcher.launch(workspace, PREFLIGHT_PROMPT, factoryProperties)
-        } catch (RuntimeException e) {
-            return Result.failure("could not start '${binary}': ${e.message}")
-        }
-        if (launched == null) {
+            launched = PaidSmokeAgentLauncher.launch(binary, workspaceRoot, clock, PREFLIGHT_PROMPT)
+        } catch (ProcessStartException e) {
             return Result.failure(
                     "'${binary}' did not start — not found on PATH, or not executable. "
-                    + 'Install/authenticate the Claude Code CLI (`claude login`) before running paidSmokeTest.')
+                    + "Install/authenticate the Claude Code CLI (`claude login`) before running paidSmokeTest. "
+                    + "(${e.message})")
         }
 
-        List<com.github.oinsio.gnomish.adapter.agent.TimestampedEvent> events
+        List<TimestampedEvent> events
         try (BufferedReader reader = new BufferedReader(
-        new InputStreamReader(launched.process().inputStream, StandardCharsets.UTF_8))) {
+        new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
             events = new StreamJsonParser(clock).parse(reader)
         } catch (IOException e) {
             return Result.failure("could not read '${binary}' stdout: ${e.message}")
         }
 
         def wait = launched.waitForExitOrTimeout(PREFLIGHT_TIMEOUT, clock)
-        if (wait instanceof LaunchedAgentProcess.RoundWait.TimedOut) {
+        if (wait instanceof ExecHandle.Wait.TimedOut) {
             return Result.failure(
                     "'${binary}' did not finish within ${PREFLIGHT_TIMEOUT} — likely blocked on an "
                     + 'interactive login prompt. Run `claude login` manually, then retry paidSmokeTest.')

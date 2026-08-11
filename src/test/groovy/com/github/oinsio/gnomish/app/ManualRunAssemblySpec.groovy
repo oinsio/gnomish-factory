@@ -74,7 +74,11 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
                 [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
-                [],
+                // The judge check makes criteria.md part of the pipeline law frozen at assemble
+                // time, so the wired CLI judge voter grades against it (D14 of add-sandbox-core).
+                [
+                    new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1)
+                ],
                 new AutonomyLimits(3),
                 AdvancementMode.AUTO)
     }
@@ -97,7 +101,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(
+                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], workspaceDir)
 
         then:
         run.ports().executor().class == expectedExecutor
@@ -116,7 +121,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(
+                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], workspaceDir)
 
         then:
         run.ports().judgeVoter().class == expectedJudgeVoter
@@ -137,7 +143,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         given:
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
+                new InMemoryAttemptPersistence(), [], workspaceDir)
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
 
         // Snapshot the held activity right after each of this test's own log lines lands, so
@@ -190,7 +197,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         given:
         Files.writeString(workspaceDir.resolve('criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
+                new InMemoryAttemptPersistence(), [], workspaceDir)
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
         def before = run.holder().activity().activity() as Activity.Executing
 

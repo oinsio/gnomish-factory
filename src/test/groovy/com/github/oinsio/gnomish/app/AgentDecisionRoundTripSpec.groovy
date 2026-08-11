@@ -25,7 +25,8 @@ import spock.lang.TempDir
  * answer appended as a {@link Decision} (FR3, D1); the resumed attempt is a fresh {@code claude
  * -p} round whose prompt — built by {@code ExecutorPromptBuilder} from {@code
  * TaskContext.decisions()} — carries the operator's answer verbatim into the fake agent's actual
- * CLI argv, captured via {@code GNOMISH_FAKE_CAPTURE_ARGV} (see {@code fake-agent/README.md},
+ * stdin prompt (prompts travel on stdin since add-sandbox-core, FR24/D18), captured via {@code
+ * GNOMISH_FAKE_CAPTURE_STDIN} (see {@code fake-agent/README.md},
  * task 9.5). Per {@code Decision}'s own contract (domain spec of add-stage-engine), only the
  * answer travels forward as recorded context — the question itself was already delivered to the
  * operator by the escalation dialog print, not re-carried into {@code TaskContext} — so this
@@ -44,13 +45,13 @@ class AgentDecisionRoundTripSpec extends Specification implements AppAssemblyFix
     private static final String QUESTION = 'Refactor or patch?'
     private static final String ANSWER = 'Re: "Refactor or patch?" — refactor everything, do not patch'
 
-    private FactoryProperties fakeAgentProperties(String scenario, String captureArgvPath) {
+    private FactoryProperties fakeAgentProperties(String scenario, String captureStdinPath) {
         URL resource = getClass().getResource('/fake-agent/fake-agent.sh')
         def scriptPath = Path.of(resource.toURI()).toAbsolutePath().toString()
         def wrapper = File.createTempFile('fake-agent-wrapper', '.sh')
         wrapper.text = """#!/bin/sh
 export GNOMISH_FAKE_SCENARIO='${scenario}'
-export GNOMISH_FAKE_CAPTURE_ARGV='${captureArgvPath}'
+export GNOMISH_FAKE_CAPTURE_STDIN='${captureStdinPath}'
 exec sh '${scriptPath}' "\$@"
 """
         wrapper.setExecutable(true)
@@ -71,11 +72,11 @@ exec sh '${scriptPath}' "\$@"
     }
 
     // FR3, UX3, D1: full round trip — escalation dialog text, accepted answer, resumed stage,
-    // and the resumed CLI invocation's actual argv carrying the operator's answer verbatim.
+    // and the resumed CLI invocation's actual stdin prompt carrying the operator's answer verbatim.
     def "an agent-raised decision escalates as a dialog, the operator's answer resumes the stage, and the resumed CLI round's prompt carries the decision verbatim"() {
-        given: 'instructions.md the stage control file reads, and a captured-argv file the fake will append to'
+        given: 'instructions.md the stage control file reads, and a captured-stdin file the fake will append to'
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
-        def captureFile = File.createTempFile('fake-agent-argv', '.log')
+        def captureFile = File.createTempFile('fake-agent-stdin', '.log')
         captureFile.deleteOnExit()
 
         and: 'operator input scripted with the escalation answer, then a bare Enter for the final Completed summary'
@@ -87,8 +88,8 @@ exec sh '${scriptPath}' "\$@"
 
         def context = new TaskContext('task-1', 'title', 'body', List.<Decision> of())
         def initialState = TaskState.atStageStart('build')
-        def run = assembly.assemble(
-                pipeline(), context, initialState, RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(pipeline(), context, initialState, RunArguments.InteractiveMode.NONE,
+                new InMemoryAttemptPersistence(), [], workspaceDir)
 
         when:
         run.loop().run(pipeline(), context, initialState, new DirectoryWorkspace(workspaceDir), run.ports())
@@ -108,7 +109,7 @@ exec sh '${scriptPath}' "\$@"
         and: '3. the run resumed and reached Completed — proof the resumed round ran the same stage to a clean finish'
         printed.contains('pipeline complete')
 
-        and: '4. the resumed attempt (attempt 2, a fresh claude -p round) actually received the operator answer verbatim in its prompt argv'
+        and: '4. the resumed attempt (attempt 2, a fresh claude -p round) actually received the operator answer verbatim in its stdin prompt'
         def capturedInvocations = captureFile.text.split('(?m)^---$')
                 .collect { it.trim() }
                 .findAll { !it.isEmpty() }

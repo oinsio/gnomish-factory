@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -44,11 +45,49 @@ public sealed interface VerifyCheck {
      * pass". The exit-code semantics live in the future stage engine — here the
      * command is carried as data only (NG1, NFR-S1).
      *
-     * <p>Implements FR2 of load-pipeline-config.
+     * <p>Carries the sandbox freshness knob {@code verifyIn} (FR13 of
+     * add-sandbox-core): {@link VerifyIn#SAME_BOX} (the default) runs the check
+     * in the round environment; {@link VerifyIn#FRESH_BOX} runs it in a new
+     * environment materialized from the attempt commit, proving the branch is
+     * self-sufficient. Applying the knob is the engine/adapter's concern; here
+     * it is inert data.
+     *
+     * <p>Implements FR2 of load-pipeline-config; FR13 of add-sandbox-core (the
+     * {@code verifyIn} field).
      *
      * @param command the command line to execute
+     * @param verifyIn where the check runs relative to the round environment
+     *     (FR13 of add-sandbox-core); never {@code null}
      */
-    record Command(String command) implements VerifyCheck {}
+    record Command(String command, VerifyIn verifyIn) implements VerifyCheck {
+
+        /**
+         * Convenience constructor for callers that declare no {@code verifyIn} —
+         * every call site predating add-sandbox-core keeps compiling unchanged,
+         * defaulting to {@link VerifyIn#SAME_BOX} (same-box verification, FR13).
+         *
+         * <p>Implements FR13 of add-sandbox-core.
+         */
+        public Command(String command) {
+            this(command, VerifyIn.SAME_BOX);
+        }
+    }
+
+    /**
+     * Where a {@link Command} check runs relative to the round environment
+     * (design D8, FR13 of add-sandbox-core). {@link #SAME_BOX} is the default —
+     * the check reuses the round environment, unchanged prior behavior.
+     * {@link #FRESH_BOX} materializes a new environment from the attempt commit
+     * so uncommitted or out-of-branch work cannot influence the verdict;
+     * applying the knob is an engine/adapter concern, out of scope for this
+     * model.
+     *
+     * <p>Implements FR13 of add-sandbox-core.
+     */
+    enum VerifyIn {
+        SAME_BOX,
+        FRESH_BOX
+    }
 
     /**
      * An asynchronous third-party verification polled for a result (e.g. a CI check
@@ -67,9 +106,37 @@ public sealed interface VerifyCheck {
      *     {@link TimeoutClass#QUALITY} (default) burns a stage attempt,
      *     {@link TimeoutClass#INFRASTRUCTURE} does not (FR9); classification
      *     itself is an engine concern, out of scope here
+     * @param pinPaths the law-declared pin paths — repo paths whose content
+     *     defines the check (workflow files, analyzer configs, local actions),
+     *     in declaration order (FR16 of add-sandbox-core); the pin-check guard
+     *     unions them with adapter-contributed paths and byte-compares against
+     *     the base branch before any adapter contact. These are repo-relative
+     *     <em>data</em>, never read by the loader, so they are exempt from the
+     *     {@code .gnomish/} traversal rule (pointing at {@code
+     *     .github/workflows/ci.yml} is their normal use); only their lexical
+     *     form (no absolute, no {@code .}/{@code ..} segments) is validated
+     *     (task 2.4). Possibly empty; immutable
      */
-    record External(String checkId, Duration interval, Duration timeout, TimeoutClass timeoutClass)
-            implements VerifyCheck {}
+    record External(
+            String checkId, Duration interval, Duration timeout, TimeoutClass timeoutClass, List<String> pinPaths)
+            implements VerifyCheck {
+
+        public External {
+            pinPaths = List.copyOf(pinPaths);
+        }
+
+        /**
+         * Convenience constructor for callers that declare no pin paths — every
+         * call site predating add-sandbox-core keeps compiling unchanged, with
+         * {@link #pinPaths()} defaulting to empty (the adapter's own contributed
+         * paths still apply, FR16 of add-sandbox-core).
+         *
+         * <p>Implements FR16 of add-sandbox-core.
+         */
+        public External(String checkId, Duration interval, Duration timeout, TimeoutClass timeoutClass) {
+            this(checkId, interval, timeout, timeoutClass, List.of());
+        }
+    }
 
     /**
      * How an {@link External} check's poll timeout classifies when the poll

@@ -136,10 +136,11 @@ public final class StateJsonMapper {
     private static StateCheckDto toCheck(CheckResult check) {
         long durationMillis = check.duration().toMillis();
         return switch (check.verdict()) {
-            case Verdict.Pass ignored ->
-                new StateCheckDto(check.checkRef().label(), "pass", List.of(), durationMillis, null, null);
+            case Verdict.Pass pass ->
+                new StateCheckDto(
+                        check.checkRef().label(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
             case Verdict.Fail fail ->
-                new StateCheckDto(check.checkRef().label(), "fail", toFindings(fail), durationMillis, null, null);
+                new StateCheckDto(check.checkRef().label(), "fail", toFindings(fail), durationMillis, null, null, null);
             case Verdict.CannotVerify cannotVerify ->
                 new StateCheckDto(
                         check.checkRef().label(),
@@ -147,7 +148,8 @@ public final class StateJsonMapper {
                         List.of(),
                         durationMillis,
                         cannotVerify.reason(),
-                        cannotVerify.details());
+                        cannotVerify.details(),
+                        null);
         };
     }
 
@@ -157,7 +159,7 @@ public final class StateJsonMapper {
         CheckRef ref = new CheckRef(0, dto.ref());
         Verdict verdict =
                 switch (dto.verdict()) {
-                    case "pass" -> new Verdict.Pass();
+                    case "pass" -> new Verdict.Pass(dto.runUrl());
                     case "fail" -> new Verdict.Fail(fromFindings(dto.findings()));
                     case "cannotVerify" ->
                         new Verdict.CannotVerify(

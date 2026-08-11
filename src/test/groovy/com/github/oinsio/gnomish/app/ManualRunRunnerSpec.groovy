@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.BindingProperties
+import com.github.oinsio.gnomish.SandboxProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
@@ -62,6 +64,10 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
                 new SystemClock(),
                 new ThreadSleeper(),
                 testProperties(),
+                new SandboxProperties(null, null, null, null, null, null, false),
+                // Host binding, explicitly: container is the default (D13 of add-sandbox-core),
+                // and these specs prove the host git-mode path.
+                new BindingProperties('host', [:]),
                 worktreesRoot,
                 homeDir,
                 new StatusCommand(worktreesRoot),

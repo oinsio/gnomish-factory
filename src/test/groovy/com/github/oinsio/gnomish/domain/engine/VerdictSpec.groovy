@@ -10,10 +10,15 @@ import spock.lang.Specification
  */
 class VerdictSpec extends Specification {
 
-    // FR4: Pass carries nothing — any two Pass instances are the same value
+    // FR4: Pass carries only the optional run URL — two passes with the same URL are the same value
     def "Pass instances are value-equal"() {
         expect: 'two independently constructed passes are equal'
         new Verdict.Pass() == new Verdict.Pass()
+
+        and: 'the no-arg pass is the null-URL pass (NFR-O2 of add-sandbox-core)'
+        new Verdict.Pass() == new Verdict.Pass(null)
+        new Verdict.Pass('https://ci.example/runs/1') == new Verdict.Pass('https://ci.example/runs/1')
+        new Verdict.Pass('https://ci.example/runs/1') != new Verdict.Pass()
     }
 
     // FR4: Fail exposes its findings exactly as constructed

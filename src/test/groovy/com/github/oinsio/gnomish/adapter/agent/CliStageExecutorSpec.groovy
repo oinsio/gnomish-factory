@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist
+import com.github.oinsio.gnomish.adapter.environment.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -30,13 +33,15 @@ class CliStageExecutorSpec extends Specification {
 
     def clock = new VirtualClock()
 
+    private static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
+
     def setup() {
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
     }
 
     private StageExecutor executorFor(String scenario) {
         def properties = FakeAgentSupport.propertiesFor(scenario)
-        new CliStageExecutor(properties, clock)
+        new CliStageExecutor(properties, clock, LAW)
     }
 
     private StageExecutor.Request requestFor(Map<String, Object> settings = [:]) {
@@ -116,7 +121,8 @@ class CliStageExecutorSpec extends Specification {
         given:
         def properties = FakeAgentSupport.propertiesFor('hangs-forever')
         def transport = new DecisionFileTransport(decisionRoot)
-        def executor = new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, transport)
+        def executor =
+                new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, transport, LAW)
 
         when:
         executor.execute(requestFor([roundTimeout: 1]))
@@ -146,7 +152,7 @@ class CliStageExecutorSpec extends Specification {
         def properties = FakeAgentSupport.propertiesFor('plain-round')
         def events = []
         AgentProgressListener listener = { AgentProgressEvent event -> events << event }
-        def executor = new CliStageExecutor(properties, clock, listener)
+        def executor = new CliStageExecutor(properties, clock, listener, LAW)
 
         when:
         executor.execute(requestFor())
@@ -154,5 +160,89 @@ class CliStageExecutorSpec extends Specification {
         then:
         events.any { it instanceof AgentProgressEvent.RoundStarted }
         events.any { it instanceof AgentProgressEvent.RoundFinished }
+    }
+
+    // FR21, D15: closeRound() is the sandboxed snapshot-commit + harvest hook — it must run on
+    // every successful round, before the decision file is read. Wraps the real
+    // HostRoundEnvironmentSource's Round in a counting delegate so the interaction is observed
+    // without hand-mocking the whole TaskExecutionEnvironment/ExecHandle chain.
+    def "closeRound is invoked exactly once on the round, before the decision is read"() {
+        given:
+        def properties = FakeAgentSupport.propertiesFor('plain-round')
+        def hostSource = new HostRoundEnvironmentSource(
+                new DecisionFileTransport(decisionRoot), clock, ChildEnvAllowlist.none())
+        def countingSource = new CountingRoundEnvironmentSource(hostSource)
+        def executor = new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, LAW, countingSource)
+
+        when:
+        def result = executor.execute(requestFor())
+
+        then:
+        result instanceof ExecutionResult.Completed
+        countingSource.round.closeRoundCalls == 1
+        countingSource.round.closeRoundCalledBeforeReadDecision
+    }
+
+    /** Test seam: wraps a real {@link RoundEnvironmentSource} to count/order {@code closeRound()} calls. */
+    private static final class CountingRoundEnvironmentSource implements RoundEnvironmentSource {
+        private final RoundEnvironmentSource delegate
+        CountingRound round
+
+        CountingRoundEnvironmentSource(RoundEnvironmentSource delegate) {
+            this.delegate = delegate
+        }
+
+        @Override
+        Round openRound(StageExecutor.Request request) {
+            round = new CountingRound(delegate.openRound(request))
+            round
+        }
+    }
+
+    private static final class CountingRound implements RoundEnvironmentSource.Round {
+        private final RoundEnvironmentSource.Round delegate
+        int closeRoundCalls = 0
+        boolean closeRoundCalledBeforeReadDecision = false
+
+        CountingRound(RoundEnvironmentSource.Round delegate) {
+            this.delegate = delegate
+        }
+
+        @Override
+        TaskExecutionEnvironment environment() {
+            delegate.environment()
+        }
+
+        @Override
+        Path decisionFilePath() {
+            delegate.decisionFilePath()
+        }
+
+        @Override
+        Map<String, String> decisionEnvFragment() {
+            delegate.decisionEnvFragment()
+        }
+
+        @Override
+        AgentProgressListener roundListener() {
+            delegate.roundListener()
+        }
+
+        @Override
+        void closeRound() {
+            closeRoundCalls++
+            delegate.closeRound()
+        }
+
+        @Override
+        Optional<String> readDecision() {
+            closeRoundCalledBeforeReadDecision = closeRoundCalls == 1
+            delegate.readDecision()
+        }
+
+        @Override
+        void discard() {
+            delegate.discard()
+        }
     }
 }

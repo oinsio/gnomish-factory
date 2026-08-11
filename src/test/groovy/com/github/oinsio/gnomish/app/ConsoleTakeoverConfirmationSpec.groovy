@@ -115,4 +115,18 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
         then:
         decision == TakeoverConfirmation.Decision.DECLINED
     }
+
+    // FR6, design D9: systemTty() must hand back a real, fully wired confirmation — never null —
+    // with both production seams present (PIT: NULL_RETURNS on systemTty). The seams themselves
+    // (System.console() probe, stdin/stdout console) stay unexercised: they carry @DoNotMutate as
+    // pure System integration wiring, and building the record is side-effect-free.
+    def "systemTty wires a non-null production confirmation with both seams present"() {
+        when:
+        def production = ConsoleTakeoverConfirmation.systemTty()
+
+        then:
+        production != null
+        production.ttyPresent() != null
+        production.consoleFactory() != null
+    }
 }

@@ -116,8 +116,8 @@ final class GitResumeContinuation {
     }
 
     /**
-     * Outcome {@code paused}: a checkpoint confirmation mirroring {@link
-     * RunnerOutcomeLoop#handlePaused} — "Press Enter to continue", nothing to reset, no decision
+     * Outcome {@code paused}: a checkpoint confirmation mirroring {@code
+     * RunnerOutcomeLoop.handlePaused} — "Press Enter to continue", nothing to reset, no decision
      * appended, since a manual pause is not a question. Resumes from {@code finalState} directly
      * (already advanced past the paused stage).
      *
@@ -139,8 +139,8 @@ final class GitResumeContinuation {
     }
 
     /**
-     * Outcome {@code completed}: prints the same final status summary {@link
-     * RunnerOutcomeLoop#handleCompleted} prints in-process, and returns — no engine run, no
+     * Outcome {@code completed}: prints the same final status summary {@code
+     * RunnerOutcomeLoop.handleCompleted} prints in-process, and returns — no engine run, no
      * further worktree or branch write.
      *
      * <p>Implements FR8, UX2 of add-git-workflow.
@@ -164,7 +164,8 @@ final class GitResumeContinuation {
         Path worktree = bootstrap.worktreePath();
         var persistence = new GitAttemptPersistence(runner, worktree, bootstrap.taskId());
         var workspace = new DirectoryWorkspace(worktree);
-        var assembled = assembly.assemble(definition, context, state, interactiveMode, persistence, List.of());
+        var assembled =
+                assembly.assemble(definition, context, state, interactiveMode, persistence, List.of(), cloneDir);
 
         try {
             assembled.loop().run(definition, context, state, workspace, assembled.ports());

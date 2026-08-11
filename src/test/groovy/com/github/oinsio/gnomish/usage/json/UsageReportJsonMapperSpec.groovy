@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.git.UsageRow
 import com.github.oinsio.gnomish.adapter.git.UsageTotals
 import com.github.oinsio.gnomish.adapter.git.state.StateAttemptDto
+import com.github.oinsio.gnomish.adapter.git.state.StateByToolDto
 import com.github.oinsio.gnomish.adapter.git.state.StateCheckDto
 import com.github.oinsio.gnomish.adapter.git.state.StateFindingDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJudgeUsageDto
@@ -26,12 +27,12 @@ class UsageReportJsonMapperSpec extends Specification {
         def checks = [
             new StateCheckDto('tests', 'fail', [
                 new StateFindingDto('boom', 'Foo.java:10', null)
-            ], 500, null, null)
+            ], 500, null, null, null)
         ]
         def executorUsage = new StateUsageDto(1500L,
                 ['claude-x': new StateTokenUsageDto(100, 10, 1, 2), 'claude-y': new StateTokenUsageDto(50, 5, 0, 0)],
                 [
-                    new com.github.oinsio.gnomish.adapter.git.state.StateByToolDto('bash', 3, 900)
+                    new StateByToolDto('bash', 3, 900)
                 ])
         def judgeUsage = new StateJudgeUsageDto([
             new StateJudgeUsageDto.Vote(['claude-z': new StateTokenUsageDto(20, 2, 0, 0)])

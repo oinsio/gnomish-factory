@@ -4,7 +4,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import com.github.oinsio.gnomish.adapter.git.AttemptCommitRef
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.adapter.workspace.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -45,17 +47,19 @@ class GithubCheckExternalClientStatelessPollSpec extends Specification {
         new VerifyCheck.External('ci.yml', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
-    private static GithubCheckWorkspace sampleWorkspace() {
-        new GithubCheckWorkspace('acme', 'widgets', 'abc123')
+    private static AttemptCommitWorkspace sampleWorkspace() {
+        def ref = new AttemptCommitRef()
+        ref.record('abc123')
+        new AttemptCommitWorkspace(ref)
     }
 
     def "a second instance polling after a simulated crash-and-takeover reaches the same verdict with no shared state"() {
         given: 'the first instance polls the attempt commit before a simulated crash'
-        def firstInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'))
+        def firstInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'), 'acme', 'widgets')
         def firstPoll = firstInstance.poll(sampleCheck(), sampleWorkspace())
 
         when: 'a second, independently constructed instance resumes the poll after takeover'
-        def secondInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'))
+        def secondInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'), 'acme', 'widgets')
         def secondPoll = secondInstance.poll(sampleCheck(), sampleWorkspace())
 
         then: 'both instances observe the same run set and reach the same verdict'

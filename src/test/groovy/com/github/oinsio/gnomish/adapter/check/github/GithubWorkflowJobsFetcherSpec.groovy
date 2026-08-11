@@ -123,4 +123,23 @@ class GithubWorkflowJobsFetcherSpec extends Specification {
         findings[0].details() == exactCapLog
         !findings[0].details().contains('truncated')
     }
+
+    def "ANSI sequences in a job log are stripped through the findings funnel"() {
+        given: 'FR15 of add-sandbox-core: log content is routed through the funnel at poll time'
+        wireMock.stubFor(get(urlEqualTo(JOBS_URL)).willReturn(aResponse().withStatus(200).withBody('''
+                {"jobs":[
+                    {"id":10,"name":"build","status":"completed","conclusion":"failure","steps":[]}
+                ]}
+                ''')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/actions/jobs/10/logs'))
+                .willReturn(aResponse().withStatus(200).withBody('\u001B[31mFAILED\u001B[0m assertion')))
+        def fetcher = fetcherFor(wireMock.baseUrl())
+        def run = new GithubWorkflowRun(1L, 'abc123', 'ci.yml', 1, 'completed', 'failure', null)
+
+        when:
+        def findings = fetcher.failureFindings(run)
+
+        then:
+        findings[0].details() == 'FAILED assertion'
+    }
 }

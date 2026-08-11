@@ -88,17 +88,19 @@ class StateJsonMapperSpec extends Specification {
         dto.durationMillis() == 500
         dto.reason() == expectedReason
         dto.details() == expectedDetails
+        dto.runUrl() == expectedRunUrl
 
         where:
-        verdict                                                              | expectedVerdict   | expectedFindings                                    | expectedReason | expectedDetails
-        new Verdict.Pass()                                                   | "pass"            | []                                                   | null           | null
+        verdict                                                              | expectedVerdict   | expectedFindings                                    | expectedReason | expectedDetails | expectedRunUrl
+        new Verdict.Pass()                                                   | "pass"            | []                                                   | null           | null            | null
+        new Verdict.Pass("https://ci.example/runs/42")                       | "pass"            | []                                                   | null           | null            | "https://ci.example/runs/42"
         new Verdict.Fail([
             new Finding("bad", "file.txt:12", "trace")
         ])       | "fail"             | [
             new StateFindingDto("bad", "file.txt:12", "trace")
-        ] | null           | null
-        new Verdict.Fail([])                                                 | "fail"             | []                                                   | null           | null
-        new Verdict.CannotVerify("timeout", "network blip")                  | "cannotVerify"    | []                                                   | "timeout"      | "network blip"
+        ] | null           | null            | null
+        new Verdict.Fail([])                                                 | "fail"             | []                                                   | null           | null            | null
+        new Verdict.CannotVerify("timeout", "network blip")                  | "cannotVerify"    | []                                                   | "timeout"      | "network blip"  | null
     }
 
     def "round-trip: full TaskState with multiple attempts, checks, tokens, tools survives toDto/fromDto"() {

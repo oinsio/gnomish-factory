@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.domain.pipeline.Sandbox;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.time.Duration;
@@ -57,7 +58,13 @@ import org.jspecify.annotations.Nullable;
  * <p>Order is preserved throughout: stages in {@code pipeline.yaml} order,
  * inputs/outputs/verify checks in {@code stage.yaml} declaration order.
  *
- * <p>Implements FR7, FR11, D2, D5a of load-pipeline-config.
+ * <p><b>Sandbox declarations (FR12, FR13 of add-sandbox-core).</b> The
+ * Mechanism's {@code sandbox} block maps to the domain {@link Sandbox}; the
+ * tighten-only {@code binding} violation is caught earlier by
+ * {@link StructuralValidation} and never carried into the domain.
+ *
+ * <p>Implements FR7, FR11, D2, D5a of load-pipeline-config; FR12, FR13 of
+ * add-sandbox-core (sandbox mapping).
  */
 public final class PipelineMapper {
 
@@ -225,7 +232,27 @@ public final class PipelineMapper {
             return new StageDefinition.Executor(ExecutorType.API, "", Map.of());
         }
         return new StageDefinition.Executor(
-                mapExecutorType(executor.type()), orEmpty(executor.model()), copySettings(executor.settings()));
+                mapExecutorType(executor.type()),
+                orEmpty(executor.model()),
+                copySettings(executor.settings()),
+                mapSandbox(executor.sandbox()));
+    }
+
+    /**
+     * Maps the Mechanism's {@code sandbox} block into the domain {@link Sandbox}
+     * (FR12, FR13 of add-sandbox-core): {@code null}/absent maps to
+     * {@link Sandbox#none()} (no needs, segment-reuse default), an absent
+     * {@code needs} to an empty list, and an absent {@code requiresFresh} to
+     * {@code false}. The tighten-only {@code binding} field is deliberately not
+     * carried into the domain — a repo-declared binding is a violation
+     * {@code StructuralValidation} already reported (FR14), never a domain value.
+     */
+    private static Sandbox mapSandbox(@Nullable SandboxDto sandbox) {
+        if (sandbox == null) {
+            return Sandbox.none();
+        }
+        List<String> needs = sandbox.needs() == null ? List.of() : List.copyOf(sandbox.needs());
+        return new Sandbox(needs, Boolean.TRUE.equals(sandbox.requiresFresh()));
     }
 
     /** Total on structurally-valid input (task 5.2 guaranteed a known value); absent maps to API. */

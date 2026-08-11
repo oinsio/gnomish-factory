@@ -3,12 +3,12 @@ package com.github.oinsio.gnomish.e2e.ollama
 /**
  * Environment variables that point the real {@code claude} CLI at a local Ollama instance (task
  * 11.1, M1, D11): Ollama v0.14+ speaks the native Anthropic API, so no shim or proxy is needed —
- * {@code ANTHROPIC_BASE_URL} alone redirects the CLI's requests. {@link
- * com.github.oinsio.gnomish.FactoryProperties#agentCliEnvPassthrough()} is documentation-only
- * (design D7: the spawned process inherits the JVM's full environment already), so wiring these
- * three variables happens by setting them on the process that ultimately spawns {@code claude} —
- * here, the {@code java -jar} subprocess {@link com.github.oinsio.gnomish.e2e.E2eProcessHarness}
- * launches, via its {@code extraEnv} parameter — not through any allowlist code.
+ * {@code ANTHROPIC_BASE_URL} alone redirects the CLI's requests. These three names are exactly
+ * the AI seam the factory's agent adapters re-set from their own process environment as
+ * factory-set protocol variables ({@code AgentAiSeam}, D6/FR9 of add-sandbox-core), so wiring
+ * them happens by setting them on the process that ultimately spawns {@code claude} — here, the
+ * {@code java -jar} subprocess {@link com.github.oinsio.gnomish.e2e.E2eProcessHarness} launches,
+ * via its {@code extraEnv} parameter.
  *
  * <p>Each value is overridable by an already-set environment variable of the same name, so a
  * developer with a non-default Ollama port or a specific pulled model does not need to edit this

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.git.FactoryCloneHardening;
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository;
@@ -72,23 +73,14 @@ import org.jspecify.annotations.Nullable;
  * as interrupted.
  *
  * <p>Implements FR6, FR7, UX1, NFR-S2 of add-git-workflow.
+ *
+ * @param assembly the shared engine/ports assembly, reused from the in-place path with a
+ *     git-backed {@code AttemptPersistence}
+ * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/} worktrees
+ *     are created (design D6); production wiring resolves {@code ~/.gnomish/worktrees}, tests
+ *     pass a temp directory
  */
-final class GitModeRunner {
-
-    private final ManualRunAssembly assembly;
-    private final Path worktreesRoot;
-
-    /**
-     * @param assembly the shared engine/ports assembly, reused from the in-place path with a
-     *     git-backed {@code AttemptPersistence}
-     * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/}
-     *     worktrees are created (design D6); production wiring resolves {@code
-     *     ~/.gnomish/worktrees}, tests pass a temp directory
-     */
-    GitModeRunner(ManualRunAssembly assembly, Path worktreesRoot) {
-        this.assembly = assembly;
-        this.worktreesRoot = worktreesRoot;
-    }
+record GitModeRunner(ManualRunAssembly assembly, Path worktreesRoot) {
 
     /**
      * Runs one fresh git-mode task to a terminal boundary this class can observe (see class
@@ -116,6 +108,7 @@ final class GitModeRunner {
         String taskId = context.taskId();
 
         new TaskWorktreeCleanup(runner).pruneWorktrees(cloneDir);
+        new FactoryCloneHardening(runner).harden(cloneDir);
 
         String branchName = branchName(taskId);
         Path worktree = worktreePath(cloneDir, taskId);
@@ -126,7 +119,8 @@ final class GitModeRunner {
 
         var persistence = new GitAttemptPersistence(runner, worktree, taskId);
         var workspace = new DirectoryWorkspace(worktree);
-        var assembled = assembly.assemble(definition, context, initialState, interactiveMode, persistence, List.of());
+        var assembled =
+                assembly.assemble(definition, context, initialState, interactiveMode, persistence, List.of(), cloneDir);
 
         try {
             assembled.loop().run(definition, context, initialState, workspace, assembled.ports());

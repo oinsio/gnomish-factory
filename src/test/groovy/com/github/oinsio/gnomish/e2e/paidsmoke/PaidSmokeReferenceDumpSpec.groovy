@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.AgentProcessLauncher
-import com.github.oinsio.gnomish.adapter.agent.LaunchedAgentProcess
 import com.github.oinsio.gnomish.adapter.engine.SystemClock
-import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.adapter.environment.ExecHandle
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -13,8 +11,9 @@ import spock.lang.TempDir
 
 /**
  * The paid smoke task's substance (task 11.3, M4, D11's "(3b) Paid smoke"): drives real {@code
- * claude -p --output-format stream-json --verbose} rounds through {@link AgentProcessLauncher} —
- * the same production launcher {@code CliStageExecutor}/{@code CliJudgeVoter} use — and overwrites
+ * claude -p --output-format stream-json --verbose} rounds through the {@code
+ * TaskExecutionEnvironment} port — the same seam {@code CliStageExecutor}/{@code CliJudgeVoter} use,
+ * with the prompt delivered on stdin (FR24, D18 of add-sandbox-core) — and overwrites
  * the committed {@code stream-json-reference/*.reference.json} fixtures with the real transcripts
  * (sensitive data scrubbed via {@link ReferenceDumpScrubber}), refreshing the reference set task
  * 3.6 built as hand-authored placeholders (see {@code
@@ -52,11 +51,9 @@ class PaidSmokeReferenceDumpSpec extends Specification {
     Path workspaceRoot
 
     private final FactoryProperties factoryProperties =
-    new FactoryProperties('paid-smoke', System.getProperty('paidSmoke.claudeBinary', 'claude'), List.of(), null)
+    new FactoryProperties('paid-smoke', System.getProperty('paidSmoke.claudeBinary', 'claude'), List.of(), null, null)
 
     private final SystemClock clock = new SystemClock()
-
-    private final AgentProcessLauncher launcher = new AgentProcessLauncher(clock)
 
     def setupSpec() {
         // Runs once for the whole spec (not per-feature): a single small real round proves login,
@@ -115,16 +112,15 @@ class PaidSmokeReferenceDumpSpec extends Specification {
      * task 3.6's committed dump this scenario refreshes.
      */
     private boolean recordScenario(String fixtureName, String scenarioLabel, String prompt) {
-        DirectoryWorkspace workspace = new DirectoryWorkspace(workspaceRoot)
-        LaunchedAgentProcess launched = launcher.launch(workspace, prompt, factoryProperties)
-        assert launched != null: "'${factoryProperties.agentCliBinary()}' failed to start"
+        ExecHandle launched = PaidSmokeAgentLauncher.launch(
+                factoryProperties.agentCliBinary(), workspaceRoot, clock, prompt)
 
         List<String> rawLines
         try (BufferedReader reader = new BufferedReader(
-        new InputStreamReader(launched.process().inputStream, StandardCharsets.UTF_8))) {
+        new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
             rawLines = reader.readLines()
         }
-        launched.waitForExitMeasuringWallTime(clock)
+        launched.waitForExit()
 
         assert !rawLines.isEmpty(): 'claude CLI produced no stdout lines — cannot record a fixture from an empty round'
         String sessionId = extractSessionId(rawLines)

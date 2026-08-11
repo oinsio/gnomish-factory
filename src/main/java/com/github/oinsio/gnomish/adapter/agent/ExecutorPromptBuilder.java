@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections;
-import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
+import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -14,19 +14,24 @@ import java.util.List;
  * criteria embedded, and the decision-file instruction — and, on retries
  * only, a rework preamble (design D9(a)).
  *
- * <p>This class owns the control-file and judge-criteria-file reads itself,
- * both via the same {@link ControlFilePreflight#read} used by {@link
- * com.github.oinsio.gnomish.adapter.console.StageBriefing}'s CLI-side sibling:
- * an unreadable file is this adapter's specific failure reaction — an
+ * <p>Control-file and judge-criteria content comes from the invocation's frozen
+ * {@link PipelineLaw} (D14, FR19 of add-sandbox-core), read once at invocation
+ * start from the gnome-unwritable law source — never lazily from the working
+ * copy the gnome can edit (task 2.5's pipeline-law rework). An
+ * unreadable law file is this adapter's specific failure reaction — an
  * infrastructure failure before any process spawns (FR13) — distinct from the
- * interactive adapter's placeholder degradation. {@link
- * ControlFilePreflight.UnreadableControlFileException} is left uncaught here
- * and is expected to propagate to the future {@code execute()}, which turns
- * it into a "cannot execute" outcome without burning a stage attempt.
+ * interactive adapter's placeholder degradation: {@link
+ * UnreadableLawFileException} is left uncaught here and is expected to propagate
+ * to {@code execute()}, which turns it into a "cannot execute" outcome without
+ * burning a stage attempt.
  *
- * <p>Implements FR2, FR13, D8, D9 of add-agent-executor.
+ * <p>Implements FR2, FR13, D8, D9 of add-agent-executor; FR19, D14 of
+ * add-sandbox-core.
+ *
+ * @param law the invocation's frozen pipeline law, the source of control-file
+ *     and judge-criteria content (D14 of add-sandbox-core); never null
  */
-public final class ExecutorPromptBuilder {
+public record ExecutorPromptBuilder(PipelineLaw law) {
 
     private static final String DECISION_FILE_INSTRUCTION = """
             === Asking a human ===
@@ -52,12 +57,11 @@ public final class ExecutorPromptBuilder {
      * @param request the round's inputs: task context, stage, workspace,
      *     attempt number and prior-attempt feedback
      * @return the full prompt text; never null
-     * @throws ControlFilePreflight.UnreadableControlFileException if the
-     *     stage's control file, or a judge check's acceptance-criteria file,
-     *     cannot be read — propagated uncaught (FR13)
+     * @throws UnreadableLawFileException if the stage's control file, or a judge
+     *     check's acceptance-criteria file, was unreadable when the invocation's
+     *     law was frozen — propagated uncaught (FR13, D14 of add-sandbox-core)
      */
     public String build(StageExecutor.Request request) {
-        Path root = ((DirectoryWorkspace) request.workspace()).root();
         StringBuilder out = new StringBuilder();
 
         BriefingSections.renderExecutorBriefing(
@@ -66,9 +70,9 @@ public final class ExecutorPromptBuilder {
                 request.stage().inputs(),
                 request.feedback(),
                 request.stage().instructionsRef(),
-                ControlFilePreflight.read(root, request.stage().instructionsRef()));
+                law.controlFile(request.stage().instructionsRef()));
 
-        renderVerifyPlan(out, root, request.stage().verify());
+        renderVerifyPlan(out, request.stage().verify());
         out.append(DECISION_FILE_INSTRUCTION).append('\n');
         if (request.attempt() > 0) {
             out.append(REWORK_PREAMBLE).append('\n');
@@ -76,29 +80,29 @@ public final class ExecutorPromptBuilder {
         return out.toString();
     }
 
-    private void renderVerifyPlan(StringBuilder out, Path root, List<VerifyCheck> checks) {
+    private void renderVerifyPlan(StringBuilder out, List<VerifyCheck> checks) {
         out.append("=== Verify plan ===\n");
         if (checks.isEmpty()) {
             out.append("(none)\n");
         } else {
             for (VerifyCheck check : checks) {
-                out.append("- ").append(describe(root, check)).append('\n');
+                out.append("- ").append(describe(check)).append('\n');
             }
         }
         out.append('\n');
     }
 
-    private String describe(Path root, VerifyCheck check) {
+    private String describe(VerifyCheck check) {
         return switch (check) {
             case VerifyCheck.Builtin builtin -> "builtin: " + builtin.name() + " " + builtin.params();
             case VerifyCheck.Command command -> "command: " + command.command();
             case VerifyCheck.External external -> "external: " + external.checkId();
-            case VerifyCheck.Judge judge -> describeJudge(root, judge);
+            case VerifyCheck.Judge judge -> describeJudge(judge);
         };
     }
 
-    private String describeJudge(Path root, VerifyCheck.Judge judge) {
-        String criteria = ControlFilePreflight.read(root, judge.criteriaFile());
+    private String describeJudge(VerifyCheck.Judge judge) {
+        String criteria = law.controlFile(judge.criteriaFile());
         return "judge: " + judge.criteriaFile() + " (model " + judge.model() + ")\n  Acceptance criteria:\n  "
                 + criteria.replace("\n", "\n  ");
     }

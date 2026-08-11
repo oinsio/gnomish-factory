@@ -2,36 +2,64 @@ package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.pipeline.PathSafety;
+import com.github.oinsio.gnomish.adapter.workspace.AttemptCommitWorkspace;
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.gitobjects.GitObjects;
+import com.github.oinsio.gnomish.gitobjects.InvalidTreePathException;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The real {@code files_exist} built-in check runner (design D2): checks that
- * every literal workspace-relative path in the {@code files} param exists on
- * disk, collecting one {@link Finding} per missing path. Malformed params or a
+ * every literal workspace-relative path in the {@code files} param exists,
+ * collecting one {@link Finding} per missing path. Malformed params or a
  * path resolving outside the workspace root never reach an existence check —
  * they yield {@link Verdict.CannotVerify} instead, since no verdict about the
  * artifact's quality can be trusted from an unsafe or unparseable input.
  *
- * <p>Implements FR6 of add-manual-run.
+ * <p>Two legs, one runner for every environment adapter (FR21, D15 of
+ * add-sandbox-core): over a {@link DirectoryWorkspace} (host modes) existence
+ * is the workspace filesystem, as today; over an {@link AttemptCommitWorkspace}
+ * (sandboxed mode) existence is answered from the harvested attempt commit's
+ * tree via bare git object reads in the factory clone — no environment access,
+ * so uncommitted box residue never counts. The factory-clone reader is bound
+ * per run through {@link #withAttemptReader}; the sandbox integration pass
+ * wires it alongside the workspace itself.
+ *
+ * <p>Implements FR6 of add-manual-run; FR21, D15 of add-sandbox-core.
  */
-public final class FilesExistCheckRunner implements BuiltinCheckRunner {
+public record FilesExistCheckRunner(@Nullable GitObjects attemptReader) implements BuiltinCheckRunner {
+
+    /** The host-modes runner: filesystem existence only, no factory-clone reader bound. */
+    public FilesExistCheckRunner() {
+        this(null);
+    }
+
+    /**
+     * Returns a copy of this runner whose sandboxed leg answers existence from {@code
+     * attemptReader} — the factory clone the attempt commit was harvested into (FR21, D15 of
+     * add-sandbox-core). Mirrors {@code ShellCommandCheckRunner.withChildEnv}'s per-run rebind
+     * pattern.
+     *
+     * @param attemptReader the factory clone's bare-object reader; never null
+     * @return a runner identical but for the bound reader; never null
+     */
+    public FilesExistCheckRunner withAttemptReader(GitObjects attemptReader) {
+        return new FilesExistCheckRunner(attemptReader);
+    }
 
     @Override
     public Verdict run(VerifyCheck.Builtin check, Workspace workspace) {
-        if (!(workspace instanceof DirectoryWorkspace directoryWorkspace)) {
-            return opaqueWorkspaceVerdict(workspace);
-        }
-
         List<String> files;
         try {
             files = readFiles(check.params());
@@ -39,12 +67,19 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
             return new Verdict.CannotVerify(e.reason(), "");
         }
 
+        if (workspace instanceof AttemptCommitWorkspace attemptWorkspace) {
+            return runAgainstAttemptCommit(files, attemptWorkspace);
+        }
+        if (!(workspace instanceof DirectoryWorkspace directoryWorkspace)) {
+            return opaqueWorkspaceVerdict(workspace);
+        }
+
         Path root = directoryWorkspace.root();
         List<Finding> findings = new ArrayList<>();
         for (String file : files) {
             PathSafety.Resolution resolution = PathSafety.resolveWithinRoot(root, file);
-            if (resolution instanceof PathSafety.Escapes escapes) {
-                return new Verdict.CannotVerify("files_exist path escapes the workspace: " + escapes.ref(), "");
+            if (resolution instanceof PathSafety.Escapes(String ref)) {
+                return new Verdict.CannotVerify("files_exist path escapes the workspace: " + ref, "");
             }
             PathSafety.Within within = (PathSafety.Within) resolution;
             if (!Files.exists(within.path())) {
@@ -52,6 +87,32 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
             }
         }
 
+        return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
+    }
+
+    /**
+     * The sandboxed leg (FR21, D15): existence is the attempt commit's tree, read as bare git
+     * objects in the factory clone — one implementation for every environment adapter, no
+     * per-adapter builtin code and no untrusted in-box answers. A path refused by the library's
+     * tree-path validation (absolute, {@code ..}, {@code .git}) is the sandboxed twin of the
+     * host leg's workspace-escape refusal.
+     */
+    private Verdict runAgainstAttemptCommit(List<String> files, AttemptCommitWorkspace workspace) {
+        if (attemptReader == null) {
+            return new Verdict.CannotVerify(
+                    "files_exist has no factory-clone reader bound for the sandboxed workspace", "");
+        }
+        ObjectId commit = ObjectId.of(workspace.attemptCommitSha());
+        List<Finding> findings = new ArrayList<>();
+        for (String file : files) {
+            try {
+                if (!attemptReader.exists(commit, file)) {
+                    findings.add(new Finding("missing file: " + file, file, null));
+                }
+            } catch (InvalidTreePathException e) {
+                return new Verdict.CannotVerify("files_exist path escapes the workspace: " + file, "");
+            }
+        }
         return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
     }
 
@@ -97,12 +158,22 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
         List<String> files = new ArrayList<>(list.size());
         for (Object entry : list) {
             if (!(entry instanceof String stringEntry)) {
-                throw new MalformedParamsException("files_exist 'files' entries must all be strings, found "
-                        + (entry == null ? "null" : entry.getClass().getName()));
+                throw new MalformedParamsException(
+                        "files_exist 'files' entries must all be strings, found " + describeType(entry));
             }
             files.add(stringEntry);
         }
         return files;
+    }
+
+    /**
+     * Describes {@code entry}'s runtime type for a malformed-params message, tolerating a
+     * {@code null} list entry — a genuine possibility for externally supplied {@code files}
+     * params (e.g. a YAML/JSON {@code null} literal in the list), even though the surrounding
+     * loop variable's inferred type is non-null.
+     */
+    private static String describeType(@Nullable Object entry) {
+        return entry == null ? "null" : entry.getClass().getName();
     }
 
     /** Signals malformed {@code files_exist} params; caught locally and turned into CannotVerify. */

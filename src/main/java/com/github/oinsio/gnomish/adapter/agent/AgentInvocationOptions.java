@@ -10,8 +10,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Renders a stage/check's first-class {@code model} and its opaque {@code
- * settings} map into the CLI invocation flags {@link AgentProcessLauncher}
- * appends after the transport tokens (design D7): {@code --model} always,
+ * settings} map into the CLI invocation flags {@link AgentCommandLine}
+ * inserts after the {@code -p} token (design D7): {@code --model} always,
  * then {@code --allowedTools}/{@code --disallowedTools}/{@code --max-turns}
  * when the corresponding settings key is present.
  *
@@ -155,8 +155,8 @@ public final class AgentInvocationOptions {
         }
         Set<String> narrowed = new LinkedHashSet<>();
         for (Object tool : requested) {
-            if (JUDGE_READ_ONLY_TOOLS.contains(tool)) {
-                narrowed.add((String) tool);
+            if (tool instanceof String toolName && JUDGE_READ_ONLY_TOOLS.contains(toolName)) {
+                narrowed.add(toolName);
             }
         }
         return List.copyOf(narrowed);

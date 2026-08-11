@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -35,7 +36,8 @@ class CliStageExecutorContractSpec extends StageExecutorContract {
         def workspaceDir = Files.createTempDirectory('cli-stage-executor-contract')
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
         def properties = FakeAgentSupport.propertiesFor(scenario)
-        def real = new CliStageExecutor(properties, new VirtualClock())
+        def law = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
+        def real = new CliStageExecutor(properties, new VirtualClock(), law)
         Optional.of(new WorkspaceSubstitutingExecutor(real, new DirectoryWorkspace(workspaceDir)))
     }
 

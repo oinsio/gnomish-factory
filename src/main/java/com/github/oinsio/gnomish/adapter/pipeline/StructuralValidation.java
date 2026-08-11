@@ -37,7 +37,15 @@ import org.jspecify.annotations.Nullable;
  * in declaration order (NFR-R1). The verify checks and inputs/outputs sections
  * are optional at this layer: an absent section is not a structural problem.
  *
- * <p>Implements FR5 of load-pipeline-config.
+ * <p><b>Tighten-only sandbox policy (FR14 of add-sandbox-core).</b> This tier
+ * also enforces that a stage's Mechanism {@code sandbox} block never names a
+ * {@code binding} — adapter binding and any weakening are operator-only,
+ * living solely in factory installation config; a repo may only tighten
+ * (declare needs, {@code requiresFresh}). It is caught here, at the wire, so
+ * the mapper never carries a repo-declared binding into the domain.
+ *
+ * <p>Implements FR5 of load-pipeline-config; FR14 of add-sandbox-core (the
+ * tighten-only sandbox check).
  */
 public final class StructuralValidation {
 
@@ -85,6 +93,7 @@ public final class StructuralValidation {
         checkInputs(errors, file, stage.inputs());
         checkOutputs(errors, file, stage.outputs());
         checkExecutor(errors, file, stage.executor());
+        checkSandbox(errors, file, stage.executor());
         requirePresent(errors, file, "instructions", stage.instructions());
         checkAdvancement(errors, file, stage.advancement());
         return List.copyOf(errors);
@@ -128,6 +137,32 @@ public final class StructuralValidation {
                     file,
                     "executor.type",
                     "unknown executor '%s'; known executors are %s".formatted(type, join(EXECUTOR_TYPES))));
+        }
+    }
+
+    /**
+     * Tighten-only enforcement of the Mechanism's {@code sandbox} block (FR14 of
+     * add-sandbox-core): a repo may declare needs and {@code requiresFresh}
+     * (both tighten), but never a {@code binding} — naming a concrete adapter
+     * ({@code container}, …) or requesting host execution ({@code host}) is an
+     * operator-only decision that lives solely in factory installation config.
+     * A declared {@code binding} is therefore a located error, so the manifest
+     * cannot weaken its own isolation. Any other weakening spelling is already
+     * closed by Jackson's unknown-field capture ({@link StructuralParse}). An
+     * absent {@code sandbox} or {@code binding} is the correct, tightening-only
+     * form and yields nothing.
+     */
+    private static void checkSandbox(List<ConfigError> errors, String file, @Nullable ExecutorDto executor) {
+        if (executor == null || executor.sandbox() == null) {
+            return;
+        }
+        String binding = executor.sandbox().binding();
+        if (binding != null) {
+            errors.add(new ConfigError(
+                    file,
+                    "executor.sandbox.binding",
+                    "repo may not declare a sandbox binding '%s'; adapter binding and any weakening live only in factory installation config (a stage manifest may only tighten)"
+                            .formatted(binding)));
         }
     }
 

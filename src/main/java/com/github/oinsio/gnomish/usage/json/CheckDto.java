@@ -17,6 +17,8 @@ import org.jspecify.annotations.Nullable;
  * @param durationMillis the wall time the check took, in milliseconds
  * @param reason the {@code cannotVerify} short cause, or {@code null} otherwise
  * @param details the {@code cannotVerify} free-text detail, or {@code null} otherwise
+ * @param runUrl the passing external check's platform run URL, or {@code null} when the verdict
+ *     carries none (NFR-O2 of add-sandbox-core)
  */
 public record CheckDto(
         String ref,
@@ -24,4 +26,5 @@ public record CheckDto(
         List<FindingDto> findings,
         long durationMillis,
         @Nullable String reason,
-        @Nullable String details) {}
+        @Nullable String details,
+        @Nullable String runUrl) {}

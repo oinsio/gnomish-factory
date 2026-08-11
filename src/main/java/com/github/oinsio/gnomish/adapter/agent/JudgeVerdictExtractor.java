@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.adapter.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -17,10 +19,14 @@ import org.slf4j.LoggerFactory;
  * balanced {@code {...}} object in the remaining text, and interprets it as
  * {@code {"passed": boolean, "findings": ["...", ...]}}. Anything short of a
  * well-formed verdict — no JSON object found, malformed JSON, a missing or
- * non-boolean {@code passed} field, or a blank message — becomes {@link
+ * non-boolean {@code passed} field, a {@code findings} entry that is not a
+ * non-blank string, or a blank message — becomes {@link
  * Verdict.CannotVerify}; this class never returns {@link Verdict.Pass} unless
  * an explicit {@code passed: true} was read (NFR-R1: the judge is the QC
  * net itself, so its degradation default is inverted from the executor's).
+ * This is the strict verdict schema of the findings funnel: a judge reply
+ * that fails it classifies as an infrastructure failure of the check, never
+ * as a quality verdict (FR15 of add-sandbox-core).
  *
  * <p>The first-JSON-object scan is a simple bracket-matching heuristic, not a
  * full JSON tokenizer: it does not distinguish braces inside string literals
@@ -34,7 +40,8 @@ import org.slf4j.LoggerFactory;
  * mirroring {@link DecisionFileReader}'s precedent so protocol
  * non-compliance is diagnosable from logs alone.
  *
- * <p>Implements FR8, NFR-R1, NFR-O2, D5 of add-agent-executor.
+ * <p>Implements FR8, NFR-R1, NFR-O2, D5 of add-agent-executor; FR15 of
+ * add-sandbox-core.
  */
 public final class JudgeVerdictExtractor {
 
@@ -77,18 +84,32 @@ public final class JudgeVerdictExtractor {
         if (passedNode.asBoolean()) {
             return new Verdict.Pass();
         }
-        return new Verdict.Fail(findings(node));
+        List<Finding> findings = findings(node);
+        if (findings == null) {
+            return cannotVerify("judge verdict \"findings\" entries must be non-blank strings", finalMessage);
+        }
+        return new Verdict.Fail(findings);
     }
 
-    private List<Finding> findings(JsonNode node) {
+    /**
+     * Reads the optional {@code findings} array under the strict schema (FR15 of
+     * add-sandbox-core): an absent or non-array node means no findings; an array with any
+     * non-string or blank entry means the verdict as a whole is malformed — {@code null}
+     * here, {@code CannotVerify} for the caller — never a partially parsed quality verdict.
+     */
+    private @Nullable List<Finding> findings(JsonNode node) {
         JsonNode findingsNode = node.get("findings");
         if (findingsNode == null || !findingsNode.isArray()) {
             return List.of();
         }
-        return findingsNode
-                .valueStream()
-                .map(n -> new Finding(n.asText(), null, null))
-                .toList();
+        List<Finding> findings = new ArrayList<>();
+        for (JsonNode entry : findingsNode) {
+            if (!entry.isTextual() || entry.asText().isBlank()) {
+                return null;
+            }
+            findings.add(new Finding(entry.asText(), null, null));
+        }
+        return List.copyOf(findings);
     }
 
     private String stripFence(String text) {
@@ -123,8 +144,17 @@ public final class JudgeVerdictExtractor {
         return null;
     }
 
+    /**
+     * The degradation exit (NFR-R1, NFR-O2): the WARN line carries the raw message through
+     * the findings funnel's log sanitization (FR15 of add-sandbox-core), while the returned
+     * {@code details} keep it verbatim — data stays full-fidelity, only the log sink is
+     * stripped and capped.
+     */
     private Verdict.CannotVerify cannotVerify(String reason, String rawMessage) {
-        log.warn("judge verdict could not be extracted ({}); raw final message: {}", reason, rawMessage);
+        log.warn(
+                "judge verdict could not be extracted ({}); raw final message: {}",
+                reason,
+                FindingsSanitizer.forLog(rawMessage));
         return new Verdict.CannotVerify(reason, rawMessage);
     }
 }

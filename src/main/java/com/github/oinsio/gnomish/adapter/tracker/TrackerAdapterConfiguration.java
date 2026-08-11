@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerSubsectionV
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.UsageException;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import java.util.Map;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,9 +46,9 @@ import org.springframework.context.annotation.Configuration;
 public class TrackerAdapterConfiguration {
 
     @Bean
-    public Map<String, TrackerAdapterFactory> trackerAdapterRegistry() {
+    public Map<String, TrackerAdapterFactory> trackerAdapterRegistry(SecretsProvider secretsProvider) {
         return Map.of(
-                "github", new GithubTrackerAdapterFactory(),
+                "github", new GithubTrackerAdapterFactory(secretsProvider),
                 "inmemory", new InMemoryTrackerAdapterFactory());
     }
 
@@ -57,8 +58,9 @@ public class TrackerAdapterConfiguration {
      * tracker.github} subsection (e.g. a bad hex color) is a located load error aggregated with core
      * errors (FR17 — the "Adapter errors aggregate with core errors" scenario) rather than surfacing
      * only later as a GitHub API error during {@code take}. Keyed identically to {@link
-     * #trackerAdapterRegistry()}; {@code inmemory} needs no content validator (its subsection is
-     * opaque), so an {@code inmemory} type with a subsection is simply handed no validator.
+     * #trackerAdapterRegistry(SecretsProvider)}; {@code inmemory} needs no content validator (its
+     * subsection is opaque), so an {@code inmemory} type with a subsection is simply handed no
+     * validator.
      */
     @Bean
     public Map<String, TrackerSubsectionValidator> trackerSubsectionValidatorRegistry() {

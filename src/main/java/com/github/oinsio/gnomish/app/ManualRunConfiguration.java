@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.engine.SystemClock;
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
+import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Random;
@@ -45,6 +47,17 @@ public class ManualRunConfiguration {
     @Bean
     public InMemoryAttemptPersistence attemptPersistence() {
         return new InMemoryAttemptPersistence();
+    }
+
+    /**
+     * The factory's single seam for named secrets (FR18, NFR-S1 of add-sandbox-core): the
+     * zero-infrastructure env/file adapter, the sole implementation in this change. The tracker
+     * registry injects it so {@code GNOMISH_GITHUB_TOKEN} resolves through the port, not a direct
+     * environment read; Vault-class and OIDC adapters arrive later behind the same bean.
+     */
+    @Bean
+    public SecretsProvider secretsProvider() {
+        return new EnvFileSecretsProvider();
     }
 
     @Bean

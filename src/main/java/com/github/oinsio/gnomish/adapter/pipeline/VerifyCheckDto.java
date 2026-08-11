@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.pipeline;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
@@ -40,11 +41,25 @@ public sealed interface VerifyCheckDto {
     record Builtin(@Nullable String name, @Nullable Map<String, Object> params) implements VerifyCheckDto {}
 
     /**
-     * A {@code command} check: the executable command line.
+     * A {@code command} check: the executable command line plus the optional
+     * {@code verifyIn} freshness knob ({@code same-box}/{@code fresh-box}, FR13
+     * of add-sandbox-core). {@code verifyIn} is a raw string so an unknown value
+     * becomes a located error the mapper reports (task 2.1); absent defaults to
+     * same-box.
      *
      * @param command the command line, or {@code null} when omitted
+     * @param verifyIn the raw freshness knob ({@code same-box}/{@code
+     *     fresh-box}), or {@code null} when omitted (defaults to same-box, FR13
+     *     of add-sandbox-core); parsing and the unknown-value error are the
+     *     mapper's concern
      */
-    record Command(@Nullable String command) implements VerifyCheckDto {}
+    record Command(@Nullable String command, @Nullable String verifyIn) implements VerifyCheckDto {
+
+        /** Convenience for construction outside Jackson binding (e.g. tests): no {@code verifyIn}. */
+        Command(@Nullable String command) {
+            this(command, null);
+        }
+    }
 
     /**
      * An {@code external} check: an identifier plus raw polling-timing strings
@@ -58,13 +73,29 @@ public sealed interface VerifyCheckDto {
      *     {@code infrastructure}), or {@code null} when omitted (defaults to
      *     {@code quality}, FR9); parsing and the unknown-value error are the
      *     mapper's concern (task 6.1)
+     * @param pinPaths the law-declared pin paths — repo paths whose content
+     *     defines the check (FR16 of add-sandbox-core); {@code null}/absent
+     *     means none declared (the adapter's own contributed paths still apply).
+     *     Repo-relative data the loader never reads; lexical form is validated
+     *     by {@code StageSanityRule}
      */
     record External(
             @Nullable String checkId,
             @Nullable String interval,
             @Nullable String timeout,
-            @Nullable String timeoutClass)
-            implements VerifyCheckDto {}
+            @Nullable String timeoutClass,
+            @Nullable List<String> pinPaths)
+            implements VerifyCheckDto {
+
+        /** Convenience for construction outside Jackson binding (e.g. tests): no {@code pinPaths}. */
+        External(
+                @Nullable String checkId,
+                @Nullable String interval,
+                @Nullable String timeout,
+                @Nullable String timeoutClass) {
+            this(checkId, interval, timeout, timeoutClass, null);
+        }
+    }
 
     /**
      * A {@code judge} check: acceptance-criteria file, pinned model, opaque

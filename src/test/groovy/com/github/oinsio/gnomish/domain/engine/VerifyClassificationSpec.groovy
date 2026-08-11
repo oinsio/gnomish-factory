@@ -1,17 +1,12 @@
 package com.github.oinsio.gnomish.domain.engine
 
-import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
-import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
-import spock.lang.Specification
 
 /**
  * The normative Fail/CannotVerify classification table (design.md "Failure
@@ -21,25 +16,7 @@ import spock.lang.Specification
  * engine collapses it to — proving the engine draws the Fail vs CannotVerify line
  * where the table draws it. Implements FR4 and success metric M4 of add-stage-engine.
  */
-class VerifyClassificationSpec extends Specification {
-
-    static final def WORKSPACE = new FakeWorkspace()
-    static final def KEY = new AttemptKey('TASK-1', 'build', 0)
-    static final def CONTEXT = new TaskContext('TASK-1', 'title', 'body', [])
-
-    def listener = new RecordingEventListener()
-    def clock = new VirtualClock()
-    def sleeper = new VirtualSleeper(clock)
-
-    private VerifyOrchestrator orchestrator(
-            ScriptedBuiltinCheckRunner builtinRunner = new ScriptedBuiltinCheckRunner(),
-            ScriptedCommandCheckRunner commandRunner = new ScriptedCommandCheckRunner(),
-            ScriptedExternalCheckClient externalClient = new ScriptedExternalCheckClient(),
-            ScriptedJudgeVoter judgeVoter = new ScriptedJudgeVoter()) {
-        new VerifyOrchestrator(builtinRunner, commandRunner,
-                new ExternalPolling(externalClient, clock, sleeper),
-                new JudgeVoting(judgeVoter), clock, listener)
-    }
+class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
 
     // FR4, M4: every line of the normative classification table classifies exactly as
     //          the table says — the engine collapses each situation to the expected
@@ -49,7 +26,7 @@ class VerifyClassificationSpec extends Specification {
         def orchestrator = orchestrator(builtinRunner, commandRunner, externalClient, judgeVoter)
 
         when: 'the single-check verify list for this row is verified'
-        def result = orchestrator.verify([check], CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator.verify([check] as List<VerifyCheck>, CONTEXT, WORKSPACE, KEY)
 
         then: 'the last (and only) check verdict is of the class the table prescribes'
         def verdict = result.results().last().verdict()
@@ -109,18 +86,6 @@ class VerifyClassificationSpec extends Specification {
     static final Duration SEC = Duration.ofSeconds(1)
     static final Duration TIMEOUT = Duration.ofSeconds(3)
     static final PollStatus RUNNING = new PollStatus.Running()
-
-    static VerifyCheck.Command command(String line) {
-        new VerifyCheck.Command(line)
-    }
-
-    static VerifyCheck.External external(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
-    }
-
-    static VerifyCheck.Judge judge(int votes) {
-        new VerifyCheck.Judge('criteria.md', 'model', [:], votes)
-    }
 
     static JudgeVoter.Vote passVote() {
         new JudgeVoter.Vote(new Verdict.Pass(), [:])

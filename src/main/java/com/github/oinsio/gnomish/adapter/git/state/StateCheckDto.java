@@ -14,14 +14,16 @@ import org.jspecify.annotations.Nullable;
  *
  * <ul>
  *   <li>{@code Verdict.Pass} — {@code verdict = "pass"}, {@code findings = []},
- *       {@code reason}/{@code details} both {@code null}
+ *       {@code reason}/{@code details} both {@code null}, {@code runUrl} carrying
+ *       the platform run link when the verdict has one
  *   <li>{@code Verdict.Fail} — {@code verdict = "fail"}, {@code findings}
- *       populated, {@code reason}/{@code details} both {@code null}
+ *       populated, {@code reason}/{@code details}/{@code runUrl} all {@code null}
  *   <li>{@code Verdict.CannotVerify} — {@code verdict = "cannotVerify"}, {@code
- *       findings = []}, {@code reason}/{@code details} populated from the verdict
+ *       findings = []}, {@code reason}/{@code details} populated from the verdict,
+ *       {@code runUrl} {@code null}
  * </ul>
  *
- * <p>Implements FR3, FR4 of add-git-workflow.
+ * <p>Implements FR3, FR4 of add-git-workflow; NFR-O2 of add-sandbox-core.
  *
  * @param ref the label of the check that ran
  * @param verdict the lowerCamel verdict discriminator
@@ -31,6 +33,8 @@ import org.jspecify.annotations.Nullable;
  * @param reason the {@code cannotVerify} short cause, or {@code null} otherwise
  * @param details the {@code cannotVerify} free-text detail, or {@code null}
  *     otherwise
+ * @param runUrl the passing external check's platform run URL, or {@code null}
+ *     when the verdict carries none
  */
 public record StateCheckDto(
         String ref,
@@ -38,4 +42,5 @@ public record StateCheckDto(
         List<StateFindingDto> findings,
         long durationMillis,
         @Nullable String reason,
-        @Nullable String details) {}
+        @Nullable String details,
+        @Nullable String runUrl) {}

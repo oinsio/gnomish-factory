@@ -18,7 +18,7 @@ import spock.lang.Specification
  */
 class JudgeVerdictExtractorSpec extends Specification {
 
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
+    private static List<ILoggingEvent> capture(Closure<?> emit) {
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(JudgeVerdictExtractor)
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
         appender.start()
@@ -212,5 +212,42 @@ class JudgeVerdictExtractorSpec extends Specification {
 
         then:
         events.isEmpty()
+    }
+
+    def "findings entry that is not a string yields CannotVerify"() {
+        given: 'FR15 of add-sandbox-core: the strict schema refuses structured findings entries'
+        def message = '{"passed": false, "findings": [{"message": "smuggled"}]}'
+
+        when:
+        def verdict = extractor.extract(message)
+
+        then: 'schema failure is an infrastructure failure, never a partially parsed Fail'
+        verdict instanceof Verdict.CannotVerify
+    }
+
+    def "blank findings entry yields CannotVerify"() {
+        given:
+        def message = '{"passed": false, "findings": ["real problem", "   "]}'
+
+        when:
+        def verdict = extractor.extract(message)
+
+        then:
+        verdict instanceof Verdict.CannotVerify
+    }
+
+    def "WARN log of the raw message is sanitized and capped"() {
+        given: 'FR15 of add-sandbox-core: log sinks strip ANSI and bound volume'
+        def message = 'no verdict here \u001B[31m' + ('x' * 3000)
+
+        when:
+        def verdict = null
+        def events = capture { verdict = extractor.extract(message) }
+
+        then: 'the log line is stripped and truncated while details keep the message verbatim'
+        events.size() == 1
+        !events[0].formattedMessage.contains('\u001B')
+        events[0].formattedMessage.contains('[truncated, showing last 2000 of')
+        ((Verdict.CannotVerify) verdict).details() == message
     }
 }

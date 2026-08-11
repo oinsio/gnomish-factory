@@ -6,16 +6,20 @@ import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter;
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor;
 import com.github.oinsio.gnomish.adapter.agent.CompositeAgentProgressListener;
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener;
+import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor;
 import com.github.oinsio.gnomish.adapter.console.DialogConsole;
 import com.github.oinsio.gnomish.adapter.console.InteractiveJudgeVoter;
 import com.github.oinsio.gnomish.adapter.console.InteractiveStageExecutor;
 import com.github.oinsio.gnomish.adapter.console.StageBriefing;
 import com.github.oinsio.gnomish.adapter.engine.SystemClock;
+import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist;
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.status.AgentActivityEnricher;
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Selects the {@link StageExecutor}/{@link JudgeVoter} adapter pair {@link ManualRunAssembly}
@@ -43,13 +47,36 @@ final class ExecutorAdapterSelector {
             StatusSnapshotHolder holder,
             FactoryProperties factoryProperties,
             SystemClock systemClock,
-            List<String> credentialEnvVarsToScrub) {
+            ChildEnvAllowlist childEnv,
+            PipelineLaw law,
+            @Nullable SandboxRunPieces sandbox) {
         return switch (interactiveMode) {
-            case ALL, EXECUTOR_ONLY -> new InteractiveStageExecutor(console, new StageBriefing());
-            case NONE, JUDGE_ONLY ->
-                new CliStageExecutor(
-                        factoryProperties, systemClock, executorProgressListener(holder), credentialEnvVarsToScrub);
+            case ALL, EXECUTOR_ONLY -> new InteractiveStageExecutor(console, new StageBriefing(law));
+            case NONE, JUDGE_ONLY -> cliStageExecutor(holder, factoryProperties, systemClock, childEnv, law, sandbox);
         };
+    }
+
+    /**
+     * The manifest-driven CLI executor: the host construction unchanged, or — in container mode
+     * (the integration pass of add-sandbox-core) — rounds routed through the sandboxed round
+     * source and wrapped by {@link ResumeVerificationStageExecutor}, so an interrupted
+     * verification found on resume re-verifies its harvested attempt commit without an agent
+     * re-run (FR21, D15).
+     */
+    private static StageExecutor cliStageExecutor(
+            StatusSnapshotHolder holder,
+            FactoryProperties factoryProperties,
+            SystemClock systemClock,
+            ChildEnvAllowlist childEnv,
+            PipelineLaw law,
+            @Nullable SandboxRunPieces sandbox) {
+        if (sandbox == null) {
+            return new CliStageExecutor(
+                    factoryProperties, systemClock, executorProgressListener(holder), childEnv, law);
+        }
+        var cli = new CliStageExecutor(
+                factoryProperties, systemClock, executorProgressListener(holder), law, sandbox.executorRounds());
+        return new ResumeVerificationStageExecutor(cli, sandbox.attemptCommit(), sandbox.pendingVerification());
     }
 
     /**
@@ -63,12 +90,19 @@ final class ExecutorAdapterSelector {
             RunArguments.InteractiveMode interactiveMode,
             FactoryProperties factoryProperties,
             SystemClock systemClock,
-            List<String> credentialEnvVarsToScrub) {
+            ChildEnvAllowlist childEnv,
+            PipelineLaw law,
+            @Nullable SandboxRunPieces sandbox) {
         return switch (interactiveMode) {
-            case ALL, JUDGE_ONLY -> new InteractiveJudgeVoter(console);
+            case ALL, JUDGE_ONLY -> new InteractiveJudgeVoter(console, law);
             case NONE, EXECUTOR_ONLY ->
                 new CliJudgeVoter(
-                        factoryProperties, systemClock, new LoggingAgentProgressListener(), credentialEnvVarsToScrub);
+                        factoryProperties,
+                        systemClock,
+                        new LoggingAgentProgressListener(),
+                        childEnv,
+                        law,
+                        sandbox == null ? null : sandbox.judgeEnvironments());
         };
     }
 

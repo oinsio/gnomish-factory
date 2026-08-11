@@ -1,32 +1,32 @@
 package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.adapter.environment.ExecCommand;
+import com.github.oinsio.gnomish.adapter.environment.ExecHandle;
+import com.github.oinsio.gnomish.adapter.environment.ProcessStartException;
+import com.github.oinsio.gnomish.adapter.environment.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Spawns {@code sh -c <command>} with the workspace as cwd and the process's own environment
- * inherited, plus a {@code GNOMISH_FINDINGS_FILE} env var when a temp path is supplied (FR8,
- * NFR-S1), merges stdout/stderr into one chronological stream, and captures the exit code
- * together with a bounded tail of that stream (design D6, FR7).
+ * Runs {@code sh -c <command>} through a {@link TaskExecutionEnvironment} — the
+ * task environment port is the sole process-launch seam (FR4 of
+ * add-sandbox-core) — with a {@code GNOMISH_FINDINGS_FILE} env fragment when a
+ * path is supplied (FR8, NFR-S1), stderr merged into stdout, and captures the
+ * exit code together with a bounded tail of that one chronological stream
+ * (design D6, FR7 of add-manual-run). The environment composes the child
+ * environment as the layered allowlist (D6, FR9 of add-sandbox-core) — this
+ * class contributes only the factory-set findings-file variable and never
+ * touches {@link ProcessBuilder}.
  *
- * <p>The child's inherited environment is the factory environment minus {@code
- * credentialEnvVarsToScrub} — the names the active tracker adapter declares as its own
- * credential variables (e.g. {@code GNOMISH_GITHUB_TOKEN}), scrubbed in {@link #run} as the last
- * step, after {@code GNOMISH_FINDINGS_FILE} has been set, so a scrubbed name can never survive
- * (the same declared-scrub-list {@code AgentProcessLauncher} applies; design D11, D17). An empty
- * list leaves the inherited environment unchanged — the shape plain {@code gnomish run} uses.
- *
- * <p>Implements FR7, FR8, D6 of add-manual-run; FR11, NFR-S1, D11 of add-claim-heartbeat.
+ * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core.
  */
 final class CommandProcessRunner {
 
@@ -39,69 +39,41 @@ final class CommandProcessRunner {
 
     private final String shell;
 
-    private final List<String> credentialEnvVarsToScrub;
-
     CommandProcessRunner(String shell) {
-        this(shell, List.of());
-    }
-
-    CommandProcessRunner(String shell, List<String> credentialEnvVarsToScrub) {
         this.shell = shell;
-        this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
     }
 
     /**
-     * Returns a copy of this runner that scrubs {@code credentialEnvVarsToScrub} from every check
-     * process's inherited environment, keeping the same shell — the per-run seam {@link
-     * ShellCommandCheckRunner#withCredentialScrub} threads the active tracker adapter's declared
-     * credential names through (design D11, D17 of add-claim-heartbeat).
-     */
-    CommandProcessRunner withCredentialScrub(List<String> credentialEnvVarsToScrub) {
-        return new CommandProcessRunner(shell, credentialEnvVarsToScrub);
-    }
-
-    /**
-     * Runs {@code check}'s command line via {@code sh -c} with {@code workspace}'s root as cwd
-     * and the current process's environment inherited plus {@code GNOMISH_FINDINGS_FILE} (FR8)
-     * minus the declared credential variables (FR11, NFR-S1 of add-claim-heartbeat), merging
-     * stdout and stderr into one chronological stream. Returns {@code null} if the
-     * process could not even be started (e.g. the shell executable is missing) instead of
-     * throwing, so the caller can turn that into a {@code CannotVerify} verdict without a stack
-     * trace crashing the check.
+     * Runs {@code check}'s command line via {@code sh -c} through {@code
+     * environment}, with {@code GNOMISH_FINDINGS_FILE} added when supplied (FR8),
+     * merging stdout and stderr into one chronological stream. Returns {@code
+     * null} if the process could not even be started (the environment throws
+     * {@link ProcessStartException}) instead of propagating, so the caller can
+     * turn that into a {@code CannotVerify} verdict without a stack trace
+     * crashing the check.
      *
-     * <p>Implements FR7, FR8, D6 of add-manual-run.
+     * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core.
      *
      * @param check the command check to run
-     * @param workspace the directory workspace whose root becomes the process's working directory
-     * @param findingsFile the temp path handed to the command as {@code GNOMISH_FINDINGS_FILE},
-     *     or {@code null} if it could not be created
-     * @return the captured exit code and bounded output tail, or {@code null} if the process
-     *     failed to start
+     * @param environment the bound task environment the process runs in
+     * @param findingsPath the environment-valid path handed to the command as
+     *     {@code GNOMISH_FINDINGS_FILE} (allocated under the environment's
+     *     scratch root), or {@code null} to run without a findings channel
+     * @return the captured exit code and bounded output tail, or {@code null} if
+     *     the process failed to start
      */
     @Nullable
-    CommandOutcome run(VerifyCheck.Command check, DirectoryWorkspace workspace, @Nullable Path findingsFile) {
-        ProcessBuilder builder = new ProcessBuilder(shell, "-c", check.command());
-        builder.directory(workspace.root().toFile());
-        builder.redirectErrorStream(true);
-        if (findingsFile != null) {
-            builder.environment().put(FINDINGS_FILE_ENV_VAR, findingsFile.toString());
-        }
-        // Scrub declared tracker credentials LAST (design D11, D17; NFR-S1) — after any env
-        // set-up, so a scrubbed name can never survive. An empty list is a no-op, leaving the
-        // inherited factory environment unchanged (plain gnomish run has no tracker credentials).
-        for (String name : credentialEnvVarsToScrub) {
-            builder.environment().remove(name);
-        }
-
-        Process process;
+    CommandOutcome run(VerifyCheck.Command check, TaskExecutionEnvironment environment, @Nullable String findingsPath) {
+        Map<String, String> env = findingsPath == null ? Map.of() : Map.of(FINDINGS_FILE_ENV_VAR, findingsPath);
+        ExecHandle handle;
         try {
-            process = builder.start();
-        } catch (IOException e) {
+            handle = environment.exec(new ExecCommand(shellCommand(check), env, null, true));
+        } catch (ProcessStartException e) {
             return null;
         }
 
-        String tail = readBoundedTail(process);
-        int exitCode = waitFor(process);
+        String tail = readBoundedTail(handle);
+        int exitCode = handle.waitForExit();
         return new CommandOutcome(exitCode, tail);
     }
 
@@ -110,8 +82,12 @@ final class CommandProcessRunner {
      * with no {@code GNOMISH_FINDINGS_FILE}.
      */
     @Nullable
-    CommandOutcome run(VerifyCheck.Command check, DirectoryWorkspace workspace) {
-        return run(check, workspace, null);
+    CommandOutcome run(VerifyCheck.Command check, TaskExecutionEnvironment environment) {
+        return run(check, environment, null);
+    }
+
+    private java.util.List<String> shellCommand(VerifyCheck.Command check) {
+        return java.util.List.of(shell, "-c", check.command());
     }
 
     /**
@@ -121,11 +97,11 @@ final class CommandProcessRunner {
      * way to keep "last N lines up to a byte cap" without buffering the whole stream first
      * (relevant for long-running or chatty commands).
      */
-    private static String readBoundedTail(Process process) {
+    private static String readBoundedTail(ExecHandle handle) {
         Deque<String> lines = new ArrayDeque<>();
         int bytes = 0;
         try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                new BufferedReader(new InputStreamReader(handle.output(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 int lineBytes = line.getBytes(StandardCharsets.UTF_8).length + 1;
@@ -161,31 +137,6 @@ final class CommandProcessRunner {
             throw new IllegalStateException("unreachable: loop guard implies a non-empty deque");
         }
         return evicted;
-    }
-
-    /**
-     * PIT M4 documented exception (build.gradle has the full rationale): {@code @DoNotMutate} on
-     * the {@code catch} block only — {@link #readBoundedTail} always runs first and blocks on
-     * non-interruptible stream I/O until the process's stdout/stderr close (normally at process
-     * exit), so by the time this method's {@code process.waitFor()} runs the process has
-     * typically already exited and the call returns immediately without blocking; forcing a
-     * thread interrupt to land inside the brief blocking window that remains is a genuine timing
-     * race, not reliably reproducible in a unit test (a real attempt at this test hung waiting on
-     * the non-interruptible read instead). The happy path (a captured exit code) is otherwise
-     * covered by every {@code run} spec in CommandProcessRunnerSpec.
-     */
-    private static int waitFor(Process process) {
-        try {
-            return process.waitFor();
-        } catch (InterruptedException e) {
-            return interruptedExitCode();
-        }
-    }
-
-    @DoNotMutate
-    private static int interruptedExitCode() {
-        Thread.currentThread().interrupt();
-        return -1;
     }
 
     /**

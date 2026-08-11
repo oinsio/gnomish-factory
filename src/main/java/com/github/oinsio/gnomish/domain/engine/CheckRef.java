@@ -26,8 +26,8 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 public record CheckRef(int index, String label) {
 
     public CheckRef {
-        index = requireNonNegative(index, "index");
-        label = requireNonBlank(label, "label");
+        requireNonNegative(index);
+        requireNonBlank(label);
     }
 
     /**
@@ -47,12 +47,10 @@ public record CheckRef(int index, String label) {
     public static CheckRef of(int index, VerifyCheck check) {
         String label =
                 switch (check) {
-                    case VerifyCheck.Builtin(String name, var params) -> "builtin:" + name;
-                    case VerifyCheck.Command(String command) -> "command:" + command;
-                    case VerifyCheck.External(String checkId, var interval, var timeout, var timeoutClass) ->
-                        "external:" + checkId;
-                    case VerifyCheck.Judge(String criteriaFile, var model, var settings, var votes) ->
-                        "judge:" + criteriaFile;
+                    case VerifyCheck.Builtin(String name, var _) -> "builtin:" + name;
+                    case VerifyCheck.Command(String command, var _) -> "command:" + command;
+                    case VerifyCheck.External(String checkId, var _, var _, var _, var _) -> "external:" + checkId;
+                    case VerifyCheck.Judge(String criteriaFile, var _, var _, var _) -> "judge:" + criteriaFile;
                 };
         return new CheckRef(index, label);
     }
@@ -64,11 +62,10 @@ public record CheckRef(int index, String label) {
      * record's canonical constructor, which would silently exempt this validation
      * from the 100% mutation gate.
      */
-    private static int requireNonNegative(int value, String component) {
+    private static void requireNonNegative(int value) {
         if (value < 0) {
-            throw new IllegalArgumentException("CheckRef." + component + " must not be negative");
+            throw new IllegalArgumentException("CheckRef.index must not be negative");
         }
-        return value;
     }
 
     /**
@@ -78,10 +75,9 @@ public record CheckRef(int index, String label) {
      * canonical constructor, which would silently exempt this validation from the
      * 100% mutation gate.
      */
-    private static String requireNonBlank(String value, String component) {
+    private static void requireNonBlank(String value) {
         if (value.isBlank()) {
-            throw new IllegalArgumentException("CheckRef." + component + " must not be blank");
+            throw new IllegalArgumentException("CheckRef.label must not be blank");
         }
-        return value;
     }
 }

@@ -575,6 +575,18 @@ adapters.
   content)] → non-matching files ignored by construction; the matching
   file's content is tolerant-parsed and fenced exactly like today's
   decision file.
+- [Mixed host/container bindings within one pipeline] → refused
+  fail-closed by the integration pass's run-shape selector: the round
+  protocol (single round commit vs snapshot-first) is mode-wide, and a
+  cross-adapter segment boundary would need per-stage persistence
+  switching over one branch. Segment mechanics (reuse, harvest → dispose
+  → materialize, `requires-fresh` splits) are fully live *within*
+  container mode; a cross-adapter boundary becomes reachable only when a
+  second sandboxed adapter exists (changes C/D) and can land then without
+  contract change. Tracker-driven `take`/`serve` keep their host worktree
+  shape until the serve/lifecycle integration pass adopts the container
+  adapter there (task 4.8's wording); binding resolution governs the
+  `gnomish run` git modes today.
 
 ## Migration Plan
 
@@ -594,4 +606,6 @@ adapters.
   a mandatory review-before-build note on the Docker ladder.
 - Q3 (proposal): funnel placement is decided here (D9, adapter-side);
   remaining detail is which module owns the fenced-publication renderer —
-  resolve during tasks.
+  resolved during task 8.1: the `adapter.findings` package owns both the
+  log sanitization and the fenced-publication renderer; app-layer report
+  builders call into it.

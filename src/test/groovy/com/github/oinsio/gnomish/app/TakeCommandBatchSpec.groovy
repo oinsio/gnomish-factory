@@ -52,11 +52,9 @@ class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, 
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths (mirrors TakeCommandCredentialScrubSpec's own documented quirk):
-        // the pipeline loader's referenced-file check resolves `instructions:` relative to
-        // .gnomish/, while the runtime engine (ControlFilePreflight, non-interactive batch mode
-        // reaches it — unlike most take specs, which use --interactive and never notice) resolves
-        // the same string relative to the workspace root, the task worktree / project root.
+        // Written at both paths: the runtime now reads control files from the frozen pipeline law
+        // (D14 of add-sandbox-core), resolved — like the loader's referenced-file check — relative
+        // to the clone's .gnomish/ root; the project-root copy is retained but no longer consulted.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\

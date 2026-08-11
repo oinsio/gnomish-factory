@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.console
 
 import com.github.oinsio.gnomish.adapter.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -10,7 +11,6 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -27,8 +27,9 @@ class InteractiveStageExecutorSpec extends Specification {
     @TempDir
     Path workspaceRoot
 
+    private static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
+
     private StageExecutor.Request sampleRequest() {
-        Files.writeString(workspaceRoot.resolve('instructions.md'), 'Do the thing.')
         def context = new TaskContext('task-1', 'Add login page', 'Implement OAuth login.', [])
         def stage = new StageDefinition(
                 'build', 'purpose', [], [],
@@ -42,7 +43,7 @@ class InteractiveStageExecutorSpec extends Specification {
         given:
         def io = new ScriptedConsoleIO([''])
         def console = new DialogConsole(io, { json -> 'status' })
-        def executor = new InteractiveStageExecutor(console, new StageBriefing())
+        def executor = new InteractiveStageExecutor(console, new StageBriefing(LAW))
         def request = sampleRequest()
 
         when:
@@ -75,7 +76,7 @@ class InteractiveStageExecutorSpec extends Specification {
             ''
         ])
         def console = new DialogConsole(io, { json -> 'status' })
-        def executor = new InteractiveStageExecutor(console, new StageBriefing())
+        def executor = new InteractiveStageExecutor(console, new StageBriefing(LAW))
         def request = sampleRequest()
 
         when:
@@ -96,7 +97,7 @@ class InteractiveStageExecutorSpec extends Specification {
         given:
         def io = new ScriptedConsoleIO(['bogus', ''])
         def console = new DialogConsole(io, { json -> 'status' })
-        def executor = new InteractiveStageExecutor(console, new StageBriefing())
+        def executor = new InteractiveStageExecutor(console, new StageBriefing(LAW))
         def request = sampleRequest()
 
         when:

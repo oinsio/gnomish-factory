@@ -17,7 +17,9 @@ import java.util.List;
  *   <li>the resolved attempt limit must be at least 1 (FR7);</li>
  *   <li>each {@code external} check must have a non-blank {@code checkId}, a
  *       positive {@code interval}, a positive {@code timeout}, and
- *       {@code interval <= timeout} (equal is valid) (FR11);</li>
+ *       {@code interval <= timeout} (equal is valid) (FR11); and each of its
+ *       pin paths must be a normalized relative path — no absolute prefix, no
+ *       {@code .}/{@code ..} segment (FR16 of add-sandbox-core);</li>
  *   <li>each {@code judge} check must pin a non-blank {@code model} — the same
  *       reproducibility rationale as the executor model — and declare
  *       {@code votes} that are &ge; 1 and odd (FR11).</li>
@@ -39,7 +41,8 @@ import java.util.List;
  * error, then the attempt-limit error, then verify-check errors in check-list
  * order and, within a check, field order.
  *
- * <p>Implements FR11 (and the FR7 attempt-limit clause) of load-pipeline-config.
+ * <p>Implements FR11 (and the FR7 attempt-limit clause) of load-pipeline-config;
+ * FR16 of add-sandbox-core (the external-check pin-path form rule).
  */
 public final class StageSanityRule {
 
@@ -108,14 +111,14 @@ public final class StageSanityRule {
         }
         Duration interval = external.interval();
         Duration timeout = external.timeout();
-        boolean intervalPositive = isPositive(interval);
+        boolean intervalPositive = Durations.isPositive(interval);
         if (!intervalPositive) {
             errors.add(new ConfigError(
                     manifest,
                     "verify[%d].interval".formatted(index),
                     "non-positive external poll interval %s; the interval must be positive".formatted(interval)));
         }
-        boolean timeoutPositive = isPositive(timeout);
+        boolean timeoutPositive = Durations.isPositive(timeout);
         if (!timeoutPositive) {
             errors.add(new ConfigError(
                     manifest,
@@ -129,6 +132,50 @@ public final class StageSanityRule {
                     "external poll interval %s exceeds timeout %s; the interval must not exceed the timeout"
                             .formatted(interval, timeout)));
         }
+        validatePinPaths(manifest, index, external, errors);
+    }
+
+    /**
+     * Rejects any pin path that is not in normalized relative form (FR16 of
+     * add-sandbox-core): absolute, or containing a {@code .} or {@code ..}
+     * segment. Pin paths are repo-relative <em>data</em> the loader never reads,
+     * so this is purely lexical — no filesystem, no traversal guard (they point
+     * outside {@code .gnomish/} by design). A malformed path can never match a
+     * repo object and would only pass the pin vacuously, so it is a located
+     * error naming the offending check and path index. Errors are appended in
+     * declaration order, after the timing errors of the same check.
+     */
+    private static void validatePinPaths(
+            String manifest, int index, VerifyCheck.External external, List<ConfigError> errors) {
+        List<String> pinPaths = external.pinPaths();
+        for (int pathIndex = 0; pathIndex < pinPaths.size(); pathIndex++) {
+            String pinPath = pinPaths.get(pathIndex);
+            if (!isNormalizedRelative(pinPath)) {
+                errors.add(new ConfigError(
+                        manifest,
+                        "verify[%d].pinPaths[%d]".formatted(index, pathIndex),
+                        "invalid pin path '%s'; a pin path must be a normalized relative path with no absolute prefix and no '.'/'..' segments"
+                                .formatted(pinPath)));
+            }
+        }
+    }
+
+    /**
+     * True when {@code pinPath} is a non-blank, relative path whose every
+     * {@code /}-delimited segment is a plain name — no leading {@code /}
+     * (absolute), no {@code .} or {@code ..} segment. Purely lexical; POSIX
+     * {@code /} separators, matching the repo-relative form pin paths take.
+     */
+    private static boolean isNormalizedRelative(String pinPath) {
+        if (pinPath.isBlank() || pinPath.startsWith("/")) {
+            return false;
+        }
+        for (String segment : pinPath.split("/", -1)) {
+            if (segment.equals(".") || segment.equals("..")) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void validateJudge(String manifest, int index, VerifyCheck.Judge judge, List<ConfigError> errors) {
@@ -145,9 +192,5 @@ public final class StageSanityRule {
                     "verify[%d].votes".formatted(index),
                     "invalid judge vote count %d; votes must be at least 1 and odd".formatted(votes)));
         }
-    }
-
-    private static boolean isPositive(Duration duration) {
-        return !duration.isZero() && !duration.isNegative();
     }
 }

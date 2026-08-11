@@ -25,6 +25,10 @@
 #   - if $GNOMISH_FAKE_CAPTURE_ARGV names a file path, "$@" is appended to it
 #     (one invocation per line) before anything else runs — lets a spec
 #     inspect what CLI argv a later attempt actually received
+#   - if $GNOMISH_FAKE_CAPTURE_STDIN names a file path, this invocation's stdin
+#     (the round prompt — prompts travel on stdin since add-sandbox-core, FR24/
+#     D18) is appended to it, one block per invocation terminated by a "---"
+#     line — lets a spec inspect the prompt a later attempt actually received
 #   - if the scenario directory contains next-scenario, this invocation
 #     plays the CURRENT scenario only the first time in a given cwd (a
 #     marker file, .gnomish-fake-attempt-marker, is dropped in cwd to
@@ -53,6 +57,16 @@ fi
 if [ -n "${GNOMISH_FAKE_CAPTURE_ARGV:-}" ]; then
     printf '%s\n' "$@" >> "$GNOMISH_FAKE_CAPTURE_ARGV"
     printf -- '---\n' >> "$GNOMISH_FAKE_CAPTURE_ARGV"
+fi
+
+# Optional stdin capture, opt-in only — a no-op when unset. Since add-sandbox-core the round
+# prompt is delivered on stdin, never argv (FR24, D18): this reads that stdin into the named
+# file, one block per invocation, each terminated by a line containing only "---" (the same
+# convention as the argv capture above) so a reader can split invocations. Only invocations
+# whose caller sets this var read stdin; every other scenario leaves stdin untouched.
+if [ -n "${GNOMISH_FAKE_CAPTURE_STDIN:-}" ]; then
+    cat >> "$GNOMISH_FAKE_CAPTURE_STDIN"
+    printf -- '\n---\n' >> "$GNOMISH_FAKE_CAPTURE_STDIN"
 fi
 
 SCENARIO_DIR="$SCENARIOS_DIR/$GNOMISH_FAKE_SCENARIO"
@@ -89,7 +103,11 @@ fi
 
 # 3. Decision-file protocol stand-in (D1): only written when the caller wired
 # $GNOMISH_DECISION_FILE, mirroring the real adapter's per-round temp path.
+# Parent directories are created like the real CLI's Write tool would — the
+# in-branch transport of add-sandbox-core (FR23, D17) names a path under
+# .gnomish-task/decisions/ that need not exist yet in a fresh working copy.
 if [ -f "$SCENARIO_DIR/decision.json" ] && [ -n "${GNOMISH_DECISION_FILE:-}" ]; then
+    mkdir -p "$(dirname "$GNOMISH_DECISION_FILE")"
     cp "$SCENARIO_DIR/decision.json" "$GNOMISH_DECISION_FILE"
 fi
 

@@ -3,8 +3,11 @@ package com.github.oinsio.gnomish.domain.engine
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
+import java.time.Instant
 
 /**
  * VerifyOrchestrator external poll loop, task 4.3 — an external check polls until it reaches
@@ -44,7 +47,63 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
 
         and: 'the loop slept exactly twice, each of the interval — so virtual time advanced 2*interval'
         sleeper.slept == [interval, interval]
-        clock.now() == java.time.Instant.EPOCH.plus(interval.multipliedBy(2))
+        clock.now() == Instant.EPOCH.plus(interval.multipliedBy(2))
+    }
+
+    def "a passing poll's run link is preserved into the recorded check result"() {
+        given: 'NFR-O2 of add-sandbox-core: the Pass run URL travels the check-result channel'
+        def externalClient = new ScriptedExternalCheckClient([
+            new PollStatus.Pass('https://ci.example/runs/42')
+        ])
+        def check = external('ci/build', Duration.ofSeconds(1), Duration.ofSeconds(3))
+
+        when:
+        def result = orchestrator(new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(), externalClient)
+                .verify([check], CONTEXT, WORKSPACE, KEY)
+
+        then:
+        result.results[0].verdict == new Verdict.Pass('https://ci.example/runs/42')
+    }
+
+    def "an undeliverable attempt commit resolves as CannotVerify with no poll issued"() {
+        given: 'FR21 of add-sandbox-core: delivery is a verified precondition of the poll loop'
+        def externalClient = new ScriptedExternalCheckClient([new PollStatus.Pass()])
+        def delivery = { workspace ->
+            new AttemptDelivery.Outcome.Undeliverable(
+            'attempt commit could not be delivered to the remote', 'push failed twice')
+        } as AttemptDelivery
+        def check = external('ci/build', Duration.ofSeconds(1), Duration.ofSeconds(3))
+
+        when:
+        def result = orchestrator(
+                new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(), externalClient,
+                new ScriptedJudgeVoter(), delivery)
+                .verify([check], CONTEXT, WORKSPACE, KEY)
+
+        then: 'the check is CannotVerify — an infrastructure failure, never a poll-timeout Fail'
+        result.results[0].verdict instanceof Verdict.CannotVerify
+        ((Verdict.CannotVerify) result.results[0].verdict).reason().contains('delivered')
+
+        and: 'no poll was issued and no time passed'
+        externalClient.pollCount == 0
+        sleeper.slept == []
+    }
+
+    def "a delivered attempt commit lets the poll loop run unchanged"() {
+        given:
+        def externalClient = new ScriptedExternalCheckClient([new PollStatus.Pass()])
+        def delivered = { workspace -> new AttemptDelivery.Outcome.Delivered() } as AttemptDelivery
+        def check = external('ci/build', Duration.ofSeconds(1), Duration.ofSeconds(3))
+
+        when:
+        def result = orchestrator(
+                new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(), externalClient,
+                new ScriptedJudgeVoter(), delivered)
+                .verify([check], CONTEXT, WORKSPACE, KEY)
+
+        then:
+        result.results[0].verdict instanceof Verdict.Pass
+        externalClient.pollCount == 1
     }
 
     // FR3, NFR-R3: a Running that never resolves times out at the deadline into a quality
@@ -72,8 +131,8 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         def verdict = result.results[0].verdict
         verdict instanceof Verdict.Fail
         verdict.findings().size() == 1
-        verdict.findings()[0].message().contains('ci/slow')
-        verdict.findings()[0].message().contains(timeout.toString())
+        ((Verdict.Fail) verdict).findings()[0].message().contains('ci/slow')
+        ((Verdict.Fail) verdict).findings()[0].message().contains(timeout.toString())
 
         and: 'the loop stopped rather than polling forever, having slept up to the timeout'
         externalClient.pollCount == 4

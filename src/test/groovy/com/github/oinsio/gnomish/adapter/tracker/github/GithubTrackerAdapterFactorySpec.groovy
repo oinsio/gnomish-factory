@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -71,12 +72,8 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     }
 
     def "missing GNOMISH_GITHUB_TOKEN refuses clearly without touching the network"() {
-        given:
-        def factory = new GithubTrackerAdapterFactory()
-        def previousToken = System.getenv(GithubTrackerAdapterFactory.TOKEN_ENV_VAR)
-
-        expect: 'this test only runs meaningfully when the real environment has no token set'
-        previousToken == null || previousToken.isBlank()
+        given: 'a SecretsProvider that resolves no token (fail-closed) — FR18, NFR-S1 of add-sandbox-core'
+        def factory = new GithubTrackerAdapterFactory({ name -> Optional.empty() } as SecretsProvider)
 
         when:
         factory.create(configFor(subsection()), INSTANCE_ID)
