@@ -34,6 +34,9 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
     @TempDir
     Path worktreesRoot
 
+    @TempDir
+    Path homeDir
+
     private ManualRunRunner newContainerRunner() {
         def runner = new ManualRunRunner(
                 new RunArgumentsParser(),
@@ -50,12 +53,15 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 // Container by default (D13): no explicit binding, image configured.
                 new BindingProperties(null, [:]),
                 worktreesRoot,
+                homeDir,
                 new StatusCommand(worktreesRoot),
                 new UsageCommand(),
+                new BoardCommand(Clock.systemUTC(), testProperties(), [:], [:]),
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:], [:]),
                 Clock.systemUTC(),
                 [:],
                 [:],
-                new ServeProperties(0, null, null, null))
+                new ServeProperties(0, null, null, null, null, null))
         // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.
         runner.@dockerProbe = { true } as BooleanSupplier
         runner
