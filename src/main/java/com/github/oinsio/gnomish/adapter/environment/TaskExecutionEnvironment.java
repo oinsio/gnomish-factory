@@ -35,6 +35,15 @@ public interface TaskExecutionEnvironment {
      * {@code --discard-work}. The pin is always factory-chosen; a caller SHALL
      * never pass a name or SHA that originated inside an environment.
      *
+     * <p>An adapter that preserves the pre-change host protocol MAY already hold
+     * the working copy checked out on {@code branch} at {@code commitPin} (the
+     * factory git runner did so before constructing the environment); in that
+     * case {@code branch}/{@code commitPin} assert the state the working copy is
+     * expected to already be in, and materialize adopts it rather than fetching
+     * afresh. The container and other isolated adapters materialize from the
+     * branch alone (they share no filesystem with the factory), so for them the
+     * arguments drive the checkout. See {@code HostTaskExecutionEnvironment}.
+     *
      * @param branch the task branch to prepare; never null
      * @param commitPin a factory-chosen commit to pin the working copy at, or
      *     {@code null} for the branch tip

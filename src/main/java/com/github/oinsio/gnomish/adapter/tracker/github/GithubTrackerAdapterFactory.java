@@ -29,21 +29,10 @@ import java.util.Optional;
  *
  * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port.
  */
-public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory {
+public record GithubTrackerAdapterFactory(SecretsProvider secretsProvider) implements TrackerAdapterFactory {
 
     /** {@code GNOMISH_GITHUB_TOKEN}: the GitHub tracker credential env var (design D5, NFR-S1). */
     public static final String TOKEN_ENV_VAR = "GNOMISH_GITHUB_TOKEN";
-
-    private static final GithubLabelDef DEFAULT_READY =
-            new GithubLabelDef("gnomish:ready", "2ea44f", "Gnomish factory: ready to be claimed");
-    private static final GithubLabelDef DEFAULT_WORKING =
-            new GithubLabelDef("gnomish:working", "1f6feb", "Gnomish factory: currently being worked");
-    private static final GithubLabelDef DEFAULT_NEEDS_HUMAN =
-            new GithubLabelDef("gnomish:needs-human", "d73a4a", "Gnomish factory: waiting on a human decision");
-    private static final GithubLabelDef DEFAULT_DELIVERED =
-            new GithubLabelDef("gnomish:delivered", "8250df", "Gnomish factory: delivered for review");
-
-    private final SecretsProvider secretsProvider;
 
     /**
      * The production factory, resolving {@code GNOMISH_GITHUB_TOKEN} through the default env/file
@@ -58,9 +47,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      *     (FR18, NFR-S1 of add-sandbox-core); never null — the composition root injects the
      *     installation-configured adapter, and tests a fake
      */
-    public GithubTrackerAdapterFactory(SecretsProvider secretsProvider) {
-        this.secretsProvider = secretsProvider;
-    }
+    public GithubTrackerAdapterFactory {}
 
     // PIT M4 documented exception: @DoNotMutate — the token now resolves through the injected
     // SecretsProvider (the missing-token throw is covered by GithubTrackerAdapterFactorySpec with an
@@ -83,15 +70,20 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      */
     Tracker create(TrackerConfig config, String instanceId, String token) {
         Map<String, Object> subsection = config.subsection();
-        String apiUrl = requireStringValue(subsection, "api-url");
-        GithubRepoRef repoRef = GithubRepoRef.parse(requireStringValue(subsection, "repo"));
+        String apiUrl = GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "api-url");
+        GithubRepoRef repoRef =
+                GithubRepoRef.parse(GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "repo"));
         String owner = repoRef.owner();
         String repo = repoRef.repo();
 
-        GithubLabelDef readyLabel = resolveLabel(subsection, "ready", DEFAULT_READY);
-        GithubLabelDef workingLabel = resolveLabel(subsection, "working", DEFAULT_WORKING);
-        GithubLabelDef needsHumanLabel = resolveLabel(subsection, "needs-human", DEFAULT_NEEDS_HUMAN);
-        GithubLabelDef deliveredLabel = resolveLabel(subsection, "delivered", DEFAULT_DELIVERED);
+        GithubLabelDef readyLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "ready", GithubTrackerAdapterFactoryLabels.DEFAULT_READY);
+        GithubLabelDef workingLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "working", GithubTrackerAdapterFactoryLabels.DEFAULT_WORKING);
+        GithubLabelDef needsHumanLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "needs-human", GithubTrackerAdapterFactoryLabels.DEFAULT_NEEDS_HUMAN);
+        GithubLabelDef deliveredLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "delivered", GithubTrackerAdapterFactoryLabels.DEFAULT_DELIVERED);
 
         var httpClient = new GithubHttpClient(apiUrl, token);
         var cache = new GithubConditionalRequestCache(httpClient);
@@ -145,8 +137,9 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      */
     Optional<String> refuseForeignRef(TrackerConfig config, TaskRef ref, String token) {
         Map<String, Object> subsection = config.subsection();
-        String apiUrl = requireStringValue(subsection, "api-url");
-        GithubRepoRef repoRef = GithubRepoRef.parse(requireStringValue(subsection, "repo"));
+        String apiUrl = GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "api-url");
+        GithubRepoRef repoRef =
+                GithubRepoRef.parse(GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "repo"));
         var check = new GithubForeignRepoCheck(new GithubHttpClient(apiUrl, token));
         try {
             check.verify(GithubTaskId.parse(ref.id()), repoRef.owner(), repoRef.repo());
@@ -195,30 +188,5 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
                 .find(TOKEN_ENV_VAR)
                 .orElseThrow(() -> new GithubTrackerConfigException(
                         TOKEN_ENV_VAR + " is required to use the GitHub tracker adapter, but is missing or blank"));
-    }
-
-    private static String requireStringValue(Map<String, Object> subsection, String key) {
-        Object value = subsection.get(key);
-        if (!(value instanceof String s) || s.isBlank()) {
-            throw new GithubTrackerConfigException(
-                    "tracker.github." + key + " is required to build the GitHub tracker");
-        }
-        return s;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static GithubLabelDef resolveLabel(Map<String, Object> subsection, String key, GithubLabelDef fallback) {
-        Object labels = subsection.get("labels");
-        if (!(labels instanceof Map<?, ?> labelsMap)) {
-            return fallback;
-        }
-        Object entry = labelsMap.get(key);
-        if (!(entry instanceof Map<?, ?> raw)) {
-            return fallback;
-        }
-        Map<String, Object> entryMap = (Map<String, Object>) raw;
-        String name = (String) entryMap.getOrDefault("name", fallback.name());
-        String color = (String) entryMap.getOrDefault("color", fallback.color());
-        return new GithubLabelDef(name, color, fallback.description());
     }
 }

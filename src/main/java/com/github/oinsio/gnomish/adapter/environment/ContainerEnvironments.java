@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -25,6 +26,7 @@ import java.util.Set;
  *
  * <p>Implements FR3, FR8, FR13, D5, D9 of add-sandbox-core.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public final class ContainerEnvironments {
 
     private final DockerCli docker;
@@ -40,16 +42,8 @@ public final class ContainerEnvironments {
     /**
      * The production construction: a fresh docker subprocess seam per task. Exists because
      * {@link DockerCli} is deliberately package-private — app-layer assemblies name only the
-     * environment-facing types.
+     * environment-facing types. See the canonical constructor below for parameter semantics.
      *
-     * @param baseKey the sanitized task identifier keying the round environment; never blank
-     * @param sourceClone the factory clone working copies are seeded from (D3); never null
-     * @param harvester the factory-side fetch behind {@code harvest()} (FR5); never null
-     * @param sandbox the operator sandbox config; never null
-     * @param clock the exec start-instant source; never null
-     * @param allowlist the run's layered child-env allowlist (D6, FR9); never null
-     * @param sleeper the guard-readiness pause seam of the self-check; never null
-     * @param guardConfigRoot the factory-private guard-config root; never null
      * @return the per-task environment seam; never null
      */
     public static ContainerEnvironments forTask(
@@ -150,6 +144,16 @@ public final class ContainerEnvironments {
     }
 
     /**
+     * Testing seam (FR9): whether {@code credentialEnvVar} is excluded from this environment's
+     * composed child-env allowlist — the observable proof that construction wired a credential
+     * name into scrubbing, without a spec reaching into the private {@link ChildEnvAllowlist}
+     * construction state to check it.
+     */
+    public boolean scrubsCredential(String credentialEnvVar) {
+        return allowlist.compose(List.of(), Map.of(credentialEnvVar, "probe")).isEmpty();
+    }
+
+    /**
      * Keep semantics for an ended task (FR6, git-task-persistence "Worktree
      * lifecycle"): the round container is stopped so no gnome process keeps
      * executing, while volume and network remain for salvage and resume.
@@ -183,24 +187,7 @@ public final class ContainerEnvironments {
     }
 
     private SelfCheckedEnvironment environment(String key) {
-        var environment = new ContainerTaskExecutionEnvironment(
-                docker,
-                key,
-                sourceClone,
-                harvester,
-                sandbox.image(),
-                sandbox.runtime(),
-                sandbox.limits(),
-                sandbox.enforceDiskQuota(),
-                clock,
-                allowlist);
-        var guard = new EgressGuard(docker, key, sandbox.guardImage(), sandbox.egressAllowlist(), configDir(key));
-        var selfCheck = new EnvironmentSelfCheck(
-                environment, guard, docker, key, sandbox.runtime(), sandbox.egressAllowlist(), sleeper);
-        return new SelfCheckedEnvironment(environment, selfCheck, guard);
-    }
-
-    private Path configDir(String key) {
-        return guardConfigRoot.resolve(key);
+        return ContainerEnvironmentBuilder.build(
+                docker, key, sourceClone, harvester, sandbox, clock, allowlist, sleeper, guardConfigRoot);
     }
 }

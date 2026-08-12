@@ -37,12 +37,23 @@ import org.jspecify.annotations.Nullable;
  * wires it alongside the workspace itself.
  *
  * <p>Implements FR6 of add-manual-run; FR21, D15 of add-sandbox-core.
+ *
+ * <p>A plain class, not a record: PIT's JVMTI-based hot-swap mutation testing refuses record
+ * bytecode changes (hcoles/pitest#1285) — a record shape here would turn nearly every mutation of
+ * {@link #run}/{@link #runAgainstAttemptCommit}/{@link #describeType} into an unkillable RUN_ERROR
+ * instead of the one isolated, documented exception {@link #opaqueWorkspaceVerdict} carries.
  */
-public record FilesExistCheckRunner(@Nullable GitObjects attemptReader) implements BuiltinCheckRunner {
+public final class FilesExistCheckRunner implements BuiltinCheckRunner {
+
+    private final @Nullable GitObjects attemptReader;
 
     /** The host-modes runner: filesystem existence only, no factory-clone reader bound. */
     public FilesExistCheckRunner() {
         this(null);
+    }
+
+    private FilesExistCheckRunner(@Nullable GitObjects attemptReader) {
+        this.attemptReader = attemptReader;
     }
 
     /**
@@ -121,17 +132,12 @@ public record FilesExistCheckRunner(@Nullable GitObjects attemptReader) implemen
      * argument, naming the workspace's actual runtime type.
      *
      * <p>PIT M4 documented exception (build.gradle has the full rationale):
-     * {@code @DoNotMutate} — PIT's coverage-instrumentation phase silently
-     * fails to attribute coverage to a {@code new Verdict.CannotVerify(...)}
-     * construction at this call shape (a record implementing a sealed
-     * interface), the same JVMTI RedefineClasses/record-attribute restriction
-     * as the RUN_ERROR cases elsewhere in this codebase (hcoles/pitest#1285) —
-     * NO_COVERAGE, not a real gap: "a workspace that is not a DirectoryWorkspace
-     * yields CannotVerify" in FilesExistCheckRunnerSpec exercises this method
-     * directly and passes. Isolated to its own method so the rest of {@link
-     * #run} (readFiles/escape/missing-file branches, all record constructions
-     * of the very same {@link Verdict} type that PIT mutates without issue)
-     * stays under the 100% mutation gate.
+     * {@code @DoNotMutate} — the same JVMTI RedefineClasses/record-attribute
+     * restriction as the class javadoc above (hcoles/pitest#1285) — NO_COVERAGE,
+     * not a real gap: "a workspace that is not a DirectoryWorkspace yields
+     * CannotVerify" in FilesExistCheckRunnerSpec exercises this method directly
+     * and passes. Isolated to its own method so the rest of {@link #run} stays
+     * under the 100% mutation gate.
      */
     @DoNotMutate
     private static Verdict opaqueWorkspaceVerdict(Workspace workspace) {

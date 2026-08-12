@@ -2,27 +2,11 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist;
-import com.github.oinsio.gnomish.adapter.environment.ExecCommand;
-import com.github.oinsio.gnomish.adapter.environment.ExecHandle;
-import com.github.oinsio.gnomish.adapter.environment.ProcessStartException;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
-import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
-import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * The real CLI {@link StageExecutor} adapter (task 6.5 of add-agent-executor):
@@ -68,31 +52,18 @@ public final class CliStageExecutor implements StageExecutor {
     private final DecisionFileReader decisionFileReader = new DecisionFileReader();
 
     /**
-     * Equivalent to {@link #CliStageExecutor(FactoryProperties, Clock,
-     * AgentProgressListener, PipelineLaw)} with a no-op listener, for callers
-     * that do not need live progress (e.g. contract-suite tests focused on the
-     * port's result shape, not its observability side channel).
-     *
-     * @param factoryProperties installation config: the CLI binary path; never null
-     * @param clock the read-time source for process start/exit stamping, shared
-     *     with the task environment the round runs through; never null
-     * @param law the invocation's frozen pipeline law, the source of control-file
-     *     and judge-criteria content (D14 of add-sandbox-core); never null
+     * No-op listener. See the canonical constructor {@link #CliStageExecutor(FactoryProperties,
+     * Clock, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for the full parameter
+     * contract.
      */
     public CliStageExecutor(FactoryProperties factoryProperties, Clock clock, PipelineLaw law) {
         this(factoryProperties, clock, _ -> {}, law);
     }
 
     /**
-     * @param factoryProperties installation config: the CLI binary path; never null
-     * @param clock the read-time source for process start/exit stamping, shared
-     *     with the task environment the round runs through; never null
-     * @param progressListener the live-progress subscriber for this
-     *     executor's rounds (design D10, task 9.4); never null — pass a
-     *     {@link CompositeAgentProgressListener} to reach several
-     *     subscribers, or a no-op ({@code event -> {}}) to reach none
-     * @param law the invocation's frozen pipeline law (D14 of add-sandbox-core);
-     *     never null
+     * {@link ChildEnvAllowlist#none()}. See the canonical constructor {@link #CliStageExecutor(
+     * FactoryProperties, Clock, AgentProgressListener, PipelineLaw, RoundEnvironmentSource)} for
+     * the full parameter contract.
      */
     public CliStageExecutor(
             FactoryProperties factoryProperties, Clock clock, AgentProgressListener progressListener, PipelineLaw law) {
@@ -100,17 +71,9 @@ public final class CliStageExecutor implements StageExecutor {
     }
 
     /**
-     * @param factoryProperties installation config: the CLI binary path; never null
-     * @param clock the read-time source for process start/exit stamping, shared
-     *     with the task environment the round runs through; never null
-     * @param progressListener the live-progress subscriber for this
-     *     executor's rounds (design D10, task 9.4); never null
-     * @param childEnv the layered child-environment allowlist every round's
-     *     process environment is composed from (D6, FR9 of add-sandbox-core);
-     *     never null, {@link ChildEnvAllowlist#none()} when neither passthrough
-     *     nor a tracker is involved
-     * @param law the invocation's frozen pipeline law (D14 of add-sandbox-core);
-     *     never null
+     * Host default (a {@link HostRoundEnvironmentSource}). See the canonical constructor {@link
+     * #CliStageExecutor(FactoryProperties, Clock, AgentProgressListener, PipelineLaw,
+     * RoundEnvironmentSource)} for the full parameter contract.
      */
     public CliStageExecutor(
             FactoryProperties factoryProperties,
@@ -122,9 +85,10 @@ public final class CliStageExecutor implements StageExecutor {
     }
 
     /**
-     * The sandboxed construction (the integration pass of add-sandbox-core): rounds run through
-     * {@code environmentSource} — the leased container environment with the in-branch decision
-     * file and snapshot-closed rounds — instead of the host default.
+     * The canonical constructor. The sandboxed construction (the integration pass of
+     * add-sandbox-core): rounds run through {@code environmentSource} — the leased container
+     * environment with the in-branch decision file and snapshot-closed rounds — instead of the
+     * host default.
      *
      * @param factoryProperties installation config: the CLI binary path; never null
      * @param clock the read-time source for process start/exit stamping; never null
@@ -215,72 +179,14 @@ public final class CliStageExecutor implements StageExecutor {
     }
 
     private ExecutionResult runRoundInEnvironment(Request request, String prompt, RoundEnvironmentSource.Round round) {
-        var stage = request.stage();
-        var executor = stage.executor();
-        var invocationFlags = AgentInvocationOptions.renderForExecutor(
-                executor.model(), executor.settings(), round.decisionFilePath());
-        List<String> command = AgentCommandLine.fromRenderedFlags(factoryProperties.agentCliBinary(), invocationFlags);
-
-        // Factory-set protocol layer (D6, FR9): the AI seam variables plus this round's
-        // decision-file path — the only variables beyond base and passthrough a round sees.
-        Map<String, String> env = new java.util.LinkedHashMap<>(AgentAiSeam.fromFactoryEnvironment());
-        env.putAll(round.decisionEnvFragment());
-        ExecHandle launched = launch(round, command, prompt, env);
-
-        Duration roundTimeout = RoundTimeout.resolve(executor.settings());
-        var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
-        if (wait instanceof ExecHandle.Wait.TimedOut) {
-            throw new RoundTimeoutException(roundTimeout);
-        }
-        var wallTime = ((ExecHandle.Wait.Exited) wait).wallTime();
-
-        // The process has already exited (or been killed) by this point, so its
-        // stdout pipe is fully drained and reading it here cannot block the round
-        // indefinitely — reading before waitForExitOrTimeout would risk hanging on
-        // a still-open pipe from a process that never exits (design D3, FR13).
-        List<TimestampedEvent> events = parseStdout(launched, round.roundListener());
-        Instant roundEnd = clock.now();
-        AgentRoundResult roundResult = resultExtractor.extract(events, roundEnd);
-        ExecutorUsage usage = withWallTime(roundResult.usage(), wallTime);
-        ToolTrace trace = trace(request, events, roundEnd);
-
-        // The sandboxed snapshot commit + harvest close the gnome half of the round here (FR21,
-        // D15) — before the decision read, so a pending decision request rides the snapshot (D17).
-        round.closeRound();
-
-        Optional<DecisionFileReader.Decision> decision = decisionFileReader.read(round.readDecision());
-        return decision.map(d ->
-                        (ExecutionResult) new ExecutionResult.DecisionNeeded(d.question(), d.options(), usage, trace))
-                .orElseGet(() -> new ExecutionResult.Completed(usage, trace));
-    }
-
-    private ExecHandle launch(
-            RoundEnvironmentSource.Round round, List<String> command, String prompt, Map<String, String> env) {
-        try {
-            return round.environment().exec(new ExecCommand(command, env, prompt, false));
-        } catch (ProcessStartException e) {
-            throw new IllegalStateException(
-                    "agent CLI process failed to start: " + factoryProperties.agentCliBinary(), e);
-        }
-    }
-
-    private List<TimestampedEvent> parseStdout(ExecHandle launched, AgentProgressListener roundListener) {
-        var listener = new CompositeAgentProgressListener(List.of(progressListener, roundListener));
-        try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
-            return new StreamJsonParser(clock, listener).parse(reader);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read agent process stdout", e);
-        }
-    }
-
-    private static ExecutorUsage withWallTime(ExecutorUsage usage, Duration wallTime) {
-        return new ExecutorUsage(wallTime, usage.tools(), usage.tokensByModel());
-    }
-
-    private static ToolTrace trace(Request request, List<TimestampedEvent> events, Instant roundEnd) {
-        AttemptKey key =
-                new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
-        return new ToolTrace(key, new ToolTraceBuilder().buildTrace(events, roundEnd));
+        return ExecutorRoundExecution.run(
+                factoryProperties,
+                clock,
+                progressListener,
+                resultExtractor,
+                decisionFileReader,
+                request,
+                prompt,
+                round);
     }
 }

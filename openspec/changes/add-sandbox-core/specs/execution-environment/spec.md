@@ -83,12 +83,16 @@ Injection-persistence surfaces inside the container SHALL be read-only for the g
 - **THEN** the write fails, and the surface's content is unchanged for every later process in the same environment
 
 ### Requirement: Resource limits
-The container adapter SHALL apply operator-configured limits at container creation: CPUs, memory, PID count, and working-volume disk size, with documented defaults.
+The container adapter SHALL apply operator-configured CPU, memory, and PID-count limits at container creation, with documented defaults. Working-volume disk-size enforcement (`--storage-opt size=`) SHALL be applied when the operator enables it (`factory.sandbox.enforce-disk-quota`, default off); it does not default on because it requires a quota-capable storage driver (overlay2 on xfs with `pquota`) that most daemons lack — enabling it without such a driver fails every container start, so the safe default is to leave disk uncapped and let the operator opt in on a capable host.
 <!-- implements FR10 of add-sandbox-core -->
 
 #### Scenario: Runaway build is contained
 - **WHEN** a process inside the box exceeds the memory limit or forks past the PID limit
 - **THEN** only in-box processes are killed; the factory observes a failed round, and the host stays healthy
+
+#### Scenario: Disk quota is enforced only when opted in
+- **WHEN** the operator sets `factory.sandbox.enforce-disk-quota` on a daemon whose storage driver supports quotas
+- **THEN** the container is created with `--storage-opt size=` at the configured working-volume size; left at its default, no disk cap is applied and container creation does not depend on a quota-capable driver
 
 ### Requirement: Orphan cleanup at startup
 Factory startup SHALL find Docker objects carrying factory labels that belong to no live task and remove them, mirroring worktree pruning.

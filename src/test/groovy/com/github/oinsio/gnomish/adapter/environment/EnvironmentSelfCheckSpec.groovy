@@ -28,8 +28,11 @@ class EnvironmentSelfCheckSpec extends Specification {
     def docker = new RecordingDockerCli()
     def environment = new ScriptedEnvironment()
 
-    /** Scripted probe answers: direct egress blocked, guard denies with 403, allowlisted reachable. */
+    /** Scripted probe answers: non-root uid, direct egress blocked, guard denies with 403, allowlisted reachable. */
     def probes = { List<String> argv ->
+        if (argv == ['id', '-u']) {
+            return [0, '1000']
+        }
         if (argv.contains('--noproxy')) {
             return [
                 7,
@@ -75,6 +78,37 @@ class EnvironmentSelfCheckSpec extends Specification {
         environment.execs.any { argv ->
             argv.contains('http://gnomish-guard:8080') && argv.any { it.contains(ALLOWED) }
         }
+    }
+
+    def "D16: a root-running image fails the non-root probe before any network probe"() {
+        given: 'the image default user is root — id -u reports uid 0'
+        def check = selfCheck()
+        environment.onExec = { List<String> argv ->
+            argv == ['id', '-u'] ? [0, '0'] : probes.call(argv)
+        }
+
+        when:
+        check.verify()
+
+        then: 'the failure names the non-root probe (UX2) and no network probe ran'
+        def failure = thrown(SelfCheckFailedException)
+        failure.probe() == 'non-root'
+        !environment.execs.any { it.contains('--noproxy') }
+    }
+
+    def "FR8: an image whose id command cannot run fails the non-root probe fail-closed"() {
+        given: 'id -u exits non-zero — an image that cannot be probed'
+        def check = selfCheck()
+        environment.onExec = { List<String> argv ->
+            argv == ['id', '-u'] ? [127, 'sh: id: not found'] : probes.call(argv)
+        }
+
+        when:
+        check.verify()
+
+        then:
+        def failure = thrown(SelfCheckFailedException)
+        failure.probe() == 'non-root'
     }
 
     def "FR8: direct egress unexpectedly succeeding fails the direct-egress probe"() {

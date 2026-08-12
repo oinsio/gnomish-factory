@@ -1,6 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist;
+import com.github.oinsio.gnomish.adapter.environment.HostTaskExecutionEnvironment;
 import com.github.oinsio.gnomish.adapter.environment.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 
 /**
@@ -24,4 +28,13 @@ public interface JudgeEnvironmentSource {
      * @return a ready-to-exec environment; never null
      */
     TaskExecutionEnvironment environmentFor(Workspace workspace);
+
+    /**
+     * The host-mode default (G4: host isolation mechanics unchanged): a {@link
+     * HostTaskExecutionEnvironment} over the graded {@link DirectoryWorkspace}'s root — the
+     * stage workspace, as today. Extracted for {@link CliJudgeVoter}'s file size.
+     */
+    static JudgeEnvironmentSource host(Clock clock, ChildEnvAllowlist childEnv) {
+        return workspace -> new HostTaskExecutionEnvironment(((DirectoryWorkspace) workspace).root(), clock, childEnv);
+    }
 }

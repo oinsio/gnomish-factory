@@ -23,11 +23,10 @@ import java.util.List;
  * The four outcome-driven continuation paths {@link GitResumeRunner#run} switches on: {@link
  * #resumeFromRecordedPosition}, {@link #resumeEscalated}, {@link #resumePaused}, {@link
  * #reportCompleted}. Extracted from {@link GitResumeRunner} purely to keep both files within the
- * project's file-size guidance (`.claude/rules/process-invariants.md`).
- *
- * <p>The three engine-rerunning paths share {@link #runToTerminalBoundary}, mirroring {@link
- * GitModeRunner}'s terminal-boundary handling; {@code Escalated}/{@code Paused} are never
- * observed here, since the loop resolves them in-process via its own dialogs first.
+ * project's file-size guidance (`.claude/rules/process-invariants.md`). The three
+ * engine-rerunning paths share {@link #runToTerminalBoundary}, mirroring {@link GitModeRunner}'s
+ * terminal-boundary handling; {@code Escalated}/{@code Paused} are never observed here, since the
+ * loop resolves them in-process via its own dialogs first.
  *
  * <p>Implements FR5, FR8, UX2 of add-git-workflow.
  */

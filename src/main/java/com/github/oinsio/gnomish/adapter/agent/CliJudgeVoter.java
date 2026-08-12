@@ -2,11 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist;
-import com.github.oinsio.gnomish.adapter.environment.ExecCommand;
-import com.github.oinsio.gnomish.adapter.environment.ExecHandle;
 import com.github.oinsio.gnomish.adapter.environment.HostTaskExecutionEnvironment;
-import com.github.oinsio.gnomish.adapter.environment.ProcessStartException;
-import com.github.oinsio.gnomish.adapter.environment.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -15,14 +11,6 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -65,38 +53,23 @@ public final class CliJudgeVoter implements JudgeVoter {
     private final AgentProgressListener progressListener;
     private final PipelineLaw law;
     private final JudgePromptBuilder promptBuilder;
-    private final ChildEnvAllowlist childEnv;
     private final JudgeEnvironmentSource environmentSource;
     private final AgentRoundResultExtractor resultExtractor = new AgentRoundResultExtractor();
     private final JudgeVerdictExtractor verdictExtractor = new JudgeVerdictExtractor();
 
     /**
-     * Equivalent to {@link #CliJudgeVoter(FactoryProperties, Clock,
-     * AgentProgressListener, PipelineLaw)} with a no-op listener, for callers
-     * that do not need live progress (e.g. contract-suite tests focused on the
-     * port's verdict shape, not its observability side channel).
-     *
-     * @param factoryProperties installation config: the CLI binary path; never null
-     * @param clock the read-time source for process start/exit stamping, shared
-     *     with the task environment the vote runs through; never null
-     * @param law the invocation's frozen pipeline law, the source of
-     *     acceptance-criteria content (D14 of add-sandbox-core); never null
+     * No-op listener, {@link ChildEnvAllowlist#none()}, host environment. See the canonical
+     * constructor {@link #CliJudgeVoter(FactoryProperties, Clock, AgentProgressListener,
+     * ChildEnvAllowlist, PipelineLaw, JudgeEnvironmentSource)} for the full parameter contract.
      */
     public CliJudgeVoter(FactoryProperties factoryProperties, Clock clock, PipelineLaw law) {
         this(factoryProperties, clock, _ -> {}, law);
     }
 
     /**
-     * @param factoryProperties installation config: the CLI binary path; never null
-     * @param clock the read-time source for process start/exit stamping, shared
-     *     with the task environment the vote runs through; never null
-     * @param progressListener the live-progress subscriber for this judge's
-     *     rounds (design D10, task 9.4); judge rounds feed the same {@link
-     *     LoggingAgentProgressListener} renderer as executor rounds, never
-     *     the status enricher (a vote runs under the verifying activity);
-     *     never null — pass a no-op ({@code event -> {}}) to reach none
-     * @param law the invocation's frozen pipeline law (D14 of add-sandbox-core);
-     *     never null
+     * {@link ChildEnvAllowlist#none()}, host environment. See the canonical constructor {@link
+     * #CliJudgeVoter(FactoryProperties, Clock, AgentProgressListener, ChildEnvAllowlist,
+     * PipelineLaw, JudgeEnvironmentSource)} for the full parameter contract.
      */
     public CliJudgeVoter(
             FactoryProperties factoryProperties, Clock clock, AgentProgressListener progressListener, PipelineLaw law) {
@@ -104,17 +77,10 @@ public final class CliJudgeVoter implements JudgeVoter {
     }
 
     /**
-     * @param factoryProperties installation config: the CLI binary path; never null
-     * @param clock the read-time source for process start/exit stamping, shared
-     *     with the task environment the vote runs through; never null
-     * @param progressListener the live-progress subscriber for this judge's
-     *     rounds (design D10, task 9.4); never null
-     * @param childEnv the layered child-environment allowlist every vote's
-     *     process environment is composed from (D6, FR9 of add-sandbox-core);
-     *     never null, {@link ChildEnvAllowlist#none()} when neither passthrough
-     *     nor a tracker is involved
-     * @param law the invocation's frozen pipeline law, the source of
-     *     acceptance-criteria content (D14 of add-sandbox-core); never null
+     * Host environment (a {@link HostTaskExecutionEnvironment} over the graded {@link
+     * DirectoryWorkspace}'s root). See the canonical constructor {@link #CliJudgeVoter(
+     * FactoryProperties, Clock, AgentProgressListener, ChildEnvAllowlist, PipelineLaw,
+     * JudgeEnvironmentSource)} for the full parameter contract.
      */
     public CliJudgeVoter(
             FactoryProperties factoryProperties,
@@ -126,12 +92,19 @@ public final class CliJudgeVoter implements JudgeVoter {
     }
 
     /**
+     * The canonical constructor.
+     *
      * @param factoryProperties installation config: the CLI binary path; never null
      * @param clock the read-time source for process start/exit stamping; never null
-     * @param progressListener the live-progress subscriber for this judge's rounds; never null
-     * @param childEnv the layered child-environment allowlist (D6, FR9 of add-sandbox-core);
-     *     never null
-     * @param law the invocation's frozen pipeline law (D14 of add-sandbox-core); never null
+     * @param progressListener the live-progress subscriber for this judge's rounds (design D10,
+     *     task 9.4); judge rounds feed the same {@link LoggingAgentProgressListener} renderer as
+     *     executor rounds, never the status enricher; never null — pass a no-op ({@code event ->
+     *     {}}) to reach none
+     * @param childEnv the layered child-environment allowlist every vote's process environment is
+     *     composed from (D6, FR9 of add-sandbox-core); never null, {@link
+     *     ChildEnvAllowlist#none()} when neither passthrough nor a tracker is involved
+     * @param law the invocation's frozen pipeline law, the source of acceptance-criteria content
+     *     (D14 of add-sandbox-core); never null
      * @param environmentSource where each vote's environment comes from (FR15, D9 of
      *     add-sandbox-core): {@code null} keeps the host default — a {@link
      *     HostTaskExecutionEnvironment} over the {@link DirectoryWorkspace} root, today's
@@ -150,17 +123,8 @@ public final class CliJudgeVoter implements JudgeVoter {
         this.progressListener = progressListener;
         this.law = law;
         this.promptBuilder = new JudgePromptBuilder(law);
-        this.childEnv = childEnv;
-        this.environmentSource = environmentSource != null ? environmentSource : hostEnvironmentSource();
-    }
-
-    /**
-     * The host-mode default (G4: host isolation mechanics unchanged): a {@link
-     * HostTaskExecutionEnvironment} over the graded {@link DirectoryWorkspace}'s root — the
-     * stage workspace, as today.
-     */
-    private JudgeEnvironmentSource hostEnvironmentSource() {
-        return workspace -> new HostTaskExecutionEnvironment(((DirectoryWorkspace) workspace).root(), clock, childEnv);
+        this.environmentSource =
+                environmentSource != null ? environmentSource : JudgeEnvironmentSource.host(clock, childEnv);
     }
 
     /**
@@ -191,53 +155,14 @@ public final class CliJudgeVoter implements JudgeVoter {
         // in-memory snapshot, so the second read cannot fail differently — no
         // defensive try/catch is warranted (D14 of add-sandbox-core).
         String prompt = promptBuilder.build(check, context, workspace);
-        return runRound(check, environmentSource.environmentFor(workspace), prompt);
-    }
-
-    private Vote runRound(VerifyCheck.Judge check, TaskExecutionEnvironment environment, String prompt) {
-        var invocationFlags = AgentInvocationOptions.renderForJudge(check.model(), check.settings());
-        List<String> command = AgentCommandLine.fromRenderedFlags(factoryProperties.agentCliBinary(), invocationFlags);
-
-        ExecHandle launched;
-        try {
-            // Factory-set protocol layer (D6, FR9): a judge vote needs only the AI seam variables.
-            launched = environment.exec(new ExecCommand(command, AgentAiSeam.fromFactoryEnvironment(), prompt, false));
-        } catch (ProcessStartException e) {
-            return cannotVerify("agent CLI process failed to start", factoryProperties.agentCliBinary());
-        }
-
-        Duration roundTimeout = RoundTimeout.resolve(check.settings());
-        var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
-        if (wait instanceof ExecHandle.Wait.TimedOut) {
-            return cannotVerify("agent round exceeded roundTimeout and was killed", "roundTimeout: " + roundTimeout);
-        }
-
-        // The process has already exited (or been killed) by this point, so its
-        // stdout pipe is fully drained and reading it here cannot block indefinitely
-        // (design D3, FR13) — same rationale as CliStageExecutor.
-        List<TimestampedEvent> events = parseStdout(launched);
-        Instant roundEnd = clock.now();
-        try {
-            AgentRoundResult roundResult = resultExtractor.extract(events, roundEnd);
-            Verdict verdict = verdictExtractor.extract(roundResult.result());
-            return new Vote(verdict, roundResult.usage().tokensByModel());
-        } catch (MissingResultEventException e) {
-            String message =
-                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            return cannotVerify("stream-json carried no result event for round", message);
-        }
-    }
-
-    private List<TimestampedEvent> parseStdout(ExecHandle launched) {
-        try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
-            return new StreamJsonParser(clock, progressListener).parse(reader);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read agent process stdout", e);
-        }
-    }
-
-    private static Vote cannotVerify(String reason, String details) {
-        return new Vote(new Verdict.CannotVerify(reason, details), Map.of());
+        return JudgeRoundExecution.run(
+                factoryProperties,
+                clock,
+                progressListener,
+                resultExtractor,
+                verdictExtractor,
+                check,
+                environmentSource.environmentFor(workspace),
+                prompt);
     }
 }

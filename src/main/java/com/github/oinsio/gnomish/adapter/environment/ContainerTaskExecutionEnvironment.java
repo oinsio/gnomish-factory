@@ -62,18 +62,13 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     private @Nullable String branch;
 
     /**
-     * @param docker the docker subprocess seam; never null
-     * @param key the sanitized environment key naming this task's objects; never blank
      * @param sourceClone the factory's local clone the working copy is seeded from (design D3,
      *     FR3); mounted read-only into the one-shot seed helper only, never the task container
      * @param harvester the factory-side fetch behind {@link #harvest} (FR5); never null
      * @param image the operator-configured {@code factory.sandbox.image}; required to bind the
      *     container adapter (validated here, per {@code SandboxProperties}); never null or blank
-     * @param runtime the {@code --runtime} value (default {@code runc}); never blank
-     * @param limits the resource limits applied at container creation (FR10); never null
      * @param enforceDiskQuota whether to add {@code --storage-opt size=} — opt-in, since it needs a
      *     quota-capable storage driver most daemons lack (documented in operator docs)
-     * @param clock the start-instant source stamped on each {@link ExecHandle}; never null
      * @param allowlist the layered child-environment allowlist (D6, FR9); the container base is
      *     empty — only composed {@code --env} entries reach an exec child, the image's own {@code
      *     ENV} supplies the runtime environment; never null
@@ -107,56 +102,23 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         String name = FactoryDockerLabels.containerName(key);
         DockerResult inspect = docker.run(DockerCommands.inspectContainerState(name));
         if (inspect.ok()) {
-            reattach(name, inspect, branch, commitPin);
+            ContainerMaterializer.reattach(docker, key, image, sourceClone, name, inspect, branch, commitPin);
         } else {
-            create(branch, commitPin);
+            ContainerMaterializer.create(
+                    docker,
+                    key,
+                    image,
+                    sourceClone,
+                    runtime,
+                    limits,
+                    enforceDiskQuota,
+                    WORKING_COPY,
+                    SCRATCH,
+                    branch,
+                    commitPin);
         }
         channel = new ContainerFileChannel(docker, key, WORKING_COPY, SCRATCH);
         this.branch = branch;
-    }
-
-    /**
-     * The keep/resume half of FR6: the task container survived (kept after a park, or an
-     * interrupted run) — start it if stopped and reuse its volume as-is; a commit pin is still
-     * applied through the idempotent seed helper. Nothing is re-cloned: the surviving volume may
-     * hold the only copy of unrecorded work.
-     */
-    private void reattach(String name, DockerResult inspect, String branch, @Nullable String commitPin) {
-        log.debug("container environment reattaching to {} for branch {}", name, branch);
-        boolean running = inspect.stdout().strip().startsWith("true");
-        if (!running) {
-            management(DockerCommands.startContainer(name), "start container");
-        }
-        if (commitPin != null) {
-            management(
-                    DockerCommands.seedClone(
-                            key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin),
-                    "pin working copy");
-        }
-    }
-
-    /** The fresh-materialize path (FR3): network, volume, seed clone, task container, scratch. */
-    private void create(String branch, @Nullable String commitPin) {
-        // A surviving network (e.g. a container removed by hand, network left behind) is reused;
-        // any other network-create failure is real. Volume create is idempotent by docker itself.
-        DockerResult network = docker.run(DockerCommands.createNetwork(key));
-        if (!network.ok() && !network.stderr().contains("already exists")) {
-            throw new IllegalStateException("docker create network for " + key + " failed: "
-                    + network.stderr().strip());
-        }
-        management(DockerCommands.createVolume(key), "create volume");
-        // Seed the volume before the task container exists: the clone runs in a one-shot helper
-        // that mounts the factory clone read-only, so the task container never sees it (D3, FR3).
-        management(
-                DockerCommands.seedClone(
-                        key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin),
-                "seed clone");
-        management(
-                DockerCommands.runContainer(key, image, runtime, limits, enforceDiskQuota, WORKING_COPY),
-                "run container");
-        management(
-                DockerCommands.exec(key, WORKING_COPY, Map.of(), false, List.of("mkdir", "-p", SCRATCH)),
-                "create scratch");
     }
 
     @Override
@@ -211,14 +173,6 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     @Override
     public CapabilityPassport passport() {
         return CapabilityPassport.container();
-    }
-
-    private void management(List<String> argv, String what) {
-        DockerResult result = docker.run(argv);
-        if (!result.ok()) {
-            throw new IllegalStateException("docker " + what + " for " + key + " failed: "
-                    + result.stderr().strip());
-        }
     }
 
     private ContainerFileChannel channel() {

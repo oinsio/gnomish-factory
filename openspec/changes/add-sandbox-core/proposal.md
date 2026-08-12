@@ -442,5 +442,11 @@ and GHA executor (E) follow as separate changes.
   judge/external/command findings; the denial channel was never built.
   Fixing it needs a report-model change (a denial-findings field
   independent of the check verdict) — exactly parallel to Q4/NFR-O2/task
-  8.4a. Deferred to a separate change; tracker-report reach to be decided
-  there.
+  8.4a. Owned by `add-sandbox-hardening`: its NFR-O1 attaches L7 denials,
+  stripped headers/tools, and budget events as findings and so needs the
+  same verdict-independent findings slot; that change builds the slot and
+  routes base allowlist denials through it (its NFR-O1 now names allowlist
+  denials, task 2.7, sandbox-egress delta MODIFIED "Denials are captured
+  as structured findings"). Accordingly this change's sandbox-egress spec
+  claims capture and read-back only; the report-attachment scenario moves
+  to the hardening delta so it does not sync into stable specs as done.

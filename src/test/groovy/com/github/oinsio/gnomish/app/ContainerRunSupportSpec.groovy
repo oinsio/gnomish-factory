@@ -10,9 +10,12 @@ import com.github.oinsio.gnomish.adapter.git.AttemptCommitRef
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
+import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.adapter.workspace.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -39,7 +42,6 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     def docker = new ScriptedSandboxDocker()
     def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false)
     Path cloneDir
@@ -48,8 +50,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         Files.writeString(cloneDir.resolve('a.txt'), 'seed\n')
-        gitRunner.run(cloneDir, 'add', 'a.txt')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir)
         origin = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', origin.toString())
     }
@@ -147,6 +148,28 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         ])
     }
 
+    // FR17: readFinalState reads back the exact state.json content committed on the branch tip —
+    // asserted on the real position, not merely "did not throw" (M4 mutation-gate coverage).
+    def "readFinalState reads back the exact state.json content committed on the branch tip"() {
+        given: 'a task branch carrying a committed state.json alongside task.json'
+        def support = support()
+        createTask(support)
+        def dto = StateJsonMapper.toDto(TaskState.atStageStart('build'))
+        def json = TaskStateJson.mapper().writeValueAsString(dto)
+        def originalBranch = gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()
+        gitOutput(cloneDir, 'checkout', 'gnomish/T-1')
+        Files.writeString(cloneDir.resolve('.gnomish-task/state.json'), json)
+        gitOutput(cloneDir, 'add', '.gnomish-task/state.json')
+        gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '-m', 'state')
+        gitOutput(cloneDir, 'checkout', originalBranch)
+
+        when:
+        def state = support.readFinalState()
+
+        then:
+        (state.position() as Position.AtStage).name() == 'build'
+    }
+
     // NFR-R1: a branch that disappeared mid-run is an honest IllegalStateException naming it,
     // never a bare NullPointerException from the ref lookup.
     def "reading the branch tip of a disappeared branch names the branch honestly"() {
@@ -219,10 +242,9 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
     // FR3: create()'s conditional adds the GitHub check token to the scrubbed credential set only
     // when factory.check.github is actually configured — exercised through the real static
-    // factory (construction alone never touches docker), and observed via the composed
-    // ChildEnvAllowlist's private state (Groovy field access, the same idiom
-    // GithubCheckClientFactorySpec already uses), since neither branch is otherwise observable
-    // without materializing a real environment.
+    // factory (construction alone never touches docker), and observed via
+    // ContainerEnvironments#scrubsCredential, a testing seam over the composed allowlist (FR9),
+    // since neither branch is otherwise observable without materializing a real environment.
     def "create scrubs the GitHub check token from the allowlist's credential set only when the check is configured"() {
         given:
         def configured = testProperties(check: new FactoryProperties.Check(
@@ -239,9 +261,8 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
                 ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, unconfigured, [])
 
         then:
-        configuredSupport.@environments.@allowlist.@credentialNames.contains(GithubCheckClientFactory.TOKEN_ENV_VAR)
-        !unconfiguredSupport.@environments.@allowlist.@credentialNames
-                .contains(GithubCheckClientFactory.TOKEN_ENV_VAR)
+        configuredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)
+        !unconfiguredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)
     }
 
     // FR12: lease() returns the run's real EnvironmentLease — not null — and it is the very

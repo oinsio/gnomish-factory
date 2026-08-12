@@ -2,14 +2,12 @@ package com.github.oinsio.gnomish.adapter.environment;
 
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,36 +113,12 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
 
     @Override
     public void putFile(String path, byte[] content) {
-        Path resolved = channels().resolve(path);
-        try {
-            Path parent = resolved.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Files.write(resolved, content);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not write channel file " + path, e);
-        }
+        HostChannelFiles.putFile(channels(), path, content);
     }
 
     @Override
     public Optional<byte[]> readFile(String path, long sizeCap) {
-        if (sizeCap <= 0) {
-            throw new IllegalArgumentException("readFile sizeCap must be positive, got " + sizeCap);
-        }
-        Path resolved = channels().resolve(path);
-        if (!Files.isRegularFile(resolved)) {
-            return Optional.empty();
-        }
-        try (InputStream in = Files.newInputStream(resolved)) {
-            byte[] capped = in.readNBytes((int) Math.min(sizeCap, Integer.MAX_VALUE));
-            if (in.read() != -1) {
-                log.warn("channel file {} exceeded read cap {} bytes; truncated", path, sizeCap);
-            }
-            return Optional.of(capped);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read channel file " + path, e);
-        }
+        return HostChannelFiles.readFile(channels(), path, sizeCap, log);
     }
 
     @Override
@@ -160,7 +134,7 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
         }
         scratch = null;
         channels = null;
-        deleteRecursively(toRemove);
+        HostChannelFiles.deleteRecursively(toRemove, log);
     }
 
     @Override
@@ -187,22 +161,5 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
             throw new IllegalStateException("environment not materialized: scratch area unavailable");
         }
         return s;
-    }
-
-    private static void deleteRecursively(Path root) {
-        try (Stream<Path> walk = Files.walk(root)) {
-            walk.sorted((a, b) -> b.getNameCount() - a.getNameCount())
-                    .forEach(HostTaskExecutionEnvironment::deleteQuietly);
-        } catch (IOException e) {
-            log.warn("could not fully remove scratch area {}: {}", root, e.toString());
-        }
-    }
-
-    private static void deleteQuietly(Path path) {
-        try {
-            Files.deleteIfExists(path);
-        } catch (IOException e) {
-            log.warn("could not remove scratch entry {}: {}", path, e.toString());
-        }
     }
 }
