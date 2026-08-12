@@ -95,7 +95,7 @@ tracker:
         def factory = new RecordingTrackerAdapterFactory(tracker)
         def clock = Clock.fixed(NOW, ZoneOffset.UTC)
         def factoryProperties = new FactoryProperties(
-                INSTANCE_NAME, null, null, new FactoryProperties.Tracker(Duration.ofMinutes(2), Duration.ofHours(1)))
+                INSTANCE_NAME, null, null, new FactoryProperties.Tracker(Duration.ofMinutes(2), Duration.ofHours(1)), null)
         def trackerValidatorRegistry = TrackerValidatorStub.acceptingGithub()
         def boardCommand = new BoardCommand(clock, factoryProperties, [github: factory], trackerValidatorRegistry)
 

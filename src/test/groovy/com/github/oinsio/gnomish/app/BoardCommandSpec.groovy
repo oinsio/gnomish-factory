@@ -80,7 +80,7 @@ tracker:
         def factory = new RecordingTrackerAdapterFactory(tracker)
         new BoardCommand(
                 Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
                 TrackerValidatorStub.acceptingGithub())
     }
@@ -97,7 +97,7 @@ tracker:
         def factory = new RecordingTrackerAdapterFactory(tracker)
         def command = new BoardCommand(
                 Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
                 TrackerValidatorStub.acceptingGithub())
 

@@ -76,7 +76,7 @@ tracker:
                 Clock.fixed(Instant.parse('2026-08-06T00:00:00Z'), ZoneOffset.UTC),
                 sleeper,
                 homeDir,
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: new RecordingTrackerAdapterFactory(tracker)],
                 TrackerValidatorStub.acceptingGithub())
     }
