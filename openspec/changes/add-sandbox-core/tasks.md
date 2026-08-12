@@ -21,7 +21,7 @@ ladder review note in explore notes).
 - [x] 2.2 Tighten-only validation: reject host/adapter requests and weakenings as located `ConfigError`s (FR14)
 - [x] 2.3 Loader specs: declarations load typed; violations reported; defaults applied (FR12–FR14)
 - [x] 2.4 External check declaration gains optional pin paths (definition files of the check); repo-relative data, never read by the loader, exempt from the `.gnomish/` traversal rule; reject absolute / non-normalized (`.`, `..`) forms as located `ConfigError`; typed into the model, loader specs (FR16)
-- [x] 2.5 Pipeline-law binding per invocation: law read at invocation start from the factory clone of the base branch (git modes) or the workspace snapshot (in-place), frozen for the invocation; control files and judge criteria read from the law source, never lazily from the working copy (`ControlFilePreflight` rework); contract test proves gnome-branch edits never affect the running task (FR19, NFR-S2, D14)
+- [x] 2.5 Pipeline-law binding per invocation: law read at invocation start from the factory clone of the base branch (git modes) or the workspace snapshot (in-place), frozen for the invocation; control files and judge criteria read from the law source, never lazily from the working copy (`ControlFilePreflight` rework); contract test proves gnome-branch edits never affect the running task — `PipelineLawReaderSpec` pins the freeze-in-memory property mode-agnostically, and `GitModeLawBindingSpec` drives a real `GitModeRunner` where law source (clone) and gnome worktree are distinct dirs, tampering `instructions.md` mid-run (committed onto the gnome branch) and asserting the captured attempt-2 prompt still carries the clone's law (FR19, NFR-S2, D14)
 
 ## 3. Binding resolution and reconciliation
 

@@ -87,6 +87,7 @@ for per-attempt env var overrides.
 | `premature-death`            | process exits non-zero after an orphaned `tool_use` with no matching `tool_result` and no `result` event |
 | `hangs-forever`              | process sleeps well past any test's `roundTimeout` budget before exiting, standing in for a hung CLI (task 6.5) |
 | `decision-then-plain`        | multi-attempt: attempt 1 asks the same decision as `decision-needed`, attempt 2+ (same cwd) plays `plain-round` — the agent-raised decision round-trip (task 9.5, FR3, UX3, D1) |
+| `law-tamper-then-plain`      | multi-attempt: attempt 1 rewrites its own `instructions.md` control file in the workspace (a `TAMPERED LAW` `workspace-files/` overwrite) and produces no output, so a `files_exist` check fails and burns the attempt; attempt 2+ (same cwd) plays `plain-round` — the reward-hacking stand-in proving a mid-run law edit never re-enters the frozen law (FR19, NFR-S2, D14 of add-sandbox-core) |
 
 Every scenario's `stdout.jsonl` is hand-written to resemble the real Claude
 Code CLI's `--output-format stream-json --verbose` protocol (init event,
