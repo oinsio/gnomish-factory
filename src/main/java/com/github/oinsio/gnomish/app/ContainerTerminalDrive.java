@@ -35,6 +35,9 @@ final class ContainerTerminalDrive {
             RunArguments.InteractiveMode interactiveMode,
             Path cloneDir,
             SnapshotTipCheck.@Nullable InterruptedVerification pending) {
+        // Runner start prunes objects a dead instance left labelled (FR11, NFR-R2), keeping this
+        // task's own environments so a reattaching resume is never swept; no daemon = a no-op.
+        support.sweepOrphans();
         var assembled = assembly.withSandbox(support.pieces(pending))
                 .assemble(definition, context, state, interactiveMode, support.persistence(), List.of(), cloneDir);
 

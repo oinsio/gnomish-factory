@@ -29,7 +29,24 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR3, FR12, FR21, FR25, D19 of add-sandbox-core.
  */
 record ContainerGitModeRunner(
-        ManualRunAssembly assembly, SandboxProperties sandboxProperties, FactoryProperties factoryProperties) {
+        ManualRunAssembly assembly,
+        SandboxProperties sandboxProperties,
+        FactoryProperties factoryProperties,
+        ContainerSupportFactory supportFactory) {
+
+    /** Production wiring: per-run support built by {@link ContainerRunSupport#create}. */
+    ContainerGitModeRunner(
+            ManualRunAssembly assembly, SandboxProperties sandboxProperties, FactoryProperties factoryProperties) {
+        this(assembly, sandboxProperties, factoryProperties, ContainerRunSupport::create);
+    }
+
+    /**
+     * Seam constructor ({@link ContainerSupportFactory}, mirroring {@link ContainerResumeRunner}):
+     * daemon-free specs bind a factory whose environments run over a scripted fake docker CLI, so
+     * the fresh-run path — including its runner-start orphan sweep (FR11) — is exercised without a
+     * daemon; behavior is otherwise identical.
+     */
+    ContainerGitModeRunner {}
 
     /**
      * Runs one fresh container-mode task to a terminal boundary (mirroring {@link
@@ -61,7 +78,7 @@ record ContainerGitModeRunner(
         System.out.println("container mode: environment " + TaskIdSanitizer.sanitize(taskId));
 
         var support =
-                ContainerRunSupport.create(cloneDir, taskId, segments, sandboxProperties, factoryProperties, List.of());
+                supportFactory.create(cloneDir, taskId, segments, sandboxProperties, factoryProperties, List.of());
         createTask(support, taskId, context, base);
 
         ContainerTerminalDrive.run(

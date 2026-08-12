@@ -182,6 +182,15 @@ final class ContainerRunSupport {
     }
 
     /**
+     * Runs the startup orphan sweep (FR11, NFR-R2): objects a dead instance left labelled but no
+     * live task owns are removed, this task's own environments preserved. Delegates to the
+     * environments seam; a missing Docker runtime is a logged no-op, never a failure.
+     */
+    void sweepOrphans() {
+        environments.sweepOrphans();
+    }
+
+    /**
      * Completed terminal boundary (D19 ordering): dispose the environment first — the last
      * in-box commit was the state commit — then record the outcome and cleanup commits
      * factory-side, then push best-effort.

@@ -89,6 +89,9 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
             'gnomish-box-' + KEY
         ])
 
+        and: 'the runner-start orphan sweep ran (FR11): the factory-labelled container listing fired'
+        docker.runs.any { it.first() == 'ps' && it.contains('label=com.github.oinsio.gnomish.factory') }
+
         cleanup:
         System.err = originalErr
     }

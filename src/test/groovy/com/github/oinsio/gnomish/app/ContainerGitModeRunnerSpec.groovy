@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.environment.ScriptedSandboxDocker
 import com.github.oinsio.gnomish.adapter.environment.Segment
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -57,7 +58,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
     }
 
-    private List<Segment> segments() {
+    private static List<Segment> segments() {
         [
             new Segment(AdapterBinding.CONTAINER, [stage()])
         ]
@@ -65,8 +66,9 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
 
     /**
      * A read-only {@link ContainerRunSupport} over the same bare-object clone {@code run()} just
-     * wrote to, for reading back {@code task.json} — a fresh {@link GitObjects} handle over the
-     * same {@code .git} directory, docker-independent.
+     * wrote to, for reading back {@code task.json} — a fresh {@link
+     * com.github.oinsio.gnomish.gitobjects.GitObjects GitObjects} handle over the same {@code
+     * .git} directory, docker-independent.
      */
     private ContainerRunSupport readBack(String taskId) {
         def environments = docker.environments(KEY, cloneDir, sandbox, tempDir.resolve('guard'))
@@ -74,16 +76,19 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
     }
 
     /**
-     * Drives one fresh container-mode run through the real {@code ContainerRunSupport.create}
-     * wiring (production construction, not the seam constructor) — safe daemon-free because
-     * construction never touches docker, and (per {@code ContainerTerminalDriveSpec}) an
-     * interactive round never closes with a snapshot commit, so the sandboxed persistence always
-     * aborts the round before any further docker subprocess would run. Every call below is
-     * expected to raise {@link AbortedException}; that abort is itself the proof that {@code
-     * run()} reached the engine loop.
+     * Drives one fresh container-mode run through the seam constructor over the scripted fake
+     * docker (mirroring {@code ContainerResumeSpecBase.runner}) — fully daemon-free, including the
+     * runner-start orphan sweep (FR11), whose read-only listings the fake answers empty. Per
+     * {@code ContainerTerminalDriveSpec}, an interactive round never closes with a snapshot
+     * commit, so the sandboxed persistence always aborts the round; every call below is expected
+     * to raise {@link AbortedException}, that abort itself proving {@code run()} reached the loop.
      */
     private void run(String taskId, String base, PrintStream output, InputStream input = lines()) {
-        def runner = new ContainerGitModeRunner(newAssembly(input, output), sandbox, testProperties())
+        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, List<String> creds ->
+            def environments = docker.environments(TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
+            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s)
+        } as ContainerSupportFactory
+        def runner = new ContainerGitModeRunner(newAssembly(input, output), sandbox, testProperties(), factory)
         runner.run(cloneDir, base, pipeline(), segments(), context(taskId), TaskState.atStageStart('build'),
                 RunArguments.InteractiveMode.ALL)
     }

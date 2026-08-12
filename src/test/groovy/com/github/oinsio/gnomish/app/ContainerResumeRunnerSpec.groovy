@@ -133,7 +133,9 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // FR6: resumeFromRecordedPosition's other branch — a recorded position at PipelineEnd (not
     // AtStage) neither leases an environment nor salvages: there is no round in flight to recover.
     // The negated-conditional mutant of the "instanceof Position.AtStage" check would instead
-    // materialize a box here, which this test's empty-docker assertion catches.
+    // materialize a box here — a `docker run` plus an in-box self-check exec — which the
+    // no-materialize assertions below catch. The read-only startup orphan sweep (FR11) may still
+    // list factory objects; it never materializes or execs, so those listings are tolerated.
     def "resuming an interrupted task already at PipelineEnd touches no environment at all"() {
         given: 'an interrupted task (no outcome) whose recorded position is already PipelineEnd'
         repository.createTask(context('T-NOENV'), 'HEAD')
@@ -142,9 +144,12 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         when:
         resume('T-NOENV', lines(''), sink())
 
-        then: 'no docker management call and no in-box exec ever ran'
-        docker.runs.isEmpty()
+        then: 'no box is materialized (no docker run) and no in-box exec ever ran'
+        !docker.runs.any { it.first() == 'run' }
         docker.starts.isEmpty()
+
+        and: 'only the startup orphan sweep ran — read-only listings, no create/remove'
+        docker.runs.every { it.first() in ['ps', 'volume', 'network'] && it.contains(it.first() == 'ps' ? '-a' : 'ls') }
 
         and: 'the task still completed — no environment was needed to report it'
         taskJsonBelowTip('T-NOENV').contains('"completed"')

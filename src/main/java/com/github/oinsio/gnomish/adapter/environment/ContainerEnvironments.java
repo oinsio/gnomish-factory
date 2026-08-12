@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The per-task construction seam for guarded container environments (the
@@ -166,6 +167,19 @@ public final class ContainerEnvironments {
      */
     public void disposeExisting() {
         new ContainerEnvironmentDisposal(docker).dispose(baseKey);
+    }
+
+    /**
+     * The startup orphan sweep (FR11, NFR-R2): removes every factory-labelled
+     * container, volume, and network left by a dead instance, preserving only
+     * this task's three role environments — the round box, the fresh judge box
+     * ({@code -j}), and the fresh verification box ({@code -v}) — so a resume that
+     * reattaches to a kept environment is never swept out from under itself. A
+     * missing Docker runtime is not an error: the sweep logs and does nothing,
+     * never blocking startup. Mirrors {@code git worktree prune} at runner start.
+     */
+    public void sweepOrphans() {
+        new ContainerOrphanSweeper(docker).sweep(Set.of(baseKey, baseKey + "-j", baseKey + "-v"));
     }
 
     private SelfCheckedEnvironment environment(String key) {
