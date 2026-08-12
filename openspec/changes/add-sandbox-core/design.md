@@ -280,9 +280,12 @@ without a commit existing at verify time), external checks poll CI runs
 of exactly the pushed attempt commit (fixing today's fuzzy
 triggered-by-mid-round-pushes semantics). State then persists as a
 separate **state commit** via `putFile` + in-box commit. Host mode keeps
-today's single round commit (behavior-neutral). The engine is untouched:
-the sequence hides in adapters, and the concrete `Workspace` (an empty
-marker interface) carries the attempt-commit ref to check runners.
+today's single round commit (behavior-neutral). The engine changes stay
+minimal — an `AttemptDelivery` precondition gates external polling and the
+CI `runUrl` threads through `PollStatus.Pass`/`Verdict.Pass` (both
+delta-specced) — but the round→harvest→verify sequence otherwise hides in
+adapters, and the concrete `Workspace` (an empty marker interface) carries
+the attempt-commit ref to check runners.
 Resume gains one intermediate state: snapshot-without-state = died during
 verification → re-verify, no attempt burned. *Alternatives rejected:*
 verify the box tree through the channel — untrusted answers, per-adapter

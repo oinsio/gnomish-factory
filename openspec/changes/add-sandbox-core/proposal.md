@@ -424,3 +424,23 @@ and GHA executor (E) follow as separate changes.
   today. Task 8.4 here already wires the pin-check guard around every
   `ExternalCheckClient` assembly. Resolved in this change: FR26, task
   8.4, github-external-check delta.
+- Q6 (defect found during implementation review): this change's NFR-O1 /
+  UX3 report-attachment is only half met — `GuardDenialLog` and
+  `EgressGuard.denialFindings()` exist and are tested, but no production
+  code reads them, so denials never reach the task report and the
+  "Denied exfiltration attempt reaches the report" scenario fails.
+  Two structural gaps, not a forgotten call: (a) the
+  `TaskExecutionEnvironment` port exposes no denial accessor — only the
+  concrete `SelfCheckedEnvironment.guard()` does — so the round/check
+  boundaries, which hold the port type, cannot reach denials; (b) the
+  report model has no verdict-independent findings slot — findings reach
+  state.json/status.json only via a check `Verdict.Fail`, and the round
+  verdict is the last check's verdict, so a passing attempt has no field
+  to carry a denial and folding denials into a `Verdict.Fail` would flip
+  the stage outcome (NFR-O1 is observability, not a gate). Task 6.2
+  delegated attachment to task 8.2's funnel, but 8.2 routed only
+  judge/external/command findings; the denial channel was never built.
+  Fixing it needs a report-model change (a denial-findings field
+  independent of the check verdict) — exactly parallel to Q4/NFR-O2/task
+  8.4a. Deferred to a separate change; tracker-report reach to be decided
+  there.

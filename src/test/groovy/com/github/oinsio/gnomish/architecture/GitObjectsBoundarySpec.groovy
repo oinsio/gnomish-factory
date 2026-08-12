@@ -37,6 +37,7 @@ class GitObjectsBoundarySpec extends Specification {
 
         where:
         forbiddenPackage << [
+            'com.github.oinsio.gnomish',
             '..adapter..',
             '..app..',
             '..domain..',

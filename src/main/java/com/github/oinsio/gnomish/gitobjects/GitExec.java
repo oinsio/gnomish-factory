@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.gitobjects;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
