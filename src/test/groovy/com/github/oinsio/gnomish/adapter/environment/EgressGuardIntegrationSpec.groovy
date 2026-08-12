@@ -20,7 +20,9 @@ import spock.lang.TempDir
  * destination (a local HTTP target on the bridge, standing in for WireMock)
  * passes, the isolation metadata matches; the denied probe's denial then reads
  * back as a structured finding, and a stopped guard is brought back by the
- * factory.
+ * factory. A direct DNS query to an external resolver from inside the box is
+ * proven to get no answer — port-53 egress, a known exfiltration channel, has
+ * no route on the internal-only network (FR7).
  *
  * <p>Docker-gated and guard-image-gated (skips cleanly with no daemon or no
  * pullable mitmproxy image).
@@ -74,6 +76,30 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
 
         then: 'the blocked destination is a visible structured finding (NFR-O1, UX3)'
         findings.any { it.message().contains(EnvironmentSelfCheck.DENIED_PROBE_HOST) }
+    }
+
+    def "FR7: a direct DNS query to an external resolver gets no answer"() {
+        when: 'a process in the box resolves a name against 8.8.8.8 directly, bypassing the guard'
+        def handle = env.exec(new ExecCommand(
+                [
+                    'timeout',
+                    '5',
+                    'nslookup',
+                    'gnomish-dns-probe.invalid',
+                    '8.8.8.8'
+                ],
+                [:],
+                null,
+                true))
+        def output = new String(handle.output().readAllBytes(), 'UTF-8')
+        def exit = handle.waitForExit()
+
+        then: 'the query gets no answer — the internal-only network has no port-53 route out'
+        // A resolved answer would exit 0 and print a "Name:" answer section; the
+        // internal network denies the packet a route, so nslookup times out under
+        // `timeout` (non-zero exit) and never reaches the answer section (FR7).
+        exit != 0
+        !output.contains('Name:')
     }
 
     def "NFR-R1: a stopped guard is brought back by ensureRunning"() {
