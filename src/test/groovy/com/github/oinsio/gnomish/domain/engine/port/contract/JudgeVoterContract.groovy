@@ -67,7 +67,9 @@ abstract class JudgeVoterContract extends Specification implements PortContractS
         expect: 'the verdict is a Pass and the tokens are carried'
         outcome.get().vote().verdict() instanceof Verdict.Pass
         !outcome.get().vote().tokensByModel().isEmpty()
-        outcome.get().vote().tokensByModel().values().every { it instanceof TokenUsage }
+        outcome.get().vote().tokensByModel().values().every {
+            it instanceof TokenUsage
+        }
     }
 
     // FR14: tokensByModel may be empty — a vote may report no token counts (NFR-C1, D4)

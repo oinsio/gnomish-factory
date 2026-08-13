@@ -158,7 +158,9 @@ class CliJudgeVoterSpec extends Specification {
         given:
         def properties = FakeAgentSupport.propertiesFor('judge-verdict-pass')
         def events = []
-        AgentProgressListener listener = { AgentProgressEvent event -> events << event }
+        AgentProgressListener listener = { AgentProgressEvent event ->
+            events << event
+        }
         def voter = new CliJudgeVoter(properties, clock, listener, LAW)
 
         when:

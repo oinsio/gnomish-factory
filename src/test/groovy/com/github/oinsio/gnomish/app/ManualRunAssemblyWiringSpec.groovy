@@ -169,7 +169,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
         given: 'an assembly whose operator passthrough lists the check token name'
         def assembly = new ManualRunAssembly(
                 new com.github.oinsio.gnomish.adapter.console.SystemConsoleIO(
-                new ByteArrayInputStream(new byte[0]), System.out),
+                        new ByteArrayInputStream(new byte[0]), System.out),
                 new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
                 new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
                 new com.github.oinsio.gnomish.adapter.engine.SystemClock(),

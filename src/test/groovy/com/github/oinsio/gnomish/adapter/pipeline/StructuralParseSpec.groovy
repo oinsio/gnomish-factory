@@ -43,12 +43,12 @@ class StructuralParseSpec extends Specification {
         }
 
         where:
-        scenario                | file                          | body                                       | type          || where                       | message
-        'malformed YAML'        | 'config.yaml'                 | 'foo: [unclosed\n'                         | ConfigDto     || 'config.yaml'               | 'malformed YAML: the file is not well-formed and cannot be parsed'
-        'type mismatch'         | 'pipeline.yaml'               | 'stages: notalist\n'                       | PipelineDto   || 'stages'                    | "type mismatch: 'stages' has the wrong YAML type"
-        'unknown property'      | 'config.yaml'                 | 'schemaVersion: "1"\nbogus: x\n'           | ConfigDto     || 'bogus'                     | "unknown field 'bogus'"
-        'unknown verify type'   | 'stages/build/stage.yaml'     | 'verify:\n  - type: foo\n'                 | StageDto      || 'verify[0]'                 | "unknown verify check type 'foo'; known types are builtin, command, external, judge"
-        'unknown input kind'    | 'stages/build/stage.yaml'     | 'inputs:\n  - kind: bar\n'                 | StageDto      || 'inputs[0]'                 | "unknown input kind 'bar'; known kinds are internal, source"
-        'missing verify type'   | 'stages/build/stage.yaml'     | 'verify:\n  - name: x\n'                   | StageDto      || 'verify[0]'                 | "missing required verify check 'type'; known types are builtin, command, external, judge"
+        scenario | file | body | type || where | message
+        'malformed YAML' | 'config.yaml' | 'foo: [unclosed\n' | ConfigDto || 'config.yaml' | 'malformed YAML: the file is not well-formed and cannot be parsed'
+        'type mismatch' | 'pipeline.yaml' | 'stages: notalist\n' | PipelineDto || 'stages' | "type mismatch: 'stages' has the wrong YAML type"
+        'unknown property' | 'config.yaml' | 'schemaVersion: "1"\nbogus: x\n' | ConfigDto || 'bogus' | "unknown field 'bogus'"
+        'unknown verify type' | 'stages/build/stage.yaml' | 'verify:\n  - type: foo\n' | StageDto || 'verify[0]' | "unknown verify check type 'foo'; known types are builtin, command, external, judge"
+        'unknown input kind' | 'stages/build/stage.yaml' | 'inputs:\n  - kind: bar\n' | StageDto || 'inputs[0]' | "unknown input kind 'bar'; known kinds are internal, source"
+        'missing verify type' | 'stages/build/stage.yaml' | 'verify:\n  - name: x\n' | StageDto || 'verify[0]' | "missing required verify check 'type'; known types are builtin, command, external, judge"
     }
 }

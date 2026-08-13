@@ -93,11 +93,15 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         tree.contains('instructions.md')
 
         and: 'every other path is a .gnomish-task/ structural artifact'
-        tree.findAll { !it.startsWith('.gnomish-task/') && it != 'output.txt' && it != 'instructions.md' }
+        tree.findAll {
+            !it.startsWith('.gnomish-task/') && it != 'output.txt' && it != 'instructions.md'
+        }
         .isEmpty()
 
         and: 'no decision-file or fake-agent-log scratch path leaked into the tree'
-        tree.every { !it.contains('gnomish-decision-') && !it.contains('gnomish-findings-') }
+        tree.every {
+            !it.contains('gnomish-decision-') && !it.contains('gnomish-findings-')
+        }
     }
 
     // NFR-S2: DecisionFileTransport's production constructor (adapter/agent/DecisionFileTransport
@@ -125,7 +129,9 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         }
         try (def stream = Files.walk(root)) {
             return stream
-                    .filter { Files.isDirectory(it) && it.fileName.toString().startsWith('gnomish-decision-') }
+                    .filter {
+                        Files.isDirectory(it) && it.fileName.toString().startsWith('gnomish-decision-')
+                    }
                     .toList()
         }
     }

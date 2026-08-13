@@ -45,7 +45,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
 
         def stage = stageDefinition()
         def boxCounter = 0
-        lease = new EnvironmentLease( {
+        lease = new EnvironmentLease({
             ->
             def boxRoot = Files.createDirectories(tempDir.resolve('box' + (boxCounter++)))
             new LocalBoxEnvironment(cloneDir, boxRoot)

@@ -17,16 +17,16 @@ class RunExitCodeMapperSpec extends Specification {
         mapper.getExitCode(exception) == expectedCode
 
         where:
-        exception                                                                  | expectedCode
-        new UsageException('bad flag')                                            | 2
-        new PipelineLoadFailedException(['error line'])                           | 3
-        new InputExhaustedException()                                             | 4
-        new DivergedBranchException('PROJ-1', 'gnomish/PROJ-1', 'aaa', 'bbb')      | 5
-        new TaskNotFoundException('PROJ-1')                                       | 6
-        new EscalationEofException(new ConsoleClosedException())                  | 10
-        new CheckpointEofException(new ConsoleClosedException())                  | 11
-        new AbortedException('persist failed')                                    | 12
-        new InternalErrorException('mismatch')                                    | 1
+        exception | expectedCode
+        new UsageException('bad flag') | 2
+        new PipelineLoadFailedException(['error line']) | 3
+        new InputExhaustedException() | 4
+        new DivergedBranchException('PROJ-1', 'gnomish/PROJ-1', 'aaa', 'bbb') | 5
+        new TaskNotFoundException('PROJ-1') | 6
+        new EscalationEofException(new ConsoleClosedException()) | 10
+        new CheckpointEofException(new ConsoleClosedException()) | 11
+        new AbortedException('persist failed') | 12
+        new InternalErrorException('mismatch') | 1
     }
 
     def "getExitCode falls back to 1 for an unrecognized Throwable"() {

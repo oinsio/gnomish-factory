@@ -35,7 +35,9 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
 
     private static FeedCycle cycle(Tracker tracker, int wipLimit = 2) {
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
-        def outageRetry = new FeedOutageRetry(sleeper, { Duration.ofSeconds(1) })
+        def outageRetry = new FeedOutageRetry(sleeper, {
+            Duration.ofSeconds(1)
+        })
         new FeedCycle(
                 tracker, INSTANCE, new SlotLedger(1), { TaskRef ref -> } as SlotRunner,
                 BASE, CAP, wipLimit, new Random(0), new FeedStateLogger(), outageRetry)
@@ -47,8 +49,8 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         given:
         def declined = new CopyOnWriteArrayList<TaskRef>()
         Tracker tracker = [
-            listReady      : { int limit -> [task('github:o/r#1', true)] },
-            listOpen       : { -> [] },
+            listReady : { int limit -> [task('github:o/r#1', true)] },
+            listOpen : { -> [] },
             declineFinished: { TaskRef ref, String message -> declined << ref },
         ] as Tracker
 
@@ -67,13 +69,13 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         given:
         def attempted = new CopyOnWriteArrayList<TaskRef>()
         Tracker tracker = [
-            listReady      : { int limit ->
+            listReady : { int limit ->
                 [
                     task('github:o/r#1', true),
                     task('github:o/r#2', true)
                 ]
             },
-            listOpen       : { -> [] },
+            listOpen : { -> [] },
             declineFinished: { TaskRef ref, String message ->
                 attempted << ref
                 if (ref == new TaskRef('github:o/r#1')) {
@@ -103,8 +105,8 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def attempts = new CopyOnWriteArrayList<TaskRef>()
         def declineCount = new AtomicInteger(0)
         Tracker tracker = [
-            listReady      : { int limit -> [task('github:o/r#1', true)] },
-            listOpen       : { -> [] },
+            listReady : { int limit -> [task('github:o/r#1', true)] },
+            listOpen : { -> [] },
             declineFinished: { TaskRef ref, String message ->
                 attempts << ref
                 if (declineCount.getAndIncrement() == 0) {
@@ -134,15 +136,17 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         given:
         def declined = new CopyOnWriteArrayList<TaskRef>()
         Tracker tracker = [
-            listReady      : { int limit ->
+            listReady : { int limit ->
                 [
                     task('github:o/r#finished', true),
                     task('github:o/r#fresh', false)
                 ]
             },
-            listOpen       : { -> [] },
+            listOpen : { -> [] },
             declineFinished: { TaskRef ref, String message -> declined << ref },
-            claim          : { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
 
         when:

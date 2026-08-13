@@ -61,10 +61,10 @@ class EnvironmentHarvestParentGuardSpec extends Specification implements BareGit
 
         when:
         persistence.persist(TASK, TaskState.atStageStart('implement'), new ToolTrace(
-                new AttemptKey(TASK, 'implement', 1),
-                [
-                    new ToolCall(0, 'bash', Instant.parse('2026-08-08T09:00:00Z'), Duration.ofMillis(100))
-                ]))
+                        new AttemptKey(TASK, 'implement', 1),
+                        [
+                            new ToolCall(0, 'bash', Instant.parse('2026-08-08T09:00:00Z'), Duration.ofMillis(100))
+                        ]))
 
         then: 'the violation is explicit, never a NullPointerException from the missing parent'
         def ex = thrown(RoundBoundaryViolationException)

@@ -98,7 +98,9 @@ class LifecycleStateTrackerSpec extends Specification {
     // state transition — transitionTo/stop must still commit the new view.
     def "a throwing dirty notifier does not propagate out of transitionTo or stop"() {
         given:
-        DirtyNotifier notifier = { -> throw new RuntimeException('notifier boom') }
+        DirtyNotifier notifier = {
+            -> throw new RuntimeException('notifier boom')
+        }
         def tracker = new LifecycleStateTracker(T0, notifier)
 
         when:

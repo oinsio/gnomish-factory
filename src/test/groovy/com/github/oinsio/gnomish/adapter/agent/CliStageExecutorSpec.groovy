@@ -151,7 +151,9 @@ class CliStageExecutorSpec extends Specification {
         given:
         def properties = FakeAgentSupport.propertiesFor('plain-round')
         def events = []
-        AgentProgressListener listener = { AgentProgressEvent event -> events << event }
+        AgentProgressListener listener = { AgentProgressEvent event ->
+            events << event
+        }
         def executor = new CliStageExecutor(properties, clock, listener, LAW)
 
         when:

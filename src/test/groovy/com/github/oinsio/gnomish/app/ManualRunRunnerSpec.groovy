@@ -429,10 +429,12 @@ advancement: auto
         then:
         noExceptionThrown()
         def output = capturedOut.toString('UTF-8')
-        def reminderLine = output.readLines().find { it.contains('in-place mode') }
+        def reminderLine = output.readLines().find {
+            it.contains('in-place mode')
+        }
         reminderLine != null
         reminderLine.contains('no resume')
-        output.indexOf(reminderLine) < output.indexOf('do the thing')
+        output.indexOf(reminderLine) <output.indexOf('do the thing')
 
         cleanup:
         System.in = originalIn
@@ -463,13 +465,17 @@ advancement: auto
         then:
         noExceptionThrown()
         def output = capturedOut.toString('UTF-8')
-        def branchLine = output.readLines().find { it.contains('git mode: branch') }
-        def worktreeLine = output.readLines().find { it.contains('git mode: worktree') }
+        def branchLine = output.readLines().find {
+            it.contains('git mode: branch')
+        }
+        def worktreeLine = output.readLines().find {
+            it.contains('git mode: worktree')
+        }
         branchLine != null
         branchLine.contains('gnomish/manual-test-git')
         worktreeLine != null
         worktreeLine.contains(worktreesRoot.toString())
-        output.indexOf(branchLine) < output.indexOf('do the thing')
+        output.indexOf(branchLine) <output.indexOf('do the thing')
         !output.contains('in-place mode')
 
         cleanup:
@@ -621,9 +627,9 @@ advancement: auto
         when:
         try {
             newRunner().run(new DefaultApplicationArguments(
-                    "--dir=${projectRoot}".toString(),
-                    '--resume=manual-test-resume',
-                    '--interactive'))
+                            "--dir=${projectRoot}".toString(),
+                            '--resume=manual-test-resume',
+                            '--interactive'))
         } finally {
             System.in = originalIn
             System.out = originalOut
@@ -664,8 +670,8 @@ advancement: auto
         UnsupportedStateFileVersionException thrownException = null
         try {
             newRunner().run(new DefaultApplicationArguments(
-                    "--dir=${projectRoot}".toString(),
-                    '--resume=manual-test-badversion'))
+                            "--dir=${projectRoot}".toString(),
+                            '--resume=manual-test-badversion'))
         } catch (UnsupportedStateFileVersionException ex) {
             thrownException = ex
         } finally {

@@ -25,8 +25,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : [
+            repo : 'acme/widgets',
+            labels : [
                 ready: [name: 'gnomish:ready', color: '2ea44f']
             ]
         ]
@@ -100,7 +100,7 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
+            repo : 'acme/widgets',
             (tokenKey): 'ghp_secret'
         ]
 
@@ -126,8 +126,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : [
+            repo : 'acme/widgets',
+            labels : [
                 working: [name: 'gnomish:working', color: '1f6feb']
             ]
         ]
@@ -140,8 +140,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : [ready: [color: '2ea44f']]
+            repo : 'acme/widgets',
+            labels : [ready: [color: '2ea44f']]
         ]
 
         when:
@@ -157,8 +157,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : [ready: [name: 'gnomish:ready']]
+            repo : 'acme/widgets',
+            labels : [ready: [name: 'gnomish:ready']]
         ]
 
         when:
@@ -174,8 +174,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : [ready: [name: 'gnomish:ready', color: color]]
+            repo : 'acme/widgets',
+            labels : [ready: [name: 'gnomish:ready', color: color]]
         ]
 
         when:
@@ -201,8 +201,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : [bogus: [name: 'x', color: '2ea44f']]
+            repo : 'acme/widgets',
+            labels : [bogus: [name: 'x', color: '2ea44f']]
         ]
 
         when:
@@ -219,8 +219,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : [ready: 'gnomish:ready']
+            repo : 'acme/widgets',
+            labels : [ready: 'gnomish:ready']
         ]
 
         when:
@@ -236,8 +236,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         given:
         def subsection = [
             'api-url': 'https://api.github.com',
-            repo     : 'acme/widgets',
-            labels   : 'not-a-map'
+            repo : 'acme/widgets',
+            labels : 'not-a-map'
         ]
 
         when:

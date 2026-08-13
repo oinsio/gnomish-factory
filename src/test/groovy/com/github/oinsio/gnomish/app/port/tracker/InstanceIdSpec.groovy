@@ -67,7 +67,9 @@ class InstanceIdSpec extends Specification {
         def sampleSize = 2000
 
         when:
-        def values = (1..sampleSize).collect { InstanceId.generate(name).value() }
+        def values = (1..sampleSize).collect {
+            InstanceId.generate(name).value()
+        }
 
         then:
         values.toSet().size() == sampleSize

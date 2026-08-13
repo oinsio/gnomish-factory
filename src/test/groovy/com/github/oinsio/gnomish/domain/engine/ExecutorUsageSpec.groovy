@@ -166,11 +166,11 @@ class ExecutorUsageSpec extends Specification {
         new ExecutorUsage(left, [], [:]).plus(new ExecutorUsage(right, [], [:])).wallTime() == expected
 
         where:
-        desc                    | left                   | right                  || expected
-        'both null'             | null                   | null                   || null
-        'present + null'        | Duration.ofSeconds(5)  | null                   || Duration.ofSeconds(5)
-        'null + present'        | null                   | Duration.ofSeconds(7)  || Duration.ofSeconds(7)
-        'present + present'     | Duration.ofSeconds(5)  | Duration.ofSeconds(7)  || Duration.ofSeconds(12)
+        desc | left | right || expected
+        'both null' | null | null || null
+        'present + null' | Duration.ofSeconds(5) | null || Duration.ofSeconds(5)
+        'null + present' | null | Duration.ofSeconds(7) || Duration.ofSeconds(7)
+        'present + present' | Duration.ofSeconds(5) | Duration.ofSeconds(7) || Duration.ofSeconds(12)
     }
 
     // FR5, NFR-C1, D4: plus unions token map keys and sums the four counts per shared key

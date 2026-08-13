@@ -23,7 +23,7 @@ class ThreadSleeperSpec extends Specification {
 
         then: 'elapsed time is at least the requested duration, generously bounded above'
         elapsedMs >= requested.toMillis()
-        elapsedMs < requested.toMillis() + 2000
+        elapsedMs <requested.toMillis() + 2000
     }
 
     def "interruption during sleep re-sets the thread's interrupt flag"() {

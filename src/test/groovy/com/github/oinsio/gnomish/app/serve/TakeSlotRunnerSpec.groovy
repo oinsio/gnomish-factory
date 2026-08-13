@@ -218,7 +218,9 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
 
         then:
         def ledgerFile = ObservabilityPaths.ledgerFile(tempDir, 'gnomish', LocalDate.now(java.time.ZoneOffset.UTC))
-        def lines = Files.readString(ledgerFile).split('\n').findAll { !it.isBlank() }
+        def lines = Files.readString(ledgerFile).split('\n').findAll {
+            !it.isBlank()
+        }
         lines.size() == 1
         lines[0].contains('"taskId":"PROJ-7"')
         lines[0].contains('"outcome":"delivered"')
@@ -249,7 +251,9 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         def slotRunner = newSlotRunner()
 
         when:
-        List<ILoggingEvent> events = captureLogs { slotRunner.run(new TaskRef('PROJ-6')) }
+        List<ILoggingEvent> events = captureLogs {
+            slotRunner.run(new TaskRef('PROJ-6'))
+        }
 
         then:
         events.any {
@@ -279,7 +283,9 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     // so it never takes down the daemon or another slot; MDC is still cleared afterward.
     def "swallows an exception from fetchTask and still clears MDC"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-3')) >> { throw new RuntimeException('tracker unreachable') }
+        tracker.fetchTask(new TaskRef('PROJ-3')) >> {
+            throw new RuntimeException('tracker unreachable')
+        }
         def slotRunner = newSlotRunner()
 
         when:

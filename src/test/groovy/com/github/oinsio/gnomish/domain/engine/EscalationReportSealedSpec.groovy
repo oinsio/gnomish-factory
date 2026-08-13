@@ -21,12 +21,12 @@ class EscalationReportSealedSpec extends Specification {
         describe(report) == expected
 
         where:
-        report                                                                       | expected
-        new EscalationReport.AttemptsExhausted(3)                                    | 'exhausted: 3'
-        new EscalationReport.DecisionNeeded('Q?', [])                                | 'decision: Q?'
-        new EscalationReport.CannotVerify(sampleCheck(), 'down', '')                 | 'cannot-verify: down'
-        new EscalationReport.PipelineMismatch('legacy')                              | 'mismatch: legacy'
-        new EscalationReport.CannotExecute('boom')                                   | 'cannot-execute: boom'
+        report | expected
+        new EscalationReport.AttemptsExhausted(3) | 'exhausted: 3'
+        new EscalationReport.DecisionNeeded('Q?', []) | 'decision: Q?'
+        new EscalationReport.CannotVerify(sampleCheck(), 'down', '') | 'cannot-verify: down'
+        new EscalationReport.PipelineMismatch('legacy') | 'mismatch: legacy'
+        new EscalationReport.CannotExecute('boom') | 'cannot-execute: boom'
     }
 
     // FR10: reports are values — equal content means equal reports

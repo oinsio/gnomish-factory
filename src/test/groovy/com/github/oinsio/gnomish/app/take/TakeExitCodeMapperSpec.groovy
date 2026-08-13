@@ -18,14 +18,14 @@ class TakeExitCodeMapperSpec extends Specification {
         TakeExitCodeMapper.exitCodeFor(result) == expectedCode
 
         where:
-        result                                                                  | expectedCode
-        new TakeResult.Delivered(STATE, 'done')                                 | 0
-        new TakeResult.EmptyQueue()                                             | 0
-        new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'decide')    | 10
-        new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, 'paused')    | 11
-        new TakeResult.AwaitingHuman(STATE, ParkReason.INFRA, 'fix and retry')  | 13
-        new TakeResult.Aborted(STATE, 'persist failed')                        | 12
-        new TakeResult.Revoked(STATE, 'work stopped')                          | 14
-        new TakeResult.Skipped('held by another instance')                     | 15
+        result | expectedCode
+        new TakeResult.Delivered(STATE, 'done') | 0
+        new TakeResult.EmptyQueue() | 0
+        new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'decide') | 10
+        new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, 'paused') | 11
+        new TakeResult.AwaitingHuman(STATE, ParkReason.INFRA, 'fix and retry') | 13
+        new TakeResult.Aborted(STATE, 'persist failed') | 12
+        new TakeResult.Revoked(STATE, 'work stopped') | 14
+        new TakeResult.Skipped('held by another instance') | 15
     }
 }

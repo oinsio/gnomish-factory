@@ -59,7 +59,7 @@ final class ClaudeLoginPreflight {
 
         List<TimestampedEvent> events
         try (BufferedReader reader = new BufferedReader(
-        new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
+                new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
             events = new StreamJsonParser(clock).parse(reader)
         } catch (IOException e) {
             return Result.failure("could not read '${binary}' stdout: ${e.message}")

@@ -29,9 +29,9 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         new StageExecutor.Request(
                 new TaskContext('T-1', 'title', 'body', List.<Decision> of()),
                 new StageDefinition(
-                stageName, 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
-                'instructions.md', [], new AutonomyLimits(3), AdvancementMode.AUTO),
+                        stageName, 'purpose', [], [],
+                        new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
+                        'instructions.md', [], new AutonomyLimits(3), AdvancementMode.AUTO),
                 new StubWorkspace(),
                 attempt,
                 [])
@@ -43,7 +43,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         new ExecutionResult.Completed(
                 new ExecutorUsage(Duration.ZERO, [], [:]),
                 new ToolTrace(
-                new AttemptKey('T-1', 'work', 1), []))
+                        new AttemptKey('T-1', 'work', 1), []))
     }
 
     def "FR21: the matching round skips the agent, records the attempt commit, and completes with empty telemetry"() {
@@ -98,8 +98,8 @@ class ResumeVerificationStageExecutorSpec extends Specification {
 
         where:
         stageName | attempt
-        'other'   | 2
-        'work'    | 3
+        'other' | 2
+        'work' | 3
     }
 
     def "a null pending verification is a pure pass-through, returning the delegate's exact result"() {

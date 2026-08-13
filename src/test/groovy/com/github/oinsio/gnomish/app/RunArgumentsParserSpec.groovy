@@ -294,11 +294,11 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         ex.message.contains(conflictingFlagName)
 
         where:
-        conflictingFlag        | conflictingFlagName
-        '--task=x'              | '--task'
-        '--task-file=task.md'   | '--task-file'
-        '--task-id=abc'         | '--task-id'
-        '--from-stage=build'    | '--from-stage'
+        conflictingFlag | conflictingFlagName
+        '--task=x' | '--task'
+        '--task-file=task.md' | '--task-file'
+        '--task-id=abc' | '--task-id'
+        '--from-stage=build' | '--from-stage'
     }
 
     @Unroll
@@ -312,9 +312,9 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         ex.message.contains(gitOnlyFlagName)
 
         where:
-        gitOnlyFlag           | gitOnlyFlagName
-        '--base=main'          | '--base'
-        '--discard-work'       | '--discard-work'
+        gitOnlyFlag | gitOnlyFlagName
+        '--base=main' | '--base'
+        '--discard-work' | '--discard-work'
     }
 
     def "FR7/UX1: --resume with --mode=in-place is a usage error naming the conflict"() {

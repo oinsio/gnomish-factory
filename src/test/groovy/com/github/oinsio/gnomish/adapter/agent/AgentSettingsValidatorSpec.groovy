@@ -26,10 +26,10 @@ class AgentSettingsValidatorSpec extends Specification {
     def "an agent-cli stage with fully well-formed settings yields no errors"() {
         given:
         def stage = stage('build', ExecutorType.AGENT_CLI, [
-            allowedTools   : ['Read', 'Write'],
+            allowedTools : ['Read', 'Write'],
             disallowedTools: ['Bash'],
-            maxTurns       : 5,
-            roundTimeout   : 30,
+            maxTurns : 5,
+            roundTimeout : 30,
         ], [])
 
         expect:
@@ -65,13 +65,13 @@ class AgentSettingsValidatorSpec extends Specification {
         ]
 
         where:
-        key               | value               || message
-        'allowedTools'    | 'Read'              || "malformed 'allowedTools': expected a list of strings"
-        'allowedTools'    | ['Read', 2]         || "malformed 'allowedTools': expected a list of strings"
-        'disallowedTools' | [1, 2]              || "malformed 'disallowedTools': expected a list of strings"
-        'maxTurns'        | 'five'              || "malformed 'maxTurns': expected a number"
-        'roundTimeout'    | true                || "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
-        'roundTimeout'    | 'not-a-duration'    || "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
+        key | value || message
+        'allowedTools' | 'Read' || "malformed 'allowedTools': expected a list of strings"
+        'allowedTools' | ['Read', 2] || "malformed 'allowedTools': expected a list of strings"
+        'disallowedTools' | [1, 2] || "malformed 'disallowedTools': expected a list of strings"
+        'maxTurns' | 'five' || "malformed 'maxTurns': expected a number"
+        'roundTimeout' | true || "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
+        'roundTimeout' | 'not-a-duration' || "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
     }
 
     def "roundTimeout accepts both a plain number of seconds and an ISO-8601 duration string"() {

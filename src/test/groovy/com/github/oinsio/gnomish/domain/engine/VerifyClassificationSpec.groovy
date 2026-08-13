@@ -33,52 +33,52 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
         expectedClass.isInstance(verdict)
 
         where: 'one row per line of the normative Fail/CannotVerify table (M4)'
-        situation                                     | check                                         | builtinRunner                    | commandRunner                                                                                                        | externalClient                                                                                          | judgeVoter                                                                                                                                                             || expectedClass
+        situation | check | builtinRunner | commandRunner | externalClient | judgeVoter || expectedClass
         // M4 row 1 — command exit code != 0 -> Fail (quality)
-        'command exit code != 0'                      | command('./gradlew test')                     | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner([
+        'command exit code != 0' | command('./gradlew test') | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner([
             new Verdict.Fail([
                 new Finding('exit 1', null, null)
             ])
-        ])                               | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter()                                                                                                                                                || Verdict.Fail
+        ]) | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter() || Verdict.Fail
         // M4 row 2 — command binary not found / cannot start -> CannotVerify
-        'command binary not found'                    | command('missing-bin')                        | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner([
+        'command binary not found' | command('missing-bin') | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner([
             new Verdict.CannotVerify('binary not found', 'no such file')
-        ])                        | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter()                                                                                                                                                || Verdict.CannotVerify
+        ]) | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter() || Verdict.CannotVerify
         // M4 row 3 — external poll returns failure -> Fail (quality)
-        'external poll returns failure'               | external('ci/gate', SEC, TIMEOUT)             | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient([
+        'external poll returns failure' | external('ci/gate', SEC, TIMEOUT) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient([
             new PollStatus.Fail([
                 new Finding('gate red', null, null)
             ])
-        ])           | new ScriptedJudgeVoter()                                                                                                                                                || Verdict.Fail
+        ]) | new ScriptedJudgeVoter() || Verdict.Fail
         // M4 row 4 — external poll timeout elapsed -> Fail (quality, hardcoded default)
-        'external poll timeout elapsed'               | external('ci/slow', SEC, TIMEOUT)             | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient([
+        'external poll timeout elapsed' | external('ci/slow', SEC, TIMEOUT) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient([
             RUNNING,
             RUNNING,
             RUNNING,
             RUNNING
-        ])                                   | new ScriptedJudgeVoter()                                                                                                                                                || Verdict.Fail
+        ]) | new ScriptedJudgeVoter() || Verdict.Fail
         // M4 row 5 — external check id unknown to the service -> CannotVerify
-        'external check id unknown'                   | external('ci/missing', SEC, TIMEOUT)          | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient([
+        'external check id unknown' | external('ci/missing', SEC, TIMEOUT) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient([
             new PollStatus.CannotVerify('check id unknown', 'no such check')
-        ])     | new ScriptedJudgeVoter()                                                                                                                                                || Verdict.CannotVerify
+        ]) | new ScriptedJudgeVoter() || Verdict.CannotVerify
         // M4 row 6 — judge majority of votes negative -> Fail (quality)
-        'judge majority negative'                     | judge(3)                                      | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter([
+        'judge majority negative' | judge(3) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter([
             failVote(),
             passVote(),
             failVote()
-        ])                                                                                                            || Verdict.Fail
+        ]) || Verdict.Fail
         // M4 row 7 — judge model reply unparseable as verdict -> CannotVerify
-        'judge reply unparseable'                     | judge(3)                                      | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter([
+        'judge reply unparseable' | judge(3) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter([
             new JudgeVoter.Vote(new Verdict.CannotVerify('unparseable verdict', 'not JSON'), [:])
-        ])                                                        || Verdict.CannotVerify
+        ]) || Verdict.CannotVerify
         // M4 row 8 — judge any single vote CannotVerify -> CannotVerify (whole check)
-        'judge any single vote CannotVerify'          | judge(3)                                      | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner()                                                                                     | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter([
+        'judge any single vote CannotVerify' | judge(3) | new ScriptedBuiltinCheckRunner() | new ScriptedCommandCheckRunner() | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter([
             passVote(),
             new JudgeVoter.Vote(new Verdict.CannotVerify('service down', 'timeout'), [:]),
             passVote()
-        ])                                        || Verdict.CannotVerify
+        ]) || Verdict.CannotVerify
         // M4 row 9 — any check adapter throws -> CannotVerify (caught, stack trace kept)
-        'check adapter throws'                        | command('./gradlew test')                     | new ScriptedBuiltinCheckRunner() | throwingCommandRunner()                                                                                              | new ScriptedExternalCheckClient()                                                                       | new ScriptedJudgeVoter()                                                                                                                                                || Verdict.CannotVerify
+        'check adapter throws' | command('./gradlew test') | new ScriptedBuiltinCheckRunner() | throwingCommandRunner() | new ScriptedExternalCheckClient() | new ScriptedJudgeVoter() || Verdict.CannotVerify
     }
 
     // --- fixtures -----------------------------------------------------------------

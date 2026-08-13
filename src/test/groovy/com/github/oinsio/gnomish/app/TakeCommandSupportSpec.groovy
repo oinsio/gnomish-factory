@@ -61,9 +61,9 @@ class TakeCommandSupportSpec extends Specification {
         TakeCommandSupport.supportedTypes(registry) == expected
 
         where:
-        registry                                                                     || expected
-        [:]                                                                          || ''
-        [github: Mock(TrackerAdapterFactory)]                                        || 'github'
+        registry || expected
+        [:] || ''
+        [github: Mock(TrackerAdapterFactory)] || 'github'
         [inmemory: Mock(TrackerAdapterFactory), github: Mock(TrackerAdapterFactory)] || 'github, inmemory'
     }
 }

@@ -149,7 +149,9 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
         docker.starts.isEmpty()
 
         and: 'only the startup orphan sweep ran — read-only listings, no create/remove'
-        docker.runs.every { it.first() in ['ps', 'volume', 'network'] && it.contains(it.first() == 'ps' ? '-a' : 'ls') }
+        docker.runs.every {
+            it.first() in ['ps', 'volume', 'network'] && it.contains(it.first() == 'ps' ? '-a' : 'ls')
+        }
 
         and: 'the task still completed — no environment was needed to report it'
         taskJsonBelowTip('T-NOENV').contains('"completed"')

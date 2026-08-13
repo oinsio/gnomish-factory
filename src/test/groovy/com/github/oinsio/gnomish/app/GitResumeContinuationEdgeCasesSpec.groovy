@@ -130,7 +130,9 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
 
         and: 'no decision was ever appended — every historical task.json still carries an empty decisions list'
         def historicalTaskJsons = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%H').stdout()
-                .lines().collect { gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json") }
+                .lines().collect {
+                    gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+                }
                 .findAll { it.exitCode() == 0 }
                 .collect { it.stdout() }
         historicalTaskJsons.every { !it.contains('"decisions":[{') }

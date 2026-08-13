@@ -19,7 +19,9 @@ class ArtifactGraphDuplicateIdSpec extends Specification {
     private static StageDefinition stage(String name, List<String> outputIds) {
         new StageDefinition(
                 name, "Purpose of $name",
-                [new ArtifactInput.Source()], outputIds.collect { new ArtifactOutput(it) },
+                [new ArtifactInput.Source()], outputIds.collect {
+                    new ArtifactOutput(it)
+                },
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:]),
                 "stages/$name/instructions.md",
                 [
@@ -53,21 +55,21 @@ class ArtifactGraphDuplicateIdSpec extends Specification {
         ArtifactGraphRule.validate(stages) == expected
 
         where:
-        label                 | stages                                || expected
-        'across two stages'   | [
+        label | stages || expected
+        'across two stages' | [
             stage('plan', ['api']),
             stage('implement', ['api']),
-        ]                                                             || [
+        ] || [
             duplicate('api', ['plan', 'implement'])
         ]
-        'within one stage'    | [stage('plan', ['api', 'api'])]       || [
+        'within one stage' | [stage('plan', ['api', 'api'])] || [
             duplicate('api', ['plan', 'plan'])
         ]
         'across three stages' | [
             stage('plan', ['x']),
             stage('design', ['x']),
             stage('implement', ['x']),
-        ]                                                             || [
+        ] || [
             duplicate('x', [
                 'plan',
                 'design',

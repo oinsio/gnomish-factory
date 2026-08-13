@@ -43,7 +43,9 @@ class InMemoryTakeLifecycleEscalateResumeSpec extends TakeLifecycleEscalateResum
 
     @Override
     List<String> thread(Tracker tracker, TaskRef ref) {
-        new InMemoryTrackerHarness(tracker as InMemoryTracker).thread(ref).collect { "${it.kind()}: ${it.text()}".toString() }
+        new InMemoryTrackerHarness(tracker as InMemoryTracker).thread(ref).collect {
+            "${it.kind()}: ${it.text()}".toString()
+        }
     }
 
     @Override

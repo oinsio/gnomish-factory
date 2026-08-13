@@ -30,11 +30,11 @@ class SandboxNeedSpec extends Specification {
         SandboxNeed.fromToken(token) == Optional.of(need)
 
         where:
-        token            || need
-        'docker-inside'  || SandboxNeed.DOCKER_INSIDE
+        token || need
+        'docker-inside' || SandboxNeed.DOCKER_INSIDE
         'egress-control' || SandboxNeed.EGRESS_CONTROL
         'task-isolation' || SandboxNeed.TASK_ISOLATION
-        'isolation'      || SandboxNeed.ISOLATION
+        'isolation' || SandboxNeed.ISOLATION
     }
 
     // FR14: an unknown token resolves to empty (the reconciler treats it as unmet)
@@ -58,10 +58,10 @@ class SandboxNeedSpec extends Specification {
         need.satisfiedBy(CONTAINER) == byContainer
 
         where:
-        need                        || byHost | byContainer
-        SandboxNeed.DOCKER_INSIDE   || true   | false
-        SandboxNeed.EGRESS_CONTROL  || false  | true
-        SandboxNeed.TASK_ISOLATION  || false  | true
-        SandboxNeed.ISOLATION       || false  | true
+        need || byHost | byContainer
+        SandboxNeed.DOCKER_INSIDE || true | false
+        SandboxNeed.EGRESS_CONTROL || false | true
+        SandboxNeed.TASK_ISOLATION || false | true
+        SandboxNeed.ISOLATION || false | true
     }
 }

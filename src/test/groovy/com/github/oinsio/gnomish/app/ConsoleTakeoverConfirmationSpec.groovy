@@ -84,14 +84,14 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
         confirmation(true, console).confirm(REF, 'gnomish-other-x1', '47m') == expected
 
         where:
-        answer  | expected
-        'y'     | TakeoverConfirmation.Decision.CONFIRMED
-        'yes'   | TakeoverConfirmation.Decision.CONFIRMED
+        answer | expected
+        'y' | TakeoverConfirmation.Decision.CONFIRMED
+        'yes' | TakeoverConfirmation.Decision.CONFIRMED
         '  Y  ' | TakeoverConfirmation.Decision.CONFIRMED
-        'YES'   | TakeoverConfirmation.Decision.CONFIRMED
-        'n'     | TakeoverConfirmation.Decision.DECLINED
-        ''      | TakeoverConfirmation.Decision.DECLINED
-        'nope'  | TakeoverConfirmation.Decision.DECLINED
+        'YES' | TakeoverConfirmation.Decision.CONFIRMED
+        'n' | TakeoverConfirmation.Decision.DECLINED
+        '' | TakeoverConfirmation.Decision.DECLINED
+        'nope' | TakeoverConfirmation.Decision.DECLINED
     }
 
     // FR6, D9: the production wiring factory returns a real, ready confirmation — its return value

@@ -88,11 +88,11 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
         result.interactiveMode() == expected
 
         where:
-        suffix        | flags                          | expected
-        ' bare'        | ['--interactive']              | RunArguments.InteractiveMode.ALL
-        '=executor'    | ['--interactive=executor']     | RunArguments.InteractiveMode.EXECUTOR_ONLY
-        '=judge'       | ['--interactive=judge']        | RunArguments.InteractiveMode.JUDGE_ONLY
-        ' absent'      | []                             | RunArguments.InteractiveMode.NONE
+        suffix | flags | expected
+        ' bare' | ['--interactive'] | RunArguments.InteractiveMode.ALL
+        '=executor' | ['--interactive=executor'] | RunArguments.InteractiveMode.EXECUTOR_ONLY
+        '=judge' | ['--interactive=judge'] | RunArguments.InteractiveMode.JUDGE_ONLY
+        ' absent' | [] | RunArguments.InteractiveMode.NONE
     }
 
     // Flag validation scenario: take is always git mode, has no ad-hoc task source, no --resume,

@@ -19,8 +19,16 @@ class TokenUsageMapperSpec extends Specification {
     def "maps the plain-round fixture's modelUsage to a single-entry tokensByModel"() {
         given: 'the plain-round fixture parsed into events'
         def events = parser.parse(readerOf('plain-round'))
-        def resultEvent = events.collect { it.event() }.find { it instanceof AgentEvent.ResultEvent } as AgentEvent.ResultEvent
-        def initEvent = events.collect { it.event() }.find { it instanceof AgentEvent.InitEvent } as AgentEvent.InitEvent
+        def resultEvent = events.collect {
+            it.event()
+        }.find {
+            it instanceof AgentEvent.ResultEvent
+        } as AgentEvent.ResultEvent
+        def initEvent = events.collect {
+            it.event()
+        }.find {
+            it instanceof AgentEvent.InitEvent
+        } as AgentEvent.InitEvent
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
@@ -33,8 +41,16 @@ class TokenUsageMapperSpec extends Specification {
     def "maps the subagent-round fixture's modelUsage to a two-entry tokensByModel, not the flat usage sum"() {
         given: 'the subagent-round fixture parsed into events'
         def events = parser.parse(readerOf('subagent-round'))
-        def resultEvent = events.collect { it.event() }.find { it instanceof AgentEvent.ResultEvent } as AgentEvent.ResultEvent
-        def initEvent = events.collect { it.event() }.find { it instanceof AgentEvent.InitEvent } as AgentEvent.InitEvent
+        def resultEvent = events.collect {
+            it.event()
+        }.find {
+            it instanceof AgentEvent.ResultEvent
+        } as AgentEvent.ResultEvent
+        def initEvent = events.collect {
+            it.event()
+        }.find {
+            it instanceof AgentEvent.InitEvent
+        } as AgentEvent.InitEvent
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
@@ -50,8 +66,16 @@ class TokenUsageMapperSpec extends Specification {
     def "maps the judge-verdict-pass fixture's modelUsage to a single-entry tokensByModel"() {
         given: 'the judge-verdict-pass fixture parsed into events'
         def events = parser.parse(readerOf('judge-verdict-pass'))
-        def resultEvent = events.collect { it.event() }.find { it instanceof AgentEvent.ResultEvent } as AgentEvent.ResultEvent
-        def initEvent = events.collect { it.event() }.find { it instanceof AgentEvent.InitEvent } as AgentEvent.InitEvent
+        def resultEvent = events.collect {
+            it.event()
+        }.find {
+            it instanceof AgentEvent.ResultEvent
+        } as AgentEvent.ResultEvent
+        def initEvent = events.collect {
+            it.event()
+        }.find {
+            it instanceof AgentEvent.InitEvent
+        } as AgentEvent.InitEvent
 
         when: 'tokens are mapped'
         def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)

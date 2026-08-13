@@ -83,7 +83,9 @@ class DashboardWatchLoopSpec extends Specification {
         def fetch = { -> fetchCount++; model }
 
         when: 'every render cycle in the hour runs'
-        cycles.times { loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch) }
+        cycles.times {
+            loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, fetch)
+        }
 
         then: 'tracker reads stay within the board-cadence budget: one fetch per board interval, not per render'
         fetchCount == (int) (Duration.ofHours(1).seconds / DashboardWatchLoop.BOARD_CADENCE.seconds)
@@ -107,7 +109,9 @@ class DashboardWatchLoopSpec extends Specification {
     def "run() renders a cycle then sleeps for exactly the render cadence before the next one"() {
         given: 'a sleeper that records the requested duration and stops the otherwise-infinite loop'
         def sleptDurations = []
-        def sleeper = { Duration d -> sleptDurations << d; throw new RuntimeException('stop after one cycle') } as Sleeper
+        def sleeper = { Duration d ->
+            sleptDurations << d; throw new RuntimeException('stop after one cycle')
+        } as Sleeper
         def loop = new DashboardWatchLoop(new DashboardRenderCycle(), sleeper, new StepClock([T0]))
 
         when:
@@ -128,11 +132,17 @@ class DashboardWatchLoopSpec extends Specification {
                 new DashboardRenderCycle(), new ThreadSleeper(), new StepClock([T0, T0.plusSeconds(10)]))
 
         and: 'the loop runs on its own thread, exactly like gnomish dashboard --watch'
-        def thread = new Thread({ loop.run(homeDir, INSTANCE_NAME, outputFile, { -> model }) })
+        def thread = new Thread({
+            loop.run(homeDir, INSTANCE_NAME, outputFile, {
+                -> model
+            })
+        })
 
         when: 'the first cycle lands and the calling thread is then interrupted mid-sleep'
         thread.start()
-        new PollingConditions(timeout: 5).eventually { assert Files.exists(outputFile) }
+        new PollingConditions(timeout: 5).eventually {
+            assert Files.exists(outputFile)
+        }
         thread.interrupt()
         thread.join(3000)
 
@@ -170,7 +180,9 @@ class DashboardWatchLoopSpec extends Specification {
         def loop = newLoop([T0])
 
         when:
-        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, { -> throw new RuntimeException('tracker down') })
+        loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, {
+            -> throw new RuntimeException('tracker down')
+        })
 
         then:
         def html = Files.readString(outputFile)

@@ -80,7 +80,9 @@ class ReentrancySpec extends Specification {
         run.executor = new ScriptedExecutor([completed(taskId)])
         run.builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
         if (barrier != null) {
-            run.builtinRunner.onRun = { check, workspace -> barrier.await(5, TimeUnit.SECONDS) }
+            run.builtinRunner.onRun = { check, workspace ->
+                barrier.await(5, TimeUnit.SECONDS)
+            }
         }
         run.persistence = new InMemoryAttemptPersistence()
         run.listener = new RecordingEventListener()
@@ -106,7 +108,9 @@ class ReentrancySpec extends Specification {
         assert run.persistence.entries.size() == 1
 
         // NFR-R1: no cross-talk — every recorded touch names ONLY this run's task
-        assert run.executor.requests.every { it.context().taskId() == run.taskId }
+        assert run.executor.requests.every {
+            it.context().taskId() == run.taskId
+        }
         assert run.persistence.entries.every { it.taskId == run.taskId }
         assert run.listener.events.every { it.taskId() == run.taskId }
     }
@@ -123,8 +127,12 @@ class ReentrancySpec extends Specification {
 
         when: 'both runs execute concurrently on virtual threads, meeting inside the verify chain'
         try (def pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            def futureA = pool.submit({ engine.run(pipeline(), new TaskContext('TASK-A', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runA)) } as java.util.concurrent.Callable)
-            def futureB = pool.submit({ engine.run(pipeline(), new TaskContext('TASK-B', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runB)) } as java.util.concurrent.Callable)
+            def futureA = pool.submit({
+                engine.run(pipeline(), new TaskContext('TASK-A', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runA))
+            } as java.util.concurrent.Callable)
+            def futureB = pool.submit({
+                engine.run(pipeline(), new TaskContext('TASK-B', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runB))
+            } as java.util.concurrent.Callable)
             runA.outcome = futureA.get(10, TimeUnit.SECONDS)
             runB.outcome = futureB.get(10, TimeUnit.SECONDS)
         }

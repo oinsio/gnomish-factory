@@ -66,7 +66,9 @@ class DashboardBoardCacheSpec extends Specification {
         def cache = new DashboardBoardCache()
 
         when:
-        def view = cache.refresh({ -> throw new RuntimeException('tracker unreachable') }, T0)
+        def view = cache.refresh({
+            -> throw new RuntimeException('tracker unreachable')
+        }, T0)
 
         then:
         view.model() == null
@@ -81,7 +83,9 @@ class DashboardBoardCacheSpec extends Specification {
         def failAt = T0.plus(CADENCE)
 
         when:
-        def view = cache.refresh({ -> throw new RuntimeException('outage') }, failAt)
+        def view = cache.refresh({
+            -> throw new RuntimeException('outage')
+        }, failAt)
 
         then:
         view.model() == model

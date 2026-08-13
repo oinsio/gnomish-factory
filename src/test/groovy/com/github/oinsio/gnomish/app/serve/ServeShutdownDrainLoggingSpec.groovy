@@ -40,7 +40,9 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
         List<ILoggingEvent> events = capture { shutdown.shutdown(null) }
 
         then:
-        def summary = events.find { it.formattedMessage.contains('in-flight task') }
+        def summary = events.find {
+            it.formattedMessage.contains('in-flight task')
+        }
         summary != null
         summary.formattedMessage.contains('true')
         !summary.formattedMessage.contains('false')
@@ -61,7 +63,9 @@ class ServeShutdownDrainLoggingSpec extends ServeShutdownSpecBase {
         List<ILoggingEvent> events = capture { shutdown.shutdown(null) }
 
         then:
-        def summary = events.find { it.formattedMessage.contains('in-flight task') }
+        def summary = events.find {
+            it.formattedMessage.contains('in-flight task')
+        }
         summary != null
         summary.formattedMessage.contains('false')
         !summary.formattedMessage.contains('true')

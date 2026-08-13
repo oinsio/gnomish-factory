@@ -63,7 +63,9 @@ class AtomicFileWriterSpec extends Specification {
         AtomicFileWriter.write(target, 'content')
 
         then:
-        def leftovers = tempDir.toFile().listFiles().findAll { it.name != 'snapshot.json' }
+        def leftovers = tempDir.toFile().listFiles().findAll {
+            it.name != 'snapshot.json'
+        }
         leftovers.isEmpty()
     }
 
@@ -90,7 +92,9 @@ class AtomicFileWriterSpec extends Specification {
 
         then:
         thrown(IOException)
-        def leftovers = tempDir.toFile().listFiles().findAll { it.name != 'snapshot.json' }
+        def leftovers = tempDir.toFile().listFiles().findAll {
+            it.name != 'snapshot.json'
+        }
         leftovers.isEmpty()
     }
 

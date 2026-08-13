@@ -38,7 +38,9 @@ class GithubConditionalRequestCacheEvictionSpec extends Specification {
         RetryConfig.custom()
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ it instanceof GithubHttpUncheckedIOException })
+                .retryOnException({
+                    it instanceof GithubHttpUncheckedIOException
+                })
                 .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
                 .build()
     }

@@ -73,8 +73,8 @@ class ArtifactGraphReferenceSpec extends Specification {
         ArtifactGraphRule.validate(stages) == []
 
         where:
-        label                                     | stages
-        'multi-stage chain of internal + source'  | [
+        label | stages
+        'multi-stage chain of internal + source' | [
             stage('plan', [source()], ['plan-doc']),
             stage('implement', [
                 internal('plan-doc'),
@@ -85,7 +85,7 @@ class ArtifactGraphReferenceSpec extends Specification {
                 internal('plan-doc')
             ], ['review-report']),
         ]
-        'a single stage with only source inputs'  | [
+        'a single stage with only source inputs' | [
             stage('gather', [source(), source()], ['notes'])
         ]
     }
@@ -98,21 +98,21 @@ class ArtifactGraphReferenceSpec extends Specification {
         ArtifactGraphRule.validate(stages) == expected
 
         where:
-        label      | stages                                                 || expected
+        label | stages || expected
         'dangling' | [
             stage('implement', [internal('ghost')], ['code'])
         ] || [
             dangling('implement', 'ghost')
         ]
-        'self'     | [
+        'self' | [
             stage('plan', [internal('plan-doc')], ['plan-doc'])
-        ]                                                                   || [
+        ] || [
             selfReference('plan', 'plan-doc')
         ]
-        'forward'  | [
+        'forward' | [
             stage('implement', [internal('plan-doc')], ['code']),
             stage('plan', [source()], ['plan-doc']),
-        ]                                                                   || [
+        ] || [
             forward('implement', 'plan-doc', 'plan')
         ]
     }
@@ -126,26 +126,26 @@ class ArtifactGraphReferenceSpec extends Specification {
         ArtifactGraphRule.validate(stages) == expected
 
         where:
-        label                               | stages                        || expected
-        'any earlier duplicate resolves'    | [
+        label | stages || expected
+        'any earlier duplicate resolves' | [
             stage('plan', [source()], ['api']),
             stage('design', [source()], ['api']),
             stage('implement', [internal('api')], ['code']),
-        ]                                                                   || [
+        ] || [
             duplicate('api', ['plan', 'design'])
         ]
         'forward names earliest late stage' | [
             stage('implement', [internal('api')], ['code']),
             stage('plan', [source()], ['api']),
             stage('design', [source()], ['api']),
-        ]                                                                   || [
+        ] || [
             duplicate('api', ['plan', 'design']),
             forward('implement', 'api', 'plan')
         ]
-        'self wins over a later duplicate'  | [
+        'self wins over a later duplicate' | [
             stage('plan', [internal('api')], ['api']),
             stage('design', [source()], ['api']),
-        ]                                                                   || [
+        ] || [
             duplicate('api', ['plan', 'design']),
             selfReference('plan', 'api')
         ]

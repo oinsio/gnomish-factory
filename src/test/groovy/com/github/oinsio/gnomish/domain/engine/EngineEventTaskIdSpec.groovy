@@ -42,14 +42,14 @@ class EngineEventTaskIdSpec extends Specification {
         (event as EngineEvent).taskId() == 't1'
 
         where:
-        description         | event
-        'RunStarted'        | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
-        'AttemptStarted'    | new EngineEvent.AttemptStarted(sampleKey())
+        description | event
+        'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
+        'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
         'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), ExecutorUsage.none())
-        'CheckStarted'      | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
-        'CheckFinished'     | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
-        'AttemptFinished'   | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
-        'TaskFinished'      | new EngineEvent.TaskFinished('t1', sampleOutcome())
+        'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
+        'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
+        'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
+        'TaskFinished' | new EngineEvent.TaskFinished('t1', sampleOutcome())
     }
 
     // FR12: key-carrying events delegate taskId() to key.taskId()
@@ -61,12 +61,12 @@ class EngineEventTaskIdSpec extends Specification {
         (event as EngineEvent).taskId() == key.taskId()
 
         where:
-        description         | event
-        'AttemptStarted'    | new EngineEvent.AttemptStarted(new AttemptKey('t1', 'build', 0))
+        description | event
+        'AttemptStarted' | new EngineEvent.AttemptStarted(new AttemptKey('t1', 'build', 0))
         'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), ExecutorUsage.none())
-        'CheckStarted'      | new EngineEvent.CheckStarted(new AttemptKey('t1', 'build', 0), sampleCheckRef())
-        'CheckFinished'     | new EngineEvent.CheckFinished(new AttemptKey('t1', 'build', 0), sampleCheckResult())
-        'AttemptFinished'   | new EngineEvent.AttemptFinished(new AttemptKey('t1', 'build', 0), sampleState(), sampleTrace())
+        'CheckStarted' | new EngineEvent.CheckStarted(new AttemptKey('t1', 'build', 0), sampleCheckRef())
+        'CheckFinished' | new EngineEvent.CheckFinished(new AttemptKey('t1', 'build', 0), sampleCheckResult())
+        'AttemptFinished' | new EngineEvent.AttemptFinished(new AttemptKey('t1', 'build', 0), sampleState(), sampleTrace())
     }
 
     // FR12: an exhaustive switch over EngineEvent handles all seven variants
@@ -75,14 +75,14 @@ class EngineEventTaskIdSpec extends Specification {
         label(event as EngineEvent) == description
 
         where:
-        description         | event
-        'RunStarted'        | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
-        'AttemptStarted'    | new EngineEvent.AttemptStarted(sampleKey())
+        description | event
+        'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
+        'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
         'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), ExecutorUsage.none())
-        'CheckStarted'      | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
-        'CheckFinished'     | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
-        'AttemptFinished'   | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
-        'TaskFinished'      | new EngineEvent.TaskFinished('t1', sampleOutcome())
+        'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
+        'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
+        'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
+        'TaskFinished' | new EngineEvent.TaskFinished('t1', sampleOutcome())
     }
 
     private static String label(EngineEvent event) {

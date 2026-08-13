@@ -26,7 +26,7 @@ import spock.lang.Specification
 class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFixture {
 
     def console = new DialogConsole(new SystemConsoleIO(
-    new ByteArrayInputStream(new byte[0]), new PrintStream(new ByteArrayOutputStream())),
+            new ByteArrayInputStream(new byte[0]), new PrintStream(new ByteArrayOutputStream())),
     { json -> 'unused' })
     def holder = new StatusSnapshotHolder(TaskState.atStageStart('build'), 3)
     def law = PipelineLaw.ofContent([:])

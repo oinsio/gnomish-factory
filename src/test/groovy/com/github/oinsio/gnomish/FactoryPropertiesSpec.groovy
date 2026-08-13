@@ -49,9 +49,9 @@ class FactoryPropertiesSpec extends Specification {
 
         where:
         blankInstanceName | description
-        ''                | 'empty string'
-        '   '             | 'spaces only'
-        '\t\n'            | 'other whitespace'
+        '' | 'empty string'
+        '   ' | 'spaces only'
+        '\t\n' | 'other whitespace'
     }
 
     // FR11/D7: CLI binary path defaults to "claude" from PATH when unset
@@ -117,10 +117,10 @@ class FactoryPropertiesSpec extends Specification {
         properties.tracker().abortBackoffCap() == cap
 
         where:
-        base                     | cap
-        Duration.ofMinutes(5)    | Duration.ofHours(2)
-        Duration.ofSeconds(30)   | Duration.ofMinutes(45)
-        Duration.ofMillis(1)     | Duration.ofDays(1)
+        base | cap
+        Duration.ofMinutes(5) | Duration.ofHours(2)
+        Duration.ofSeconds(30) | Duration.ofMinutes(45)
+        Duration.ofMillis(1) | Duration.ofDays(1)
     }
 
     // FR17/D5/D10: a partially-configured tracker section still defaults the other half
@@ -143,7 +143,9 @@ class FactoryPropertiesSpec extends Specification {
         type.isRecord()
 
         and: 'no public method follows the mutable setter convention'
-        type.methods.every { !(it.name.startsWith('set') && it.parameterCount > 0) }
+        type.methods.every {
+            !(it.name.startsWith('set') && it.parameterCount> 0)
+        }
     }
     // FR26 of add-sandbox-core: the check section defaults to the all-unset github binding
     def "check section defaults to an unconfigured github binding"() {
@@ -178,8 +180,8 @@ class FactoryPropertiesSpec extends Specification {
         e.message.contains(present)
 
         where:
-        apiUrl                   | repo           | present
-        'https://api.github.com' | null           | 'api-url'
-        null                     | 'acme/widgets' | 'repo'
+        apiUrl | repo | present
+        'https://api.github.com' | null | 'api-url'
+        null | 'acme/widgets' | 'repo'
     }
 }

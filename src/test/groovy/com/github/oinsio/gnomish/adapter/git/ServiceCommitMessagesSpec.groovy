@@ -17,10 +17,10 @@ class ServiceCommitMessagesSpec extends Specification {
         ServiceCommitMessages.round(stage, round) == expected
 
         where:
-        stage    | round | expected
-        'build'  | 3     | 'gnomish: round build#3'
-        'verify' | 1     | 'gnomish: round verify#1'
-        'plan'   | 12    | 'gnomish: round plan#12'
+        stage | round | expected
+        'build' | 3 | 'gnomish: round build#3'
+        'verify' | 1 | 'gnomish: round verify#1'
+        'plan' | 12 | 'gnomish: round plan#12'
     }
 
     @Unroll
@@ -29,13 +29,13 @@ class ServiceCommitMessagesSpec extends Specification {
         ServiceCommitMessages.taskEvent(event) == expected
 
         where:
-        event                          | expected
-        TaskLifecycleEvent.STARTED     | 'gnomish: task started'
-        TaskLifecycleEvent.RESUMED     | 'gnomish: task resumed'
-        TaskLifecycleEvent.COMPLETED   | 'gnomish: task completed'
-        TaskLifecycleEvent.PAUSED      | 'gnomish: task paused'
-        TaskLifecycleEvent.ESCALATED   | 'gnomish: task escalated'
-        TaskLifecycleEvent.ABORTED     | 'gnomish: task aborted'
+        event | expected
+        TaskLifecycleEvent.STARTED | 'gnomish: task started'
+        TaskLifecycleEvent.RESUMED | 'gnomish: task resumed'
+        TaskLifecycleEvent.COMPLETED | 'gnomish: task completed'
+        TaskLifecycleEvent.PAUSED | 'gnomish: task paused'
+        TaskLifecycleEvent.ESCALATED | 'gnomish: task escalated'
+        TaskLifecycleEvent.ABORTED | 'gnomish: task aborted'
     }
 
     def "FR2: taskEvent is total over every TaskLifecycleEvent constant, with no gaps"() {

@@ -99,7 +99,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, { confirmed.incrementAndGet() })
+                escalated(), tracker, REF, INSTANCE, retry, {
+                    confirmed.incrementAndGet()
+                })
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, _ as String)
@@ -120,7 +122,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, { confirmed.incrementAndGet() })
+                escalated(), tracker, REF, INSTANCE, retry, {
+                    confirmed.incrementAndGet()
+                })
 
         then:
         attempts.get() == 3
@@ -136,13 +140,17 @@ class TakeParkRetrySpec extends Specification {
     def "escalation park give-up leaves the marker set, logs the unreconciled state, and still returns AwaitingHuman"() {
         given:
         tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
-        tracker.park(REF, ParkReason.ESCALATION, _ as String) >> { throw new TrackerUnavailableException('still down') }
+        tracker.park(REF, ParkReason.ESCALATION, _ as String) >> {
+            throw new TrackerUnavailableException('still down')
+        }
         def result = null
 
         when:
         def events = capture(TakeEscalationExit) {
             result = TakeEscalationExit.exit(
-            escalated(), tracker, REF, INSTANCE, givingUpRetry(), { confirmed.incrementAndGet() })
+            escalated(), tracker, REF, INSTANCE, givingUpRetry(), {
+                confirmed.incrementAndGet()
+            })
         }
 
         then: 'the marker-clear callback never runs, so the branch keeps the pending marker'
@@ -166,7 +174,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, { confirmed.incrementAndGet() })
+                escalated(), tracker, REF, INSTANCE, retry, {
+                    confirmed.incrementAndGet()
+                })
 
         then:
         0 * tracker.park(*_)
@@ -182,7 +192,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakePauseExit.finish(
-                paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, retry, { confirmed.incrementAndGet() })
+                paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, retry, {
+                    confirmed.incrementAndGet()
+                })
 
         then:
         1 * tracker.park(REF, ParkReason.CHECKPOINT, _ as String)
@@ -196,14 +208,18 @@ class TakeParkRetrySpec extends Specification {
     def "checkpoint park give-up leaves the marker set, logs the unreconciled state, and still returns AwaitingHuman"() {
         given:
         tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
-        tracker.park(REF, ParkReason.CHECKPOINT, _ as String) >> { throw new TrackerUnavailableException('down') }
+        tracker.park(REF, ParkReason.CHECKPOINT, _ as String) >> {
+            throw new TrackerUnavailableException('down')
+        }
         def paused = new TaskOutcome.Paused(STATE, 'build')
         def result = null
 
         when:
         def events = capture(TakePauseExit) {
             result = TakePauseExit.finish(
-            paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, givingUpRetry(), { confirmed.incrementAndGet() })
+            paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, givingUpRetry(), {
+                confirmed.incrementAndGet()
+            })
         }
 
         then:

@@ -72,11 +72,13 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         tracker.store.get(ref).claimMarker() == null
 
         where:
-        op          | clearer
-        'park'      | { t, r -> t.park(r, ParkReason.CHECKPOINT, 'paused') }
-        'finish'    | { t, r -> t.finish(r, 'done') }
-        'abort'     | { t, r -> t.recordAbort(r, new AbortRecord('boom', 'instance-a', Instant.parse('2026-07-20T10:00:00Z'))) }
-        'release'   | { t, r -> t.release(r) }
+        op | clearer
+        'park' | { t, r -> t.park(r, ParkReason.CHECKPOINT, 'paused') }
+        'finish' | { t, r -> t.finish(r, 'done') }
+        'abort' | { t, r ->
+            t.recordAbort(r, new AbortRecord('boom', 'instance-a', Instant.parse('2026-07-20T10:00:00Z')))
+        }
+        'release' | { t, r -> t.release(r) }
     }
 
     // FR5: listOpen still reports a marker-cleared task that stays open, with a null version —
@@ -95,8 +97,8 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         entry.claimVersion() == null
 
         where:
-        op        | clearer
-        'park'    | { t, r -> t.park(r, ParkReason.CHECKPOINT, 'paused') }
+        op | clearer
+        'park' | { t, r -> t.park(r, ParkReason.CHECKPOINT, 'paused') }
         'release' | { t, r -> t.release(r) }
     }
 
@@ -134,7 +136,9 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         then: 'the removal succeeds, returns the task to Ready, and narrates the dead holder'
         result instanceof RemoveStaleClaimResult.Removed
         tracker.fetchTask(ref).state() == new TrackerTaskState.Ready()
-        def removal = harness.thread(ref).find { it.kind() == CorrespondenceEntry.Kind.STALE_CLAIM_REMOVED }
+        def removal = harness.thread(ref).find {
+            it.kind() == CorrespondenceEntry.Kind.STALE_CLAIM_REMOVED
+        }
         removal.text().contains('instance-a')
     }
 
@@ -163,7 +167,9 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         def ref = new TaskRef('fixture:beat-between')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
         ClaimVersion observed = claimVersionOf(ref)
-        harness.armRemoveStaleClaimGate { tracker.heartbeat(ref, 'sneaky beat') }
+        harness.armRemoveStaleClaimGate {
+            tracker.heartbeat(ref, 'sneaky beat')
+        }
 
         when: 'the reaper removes against its stale observation'
         def result = tracker.removeStaleClaim(ref, observed)

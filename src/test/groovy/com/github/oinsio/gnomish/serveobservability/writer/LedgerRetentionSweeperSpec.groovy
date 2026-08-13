@@ -137,7 +137,9 @@ class LedgerRetentionSweeperSpec extends Specification {
     }
 
     // POSIX permissions aren't meaningful on Windows; see the delete-failure spec above.
-    @Requires({ !System.getProperty('os.name').toLowerCase().contains('windows') })
+    @Requires({
+        !System.getProperty('os.name').toLowerCase().contains('windows')
+    })
     def "a directory listing failure is logged and swallowed rather than propagated"() {
         given:
         Files.writeString(dir.resolve('ledger-2020-01-01.jsonl'), 'stale')
@@ -186,7 +188,9 @@ class LedgerRetentionSweeperSpec extends Specification {
 
     // POSIX permissions aren't meaningful on Windows; this repo targets macOS/Linux (Darwin CI),
     // but the guard keeps the spec portable rather than assuming the platform.
-    @Requires({ !System.getProperty('os.name').toLowerCase().contains('windows') })
+    @Requires({
+        !System.getProperty('os.name').toLowerCase().contains('windows')
+    })
     def "a delete failure is logged and swallowed rather than propagated"() {
         given:
         def stale = dir.resolve('ledger-2020-01-01.jsonl')

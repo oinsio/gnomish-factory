@@ -85,6 +85,8 @@ class HostFileChannelBoundarySpec extends Specification {
 
         then:
         read.get().length == 10
-        events.any { it.level == Level.WARN && it.formattedMessage.contains('exceeded read cap') }
+        events.any {
+            it.level == Level.WARN && it.formattedMessage.contains('exceeded read cap')
+        }
     }
 }

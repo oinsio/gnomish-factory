@@ -15,6 +15,8 @@ class TrackerValidatorStub {
 
     /** A registry whose only entry, {@code github}, accepts any subsection content. */
     static Map<String, TrackerSubsectionValidator> acceptingGithub() {
-        [github: { String file, String where, Map subsection -> [] } as TrackerSubsectionValidator]
+        [github: { String file, String where, Map subsection ->
+                []
+            } as TrackerSubsectionValidator]
     }
 }

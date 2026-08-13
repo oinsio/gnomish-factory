@@ -24,7 +24,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def docker = new RecordingDockerCli()
     def clock = { -> Instant.now() } as Clock
     List<List<String>> harvests = []
-    def harvester = { String container, String branch -> harvests << [container, branch] } as ContainerHarvest
+    def harvester = { String container, String branch ->
+        harvests << [container, branch]
+    } as ContainerHarvest
 
     private ContainerTaskExecutionEnvironment env(String image = 'gnomish/img') {
         new ContainerTaskExecutionEnvironment(
@@ -149,7 +151,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
         and: 'the task container run mounts only the task volume'
         def run = docker.runs[4]
-        run.findAll { it.toString().contains(':') && it.toString().contains('/gnomish') } ==
+        run.findAll {
+            it.toString().contains(':') && it.toString().contains('/gnomish')
+        } ==
         [
             'gnomish-vol-' + KEY + ':/gnomish/work'
         ]
@@ -169,7 +173,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
     def "FR3: a failed docker create surfaces as IllegalStateException naming the failure"() {
         given:
-        docker.onRun = { args -> new DockerResult(1, '', 'no space left on device') }
+        docker.onRun = { args ->
+            new DockerResult(1, '', 'no space left on device')
+        }
 
         when:
         env().materialize('task/x', null)
@@ -181,7 +187,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
     def "NFR-R1: a daemon outage at materialize propagates as an infrastructure failure, not a quality failure"() {
         given:
-        docker.onRun = { args -> throw new DockerUnavailableException('Cannot connect to the Docker daemon', null) }
+        docker.onRun = { args ->
+            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null)
+        }
 
         when:
         env().materialize('task/x', null)
@@ -337,7 +345,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def "FR9: exec passes exactly the composed allowlist as --env entries, with an empty container base"() {
         given: 'an allowlist passing JAVA_HOME through, over a factory env that also holds a noise key'
         def factoryEnv = [JAVA_HOME: '/jdk', AWS_SECRET_ACCESS_KEY: 'never', PATH: '/usr/bin']
-        def allowlist = ChildEnvAllowlist.over(['JAVA_HOME'], [], { -> factoryEnv })
+        def allowlist = ChildEnvAllowlist.over(['JAVA_HOME'], [], {
+            -> factoryEnv
+        })
         def e = new ContainerTaskExecutionEnvironment(
                 docker, KEY, SOURCE_CLONE, harvester, 'gnomish/img', 'runc', LIMITS, false, clock, allowlist)
         e.materialize('task/x', null)

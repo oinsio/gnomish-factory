@@ -141,12 +141,12 @@ class TaskJsonMapperSpec extends Specification {
         TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, report, false).lastEscalation() == expected
 
         where:
-        report                                                                          | expected
-        new EscalationReport.AttemptsExhausted(3)                                       | new EscalationReportDto.AttemptsExhausted("attemptsExhausted", 3)
-        new EscalationReport.DecisionNeeded("Q?", ["a", "b"])                           | new EscalationReportDto.DecisionNeeded("decisionNeeded", "Q?", ["a", "b"])
+        report | expected
+        new EscalationReport.AttemptsExhausted(3) | new EscalationReportDto.AttemptsExhausted("attemptsExhausted", 3)
+        new EscalationReport.DecisionNeeded("Q?", ["a", "b"]) | new EscalationReportDto.DecisionNeeded("decisionNeeded", "Q?", ["a", "b"])
         new EscalationReport.CannotVerify(new CheckRef(0, "command:./gradlew test"), "timeout", "detail") | new EscalationReportDto.CannotVerify("cannotVerify", "command:./gradlew test", "timeout", "detail")
-        new EscalationReport.PipelineMismatch("removed-stage")                          | new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage")
-        new EscalationReport.CannotExecute("adapter crashed")                           | new EscalationReportDto.CannotExecute("cannotExecute", "adapter crashed")
+        new EscalationReport.PipelineMismatch("removed-stage") | new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage")
+        new EscalationReport.CannotExecute("adapter crashed") | new EscalationReportDto.CannotExecute("cannotExecute", "adapter crashed")
     }
 
     def "round-trip: serialize then deserialize a full TaskJsonDto tree is equal"() {
@@ -163,8 +163,8 @@ class TaskJsonMapperSpec extends Specification {
                     new TaskDecisionDto("patch in place", "operator", "plan", "2026-07-16T14:21:30Z")
                 ],
                 new TaskOutcomeDto.Escalated(
-                "escalated",
-                new EscalationReportDto.CannotVerify("cannotVerify", "external:ci", "timeout", "poll exceeded")),
+                        "escalated",
+                        new EscalationReportDto.CannotVerify("cannotVerify", "external:ci", "timeout", "poll exceeded")),
                 new EscalationReportDto.DecisionNeeded("decisionNeeded", "Refactor or patch?", ["refactor", "patch"]),
                 null)
 
@@ -353,10 +353,10 @@ class TaskJsonMapperSpec extends Specification {
         content.outcome() == expectedDto
 
         where:
-        outcome                                                                                    | expectedDto
-        new TaskOutcome.Completed(someState())                                                      | new TaskOutcomeDto.Completed("completed")
-        new TaskOutcome.Paused(someState(), "implement")                                            | new TaskOutcomeDto.Paused("paused", "implement")
-        new TaskOutcome.Escalated(someState(), new EscalationReport.AttemptsExhausted(3))           | new TaskOutcomeDto.Escalated("escalated", new EscalationReportDto.AttemptsExhausted("attemptsExhausted", 3))
+        outcome | expectedDto
+        new TaskOutcome.Completed(someState()) | new TaskOutcomeDto.Completed("completed")
+        new TaskOutcome.Paused(someState(), "implement") | new TaskOutcomeDto.Paused("paused", "implement")
+        new TaskOutcome.Escalated(someState(), new EscalationReport.AttemptsExhausted(3)) | new TaskOutcomeDto.Escalated("escalated", new EscalationReportDto.AttemptsExhausted("attemptsExhausted", 3))
         new TaskOutcome.Aborted(someState(), new AttemptKey("task-1", "implement", 2), "disk full") | new TaskOutcomeDto.Aborted("aborted", new AttemptKey("task-1", "implement", 2).toString(), "disk full")
     }
 

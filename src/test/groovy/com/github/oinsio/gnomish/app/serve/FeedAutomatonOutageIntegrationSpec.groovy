@@ -77,19 +77,19 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
     def "the feed survives a sustained tracker outage and resumes claiming once WireMock recovers"() {
         given: 'the List Issues endpoint resets the connection twice, then recovers with one ready task'
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .inScenario('outage')
                 .whenScenarioStateIs('Started')
                 .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER))
                 .willSetStateTo('failed-once'))
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .inScenario('outage')
                 .whenScenarioStateIs('failed-once')
                 .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER))
                 .willSetStateTo('recovered'))
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .inScenario('outage')
                 .whenScenarioStateIs('recovered')
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":42}]')))
@@ -104,7 +104,9 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
         Tracker tracker = [
             listReady: { int limit -> feedQuery.listReady(limit) },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
         def ledger = new SlotLedger(1)
         def slotRunner = { TaskRef ref -> claimed.add(ref) } as SlotRunner
@@ -128,7 +130,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
 
         and: 'all three HTTP attempts actually reached WireMock (two faulted, one succeeded)'
         wireMock.verify(3, getRequestedFor(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
     }
 
     // Sanity companion: absent stubbed candidates, the same outage-tolerant tracker still leaves
@@ -138,13 +140,13 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
     def "an outage resolving to an empty feed lands in Idle-empty, not a crash"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .inScenario('empty-outage')
                 .whenScenarioStateIs('Started')
                 .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER))
                 .willSetStateTo('recovered'))
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .inScenario('empty-outage')
                 .whenScenarioStateIs('recovered')
                 .willReturn(aResponse().withStatus(200).withBody('[]')))

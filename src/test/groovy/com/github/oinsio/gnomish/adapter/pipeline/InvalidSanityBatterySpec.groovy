@@ -76,11 +76,11 @@ instructions: stages/plan/instructions.md
         errors == [expected]
 
         where:
-        rule                    | verifyBlock                                   || expected
-        'blank checkId'         | external('""', '5s', '60s')                   || new ConfigError('stages/plan/stage.yaml', 'verify[0].checkId', 'missing required external check identifier')
-        'non-positive interval' | external('ci', '0s', '60s')                   || new ConfigError('stages/plan/stage.yaml', 'verify[0].interval', 'non-positive external poll interval PT0S; the interval must be positive')
-        'non-positive timeout'  | external('ci', '5s', '0s')                    || new ConfigError('stages/plan/stage.yaml', 'verify[0].timeout', 'non-positive external poll timeout PT0S; the timeout must be positive')
-        'interval over timeout' | external('ci', '2m', '30s')                   || new ConfigError('stages/plan/stage.yaml', 'verify[0].interval', 'external poll interval PT2M exceeds timeout PT30S; the interval must not exceed the timeout')
+        rule | verifyBlock || expected
+        'blank checkId' | external('""', '5s', '60s') || new ConfigError('stages/plan/stage.yaml', 'verify[0].checkId', 'missing required external check identifier')
+        'non-positive interval' | external('ci', '0s', '60s') || new ConfigError('stages/plan/stage.yaml', 'verify[0].interval', 'non-positive external poll interval PT0S; the interval must be positive')
+        'non-positive timeout' | external('ci', '5s', '0s') || new ConfigError('stages/plan/stage.yaml', 'verify[0].timeout', 'non-positive external poll timeout PT0S; the timeout must be positive')
+        'interval over timeout' | external('ci', '2m', '30s') || new ConfigError('stages/plan/stage.yaml', 'verify[0].interval', 'external poll interval PT2M exceeds timeout PT30S; the interval must not exceed the timeout')
     }
 
     def "M2/FR11: judge-check faults each yield exactly their located error"() {
@@ -94,10 +94,10 @@ instructions: stages/plan/instructions.md
         errors == [expected]
 
         where:
-        rule               | verifyBlock          || expected
-        'blank judge model'| judge('""', '3')     || new ConfigError('stages/plan/stage.yaml', 'verify[0].model', 'missing required judge model; the model must be pinned in the manifest for reproducibility')
-        'even votes'       | judge('judge-m', '2')|| new ConfigError('stages/plan/stage.yaml', 'verify[0].votes', 'invalid judge vote count 2; votes must be at least 1 and odd')
-        'zero votes'       | judge('judge-m', '0')|| new ConfigError('stages/plan/stage.yaml', 'verify[0].votes', 'invalid judge vote count 0; votes must be at least 1 and odd')
+        rule | verifyBlock || expected
+        'blank judge model'| judge('""', '3') || new ConfigError('stages/plan/stage.yaml', 'verify[0].model', 'missing required judge model; the model must be pinned in the manifest for reproducibility')
+        'even votes' | judge('judge-m', '2')|| new ConfigError('stages/plan/stage.yaml', 'verify[0].votes', 'invalid judge vote count 2; votes must be at least 1 and odd')
+        'zero votes' | judge('judge-m', '0')|| new ConfigError('stages/plan/stage.yaml', 'verify[0].votes', 'invalid judge vote count 0; votes must be at least 1 and odd')
     }
 
     /** A valid single plan-stage tree whose manifest body is the given block (with executor/verify). */

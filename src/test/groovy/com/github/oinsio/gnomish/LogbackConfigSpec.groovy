@@ -75,7 +75,9 @@ class LogbackConfigSpec extends Specification {
 
         expect:
         stdout.target == 'System.out'
-        stdout.copyOfAttachedFiltersList.any { it instanceof ThresholdFilter && ((ThresholdFilter) it).level == Level.WARN }
+        stdout.copyOfAttachedFiltersList.any {
+            it instanceof ThresholdFilter && ((ThresholdFilter) it).level == Level.WARN
+        }
     }
 
     // NFR-O2: ERROR is duplicated to stderr via a dedicated appender
@@ -85,7 +87,9 @@ class LogbackConfigSpec extends Specification {
 
         expect:
         stderr.target == 'System.err'
-        stderr.copyOfAttachedFiltersList.any { it instanceof ThresholdFilter && ((ThresholdFilter) it).level == Level.ERROR }
+        stderr.copyOfAttachedFiltersList.any {
+            it instanceof ThresholdFilter && ((ThresholdFilter) it).level == Level.ERROR
+        }
     }
 
     // NFR-O1, NFR-O2: all three appenders are attached to the root logger at INFO

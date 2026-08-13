@@ -80,7 +80,9 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
     def "captures a builtin check duration measured across the runner call"() {
         given: 'a builtin runner whose call advances the clock by a known amount'
         def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
-        builtinRunner.onRun = { check, ws -> clock.advance(Duration.ofSeconds(5)) }
+        builtinRunner.onRun = { check, ws ->
+            clock.advance(Duration.ofSeconds(5))
+        }
         def commandRunner = new ScriptedCommandCheckRunner()
 
         when: 'the single builtin check is verified'
@@ -95,7 +97,9 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
         given: 'a command runner whose call advances the clock by a known amount'
         def builtinRunner = new ScriptedBuiltinCheckRunner()
         def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
-        commandRunner.onRun = { check, ws -> clock.advance(Duration.ofMillis(250)) }
+        commandRunner.onRun = { check, ws ->
+            clock.advance(Duration.ofMillis(250))
+        }
 
         when: 'the single command check is verified'
         def result = orchestrator(builtinRunner, commandRunner).verify([command('./gradlew test')], CONTEXT, WORKSPACE, KEY)
@@ -108,9 +112,13 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
     def "measures each check's duration independently across its own runner call"() {
         given: 'a builtin advancing 2s then a command advancing 3s'
         def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
-        builtinRunner.onRun = { check, ws -> clock.advance(Duration.ofSeconds(2)) }
+        builtinRunner.onRun = { check, ws ->
+            clock.advance(Duration.ofSeconds(2))
+        }
         def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
-        commandRunner.onRun = { check, ws -> clock.advance(Duration.ofSeconds(3)) }
+        commandRunner.onRun = { check, ws ->
+            clock.advance(Duration.ofSeconds(3))
+        }
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')

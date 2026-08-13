@@ -111,7 +111,9 @@ class InteractiveJudgeVoterSpec extends Specification {
         voter.vote(check, sampleContext(), sampleWorkspace())
 
         then:
-        io.printed.any { it == '(acceptance criteria could not be read: does-not-exist.md)' }
+        io.printed.any {
+            it == '(acceptance criteria could not be read: does-not-exist.md)'
+        }
     }
 
     def "unrecognized input re-prompts naming the accepted answers before an eventual valid answer"() {

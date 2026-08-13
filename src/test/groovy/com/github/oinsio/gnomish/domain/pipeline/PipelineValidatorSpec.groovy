@@ -71,12 +71,12 @@ class PipelineValidatorSpec extends Specification {
         PipelineValidator.validate(model).containsAll(expected)
 
         where:
-        ruleName          | model                        || expected
-        'SchemaVersion'   | unsupportedVersionModel()    || SchemaVersionRule.validate(unsupportedVersionModel().schemaVersion())
-        'TrackerConfig'   | badThresholdModel()          || TrackerConfigRule.validate(badThresholdModel().tracker())
-        'StageOrder'      | emptyOrderModel()            || StageOrderRule.validate(emptyOrderModel().stages())
-        'ArtifactGraph'   | danglingRefModel()           || ArtifactGraphRule.validate(danglingRefModel().stages())
-        'StageSanity'     | blankModelModel()            || StageSanityRule.validate(blankModelModel().stages())
+        ruleName | model || expected
+        'SchemaVersion' | unsupportedVersionModel() || SchemaVersionRule.validate(unsupportedVersionModel().schemaVersion())
+        'TrackerConfig' | badThresholdModel() || TrackerConfigRule.validate(badThresholdModel().tracker())
+        'StageOrder' | emptyOrderModel() || StageOrderRule.validate(emptyOrderModel().stages())
+        'ArtifactGraph' | danglingRefModel() || ArtifactGraphRule.validate(danglingRefModel().stages())
+        'StageSanity' | blankModelModel() || StageSanityRule.validate(blankModelModel().stages())
     }
 
     // FR8 / UX1 / delta-spec "All problems reported in one pass": a model
@@ -110,9 +110,9 @@ class PipelineValidatorSpec extends Specification {
         PipelineValidator.validate(model) == PipelineValidator.validate(model)
 
         where:
-        ruleName  | model
-        'valid'   | validModel()
-        'broken'  | allRulesBrokenModel()
+        ruleName | model
+        'valid' | validModel()
+        'broken' | allRulesBrokenModel()
     }
 
     // NFR-R1 / conventions: the returned list is immutable (defensive copy).

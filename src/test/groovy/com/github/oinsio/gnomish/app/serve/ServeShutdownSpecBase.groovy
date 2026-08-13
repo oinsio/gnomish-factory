@@ -39,7 +39,9 @@ abstract class ServeShutdownSpecBase extends Specification {
     // never-started StandingReaper is a harmless collaborator for all of them.
     protected static StandingReaper inertReaper() {
         new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier, new SystemClock())
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), {
+                    []
+                } as Supplier, new SystemClock())
     }
 
     // Captures ServeShutdown's log output so the grace-window summary line — the only observable

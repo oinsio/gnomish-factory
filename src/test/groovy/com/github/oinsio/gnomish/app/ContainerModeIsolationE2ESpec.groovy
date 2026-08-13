@@ -108,7 +108,11 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
         def handle = environment.exec(new ExecCommand(['env'], [:], null, true))
         def output = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
         handle.waitForExit()
-        def names = output.readLines().findAll { it.contains('=') }.collect { it.substring(0, it.indexOf('=')) }
+        def names = output.readLines().findAll {
+            it.contains('=')
+        }.collect {
+            it.substring(0, it.indexOf('='))
+        }
 
         then: 'every observed variable is either image ENV or the factory-set proxy fragment'
         def allowed = [

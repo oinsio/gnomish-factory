@@ -117,16 +117,16 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
         method.invoke(null, [args as String[]] as Object[]) == expected
 
         where:
-        args                    | expected
-        []                       | false
-        ['status']               | false
-        ['fetch']                | true
-        ['push']                 | true
-        ['worktree']             | false // length == 1: no second arg to inspect, must not index into args[1]
-        ['worktree', 'add']      | true
-        ['worktree', 'remove']   | true
-        ['worktree', 'prune']    | true
-        ['worktree', 'list']     | false // length > 1 but second arg is not add/remove/prune
+        args | expected
+        [] | false
+        ['status'] | false
+        ['fetch'] | true
+        ['push'] | true
+        ['worktree'] | false // length == 1: no second arg to inspect, must not index into args[1]
+        ['worktree', 'add'] | true
+        ['worktree', 'remove'] | true
+        ['worktree', 'prune'] | true
+        ['worktree', 'list'] | false // length > 1 but second arg is not add/remove/prune
         [
             'worktree',
             'prune',
@@ -158,8 +158,8 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
             'worktree',
             'add'
         ] | true
-        ['-c', 'a=b']            | false // only -c pairs, no subcommand at all
-        ['-c']                   | false // dangling -c with no value
+        ['-c', 'a=b'] | false // only -c pairs, no subcommand at all
+        ['-c'] | false // dangling -c with no value
     }
 
     // Design D8/NFR-R2: run() with a repo-level-mutating subcommand drives resolveCloneKey ->

@@ -193,13 +193,13 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         content.outcome().type() == expectedType
 
         where:
-        outcome                                                                                  | expectedEvent                | expectedType
-        new TaskOutcome.Completed(TaskState.atStageStart('implement'))                            | TaskLifecycleEvent.COMPLETED | 'completed'
-        new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement')                  | TaskLifecycleEvent.PAUSED    | 'paused'
+        outcome | expectedEvent | expectedType
+        new TaskOutcome.Completed(TaskState.atStageStart('implement')) | TaskLifecycleEvent.COMPLETED | 'completed'
+        new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement') | TaskLifecycleEvent.PAUSED | 'paused'
         new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']))                  | TaskLifecycleEvent.ESCALATED | 'escalated'
+                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])) | TaskLifecycleEvent.ESCALATED | 'escalated'
         new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-                new AttemptKey('PROJ-1', 'implement', 0), 'boom')                                 | TaskLifecycleEvent.ABORTED   | 'aborted'
+                new AttemptKey('PROJ-1', 'implement', 0), 'boom') | TaskLifecycleEvent.ABORTED | 'aborted'
     }
 
     def "FR25: recordOutcome for Escalated populates lastEscalation and the tracker-write pending marker"() {

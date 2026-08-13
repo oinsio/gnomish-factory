@@ -60,8 +60,9 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
                 instanceId,
                 slotLedger,
                 { TaskRef ref -> } as SlotRunner,
-                { Duration d -> } as Sleeper,
-                { -> Instant.now() } as com.github.oinsio.gnomish.domain.engine.port.Clock,
+                { Duration d -> } as Sleeper, {
+                    -> Instant.now()
+                } as com.github.oinsio.gnomish.domain.engine.port.Clock,
                 Duration.ofSeconds(1),
                 Duration.ofSeconds(60),
                 Duration.ofSeconds(30),
@@ -104,13 +105,19 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
         given:
         def instanceId = InstanceId.generate(INSTANCE_NAME)
         def tracker = Stub(Tracker)
-        def trackerHealth = new TrackerHealthTracker(tracker, { -> Instant.now() } as com.github.oinsio.gnomish.domain.engine.port.Clock)
+        def trackerHealth = new TrackerHealthTracker(tracker, {
+            -> Instant.now()
+        } as com.github.oinsio.gnomish.domain.engine.port.Clock)
         def dirtyNotifier = new ForwardingDirtyNotifier()
         def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
-        def slotLedger = new SlotLedger(3, { -> clock.instant() } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
+        def slotLedger = new SlotLedger(3, {
+            -> clock.instant()
+        } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
         def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0)
-        def engineClock = { -> clock.instant() } as com.github.oinsio.gnomish.domain.engine.port.Clock
+        def engineClock = {
+            -> clock.instant()
+        } as com.github.oinsio.gnomish.domain.engine.port.Clock
 
         when:
         def observability = ObservabilityAssembly.assemble(
@@ -165,16 +172,22 @@ class ObservabilityAssemblySpec extends Specification implements AppAssemblyFixt
         given:
         def instanceId = InstanceId.generate(INSTANCE_NAME)
         def tracker = Stub(Tracker)
-        def trackerHealth = new TrackerHealthTracker(tracker, { -> Instant.now() } as com.github.oinsio.gnomish.domain.engine.port.Clock)
+        def trackerHealth = new TrackerHealthTracker(tracker, {
+            -> Instant.now()
+        } as com.github.oinsio.gnomish.domain.engine.port.Clock)
         def dirtyNotifier = new ForwardingDirtyNotifier()
         def clock = Clock.fixed(Instant.parse('2026-08-03T10:00:00Z'), ZoneOffset.UTC)
-        def slotLedger = new SlotLedger(1, { -> clock.instant() } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
+        def slotLedger = new SlotLedger(1, {
+            -> clock.instant()
+        } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
         def ref = new TaskRef('github:o/r#1')
         slotLedger.acquire()
         slotLedger.assign(ref)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
         def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0)
-        def engineClock = { -> clock.instant() } as com.github.oinsio.gnomish.domain.engine.port.Clock
+        def engineClock = {
+            -> clock.instant()
+        } as com.github.oinsio.gnomish.domain.engine.port.Clock
 
         when:
         def observability = ObservabilityAssembly.assemble(

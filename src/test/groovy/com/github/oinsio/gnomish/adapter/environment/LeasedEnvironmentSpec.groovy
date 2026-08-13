@@ -71,8 +71,8 @@ class LeasedEnvironmentSpec extends Specification {
         0 * box._
 
         where:
-        operation     | args
+        operation | args
         'materialize' | ['gnomish/t', null]
-        'dispose'     | []
+        'dispose' | []
     }
 }

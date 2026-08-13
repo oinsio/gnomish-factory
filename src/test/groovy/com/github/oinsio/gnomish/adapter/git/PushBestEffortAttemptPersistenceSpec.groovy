@@ -55,7 +55,9 @@ class PushBestEffortAttemptPersistenceSpec extends Specification implements Bare
                 new ToolTrace(new AttemptKey('T-1', 'work', 0), []))
 
         then:
-        1 * delegate.persist(_, _, _) >> { throw new GitPersistFailedException('T-1', 'work', 0, 'boom', 'x') }
+        1 * delegate.persist(_, _, _) >> {
+            throw new GitPersistFailedException('T-1', 'work', 0, 'boom', 'x')
+        }
         thrown(GitPersistFailedException)
     }
 }

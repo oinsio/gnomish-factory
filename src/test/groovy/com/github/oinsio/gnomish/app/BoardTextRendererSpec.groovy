@@ -57,8 +57,8 @@ class BoardTextRendererSpec extends Specification {
         def workingIndex = text.indexOf('Working')
         def awaitingIndex = text.indexOf('AwaitingHuman')
         readyIndex >= 0
-        readyIndex < workingIndex
-        workingIndex < awaitingIndex
+        readyIndex <workingIndex
+        workingIndex <awaitingIndex
     }
 
     // FR2, spec scenario "Backed-off task is annotated with its deadline"

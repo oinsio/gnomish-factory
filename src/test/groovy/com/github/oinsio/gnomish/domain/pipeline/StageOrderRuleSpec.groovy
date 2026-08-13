@@ -65,14 +65,14 @@ class StageOrderRuleSpec extends Specification {
         StageOrderRule.validate(names.collect { stage(it) }) == expected
 
         where:
-        names                                          || expected
-        ['plan', 'implement', 'plan']                  || [duplicate('plan', 2)]
+        names || expected
+        ['plan', 'implement', 'plan'] || [duplicate('plan', 2)]
         [
             'plan',
             'plan',
             'implement',
             'implement'
-        ]     || [
+        ] || [
             duplicate('plan', 2),
             duplicate('implement', 2)
         ]
@@ -81,7 +81,7 @@ class StageOrderRuleSpec extends Specification {
             'plan',
             'review',
             'plan'
-        ]           || [
+        ] || [
             duplicate('review', 2),
             duplicate('plan', 2)
         ]
@@ -89,14 +89,14 @@ class StageOrderRuleSpec extends Specification {
             'implement',
             'implement',
             'implement'
-        ]        || [duplicate('implement', 3)]
+        ] || [duplicate('implement', 3)]
         [
             'plan',
             'plan',
             'plan',
             'review',
             'review'
-        ]   || [
+        ] || [
             duplicate('plan', 3),
             duplicate('review', 2)
         ]

@@ -60,7 +60,7 @@ class GithubFeedQuerySpec extends Specification {
     def "queries List Issues with state=open, ready label, ascending by creation"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
         def feedQuery = newFeedQuery()
 
@@ -70,13 +70,13 @@ class GithubFeedQuerySpec extends Specification {
         then:
         result.isEmpty()
         wireMock.verify(getRequestedFor(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
     }
 
     def "filters out entries carrying a pull_request field"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
                           {"number":1,"pull_request":{"url":"https://api.github.com/repos/acme/widgets/pulls/1"}},
@@ -104,7 +104,7 @@ class GithubFeedQuerySpec extends Specification {
     def "enriches a ready task with abort facts from the latest abort structural marker comment"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":7}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/7/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -131,7 +131,7 @@ class GithubFeedQuerySpec extends Specification {
     def "counts only abort markers strictly after the latest PROGRESS marker (FR3, D3 of fix-abort-progress-reset)"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":8}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/8/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -156,7 +156,7 @@ class GithubFeedQuerySpec extends Specification {
     def "a ready task with no abort markers reports AbortFacts.none()"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":9}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/9/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
@@ -174,7 +174,7 @@ class GithubFeedQuerySpec extends Specification {
     def "reports returned = true when the thread carries a PARK marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":11}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/11/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -198,7 +198,7 @@ class GithubFeedQuerySpec extends Specification {
     def "reports returned = true when the thread carries a STALE_CLAIM_REMOVED marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":12}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -222,7 +222,7 @@ class GithubFeedQuerySpec extends Specification {
     def "reports returned = false when the thread carries neither a PARK nor a STALE_CLAIM_REMOVED marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":13}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/13/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
@@ -241,7 +241,7 @@ class GithubFeedQuerySpec extends Specification {
     def "reports finished = true when the thread carries a FINISH marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":14}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/14/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -265,7 +265,7 @@ class GithubFeedQuerySpec extends Specification {
     def "reports finished = false and returned = true when the thread carries only a PARK marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":15}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/15/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -288,7 +288,7 @@ class GithubFeedQuerySpec extends Specification {
     def "reports finished = false for a task with no markers at all"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":16}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/16/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
@@ -307,7 +307,7 @@ class GithubFeedQuerySpec extends Specification {
     def "carries each ready task's title from the List Issues response, with no extra request"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[{"number":20,"title":"Fix the widget"}]')))
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/20/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
@@ -321,7 +321,7 @@ class GithubFeedQuerySpec extends Specification {
         result[0].title() == 'Fix the widget'
         // exactly one feed request and one comments request — no issue-detail (GET /issues/20) call
         wireMock.verify(1, getRequestedFor(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
         wireMock.verify(1, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/20/comments?per_page=100')))
         wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/20')))
     }
@@ -340,7 +340,7 @@ class GithubFeedQuerySpec extends Specification {
     def "respects the limit parameter, stopping after limit entries"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [{"number":1},{"number":2},{"number":3}]
                         ''')))
@@ -361,7 +361,7 @@ class GithubFeedQuerySpec extends Specification {
     def "reuses the conditional-request cache across repeated polls of the feed"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withHeader('ETag', '"v1"').withBody('[]')))
         def feedQuery = newFeedQuery()
         feedQuery.listReady(10)
@@ -371,7 +371,7 @@ class GithubFeedQuerySpec extends Specification {
 
         then:
         wireMock.verify(getRequestedFor(urlEqualTo(
-                '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .withHeader('If-None-Match', equalTo('"v1"')))
     }
 }

@@ -24,7 +24,7 @@ trait StageFixture {
                     new ArtifactOutput("$name-out")
                 ],
                 new StageDefinition.Executor(
-                ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], new Sandbox([], requiresFresh)),
+                        ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], new Sandbox([], requiresFresh)),
                 "stages/$name/instructions.md",
                 [
                     new VerifyCheck.Command('./gradlew check')

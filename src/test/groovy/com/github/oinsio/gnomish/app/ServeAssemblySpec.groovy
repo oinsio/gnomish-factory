@@ -38,7 +38,9 @@ class ServeAssemblySpec extends Specification {
         def serveProperties = new ServeProperties(
                 1, Duration.ofSeconds(30), Duration.ofMillis(50), Duration.ofDays(14), null, null)
         def standingReaper = new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier, new SystemClock())
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), {
+                    []
+                } as Supplier, new SystemClock())
 
         when:
         def shutdown = ServeAssembly.shutdown(slotLedger, claimLossFlag, serveProperties, standingReaper)

@@ -111,10 +111,10 @@ class VerdictSpec extends Specification {
         label(verdict) == expected
 
         where:
-        verdict                                          || expected
-        new Verdict.Pass()                               || 'pass'
-        new Verdict.Fail([])                             || 'fail'
-        new Verdict.CannotVerify('r', '')                || 'cannot-verify'
+        verdict || expected
+        new Verdict.Pass() || 'pass'
+        new Verdict.Fail([]) || 'fail'
+        new Verdict.CannotVerify('r', '') || 'cannot-verify'
     }
 
     private static String label(Verdict verdict) {

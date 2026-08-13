@@ -113,8 +113,8 @@ class StageSanityRuleSpec extends Specification {
         ]) == []
 
         where:
-        type                   | model                    | limit
-        ExecutorType.API       | 'claude-sonnet-4-5'      | 1
+        type | model | limit
+        ExecutorType.API | 'claude-sonnet-4-5' | 1
         ExecutorType.AGENT_CLI | 'no-such-model-anywhere' | 3
     }
 
@@ -127,10 +127,10 @@ class StageSanityRuleSpec extends Specification {
         ]) == [missingModel('plan')]
 
         where:
-        label              | model  | type
-        'empty'            | ''     | ExecutorType.API
-        'whitespace-only'  | '   '  | ExecutorType.AGENT_CLI
-        'tab'              | '\t'   | ExecutorType.API
+        label | model | type
+        'empty' | '' | ExecutorType.API
+        'whitespace-only' | '   ' | ExecutorType.AGENT_CLI
+        'tab' | '\t' | ExecutorType.API
     }
 
     // FR11 delta-spec AND-clause (Q1/D5a): settings present as a mapping are
@@ -172,9 +172,9 @@ class StageSanityRuleSpec extends Specification {
         ]) == []
 
         where:
-        interval                  | timeout
-        Duration.ofSeconds(30)    | Duration.ofMinutes(10)
-        Duration.ofMinutes(10)    | Duration.ofMinutes(10)
+        interval | timeout
+        Duration.ofSeconds(30) | Duration.ofMinutes(10)
+        Duration.ofMinutes(10) | Duration.ofMinutes(10)
     }
 
     // FR11 external clause: a non-positive interval/timeout or interval >
@@ -189,24 +189,24 @@ class StageSanityRuleSpec extends Specification {
         ]) == expected
 
         where:
-        label                    | checkId    | interval                 | timeout                  || expected
-        'zero interval'          | 'ci/build' | Duration.ZERO            | Duration.ofMinutes(1)    || [
+        label | checkId | interval | timeout || expected
+        'zero interval' | 'ci/build' | Duration.ZERO | Duration.ofMinutes(1) || [
             badInterval('review', 0, Duration.ZERO)
         ]
-        'negative interval'      | 'ci/build' | Duration.ofSeconds(-1)   | Duration.ofMinutes(1)    || [
+        'negative interval' | 'ci/build' | Duration.ofSeconds(-1) | Duration.ofMinutes(1) || [
             badInterval('review', 0, Duration.ofSeconds(-1))
         ]
-        'zero timeout'           | 'ci/build' | Duration.ofSeconds(30)   | Duration.ZERO            || [
+        'zero timeout' | 'ci/build' | Duration.ofSeconds(30) | Duration.ZERO || [
             badTimeout('review', 0, Duration.ZERO)
         ]
-        'negative timeout'       | 'ci/build' | Duration.ofSeconds(30)   | Duration.ofSeconds(-1)   || [
+        'negative timeout' | 'ci/build' | Duration.ofSeconds(30) | Duration.ofSeconds(-1) || [
             badTimeout('review', 0, Duration.ofSeconds(-1))
         ]
-        'interval over timeout'  | 'ci/build' | Duration.ofMinutes(2)    | Duration.ofMinutes(1)    || [
+        'interval over timeout' | 'ci/build' | Duration.ofMinutes(2) | Duration.ofMinutes(1) || [
             intervalOverTimeout('review', 0, Duration.ofMinutes(2), Duration.ofMinutes(1))
         ]
-        'blank checkId'          | '   '      | Duration.ofSeconds(30)   | Duration.ofMinutes(1)    || [blankCheckId('review', 0)]
-        'empty checkId'          | ''         | Duration.ofSeconds(30)   | Duration.ofMinutes(1)    || [blankCheckId('review', 0)]
+        'blank checkId' | '   ' | Duration.ofSeconds(30) | Duration.ofMinutes(1) || [blankCheckId('review', 0)]
+        'empty checkId' | '' | Duration.ofSeconds(30) | Duration.ofMinutes(1) || [blankCheckId('review', 0)]
     }
 
     // FR11 external clause: field-order determinism within one check — a blank
@@ -264,15 +264,15 @@ class StageSanityRuleSpec extends Specification {
         ]
 
         where:
-        label                 | path
-        'absolute'            | '/etc/passwd'
-        'parent traversal'    | '../secrets/ci.yml'
-        'dot-dot segment'     | '.github/../ci.yml'
-        'dot segment'         | './ci.yml'
-        'bare dot'            | '.'
-        'bare dot-dot'        | '..'
-        'blank'               | '   '
-        'empty'               | ''
+        label | path
+        'absolute' | '/etc/passwd'
+        'parent traversal' | '../secrets/ci.yml'
+        'dot-dot segment' | '.github/../ci.yml'
+        'dot segment' | './ci.yml'
+        'bare dot' | '.'
+        'bare dot-dot' | '..'
+        'blank' | '   '
+        'empty' | ''
     }
 
     // FR16 (add-sandbox-core): pin-path errors are located by their index in the
@@ -354,8 +354,8 @@ class StageSanityRuleSpec extends Specification {
         ]
 
         where:
-        label             | model
-        'empty'           | ''
+        label | model
+        'empty' | ''
         'whitespace-only' | '   '
     }
 

@@ -31,7 +31,9 @@ class ContainerE2eDocker {
                 '{{.Name}}'
             ],
         ].each { args ->
-            names.addAll(run(args).readLines().findAll { it.contains(key) && it.startsWith('gnomish-') })
+            names.addAll(run(args).readLines().findAll {
+                it.contains(key) && it.startsWith('gnomish-')
+            })
         }
         names
     }

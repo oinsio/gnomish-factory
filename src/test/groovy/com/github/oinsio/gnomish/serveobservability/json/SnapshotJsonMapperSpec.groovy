@@ -86,11 +86,11 @@ class SnapshotJsonMapperSpec extends Specification {
         mapper.toDto(snapshotWithFeedPhase(phase)).feed().state() == wireValue
 
         where:
-        phase                     | wireValue
-        FeedPhase.FILLING         | "filling"
-        FeedPhase.IDLE_EMPTY      | "idleEmpty"
-        FeedPhase.IDLE_BLOCKED    | "idleBlocked"
-        FeedPhase.FULL            | "full"
+        phase | wireValue
+        FeedPhase.FILLING | "filling"
+        FeedPhase.IDLE_EMPTY | "idleEmpty"
+        FeedPhase.IDLE_BLOCKED | "idleBlocked"
+        FeedPhase.FULL | "full"
     }
 
     def "feed section renders since, lastPollAt, openFronts, and wipLimit"() {
@@ -126,10 +126,10 @@ class SnapshotJsonMapperSpec extends Specification {
         mapper.toDto(snapshotWithHeartbeatState(state)).vitals().heartbeat().state() == wireValue
 
         where:
-        state                    | wireValue
-        HeartbeatState.IDLE      | "idle"
-        HeartbeatState.RUNNING   | "running"
-        HeartbeatState.DIED      | "died"
+        state | wireValue
+        HeartbeatState.IDLE | "idle"
+        HeartbeatState.RUNNING | "running"
+        HeartbeatState.DIED | "died"
     }
 
     def "vitals reaper renders lastRunAt, restartCount, and intervalSeconds"() {

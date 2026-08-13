@@ -113,7 +113,9 @@ class OpenFrontGateSpec extends Specification {
         int wipLimit = 10
         int racingInstances = 5
         int[] sharedOpenFrontCount = [0]
-        IntSupplier sharedSupplier = { -> sharedOpenFrontCount[0] } as IntSupplier
+        IntSupplier sharedSupplier = {
+            -> sharedOpenFrontCount[0]
+        } as IntSupplier
 
         when: 'simulate many claim rounds; each instance re-checks before every claim attempt'
         int claimed = 0

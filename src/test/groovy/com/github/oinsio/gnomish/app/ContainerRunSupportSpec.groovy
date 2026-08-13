@@ -84,7 +84,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
         when:
         support.recordAborted(new TaskOutcome.Aborted(
-                TaskState.atStageStart('build'), new AttemptKey('T-1', 'build', 0), 'durability broke'))
+                        TaskState.atStageStart('build'), new AttemptKey('T-1', 'build', 0), 'durability broke'))
 
         then: 'the branch tip carries the aborted outcome'
         gitOutput(cloneDir, 'show', 'gnomish/T-1:.gnomish-task/task.json').contains('"aborted"')
@@ -248,7 +248,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     def "create scrubs the GitHub check token from the allowlist's credential set only when the check is configured"() {
         given:
         def configured = testProperties(check: new FactoryProperties.Check(
-        new FactoryProperties.Check.Github('https://api.github.com', 'acme/widgets')))
+                new FactoryProperties.Check.Github('https://api.github.com', 'acme/widgets')))
         def unconfigured = testProperties()
         def segments = [
             new Segment(AdapterBinding.CONTAINER, [stage()])

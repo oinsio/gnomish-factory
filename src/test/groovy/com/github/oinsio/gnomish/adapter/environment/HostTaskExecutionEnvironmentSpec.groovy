@@ -89,12 +89,14 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
 
         when: 'a command dumps every environment variable name it sees'
         def handle = e.exec(new ExecCommand(
-                [
-                    'sh',
-                    '-c',
-                    'env | cut -d= -f1'
-                ], [GNOMISH_PROBE: 'x'], null, false))
-        def names = readFully(handle.output()).readLines().findAll { !it.isEmpty() } as Set
+                        [
+                            'sh',
+                            '-c',
+                            'env | cut -d= -f1'
+                        ], [GNOMISH_PROBE: 'x'], null, false))
+        def names = readFully(handle.output()).readLines().findAll {
+            !it.isEmpty()
+        } as Set
         handle.waitForExit()
 
         then: 'the factory-set variable arrived, and every name is allowlisted or shell-internal'
@@ -126,7 +128,9 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
     def "a passthrough name carries a live value into the child"() {
         given: 'an allowlist passing GNOMISH_TOOLCHAIN through, backed by a mutable env source'
         def factoryEnv = [GNOMISH_TOOLCHAIN: 'first']
-        def e = hostEnv(ChildEnvAllowlist.over(['GNOMISH_TOOLCHAIN'], [], { -> factoryEnv }))
+        def e = hostEnv(ChildEnvAllowlist.over(['GNOMISH_TOOLCHAIN'], [], {
+            -> factoryEnv
+        }))
 
         when: 'the factory value changes between execs'
         def report = 'echo "[$GNOMISH_TOOLCHAIN]"'

@@ -99,7 +99,9 @@ class TakeFinishReportSpec extends Specification {
         def result = TakeFinishReport.finish(completed, CONTEXT, BRANCH, tracker, REF, INSTANCE)
 
         then:
-        1 * tracker.finish(REF, _ as String) >> { TaskRef ref, String summary -> captured = summary }
+        1 * tracker.finish(REF, _ as String) >> { TaskRef ref, String summary ->
+            captured = summary
+        }
 
         and:
         (result as TakeResult.Delivered).summary() == captured
@@ -136,7 +138,9 @@ class TakeFinishReportSpec extends Specification {
         given:
         def now = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
         Clock clock = { -> now.get() } as Clock
-        Sleeper sleeper = { Duration d -> now.set(now.get().plus(d)) } as Sleeper
+        Sleeper sleeper = { Duration d ->
+            now.set(now.get().plus(d))
+        } as Sleeper
         def retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
         def attempts = new AtomicInteger()
         tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
@@ -172,7 +176,9 @@ class TakeFinishReportSpec extends Specification {
         Sleeper sleeper = { Duration d -> } as Sleeper
         def retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
         tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
-        tracker.finish(REF, _ as String) >> { throw new TrackerUnavailableException('still down') }
+        tracker.finish(REF, _ as String) >> {
+            throw new TrackerUnavailableException('still down')
+        }
         def completed = new TaskOutcome.Completed(STATE)
         def result = null
 

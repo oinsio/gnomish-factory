@@ -22,11 +22,11 @@ class CheckRefSpec extends Specification {
         ref.label() == expectedLabel
 
         where:
-        index | check                                                                    || expectedLabel
-        0     | new VerifyCheck.Builtin('files_exist', [:])                              || 'builtin:files_exist'
-        1     | new VerifyCheck.Command('./gradlew test')                                || 'command:./gradlew test'
-        2     | new VerifyCheck.External('ci/build', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) || 'external:ci/build'
-        3     | new VerifyCheck.Judge('criteria/build.md', 'model-x', [:], 1)            || 'judge:criteria/build.md'
+        index | check || expectedLabel
+        0 | new VerifyCheck.Builtin('files_exist', [:]) || 'builtin:files_exist'
+        1 | new VerifyCheck.Command('./gradlew test') || 'command:./gradlew test'
+        2 | new VerifyCheck.External('ci/build', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) || 'external:ci/build'
+        3 | new VerifyCheck.Judge('criteria/build.md', 'model-x', [:], 1) || 'judge:criteria/build.md'
     }
 
     // FR4: the index and label are exposed exactly as constructed

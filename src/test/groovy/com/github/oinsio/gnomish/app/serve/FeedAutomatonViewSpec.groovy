@@ -65,7 +65,11 @@ class FeedAutomatonViewSpec extends Specification {
 
     def "before any cycle runs, the view reports an idle state at construction time"() {
         given:
-        Tracker tracker = [listReady: { int limit -> [] }, listOpen: { -> [] }] as Tracker
+        Tracker tracker = [listReady: { int limit ->
+                []
+            }, listOpen: {
+                -> []
+            }] as Tracker
         def a = automaton(tracker, new SlotLedger(1))
 
         expect:
@@ -85,7 +89,9 @@ class FeedAutomatonViewSpec extends Specification {
         Tracker tracker = [
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> openFronts },
-            claim    : { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
         def a = automaton(tracker, new SlotLedger(1))
         clock.advance(Duration.ofSeconds(5))
@@ -104,7 +110,11 @@ class FeedAutomatonViewSpec extends Specification {
 
     def "since is only updated on an actual state change, not on every cycle in the same state"() {
         given:
-        Tracker tracker = [listReady: { int limit -> [] }, listOpen: { -> [] }] as Tracker
+        Tracker tracker = [listReady: { int limit ->
+                []
+            }, listOpen: {
+                -> []
+            }] as Tracker
         def a = automaton(tracker, new SlotLedger(1))
         def firstSince = a.view().since()
         clock.advance(Duration.ofSeconds(10))
@@ -124,9 +134,13 @@ class FeedAutomatonViewSpec extends Specification {
         given:
         def fillingCounter = 0
         Tracker tracker = [
-            listReady: { int limit -> fillingCounter == 0 ? [fresh('github:o/r#1')] : [] },
+            listReady: { int limit ->
+                fillingCounter == 0 ? [fresh('github:o/r#1')] : []
+            },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance -> fillingCounter++; new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                fillingCounter++; new ClaimResult.Acquired()
+            },
         ] as Tracker
         def a = automaton(tracker, new SlotLedger(2))
         a.step()
@@ -149,7 +163,11 @@ class FeedAutomatonViewSpec extends Specification {
         def ledger = new SlotLedger(1)
         ledger.acquire()
         ledger.assign(busy)
-        Tracker tracker = [listReady: { int limit -> [] }, listOpen: { -> [] }] as Tracker
+        Tracker tracker = [listReady: { int limit ->
+                []
+            }, listOpen: {
+                -> []
+            }] as Tracker
         def a = automaton(tracker, ledger)
         ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()
         def stepDone = new CountDownLatch(1)

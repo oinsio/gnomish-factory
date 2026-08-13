@@ -24,9 +24,13 @@ class ToolTraceBuilderSpec extends Specification {
         def events = parser.parse(readerOf('plain-round'))
         def toolUseReadAt = events.find {
             it.event() instanceof AgentEvent.AssistantEvent &&
-            (it.event() as AgentEvent.AssistantEvent).content().any { c -> c instanceof ContentBlock.ToolUse }
+            (it.event() as AgentEvent.AssistantEvent).content().any { c ->
+                c instanceof ContentBlock.ToolUse
+            }
         }.readAt()
-        def toolResultReadAt = events.find { it.event() instanceof AgentEvent.UserEvent }.readAt()
+        def toolResultReadAt = events.find {
+            it.event() instanceof AgentEvent.UserEvent
+        }.readAt()
 
         when: 'the trace is built'
         def trace = builder.buildTrace(events, events.last().readAt())
@@ -57,7 +61,9 @@ class ToolTraceBuilderSpec extends Specification {
     def "computes an orphaned top-level tool call's duration to the supplied roundEnd"() {
         given: 'the premature-death fixture parsed into timestamped events (no tool_result ever arrives)'
         def events = parser.parse(readerOf('premature-death'))
-        def toolUseReadAt = events.find { it.event() instanceof AgentEvent.AssistantEvent }.readAt()
+        def toolUseReadAt = events.find {
+            it.event() instanceof AgentEvent.AssistantEvent
+        }.readAt()
         def roundEnd = toolUseReadAt.plusSeconds(45)
 
         when: 'the trace is built with the process-exit instant as roundEnd'
@@ -124,7 +130,9 @@ class ToolTraceBuilderSpec extends Specification {
                     }
                 }
         def events = advancingParser.parse(reader)
-        def toolResultReadAt = events.find { it.event() instanceof AgentEvent.UserEvent }.readAt()
+        def toolResultReadAt = events.find {
+            it.event() instanceof AgentEvent.UserEvent
+        }.readAt()
         def roundEnd = toolResultReadAt.plusSeconds(999)
 
         when: 'the trace is built with a roundEnd far past the tool_result'

@@ -237,11 +237,15 @@ exit 0''')
 
         when:
         Verdict verdict
-        def events = capture(FindingsFileReader) { verdict = runner.run(check, workspace()) }
+        def events = capture(FindingsFileReader) {
+            verdict = runner.run(check, workspace())
+        }
 
         then:
         verdict instanceof Verdict.Pass
-        events.any { it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content') }
+        events.any {
+            it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content')
+        }
     }
 
     def "exit 0 with no findings file content logs no warning"() {
@@ -250,11 +254,15 @@ exit 0''')
 
         when:
         Verdict verdict
-        def events = capture(FindingsFileReader) { verdict = runner.run(check, workspace()) }
+        def events = capture(FindingsFileReader) {
+            verdict = runner.run(check, workspace())
+        }
 
         then:
         verdict instanceof Verdict.Pass
-        events.every { !it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content') }
+        events.every {
+            !it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content')
+        }
     }
 
     // FR1, NFR-S3 of add-sandbox-core (task 7.3): the findings path lives in the environment's
@@ -331,7 +339,9 @@ exit 0''')
 
         then: 'every observed name is allowlisted or shell-internal'
         verdict instanceof Verdict.Fail
-        def names = (verdict as Verdict.Fail).findings()[0].details().readLines().findAll { !it.isEmpty() } as Set
+        def names = (verdict as Verdict.Fail).findings()[0].details().readLines().findAll {
+            !it.isEmpty()
+        } as Set
         def allowed = (HostTaskExecutionEnvironment.BASE_ENV_NAMES as Set) + ['GNOMISH_FINDINGS_FILE'] + shellSelfSet
         names.every { allowed.contains(it) }
     }

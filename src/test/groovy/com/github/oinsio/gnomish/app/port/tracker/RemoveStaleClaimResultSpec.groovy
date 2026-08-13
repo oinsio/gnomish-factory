@@ -33,10 +33,10 @@ class RemoveStaleClaimResultSpec extends Specification {
         describe(result) == expected
 
         where:
-        result                                                                                             | expected
-        new RemoveStaleClaimResult.Removed()                                                               | 'removed'
+        result | expected
+        new RemoveStaleClaimResult.Removed() | 'removed'
         new RemoveStaleClaimResult.Mismatch(new ClaimVersion('m2', Instant.parse('2026-07-29T10:20:30Z'))) | 'mismatch: m2'
-        new RemoveStaleClaimResult.Mismatch(null)                                                          | 'mismatch: gone'
+        new RemoveStaleClaimResult.Mismatch(null) | 'mismatch: gone'
     }
 
     // FR4, FR5: results are values — equal content means equal results

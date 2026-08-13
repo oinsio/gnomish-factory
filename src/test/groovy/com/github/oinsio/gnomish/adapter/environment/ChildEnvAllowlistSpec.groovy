@@ -44,7 +44,9 @@ class ChildEnvAllowlistSpec extends Specification {
     def "D6: compose layers base, passthrough, and factory-set — later layers win on a collision"() {
         given: 'a factory environment carrying base, passthrough, and colliding names'
         def factoryEnv = [PATH: '/usr/bin', JAVA_HOME: '/jdk', SHARED: 'from-env']
-        def allowlist = ChildEnvAllowlist.over(['JAVA_HOME', 'SHARED'], [], { -> factoryEnv })
+        def allowlist = ChildEnvAllowlist.over(['JAVA_HOME', 'SHARED'], [], {
+            -> factoryEnv
+        })
 
         when:
         def composed = allowlist.compose(['PATH', 'SHARED'], [SHARED: 'factory-set', GNOMISH_X: 'proto'])
@@ -55,7 +57,9 @@ class ChildEnvAllowlistSpec extends Specification {
 
     def "D6: a name unset in the factory environment is simply omitted"() {
         given:
-        def allowlist = ChildEnvAllowlist.over(['MISSING_TOOL_VAR'], [], { -> [PATH: '/usr/bin'] })
+        def allowlist = ChildEnvAllowlist.over(['MISSING_TOOL_VAR'], [], {
+            -> [PATH: '/usr/bin']
+        })
 
         expect:
         allowlist.compose(['PATH', 'MISSING_BASE_VAR'], [:]) == [PATH: '/usr/bin']
@@ -79,7 +83,9 @@ class ChildEnvAllowlistSpec extends Specification {
     def "NFR-S1: a declared credential name never appears in a composed map, whatever layer carries it"() {
         given: 'a credential name present in the factory environment and even in the factory-set fragment'
         def factoryEnv = [PATH: '/usr/bin', GNOMISH_GITHUB_TOKEN: 'secret']
-        def allowlist = ChildEnvAllowlist.over([], ['GNOMISH_GITHUB_TOKEN'], { -> factoryEnv })
+        def allowlist = ChildEnvAllowlist.over([], ['GNOMISH_GITHUB_TOKEN'], {
+            -> factoryEnv
+        })
 
         expect: 'the credential is absent even when named in base or factory-set'
         allowlist.compose([

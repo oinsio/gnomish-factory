@@ -75,8 +75,9 @@ class SnapshotWriterInterruptedStopSpec extends Specification {
         given:
         def calls = new AtomicInteger()
         def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'),
-                { -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot() },
+                tempDir.resolve('snapshot.json'), {
+                    -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot()
+                },
                 mapper,
                 Duration.ofSeconds(30),
                 Clock.systemUTC(),

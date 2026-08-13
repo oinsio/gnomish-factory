@@ -34,8 +34,9 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
     @TempDir
     Path tempDir
 
-    private static Supplier<TaskExecutionEnvironment> noFreshBox() {
-        { -> throw new IllegalStateException('no fresh box expected') } as Supplier<TaskExecutionEnvironment>
+    private static Supplier<TaskExecutionEnvironment> noFreshBox() { {
+            -> throw new IllegalStateException('no fresh box expected')
+        } as Supplier<TaskExecutionEnvironment>
     }
 
     private static Workspace attemptWorkspace() {
@@ -123,7 +124,9 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
         source.acquire(new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
 
         then:
-        1 * fresh.materialize('gnomish/t', SHA) >> { throw new RuntimeException('docker died') }
+        1 * fresh.materialize('gnomish/t', SHA) >> {
+            throw new RuntimeException('docker died')
+        }
         1 * fresh.dispose()
         def e = thrown(CheckEnvironmentUnavailableException)
         e.message.contains('could not be materialized')

@@ -38,11 +38,17 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'ExecutionFinished fired once for the executed round'
-        listener.events.findAll { it instanceof EngineEvent.ExecutionFinished }.size() == 1
+        listener.events.findAll {
+            it instanceof EngineEvent.ExecutionFinished
+        }.size() == 1
 
         and: 'no check events fired — no verify chain ran'
-        listener.events.findAll { it instanceof EngineEvent.CheckStarted }.isEmpty()
-        listener.events.findAll { it instanceof EngineEvent.CheckFinished }.isEmpty()
+        listener.events.findAll {
+            it instanceof EngineEvent.CheckStarted
+        }.isEmpty()
+        listener.events.findAll {
+            it instanceof EngineEvent.CheckFinished
+        }.isEmpty()
     }
 
     // FR12: a CannotExecute round (executor throws) emits NO ExecutionFinished — the execution
@@ -56,7 +62,9 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'no ExecutionFinished was emitted'
-        listener.events.findAll { it instanceof EngineEvent.ExecutionFinished }.isEmpty()
+        listener.events.findAll {
+            it instanceof EngineEvent.ExecutionFinished
+        }.isEmpty()
 
         and: 'the run bookends still framed the run'
         listener.events.first() instanceof EngineEvent.RunStarted

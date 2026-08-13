@@ -62,7 +62,9 @@ class EnvironmentSelfCheckSpec extends Specification {
         }
         environment.onExec = probes
         def guard = new EgressGuard(docker, 'k1', 'mitmproxy/mitmproxy:12', allowlist, tempDir.resolve('cfg'))
-        new EnvironmentSelfCheck(environment, guard, docker, 'k1', 'runc', allowlist, { Duration d -> sleeps++ } as Sleeper)
+        new EnvironmentSelfCheck(environment, guard, docker, 'k1', 'runc', allowlist, { Duration d ->
+            sleeps++
+        } as Sleeper)
     }
 
     def "FR8: a healthy environment passes all probes"() {
@@ -74,9 +76,15 @@ class EnvironmentSelfCheckSpec extends Specification {
 
         and: 'the network probes ran inside the box via exec, proxied ones through the guard'
         environment.execs.any { it.contains('--noproxy') }
-        environment.execs.any { argv -> argv.any { it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST) } }
         environment.execs.any { argv ->
-            argv.contains('http://gnomish-guard:8080') && argv.any { it.contains(ALLOWED) }
+            argv.any {
+                it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST)
+            }
+        }
+        environment.execs.any { argv ->
+            argv.contains('http://gnomish-guard:8080') && argv.any {
+                it.contains(ALLOWED)
+            }
         }
     }
 
@@ -130,7 +138,9 @@ class EnvironmentSelfCheckSpec extends Specification {
         given: 'the guard answers 200 — the allowlist is not enforced'
         def check = selfCheck()
         environment.onExec = { List<String> argv ->
-            argv.any { it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST) } ? [0, '200'] : probes.call(argv)
+            argv.any {
+                it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST)
+            } ? [0, '200'] : probes.call(argv)
         }
 
         when:
@@ -148,7 +158,9 @@ class EnvironmentSelfCheckSpec extends Specification {
         def check = selfCheck()
         def deniedAttempts = 0
         environment.onExec = { List<String> argv ->
-            if (argv.any { it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST) }) {
+            if (argv.any {
+                it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST)
+            }) {
                 deniedAttempts++
                 return deniedAttempts <= 2 ? [7, '000'] : [0, '403']
             }
@@ -169,7 +181,9 @@ class EnvironmentSelfCheckSpec extends Specification {
         def check = selfCheck()
         def deniedAttempts = 0
         environment.onExec = { List<String> argv ->
-            if (argv.any { it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST) }) {
+            if (argv.any {
+                it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST)
+            }) {
                 deniedAttempts++
                 return [7, '000']
             }
@@ -190,7 +204,9 @@ class EnvironmentSelfCheckSpec extends Specification {
         given: 'the allowlisted host cannot be reached through the guard'
         def check = selfCheck()
         environment.onExec = { List<String> argv ->
-            if (argv.contains('http://gnomish-guard:8080') && argv.any { it.contains(ALLOWED) }) {
+            if (argv.contains('http://gnomish-guard:8080') && argv.any {
+                it.contains(ALLOWED)
+            }) {
                 return [
                     56,
                     'curl: (56) proxy refused'
@@ -216,7 +232,9 @@ class EnvironmentSelfCheckSpec extends Specification {
 
         and: 'every probe URL targets the concrete host — a wildcard names no single destination'
         !environment.execs.any { argv -> argv.any { it.contains('*.') } }
-        environment.execs.any { argv -> argv.contains('http://' + ALLOWED + '/') }
+        environment.execs.any { argv ->
+            argv.contains('http://' + ALLOWED + '/')
+        }
     }
 
     def "FR8: an empty allowlist skips the allowlisted-host probe and still verifies denial"() {
@@ -227,9 +245,15 @@ class EnvironmentSelfCheckSpec extends Specification {
         noExceptionThrown()
 
         and: 'the denied probe still ran; no proxied probe targeted the fallback host'
-        environment.execs.any { argv -> argv.any { it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST) } }
+        environment.execs.any { argv ->
+            argv.any {
+                it.contains(EnvironmentSelfCheck.DENIED_PROBE_HOST)
+            }
+        }
         !environment.execs.any { argv ->
-            argv.contains('http://gnomish-guard:8080') && argv.any { it.contains('example.com/') && !it.contains('invalid') }
+            argv.contains('http://gnomish-guard:8080') && argv.any {
+                it.contains('example.com/') && !it.contains('invalid')
+            }
         }
     }
 

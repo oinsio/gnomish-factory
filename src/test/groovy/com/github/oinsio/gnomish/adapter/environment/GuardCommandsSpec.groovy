@@ -39,7 +39,7 @@ class GuardCommandsSpec extends Specification {
         ])
 
         and: 'mitmdump runs the addon script in regular mode on the guard port, lazy upstream'
-        argv.indexOf('mitmproxy/mitmproxy:12') < argv.indexOf('mitmdump')
+        argv.indexOf('mitmproxy/mitmproxy:12') <argv.indexOf('mitmdump')
         argv.containsAll(['--mode', 'regular'])
         argv.containsAll(['--listen-port', '8080'])
         argv.containsAll([

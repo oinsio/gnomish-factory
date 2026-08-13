@@ -93,7 +93,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         branchLine.contains('gnomish/PROJ-1')
         worktreeLine != null
         worktreeLine.contains(expectedWorktree('PROJ-1').toString())
-        lines.indexOf(branchLine) < lines.indexOf(worktreeLine)
+        lines.indexOf(branchLine) <lines.indexOf(worktreeLine)
 
         cleanup:
         System.out = originalOut

@@ -63,7 +63,9 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment {
         builder.environment().putAll(command.env())
         def process = builder.start()
         if (command.stdin() != null) {
-            process.outputStream.withStream { it.write(command.stdin().getBytes(StandardCharsets.UTF_8)) }
+            process.outputStream.withStream {
+                it.write(command.stdin().getBytes(StandardCharsets.UTF_8))
+            }
         } else {
             process.outputStream.close()
         }

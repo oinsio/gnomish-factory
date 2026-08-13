@@ -125,7 +125,9 @@ class PathSafetySpec extends Specification {
         } catch (UnsupportedOperationException | IOException ignored) {
             return false
         } finally {
-            Files.walk(probeDir).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            Files.walk(probeDir).sorted(Comparator.reverseOrder()).forEach {
+                Files.deleteIfExists(it)
+            }
         }
     }
 }

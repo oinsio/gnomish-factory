@@ -32,9 +32,9 @@ class ArtifactOutputSpec extends Specification {
         output.id() == id
 
         where:
-        id     | reason
-        ''     | 'empty id'
-        '   '  | 'whitespace-only id'
+        id | reason
+        '' | 'empty id'
+        '   ' | 'whitespace-only id'
     }
 
     // FR4: outputs are plain values — the DAG validator compares ids by content

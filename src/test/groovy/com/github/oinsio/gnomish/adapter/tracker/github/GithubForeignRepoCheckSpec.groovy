@@ -75,7 +75,9 @@ class GithubForeignRepoCheckSpec extends Specification {
         }
 
         then: 'no exception, and a WARN names both the id repo and the configured target'
-        events.any { it.level == Level.WARN && it.formattedMessage.contains('old-org/widgets') && it.formattedMessage.contains('acme/widgets') }
+        events.any {
+            it.level == Level.WARN && it.formattedMessage.contains('old-org/widgets') && it.formattedMessage.contains('acme/widgets')
+        }
     }
 
     def "foreign repo whose full_name resolves elsewhere: refused, naming both repos"() {

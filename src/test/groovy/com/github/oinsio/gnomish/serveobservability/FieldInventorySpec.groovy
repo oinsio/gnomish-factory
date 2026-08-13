@@ -49,49 +49,49 @@ class FieldInventorySpec extends Specification {
      */
     static final Map<String, FieldCategory> ALLOWED_FIELDS = [
         // identifiers
-        instanceId    : FieldCategory.IDENTIFIER,
-        host          : FieldCategory.IDENTIFIER,
+        instanceId : FieldCategory.IDENTIFIER,
+        host : FieldCategory.IDENTIFIER,
         factoryVersion: FieldCategory.IDENTIFIER,
-        taskId        : FieldCategory.IDENTIFIER,
-        stage         : FieldCategory.IDENTIFIER,
-        type          : FieldCategory.IDENTIFIER,
-        version       : FieldCategory.COUNTER,
+        taskId : FieldCategory.IDENTIFIER,
+        stage : FieldCategory.IDENTIFIER,
+        type : FieldCategory.IDENTIFIER,
+        version : FieldCategory.COUNTER,
         // states (closed vocabularies, or a short reason token)
-        state         : FieldCategory.STATE,
-        outcome       : FieldCategory.STATE,
-        event         : FieldCategory.STATE,
-        reason        : FieldCategory.STATE,
-        parkReason    : FieldCategory.STATE,
+        state : FieldCategory.STATE,
+        outcome : FieldCategory.STATE,
+        event : FieldCategory.STATE,
+        reason : FieldCategory.STATE,
+        parkReason : FieldCategory.STATE,
         // counters
-        intervalSeconds     : FieldCategory.COUNTER,
-        openFronts          : FieldCategory.COUNTER,
-        wipLimit            : FieldCategory.COUNTER,
-        capacity            : FieldCategory.COUNTER,
-        attempt             : FieldCategory.COUNTER,
-        heldClaims          : FieldCategory.COUNTER,
-        restartCount        : FieldCategory.COUNTER,
+        intervalSeconds : FieldCategory.COUNTER,
+        openFronts : FieldCategory.COUNTER,
+        wipLimit : FieldCategory.COUNTER,
+        capacity : FieldCategory.COUNTER,
+        attempt : FieldCategory.COUNTER,
+        heldClaims : FieldCategory.COUNTER,
+        restartCount : FieldCategory.COUNTER,
         consecutiveFailures : FieldCategory.COUNTER,
-        attemptsUsed        : FieldCategory.COUNTER,
-        wallMillis          : FieldCategory.COUNTER,
-        delivered           : FieldCategory.COUNTER,
-        awaitingHuman       : FieldCategory.COUNTER,
-        aborted             : FieldCategory.COUNTER,
-        revoked             : FieldCategory.COUNTER,
+        attemptsUsed : FieldCategory.COUNTER,
+        wallMillis : FieldCategory.COUNTER,
+        delivered : FieldCategory.COUNTER,
+        awaitingHuman : FieldCategory.COUNTER,
+        aborted : FieldCategory.COUNTER,
+        revoked : FieldCategory.COUNTER,
         // timestamps
-        writtenAt    : FieldCategory.TIMESTAMP,
-        since        : FieldCategory.TIMESTAMP,
-        lastPollAt   : FieldCategory.TIMESTAMP,
-        lastTickAt   : FieldCategory.TIMESTAMP,
-        lastRunAt    : FieldCategory.TIMESTAMP,
+        writtenAt : FieldCategory.TIMESTAMP,
+        since : FieldCategory.TIMESTAMP,
+        lastPollAt : FieldCategory.TIMESTAMP,
+        lastTickAt : FieldCategory.TIMESTAMP,
+        lastRunAt : FieldCategory.TIMESTAMP,
         lastSuccessAt: FieldCategory.TIMESTAMP,
-        startedAt    : FieldCategory.TIMESTAMP,
-        finishedAt   : FieldCategory.TIMESTAMP,
-        at           : FieldCategory.TIMESTAMP,
+        startedAt : FieldCategory.TIMESTAMP,
+        finishedAt : FieldCategory.TIMESTAMP,
+        at : FieldCategory.TIMESTAMP,
         // token counts
-        input        : FieldCategory.TOKEN_COUNT,
-        output       : FieldCategory.TOKEN_COUNT,
+        input : FieldCategory.TOKEN_COUNT,
+        output : FieldCategory.TOKEN_COUNT,
         cacheCreation: FieldCategory.TOKEN_COUNT,
-        cacheRead    : FieldCategory.TOKEN_COUNT,
+        cacheRead : FieldCategory.TOKEN_COUNT,
     ]
 
     /**
@@ -130,7 +130,9 @@ class FieldInventorySpec extends Specification {
 
     def "ledger reference document: every field of every line is an identifier, state, counter, timestamp, or token count"() {
         given:
-        def lines = resourceText('ledger-v1.reference.jsonl').readLines().findAll { !it.isBlank() }
+        def lines = resourceText('ledger-v1.reference.jsonl').readLines().findAll {
+            !it.isBlank()
+        }
 
         expect:
         lines.each { line ->
@@ -173,7 +175,9 @@ class FieldInventorySpec extends Specification {
                 assertLeafAllowListed(childPath, key, entry.value)
             }
         } else if (node.isArray()) {
-            node.eachWithIndex { child, idx -> assertSubtree("${path}[${idx}]", child, underTokensByModel) }
+            node.eachWithIndex { child, idx ->
+                assertSubtree("${path}[${idx}]", child, underTokensByModel)
+            }
         }
         true
     }

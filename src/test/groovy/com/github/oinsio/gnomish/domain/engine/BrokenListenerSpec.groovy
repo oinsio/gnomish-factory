@@ -138,7 +138,9 @@ class BrokenListenerSpec extends BrokenListenerSpecBase {
         warnings.size() == listener.events.size()
 
         and: 'every captured line is a WARN naming a listener failure'
-        warnings.every { it.level == Level.WARN && it.formattedMessage.contains('listener threw') }
+        warnings.every {
+            it.level == Level.WARN && it.formattedMessage.contains('listener threw')
+        }
 
         cleanup:
         eventsLogger.detachAppender(appender)

@@ -80,7 +80,9 @@ class TakeBatchSpec extends Specification {
         }
 
         when: 'the batch is driven on its own thread — run() blocks until every ref finishes'
-        def batchThread = Thread.ofVirtual().start { TakeBatch.run(refs, 2, perRef) }
+        def batchThread = Thread.ofVirtual().start {
+            TakeBatch.run(refs, 2, perRef)
+        }
 
         then: 'both slot-occupying refs started, but the third has not — no free slot yet'
         bothBlockedStarted.await(2, TimeUnit.SECONDS)
@@ -128,7 +130,9 @@ class TakeBatchSpec extends Specification {
     def "an interrupted wait for a free slot propagates InterruptedException"() {
         given:
         def refs = ['a', 'b']
-        def blockForever = { String ref -> Thread.sleep(60_000); new TakeResult.Delivered(null, 'never') }
+        def blockForever = { String ref ->
+            Thread.sleep(60_000); new TakeResult.Delivered(null, 'never')
+        }
         def caught = null
         def blockedThread = Thread.ofVirtual().start {
             try {

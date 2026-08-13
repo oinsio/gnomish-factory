@@ -53,8 +53,8 @@ class ContainerEnvironmentsSpec extends Specification {
 
         where:
         exit | available
-        0    | true
-        1    | false
+        0 | true
+        1 | false
     }
 
     // D13, NFR-R1: an unreachable runtime is the fail-closed false, not an escaping exception
@@ -143,10 +143,20 @@ class ContainerEnvironmentsSpec extends Specification {
         docker.runs.contains(DockerCommands.removeNetwork('gnomish-net-dead'))
 
         and: 'none of this task own role objects are touched'
-        !docker.runs.any { it == DockerCommands.removeContainer('gnomish-box-' + KEY) }
-        !docker.runs.any { it == DockerCommands.removeContainer('gnomish-box-' + KEY + '-j') }
-        !docker.runs.any { it == DockerCommands.removeContainer('gnomish-box-' + KEY + '-v') }
-        !docker.runs.any { it == DockerCommands.removeVolume('gnomish-vol-' + KEY) }
-        !docker.runs.any { it == DockerCommands.removeNetwork('gnomish-net-' + KEY) }
+        !docker.runs.any {
+            it == DockerCommands.removeContainer('gnomish-box-' + KEY)
+        }
+        !docker.runs.any {
+            it == DockerCommands.removeContainer('gnomish-box-' + KEY + '-j')
+        }
+        !docker.runs.any {
+            it == DockerCommands.removeContainer('gnomish-box-' + KEY + '-v')
+        }
+        !docker.runs.any {
+            it == DockerCommands.removeVolume('gnomish-vol-' + KEY)
+        }
+        !docker.runs.any {
+            it == DockerCommands.removeNetwork('gnomish-net-' + KEY)
+        }
     }
 }

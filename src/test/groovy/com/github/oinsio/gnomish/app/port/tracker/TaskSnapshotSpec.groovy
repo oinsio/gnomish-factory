@@ -35,11 +35,11 @@ class TaskSnapshotSpec extends Specification {
         failure.message.contains(expectedComponent)
 
         where:
-        id                     | title           || expectedComponent
-        ''                     | 'Fix the thing' || 'TaskSnapshot.id'
-        '   '                  | 'Fix the thing' || 'TaskSnapshot.id'
-        'github:owner/repo#42' | ''              || 'TaskSnapshot.title'
-        'github:owner/repo#42' | '  \t'          || 'TaskSnapshot.title'
+        id | title || expectedComponent
+        '' | 'Fix the thing' || 'TaskSnapshot.id'
+        '   ' | 'Fix the thing' || 'TaskSnapshot.id'
+        'github:owner/repo#42' | '' || 'TaskSnapshot.title'
+        'github:owner/repo#42' | '  \t' || 'TaskSnapshot.title'
     }
 
     // FR11: snapshots are values — equal content means equal snapshots

@@ -90,7 +90,7 @@ class RunSummaryAccumulatorSpec extends Specification {
                 go.await()
                 (0..<recordsPerThread).each {
                     accumulator.record(new TakeResult.Delivered(
-                    stateAt(tokensOf(['claude-x': new TokenUsage(1L, 1L, 1L, 1L)])), 'shipped it'))
+                            stateAt(tokensOf(['claude-x': new TokenUsage(1L, 1L, 1L, 1L)])), 'shipped it'))
                 }
             } as Runnable)
         }

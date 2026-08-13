@@ -27,8 +27,8 @@ class AgentEventSpec extends Specification {
 
         where:
         sessionId | model
-        ''        | 'claude-x'
-        'sess-1'  | ''
+        '' | 'claude-x'
+        'sess-1' | ''
     }
 
     // FR4, D3: AssistantEvent accepts a null parentToolUseId for a top-level event

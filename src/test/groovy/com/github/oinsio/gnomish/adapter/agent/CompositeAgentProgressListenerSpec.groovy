@@ -44,7 +44,9 @@ class CompositeAgentProgressListenerSpec extends Specification {
     def "a listener that throws does not block delivery to the listeners after it"() {
         given:
         def before = new RecordingAgentProgressListener()
-        def throwing = { AgentProgressEvent event -> throw new RuntimeException('boom') } as AgentProgressListener
+        def throwing = { AgentProgressEvent event ->
+            throw new RuntimeException('boom')
+        } as AgentProgressListener
         def after = new RecordingAgentProgressListener()
         def composite = new CompositeAgentProgressListener([before, throwing, after])
 

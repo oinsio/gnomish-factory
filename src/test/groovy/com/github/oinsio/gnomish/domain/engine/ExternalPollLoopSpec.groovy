@@ -92,7 +92,9 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
     def "a delivered attempt commit lets the poll loop run unchanged"() {
         given:
         def externalClient = new ScriptedExternalCheckClient([new PollStatus.Pass()])
-        def delivered = { workspace -> new AttemptDelivery.Outcome.Delivered() } as AttemptDelivery
+        def delivered = { workspace ->
+            new AttemptDelivery.Outcome.Delivered()
+        } as AttemptDelivery
         def check = external('ci/build', Duration.ofSeconds(1), Duration.ofSeconds(3))
 
         when:

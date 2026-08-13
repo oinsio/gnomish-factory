@@ -54,8 +54,8 @@ class DashboardHtmlRendererSpec extends Specification {
         html.contains(expectedText)
 
         where:
-        description                    | view                                                | expectedText
-        'no snapshot ever written'     | new DaemonSnapshotView.Absent()                     | 'daemon has not run here'
+        description | view | expectedText
+        'no snapshot ever written' | new DaemonSnapshotView.Absent() | 'daemon has not run here'
         'fresh snapshot shows writtenAt' | new DaemonSnapshotView.Fresh(snapshot(new LifecycleState.Running())) | WRITTEN_AT.toString()
         'dead-daemon snapshot still shows its instance data' | new DaemonSnapshotView.DeadDaemon(snapshot(new LifecycleState.Running())) | WRITTEN_AT.toString()
         'stopped-stale shows the stop reason' | new DaemonSnapshotView.StoppedStale(snapshot(new LifecycleState.Stopped('sigterm'))) | 'sigterm'

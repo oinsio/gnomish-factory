@@ -119,11 +119,11 @@ class PollStatusSpec extends Specification {
         label(status) == expected
 
         where:
-        status                                  || expected
-        new PollStatus.Pass()                   || 'pass'
-        new PollStatus.Fail([])                 || 'fail'
-        new PollStatus.Running()                || 'running'
-        new PollStatus.CannotVerify('r', '')    || 'cannot-verify'
+        status || expected
+        new PollStatus.Pass() || 'pass'
+        new PollStatus.Fail([]) || 'fail'
+        new PollStatus.Running() || 'running'
+        new PollStatus.CannotVerify('r', '') || 'cannot-verify'
     }
 
     private static String label(PollStatus status) {

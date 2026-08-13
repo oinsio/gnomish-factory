@@ -168,7 +168,9 @@ class AttemptsExhaustedSpec extends Specification {
         def state = escalated.finalState()
         def stageName = (state.position() as Position.AtStage).name()
         def rounds = state.attempts()
-                .collect { "round ${it.round()}: ${findingMessages(it).join(', ')}" }
+                .collect {
+                    "round ${it.round()}: ${findingMessages(it).join(', ')}"
+                }
                 .join('; ')
         "stage=${stageName} limit=${report.limit()} attemptsUsed=${state.attemptsUsed()} [${rounds}]"
     }

@@ -160,7 +160,9 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     def "a fresh take claim never lets the declared tracker credential reach the spawned agent process"() {
         given: 'a Ready task, claimable, with no branch yet — a genuine fresh TakeFreshClaim run'
         String claimedBy = null
-        tracker.claim(_, _) >> { TaskRef ref, String instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
+            claimedBy = instanceId; new ClaimResult.Acquired()
+        }
         tracker.fetchTask(_) >> {
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
@@ -190,7 +192,9 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     def "with no credential declared, the same variable reaches the spawned agent process"() {
         given:
         String claimedBy = null
-        tracker.claim(_, _) >> { TaskRef ref, String instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
+            claimedBy = instanceId; new ClaimResult.Acquired()
+        }
         tracker.fetchTask(_) >> {
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),

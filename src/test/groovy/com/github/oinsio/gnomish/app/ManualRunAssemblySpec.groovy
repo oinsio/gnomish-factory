@@ -108,11 +108,11 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         run.ports().executor().class == expectedExecutor
 
         where:
-        interactiveMode                              | expectedExecutor
-        RunArguments.InteractiveMode.NONE             | CliStageExecutor
-        RunArguments.InteractiveMode.ALL               | InteractiveStageExecutor
-        RunArguments.InteractiveMode.EXECUTOR_ONLY     | InteractiveStageExecutor
-        RunArguments.InteractiveMode.JUDGE_ONLY        | CliStageExecutor
+        interactiveMode | expectedExecutor
+        RunArguments.InteractiveMode.NONE | CliStageExecutor
+        RunArguments.InteractiveMode.ALL | InteractiveStageExecutor
+        RunArguments.InteractiveMode.EXECUTOR_ONLY | InteractiveStageExecutor
+        RunArguments.InteractiveMode.JUDGE_ONLY | CliStageExecutor
     }
 
     @Unroll
@@ -128,11 +128,11 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         run.ports().judgeVoter().class == expectedJudgeVoter
 
         where:
-        interactiveMode                              | expectedJudgeVoter
-        RunArguments.InteractiveMode.NONE             | CliJudgeVoter
-        RunArguments.InteractiveMode.ALL               | InteractiveJudgeVoter
-        RunArguments.InteractiveMode.EXECUTOR_ONLY     | CliJudgeVoter
-        RunArguments.InteractiveMode.JUDGE_ONLY        | InteractiveJudgeVoter
+        interactiveMode | expectedJudgeVoter
+        RunArguments.InteractiveMode.NONE | CliJudgeVoter
+        RunArguments.InteractiveMode.ALL | InteractiveJudgeVoter
+        RunArguments.InteractiveMode.EXECUTOR_ONLY | CliJudgeVoter
+        RunArguments.InteractiveMode.JUDGE_ONLY | InteractiveJudgeVoter
     }
 
     // FR7, NFR-O1, UX1, D10, task 9.4: the wired CliStageExecutor's rounds reach both the
@@ -178,7 +178,9 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         then: 'the renderer saw the whole round'
         loggedEvents.any { it.formattedMessage.contains('round started') }
-        loggedEvents.any { it.formattedMessage.contains('tool started') && it.formattedMessage.contains('Write') }
+        loggedEvents.any {
+            it.formattedMessage.contains('tool started') && it.formattedMessage.contains('Write')
+        }
         loggedEvents.any { it.formattedMessage.contains('round finished') }
 
         and: 'the enricher had already incremented toolCalls by the time the tool-started line logged'

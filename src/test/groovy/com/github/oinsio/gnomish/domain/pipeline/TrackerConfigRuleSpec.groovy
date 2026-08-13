@@ -81,7 +81,7 @@ class TrackerConfigRuleSpec extends Specification {
     def "wip-limit and abort-threshold faults aggregate together"() {
         expect: 'both located errors, abort-threshold then wip-limit'
         TrackerConfigRule.validate(new TrackerConfig(
-                'github', 0, Duration.ofMinutes(5), 3, 0, [:])) == [
+                        'github', 0, Duration.ofMinutes(5), 3, 0, [:])) == [
                     new ConfigError('config.yaml', 'tracker.abort-threshold',
                     'non-positive abort-threshold 0; the threshold must be a positive integer'),
                     new ConfigError('config.yaml', 'tracker.wip-limit',

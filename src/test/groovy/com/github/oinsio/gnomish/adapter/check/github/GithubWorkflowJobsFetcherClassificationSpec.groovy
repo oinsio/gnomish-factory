@@ -57,11 +57,11 @@ class GithubWorkflowJobsFetcherClassificationSpec extends Specification {
 
         where:
         status | expectedException
-        500    | GithubWorkflowRunInfrastructureException
-        503    | GithubWorkflowRunInfrastructureException
-        429    | GithubWorkflowRunInfrastructureException
-        404    | GithubWorkflowRunUnverifiableException
-        422    | GithubWorkflowRunUnverifiableException
+        500 | GithubWorkflowRunInfrastructureException
+        503 | GithubWorkflowRunInfrastructureException
+        429 | GithubWorkflowRunInfrastructureException
+        404 | GithubWorkflowRunUnverifiableException
+        422 | GithubWorkflowRunUnverifiableException
     }
 
     def "a non-2xx log response is classified, not kept verbatim as the job's log tail"() {
@@ -83,7 +83,7 @@ class GithubWorkflowJobsFetcherClassificationSpec extends Specification {
 
         where:
         status | expectedException
-        500    | GithubWorkflowRunInfrastructureException
-        404    | GithubWorkflowRunUnverifiableException
+        500 | GithubWorkflowRunInfrastructureException
+        404 | GithubWorkflowRunUnverifiableException
     }
 }

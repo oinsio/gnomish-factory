@@ -141,10 +141,14 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         def flag = new ClaimLossFlag()
         def killer = new RecordingKiller()
         def tickCount = new AtomicInteger()
-        def reaperDuty = { Collection refs -> tickCount.incrementAndGet() } as ReaperDuty
+        def reaperDuty = { Collection refs ->
+            tickCount.incrementAndGet()
+        } as ReaperDuty
         def sleeper = { Duration d -> Thread.sleep(5) } as Sleeper
         def standingReaper =
-                new StandingReaper(reaperDuty, sleeper, Duration.ofMillis(5), { [] } as Supplier, new SystemClock())
+                new StandingReaper(reaperDuty, sleeper, Duration.ofMillis(5), {
+                    []
+                } as Supplier, new SystemClock())
         standingReaper.start()
         def shutdown = new ServeShutdown(ledger, flag, Duration.ofMillis(50), killer, standingReaper)
 
@@ -153,7 +157,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
         int tickedBeforeShutdown = tickCount.get()
 
         then:
-        tickedBeforeShutdown > 0
+        tickedBeforeShutdown> 0
 
         when:
         shutdown.shutdown(null)

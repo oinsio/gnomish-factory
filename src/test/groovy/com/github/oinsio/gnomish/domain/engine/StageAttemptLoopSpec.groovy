@@ -156,7 +156,9 @@ class StageAttemptLoopSpec extends Specification {
         given: "the clock is at a known begin instant and advances mid-round during verification"
         clock.instant = begin
         def stageDef = stage('build', 3, [builtin('files_exist')])
-        builtinRunner.onRun = { check, workspace -> clock.advance(Duration.ofMinutes(5)) }
+        builtinRunner.onRun = { check, workspace ->
+            clock.advance(Duration.ofMinutes(5))
+        }
         builtinRunner.scripted << verdict
         executor.scripted << completed(ExecutorUsage.none())
 
@@ -172,9 +174,9 @@ class StageAttemptLoopSpec extends Specification {
         clock.now() == begin.plus(Duration.ofMinutes(5))
 
         where:
-        begin                                 | verdict                            || expectedResult
-        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass()                 || AttemptRecord.Result.PASSED
-        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Fail([])               || AttemptRecord.Result.QUALITY_FAILURE
+        begin | verdict || expectedResult
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass() || AttemptRecord.Result.PASSED
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Fail([]) || AttemptRecord.Result.QUALITY_FAILURE
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.CannotVerify('x', 'y') || AttemptRecord.Result.CANNOT_VERIFY
     }
 
@@ -210,7 +212,9 @@ class StageAttemptLoopSpec extends Specification {
         builtinRunner.scripted << new Verdict.Fail([])
         builtinRunner.scripted << new Verdict.Pass()
         // each round advances the clock one minute during its verification, so each round begins later
-        builtinRunner.onRun = { check, workspace -> clock.advance(Duration.ofMinutes(1)) }
+        builtinRunner.onRun = { check, workspace ->
+            clock.advance(Duration.ofMinutes(1))
+        }
 
         when: 'the run is driven to a pass'
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())

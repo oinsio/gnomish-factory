@@ -65,11 +65,11 @@ class StateJsonMapperSpec extends Specification {
         dto.attempts()[0].result() == expected
 
         where:
-        result                            | expected
-        AttemptRecord.Result.PASSED           | "passed"
-        AttemptRecord.Result.QUALITY_FAILURE  | "qualityFailure"
-        AttemptRecord.Result.CANNOT_VERIFY    | "cannotVerify"
-        AttemptRecord.Result.DECISION_NEEDED  | "decisionNeeded"
+        result | expected
+        AttemptRecord.Result.PASSED | "passed"
+        AttemptRecord.Result.QUALITY_FAILURE | "qualityFailure"
+        AttemptRecord.Result.CANNOT_VERIFY | "cannotVerify"
+        AttemptRecord.Result.DECISION_NEEDED | "decisionNeeded"
     }
 
     def "toDto flattens every Verdict kind onto StateCheckDto"() {
@@ -91,16 +91,16 @@ class StateJsonMapperSpec extends Specification {
         dto.runUrl() == expectedRunUrl
 
         where:
-        verdict                                                              | expectedVerdict   | expectedFindings                                    | expectedReason | expectedDetails | expectedRunUrl
-        new Verdict.Pass()                                                   | "pass"            | []                                                   | null           | null            | null
-        new Verdict.Pass("https://ci.example/runs/42")                       | "pass"            | []                                                   | null           | null            | "https://ci.example/runs/42"
+        verdict | expectedVerdict | expectedFindings | expectedReason | expectedDetails | expectedRunUrl
+        new Verdict.Pass() | "pass" | [] | null | null | null
+        new Verdict.Pass("https://ci.example/runs/42") | "pass" | [] | null | null | "https://ci.example/runs/42"
         new Verdict.Fail([
             new Finding("bad", "file.txt:12", "trace")
-        ])       | "fail"             | [
+        ]) | "fail" | [
             new StateFindingDto("bad", "file.txt:12", "trace")
-        ] | null           | null            | null
-        new Verdict.Fail([])                                                 | "fail"             | []                                                   | null           | null            | null
-        new Verdict.CannotVerify("timeout", "network blip")                  | "cannotVerify"    | []                                                   | "timeout"      | "network blip"  | null
+        ] | null | null | null
+        new Verdict.Fail([]) | "fail" | [] | null | null | null
+        new Verdict.CannotVerify("timeout", "network blip") | "cannotVerify" | [] | "timeout" | "network blip" | null
     }
 
     def "round-trip: full TaskState with multiple attempts, checks, tokens, tools survives toDto/fromDto"() {
@@ -184,18 +184,18 @@ class StateJsonMapperSpec extends Specification {
                 1,
                 [
                     new AttemptRecord(
-                    0,
-                    AttemptRecord.Result.QUALITY_FAILURE,
-                    startedAt,
-                    [
-                        new CheckResult(new CheckRef(0, "command:./gradlew test"), new Verdict.Fail([
-                            new Finding("bad", null, null)
-                        ]), Duration.ofMillis(400))
-                    ],
-                    new ExecutorUsage(Duration.ofSeconds(5), [], ["model-a": new TokenUsage(10, 20, 0, 0)]),
-                    new JudgeUsage([
-                        ["model-a": new TokenUsage(1, 2, 0, 0)]
-                    ]))
+                            0,
+                            AttemptRecord.Result.QUALITY_FAILURE,
+                            startedAt,
+                            [
+                                new CheckResult(new CheckRef(0, "command:./gradlew test"), new Verdict.Fail([
+                                    new Finding("bad", null, null)
+                                ]), Duration.ofMillis(400))
+                            ],
+                            new ExecutorUsage(Duration.ofSeconds(5), [], ["model-a": new TokenUsage(10, 20, 0, 0)]),
+                            new JudgeUsage([
+                                ["model-a": new TokenUsage(1, 2, 0, 0)]
+                            ]))
                 ],
                 new ExecutorUsage(Duration.ofSeconds(5), [], ["model-a": new TokenUsage(10, 20, 0, 0)]))
         def dto = StateJsonMapper.toDto(state)

@@ -28,11 +28,11 @@ class GithubWorkflowRunVerdictSpec extends Specification {
         status.class == expectedType
 
         where:
-        conclusion    | expectedType
-        'success'     | PollStatus.Pass
-        'failure'     | PollStatus.Fail
-        'cancelled'   | PollStatus.Fail
-        'timed_out'   | PollStatus.Fail
+        conclusion | expectedType
+        'success' | PollStatus.Pass
+        'failure' | PollStatus.Fail
+        'cancelled' | PollStatus.Fail
+        'timed_out' | PollStatus.Fail
         'action_required' | PollStatus.Fail
         'some_future_conclusion_this_adapter_does_not_recognize' | PollStatus.Fail
     }

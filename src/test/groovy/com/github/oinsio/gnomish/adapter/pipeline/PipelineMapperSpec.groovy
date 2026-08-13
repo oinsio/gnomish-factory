@@ -257,10 +257,10 @@ class PipelineMapperSpec extends Specification {
 
         where:
         defaultLimit | override || expected
-        3            | 5        || 5 // override wins
-        3            | null     || 3 // default applies
-        null         | 5        || 5 // no default, override still wins
-        null         | null     || 0 // both absent → 0 (StageSanityRule flags it)
+        3 | 5 || 5 // override wins
+        3 | null || 3 // default applies
+        null | 5 || 5 // no default, override still wins
+        null | null || 0 // both absent → 0 (StageSanityRule flags it)
     }
 
     // FR5 boundary: enum wire values map to the domain enums, both values each
@@ -277,8 +277,8 @@ class PipelineMapperSpec extends Specification {
         s.advancement() == domainAdv
 
         where:
-        wireType    | wireAdv  || domainType             | domainAdv
-        'api'       | 'auto'   || ExecutorType.API       | AdvancementMode.AUTO
+        wireType | wireAdv || domainType | domainAdv
+        'api' | 'auto' || ExecutorType.API | AdvancementMode.AUTO
         'agent-cli' | 'manual' || ExecutorType.AGENT_CLI | AdvancementMode.MANUAL
     }
 
@@ -309,10 +309,10 @@ class PipelineMapperSpec extends Specification {
         check.timeout() == expectedTimeout
 
         where:
-        interval | timeout || expectedInterval          | expectedTimeout
-        '30s'    | '15m'   || Duration.ofSeconds(30)    | Duration.ofMinutes(15)
-        'PT1H'   | 'PT2H'  || Duration.ofHours(1)       | Duration.ofHours(2)
-        '500ms'  | '1s'    || Duration.ofMillis(500)    | Duration.ofSeconds(1)
+        interval | timeout || expectedInterval | expectedTimeout
+        '30s' | '15m' || Duration.ofSeconds(30) | Duration.ofMinutes(15)
+        'PT1H' | 'PT2H' || Duration.ofHours(1) | Duration.ofHours(2)
+        '500ms' | '1s' || Duration.ofMillis(500) | Duration.ofSeconds(1)
     }
 
     // FR11: a null external interval/timeout maps to Duration.ZERO, which
@@ -337,9 +337,9 @@ class PipelineMapperSpec extends Specification {
         check.timeout() == expectedTimeout
 
         where:
-        field      | interval | timeout || expectedInterval       | expectedTimeout
-        'interval' | null     | '15m'   || Duration.ZERO          | Duration.ofMinutes(15)
-        'timeout'  | '30s'    | null    || Duration.ofSeconds(30) | Duration.ZERO
+        field | interval | timeout || expectedInterval | expectedTimeout
+        'interval' | null | '15m' || Duration.ZERO | Duration.ofMinutes(15)
+        'timeout' | '30s' | null || Duration.ofSeconds(30) | Duration.ZERO
     }
 
     // FR11 / duration-parse placement: a malformed timing string is a located
@@ -362,9 +362,9 @@ class PipelineMapperSpec extends Specification {
         ]
 
         where:
-        field      | interval  | timeout   || where              | message
-        'interval' | 'banana'  | '15m'     || 'verify[0].interval' | "malformed duration 'banana'; use e.g. '30s', '15m', '2h'"
-        'timeout'  | '30s'     | 'nonsense'|| 'verify[0].timeout'  | "malformed duration 'nonsense'; use e.g. '30s', '15m', '2h'"
+        field | interval | timeout || where | message
+        'interval' | 'banana' | '15m' || 'verify[0].interval' | "malformed duration 'banana'; use e.g. '30s', '15m', '2h'"
+        'timeout' | '30s' | 'nonsense'|| 'verify[0].timeout' | "malformed duration 'nonsense'; use e.g. '30s', '15m', '2h'"
     }
 
     // FR9: absent timeout-class defaults to quality — unchanged engine behavior
@@ -402,9 +402,9 @@ class PipelineMapperSpec extends Specification {
         check.timeoutClass() == expected
 
         where:
-        raw               || expected
-        'quality'         || VerifyCheck.TimeoutClass.QUALITY
-        'infrastructure'  || VerifyCheck.TimeoutClass.INFRASTRUCTURE
+        raw || expected
+        'quality' || VerifyCheck.TimeoutClass.QUALITY
+        'infrastructure' || VerifyCheck.TimeoutClass.INFRASTRUCTURE
     }
 
     // FR9: an unrecognized timeout-class is a located error identifying the check
@@ -690,9 +690,9 @@ class PipelineMapperSpec extends Specification {
 
         where:
         interval || expected
-        '30s'    || Duration.ofSeconds(30)
-        '15m'    || Duration.ofMinutes(15)
-        'PT2H'   || Duration.ofHours(2)
+        '30s' || Duration.ofSeconds(30)
+        '15m' || Duration.ofMinutes(15)
+        'PT2H' || Duration.ofHours(2)
     }
 
     // FR3 of add-claim-heartbeat: a malformed heartbeat-interval is a located

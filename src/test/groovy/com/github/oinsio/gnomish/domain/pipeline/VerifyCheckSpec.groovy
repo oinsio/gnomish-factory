@@ -164,11 +164,11 @@ class VerifyCheckSpec extends Specification {
         check.timeout() == timeout
 
         where:
-        interval                | timeout                 | reason
-        Duration.ZERO           | Duration.ofMinutes(5)   | 'zero interval'
-        Duration.ofSeconds(-30) | Duration.ofMinutes(5)   | 'negative interval'
-        Duration.ofSeconds(30)  | Duration.ofSeconds(-1)  | 'negative timeout'
-        Duration.ofMinutes(10)  | Duration.ofMinutes(5)   | 'interval above timeout'
+        interval | timeout | reason
+        Duration.ZERO | Duration.ofMinutes(5) | 'zero interval'
+        Duration.ofSeconds(-30) | Duration.ofMinutes(5) | 'negative interval'
+        Duration.ofSeconds(30) | Duration.ofSeconds(-1) | 'negative timeout'
+        Duration.ofMinutes(10) | Duration.ofMinutes(5) | 'interval above timeout'
     }
 
     // FR2/FR11: a judge check carries its acceptance criteria, model pin,

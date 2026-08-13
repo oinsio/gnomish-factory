@@ -44,7 +44,9 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then: 'the question was restated in the park report'
-        1 * tracker.park(REF, ParkReason.ESCALATION, { it.contains('continue?') })
+        1 * tracker.park(REF, ParkReason.ESCALATION, {
+            it.contains('continue?')
+        })
         0 * tracker.acknowledgeDecision(*_)
 
         and:
@@ -189,7 +191,9 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         and: 'the reply text was appended durably via GitTaskRepository#appendDecision'
         def historicalTaskJsons = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%H').stdout()
-                .lines().collect { gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json") }
+                .lines().collect {
+                    gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+                }
                 .findAll { it.exitCode() == 0 }
                 .collect { it.stdout() }
         historicalTaskJsons.any { it.contains('try again') }

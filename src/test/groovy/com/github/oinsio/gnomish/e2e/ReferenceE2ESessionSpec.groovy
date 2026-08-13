@@ -128,7 +128,7 @@ class ReferenceE2ESessionSpec extends Specification {
         Path root = E2eFixture.projectRoot()
         try (var stream = Files.walk(root)) {
             return stream
-                    .filter(Files::isRegularFile)
+                    .filter { Files.isRegularFile(it) }
                     .map { root.relativize(it).toString() }
                     .collect(Collectors.toSet())
         }

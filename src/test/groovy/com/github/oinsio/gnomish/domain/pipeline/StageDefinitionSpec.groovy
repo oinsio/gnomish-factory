@@ -110,10 +110,10 @@ class StageDefinitionSpec extends Specification {
         thrown(UnsupportedOperationException)
 
         where:
-        section   | list             | intruder
-        'inputs'  | { it.inputs() }  | new ArtifactInput.Source()
+        section | list | intruder
+        'inputs' | { it.inputs() } | new ArtifactInput.Source()
         'outputs' | { it.outputs() } | new ArtifactOutput('intruder')
-        'verify'  | { it.verify() }  | new VerifyCheck.Command('intruder')
+        'verify' | { it.verify() } | new VerifyCheck.Command('intruder')
     }
 
     // FR2/Q1: the mechanism section is executor type + pinned model + opaque settings

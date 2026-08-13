@@ -47,12 +47,12 @@ class TrackerTaskStateSpec extends Specification {
         describe(state) == expected
 
         where:
-        state                                                            | expected
-        new TrackerTaskState.Ready()                                     | 'ready'
-        new TrackerTaskState.Working('gnomish-factory-x7k2q1')           | 'working: gnomish-factory-x7k2q1'
-        new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT)         | 'awaiting: CHECKPOINT'
-        new TrackerTaskState.Finished()                                  | 'finished'
-        new TrackerTaskState.Gone()                                      | 'gone'
+        state | expected
+        new TrackerTaskState.Ready() | 'ready'
+        new TrackerTaskState.Working('gnomish-factory-x7k2q1') | 'working: gnomish-factory-x7k2q1'
+        new TrackerTaskState.AwaitingHuman(ParkReason.CHECKPOINT) | 'awaiting: CHECKPOINT'
+        new TrackerTaskState.Finished() | 'finished'
+        new TrackerTaskState.Gone() | 'gone'
     }
 
     // FR2: states are values — equal content means equal states

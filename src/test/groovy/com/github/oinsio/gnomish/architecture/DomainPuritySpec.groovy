@@ -60,7 +60,9 @@ class DomainPuritySpec extends Specification {
     def "NFR-O1/D9: the ..domain.. selector covers every class in the new engine package #enginePackage"() {
         given: 'the exact engine package this change added and the rule\'s own domain selector'
         def domainSelector = resideInAPackage('..domain..')
-        def packageClasses = productionClasses.findAll { it.packageName == enginePackage }
+        def packageClasses = productionClasses.findAll {
+            it.packageName == enginePackage
+        }
 
         expect: 'the package contributes production classes for the rule to constrain'
         !packageClasses.isEmpty()

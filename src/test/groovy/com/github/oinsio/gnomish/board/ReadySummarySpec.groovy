@@ -89,10 +89,10 @@ class ReadySummarySpec extends Specification {
 
         where:
         queuedCount | eligibleNowCount | inBackoffCount | finishedCount | wipHeldCount
-        -1          | 0                | 0              | 0             | 0
-        0           | -1               | 1              | 0             | 0
-        0           | 0                | -1             | 1             | 0
-        0           | 0                | 0              | -1            | 1
-        -1          | 0                | 0              | 0             | -1
+        -1 | 0 | 0 | 0 | 0
+        0 | -1 | 1 | 0 | 0
+        0 | 0 | -1 | 1 | 0
+        0 | 0 | 0 | -1 | 1
+        -1 | 0 | 0 | 0 | -1
     }
 }

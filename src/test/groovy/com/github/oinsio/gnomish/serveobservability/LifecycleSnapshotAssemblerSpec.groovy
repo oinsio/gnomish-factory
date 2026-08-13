@@ -27,10 +27,10 @@ class LifecycleSnapshotAssemblerSpec extends Specification {
         LifecycleSnapshotAssembler.assemble(view) == expected
 
         where:
-        daemonState                     | expected
-        DaemonLifecycleState.RUNNING    | new LifecycleState.Running()
-        DaemonLifecycleState.DRAINING   | new LifecycleState.Draining()
-        DaemonLifecycleState.STOPPING   | new LifecycleState.Stopping()
+        daemonState | expected
+        DaemonLifecycleState.RUNNING | new LifecycleState.Running()
+        DaemonLifecycleState.DRAINING | new LifecycleState.Draining()
+        DaemonLifecycleState.STOPPING | new LifecycleState.Stopping()
     }
 
     def "maps STOPPED with its reason"() {

@@ -156,7 +156,9 @@ tracker:
         // call itself (mirrors TakeResumeSpecBase's fetchTask stub shape, but holder is dynamic
         // here since TakeCommand mints a fresh InstanceId per invocation).
         String claimedBy = null
-        tracker.claim(_, _) >> { TaskRef ref, String instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
+            claimedBy = instanceId; new ClaimResult.Acquired()
+        }
         tracker.fetchTask(_) >> {
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),

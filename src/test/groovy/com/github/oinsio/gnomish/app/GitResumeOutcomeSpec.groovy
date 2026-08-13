@@ -130,7 +130,9 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         // by finding it in some historical task.json blob on the branch, since the FR15 cleanup
         // commit at Completed removes the tip's .gnomish-task/ entirely.
         def historicalTaskJsons = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%H').stdout()
-                .lines().collect { gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json") }
+                .lines().collect {
+                    gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+                }
                 .findAll { it.exitCode() == 0 }
                 .collect { it.stdout() }
         historicalTaskJsons.any { it.contains('go ahead') }

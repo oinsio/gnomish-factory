@@ -166,7 +166,9 @@ class ReaperSpec extends Specification {
         1 * tracker.removeStaleClaim(new TaskRef('T-2'), v2) >> new RemoveStaleClaimResult.Removed()
 
         and: 'exactly the mismatched claim logs the converging INFO line; the removed one does not'
-        def converging = events.findAll { it.level == Level.INFO && it.formattedMessage.contains('converging') }
+        def converging = events.findAll {
+            it.level == Level.INFO && it.formattedMessage.contains('converging')
+        }
         converging.size() == 1
         converging[0].formattedMessage.contains('T-1')
         !converging[0].formattedMessage.contains('T-2')
@@ -193,7 +195,9 @@ class ReaperSpec extends Specification {
         reaper.reapOnce([])
 
         then:
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v1) >> { throw new RuntimeException('5xx') }
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v1) >> {
+            throw new RuntimeException('5xx')
+        }
         1 * tracker.removeStaleClaim(new TaskRef('T-2'), v2) >> new RemoveStaleClaimResult.Removed()
         1 * tracker.listOpen() >> open
         noExceptionThrown()
@@ -348,7 +352,9 @@ class ReaperSpec extends Specification {
 
         then:
         1 * tracker.listOpen() >> open
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> { throw new RuntimeException('5xx') }
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> {
+            throw new RuntimeException('5xx')
+        }
 
         when: 'the next tick sees the same unchanged version'
         reaper.reapOnce([])

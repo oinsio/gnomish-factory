@@ -33,7 +33,9 @@ class ContainerEnvironmentReaperSpec extends Specification {
 
     def "NFR-R2: stopKeeping is best-effort on a runtime outage"() {
         given:
-        docker.onRun = { args -> throw new DockerUnavailableException('down', null) }
+        docker.onRun = { args ->
+            throw new DockerUnavailableException('down', null)
+        }
 
         when:
         reaper.stopKeeping('k1')
@@ -75,7 +77,9 @@ class ContainerEnvironmentReaperSpec extends Specification {
 
     def "NFR-R2: a runtime outage skips the whole reap pass without throwing"() {
         given:
-        docker.onRun = { args -> throw new DockerUnavailableException('down', null) }
+        docker.onRun = { args ->
+            throw new DockerUnavailableException('down', null)
+        }
 
         when:
         reaper.reapAged([] as Set, ONE_HOUR, NOW)

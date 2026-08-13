@@ -25,7 +25,9 @@ class EnvironmentLeaseSpec extends Specification {
 
     private TaskExecutionEnvironment fake(int id) {
         Stub(TaskExecutionEnvironment) {
-            materialize(_, _) >> { b, pin -> events << "materialize-${id}:${b}" }
+            materialize(_, _) >> { b, pin ->
+                events << "materialize-${id}:${b}"
+            }
             harvest() >> { events << "harvest-${id}" }
             dispose() >> { events << "dispose-${id}" }
         }

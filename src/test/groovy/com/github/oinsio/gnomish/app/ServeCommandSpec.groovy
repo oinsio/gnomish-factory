@@ -329,7 +329,9 @@ tracker:
         def command = newCommand([github: factory], starter)
 
         when:
-        runsToCompletion { command.run(args('serve', "--dir=$projectDir", '--drain')) }
+        runsToCompletion {
+            command.run(args('serve', "--dir=$projectDir", '--drain'))
+        }
 
         then: 'the ordinary forever-loop starter was never invoked'
         noExceptionThrown()
@@ -358,7 +360,11 @@ tracker:
         Files.createDirectories(worktreePath.parent)
         assert gitRunner.run(projectDir, 'worktree', 'add', worktreePath.toString(), '-b', 'task/aged-task').exitCode() == 0
         def aged = FileTime.from(Instant.now() - Duration.ofDays(1))
-        Files.walk(worktreePath).filter { Files.isRegularFile(it) }.forEach { Files.setLastModifiedTime(it, aged) }
+        Files.walk(worktreePath).filter {
+            Files.isRegularFile(it)
+        }.forEach {
+            Files.setLastModifiedTime(it, aged)
+        }
         Files.setLastModifiedTime(worktreePath, aged)
 
         and: 'a config with a tiny worktree-age threshold, so the immediate startup tick disposes it'
@@ -432,7 +438,9 @@ tracker:
         def command = newCommand([github: factory], starter)
 
         when:
-        runsToCompletion { command.run(args('serve', "--dir=$projectDir", '--slots=3')) }
+        runsToCompletion {
+            command.run(args('serve', "--dir=$projectDir", '--slots=3'))
+        }
 
         then:
         noExceptionThrown()

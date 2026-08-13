@@ -26,10 +26,10 @@ class GithubWorkflowRunParserSpec extends Specification {
         runs[0].htmlUrl() == expectedHtmlUrl
 
         where:
-        runFragment                                                       | expectedConclusion | expectedHtmlUrl
-        ''                                                                 | null                | null
-        ',"conclusion":null,"html_url":null'                               | null                | null
-        ',"conclusion":"success","html_url":"https://example/runs/1"'      | 'success'           | 'https://example/runs/1'
+        runFragment | expectedConclusion | expectedHtmlUrl
+        '' | null | null
+        ',"conclusion":null,"html_url":null' | null | null
+        ',"conclusion":"success","html_url":"https://example/runs/1"' | 'success' | 'https://example/runs/1'
     }
 
     def "a malformed response body raises GithubWorkflowRunQueryException with the parse failure as cause"() {

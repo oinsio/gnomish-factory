@@ -73,13 +73,13 @@ class StageConsistencySpec extends Specification {
         errors == [expected]
 
         where:
-        scenario                              | names                | discovered                                        || expected
-        'pipeline stage with no directory'    | ['plan']             | []                                                || missingManifest('plan')
-        'pipeline stage, dir but no manifest' | ['plan']             | [withoutManifest('plan')]                         || missingManifest('plan')
-        'dangling directory'                  | ['plan']             | [
+        scenario | names | discovered || expected
+        'pipeline stage with no directory' | ['plan'] | [] || missingManifest('plan')
+        'pipeline stage, dir but no manifest' | ['plan'] | [withoutManifest('plan')] || missingManifest('plan')
+        'dangling directory' | ['plan'] | [
             withManifest('plan'),
             withManifest('orphan')
-        ]    || dangling('orphan')
+        ] || dangling('orphan')
     }
 
     def "a dangling directory that also lacks a manifest is still dangling, not missing"() {

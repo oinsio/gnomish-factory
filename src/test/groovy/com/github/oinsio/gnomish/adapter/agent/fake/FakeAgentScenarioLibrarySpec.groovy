@@ -98,7 +98,9 @@ class FakeAgentScenarioLibrarySpec extends Specification {
 
         then:
         result.exitCode() == 0
-        def nested = result.stdoutLines().findAll { it.contains('parent_tool_use_id') }
+        def nested = result.stdoutLines().findAll {
+            it.contains('parent_tool_use_id')
+        }
         nested.size() == 3
         def topLevelToolUse = result.stdoutLines().findAll {
             it.contains('"type":"tool_use"') && !it.contains('parent_tool_use_id')

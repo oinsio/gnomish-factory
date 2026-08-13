@@ -59,15 +59,15 @@ class TokenUsageSpec extends Specification {
         failure.message.contains("TokenUsage.${component}")
 
         where:
-        component        | input | output | cacheCreation | cacheRead
-        'input'           | -1L   | 0L     | 0L            | 0L
-        'input'           | -99L  | 5L     | 0L            | 0L
-        'output'          | 0L    | -1L    | 0L            | 0L
-        'output'          | 10L   | -50L   | 0L            | 0L
-        'cacheCreation'   | 0L    | 0L     | -1L           | 0L
-        'cacheCreation'   | 5L    | 5L     | -20L          | 0L
-        'cacheRead'       | 0L    | 0L     | 0L            | -1L
-        'cacheRead'       | 5L    | 5L     | 5L            | -30L
+        component | input | output | cacheCreation | cacheRead
+        'input' | -1L | 0L | 0L | 0L
+        'input' | -99L | 5L | 0L | 0L
+        'output' | 0L | -1L | 0L | 0L
+        'output' | 10L | -50L | 0L | 0L
+        'cacheCreation' | 0L | 0L | -1L | 0L
+        'cacheCreation' | 5L | 5L | -20L | 0L
+        'cacheRead' | 0L | 0L | 0L | -1L
+        'cacheRead' | 5L | 5L | 5L | -30L
     }
 
     // FR5: TokenUsage is inert value data compared by content

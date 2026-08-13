@@ -15,7 +15,9 @@ class DirtyNotifierFailureIsolationSpec extends Specification {
 
     def "a notifier that throws does not propagate out of markDirtySafely"() {
         given:
-        DirtyNotifier notifier = { -> throw new RuntimeException('writer thread died mid-notify') }
+        DirtyNotifier notifier = {
+            -> throw new RuntimeException('writer thread died mid-notify')
+        }
 
         when:
         DirtyNotifier.markDirtySafely(notifier, 'test-call-site')

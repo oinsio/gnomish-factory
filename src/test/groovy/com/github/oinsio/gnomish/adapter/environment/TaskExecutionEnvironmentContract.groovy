@@ -90,7 +90,9 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         // load, yet well inside PIT's per-mutation budget so the drop-the-pump mutant — which hangs
         // cat forever — dies as a red Exited assertion within the budget rather than as a TIMED_OUT.
         def handle = e.exec(shell('cat', 'piped-prompt-content'))
-        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(12), { -> java.time.Instant.now() })
+        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(12), {
+            -> java.time.Instant.now()
+        })
         def out = readFully(handle.output())
 
         then: 'cat saw EOF (stdin was delivered and closed), exited, and echoed the bytes back'
@@ -152,10 +154,10 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         thrown(PathEscapeException)
 
         where:
-        label            | path
-        'hook'           | '.git/hooks/post-checkout'
-        'git config'     | '.git/config'
-        'traversal'      | '../../outside.txt'
+        label | path
+        'hook' | '.git/hooks/post-checkout'
+        'git config' | '.git/config'
+        'traversal' | '../../outside.txt'
     }
 
     // FR17, NFR-S3: reads are confined exactly like writes
@@ -222,7 +224,9 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
 
         when: 'a fast command runs under a generous timeout'
         def handle = e.exec(shell('true'))
-        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(30), { -> java.time.Instant.now() })
+        def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(30), {
+            -> java.time.Instant.now()
+        })
 
         then: 'it exited naturally'
         wait instanceof ExecHandle.Wait.Exited

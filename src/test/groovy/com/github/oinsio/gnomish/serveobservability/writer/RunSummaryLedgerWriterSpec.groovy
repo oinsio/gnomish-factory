@@ -58,13 +58,15 @@ class RunSummaryLedgerWriterSpec extends Specification {
         def finishedAt = Instant.parse('2026-08-03T10:05:30Z')
         def accumulator = new RunSummaryAccumulator()
         accumulator.record(new TakeResult.Delivered(
-                delivered(['claude-x': new TokenUsage(100L, 50L, 10L, 5L)]), 'shipped it'))
+                        delivered(['claude-x': new TokenUsage(100L, 50L, 10L, 5L)]), 'shipped it'))
 
         when:
         writer(finishedAt).write(accumulator, startedAt)
 
         then:
-        def lines = Files.readString(ledgerFileFor(finishedAt)).split('\n').findAll { !it.isBlank() }
+        def lines = Files.readString(ledgerFileFor(finishedAt)).split('\n').findAll {
+            !it.isBlank()
+        }
         lines.size() == 1
         def json = JSON.readTree(lines[0])
         json.get('type').asText() == 'runSummary'
@@ -97,7 +99,9 @@ class RunSummaryLedgerWriterSpec extends Specification {
         writer(now).write(new RunSummaryAccumulator(), now)
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll { !it.isBlank() }
+        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+            !it.isBlank()
+        }
         lines.size() == 1
         def json = JSON.readTree(lines[0])
         json.get('counts').get('delivered').asInt() == 0

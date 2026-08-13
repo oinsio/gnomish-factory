@@ -130,9 +130,9 @@ class ExecutionResultSpec extends Specification {
         describe(result) == expected
 
         where:
-        result                                                                             | expected
-        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace())                 | 'completed'
-        new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), sampleTrace())  | 'decision: Q?'
+        result | expected
+        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace()) | 'completed'
+        new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), sampleTrace()) | 'decision: Q?'
     }
 
     // FR6: Completed results are values — equal content means equal results

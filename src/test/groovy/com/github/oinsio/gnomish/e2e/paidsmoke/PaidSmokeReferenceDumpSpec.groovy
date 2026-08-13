@@ -117,7 +117,7 @@ class PaidSmokeReferenceDumpSpec extends Specification {
 
         List<String> rawLines
         try (BufferedReader reader = new BufferedReader(
-        new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
+                new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
             rawLines = reader.readLines()
         }
         launched.waitForExit()

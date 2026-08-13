@@ -36,7 +36,7 @@ class EgressGuardSpec extends Specification {
         given: 'no guard container exists, and every create step succeeds'
         docker.onRun = { List<String> args ->
             args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.contains(GuardCommands.runGuard(
-            'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString()))
+                    'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString()))
             ? failed('No such object')
             : ok('true\n')
         }
@@ -46,7 +46,7 @@ class EgressGuardSpec extends Specification {
 
         then: 'the guard is run with the rendered config and given its bridge leg'
         docker.runs.contains(GuardCommands.runGuard(
-                'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString()))
+                        'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString()))
         docker.runs.contains(GuardCommands.connectBridge('k1'))
 
         and: 'the first create sufficed — the recreate repair path never ran'
@@ -144,8 +144,10 @@ class EgressGuardSpec extends Specification {
                 return failed('endpoint with name gnomish-guard-k1 already exists in network bridge')
             }
             if (args == GuardCommands.inspectGuardRunning('k1')) {
-                def probes = docker.runs.count { it == GuardCommands.inspectGuardRunning('k1') }
-                return probes > 1 ? ok('true\n') : failed('No such object')
+                def probes = docker.runs.count {
+                    it == GuardCommands.inspectGuardRunning('k1')
+                }
+                return probes> 1 ? ok('true\n') : failed('No such object')
             }
             ok()
         }

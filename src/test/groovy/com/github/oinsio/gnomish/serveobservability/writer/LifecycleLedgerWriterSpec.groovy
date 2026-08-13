@@ -53,7 +53,9 @@ class LifecycleLedgerWriterSpec extends Specification {
         writer(now).writeStarted()
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll { !it.isBlank() }
+        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+            !it.isBlank()
+        }
         lines.size() == 1
         def json = JSON.readTree(lines[0])
         json.get('type').asText() == 'lifecycle'
@@ -71,7 +73,9 @@ class LifecycleLedgerWriterSpec extends Specification {
         writer(now).writeStopped('sigterm')
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll { !it.isBlank() }
+        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+            !it.isBlank()
+        }
         lines.size() == 1
         def json = JSON.readTree(lines[0])
         json.get('type').asText() == 'lifecycle'
@@ -103,7 +107,9 @@ class LifecycleLedgerWriterSpec extends Specification {
         w.writeStopped('drainComplete')
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll { !it.isBlank() }
+        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+            !it.isBlank()
+        }
         lines.size() == 2
         JSON.readTree(lines[0]).get('event').asText() == 'started'
         JSON.readTree(lines[1]).get('event').asText() == 'stopped'

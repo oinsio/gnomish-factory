@@ -47,7 +47,9 @@ class GithubTokenHygieneSpec extends Specification {
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
                 .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 || r.statusCode() == 429 })
+                .retryOnResult({ HttpResponse<?> r ->
+                    r.statusCode() >= 500 || r.statusCode() == 429
+                })
                 .build()
     }
 

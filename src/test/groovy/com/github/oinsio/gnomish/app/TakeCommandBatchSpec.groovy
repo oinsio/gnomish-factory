@@ -126,8 +126,12 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refA, _) >> { TaskRef r, String instanceId -> claimedByA = instanceId; new ClaimResult.Acquired() }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refA, _) >> { TaskRef r, String instanceId ->
+            claimedByA = instanceId; new ClaimResult.Acquired()
+        }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
 
@@ -153,7 +157,9 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
 
@@ -198,7 +204,9 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         // fakeFactory's expandRef always throws UnsupportedOperationException (not used by this
         // fixture) — a short ref like '42' reaches it, so the ref fails for a reason outside this
         // fixture's control, exactly the "tool could not operate" shape.
@@ -216,7 +224,9 @@ tracker:
         ex.exitCode() > 0 && ex.exitCode() < 10
 
         and: 'the checklist summary names both refs, including the tool failure'
-        def summary = appender.list.find { it.level == Level.INFO && it.formattedMessage.contains('batch take:') }
+        def summary = appender.list.find {
+            it.level == Level.INFO && it.formattedMessage.contains('batch take:')
+        }
         summary != null
         summary.formattedMessage.contains('42 -> tool failure')
         summary.formattedMessage.contains(refB.id() + ' -> delivered')
@@ -238,7 +248,9 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
         def appender = attachAppender()
@@ -248,7 +260,9 @@ tracker:
 
         then:
         thrown(TakeExitCodeException)
-        def summary = appender.list.find { it.level == Level.INFO && it.formattedMessage.contains('batch take:') }
+        def summary = appender.list.find {
+            it.level == Level.INFO && it.formattedMessage.contains('batch take:')
+        }
         summary != null
         summary.formattedMessage.contains('2 ref(s)')
         summary.formattedMessage.contains(refA.id() + ' -> skipped')

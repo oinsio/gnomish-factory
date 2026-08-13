@@ -101,8 +101,9 @@ tracker:
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],
-                TrackerValidatorStub.acceptingGithub(),
-                { FeedAutomaton automaton -> automaton.run() } as FeedAutomatonStarter)
+                TrackerValidatorStub.acceptingGithub(), { FeedAutomaton automaton ->
+                    automaton.run()
+                } as FeedAutomatonStarter)
         def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-restart-integration-under-test').start {
             try {

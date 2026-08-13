@@ -64,7 +64,9 @@ class AgentRoundResultExtractorSpec extends Specification {
     def "computes an orphaned top-level tool call's duration to the supplied roundEnd"() {
         given: 'the premature-death fixture parsed into timestamped events (no tool_result, no result event)'
         def events = parser.parse(readerOf('premature-death'))
-        def toolUseReadAt = events.find { it.event() instanceof AgentEvent.AssistantEvent }.readAt()
+        def toolUseReadAt = events.find {
+            it.event() instanceof AgentEvent.AssistantEvent
+        }.readAt()
         def roundEnd = toolUseReadAt.plusSeconds(30)
 
         when: 'a synthetic result event is appended so extraction does not throw on the essential path'

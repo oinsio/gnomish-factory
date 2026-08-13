@@ -56,7 +56,7 @@ class InteractiveStageExecutorSpec extends Specification {
         // Bounds the measured wall time to a sane in-process range: kills a mutant that
         // replaces the nanoTime() subtraction with addition, which would yield a wall
         // time on the order of the current epoch nanos (many years), not a few seconds.
-        result.usage().wallTime() < Duration.ofSeconds(30)
+        result.usage().wallTime() <Duration.ofSeconds(30)
         result.usage().tools().isEmpty()
         result.usage().tokensByModel().isEmpty()
         result.trace().key() == new AttemptKey('task-1', 'build', 2)

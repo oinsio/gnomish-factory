@@ -139,7 +139,9 @@ class UsageCommandSpec extends Specification implements BareGitRepoFixture {
         def args = new DefaultApplicationArguments('usage', '--dir=' + cloneDir, 'NO-SUCH-TASK')
 
         when:
-        def output = captureStdoutExpectingThrow(TaskNotFoundException) { newCommand().run(args) }
+        def output = captureStdoutExpectingThrow(TaskNotFoundException) {
+            newCommand().run(args)
+        }
 
         then:
         output.contains('task not found')
@@ -155,7 +157,9 @@ class UsageCommandSpec extends Specification implements BareGitRepoFixture {
         def args = new DefaultApplicationArguments('usage', '--dir=' + cloneDir, 'PROJ-3')
 
         when:
-        def output = captureStdoutExpectingThrow(TaskNotFoundException) { newCommand().run(args) }
+        def output = captureStdoutExpectingThrow(TaskNotFoundException) {
+            newCommand().run(args)
+        }
 
         then:
         output.contains('task not found: PROJ-3')

@@ -79,15 +79,15 @@ class StructuralValidationSpec extends Specification {
         }
 
         where:
-        scenario                     | stage                                     || expectedWhere        | expectedMessage
-        'missing purpose'            | stageWith(purpose: null)                  || 'purpose'            | "missing required field 'purpose'"
-        'missing executor block'     | stageWith(executor: null)                 || 'executor'           | "missing required field 'executor'"
-        'missing executor type'      | stageWith(executor: exec(type: null))     || 'executor.type'      | "missing required field 'executor.type'"
-        'unknown executor type'      | stageWith(executor: exec(type: 'foo'))    || 'executor.type'      | "unknown executor 'foo'; known executors are api, agent-cli"
-        'missing instructions'       | stageWith(instructions: null)             || 'instructions'       | "missing required field 'instructions'"
-        'missing advancement'        | stageWith(advancement: null)              || 'advancement'        | "missing required field 'advancement'"
-        'unknown advancement'        | stageWith(advancement: 'later')           || 'advancement'        | "unknown advancement 'later'; known modes are auto, manual"
-        'output without id'          | stageWith(outputs: [new ArtifactOutputDto(null)]) || 'outputs[0].id' | "missing required field 'id'"
+        scenario | stage || expectedWhere | expectedMessage
+        'missing purpose' | stageWith(purpose: null) || 'purpose' | "missing required field 'purpose'"
+        'missing executor block' | stageWith(executor: null) || 'executor' | "missing required field 'executor'"
+        'missing executor type' | stageWith(executor: exec(type: null)) || 'executor.type' | "missing required field 'executor.type'"
+        'unknown executor type' | stageWith(executor: exec(type: 'foo')) || 'executor.type' | "unknown executor 'foo'; known executors are api, agent-cli"
+        'missing instructions' | stageWith(instructions: null) || 'instructions' | "missing required field 'instructions'"
+        'missing advancement' | stageWith(advancement: null) || 'advancement' | "missing required field 'advancement'"
+        'unknown advancement' | stageWith(advancement: 'later') || 'advancement' | "unknown advancement 'later'; known modes are auto, manual"
+        'output without id' | stageWith(outputs: [new ArtifactOutputDto(null)]) || 'outputs[0].id' | "missing required field 'id'"
         'internal input without ref' | stageWith(inputs: [
             new ArtifactInputDto.Internal(null)
         ]) || 'inputs[0].producerOutputId' | "missing required field 'producerOutputId'"

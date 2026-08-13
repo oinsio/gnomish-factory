@@ -36,9 +36,9 @@ class GitObjectsTreeSpec extends Specification implements GitObjectsFixture {
     def "FR25: a directory delete drops the subtree but preserves history"() {
         given: 'a base carrying a .gnomish-task/ subtree'
         def bare = seedBareRepo(tempDir, [
-            '.gnomish-task/task.json'          : '{}',
+            '.gnomish-task/task.json' : '{}',
             '.gnomish-task/decisions/s-a1.json': '{}',
-            'src/App.java'                     : 'class App {}'])
+            'src/App.java' : 'class App {}'])
         def git = openGitObjects(bare, tempDir)
         def base = git.resolveRef('refs/heads/base').get()
 
@@ -125,7 +125,9 @@ class GitObjectsTreeSpec extends Specification implements GitObjectsFixture {
 
     private long leftoverIndexes() {
         try (var stream = Files.list(indexDir(tempDir))) {
-            return stream.filter { it.fileName.toString().startsWith('gnomish-index-') }.collect(Collectors.toList()).size()
+            return stream.filter {
+                it.fileName.toString().startsWith('gnomish-index-')
+            }.collect(Collectors.toList()).size()
         }
     }
 }

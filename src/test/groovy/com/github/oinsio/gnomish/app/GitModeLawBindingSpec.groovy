@@ -116,7 +116,11 @@ exec sh '${scriptPath}' "\$@"
         Files.readString(cloneDir.resolve('instructions.md')).contains(ORIGINAL_LAW)
 
         and: 'exactly two attempts ran (the tamper attempt burned by the failed check, then the completing one)'
-        def prompts = captureFile.text.split('(?m)^---$').collect { it.trim() }.findAll { !it.isEmpty() }
+        def prompts = captureFile.text.split('(?m)^---$').collect {
+            it.trim()
+        }.findAll {
+            !it.isEmpty()
+        }
         prompts.size() == 2
 
         and: "attempt 1's prompt carried the clone's ORIGINAL law"

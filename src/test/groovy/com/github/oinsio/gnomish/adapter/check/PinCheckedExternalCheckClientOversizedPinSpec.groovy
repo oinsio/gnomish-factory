@@ -48,13 +48,15 @@ class PinCheckedExternalCheckClientOversizedPinSpec extends Specification implem
         given: 'an attempt whose pinned workflow file is one byte over the comparison read cap'
         byte[] oversized = new byte[(int) PinCheckedExternalCheckClient.PIN_READ_CAP_BYTES + 1]
         def attempt = gitObjects.commit(new CommitRequest(
-                'refs/heads/gnomish/task-1', Optional.empty(), baseTip,
-                [
-                    new TreeEdit.PutFile('.github/workflows/ci.yml', oversized)
-                ], metadata()))
+                        'refs/heads/gnomish/task-1', Optional.empty(), baseTip,
+                        [
+                            new TreeEdit.PutFile('.github/workflows/ci.yml', oversized)
+                        ], metadata()))
         def delegate = new RecordingClient()
         def guard = new PinCheckedExternalCheckClient(
-                delegate, { c -> [c.checkId()] as Set }, gitObjects, 'refs/heads/base')
+                delegate, { c ->
+                    [c.checkId()] as Set
+                }, gitObjects, 'refs/heads/base')
         def check = new VerifyCheck.External(
                 '.github/workflows/ci.yml', Duration.ofSeconds(1), Duration.ofSeconds(5),
                 VerifyCheck.TimeoutClass.QUALITY, [])

@@ -46,17 +46,17 @@ class BoardModelEligibilitySpec extends Specification {
         model.readyRows()[0].eligibilityReason() == expectedReason
 
         where:
-        description                                              | abortFacts        | returned | finished | openFrontCount | wipLimit || expectedReason
-        'eligible: fresh, no backoff, front below cap'           | AbortFacts.none() | false    | false    | 0              | 3        || null
-        'eligible: returned, no backoff, front below cap'        | AbortFacts.none() | true     | false    | 0              | 3        || null
-        'in backoff'                                             | BACKED_OFF_FACTS  | false    | false    | 0              | 3        || new EligibilityReason.InBackoff(BACKED_OFF_DEADLINE)
-        'finished, not backed off'                               | AbortFacts.none() | false    | true     | 0              | 3        || new EligibilityReason.Finished()
-        'WIP-held: fresh, front at limit'                        | AbortFacts.none() | false    | false    | 3              | 3        || new EligibilityReason.WipHeld()
-        'WIP-held: fresh, front above limit'                     | AbortFacts.none() | false    | false    | 4              | 3        || new EligibilityReason.WipHeld()
-        'returned bypasses the WIP gate even when front is full' | AbortFacts.none() | true     | false    | 3              | 3        || null
-        'backoff wins over finished (both apply)'                | BACKED_OFF_FACTS  | false    | true     | 0              | 3        || new EligibilityReason.InBackoff(BACKED_OFF_DEADLINE)
-        'finished wins over WIP-held (both apply, fresh)'        | AbortFacts.none() | false    | true     | 3              | 3        || new EligibilityReason.Finished()
-        'backoff wins over WIP-held too (all three apply)'       | BACKED_OFF_FACTS  | false    | true     | 3              | 3        || new EligibilityReason.InBackoff(BACKED_OFF_DEADLINE)
+        description | abortFacts | returned | finished | openFrontCount | wipLimit || expectedReason
+        'eligible: fresh, no backoff, front below cap' | AbortFacts.none() | false | false | 0 | 3 || null
+        'eligible: returned, no backoff, front below cap' | AbortFacts.none() | true | false | 0 | 3 || null
+        'in backoff' | BACKED_OFF_FACTS | false | false | 0 | 3 || new EligibilityReason.InBackoff(BACKED_OFF_DEADLINE)
+        'finished, not backed off' | AbortFacts.none() | false | true | 0 | 3 || new EligibilityReason.Finished()
+        'WIP-held: fresh, front at limit' | AbortFacts.none() | false | false | 3 | 3 || new EligibilityReason.WipHeld()
+        'WIP-held: fresh, front above limit' | AbortFacts.none() | false | false | 4 | 3 || new EligibilityReason.WipHeld()
+        'returned bypasses the WIP gate even when front is full' | AbortFacts.none() | true | false | 3 | 3 || null
+        'backoff wins over finished (both apply)' | BACKED_OFF_FACTS | false | true | 0 | 3 || new EligibilityReason.InBackoff(BACKED_OFF_DEADLINE)
+        'finished wins over WIP-held (both apply, fresh)' | AbortFacts.none() | false | true | 3 | 3 || new EligibilityReason.Finished()
+        'backoff wins over WIP-held too (all three apply)' | BACKED_OFF_FACTS | false | true | 3 | 3 || new EligibilityReason.InBackoff(BACKED_OFF_DEADLINE)
     }
 
     // Task 2.2 seam confirmation: the shorter build overload still defaults every row to eligible

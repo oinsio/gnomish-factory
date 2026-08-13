@@ -204,7 +204,9 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
 
         and: 'exactly one round was recorded — the interrupted one, no attempt burned (FR21)'
         def stateShas = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: round work#0$').stdout().readLines().findAll { !it.isBlank() }
+                '^gnomish: round work#0$').stdout().readLines().findAll {
+                    !it.isBlank()
+                }
         stateShas.size() == 1
         gitRunner.run(cloneDir, 'log', branch, '--grep', '^gnomish: round work#1$', '--format=%H')
                 .stdout().trim().isEmpty()

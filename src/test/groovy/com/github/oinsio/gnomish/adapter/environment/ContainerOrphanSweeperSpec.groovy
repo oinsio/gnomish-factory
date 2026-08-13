@@ -14,7 +14,9 @@ class ContainerOrphanSweeperSpec extends Specification {
     def sweeper = new ContainerOrphanSweeper(docker)
 
     private void listing(Map<List<String>, String> stdoutByArgv) {
-        docker.onRun = { List<String> args -> new DockerResult(0, stdoutByArgv.getOrDefault(args, ''), '') }
+        docker.onRun = { List<String> args ->
+            new DockerResult(0, stdoutByArgv.getOrDefault(args, ''), '')
+        }
     }
 
     def "FR11: orphaned factory objects are removed, live-task objects are kept"() {

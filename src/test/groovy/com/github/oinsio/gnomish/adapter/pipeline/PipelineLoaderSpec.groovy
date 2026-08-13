@@ -184,7 +184,9 @@ advancement: manual
         then: 'only the consistency error is present — no domain empty-pipeline error is fabricated'
         outcome instanceof LoadOutcome.Invalid
         def errors = (outcome as LoadOutcome.Invalid).errors()
-        errors.any { it.file() == 'pipeline.yaml' && it.message().contains("stage 'plan' has no manifest") }
+        errors.any {
+            it.file() == 'pipeline.yaml' && it.message().contains("stage 'plan' has no manifest")
+        }
         // If orderedEntries returned an empty list instead of null, the mapper would build an
         // empty model and StageOrderRule would emit "pipeline declares no stages": it must not.
         !errors.any { it.message().contains('declares no stages') }
@@ -220,8 +222,12 @@ advancement: auto
         }
 
         and: 'consistency: ghost has no manifest, orphan is dangling'
-        errors.any { it.file() == 'pipeline.yaml' && it.message().contains("stage 'ghost' has no manifest") }
-        errors.any { it.file() == 'stages/orphan/stage.yaml' && it.message().contains("dangling stage directory 'orphan'") }
+        errors.any {
+            it.file() == 'pipeline.yaml' && it.message().contains("stage 'ghost' has no manifest")
+        }
+        errors.any {
+            it.file() == 'stages/orphan/stage.yaml' && it.message().contains("dangling stage directory 'orphan'")
+        }
     }
 
     def "domain rules run when a model maps: an empty pipeline and missing version are both reported"() {
@@ -235,8 +241,12 @@ advancement: auto
         then: 'Invalid, carrying both domain problems in one pass'
         outcome instanceof LoadOutcome.Invalid
         def errors = (outcome as LoadOutcome.Invalid).errors()
-        errors.any { it.file() == 'config.yaml' && it.message().toLowerCase().contains('version') }
-        errors.any { it.file() == 'pipeline.yaml' && it.message().contains('declares no stages') }
+        errors.any {
+            it.file() == 'config.yaml' && it.message().toLowerCase().contains('version')
+        }
+        errors.any {
+            it.file() == 'pipeline.yaml' && it.message().contains('declares no stages')
+        }
     }
 
     def "a file that will not parse short-circuits only its own semantic checks; other files still report"() {
@@ -262,11 +272,17 @@ advancement: auto
         def errors = (outcome as LoadOutcome.Invalid).errors()
 
         and: "plan's malformed YAML is reported once, and its shape checks are NOT run"
-        errors.any { it.file() == 'stages/plan/stage.yaml' && it.message().contains('malformed YAML') }
-        !errors.any { it.file() == 'stages/plan/stage.yaml' && it.where() == 'executor.type' }
+        errors.any {
+            it.file() == 'stages/plan/stage.yaml' && it.message().contains('malformed YAML')
+        }
+        !errors.any {
+            it.file() == 'stages/plan/stage.yaml' && it.where() == 'executor.type'
+        }
 
         and: "build's structural error is still reported (other files proceed)"
-        errors.any { it.file() == 'stages/build/stage.yaml' && it.where() == 'executor.type' }
+        errors.any {
+            it.file() == 'stages/build/stage.yaml' && it.where() == 'executor.type'
+        }
     }
 
     def "a missing referenced file is reported via the I/O tier when the model maps cleanly"() {

@@ -89,7 +89,7 @@ class SlowCloseStdin extends ByteArrayOutputStream {
 
     @Override
     void close() {
-        if (closeDelayMillis > 0) {
+        if (closeDelayMillis> 0) {
             Thread.sleep(closeDelayMillis)
         }
         closed = true

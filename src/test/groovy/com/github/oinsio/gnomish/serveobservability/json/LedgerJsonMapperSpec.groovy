@@ -47,11 +47,11 @@ class LedgerJsonMapperSpec extends Specification {
         mapper.toDto(lineWithOutcome(outcome)).outcome() == wireValue
 
         where:
-        outcome                     | wireValue
-        TaskOutcome.DELIVERED       | "delivered"
-        TaskOutcome.AWAITING_HUMAN  | "awaitingHuman"
-        TaskOutcome.ABORTED         | "aborted"
-        TaskOutcome.REVOKED         | "revoked"
+        outcome | wireValue
+        TaskOutcome.DELIVERED | "delivered"
+        TaskOutcome.AWAITING_HUMAN | "awaitingHuman"
+        TaskOutcome.ABORTED | "aborted"
+        TaskOutcome.REVOKED | "revoked"
     }
 
     def "parkReason is null when outcome is not awaitingHuman"() {
@@ -64,10 +64,10 @@ class LedgerJsonMapperSpec extends Specification {
         mapper.toDto(awaitingHumanLineWith(reason)).parkReason() == wireValue
 
         where:
-        reason                | wireValue
+        reason | wireValue
         ParkReason.ESCALATION | "escalation"
         ParkReason.CHECKPOINT | "checkpoint"
-        ParkReason.INFRA      | "infra"
+        ParkReason.INFRA | "infra"
     }
 
     def "stage renders null at pipeline end"() {

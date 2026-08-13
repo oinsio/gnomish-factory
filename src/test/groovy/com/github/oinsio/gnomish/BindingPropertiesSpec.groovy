@@ -59,6 +59,8 @@ class BindingPropertiesSpec extends Specification {
         BindingProperties.isRecord()
 
         and: 'no public method follows the mutable setter convention'
-        BindingProperties.methods.every { !(it.name.startsWith('set') && it.parameterCount > 0) }
+        BindingProperties.methods.every {
+            !(it.name.startsWith('set') && it.parameterCount> 0)
+        }
     }
 }

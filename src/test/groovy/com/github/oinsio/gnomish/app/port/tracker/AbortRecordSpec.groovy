@@ -35,11 +35,11 @@ class AbortRecordSpec extends Specification {
         failure.message.contains("AbortRecord.$component")
 
         where:
-        cause          | instance     | component
-        ''             | 'instance-a' | 'cause'
-        '   '          | 'instance-a' | 'cause'
-        'build failed' | ''           | 'instance'
-        'build failed' | '\t'         | 'instance'
+        cause | instance | component
+        '' | 'instance-a' | 'cause'
+        '   ' | 'instance-a' | 'cause'
+        'build failed' | '' | 'instance'
+        'build failed' | '\t' | 'instance'
     }
 
     // FR14: abort records are values — equal content means equal records

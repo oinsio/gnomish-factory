@@ -27,7 +27,9 @@ class DialogConsoleSpec extends Specification {
     def "intercepts status, renders text, and re-prompts for the original question"() {
         given:
         def io = new ScriptedConsoleIO(['status', 'answer'])
-        def console = new DialogConsole(io, { json -> json ? 'json-report' : 'text-report' })
+        def console = new DialogConsole(io, { json ->
+            json ? 'json-report' : 'text-report'
+        })
 
         expect:
         console.prompt('question? ') == 'answer'
@@ -41,7 +43,9 @@ class DialogConsoleSpec extends Specification {
     def "intercepts status --json, renders json, and re-prompts for the original question"() {
         given:
         def io = new ScriptedConsoleIO(['status --json', 'answer'])
-        def console = new DialogConsole(io, { json -> json ? 'json-report' : 'text-report' })
+        def console = new DialogConsole(io, { json ->
+            json ? 'json-report' : 'text-report'
+        })
 
         expect:
         console.prompt('question? ') == 'answer'
@@ -59,7 +63,9 @@ class DialogConsoleSpec extends Specification {
             'status --json',
             'answer'
         ])
-        def console = new DialogConsole(io, { json -> json ? 'json-report' : 'text-report' })
+        def console = new DialogConsole(io, { json ->
+            json ? 'json-report' : 'text-report'
+        })
 
         expect:
         console.prompt('question? ') == 'answer'
@@ -74,7 +80,9 @@ class DialogConsoleSpec extends Specification {
 
     def "is not exhausted before any EOF"() {
         given:
-        def console = new DialogConsole(new ScriptedConsoleIO(['line']), { json -> 'unused' })
+        def console = new DialogConsole(new ScriptedConsoleIO(['line']), { json ->
+            'unused'
+        })
 
         expect:
         !console.inputExhausted()
@@ -82,7 +90,9 @@ class DialogConsoleSpec extends Specification {
 
     def "latches the input-exhausted flag and rethrows on EOF"() {
         given:
-        def console = new DialogConsole(new ScriptedConsoleIO([]), { json -> 'unused' })
+        def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
+            'unused'
+        })
 
         when:
         console.prompt('question? ')
@@ -126,7 +136,9 @@ class DialogConsoleSpec extends Specification {
 
         expect:
         console.ask('pass/fail/running? ', ['pass', 'fail', 'running']) == 'pass'
-        io.printed.any { it.contains('pass') && it.contains('fail') && it.contains('running') }
+        io.printed.any {
+            it.contains('pass') && it.contains('fail') && it.contains('running')
+        }
     }
 
     def "ask still intercepts status before checking accepted answers"() {
@@ -141,7 +153,9 @@ class DialogConsoleSpec extends Specification {
 
     def "ask propagates EOF and latches the exhausted flag"() {
         given:
-        def console = new DialogConsole(new ScriptedConsoleIO([]), { json -> 'unused' })
+        def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
+            'unused'
+        })
 
         when:
         console.ask('pass/fail/running? ', ['pass', 'fail', 'running'])
@@ -155,7 +169,9 @@ class DialogConsoleSpec extends Specification {
         given:
         def executing = new Activity.Executing(Instant.EPOCH)
         def tracker = new RecordingActivityTracker(executing)
-        def console = new DialogConsole(new ScriptedConsoleIO(['answer']), { json -> 'unused' }, tracker)
+        def console = new DialogConsole(new ScriptedConsoleIO(['answer']), { json ->
+            'unused'
+        }, tracker)
 
         expect:
         console.prompt('question? ') == 'answer'
@@ -169,7 +185,9 @@ class DialogConsoleSpec extends Specification {
         given:
         def verifying = new Activity.Executing(Instant.EPOCH)
         def tracker = new RecordingActivityTracker(verifying)
-        def console = new DialogConsole(new ScriptedConsoleIO([]), { json -> 'unused' }, tracker)
+        def console = new DialogConsole(new ScriptedConsoleIO([]), { json ->
+            'unused'
+        }, tracker)
 
         when:
         console.prompt('question? ')
@@ -207,7 +225,9 @@ class DialogConsoleSpec extends Specification {
 
     def "the two-arg constructor defaults to a no-op activity tracker"() {
         given:
-        def console = new DialogConsole(new ScriptedConsoleIO(['answer']), { json -> 'unused' })
+        def console = new DialogConsole(new ScriptedConsoleIO(['answer']), { json ->
+            'unused'
+        })
 
         expect:
         console.prompt('question? ') == 'answer'

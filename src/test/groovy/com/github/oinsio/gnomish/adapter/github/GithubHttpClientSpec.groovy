@@ -38,7 +38,9 @@ class GithubHttpClientSpec extends Specification {
         RetryConfig.custom()
                 .maxAttempts(4)
                 .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ it instanceof GithubHttpUncheckedIOException })
+                .retryOnException({
+                    it instanceof GithubHttpUncheckedIOException
+                })
                 .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
                 .build()
     }

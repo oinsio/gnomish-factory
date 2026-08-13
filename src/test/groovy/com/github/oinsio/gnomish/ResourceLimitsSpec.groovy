@@ -44,10 +44,10 @@ class ResourceLimitsSpec extends Specification {
         accessor.call(new ResourceLimits(cpus, memory, 0L, disk)) == expected
 
         where:
-        knob     | cpus | memory | disk | expected || accessor
-        'cpus'   | null | 'x'    | 'x'  | '2'      || { it.cpus() }
-        'memory' | 'x'  | null   | 'x'  | '2g'     || { it.memory() }
-        'disk'   | 'x'  | 'x'    | null | '10g'    || { it.disk() }
+        knob | cpus | memory | disk | expected || accessor
+        'cpus' | null | 'x' | 'x' | '2' || { it.cpus() }
+        'memory' | 'x' | null | 'x' | '2g' || { it.memory() }
+        'disk' | 'x' | 'x' | null | '10g' || { it.disk() }
     }
 
     // FR10: a blank string knob is a configuration mistake, rejected with its name
@@ -60,10 +60,10 @@ class ResourceLimitsSpec extends Specification {
         failure.message.contains("factory.sandbox.limits.$knob")
 
         where:
-        knob     | cpus | memory | disk
-        'cpus'   | ' '  | 'x'    | 'x'
-        'memory' | 'x'  | ''     | 'x'
-        'disk'   | 'x'  | 'x'    | '  '
+        knob | cpus | memory | disk
+        'cpus' | ' ' | 'x' | 'x'
+        'memory' | 'x' | '' | 'x'
+        'disk' | 'x' | 'x' | '  '
     }
 
     // FR10: pids defaults to 512 when unset (primitive 0 sentinel)
@@ -81,9 +81,9 @@ class ResourceLimitsSpec extends Specification {
         limits.pids() == expected
 
         where:
-        value | outcome              || expected
-        1L    | 'kept unchanged'     || 1L
-        999L  | 'kept unchanged'     || 999L
+        value | outcome || expected
+        1L | 'kept unchanged' || 1L
+        999L | 'kept unchanged' || 999L
     }
 
     // FR10: a negative pids count is rejected with the property name
@@ -105,6 +105,8 @@ class ResourceLimitsSpec extends Specification {
         ResourceLimits.isRecord()
 
         and: 'no public method follows the mutable setter convention'
-        ResourceLimits.methods.every { !(it.name.startsWith('set') && it.parameterCount > 0) }
+        ResourceLimits.methods.every {
+            !(it.name.startsWith('set') && it.parameterCount> 0)
+        }
     }
 }

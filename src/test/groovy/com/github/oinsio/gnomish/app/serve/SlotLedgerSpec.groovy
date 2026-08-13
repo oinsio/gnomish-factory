@@ -194,7 +194,9 @@ class SlotLedgerSpec extends Specification {
         given:
         int slots = 4
         def ledger = new SlotLedger(slots)
-        def refs = (0..<slots).collect { new TaskRef("github:o/r#${it}" as String) }
+        def refs = (0..<slots).collect {
+            new TaskRef("github:o/r#${it}" as String)
+        }
         refs.each { ledger.acquire(); ledger.assign(it) }
         def running = new AtomicInteger(slots)
         def sawZeroBeforeDrain = new AtomicBoolean(false)
@@ -232,7 +234,9 @@ class SlotLedgerSpec extends Specification {
         int taskCount = 8
         int workersPerTask = 5
         def ledger = new SlotLedger(slots)
-        def refs = (0..<taskCount).collect { new TaskRef("github:o/r#${it}" as String) }
+        def refs = (0..<taskCount).collect {
+            new TaskRef("github:o/r#${it}" as String)
+        }
 
         def running = new AtomicInteger(0)
         def maxObservedRunning = new AtomicInteger(0)
@@ -263,9 +267,13 @@ class SlotLedgerSpec extends Specification {
                     }
                     if (assigned) {
                         int now = running.incrementAndGet()
-                        maxObservedRunning.updateAndGet { current -> Math.max(current, now) }
+                        maxObservedRunning.updateAndGet { current ->
+                            Math.max(current, now)
+                        }
                         int perRefNow = perRefHolders[taskIndex].incrementAndGet()
-                        maxObservedPerRefHolders.updateAndGet { current -> Math.max(current, perRefNow) }
+                        maxObservedPerRefHolders.updateAndGet { current ->
+                            Math.max(current, perRefNow)
+                        }
                         Thread.sleep(random.nextInt(5))
                         perRefHolders[taskIndex].decrementAndGet()
                         running.decrementAndGet()

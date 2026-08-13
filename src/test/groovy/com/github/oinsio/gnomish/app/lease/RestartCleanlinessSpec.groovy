@@ -52,7 +52,11 @@ class RestartCleanlinessSpec extends Specification {
         String oldInstanceId = InstanceId.generate('gnomish-factory').value()
         harness.seedWorkingWithClaim(tracker, TASK_A, oldInstanceId)
         harness.seedWorkingWithClaim(tracker, TASK_B, oldInstanceId)
-        def versionBefore = { TaskRef ref -> tracker.listOpen().find { it.ref() == ref }.claimVersion() }
+        def versionBefore = { TaskRef ref ->
+            tracker.listOpen().find {
+                it.ref() == ref
+            }.claimVersion()
+        }
         def originalVersionA = versionBefore(TASK_A)
         def originalVersionB = versionBefore(TASK_B)
 
@@ -64,7 +68,9 @@ class RestartCleanlinessSpec extends Specification {
         // The new instance holds nothing of its own, so the standing reaper's live-claims
         // snapshot supplier always returns empty — exactly the shape of a just-restarted process
         // that has not claimed anything yet (FR1, FR2).
-        def standingReaper = new StandingReaper(reaper, { Duration d -> }, INTERVAL, { -> [] }, new SystemClock())
+        def standingReaper = new StandingReaper(reaper, { Duration d -> }, INTERVAL, {
+            -> []
+        }, new SystemClock())
 
         expect: 'the restart alone mints a different id — the two lives are never confused'
         newInstanceId != oldInstanceId

@@ -16,7 +16,9 @@ class RecordingDockerCli extends DockerCli {
     final List<List<String>> starts = []
 
     /** Maps a run argv to its result; may throw to simulate a runtime outage. Default: exit 0. */
-    Closure<DockerResult> onRun = { List<String> args -> new DockerResult(0, '', '') }
+    Closure<DockerResult> onRun = { List<String> args ->
+        new DockerResult(0, '', '')
+    }
 
     RecordingDockerCli() {
         super('docker')

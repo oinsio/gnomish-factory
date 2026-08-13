@@ -68,9 +68,9 @@ class DashboardHtmlRendererStalenessSpec extends Specification {
 
         where:
         cadenceSeconds | expectedThresholdMillis
-        10             | 30000
-        5              | 15000
-        60             | 180000
+        10 | 30000
+        5 | 15000
+        60 | 180000
     }
 
     def "one-shot page (no render cadence) shows generatedAt but includes no staleness script or banner"() {

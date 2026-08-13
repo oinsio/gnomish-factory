@@ -41,13 +41,13 @@ class ConfigErrorSpec extends Specification {
         failure.message.contains("ConfigError.$component")
 
         where:
-        file          | where   | message   | component
-        ''            | 'field' | 'problem' | 'file'
-        '   '         | 'field' | 'problem' | 'file'
-        'config.yaml' | ''      | 'problem' | 'where'
-        'config.yaml' | '\t'    | 'problem' | 'where'
-        'config.yaml' | 'field' | ''        | 'message'
-        'config.yaml' | 'field' | ' \n'     | 'message'
+        file | where | message | component
+        '' | 'field' | 'problem' | 'file'
+        '   ' | 'field' | 'problem' | 'file'
+        'config.yaml' | '' | 'problem' | 'where'
+        'config.yaml' | '\t' | 'problem' | 'where'
+        'config.yaml' | 'field' | '' | 'message'
+        'config.yaml' | 'field' | ' \n' | 'message'
     }
 
     // FR8: errors are values — aggregated lists compare by content (M2 data tables)

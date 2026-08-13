@@ -21,17 +21,17 @@ jacoco = "0.8.15"
 pitest-tool = "1.25.7"
 pitest-junit5-plugin = "1.2.3"
 pitest-plugin = "1.19.0"
-spotless = "8.8.0"
+spotless = "8.9.0"
 palantir-java-format = "2.96.0"
 errorprone = "2.50.0"
 errorprone-plugin = "5.1.0"
 nullaway = "0.13.8"
-jspecify = "1.0.0"
-dependency-analysis = "3.17.0"
+jspecify = "1.0.1"
+dependency-analysis = "3.18.0"
 # ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
-# design D7). 1.4.2 verified on Maven Central 2026-07-15; its shaded ASM
+# design D7). 1.5.0 verified on Maven Central 2026-08-13; its shaded ASM
 # supports Java 25 bytecode (class-file version 69).
-archunit = "1.4.2"
+archunit = "1.5.0"
 # WireMock for tracker/AI API contract tests, in-JVM, no Docker (.claude/rules/testing.md,
 # NFR-R2 of add-tracker-port). 3.13.2 is the latest stable line on Maven Central (2026-07-28);
 # 4.0.0 is still beta. Plain JDK artifact, so no JDK-version-specific classifier is needed.
@@ -62,10 +62,10 @@ resilience4j = "2.4.0"
 # and stays on the fixed line.
 jackson = "2.22.1"
 # logback: GHSA-jhq6-gfmj-v8fx (logback-core HardenedObjectInputStream Proxy
-# injection, CVSS 2.9); fixed in 1.5.35. 1.6.0 is the latest stable release on
-# Maven Central (2026-07-28) and stays on the fixed line. classic is kept on
+# injection, CVSS 2.9); fixed in 1.5.35. 1.6.1 is the latest stable release on
+# Maven Central (2026-08-13) and stays on the fixed line. classic is kept on
 # the same version.
-logback = "1.6.0"
+logback = "1.6.1"
 # httpcore5: GHSA-hf6x-8p5f-cgmf (CVSS 7.5); a WireMock/Testcontainers
 # transitive drags in 5.4/5.4.2, fixed in 5.4.3. h2 is kept on the same
 # version. Test-scope only (testCompileClasspath/testRuntimeClasspath).

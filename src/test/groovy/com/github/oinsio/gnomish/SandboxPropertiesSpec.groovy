@@ -58,11 +58,11 @@ class SandboxPropertiesSpec extends Specification {
         failure.message.contains(property)
 
         where:
-        property                      | runtime | guardImage
-        'factory.sandbox.runtime'     | ''      | null
-        'factory.sandbox.runtime'     | '   '   | null
-        'factory.sandbox.guard-image' | null    | ''
-        'factory.sandbox.guard-image' | null    | '   '
+        property | runtime | guardImage
+        'factory.sandbox.runtime' | '' | null
+        'factory.sandbox.runtime' | '   ' | null
+        'factory.sandbox.guard-image' | null | ''
+        'factory.sandbox.guard-image' | null | '   '
     }
 
     // FR10: limits default to the documented set when unset
@@ -111,9 +111,17 @@ class SandboxPropertiesSpec extends Specification {
         thrown(UnsupportedOperationException)
 
         where:
-        knob              | build                                                          | accessor
-        'egressAllowlist' | { new SandboxProperties(null, null, null, null, it, null, false) }    | { it.egressAllowlist() }
-        'envPassthrough'  | { new SandboxProperties(null, null, null, null, null, it, false) }    | { it.envPassthrough() }
+        knob | build | accessor
+        'egressAllowlist' | {
+            new SandboxProperties(null, null, null, null, it, null, false)
+        } | {
+            it.egressAllowlist()
+        }
+        'envPassthrough' | {
+            new SandboxProperties(null, null, null, null, null, it, false)
+        } | {
+            it.envPassthrough()
+        }
     }
 
     // FR3/FR7/FR9/FR10: the properties type is an immutable record without setters
@@ -122,6 +130,8 @@ class SandboxPropertiesSpec extends Specification {
         SandboxProperties.isRecord()
 
         and: 'no public method follows the mutable setter convention'
-        SandboxProperties.methods.every { !(it.name.startsWith('set') && it.parameterCount > 0) }
+        SandboxProperties.methods.every {
+            !(it.name.startsWith('set') && it.parameterCount> 0)
+        }
     }
 }

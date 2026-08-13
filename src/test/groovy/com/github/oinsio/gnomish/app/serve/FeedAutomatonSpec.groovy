@@ -179,7 +179,9 @@ class FeedAutomatonSpec extends Specification {
                 ]
             },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
         def claimed = new CopyOnWriteArrayList<TaskRef>()
         def automaton = automaton(tracker, ledger, capturing(claimed), new FixedRandom())
@@ -206,7 +208,7 @@ class FeedAutomatonSpec extends Specification {
         Tracker tracker = [
             listReady: { int limit -> [lost, won] },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance ->
+            claim : { TaskRef ref, String instance ->
                 claimCalls.add(ref)
                 ref == lost.ref() ? new ClaimResult.Held('other-instance') : new ClaimResult.Acquired()
             },
@@ -306,7 +308,7 @@ class FeedAutomatonSpec extends Specification {
                 remaining.collect { fresh("github:o/r#${it}" as String) }
             },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance ->
+            claim : { TaskRef ref, String instance ->
                 remaining.remove(ref.id().replace('github:o/r#', ''))
                 new ClaimResult.Acquired()
             },
@@ -320,7 +322,11 @@ class FeedAutomatonSpec extends Specification {
 
         then:
         claimed.size() == 3
-        claimed.collect { it.id() }.toSet() == (['1', '2', '3'].collect { "github:o/r#${it}" as String }).toSet()
+        claimed.collect {
+            it.id()
+        }.toSet() == (['1', '2', '3'].collect {
+            "github:o/r#${it}" as String
+        }).toSet()
         sleeper.slept.isEmpty()
         ledger.freeSlots() == 2
     }
@@ -334,7 +340,9 @@ class FeedAutomatonSpec extends Specification {
         Tracker tracker = [
             listReady: { int limit -> [] },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance -> claimCalls.incrementAndGet(); new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                claimCalls.incrementAndGet(); new ClaimResult.Acquired()
+            },
         ] as Tracker
         def automaton = automaton(tracker, ledger, capturing([]), new FixedRandom())
 
@@ -406,7 +414,9 @@ class FeedAutomatonSpec extends Specification {
 
         when:
         List<ILoggingEvent> events = captureLogs { automaton.step() }
-        def blockedEvents = events.findAll { it.level == Level.INFO && it.formattedMessage.contains('not starting fresh work') }
+        def blockedEvents = events.findAll {
+            it.level == Level.INFO && it.formattedMessage.contains('not starting fresh work')
+        }
 
         then:
         blockedEvents.size() == 1
@@ -438,7 +448,9 @@ class FeedAutomatonSpec extends Specification {
                 automaton.step()
             }
         }
-        def blockedEvents = events.findAll { it.level == Level.INFO && it.formattedMessage.contains('not starting fresh work') }
+        def blockedEvents = events.findAll {
+            it.level == Level.INFO && it.formattedMessage.contains('not starting fresh work')
+        }
 
         then: 'only the first cycle (the Filling/initial -> Idle-blocked transition) logged the INFO line'
         blockedEvents.size() == 1
@@ -459,7 +471,7 @@ class FeedAutomatonSpec extends Specification {
                 fillingCounter.get() == 0 ? [fresh('github:o/r#1')] : [blockedFresh]
             },
             listOpen : { -> fillingCounter.get() == 0 ? [] : openFronts },
-            claim    : { TaskRef ref, String instance ->
+            claim : { TaskRef ref, String instance ->
                 fillingCounter.incrementAndGet()
                 new ClaimResult.Acquired()
             },
@@ -471,7 +483,9 @@ class FeedAutomatonSpec extends Specification {
             automaton.step()
             automaton.step()
         }
-        def blockedEvents = events.findAll { it.level == Level.INFO && it.formattedMessage.contains('not starting fresh work') }
+        def blockedEvents = events.findAll {
+            it.level == Level.INFO && it.formattedMessage.contains('not starting fresh work')
+        }
 
         then:
         blockedEvents.size() == 1
@@ -543,7 +557,7 @@ class FeedAutomatonSpec extends Specification {
         Tracker tracker = [
             listReady: { int limit -> [candidate] },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance ->
+            claim : { TaskRef ref, String instance ->
                 if (claimCalls.incrementAndGet() <= 2) {
                     throw new RuntimeException('tracker down')
                 }
@@ -603,7 +617,7 @@ class FeedAutomatonSpec extends Specification {
                 remaining.collect { fresh("github:o/r#${it}" as String) }
             },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance ->
+            claim : { TaskRef ref, String instance ->
                 if (claimAttempts.incrementAndGet() <= 1) {
                     throw new RuntimeException('tracker down')
                 }
@@ -633,7 +647,9 @@ class FeedAutomatonSpec extends Specification {
         Tracker tracker = [
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
         def automaton = automaton(tracker, ledger, capturing([]), new FixedRandom())
 
@@ -693,13 +709,17 @@ class FeedAutomatonSpec extends Specification {
         Tracker tracker = [
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
         def automaton = automaton(tracker, ledger, capturing([]), new FixedRandom())
 
         when:
         List<ILoggingEvent> events = captureLogs { automaton.step() }
-        def fullEvents = events.findAll { it.level == Level.INFO && it.formattedMessage.toLowerCase().contains('full') }
+        def fullEvents = events.findAll {
+            it.level == Level.INFO && it.formattedMessage.toLowerCase().contains('full')
+        }
 
         then:
         fullEvents.size() == 1

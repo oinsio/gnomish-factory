@@ -58,7 +58,9 @@ class GitObjectsReadSpec extends Specification implements GitObjectsFixture, Bou
         // bounded, turning a hang into a fast, clean failure instead of stalling the
         // mutation-testing minion.
         expect: 'a cap exactly at or above the content length reads it whole'
-        new String(withBoundedWait { git.readBlob(tip, 'big.txt', cap) }, 'UTF-8') == content
+        new String(withBoundedWait {
+            git.readBlob(tip, 'big.txt', cap)
+        }, 'UTF-8') == content
 
         where:
         cap << [20L, 21L]
@@ -162,11 +164,11 @@ class GitObjectsReadSpec extends Specification implements GitObjectsFixture, Bou
         git.exists(base, path) == expected
 
         where:
-        path           | expected
-        'README.md'    | true
+        path | expected
+        'README.md' | true
         'src/App.java' | true
-        'src'          | true
-        'absent.md'    | false
+        'src' | true
+        'absent.md' | false
         'src/Nope.java'| false
     }
 

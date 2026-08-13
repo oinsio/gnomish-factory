@@ -19,15 +19,21 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: a clean round fixture parses into the full init/assistant/user/result sequence
     def "parses the plain-round fixture into the full event sequence"() {
         when: 'the plain-round fixture is parsed'
-        def events = parser.parse(readerOf('plain-round')).collect { it.event() }
+        def events = parser.parse(readerOf('plain-round')).collect {
+            it.event()
+        }
 
         then: 'init, assistant (tool_use), user (tool_result), assistant (final text), result — in order'
         events.size() == 5
         events[0] instanceof AgentEvent.InitEvent
         events[1] instanceof AgentEvent.AssistantEvent
-        (events[1] as AgentEvent.AssistantEvent).content().any { it instanceof ContentBlock.ToolUse }
+        (events[1] as AgentEvent.AssistantEvent).content().any {
+            it instanceof ContentBlock.ToolUse
+        }
         events[2] instanceof AgentEvent.UserEvent
-        (events[2] as AgentEvent.UserEvent).content().any { it instanceof ContentBlock.ToolResult }
+        (events[2] as AgentEvent.UserEvent).content().any {
+            it instanceof ContentBlock.ToolResult
+        }
         events[3] instanceof AgentEvent.AssistantEvent
         events[4] instanceof AgentEvent.ResultEvent
 
@@ -42,7 +48,9 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: subagent nesting is preserved via parentToolUseId, top-level events have none
     def "parses the subagent-round fixture, preserving parentToolUseId on nested events only"() {
         when: 'the subagent-round fixture is parsed'
-        def events = parser.parse(readerOf('subagent-round')).collect { it.event() }
+        def events = parser.parse(readerOf('subagent-round')).collect {
+            it.event()
+        }
 
         then: 'top-level events carry a null parentToolUseId, nested ones carry the top-level tool_use id'
         def topLevelInit = events[0] as AgentEvent.InitEvent
@@ -68,7 +76,9 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: garbage/unknown lines mixed with valid ones are tolerated end to end
     def "parses the garbage-output fixture, keeping only the recognized lines"() {
         when: 'the garbage-output fixture is parsed'
-        def events = parser.parse(readerOf('garbage-output')).collect { it.event() }
+        def events = parser.parse(readerOf('garbage-output')).collect {
+            it.event()
+        }
 
         then: 'the non-JSON, unknown-type, and unterminated lines are dropped without throwing'
         events.size() == 2
@@ -79,7 +89,9 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: a stream ending without a result event yields no ResultEvent, no exception
     def "parses the missing-result-event fixture without producing a ResultEvent"() {
         when: 'the missing-result-event fixture is parsed'
-        def events = parser.parse(readerOf('missing-result-event')).collect { it.event() }
+        def events = parser.parse(readerOf('missing-result-event')).collect {
+            it.event()
+        }
 
         then: 'both prior events parse, no ResultEvent is present'
         events.size() == 2
@@ -94,7 +106,9 @@ class StreamJsonParserFixtureSpec extends Specification {
         then: 'every event carries a readAt instant, in non-decreasing wire order'
         timestamped.size() == 5
         timestamped.every { it.readAt() != null }
-        (1..<timestamped.size()).every { i -> !timestamped[i].readAt().isBefore(timestamped[i - 1].readAt()) }
+        (1..<timestamped.size()).every { i ->
+            !timestamped[i].readAt().isBefore(timestamped[i - 1].readAt())
+        }
     }
 
     private static BufferedReader readerOf(String scenario) {

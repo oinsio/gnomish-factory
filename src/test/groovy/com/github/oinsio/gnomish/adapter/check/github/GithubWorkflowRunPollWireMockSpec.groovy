@@ -44,7 +44,9 @@ class GithubWorkflowRunPollWireMockSpec extends Specification {
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
                 .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 || r.statusCode() == 429 })
+                .retryOnResult({ HttpResponse<?> r ->
+                    r.statusCode() >= 500 || r.statusCode() == 429
+                })
                 .build()
     }
 
@@ -117,10 +119,10 @@ class GithubWorkflowRunPollWireMockSpec extends Specification {
 
         where:
         status | diagnosisFragment
-        401    | 'token is invalid or expired'
-        403    | 'lacks permission'
-        404    | 'no workflow by that file name'
-        422    | 'rejected the runs query'
+        401 | 'token is invalid or expired'
+        403 | 'lacks permission'
+        404 | 'no workflow by that file name'
+        422 | 'rejected the runs query'
     }
 
     def "a run concluding success still maps through to Pass once the platform answers"() {

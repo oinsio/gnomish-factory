@@ -34,7 +34,7 @@ class FeedOutageRetryInterruptSpec extends Specification {
             int n = sleeps.incrementAndGet()
             if (n == 1) {
                 Thread.currentThread().interrupt() // SIGTERM lands mid-backoff
-            } else if (n > 3) {
+            } else if (n> 3) {
                 // Reached only if the interrupt flag was ignored and the loop kept spinning.
                 throw new IllegalStateException('busy-spin: outage retry ignored the interrupt flag')
             }
@@ -42,10 +42,14 @@ class FeedOutageRetryInterruptSpec extends Specification {
 
         and: 'a tracker call that never recovers within the shutdown window'
         def attempts = new AtomicInteger()
-        def retry = new FeedOutageRetry(interruptingSleeper, { Duration.ofSeconds(30) })
+        def retry = new FeedOutageRetry(interruptingSleeper, {
+            Duration.ofSeconds(30)
+        })
 
         when: 'the outage retry runs against the perpetually-failing call while the interrupt arrives'
-        retry.run('feed poll', { -> attempts.incrementAndGet(); throw new RuntimeException('tracker down') })
+        retry.run('feed poll', {
+            -> attempts.incrementAndGet(); throw new RuntimeException('tracker down')
+        })
 
         then: 'it stops promptly by propagating the interrupt as the shutdown stop signal'
         thrown(InterruptedException)

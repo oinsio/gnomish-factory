@@ -64,7 +64,9 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
 
         and: 'both rounds were executed but only one AttemptFinished fired — the aborted round emitted none'
         executor.requests.size() == 2
-        listener.events.findAll { it instanceof EngineEvent.AttemptFinished }.size() == 1
+        listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }.size() == 1
     }
 
     // NFR-O1: on a persist failure the Aborted cause carries the thrown exception's stack trace,

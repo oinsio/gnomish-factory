@@ -102,9 +102,15 @@ final class E2eProcessHarness {
             // cast, Groovy's overload resolution picks the Runnable overload here, silently
             // discarding the closure's return value and handing back a Future whose get()
             // always yields null.
-            Future<String> stdoutFuture = pumps.submit({ readAll(process.inputStream) } as Callable<String>)
-            Future<String> stderrFuture = pumps.submit({ readAll(process.errorStream) } as Callable<String>)
-            pumps.submit({ writeStdin(process, scriptedInputLines, keepStdinOpen) } as Runnable)
+            Future<String> stdoutFuture = pumps.submit({
+                readAll(process.inputStream)
+            } as Callable<String>)
+            Future<String> stderrFuture = pumps.submit({
+                readAll(process.errorStream)
+            } as Callable<String>)
+            pumps.submit({
+                writeStdin(process, scriptedInputLines, keepStdinOpen)
+            } as Runnable)
 
             boolean finished = process.waitFor(DEFAULT_TIMEOUT.toSeconds(), TimeUnit.SECONDS)
             if (!finished) {

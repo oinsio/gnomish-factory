@@ -132,7 +132,9 @@ class SnapshotWriterTimerWakeSpec extends Specification {
         writer.stop()
 
         then: 'the worker is woken and exits well before the timer would have fired'
-        new PollingConditions(timeout: 1).eventually { assert !writer.worker().isAlive() }
+        new PollingConditions(timeout: 1).eventually {
+            assert !writer.worker().isAlive()
+        }
 
         cleanup:
         writer.worker()?.interrupt()

@@ -44,7 +44,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
 
     private ObjectId attemptCommitWith(List<TreeEdit> edits) {
         gitObjects.commit(new CommitRequest(
-                'refs/heads/gnomish/task-1', Optional.empty(), baseTip, edits, metadata()))
+                        'refs/heads/gnomish/task-1', Optional.empty(), baseTip, edits, metadata()))
     }
 
     private static Workspace workspaceAt(ObjectId attempt) {
@@ -72,7 +72,9 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         ])
 
         when:
-        def status = guard({ c -> [c.checkId()] as Set }).poll(check([]), workspaceAt(attempt))
+        def status = guard({ c ->
+            [c.checkId()] as Set
+        }).poll(check([]), workspaceAt(attempt))
 
         then:
         status == new PollStatus.Pass()
@@ -86,7 +88,9 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         ])
 
         when:
-        def status = guard({ c -> [c.checkId()] as Set }).poll(check([]), workspaceAt(attempt))
+        def status = guard({ c ->
+            [c.checkId()] as Set
+        }).poll(check([]), workspaceAt(attempt))
 
         then:
         status instanceof PollStatus.Fail
@@ -107,7 +111,9 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         ])
 
         when:
-        def status = guard({ c -> [c.checkId()] as Set }).poll(check(['config/analyzer.yml']), workspaceAt(attempt))
+        def status = guard({ c ->
+            [c.checkId()] as Set
+        }).poll(check(['config/analyzer.yml']), workspaceAt(attempt))
 
         then:
         status instanceof PollStatus.Fail
@@ -179,13 +185,15 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
             new TreeEdit.PutFile('.github/workflows/ci.yml', bytes('name: weakened'))
         ])
         def stage3Tip = gitObjects.commit(new CommitRequest(
-                'refs/heads/gnomish/task-1', Optional.of(stage1), stage1,
-                [
-                    new TreeEdit.PutFile('src/Main.java', bytes('honest work'))
-                ], metadata(1_700_000_100L)))
+                        'refs/heads/gnomish/task-1', Optional.of(stage1), stage1,
+                        [
+                            new TreeEdit.PutFile('src/Main.java', bytes('honest work'))
+                        ], metadata(1_700_000_100L)))
 
         when: 'the check is used two stages later, its own file untouched since the substitution'
-        def status = guard({ c -> [c.checkId()] as Set }).poll(check([]), workspaceAt(stage3Tip))
+        def status = guard({ c ->
+            [c.checkId()] as Set
+        }).poll(check([]), workspaceAt(stage3Tip))
 
         then: 'the comparison is against the base branch, not the previous round, so the diff is caught'
         status instanceof PollStatus.Fail
@@ -210,7 +218,9 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
             new TreeEdit.PutFile('src/Main.java', bytes('code'))
         ])
         def brokenGuard = new PinCheckedExternalCheckClient(
-                delegate, { c -> [c.checkId()] as Set }, gitObjects, 'refs/heads/no-such-branch')
+                delegate, { c ->
+                    [c.checkId()] as Set
+                }, gitObjects, 'refs/heads/no-such-branch')
 
         when:
         def status = brokenGuard.poll(check([]), workspaceAt(attempt))

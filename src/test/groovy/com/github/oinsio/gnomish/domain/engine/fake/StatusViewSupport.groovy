@@ -53,7 +53,9 @@ class StatusViewSupport {
     static StatusView reconstruct(List<EngineEvent> events) {
         def view = new StatusView()
 
-        def taskFinished = events.find { it instanceof EngineEvent.TaskFinished }
+        def taskFinished = events.find {
+            it instanceof EngineEvent.TaskFinished
+        }
         view.terminalOutcome = taskFinished == null ? null : (taskFinished as EngineEvent.TaskFinished).outcome()
 
         // authoritative terminal position / counters: the TaskFinished bookend's final state.
@@ -62,7 +64,9 @@ class StatusViewSupport {
             view.attemptsUsed = view.terminalOutcome.finalState().attemptsUsed()
         }
 
-        def finishedEvents = events.findAll { it instanceof EngineEvent.AttemptFinished }
+        def finishedEvents = events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }
         view.rounds = finishedEvents.size()
 
         // the last-executed stage's burned count, from the LAST AttemptFinished's recorded

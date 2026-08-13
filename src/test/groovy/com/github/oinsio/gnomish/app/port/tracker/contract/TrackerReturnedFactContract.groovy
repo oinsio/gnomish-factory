@@ -112,7 +112,9 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
         def adapter = tracker.get()
         def ref = new TaskRef('fixture:returned-stale-claim')
         seedWorkingWithClaim(adapter, ref, 'instance-a')
-        def observed = adapter.listOpen().find { it.ref() == ref }.claimVersion()
+        def observed = adapter.listOpen().find {
+            it.ref() == ref
+        }.claimVersion()
 
         when: 'a reaper removes the stale claim, returning the task to Ready, and listReady is called'
         adapter.removeStaleClaim(ref, observed)

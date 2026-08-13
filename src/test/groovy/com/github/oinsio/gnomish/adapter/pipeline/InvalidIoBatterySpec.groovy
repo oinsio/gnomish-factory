@@ -106,10 +106,10 @@ advancement: auto
         errors == [expected]
 
         where:
-        rule                           | instructionsRef                | criteriaRef              || expected
-        'instructions ../ escape'      | '../escape.md'                 | ''                       || new ConfigError('stages/plan/stage.yaml', 'instructions', "referenced instructions file '../escape.md' escapes the configuration root")
-        'judge criteria absolute path' | 'stages/plan/instructions.md'  | '/etc/passwd'            || new ConfigError('stages/plan/stage.yaml', 'verify[0].criteriaFile', "referenced acceptance-criteria file '/etc/passwd' escapes the configuration root")
-        'judge criteria ../ escape'    | 'stages/plan/instructions.md'  | '../secret.md'          || new ConfigError('stages/plan/stage.yaml', 'verify[0].criteriaFile', "referenced acceptance-criteria file '../secret.md' escapes the configuration root")
+        rule | instructionsRef | criteriaRef || expected
+        'instructions ../ escape' | '../escape.md' | '' || new ConfigError('stages/plan/stage.yaml', 'instructions', "referenced instructions file '../escape.md' escapes the configuration root")
+        'judge criteria absolute path' | 'stages/plan/instructions.md' | '/etc/passwd' || new ConfigError('stages/plan/stage.yaml', 'verify[0].criteriaFile', "referenced acceptance-criteria file '/etc/passwd' escapes the configuration root")
+        'judge criteria ../ escape' | 'stages/plan/instructions.md' | '../secret.md' || new ConfigError('stages/plan/stage.yaml', 'verify[0].criteriaFile', "referenced acceptance-criteria file '../secret.md' escapes the configuration root")
     }
 
     /** A valid plan tree whose judge check points criteriaFile at {@code criteria} (file not written). */

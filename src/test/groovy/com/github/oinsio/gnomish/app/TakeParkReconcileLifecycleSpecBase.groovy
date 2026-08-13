@@ -154,9 +154,13 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
         def sanitized = TaskIdSanitizer.sanitize(taskId)
         Files.walk(worktreesRoot).withCloseable { stream ->
             def taskJson = stream
-            .filter { it.fileName.toString() == 'task.json' && it.toString().contains(sanitized) }
+            .filter {
+                it.fileName.toString() == 'task.json' && it.toString().contains(sanitized)
+            }
             .findFirst()
-            .orElseThrow { new IllegalStateException("no task.json for ${taskId} under ${worktreesRoot}") }
+            .orElseThrow {
+                new IllegalStateException("no task.json for ${taskId} under ${worktreesRoot}")
+            }
             TaskJsonMapper.readDto(Files.readString(taskJson)).trackerWritePending()
         }
     }

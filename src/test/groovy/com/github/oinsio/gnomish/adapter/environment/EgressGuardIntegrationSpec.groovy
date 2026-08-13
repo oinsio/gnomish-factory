@@ -75,22 +75,24 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
         def findings = guard.denialFindings()
 
         then: 'the blocked destination is a visible structured finding (NFR-O1, UX3)'
-        findings.any { it.message().contains(EnvironmentSelfCheck.DENIED_PROBE_HOST) }
+        findings.any {
+            it.message().contains(EnvironmentSelfCheck.DENIED_PROBE_HOST)
+        }
     }
 
     def "FR7: a direct DNS query to an external resolver gets no answer"() {
         when: 'a process in the box resolves a name against 8.8.8.8 directly, bypassing the guard'
         def handle = env.exec(new ExecCommand(
-                [
-                    'timeout',
-                    '5',
-                    'nslookup',
-                    'gnomish-dns-probe.invalid',
-                    '8.8.8.8'
-                ],
-                [:],
-                null,
-                true))
+                        [
+                            'timeout',
+                            '5',
+                            'nslookup',
+                            'gnomish-dns-probe.invalid',
+                            '8.8.8.8'
+                        ],
+                        [:],
+                        null,
+                        true))
         def output = new String(handle.output().readAllBytes(), 'UTF-8')
         def exit = handle.waitForExit()
 

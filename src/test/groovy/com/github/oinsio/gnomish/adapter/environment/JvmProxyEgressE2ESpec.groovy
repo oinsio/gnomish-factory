@@ -91,15 +91,15 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
     private String probe(String url) {
         String out = ''
         for (int attempt = 0; attempt < 20; attempt++) {
-            if (attempt > 0) {
+            if (attempt> 0) {
                 Thread.sleep(500)
             }
             def handle = env.exec(new ExecCommand(
-                    [
-                        'java',
-                        '/gnomish-probe/Probe.java',
-                        url
-                    ], [:], null, true))
+                            [
+                                'java',
+                                '/gnomish-probe/Probe.java',
+                                url
+                            ], [:], null, true))
             out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
             handle.waitForExit()
             if (out.contains('HTTP ')) {

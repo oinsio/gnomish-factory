@@ -34,7 +34,7 @@ class GitExecReadCappedSpec extends Specification implements GitObjectsFixture, 
 
         then: 'the uncapped read returns the real listing'
         uncapped.exitCode() == 0
-        uncapped.stdout().length > 0
+        uncapped.stdout().length> 0
         !uncapped.truncated()
 
         and: 'the zero-cap read is capped, not treated as uncapped'

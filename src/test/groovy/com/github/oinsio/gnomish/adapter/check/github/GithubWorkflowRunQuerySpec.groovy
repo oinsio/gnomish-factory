@@ -54,7 +54,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
     def "scopes the runs query by the checkId workflow file name, not its full path, and matches GitHub's full-path run.path"() {
         given: 'a checkId given as a full workflow path, and GitHub echoing that full path in run.path'
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         {
                           "workflow_runs": [
@@ -73,13 +73,13 @@ class GithubWorkflowRunQuerySpec extends Specification {
         result.get().conclusion() == 'success'
         result.get().htmlUrl() == 'https://example/runs/1'
         wireMock.verify(getRequestedFor(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100')))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100')))
     }
 
     def "matches a Gitea run whose path carries a @refs/heads ref suffix (live-E2E shape, task 7.1)"() {
         given: 'Gitea reports run.path as <fileName>@refs/heads/<branch> rather than the workflow file path'
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/smoke.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/smoke.yml/runs?head_sha=abc123&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         {
                           "workflow_runs": [
@@ -101,7 +101,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
     def "excludes a run whose head_sha does not match the attempt commit"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         {
                           "workflow_runs": [
@@ -121,7 +121,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
     def "excludes a run whose path is a different workflow than the queried workflow"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         {
                           "workflow_runs": [
@@ -141,7 +141,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
     def "the newest run_attempt supersedes earlier attempts for the same head_sha"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         {
                           "workflow_runs": [
@@ -165,7 +165,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
     def "returns empty when no run has been listed yet for the attempt commit"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('{"workflow_runs":[]}')))
         def query = newQuery()
 
@@ -179,7 +179,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
     def "reuses the conditional-request cache across repeated polls of the same attempt commit"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
                 .willReturn(aResponse().withStatus(200).withHeader('ETag', '"v1"').withBody('{"workflow_runs":[]}')))
         def query = newQuery()
         query.latestMatchingRun('ci.yml', 'abc123')
@@ -189,7 +189,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
 
         then:
         wireMock.verify(getRequestedFor(urlEqualTo(
-                '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
+                        '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'))
                 .withHeader('If-None-Match', equalTo('"v1"')))
     }
 
