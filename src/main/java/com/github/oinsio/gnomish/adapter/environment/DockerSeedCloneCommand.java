@@ -16,8 +16,12 @@ final class DockerSeedCloneCommand {
 
     // $1 = task branch, $2 (optional) = factory-chosen commit pin. Paths are constants; set -e
     // makes any failing step fail the helper, surfacing git's stderr through the run result.
-    // safe.directory (protected configuration, honored from argv) lets the in-box user read the
-    // read-only-mounted factory clone, which carries the host uid, without any config-file write.
+    // safe.directory lets the in-box user read the read-only-mounted factory clone, which carries
+    // the host uid. It must arrive via a global-scope config file: git through at least 2.43 (the
+    // Ubuntu noble package) honors safe.directory ONLY from system/global scope — never from -c or
+    // GIT_CONFIG_* — and a local clone consults it in a child upload-pack, which -c would not reach
+    // anyway. GIT_CONFIG_GLOBAL points that global scope at a throwaway file inside the one-shot
+    // helper, so no image-owned config is touched and nothing survives the container.
     // Both the worktree path and its gitdir are listed: git resolves a non-bare source to
     // <path>/.git and refuses that exact path as dubious, so the worktree entry alone is not
     // enough on a real Linux bind mount (a macOS/Docker Desktop mount remaps ownership to the
@@ -27,8 +31,12 @@ final class DockerSeedCloneCommand {
     private static final String SEED_SCRIPT = """
             set -e
             if [ ! -d %s/.git ]; then
-              git -c safe.directory=%s -c safe.directory=%s/.git clone --no-hardlinks --single-branch --branch "$1" %s %s
+              export GIT_CONFIG_GLOBAL=/tmp/gnomish-seed-gitconfig
+              git config --global --add safe.directory %s
+              git config --global --add safe.directory %s/.git
+              git clone --no-hardlinks --single-branch --branch "$1" %s %s
               cd %s
+              unset GIT_CONFIG_GLOBAL
               git remote remove origin
               git config user.name gnome
               git config user.email gnome@sandbox.local

@@ -145,7 +145,12 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         script.contains('clone --no-hardlinks --single-branch --branch "$1"')
         // FR3: both the worktree and its gitdir are trusted — git resolves a non-bare source to
         // <path>/.git and refuses that exact path as dubious under a real Linux bind mount.
-        script.contains('-c safe.directory=/gnomish/src -c safe.directory=/gnomish/src/.git')
+        // Global scope via a throwaway GIT_CONFIG_GLOBAL file: git <= 2.43 (Ubuntu noble)
+        // ignores safe.directory from -c / GIT_CONFIG_*, and the local clone's child
+        // upload-pack would not see -c in any case.
+        script.contains('export GIT_CONFIG_GLOBAL=/tmp/gnomish-seed-gitconfig')
+        script.contains('git config --global --add safe.directory /gnomish/src\n')
+        script.contains('git config --global --add safe.directory /gnomish/src/.git')
         script.contains('git remote remove origin')
         script.contains('git config gc.auto 0')
         !script.contains('gnomish/task-x')
