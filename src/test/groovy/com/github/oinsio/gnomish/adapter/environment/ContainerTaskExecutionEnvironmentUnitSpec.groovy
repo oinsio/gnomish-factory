@@ -143,7 +143,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         and: 'the seed script clones --no-hardlinks with the branch as a positional parameter, never interpolated'
         def script = seed[seed.indexOf('-c') + 1]
         script.contains('clone --no-hardlinks --single-branch --branch "$1"')
-        script.contains('-c safe.directory=/gnomish/src')
+        // FR3: both the worktree and its gitdir are trusted — git resolves a non-bare source to
+        // <path>/.git and refuses that exact path as dubious under a real Linux bind mount.
+        script.contains('-c safe.directory=/gnomish/src -c safe.directory=/gnomish/src/.git')
         script.contains('git remote remove origin')
         script.contains('git config gc.auto 0')
         !script.contains('gnomish/task-x')

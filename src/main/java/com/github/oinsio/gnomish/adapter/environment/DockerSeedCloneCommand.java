@@ -18,12 +18,16 @@ final class DockerSeedCloneCommand {
     // makes any failing step fail the helper, surfacing git's stderr through the run result.
     // safe.directory (protected configuration, honored from argv) lets the in-box user read the
     // read-only-mounted factory clone, which carries the host uid, without any config-file write.
+    // Both the worktree path and its gitdir are listed: git resolves a non-bare source to
+    // <path>/.git and refuses that exact path as dubious, so the worktree entry alone is not
+    // enough on a real Linux bind mount (a macOS/Docker Desktop mount remaps ownership to the
+    // container user and hides the mismatch entirely).
     // Idempotent by the .git guard: re-seeding a volume that already holds the clone (resume over
     // a surviving volume, FR6) changes nothing — except an explicit pin, which is always applied.
     private static final String SEED_SCRIPT = """
             set -e
             if [ ! -d %s/.git ]; then
-              git -c safe.directory=%s clone --no-hardlinks --single-branch --branch "$1" %s %s
+              git -c safe.directory=%s -c safe.directory=%s/.git clone --no-hardlinks --single-branch --branch "$1" %s %s
               cd %s
               git remote remove origin
               git config user.name gnome
@@ -34,6 +38,7 @@ final class DockerSeedCloneCommand {
             if [ -n "${2:-}" ]; then git reset --hard "$2"; fi
             """.formatted(
                     ContainerTaskExecutionEnvironment.WORKING_COPY,
+                    SEED_SOURCE,
                     SEED_SOURCE,
                     SEED_SOURCE,
                     ContainerTaskExecutionEnvironment.WORKING_COPY,
