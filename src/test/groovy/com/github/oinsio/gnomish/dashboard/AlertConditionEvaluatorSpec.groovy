@@ -37,16 +37,16 @@ class AlertConditionEvaluatorSpec extends Specification {
         AlertConditionEvaluator.evaluate(view, FRESH_NOW).contains(expected) == shouldFire
 
         where:
-        rule                                   | snapshot                                             | expected                                             | shouldFire
-        'rule2 (occupied slots, dead heartbeat)' | snapshotWithHeartbeat(HeartbeatState.DIED)           | new AlertCondition.OccupiedSlotsHeartbeatNotRunning() | true
-        'rule2 (occupied slots, running heartbeat)' | snapshotWithHeartbeat(HeartbeatState.RUNNING)     | new AlertCondition.OccupiedSlotsHeartbeatNotRunning() | false
-        'rule3 (long idleBlocked)'             | snapshotWithIdleBlockedSince(FRESH_NOW.minusSeconds(31 * 60)) | new AlertCondition.LongIdleBlocked()      | true
-        'rule3 (fresh idleBlocked)'            | snapshotWithIdleBlockedSince(FRESH_NOW.minusSeconds(60))      | new AlertCondition.LongIdleBlocked()      | false
-        'rule4 (consecutiveFailures present)'  | snapshotWithConsecutiveFailures(3)                   | new AlertCondition.TrackerFailuresPresent()          | true
-        'rule4 (no consecutiveFailures)'       | snapshotWithConsecutiveFailures(0)                   | new AlertCondition.TrackerFailuresPresent()          | false
-        'rule5 (stale reaper lastRunAt)'       | snapshotWithReaper(WRITTEN_AT.minusSeconds(1000), 0) | new AlertCondition.ReaperDegraded()                  | true
-        'rule5 (reaper restartCount > 0)'      | snapshotWithReaper(FRESH_NOW.minusSeconds(10), 2)    | new AlertCondition.ReaperDegraded()                  | true
-        'rule5 (fresh reaper, no restarts)'    | snapshotWithReaper(FRESH_NOW.minusSeconds(10), 0)    | new AlertCondition.ReaperDegraded()                  | false
+        rule | snapshot | expected | shouldFire
+        'rule2 (occupied slots, dead heartbeat)' | snapshotWithHeartbeat(HeartbeatState.DIED) | new AlertCondition.OccupiedSlotsHeartbeatNotRunning() | true
+        'rule2 (occupied slots, running heartbeat)' | snapshotWithHeartbeat(HeartbeatState.RUNNING) | new AlertCondition.OccupiedSlotsHeartbeatNotRunning() | false
+        'rule3 (long idleBlocked)' | snapshotWithIdleBlockedSince(FRESH_NOW.minusSeconds(31 * 60)) | new AlertCondition.LongIdleBlocked() | true
+        'rule3 (fresh idleBlocked)' | snapshotWithIdleBlockedSince(FRESH_NOW.minusSeconds(60)) | new AlertCondition.LongIdleBlocked() | false
+        'rule4 (consecutiveFailures present)' | snapshotWithConsecutiveFailures(3) | new AlertCondition.TrackerFailuresPresent() | true
+        'rule4 (no consecutiveFailures)' | snapshotWithConsecutiveFailures(0) | new AlertCondition.TrackerFailuresPresent() | false
+        'rule5 (stale reaper lastRunAt)' | snapshotWithReaper(WRITTEN_AT.minusSeconds(1000), 0) | new AlertCondition.ReaperDegraded() | true
+        'rule5 (reaper restartCount > 0)' | snapshotWithReaper(FRESH_NOW.minusSeconds(10), 2) | new AlertCondition.ReaperDegraded() | true
+        'rule5 (fresh reaper, no restarts)' | snapshotWithReaper(FRESH_NOW.minusSeconds(10), 0) | new AlertCondition.ReaperDegraded() | false
     }
 
     def "rule1 fires for DeadDaemon and not for Fresh or StoppedStale"() {

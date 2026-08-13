@@ -50,7 +50,7 @@ class EnvironmentVariableStub implements ApplicationContextInitializer<Configura
         context.environment.propertySources.addAfter(
                 StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
                 new SystemEnvironmentPropertySource(
-                'test-systemEnvironment',
-                [FACTORY_INSTANCE_NAME: ENVIRONMENT_INSTANCE_NAME] as Map<String, Object>))
+                        'test-systemEnvironment',
+                        [FACTORY_INSTANCE_NAME: ENVIRONMENT_INSTANCE_NAME] as Map<String, Object>))
     }
 }

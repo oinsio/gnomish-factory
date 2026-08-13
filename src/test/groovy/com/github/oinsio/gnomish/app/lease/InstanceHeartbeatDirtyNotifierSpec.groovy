@@ -38,7 +38,9 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     private final HeartbeatProgress progress = new HeartbeatProgress()
     private final VirtualClock clock = new VirtualClock()
     private final AtomicInteger fired = new AtomicInteger()
-    private final HeartbeatStateListener listener = { -> fired.incrementAndGet() } as HeartbeatStateListener
+    private final HeartbeatStateListener listener = {
+        -> fired.incrementAndGet()
+    } as HeartbeatStateListener
     // Every heartbeat a test starts a real worker on, drained in cleanup (see cleanup()).
     private final List<InstanceHeartbeat> started = []
 
@@ -130,7 +132,9 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     //     start a live worker and report RUNNING; the observability failure is swallowed.
     def "a throwing state listener does not break beating or the lifecycle"() {
         given:
-        HeartbeatStateListener boom = { -> throw new RuntimeException('listener boom') }
+        HeartbeatStateListener boom = {
+            -> throw new RuntimeException('listener boom')
+        }
         def sleeper = new BlockingSleeper()
         def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE, boom)
         started << hb

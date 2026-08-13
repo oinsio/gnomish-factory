@@ -28,16 +28,16 @@ class BoardLabelsSpec extends Specification {
 
         where:
         offsetSeconds || expected
-        0             || 'updated 0s ago'
-        30            || 'updated 30s ago'
-        59            || 'updated 59s ago'
-        60            || 'updated 1m ago'
-        3540          || 'updated 59m ago'
-        3600          || 'updated 1h ago'
-        82800         || 'updated 23h ago'
-        86400         || 'updated 1d ago'
-        172800        || 'updated 2d ago'
-        -30           || 'updated 30s ago'
+        0 || 'updated 0s ago'
+        30 || 'updated 30s ago'
+        59 || 'updated 59s ago'
+        60 || 'updated 1m ago'
+        3540 || 'updated 59m ago'
+        3600 || 'updated 1h ago'
+        82800 || 'updated 23h ago'
+        86400 || 'updated 1d ago'
+        172800 || 'updated 2d ago'
+        -30 || 'updated 30s ago'
     }
 
     // FR4: claimFreshness carries the age through when the marker is present and reports "freshness

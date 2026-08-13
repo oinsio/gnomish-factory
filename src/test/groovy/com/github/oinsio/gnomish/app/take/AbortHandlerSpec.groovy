@@ -77,7 +77,9 @@ class AbortHandlerSpec extends Specification {
         def previousAbortAt = Instant.parse('2026-07-17T09:00:00Z')
         def facts = new AbortFacts(THRESHOLD - 1, previousAbortAt)
         String captured = null
-        tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report -> captured = report }
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report ->
+            captured = report
+        }
 
         when:
         handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
@@ -97,7 +99,9 @@ class AbortHandlerSpec extends Specification {
         given: 'facts at the threshold but with a null lastAbortAt'
         def facts = new AbortFacts(THRESHOLD - 1, null)
         String captured = null
-        tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report -> captured = report }
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report ->
+            captured = report
+        }
 
         when:
         handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
@@ -115,7 +119,9 @@ class AbortHandlerSpec extends Specification {
     def "a park failure at the fuse does not propagate and still returns AwaitingHuman(INFRA)"() {
         given: 'a fuse-tripping abort against a tracker whose park call is unreachable'
         def facts = new AbortFacts(THRESHOLD - 1, Instant.parse('2026-07-17T09:00:00Z'))
-        tracker.park(*_) >> { throw new RuntimeException('tracker unreachable') }
+        tracker.park(*_) >> {
+            throw new RuntimeException('tracker unreachable')
+        }
 
         when:
         def result = handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
@@ -133,7 +139,9 @@ class AbortHandlerSpec extends Specification {
     def "a recordAbort failure below the fuse does not propagate and still returns Aborted"() {
         given: 'a tracker whose recordAbort call is unreachable'
         def facts = AbortFacts.none()
-        tracker.recordAbort(*_) >> { throw new RuntimeException('tracker unreachable') }
+        tracker.recordAbort(*_) >> {
+            throw new RuntimeException('tracker unreachable')
+        }
 
         when:
         def result = handler.handle(REF, STATE, 'tracker down', facts, THRESHOLD, INSTANCE)

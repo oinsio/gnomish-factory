@@ -43,9 +43,9 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         errors == [expected]
 
         where:
-        rule                 | config                                                  || expected
-        'missing schema'     | 'autonomy:\n  attemptLimit: 2\n'                        || new ConfigError('config.yaml', 'schemaVersion', "missing required schemaVersion; supported version is '1'")
-        'unsupported schema' | 'schemaVersion: "2"\nautonomy:\n  attemptLimit: 2\n'    || new ConfigError('config.yaml', 'schemaVersion', "unsupported schemaVersion '2'; supported version is '1'")
+        rule | config || expected
+        'missing schema' | 'autonomy:\n  attemptLimit: 2\n' || new ConfigError('config.yaml', 'schemaVersion', "missing required schemaVersion; supported version is '1'")
+        'unsupported schema' | 'schemaVersion: "2"\nautonomy:\n  attemptLimit: 2\n' || new ConfigError('config.yaml', 'schemaVersion', "unsupported schemaVersion '2'; supported version is '1'")
     }
 
     def "M2/FR5: a structurally broken stage.yaml yields exactly the located structural error"() {
@@ -60,11 +60,11 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         errors == [expected]
 
         where:
-        rule                    | manifest         || expected
-        'missing purpose'       | noPurpose()      || new ConfigError('stages/plan/stage.yaml', 'purpose', "missing required field 'purpose'")
-        'missing instructions'  | noInstructions() || new ConfigError('stages/plan/stage.yaml', 'instructions', "missing required field 'instructions'")
-        'missing advancement'   | noAdvancement()  || new ConfigError('stages/plan/stage.yaml', 'advancement', "missing required field 'advancement'")
-        'unknown advancement'   | badAdvancement() || new ConfigError('stages/plan/stage.yaml', 'advancement', "unknown advancement 'sideways'; known modes are auto, manual")
+        rule | manifest || expected
+        'missing purpose' | noPurpose() || new ConfigError('stages/plan/stage.yaml', 'purpose', "missing required field 'purpose'")
+        'missing instructions' | noInstructions() || new ConfigError('stages/plan/stage.yaml', 'instructions', "missing required field 'instructions'")
+        'missing advancement' | noAdvancement() || new ConfigError('stages/plan/stage.yaml', 'advancement', "missing required field 'advancement'")
+        'unknown advancement' | badAdvancement() || new ConfigError('stages/plan/stage.yaml', 'advancement', "unknown advancement 'sideways'; known modes are auto, manual")
     }
 
     def "M2/FR5: a missing executor.type falls back to the mapper's api default, so the structural error and the api-rejection error (D6 of add-agent-executor) both fire"() {
@@ -128,9 +128,9 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         errors == [expected]
 
         where:
-        rule                  | manifest             || expected
-        'unknown verify type' | badVerifyType()      || new ConfigError('stages/plan/stage.yaml', 'verify[0]', "unknown verify check type 'lint'; known types are builtin, command, external, judge")
-        'unknown input kind'  | badInputKind()       || new ConfigError('stages/plan/stage.yaml', 'inputs[0]', "unknown input kind 'external'; known kinds are internal, source")
+        rule | manifest || expected
+        'unknown verify type' | badVerifyType() || new ConfigError('stages/plan/stage.yaml', 'verify[0]', "unknown verify check type 'lint'; known types are builtin, command, external, judge")
+        'unknown input kind' | badInputKind() || new ConfigError('stages/plan/stage.yaml', 'inputs[0]', "unknown input kind 'external'; known kinds are internal, source")
     }
 
     def "M2/FR5: malformed YAML in a stage manifest yields exactly its located parse error"() {

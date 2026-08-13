@@ -159,8 +159,8 @@ class GithubDecisionsSpec extends Specification {
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/34/comments'))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"ack"')))
                 .withRequestBody(WireMock.matchingJsonPath(
-                '$.body', WireMock.containing('"instance":"gnomish-factory-x7k2q1"')))
+                        '$.body', WireMock.containing('"instance":"gnomish-factory-x7k2q1"')))
                 .withRequestBody(WireMock.matchingJsonPath(
-                '$.body', WireMock.containing('acting on decision: Use approach B.'))))
+                        '$.body', WireMock.containing('acting on decision: Use approach B.'))))
     }
 }

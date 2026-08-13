@@ -144,10 +144,10 @@ class GnomishFilesSpec extends Specification {
         !(e instanceof RuntimeException)
 
         where:
-        present    | missing
-        'config'   | 'pipeline.yaml'
+        present | missing
+        'config' | 'pipeline.yaml'
         'pipeline' | 'config.yaml'
-        'neither'  | 'config.yaml'
+        'neither' | 'config.yaml'
     }
 
     def "reading does not create, modify, or delete anything under the root"() {

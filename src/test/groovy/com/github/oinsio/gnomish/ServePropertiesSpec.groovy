@@ -241,6 +241,8 @@ class ServePropertiesSpec extends Specification {
         type.isRecord()
 
         and: 'no public method follows the mutable setter convention'
-        type.methods.every { !(it.name.startsWith('set') && it.parameterCount > 0) }
+        type.methods.every {
+            !(it.name.startsWith('set') && it.parameterCount> 0)
+        }
     }
 }

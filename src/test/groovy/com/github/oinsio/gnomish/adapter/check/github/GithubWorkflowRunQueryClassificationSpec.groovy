@@ -96,9 +96,9 @@ class GithubWorkflowRunQueryClassificationSpec extends Specification {
 
         where:
         status | body
-        401    | '{"message":"Bad credentials"}'
-        403    | '{"message":"Resource not accessible by integration"}'
-        404    | '{"message":"Not Found"}'
-        422    | '{"message":"Validation Failed"}'
+        401 | '{"message":"Bad credentials"}'
+        403 | '{"message":"Resource not accessible by integration"}'
+        404 | '{"message":"Not Found"}'
+        422 | '{"message":"Validation Failed"}'
     }
 }

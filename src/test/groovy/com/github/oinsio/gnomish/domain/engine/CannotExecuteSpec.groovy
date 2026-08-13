@@ -134,8 +134,12 @@ class CannotExecuteSpec extends Specification {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'both run bookend events were emitted exactly once'
-        listener.events.findAll { it instanceof EngineEvent.RunStarted }.size() == 1
-        listener.events.findAll { it instanceof EngineEvent.TaskFinished }.size() == 1
+        listener.events.findAll {
+            it instanceof EngineEvent.RunStarted
+        }.size() == 1
+        listener.events.findAll {
+            it instanceof EngineEvent.TaskFinished
+        }.size() == 1
     }
 
     // FR10: an executor throw on a LATER attempt (after a prior quality failure) escalates

@@ -76,7 +76,8 @@ public final class UsageReportJsonMapper {
                 check.findings().stream().map(UsageReportJsonMapper::toFinding).toList(),
                 check.durationMillis(),
                 check.reason(),
-                check.details());
+                check.details(),
+                check.runUrl());
     }
 
     private static FindingDto toFinding(StateFindingDto finding) {

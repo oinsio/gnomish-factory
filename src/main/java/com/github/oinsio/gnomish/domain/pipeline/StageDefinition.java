@@ -61,23 +61,41 @@ public record StageDefinition(
     /**
      * The Mechanism section (§5): the executor kind, the model pinned in the
      * manifest so any instance reproduces the stage identically — required for
-     * every executor type, never left to a CLI default — and opaque executor
-     * settings. Per Q1/D5a both {@code model} and {@code settings} are carried
-     * opaque: the settings map holds plain JDK types (String/Number/Boolean/
-     * List/Map, mapped from the YAML tree by the adapter) so the domain stays
-     * Jackson-free, and model non-blankness is the FR11 validators' concern
-     * (task 4.4), carried here unvalidated.
+     * every executor type, never left to a CLI default — opaque executor
+     * settings, and the stage's {@link Sandbox} declarations (the "workspace
+     * requirements" clause of the Mechanism section — sandbox needs and
+     * {@code requires-fresh}, FR12/FR13 of add-sandbox-core). Per Q1/D5a both
+     * {@code model} and {@code settings} are carried opaque: the settings map
+     * holds plain JDK types (String/Number/Boolean/List/Map, mapped from the
+     * YAML tree by the adapter) so the domain stays Jackson-free, and model
+     * non-blankness is the FR11 validators' concern (task 4.4), carried here
+     * unvalidated.
      *
-     * <p>Implements FR2 and carries the FR11 fields of load-pipeline-config.
+     * <p>Implements FR2 and carries the FR11 fields of load-pipeline-config;
+     * FR12, FR13 of add-sandbox-core (the {@code sandbox} field).
      *
      * @param type the executor kind
      * @param model the model pinned for reproducibility (FR11)
      * @param settings opaque executor settings, possibly empty; immutable
+     * @param sandbox the stage's sandbox declarations (FR12, FR13 of
+     *     add-sandbox-core); never {@code null} — {@link Sandbox#none()} when the
+     *     manifest declares no {@code sandbox} block
      */
-    public record Executor(ExecutorType type, String model, Map<String, Object> settings) {
+    public record Executor(ExecutorType type, String model, Map<String, Object> settings, Sandbox sandbox) {
 
         public Executor {
             settings = Map.copyOf(settings);
+        }
+
+        /**
+         * Convenience constructor for callers that declare no {@code sandbox}
+         * block — every call site predating add-sandbox-core keeps compiling
+         * unchanged, with {@link #sandbox()} defaulting to {@link Sandbox#none()}.
+         *
+         * <p>Implements FR12, FR13 of add-sandbox-core.
+         */
+        public Executor(ExecutorType type, String model, Map<String, Object> settings) {
+            this(type, model, settings, Sandbox.none());
         }
     }
 }

@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -114,21 +117,49 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
         method.invoke(null, [args as String[]] as Object[]) == expected
 
         where:
-        args                    | expected
-        []                       | false
-        ['status']               | false
-        ['fetch']                | true
-        ['push']                 | true
-        ['worktree']             | false // length == 1: no second arg to inspect, must not index into args[1]
-        ['worktree', 'add']      | true
-        ['worktree', 'remove']   | true
-        ['worktree', 'prune']    | true
-        ['worktree', 'list']     | false // length > 1 but second arg is not add/remove/prune
+        args | expected
+        [] | false
+        ['status'] | false
+        ['fetch'] | true
+        ['push'] | true
+        ['worktree'] | false // length == 1: no second arg to inspect, must not index into args[1]
+        ['worktree', 'add'] | true
+        ['worktree', 'remove'] | true
+        ['worktree', 'prune'] | true
+        ['worktree', 'list'] | false // length > 1 but second arg is not add/remove/prune
         [
             'worktree',
             'prune',
             '--dry-run'
         ] | true
+        // FR5 of add-sandbox-core: leading -c pairs are skipped before classifying, so the
+        // harvest fetch's per-invocation config still serializes; a trailing bare -c never
+        // indexes past the end.
+        [
+            '-c',
+            'protocol.ext.allow=user',
+            'fetch'
+        ] | true
+        [
+            '-c',
+            'a=b',
+            '-c',
+            'c=d',
+            'push'
+        ] | true
+        [
+            '-c',
+            'a=b',
+            'status'
+        ] | false
+        [
+            '-c',
+            'a=b',
+            'worktree',
+            'add'
+        ] | true
+        ['-c', 'a=b'] | false // only -c pairs, no subcommand at all
+        ['-c'] | false // dangling -c with no value
     }
 
     // Design D8/NFR-R2: run() with a repo-level-mutating subcommand drives resolveCloneKey ->
@@ -156,7 +187,7 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
         def mutationLock = lockField.get(null)
         def registryField = mutationLock.getClass().getDeclaredField('locksByClone')
         registryField.accessible = true
-        Map registry = registryField.get(mutationLock)
+        Map registry = (Map) registryField.get(mutationLock)
 
         // MUTATION_LOCK is process-shared static state: other specs/tests running earlier in this
         // same JVM may already have populated the registry with entries for their own (distinct)
@@ -228,9 +259,9 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
         def waitForMethod = GitProcessRunner.getDeclaredMethod('waitFor', Process)
         waitForMethod.accessible = true
 
-        def resultRef = new java.util.concurrent.atomic.AtomicReference()
-        def interruptedFlagRef = new java.util.concurrent.atomic.AtomicBoolean()
-        def started = new java.util.concurrent.CountDownLatch(1)
+        def resultRef = new AtomicReference()
+        def interruptedFlagRef = new AtomicBoolean()
+        def started = new CountDownLatch(1)
 
         def worker = new Thread({
             started.countDown()

@@ -144,14 +144,16 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
 
     /** The bare {@code SlotRunner} every daemon slot ran before task 5.1: fetch, finish, nothing else. */
     private static SlotRunner bareSlotRunner(Tracker tracker) {
-        { TaskRef ref -> tracker.fetchTask(ref); tracker.finish(ref, 'shipped it') } as SlotRunner
+        { TaskRef ref ->
+            tracker.fetchTask(ref); tracker.finish(ref, 'shipped it')
+        } as SlotRunner
     }
 
     /** The task 5.1 {@code SlotRunner}: same fetch/finish, plus the ledger line and the run-summary
      * accumulation a real {@code TakeSlotRunner} performs after {@code drainReport.record()}. */
     private static SlotRunner observedSlotRunner(
-            Tracker tracker, TaskOutcomeLedgerWriter ledgerWriter, RunSummaryAccumulator accumulator) {
-        { TaskRef ref ->
+            Tracker tracker, TaskOutcomeLedgerWriter ledgerWriter, RunSummaryAccumulator accumulator) { {
+            TaskRef ref ->
             tracker.fetchTask(ref)
             tracker.finish(ref, 'shipped it')
             def result = scriptedResult()
@@ -173,7 +175,9 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         def observedClock = new VirtualClock(Instant.parse('2026-01-01T00:00:00Z'))
         def healthTracker = new TrackerHealthTracker(observedTracker, observedClock)
         def dirtyCalls = new AtomicInteger()
-        DirtyNotifier notifier = { dirtyCalls.incrementAndGet() } as DirtyNotifier
+        DirtyNotifier notifier = {
+            dirtyCalls.incrementAndGet()
+        } as DirtyNotifier
         def observedLedger = new SlotLedger(1, observedClock, notifier)
         // TaskOutcomeLedgerWriter/RotatingLedgerAppender take a java.time.Clock, distinct from the
         // domain Clock FeedAutomaton/SlotLedger/TrackerHealthTracker use; fixed to the same instant.

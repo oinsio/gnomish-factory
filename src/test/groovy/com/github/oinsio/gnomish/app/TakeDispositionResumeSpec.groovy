@@ -49,13 +49,13 @@ class TakeDispositionResumeSpec extends Specification {
         TakeDispositionResume.isOrphanedPark(bootstrap(outcome, pending)) == orphaned
 
         where:
-        label                       | outcome                            | pending || orphaned
-        'pending Escalated'         | escalated()                        | true    || true
-        'pending Paused'            | paused()                           | true    || true
-        'cleared Escalated'         | escalated()                        | false   || false
-        'cleared Paused'            | paused()                           | false   || false
-        'pending Completed'         | new TaskOutcomeDto.Completed('completed') | true || false
-        'pending null outcome'      | null                               | true    || false
+        label | outcome | pending || orphaned
+        'pending Escalated' | escalated() | true || true
+        'pending Paused' | paused() | true || true
+        'cleared Escalated' | escalated() | false || false
+        'cleared Paused' | paused() | false || false
+        'pending Completed' | new TaskOutcomeDto.Completed('completed') | true || false
+        'pending null outcome' | null | true || false
     }
 
     // FR9, D3, D12: only an Escalated outcome whose report is an ESCALATION kind is a decision park.
@@ -64,13 +64,13 @@ class TakeDispositionResumeSpec extends Specification {
         TakeDispositionResume.isEscalationDecision(outcome, report) == decision
 
         where:
-        label                              | outcome       | report                                                   || decision
-        'Escalated + AttemptsExhausted'    | escalated()   | new EscalationReport.AttemptsExhausted(3)                 || true
-        'Escalated + DecisionNeeded'       | escalated()   | new EscalationReport.DecisionNeeded('Q?', ['a', 'b'])    || true
-        'Escalated + INFRA CannotExecute'  | escalated()   | new EscalationReport.CannotExecute('adapter crashed')    || false
-        'Escalated + no report'            | escalated()   | null                                                     || false
-        'Paused + stale AttemptsExhausted' | paused()      | new EscalationReport.AttemptsExhausted(3)                 || false
-        'null outcome + AttemptsExhausted' | null          | new EscalationReport.AttemptsExhausted(3)                 || false
-        'null outcome + no report'         | null          | null                                                     || false
+        label | outcome | report || decision
+        'Escalated + AttemptsExhausted' | escalated() | new EscalationReport.AttemptsExhausted(3) || true
+        'Escalated + DecisionNeeded' | escalated() | new EscalationReport.DecisionNeeded('Q?', ['a', 'b']) || true
+        'Escalated + INFRA CannotExecute' | escalated() | new EscalationReport.CannotExecute('adapter crashed') || false
+        'Escalated + no report' | escalated() | null || false
+        'Paused + stale AttemptsExhausted' | paused() | new EscalationReport.AttemptsExhausted(3) || false
+        'null outcome + AttemptsExhausted' | null | new EscalationReport.AttemptsExhausted(3) || false
+        'null outcome + no report' | null | null || false
     }
 }

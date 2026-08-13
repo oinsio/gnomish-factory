@@ -150,8 +150,10 @@ class EngineEventSpec extends Specification {
         e.message.contains('taskId')
 
         where:
-        description   | create
-        'RunStarted'  | { new EngineEvent.RunStarted('  ', new Position.AtStage('build'), 0) }
+        description | create
+        'RunStarted' | {
+            new EngineEvent.RunStarted('  ', new Position.AtStage('build'), 0)
+        }
         'TaskFinished' | { new EngineEvent.TaskFinished('', sampleOutcome()) }
     }
 

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -40,7 +41,8 @@ class CliJudgeVoterContractSpec extends JudgeVoterContract {
         Files.writeString(workspaceDir.resolve('criteria.md'), 'The output must be correct.')
         def check = new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1)
         def properties = FakeAgentSupport.propertiesFor(scenario)
-        def voter = new CliJudgeVoter(properties, new VirtualClock())
+        def law = PipelineLaw.ofContent(['criteria.md': 'The output must be correct.'])
+        def voter = new CliJudgeVoter(properties, new VirtualClock(), law)
 
         def vote = voter.vote(check, context, new DirectoryWorkspace(workspaceDir))
         Optional.of(new VoteOutcome(vote, context))

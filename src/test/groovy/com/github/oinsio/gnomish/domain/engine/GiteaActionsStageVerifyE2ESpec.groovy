@@ -1,17 +1,18 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckWorkspace
 import com.github.oinsio.gnomish.adapter.engine.SystemClock
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper
+import com.github.oinsio.gnomish.adapter.git.AttemptCommitRef
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
-import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.adapter.workspace.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.e2e.gitea.GiteaActionsRunnerFixture
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
@@ -20,14 +21,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.TimeUnit
-import spock.lang.AutoCleanup
-import spock.lang.IgnoreIf
-import spock.lang.Shared
-import spock.lang.Specification
-import spock.lang.TempDir
-import spock.lang.Timeout
+import spock.lang.*
 import spock.util.concurrent.PollingConditions
-
 /**
  * Task 7.2 (M1, G1, G4 of add-external-check-github-actions): the capstone live stage-level E2E.
  * Building on task 7.1's proven Gitea + {@code act_runner} fixture, this drives the real {@link
@@ -126,7 +121,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     // green run, yields a stage Pass with no findings — fully automated, no manual steps.
     def "a stage whose external CI check concludes green verifies to a stage Pass"() {
         given: 'the stage verifies the attempt commit that carries the green workflow'
-        def workspace = new GithubCheckWorkspace(GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, greenSha)
+        def workspace = workspaceAt(greenSha)
 
         when: 'the engine runs the verify chain, its poll loop blocking on the real runner'
         def result = orchestrator().verify([check()], CONTEXT, workspace, KEY)
@@ -140,7 +135,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     // findings — the report — name the failed job and step and carry a log tail.
     def "a stage whose external CI check concludes red fails with findings naming the job, step and a log tail"() {
         given: 'the stage verifies the attempt commit that carries the failing workflow'
-        def workspace = new GithubCheckWorkspace(GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, redSha)
+        def workspace = workspaceAt(redSha)
 
         when: 'the engine runs the verify chain, its poll loop blocking on the real runner'
         def result = orchestrator().verify([check()], CONTEXT, workspace, KEY)
@@ -162,9 +157,9 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     }
 
     private VerifyOrchestrator orchestrator() {
-        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()))
+        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME)
         def clock = new SystemClock()
-        def polling = new ExternalPolling(client, clock, new ThreadSleeper())
+        def polling = new ExternalPolling(client, AttemptDelivery.assumedDelivered(), clock, new ThreadSleeper())
         new VerifyOrchestrator(
                 new ScriptedBuiltinCheckRunner(),
                 new ScriptedCommandCheckRunner(),
@@ -183,8 +178,8 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     // (see setupSpec) from ever reaching the green run. Host-mode `echo ok` concludes in about a
     // second once picked up; the generous timeout only absorbs runner registration and job pickup.
     private void awaitGreenConcluded(String sha) {
-        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()))
-        def workspace = new GithubCheckWorkspace(GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, sha)
+        def client = new GithubCheckExternalClient(new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME)
+        def workspace = workspaceAt(sha)
         new PollingConditions(timeout: 300, initialDelay: 5, delay: 5).eventually {
             def status = client.poll(check(), workspace)
             assert status instanceof PollStatus.Pass: "green run not concluded green yet: ${status} — runner logs: ${runner.logs()}"
@@ -199,5 +194,10 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         def push = git.run(work, 'push', 'origin', 'main')
         assert push.exitCode() == 0: "push failed: ${push.stderr()}"
         sha
+    }
+    private static AttemptCommitWorkspace workspaceAt(String sha) {
+        def ref = new AttemptCommitRef()
+        ref.record(sha)
+        new AttemptCommitWorkspace(ref)
     }
 }

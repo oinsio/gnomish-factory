@@ -134,13 +134,13 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         content.outcome().type() == expectedType
 
         where:
-        outcome                                                                                  | expectedEvent                     | expectedType
-        new TaskOutcome.Completed(TaskState.atStageStart('implement'))                            | TaskLifecycleEvent.COMPLETED      | 'completed'
-        new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement')                  | TaskLifecycleEvent.PAUSED         | 'paused'
+        outcome | expectedEvent | expectedType
+        new TaskOutcome.Completed(TaskState.atStageStart('implement')) | TaskLifecycleEvent.COMPLETED | 'completed'
+        new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement') | TaskLifecycleEvent.PAUSED | 'paused'
         new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
-                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']))                  | TaskLifecycleEvent.ESCALATED      | 'escalated'
+                new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])) | TaskLifecycleEvent.ESCALATED | 'escalated'
         new TaskOutcome.Aborted(TaskState.atStageStart('implement'),
-                new AttemptKey('PROJ-1', 'implement', 0), 'boom')                                 | TaskLifecycleEvent.ABORTED        | 'aborted'
+                new AttemptKey('PROJ-1', 'implement', 0), 'boom') | TaskLifecycleEvent.ABORTED | 'aborted'
     }
 
     private String commitMessageAt(Path worktree, int commitsBack) {
@@ -234,7 +234,9 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         runner.run(worktree, 'ls-tree', 'HEAD', '--', '.gnomish-task').stdout().trim() != ''
 
         and: 'no commit carries the cleanup message'
-        allCommitMessages(worktree).every { it != ServiceCommitMessages.cleanup() }
+        allCommitMessages(worktree).every {
+            it != ServiceCommitMessages.cleanup()
+        }
 
         where:
         outcome << [
@@ -261,10 +263,10 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         content.trackerWritePending()
 
         where:
-        event       | outcome
+        event | outcome
         'ESCALATED' | new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
                 new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']))
-        'PAUSED'    | new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement')
+        'PAUSED' | new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement')
     }
 
     // FR10, D10: a non-park terminal outcome never sets the marker (Aborted's write is best-effort;

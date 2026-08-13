@@ -55,7 +55,9 @@ class FeedViewTrackerDirtyNotifierSpec extends Specification {
     // transition — transitionTo must still commit the new view.
     def "a throwing dirty notifier does not propagate out of transitionTo"() {
         given:
-        DirtyNotifier notifier = { -> throw new RuntimeException('notifier boom') }
+        DirtyNotifier notifier = {
+            -> throw new RuntimeException('notifier boom')
+        }
         def tracker = new FeedViewTracker(FeedState.IDLE_EMPTY, T0, 2, notifier)
 
         when:

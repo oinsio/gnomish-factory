@@ -1,15 +1,19 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.adapter.engine.SystemClock
+import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist
+import com.github.oinsio.gnomish.adapter.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR7, D6 of add-manual-run: the process runner spawns {@code sh -c <command>} with the
- * workspace as cwd and inherited environment, merges stdout/stderr into one chronological
- * stream, retains a bounded tail, and captures the exit code.
+ * FR7, D6 of add-manual-run; FR4 of add-sandbox-core: the process runner runs {@code sh -c
+ * <command>} through the {@link HostTaskExecutionEnvironment} (the sole process-launch seam) with
+ * the working copy as cwd, merges stdout/stderr into one chronological stream, retains a bounded
+ * tail, and captures the exit code. Child-environment composition (inheritance, credential scrub)
+ * is the environment's concern, covered by {@code HostTaskExecutionEnvironmentSpec}.
  */
 class CommandProcessRunnerSpec extends Specification {
 
@@ -18,32 +22,32 @@ class CommandProcessRunnerSpec extends Specification {
 
     def runner = new CommandProcessRunner('sh')
 
-    private DirectoryWorkspace workspace() {
-        new DirectoryWorkspace(tempDir)
+    private HostTaskExecutionEnvironment env() {
+        new HostTaskExecutionEnvironment(tempDir, new SystemClock(), ChildEnvAllowlist.none())
     }
 
     private static VerifyCheck.Command command(String line) {
         new VerifyCheck.Command(line)
     }
 
-    def "command runs with cwd set to the workspace root"() {
+    def "command runs with cwd set to the working copy root"() {
         given:
         def check = command('pwd')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
         outcome.outputTail().trim() == tempDir.toRealPath().toString()
     }
 
-    def "environment is inherited from the parent process"() {
-        given: 'PATH is set in essentially every process environment'
+    def "the host base set reaches the command"() {
+        given: 'PATH, part of the host base set, is set in essentially every factory environment'
         def check = command('echo $PATH')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -55,7 +59,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('echo out1; echo err1 1>&2; echo out2; echo err2 1>&2')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -72,7 +76,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('exit 0')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -83,7 +87,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('exit 3')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 3
@@ -94,7 +98,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('for i in $(seq 1 500); do echo "line-$i"; done')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -110,7 +114,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('for i in $(seq 1 200); do echo "line-$i"; done')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -125,7 +129,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('for i in $(seq 1 201); do echo "line-$i"; done')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -141,7 +145,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('for i in $(seq 1 20); do printf "%01000d\\n" 0; done')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -154,7 +158,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('printf "%*s" 10239 "" | tr " " "a"; printf "\\n"')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -173,7 +177,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('printf "%*s" 10240 "" | tr " " "a"; printf "\\n"')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -189,7 +193,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('printf "%*s" 10239 "" | tr " " "a"; printf "\\n"; echo second')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -208,7 +212,7 @@ class CommandProcessRunnerSpec extends Specification {
         def check = command('for i in $(seq 1 400); do printf "%099d\\n" $i; done')
 
         when:
-        def outcome = runner.run(check, workspace())
+        def outcome = runner.run(check, env())
 
         then:
         outcome.exitCode() == 0
@@ -217,80 +221,11 @@ class CommandProcessRunnerSpec extends Specification {
         lines.last() == String.format('%099d', 400)
     }
 
-    // FR11, NFR-S1, D11 of add-claim-heartbeat: a name in credentialEnvVarsToScrub is removed
-    // from the check process's inherited environment, while an untouched inherited var still
-    // reaches it — proven against two real, always-present inherited variables (this test JVM's
-    // own HOME/USER) rather than a synthetic credential, since there is no reliable, portable way
-    // to inject a brand-new var into this running JVM's own environment. PATH is deliberately not
-    // used: POSIX sh assigns a default PATH when none is inherited, which would falsely look like
-    // "PATH survived scrubbing". Mirrors AgentProcessLauncherSpec's scrub test.
-    def "FR11: a declared credential var is scrubbed from the check environment while an untouched var still reaches it"() {
-        given: 'a runner configured to scrub HOME, and a command reporting both HOME and USER'
-        def scrubbingRunner = new CommandProcessRunner('sh', ['HOME'])
-        def check = command(envReportCommand('HOME', 'USER'))
+    def "a process that cannot start yields a null outcome"() {
+        given: 'a runner whose shell binary does not exist'
+        def brokenRunner = new CommandProcessRunner('definitely-not-a-real-shell-xyzzy')
 
-        when:
-        def outcome = scrubbingRunner.run(check, workspace())
-
-        then: 'the scrubbed name is gone from the check environment'
-        outcome.exitCode() == 0
-        outcome.outputTail().readLines().contains('HOME=absent')
-
-        and: 'an untouched, already-inherited name still reaches the check unaffected'
-        outcome.outputTail().readLines().contains('USER=present')
-    }
-
-    // FR11 negative control: with an empty scrub list (no tracker configured) the environment is
-    // inherited unchanged — HOME, present in the factory environment, reaches the check.
-    def "FR11: with an empty scrub list the check environment is inherited unchanged"() {
-        given: 'the default runner, which scrubs nothing'
-        def check = command(envReportCommand('HOME'))
-
-        when:
-        def outcome = runner.run(check, workspace())
-
-        then:
-        outcome.exitCode() == 0
-        outcome.outputTail().readLines().contains('HOME=present')
-    }
-
-    private static String envReportCommand(String... names) {
-        names.collect { name ->
-            "if [ -n \"\${${name}:-}\" ]; then echo '${name}=present'; else echo '${name}=absent'; fi"
-        }.join('; ')
-    }
-
-    def "an interrupt raised while waiting for the process maps to the interrupted exit code"() {
-        given: 'a Process whose waitFor() throws InterruptedException, exercised directly (no blocking read)'
-        def interruptingProcess = new Process() {
-                    OutputStream getOutputStream() {
-                        OutputStream.nullOutputStream()
-                    }
-                    InputStream getInputStream() {
-                        InputStream.nullInputStream()
-                    }
-                    InputStream getErrorStream() {
-                        InputStream.nullInputStream()
-                    }
-                    int waitFor() throws InterruptedException {
-                        throw new InterruptedException()
-                    }
-                    int exitValue() {
-                        throw new IllegalThreadStateException()
-                    }
-                    void destroy() {}
-                }
-        def method = CommandProcessRunner.getDeclaredMethod('waitFor', Process)
-        method.setAccessible(true)
-
-        when:
-        def result = method.invoke(null, [interruptingProcess] as Object[])
-
-        then: 'the catch returns -1 and re-raises the thread interrupt flag (which we consume to isolate this test)'
-        result == -1
-        Thread.interrupted()
-
-        cleanup:
-        Thread.interrupted()
+        expect: 'the runner returns null rather than throwing, so the caller maps it to CannotVerify'
+        brokenRunner.run(command('echo hi'), env()) == null
     }
 }

@@ -34,9 +34,9 @@ class DaemonSnapshotFixtures {
                 new FeedSnapshot(FeedPhase.FILLING, WRITTEN_AT, WRITTEN_AT, 0, 3),
                 new SlotsSnapshot(3, []),
                 new VitalsSnapshot(
-                new HeartbeatVital(HeartbeatState.RUNNING, WRITTEN_AT, 0),
-                new ReaperVital(WRITTEN_AT, 0, 300L),
-                new JanitorVital(WRITTEN_AT)),
+                        new HeartbeatVital(HeartbeatState.RUNNING, WRITTEN_AT, 0),
+                        new ReaperVital(WRITTEN_AT, 0, 300L),
+                        new JanitorVital(WRITTEN_AT)),
                 new TrackerHealth(WRITTEN_AT, 0))
     }
 }

@@ -39,8 +39,9 @@ class SnapshotWriterLifecycleSpec extends Specification {
         given:
         def calls = new AtomicInteger()
         def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'),
-                { -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot() },
+                tempDir.resolve('snapshot.json'), {
+                    -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot()
+                },
                 mapper,
                 Duration.ofSeconds(30),
                 Clock.systemUTC(),
@@ -63,8 +64,9 @@ class SnapshotWriterLifecycleSpec extends Specification {
         given:
         def calls = new AtomicInteger()
         def writer = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'),
-                { -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot() },
+                tempDir.resolve('snapshot.json'), {
+                    -> calls.incrementAndGet(); SnapshotWriterSpec.fixtureSnapshot()
+                },
                 mapper,
                 Duration.ofMillis(30),
                 Clock.systemUTC(),
@@ -141,7 +143,9 @@ class SnapshotWriterLifecycleSpec extends Specification {
         50.times { writer.markDirty() }
 
         then: 'settle, then the call count is nowhere near one write per trigger'
-        new PollingConditions(timeout: 1, delay: 0.2).eventually { assert calls.get() >= 2 }
+        new PollingConditions(timeout: 1, delay: 0.2).eventually {
+            assert calls.get() >= 2
+        }
         Thread.sleep(300)
         calls.get() <= 3
 
@@ -174,7 +178,9 @@ class SnapshotWriterLifecycleSpec extends Specification {
         writer.markDirty()
 
         then: 'the resulting file content is fresh, timestamped after the trigger — not a stale reuse'
-        conditions.eventually { assert writtenAtIn(target).isAfter(beforeTrigger) }
+        conditions.eventually {
+            assert writtenAtIn(target).isAfter(beforeTrigger)
+        }
 
         cleanup:
         writer.stop()

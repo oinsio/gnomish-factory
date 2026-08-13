@@ -84,7 +84,9 @@ class GithubStateWritesSpec extends Specification {
     }
 
     private static void stubIssue(WireMockServer wireMock, int issueNumber, List<String> labelNames) {
-        def labelsJson = labelNames.collect { '{"name":"' + it + '"}' }.join(',')
+        def labelsJson = labelNames.collect {
+            '{"name":"' + it + '"}'
+        }.join(',')
         wireMock.stubFor(get(urlEqualTo("/repos/acme/widgets/issues/${issueNumber}"))
                 .willReturn(aResponse().withStatus(200)
                 .withBody('{"title":"t","body":"b","state":"open","labels":[' + labelsJson + ']}')))
@@ -125,9 +127,9 @@ class GithubStateWritesSpec extends Specification {
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/41/comments'))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"finish"')))
                 .withRequestBody(WireMock.matchingJsonPath(
-                '$.body', WireMock.notMatching('.*"reason".*')))
+                        '$.body', WireMock.notMatching('.*"reason".*')))
                 .withRequestBody(WireMock.matchingJsonPath(
-                '$.body', WireMock.containing('All stages passed. Branch: gnomish/task-41.'))))
+                        '$.body', WireMock.containing('All stages passed. Branch: gnomish/task-41.'))))
     }
 
     def "recordAbort posts an ABORT marker and transitions working back to ready, as one operation"() {
@@ -196,7 +198,7 @@ class GithubStateWritesSpec extends Specification {
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/50/comments'))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"note"')))
                 .withRequestBody(WireMock.matchingJsonPath(
-                '$.body', WireMock.containing('This task is already finished. Please open a new task or bug.'))))
+                        '$.body', WireMock.containing('This task is already finished. Please open a new task or bug.'))))
     }
 
     def "declineFinished on an already-delivered issue is a silent no-op"() {

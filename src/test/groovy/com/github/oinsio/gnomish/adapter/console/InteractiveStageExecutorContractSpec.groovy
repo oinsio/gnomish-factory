@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.console
 
 import com.github.oinsio.gnomish.adapter.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.port.contract.StageExecutorContract
 
@@ -34,6 +35,6 @@ class InteractiveStageExecutorContractSpec extends StageExecutorContract {
                 }
         def io = new ScriptedConsoleIO(script)
         def console = new DialogConsole(io, { json -> 'status' })
-        Optional.of(new InteractiveStageExecutor(console, new StageBriefing()))
+        Optional.of(new InteractiveStageExecutor(console, new StageBriefing(PipelineLaw.ofContent([:]))))
     }
 }

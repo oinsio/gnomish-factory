@@ -176,8 +176,8 @@ exit \$rc
                 .findAll { it.size() == 2 }
                 .collect { [it.min(), it.max()] }
                 .sort { it[0] }
-        for (int i = 1; i < ranges.size(); i++) {
-            if (ranges[i][0] < ranges[i - 1][1]) {
+        for (int i = 1; i <ranges.size(); i++) {
+            if (ranges[i][0] <ranges[i - 1][1]) {
                 return true
             }
         }

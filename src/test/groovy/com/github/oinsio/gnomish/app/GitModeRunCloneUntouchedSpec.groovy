@@ -87,13 +87,13 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
 
     private Map snapshot() {
         [
-            branch      : gitRunner.run(cloneDir, 'symbolic-ref', '--short', 'HEAD').stdout().trim(),
-            head        : gitRunner.run(cloneDir, 'rev-parse', 'HEAD').stdout().trim(),
-            porcelain   : gitRunner.run(cloneDir, 'status', '--porcelain').stdout(),
-            content     : trackedContentFingerprint(),
+            branch : gitRunner.run(cloneDir, 'symbolic-ref', '--short', 'HEAD').stdout().trim(),
+            head : gitRunner.run(cloneDir, 'rev-parse', 'HEAD').stdout().trim(),
+            porcelain : gitRunner.run(cloneDir, 'status', '--porcelain').stdout(),
+            content : trackedContentFingerprint(),
             operatorBranches: operatorBranchRefs(),
-            worktrees   : gitRunner.run(cloneDir, 'worktree', 'list', '--porcelain').stdout(),
-            reflog      : gitRunner.run(cloneDir, 'reflog', 'show', '--no-abbrev', 'HEAD').stdout(),
+            worktrees : gitRunner.run(cloneDir, 'worktree', 'list', '--porcelain').stdout(),
+            reflog : gitRunner.run(cloneDir, 'reflog', 'show', '--no-abbrev', 'HEAD').stdout(),
             uncommitted : Files.readString(cloneDir.resolve('operator-work.txt')),
         ]
     }

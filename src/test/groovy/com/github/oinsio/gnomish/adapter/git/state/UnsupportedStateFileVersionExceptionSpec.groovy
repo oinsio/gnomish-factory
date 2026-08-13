@@ -22,8 +22,8 @@ class UnsupportedStateFileVersionExceptionSpec extends Specification {
 
         where:
         foundVersion || expectedMessage
-        -1            | 'task.json: missing (supported: 1)'
-        0             | 'task.json: unsupported version 0 (supported: 1)'
-        2             | 'task.json: unsupported version 2 (supported: 1)'
+        -1 | 'task.json: missing (supported: 1)'
+        0 | 'task.json: unsupported version 0 (supported: 1)'
+        2 | 'task.json: unsupported version 2 (supported: 1)'
     }
 }

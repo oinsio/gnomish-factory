@@ -67,7 +67,9 @@ tracker:
      * otherwise block on real 10s sleeps forever instead of failing fast.
      */
     private DashboardCommand newCommand(RecordingReadOnlyTracker tracker) {
-        def sleeper = { Duration d -> throw new IllegalStateException('sleeper must not be used in one-shot mode') } as Sleeper
+        def sleeper = { Duration d ->
+            throw new IllegalStateException('sleeper must not be used in one-shot mode')
+        } as Sleeper
         newCommand(tracker, sleeper)
     }
 
@@ -76,7 +78,7 @@ tracker:
                 Clock.fixed(Instant.parse('2026-08-06T00:00:00Z'), ZoneOffset.UTC),
                 sleeper,
                 homeDir,
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: new RecordingTrackerAdapterFactory(tracker)],
                 TrackerValidatorStub.acceptingGithub())
     }
@@ -141,7 +143,9 @@ tracker:
     def "--watch enters the watch loop instead of rendering once"() {
         given: 'a sleeper that records the requested duration and stops the otherwise-infinite loop'
         def sleptDurations = []
-        def sleeper = { Duration d -> sleptDurations << d; throw new RuntimeException('stop after one cycle') } as Sleeper
+        def sleeper = { Duration d ->
+            sleptDurations << d; throw new RuntimeException('stop after one cycle')
+        } as Sleeper
         def command = newCommand(new RecordingReadOnlyTracker([], []), sleeper)
         def out = tempDir.resolve('watch.html')
 

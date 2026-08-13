@@ -70,7 +70,9 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
         writer(now).write(ref, result)
 
         then:
-        def lines = Files.readString(ledgerFile(now)).split('\n').findAll { !it.isBlank() }
+        def lines = Files.readString(ledgerFile(now)).split('\n').findAll {
+            !it.isBlank()
+        }
         lines.size() == 1
         def json = JSON.readTree(lines[0])
         json.get('type').asText() == 'taskOutcome'
@@ -155,7 +157,9 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
         def startedByTask = Files.readString(ledgerFile(now)).split('\n')
                 .findAll { !it.isBlank() }
                 .collect { JSON.readTree(it) }
-                .collectEntries { [(it.get('taskId').asText()): it.get('startedAt').asText()] }
+                .collectEntries {
+                    [(it.get('taskId').asText()): it.get('startedAt').asText()]
+                }
         startedByTask['PROJ-A'] == '2026-08-03T09:00:00Z'
         startedByTask['PROJ-B'] == '2026-08-03T09:30:00Z'
     }

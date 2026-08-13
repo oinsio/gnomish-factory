@@ -97,16 +97,12 @@ public final class TrackerConfigRule {
                             .formatted(multiplier, MIN_TTL_MULTIPLIER, MIN_TTL_MULTIPLIER)));
         }
         Duration interval = tracker.heartbeatInterval();
-        if (!isPositive(interval)) {
+        if (!Durations.isPositive(interval)) {
             errors.add(new ConfigError(
                     FILE,
                     INTERVAL_WHERE,
                     "non-positive heartbeat-interval %s; the interval must be positive".formatted(interval)));
         }
         return List.copyOf(errors);
-    }
-
-    private static boolean isPositive(Duration duration) {
-        return !duration.isZero() && !duration.isNegative();
     }
 }

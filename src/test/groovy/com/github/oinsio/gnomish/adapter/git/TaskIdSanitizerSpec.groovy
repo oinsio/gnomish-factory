@@ -15,15 +15,15 @@ class TaskIdSanitizerSpec extends Specification {
         TaskIdSanitizer.sanitize(taskId) == expected
 
         where:
-        taskId                    | expected
-        'PROJ-42'                 | 'PROJ-42'
-        'PROJ 42: fix/it'         | 'PROJ-42-fix-it'
-        'a///b'                   | 'a-b'
-        '-foo-'                   | 'foo'
-        '.foo.'                   | 'foo'
-        '!!!foo!!!'               | 'foo'
-        'foo.bar_baz-qux'         | 'foo.bar_baz-qux'
-        'é日本語task'               | 'task'
+        taskId | expected
+        'PROJ-42' | 'PROJ-42'
+        'PROJ 42: fix/it' | 'PROJ-42-fix-it'
+        'a///b' | 'a-b'
+        '-foo-' | 'foo'
+        '.foo.' | 'foo'
+        '!!!foo!!!' | 'foo'
+        'foo.bar_baz-qux' | 'foo.bar_baz-qux'
+        'é日本語task' | 'task'
     }
 
     @Unroll
@@ -32,8 +32,8 @@ class TaskIdSanitizerSpec extends Specification {
         TaskIdSanitizer.branchName(taskId) == expected
 
         where:
-        taskId            | expected
-        'PROJ-42'         | 'gnomish/PROJ-42'
+        taskId | expected
+        'PROJ-42' | 'gnomish/PROJ-42'
         'PROJ 42: fix/it' | 'gnomish/PROJ-42-fix-it'
     }
 

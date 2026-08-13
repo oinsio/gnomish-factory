@@ -107,7 +107,11 @@ tracker:
     }
 
     static List<JsonNode> readLedgerLines(Path ledgerFile) {
-        ledgerFile.toFile().readLines('UTF-8').findAll { !it.isBlank() }.collect { MAPPER.readTree(it) }
+        ledgerFile.toFile().readLines('UTF-8').findAll {
+            !it.isBlank()
+        }.collect {
+            MAPPER.readTree(it)
+        }
     }
 
     static String instanceIdOf(JsonNode line) {

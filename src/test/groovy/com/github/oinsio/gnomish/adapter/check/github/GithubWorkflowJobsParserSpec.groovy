@@ -25,10 +25,10 @@ class GithubWorkflowJobsParserSpec extends Specification {
         jobs[0].conclusion() == expectedConclusion
 
         where:
-        jobFragment                | expectedConclusion
-        ''                          | null
-        ',"conclusion":null'       | null
-        ',"conclusion":"failure"'  | 'failure'
+        jobFragment | expectedConclusion
+        '' | null
+        ',"conclusion":null' | null
+        ',"conclusion":"failure"' | 'failure'
     }
 
     def "reads a step's null conclusion the same whether explicit JSON null or the field is absent"() {
@@ -45,10 +45,10 @@ class GithubWorkflowJobsParserSpec extends Specification {
         jobs[0].steps()[0].conclusion() == expectedConclusion
 
         where:
-        stepFragment                | expectedConclusion
-        ''                           | null
-        ',"conclusion":null'        | null
-        ',"conclusion":"success"'   | 'success'
+        stepFragment | expectedConclusion
+        '' | null
+        ',"conclusion":null' | null
+        ',"conclusion":"success"' | 'success'
     }
 
     def "a malformed response body raises GithubWorkflowRunQueryException with the parse failure as cause"() {

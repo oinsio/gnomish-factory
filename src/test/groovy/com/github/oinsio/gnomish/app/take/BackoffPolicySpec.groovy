@@ -30,10 +30,10 @@ class BackoffPolicySpec extends Specification {
 
         where:
         count | expected
-        1     | BASE
-        2     | BASE.multipliedBy(2)
-        3     | BASE.multipliedBy(4)
-        4     | BASE.multipliedBy(8)
+        1 | BASE
+        2 | BASE.multipliedBy(2)
+        3 | BASE.multipliedBy(4)
+        4 | BASE.multipliedBy(8)
     }
 
     // D10: count <= 0 means "nothing to back off" - delay is zero

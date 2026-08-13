@@ -86,7 +86,9 @@ class StatusReconstructionSpec extends StatusReconstructionSpecBase {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'for every AttemptFinished the check/exec/finished events of that round share ONE key'
-        def finished = listener.events.findAll { it instanceof EngineEvent.AttemptFinished }
+        def finished = listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }
         finished.eachWithIndex { fin, roundIndex ->
             def key = (fin as EngineEvent.AttemptFinished).key()
 

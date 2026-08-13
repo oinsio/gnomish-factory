@@ -155,7 +155,9 @@ class GithubOpenQuerySpec extends Specification {
             'github:localhost/acme/widgets#7',
             'github:localhost/acme/widgets#9'
         ] as Set
-        def working = result.find { it.ref().id() == 'github:localhost/acme/widgets#7' }
+        def working = result.find {
+            it.ref().id() == 'github:localhost/acme/widgets#7'
+        }
         working.state() == new TrackerTaskState.Working('gnomish-factory-a1')
         working.claimVersion() == new ClaimVersion('501', Instant.parse('2026-07-23T10:00:00Z'))
     }
@@ -230,8 +232,12 @@ class GithubOpenQuerySpec extends Specification {
         def result = newOpenQuery().listOpen()
 
         then:
-        result.find { it.ref().id() == 'github:localhost/acme/widgets#7' }.title() == 'Fix the widget'
-        result.find { it.ref().id() == 'github:localhost/acme/widgets#9' }.title() == 'Escalated widget'
+        result.find {
+            it.ref().id() == 'github:localhost/acme/widgets#7'
+        }.title() == 'Fix the widget'
+        result.find {
+            it.ref().id() == 'github:localhost/acme/widgets#9'
+        }.title() == 'Escalated widget'
         // one working-label feed call, one needs-human-label feed call, one comments call per issue —
         // no issue-detail (GET /issues/{n}) request added by title enrichment
         wireMock.verify(1, getRequestedFor(urlEqualTo(WORKING_URL)))

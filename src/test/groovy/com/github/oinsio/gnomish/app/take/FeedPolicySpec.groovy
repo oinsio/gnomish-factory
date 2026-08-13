@@ -28,7 +28,7 @@ class FeedPolicySpec extends Specification {
         new Random() {
                     @Override
                     int nextInt(int bound) {
-                        assert index < bound
+                        assert index <bound
                         return index
                     }
                 }

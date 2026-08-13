@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.SandboxProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO
@@ -34,7 +35,7 @@ trait AppAssemblyFixture {
     /**
      * Builds a {@link FactoryProperties} for tests, defaulting to the
      * dominant {@code new FactoryProperties('test-instance', null, null,
-     * null)} literal seen across app-layer specs. Pass overrides by key —
+     * null, null)} literal seen across app-layer specs. Pass overrides by key —
      * {@code instanceName}, {@code agentCliBinary},
      * {@code agentCliEnvPassthrough}, {@code tracker} — for the sites that
      * vary one of these (fake-agent binary paths, per-instance names, env
@@ -49,7 +50,8 @@ trait AppAssemblyFixture {
                 overrides.getOrDefault('instanceName', 'test-instance') as String,
                 overrides['agentCliBinary'] as String,
                 overrides['agentCliEnvPassthrough'] as List<String>,
-                overrides['tracker'] as FactoryProperties.Tracker)
+                overrides['tracker'] as FactoryProperties.Tracker,
+                overrides['check'] as FactoryProperties.Check)
     }
 
     /**
@@ -68,16 +70,17 @@ trait AppAssemblyFixture {
      * <p>Implements FR1 of refactor-app-spec-fixtures.
      */
     ManualRunAssembly newAssembly(
-            InputStream input = defaultConsoleInput(),
+            InputStream input = null,
             PrintStream output = System.out,
             FactoryProperties factoryProperties = testProperties()) {
         new ManualRunAssembly(
-                new SystemConsoleIO(input, output),
+                new SystemConsoleIO(input ?: defaultConsoleInput(), output),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                factoryProperties)
+                factoryProperties,
+                new SandboxProperties(null, null, null, null, null, null, false))
     }
 
     /**
@@ -94,7 +97,7 @@ trait AppAssemblyFixture {
      * <p>Implements FR1, FR2 of refactor-app-spec-fixtures.
      */
     ManualRunAssembly newAssembly(FactoryProperties factoryProperties) {
-        newAssembly(defaultConsoleInput(), System.out, factoryProperties)
+        newAssembly(null, System.out, factoryProperties)
     }
 
     /**

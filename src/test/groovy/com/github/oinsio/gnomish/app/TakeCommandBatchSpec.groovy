@@ -52,11 +52,9 @@ class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, 
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths (mirrors TakeCommandCredentialScrubSpec's own documented quirk):
-        // the pipeline loader's referenced-file check resolves `instructions:` relative to
-        // .gnomish/, while the runtime engine (ControlFilePreflight, non-interactive batch mode
-        // reaches it — unlike most take specs, which use --interactive and never notice) resolves
-        // the same string relative to the workspace root, the task worktree / project root.
+        // Written at both paths: the runtime now reads control files from the frozen pipeline law
+        // (D14 of add-sandbox-core), resolved — like the loader's referenced-file check — relative
+        // to the clone's .gnomish/ root; the project-root copy is retained but no longer consulted.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
@@ -128,8 +126,12 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refA, _) >> { TaskRef r, String instanceId -> claimedByA = instanceId; new ClaimResult.Acquired() }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refA, _) >> { TaskRef r, String instanceId ->
+            claimedByA = instanceId; new ClaimResult.Acquired()
+        }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
 
@@ -155,7 +157,9 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
 
@@ -200,7 +204,9 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         // fakeFactory's expandRef always throws UnsupportedOperationException (not used by this
         // fixture) — a short ref like '42' reaches it, so the ref fails for a reason outside this
         // fixture's control, exactly the "tool could not operate" shape.
@@ -218,7 +224,9 @@ tracker:
         ex.exitCode() > 0 && ex.exitCode() < 10
 
         and: 'the checklist summary names both refs, including the tool failure'
-        def summary = appender.list.find { it.level == Level.INFO && it.formattedMessage.contains('batch take:') }
+        def summary = appender.list.find {
+            it.level == Level.INFO && it.formattedMessage.contains('batch take:')
+        }
         summary != null
         summary.formattedMessage.contains('42 -> tool failure')
         summary.formattedMessage.contains(refB.id() + ' -> delivered')
@@ -240,7 +248,9 @@ tracker:
             ? trackerTask(refB, new TrackerTaskState.Ready(), 'PROJ-2')
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
-        tracker.claim(refB, _) >> { TaskRef r, String instanceId -> claimedByB = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
+            claimedByB = instanceId; new ClaimResult.Acquired()
+        }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
         def appender = attachAppender()
@@ -250,7 +260,9 @@ tracker:
 
         then:
         thrown(TakeExitCodeException)
-        def summary = appender.list.find { it.level == Level.INFO && it.formattedMessage.contains('batch take:') }
+        def summary = appender.list.find {
+            it.level == Level.INFO && it.formattedMessage.contains('batch take:')
+        }
         summary != null
         summary.formattedMessage.contains('2 ref(s)')
         summary.formattedMessage.contains(refA.id() + ' -> skipped')

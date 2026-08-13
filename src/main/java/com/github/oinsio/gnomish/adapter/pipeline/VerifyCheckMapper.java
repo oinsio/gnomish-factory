@@ -31,8 +31,14 @@ import org.jspecify.annotations.Nullable;
  * is a located {@link ConfigError} (task 6.1, FR9 of
  * add-external-check-github-actions).
  *
+ * <p>This mapper also parses the {@code command} check's optional raw
+ * {@code verifyIn} string into {@link VerifyCheck.VerifyIn} (absent defaults to
+ * {@code SAME_BOX}, unknown is a located error) and copies the {@code external}
+ * check's law-declared pin paths across verbatim (FR13, FR16 of
+ * add-sandbox-core).
+ *
  * <p>Implements FR2, FR11, D2, D5, D5a of load-pipeline-config; FR9 of
- * add-external-check-github-actions.
+ * add-external-check-github-actions; FR13, FR16 of add-sandbox-core.
  */
 final class VerifyCheckMapper {
 
@@ -67,7 +73,10 @@ final class VerifyCheckMapper {
             case VerifyCheckDto.Builtin builtin ->
                 new VerifyCheck.Builtin(
                         PipelineMapper.orEmpty(builtin.name()), PipelineMapper.copySettings(builtin.params()));
-            case VerifyCheckDto.Command command -> new VerifyCheck.Command(PipelineMapper.orEmpty(command.command()));
+            case VerifyCheckDto.Command command ->
+                new VerifyCheck.Command(
+                        PipelineMapper.orEmpty(command.command()),
+                        mapVerifyIn(manifest, index, command.verifyIn(), errors));
             case VerifyCheckDto.External external -> mapExternal(manifest, index, external, errors);
             case VerifyCheckDto.Judge judge ->
                 new VerifyCheck.Judge(
@@ -85,7 +94,43 @@ final class VerifyCheckMapper {
         Duration timeout =
                 DurationConfig.parse(manifest, "verify[%d].timeout".formatted(index), external.timeout(), errors);
         VerifyCheck.TimeoutClass timeoutClass = mapTimeoutClass(manifest, index, external.timeoutClass(), errors);
-        return new VerifyCheck.External(PipelineMapper.orEmpty(external.checkId()), interval, timeout, timeoutClass);
+        return new VerifyCheck.External(
+                PipelineMapper.orEmpty(external.checkId()), interval, timeout, timeoutClass, copyPinPaths(external));
+    }
+
+    /**
+     * Parses the raw {@code verifyIn} string (FR13 of add-sandbox-core):
+     * {@code null} (absent) defaults to {@link VerifyCheck.VerifyIn#SAME_BOX} —
+     * unchanged behavior; {@code "same-box"}/{@code "fresh-box"} map to their
+     * enum constants; any other value is a located {@link ConfigError}, still
+     * returning the safe {@code SAME_BOX} fallback (mirroring
+     * {@link #mapTimeoutClass}) since the accumulated error discards the whole
+     * definition anyway.
+     */
+    private static VerifyCheck.VerifyIn mapVerifyIn(
+            String manifest, int index, @Nullable String raw, List<ConfigError> errors) {
+        if (raw == null || raw.equals("same-box")) {
+            return VerifyCheck.VerifyIn.SAME_BOX;
+        }
+        if (raw.equals("fresh-box")) {
+            return VerifyCheck.VerifyIn.FRESH_BOX;
+        }
+        errors.add(new ConfigError(
+                manifest,
+                "verify[%d].verifyIn".formatted(index),
+                "unknown verify-in '%s'; use 'same-box' or 'fresh-box'".formatted(raw)));
+        return VerifyCheck.VerifyIn.SAME_BOX;
+    }
+
+    /**
+     * Copies the external check's law-declared pin paths across as a defensive
+     * plain-JDK list (FR16 of add-sandbox-core); {@code null}/absent maps to
+     * empty. Pin paths are carried verbatim — lexical-form validation is the
+     * domain {@code StageSanityRule}'s concern, and the loader never reads them.
+     */
+    private static List<String> copyPinPaths(VerifyCheckDto.External external) {
+        List<String> pinPaths = external.pinPaths();
+        return pinPaths == null ? List.of() : List.copyOf(pinPaths);
     }
 
     /**

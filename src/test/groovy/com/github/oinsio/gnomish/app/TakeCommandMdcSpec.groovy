@@ -162,7 +162,9 @@ tracker:
     def "taskId MDC is cleared even when the tracker call throws"() {
         given:
         writeConfig()
-        tracker.fetchTask(_) >> { throw new RuntimeException('tracker unreachable') }
+        tracker.fetchTask(_) >> {
+            throw new RuntimeException('tracker unreachable')
+        }
         Map<String, TrackerAdapterFactory> registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry)
 
@@ -249,7 +251,9 @@ tracker:
         writeConfig()
         String claimedBy = null
         List<String> mdcDuringFetch = []
-        tracker.claim(_, _) >> { ref, instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> { ref, instanceId ->
+            claimedBy = instanceId; new ClaimResult.Acquired()
+        }
         tracker.fetchTask(_) >> {
             mdcDuringFetch << MDC.get(TASK_ID_KEY)
             new TrackerTask(

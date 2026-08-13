@@ -31,7 +31,9 @@ class PersistenceOrderingSpec extends PersistenceOrderingSpecBase {
         persistence.entries[0].state.is(outcome.finalState())
 
         and: 'an AttemptFinished event was emitted for the round'
-        def finished = listener.events.findAll { it instanceof EngineEvent.AttemptFinished }
+        def finished = listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }
         finished.size() == 1
 
         and: 'the persist happened before the AttemptFinished was recorded — the fake saw persist while no AttemptFinished existed yet'
@@ -61,8 +63,12 @@ class PersistenceOrderingSpec extends PersistenceOrderingSpecBase {
         persistence.entries[1].state.attempts().size() == 2
 
         and: 'two AttemptStarted and two AttemptFinished events fired'
-        def started = listener.events.findAll { it instanceof EngineEvent.AttemptStarted }
-        def finished = listener.events.findAll { it instanceof EngineEvent.AttemptFinished }
+        def started = listener.events.findAll {
+            it instanceof EngineEvent.AttemptStarted
+        }
+        def finished = listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }
         started.size() == 2
         finished.size() == 2
 

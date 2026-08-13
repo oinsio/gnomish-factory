@@ -7,6 +7,9 @@ hands tasks to the factory through a GitHub issue tracker and resolves the
 escalations it can't decide alone. It assumes the factory is already built and a
 target project has a working `.gnomish/` pipeline (see the main README for `gnomish
 run`); this document covers the tracker-driven single-task workflow layered on top.
+Where gnome processes actually execute — the container sandbox, host mode, the
+egress allowlist — is
+[`docs/operator-guide-sandbox.md`](operator-guide-sandbox.md)'s territory.
 
 ## Quick Start
 

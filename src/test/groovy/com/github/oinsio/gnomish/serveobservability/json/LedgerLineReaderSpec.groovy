@@ -82,7 +82,9 @@ class LedgerLineReaderSpec extends Specification {
     }
 
     private static List<String> completeLines(int count) {
-        (1..count).collect { i -> "{\"version\":1,\"type\":\"lifecycle\",\"seq\":${i}}" }
+        (1..count).collect { i ->
+            "{\"version\":1,\"type\":\"lifecycle\",\"seq\":${i}}"
+        }
     }
 
     private static Path writeLines(Path dir, List<String> lines) {

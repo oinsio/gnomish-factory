@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.git.FactoryCloneHardening;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository;
 import com.github.oinsio.gnomish.adapter.git.TaskIdSanitizer;
@@ -63,6 +64,7 @@ final class TakeFreshClaim {
         String taskId = trackerTask.snapshot().id();
 
         new TaskWorktreeCleanup(runner).pruneWorktrees(cloneDir);
+        new FactoryCloneHardening(runner).harden(cloneDir);
 
         var synthesized = TrackerTaskSynthesizer.synthesize(trackerTask.snapshot(), definition);
         var taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot);

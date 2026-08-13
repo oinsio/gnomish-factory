@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
+import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
 import spock.lang.Specification
@@ -53,9 +54,10 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
     VerifyOrchestrator orchestrator(ScriptedBuiltinCheckRunner builtinRunner,
             ScriptedCommandCheckRunner commandRunner,
             ScriptedExternalCheckClient externalClient = new ScriptedExternalCheckClient(),
-            ScriptedJudgeVoter judgeVoter = new ScriptedJudgeVoter()) {
+            ScriptedJudgeVoter judgeVoter = new ScriptedJudgeVoter(),
+            AttemptDelivery attemptDelivery = AttemptDelivery.assumedDelivered()) {
         new VerifyOrchestrator(builtinRunner, commandRunner,
-                new ExternalPolling(externalClient, clock, sleeper),
+                new ExternalPolling(externalClient, attemptDelivery, clock, sleeper),
                 new JudgeVoting(judgeVoter), clock, listener)
     }
 }

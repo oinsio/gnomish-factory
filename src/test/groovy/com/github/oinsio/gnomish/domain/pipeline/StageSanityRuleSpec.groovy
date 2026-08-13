@@ -49,6 +49,16 @@ class StageSanityRuleSpec extends Specification {
         new VerifyCheck.External(checkId, interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
+    private static VerifyCheck extPins(String checkId, List<String> pinPaths) {
+        new VerifyCheck.External(checkId, Duration.ofSeconds(30), Duration.ofMinutes(1),
+                VerifyCheck.TimeoutClass.QUALITY, pinPaths)
+    }
+
+    private static ConfigError badPinPath(String stage, int index, int pathIndex, String path) {
+        new ConfigError("stages/$stage/stage.yaml", "verify[$index].pinPaths[$pathIndex]" as String,
+                "invalid pin path '$path'; a pin path must be a normalized relative path with no absolute prefix and no '.'/'..' segments" as String)
+    }
+
     private static VerifyCheck judge(String model, int votes) {
         new VerifyCheck.Judge('criteria.md', model, [:], votes)
     }
@@ -103,8 +113,8 @@ class StageSanityRuleSpec extends Specification {
         ]) == []
 
         where:
-        type                   | model                    | limit
-        ExecutorType.API       | 'claude-sonnet-4-5'      | 1
+        type | model | limit
+        ExecutorType.API | 'claude-sonnet-4-5' | 1
         ExecutorType.AGENT_CLI | 'no-such-model-anywhere' | 3
     }
 
@@ -117,10 +127,10 @@ class StageSanityRuleSpec extends Specification {
         ]) == [missingModel('plan')]
 
         where:
-        label              | model  | type
-        'empty'            | ''     | ExecutorType.API
-        'whitespace-only'  | '   '  | ExecutorType.AGENT_CLI
-        'tab'              | '\t'   | ExecutorType.API
+        label | model | type
+        'empty' | '' | ExecutorType.API
+        'whitespace-only' | '   ' | ExecutorType.AGENT_CLI
+        'tab' | '\t' | ExecutorType.API
     }
 
     // FR11 delta-spec AND-clause (Q1/D5a): settings present as a mapping are
@@ -162,9 +172,9 @@ class StageSanityRuleSpec extends Specification {
         ]) == []
 
         where:
-        interval                  | timeout
-        Duration.ofSeconds(30)    | Duration.ofMinutes(10)
-        Duration.ofMinutes(10)    | Duration.ofMinutes(10)
+        interval | timeout
+        Duration.ofSeconds(30) | Duration.ofMinutes(10)
+        Duration.ofMinutes(10) | Duration.ofMinutes(10)
     }
 
     // FR11 external clause: a non-positive interval/timeout or interval >
@@ -179,24 +189,24 @@ class StageSanityRuleSpec extends Specification {
         ]) == expected
 
         where:
-        label                    | checkId    | interval                 | timeout                  || expected
-        'zero interval'          | 'ci/build' | Duration.ZERO            | Duration.ofMinutes(1)    || [
+        label | checkId | interval | timeout || expected
+        'zero interval' | 'ci/build' | Duration.ZERO | Duration.ofMinutes(1) || [
             badInterval('review', 0, Duration.ZERO)
         ]
-        'negative interval'      | 'ci/build' | Duration.ofSeconds(-1)   | Duration.ofMinutes(1)    || [
+        'negative interval' | 'ci/build' | Duration.ofSeconds(-1) | Duration.ofMinutes(1) || [
             badInterval('review', 0, Duration.ofSeconds(-1))
         ]
-        'zero timeout'           | 'ci/build' | Duration.ofSeconds(30)   | Duration.ZERO            || [
+        'zero timeout' | 'ci/build' | Duration.ofSeconds(30) | Duration.ZERO || [
             badTimeout('review', 0, Duration.ZERO)
         ]
-        'negative timeout'       | 'ci/build' | Duration.ofSeconds(30)   | Duration.ofSeconds(-1)   || [
+        'negative timeout' | 'ci/build' | Duration.ofSeconds(30) | Duration.ofSeconds(-1) || [
             badTimeout('review', 0, Duration.ofSeconds(-1))
         ]
-        'interval over timeout'  | 'ci/build' | Duration.ofMinutes(2)    | Duration.ofMinutes(1)    || [
+        'interval over timeout' | 'ci/build' | Duration.ofMinutes(2) | Duration.ofMinutes(1) || [
             intervalOverTimeout('review', 0, Duration.ofMinutes(2), Duration.ofMinutes(1))
         ]
-        'blank checkId'          | '   '      | Duration.ofSeconds(30)   | Duration.ofMinutes(1)    || [blankCheckId('review', 0)]
-        'empty checkId'          | ''         | Duration.ofSeconds(30)   | Duration.ofMinutes(1)    || [blankCheckId('review', 0)]
+        'blank checkId' | '   ' | Duration.ofSeconds(30) | Duration.ofMinutes(1) || [blankCheckId('review', 0)]
+        'empty checkId' | '' | Duration.ofSeconds(30) | Duration.ofMinutes(1) || [blankCheckId('review', 0)]
     }
 
     // FR11 external clause: field-order determinism within one check — a blank
@@ -211,6 +221,93 @@ class StageSanityRuleSpec extends Specification {
             blankCheckId('review', 0),
             badInterval('review', 0, Duration.ZERO),
             badTimeout('review', 0, Duration.ofSeconds(-1)),
+        ]
+    }
+
+    // FR16 (add-sandbox-core) pin-path clause: normalized relative pin paths —
+    // including ones pointing outside `.gnomish/`, their normal use — are
+    // accepted; the loader never reads them, only their lexical form matters
+    def "normalized relative pin paths produce no errors"() {
+        expect: 'validating the external check yields an empty error list'
+        StageSanityRule.validate([
+            stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
+                extPins('ci/build', [
+                    '.github/workflows/ci.yml',
+                    'analyzer/config.xml'
+                ])
+            ])
+        ]) == []
+    }
+
+    // FR16 (add-sandbox-core): an absent (empty) pin-path list is the valid,
+    // vacuous form — the adapter's own contributed paths still apply
+    def "no declared pin paths produce no errors"() {
+        expect: 'the external check with an empty pin-path list is sane'
+        StageSanityRule.validate([
+            stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
+                extPins('ci/build', [])
+            ])
+        ]) == []
+    }
+
+    // FR16 (add-sandbox-core) delta-spec scenario: a pin path that is absolute
+    // or contains `.`/`..` segments (or is blank) can never match a repo object
+    // and is a located error naming the offending check and path index
+    def "a non-normalized pin path (#label) is a located error"() {
+        expect: 'exactly one located error naming the offending pin path'
+        StageSanityRule.validate([
+            stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
+                extPins('ci/build', [path])
+            ])
+        ]) == [
+            badPinPath('review', 0, 0, path)
+        ]
+
+        where:
+        label | path
+        'absolute' | '/etc/passwd'
+        'parent traversal' | '../secrets/ci.yml'
+        'dot-dot segment' | '.github/../ci.yml'
+        'dot segment' | './ci.yml'
+        'bare dot' | '.'
+        'bare dot-dot' | '..'
+        'blank' | '   '
+        'empty' | ''
+    }
+
+    // FR16 (add-sandbox-core): pin-path errors are located by their index in the
+    // pin-path list, in list order, so multiple bad paths each name their slot;
+    // a valid path between two bad ones contributes nothing
+    def "pin-path errors are located by list index in order"() {
+        expect: 'errors name pinPaths[0] then pinPaths[2], skipping the valid pinPaths[1]'
+        StageSanityRule.validate([
+            stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
+                extPins('ci/build', [
+                    '/abs.yml',
+                    'ok/ci.yml',
+                    '../up.yml'
+                ])
+            ])
+        ]) == [
+            badPinPath('review', 0, 0, '/abs.yml'),
+            badPinPath('review', 0, 2, '../up.yml'),
+        ]
+    }
+
+    // FR16 (add-sandbox-core): within one external check, timing faults come
+    // before pin-path faults — the deterministic field order (checkId, interval,
+    // timeout, then pin paths)
+    def "timing faults are ordered before pin-path faults in one external check"() {
+        expect: 'the blank-checkId and interval errors precede the pin-path error'
+        StageSanityRule.validate([
+            stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
+                new VerifyCheck.External('', Duration.ZERO, Duration.ofSeconds(1),
+                VerifyCheck.TimeoutClass.QUALITY, ['/abs.yml'])
+            ])
+        ]) == [
+            blankCheckId('review', 0),
+            badInterval('review', 0, Duration.ZERO),
+            badPinPath('review', 0, 0, '/abs.yml'),
         ]
     }
 
@@ -257,8 +354,8 @@ class StageSanityRuleSpec extends Specification {
         ]
 
         where:
-        label             | model
-        'empty'           | ''
+        label | model
+        'empty' | ''
         'whitespace-only' | '   '
     }
 

@@ -16,6 +16,9 @@ import org.jspecify.annotations.Nullable;
  *   model: claude-sonnet-4-5
  *   settings:
  *     temperature: 0
+ *   sandbox:
+ *     needs: [docker-inside]
+ *     requiresFresh: true
  * }</pre>
  *
  * <p>{@code type} is carried as a raw string so an unknown value becomes a
@@ -23,15 +26,26 @@ import org.jspecify.annotations.Nullable;
  * deserialization failure; the domain enum mapping is task 5.3. {@code settings}
  * is typed {@code Map<String, Object>} to bind plain JDK types, never a Jackson
  * {@code JsonNode} (D5a). {@code model} presence is a validator concern (task
- * 4.4, FR11), not the DTO's.
+ * 4.4, FR11), not the DTO's. {@code sandbox} carries the stage's tighten-only
+ * sandbox declarations (FR12–FR14 of add-sandbox-core); {@code null}/absent
+ * means no declarations — the defaults apply.
  *
- * <p>Implements FR2, FR11 (DTO shape), D2, D5a of load-pipeline-config.
+ * <p>Implements FR2, FR11 (DTO shape), D2, D5a of load-pipeline-config;
+ * FR12–FR14 of add-sandbox-core (the {@code sandbox} field).
  *
  * @param type the raw executor type, or {@code null} when omitted
  * @param model the pinned model, or {@code null} when omitted
  * @param settings the opaque executor settings; {@code null}/absent means none
+ * @param sandbox the stage's sandbox declarations; {@code null}/absent means none
  */
 public record ExecutorDto(
         @Nullable String type,
         @Nullable String model,
-        @Nullable Map<String, Object> settings) {}
+        @Nullable Map<String, Object> settings,
+        @Nullable SandboxDto sandbox) {
+
+    /** Convenience for construction outside Jackson binding (e.g. tests): no {@code sandbox} block. */
+    public ExecutorDto(@Nullable String type, @Nullable String model, @Nullable Map<String, Object> settings) {
+        this(type, model, settings, null);
+    }
+}

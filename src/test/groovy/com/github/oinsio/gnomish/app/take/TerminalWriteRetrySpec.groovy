@@ -57,7 +57,7 @@ class TerminalWriteRetrySpec extends Specification {
 
         when:
         def result = retry().confirm({
-            if (attempts.getAndIncrement() < failures) {
+            if (attempts.getAndIncrement() <failures) {
                 throw new TrackerUnavailableException('tracker unreachable')
             }
         })

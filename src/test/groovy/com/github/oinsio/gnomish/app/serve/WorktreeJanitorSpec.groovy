@@ -39,7 +39,9 @@ class WorktreeJanitorSpec extends Specification {
     }
 
     private WorktreeJanitor janitor(Set<TaskRef> held = Set.of()) {
-        new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, disposal, clock, sleeper, { -> held })
+        new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, disposal, clock, sleeper, {
+            -> held
+        })
     }
 
     private Path environment(String key, Instant lastActivity) {
@@ -190,7 +192,9 @@ class WorktreeJanitorSpec extends Specification {
 
         when: 'a tick completes on a clock set one minute later'
         def laterClock = { -> NOW + Duration.ofMinutes(1) } as Clock
-        def later = new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, disposal, laterClock, sleeper, { -> Set.of() })
+        def later = new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, disposal, laterClock, sleeper, {
+            -> Set.of()
+        })
         later.tick()
 
         then:

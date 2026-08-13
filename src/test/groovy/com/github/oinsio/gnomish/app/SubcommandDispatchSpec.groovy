@@ -172,7 +172,9 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // `expandRef` is intentionally unimplemented (never called by this fixture's `serve` path):
     // Groovy's map-to-interface coercion throws UnsupportedOperationException if it ever were.
     private static TrackerAdapterFactory factoryReturning(Tracker t) {
-        [create: { TrackerConfig config, String instanceId -> t }] as TrackerAdapterFactory
+        [create: { TrackerConfig config, String instanceId ->
+                t
+            }] as TrackerAdapterFactory
     }
 
     /** A minimal, valid `.gnomish/` tree with a `tracker: github` section, under {@code root}. */
@@ -199,11 +201,12 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def serveDispatch = new SubcommandDispatch(
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 new ServeCommand(
-                newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, homeDir, 'taskId',
-                testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
-                new SystemClock(), [github: factoryReturning(Stub(Tracker))],
-                TrackerValidatorStub.acceptingGithub(),
-                { FeedAutomaton automaton -> starterInvoked.set(true) } as FeedAutomatonStarter),
+                        newAssembly(new ByteArrayInputStream(new byte[0])), worktreesRoot, homeDir, 'taskId',
+                        testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
+                        new SystemClock(), [github: factoryReturning(Stub(Tracker))],
+                        TrackerValidatorStub.acceptingGithub(), { FeedAutomaton automaton ->
+                            starterInvoked.set(true)
+                        } as FeedAutomatonStarter),
                 dispatch.boardCommand(), dispatch.dashboardCommand())
         def args = new DefaultApplicationArguments('serve', "--dir=${worktreesRoot}".toString())
 

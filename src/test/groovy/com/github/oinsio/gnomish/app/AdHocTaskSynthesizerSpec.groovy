@@ -101,13 +101,13 @@ class AdHocTaskSynthesizerSpec extends Specification {
         result.context().body() == expectedBody
 
         where:
-        description                                   | text                                     || expectedTitle  | expectedBody
-        'heading-marker line becomes the title'       | '## Fix the bug\nMore detail'            || 'Fix the bug'  | 'More detail'
-        'single-line text has an empty body'          | 'Fix the bug'                            || 'Fix the bug'  | ''
-        'leading blank lines are skipped for the title' | '\n\n  \nFix the bug\nMore detail'     || 'Fix the bug'  | 'More detail'
-        'multiple heading markers are stripped'       | '### Title here\nline2\nline3'           || 'Title here'   | 'line2\nline3'
-        'blank text yields empty title and body'      | ''                                        || ''             | ''
-        'blank/whitespace-only text yields empty title and body' | '   \n   \n  '                 || ''             | ''
+        description | text || expectedTitle | expectedBody
+        'heading-marker line becomes the title' | '## Fix the bug\nMore detail' || 'Fix the bug' | 'More detail'
+        'single-line text has an empty body' | 'Fix the bug' || 'Fix the bug' | ''
+        'leading blank lines are skipped for the title' | '\n\n  \nFix the bug\nMore detail' || 'Fix the bug' | 'More detail'
+        'multiple heading markers are stripped' | '### Title here\nline2\nline3' || 'Title here' | 'line2\nline3'
+        'blank text yields empty title and body' | '' || '' | ''
+        'blank/whitespace-only text yields empty title and body' | '   \n   \n  ' || '' | ''
     }
 
     def "FR2: --task-file path is read from disk and split the same way"() {

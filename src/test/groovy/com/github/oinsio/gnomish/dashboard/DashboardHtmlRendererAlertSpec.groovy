@@ -50,12 +50,12 @@ class DashboardHtmlRendererAlertSpec extends Specification {
         html.contains(label)
 
         where:
-        label                              | view
-        'dead daemon'                      | new DaemonSnapshotView.DeadDaemon(healthySnapshot())
-        'occupied slots not heartbeating'  | new DaemonSnapshotView.Fresh(snapshotWithOccupiedSlotsDeadHeartbeat())
-        'idle-blocked too long'            | new DaemonSnapshotView.Fresh(snapshotWithLongIdleBlocked())
-        'tracker failures'                 | new DaemonSnapshotView.Fresh(snapshotWithTrackerFailures())
-        'reaper degraded'                  | new DaemonSnapshotView.Fresh(snapshotWithDegradedReaper())
+        label | view
+        'dead daemon' | new DaemonSnapshotView.DeadDaemon(healthySnapshot())
+        'occupied slots not heartbeating' | new DaemonSnapshotView.Fresh(snapshotWithOccupiedSlotsDeadHeartbeat())
+        'idle-blocked too long' | new DaemonSnapshotView.Fresh(snapshotWithLongIdleBlocked())
+        'tracker failures' | new DaemonSnapshotView.Fresh(snapshotWithTrackerFailures())
+        'reaper degraded' | new DaemonSnapshotView.Fresh(snapshotWithDegradedReaper())
     }
 
     def "two simultaneous alerts are comma-separated, not just the first one shown"() {
@@ -118,9 +118,9 @@ class DashboardHtmlRendererAlertSpec extends Specification {
                 new FeedSnapshot(FeedPhase.FILLING, WRITTEN_AT, WRITTEN_AT, 0, 3),
                 new SlotsSnapshot(3, []),
                 new VitalsSnapshot(
-                new HeartbeatVital(HeartbeatState.RUNNING, WRITTEN_AT, 0),
-                new ReaperVital(WRITTEN_AT, 0, 300L),
-                new JanitorVital(WRITTEN_AT)),
+                        new HeartbeatVital(HeartbeatState.RUNNING, WRITTEN_AT, 0),
+                        new ReaperVital(WRITTEN_AT, 0, 300L),
+                        new JanitorVital(WRITTEN_AT)),
                 new TrackerHealth(WRITTEN_AT, 0))
     }
 

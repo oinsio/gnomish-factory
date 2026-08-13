@@ -231,12 +231,14 @@ The adapter SHALL declare and validate its `tracker.github` subsection:
 `api-url` (mandatory, no code default), `repo` (`owner/name`), and
 `labels.{ready,working,needs-human,delivered}` as `{name, color}` objects with
 hex color validation. Validation SHALL aggregate errors and fail fast at load,
-consistent with pipeline-config error reporting. The token SHALL come only from
-the `GNOMISH_GITHUB_TOKEN` environment variable — never from yaml — and SHALL
-never reach the gnome process environment or prompts; the adapter SHALL declare
-`GNOMISH_GITHUB_TOKEN` as its credential variable for the launcher scrub.
-<!-- implements FR17 of add-tracker-port -->
-<!-- implements NFR-S1 of add-tracker-port -->
+consistent with pipeline-config error reporting. The token SHALL be resolved
+through the `SecretsProvider` port by name — never from yaml and never read
+from process env directly; the env/file adapter backs the name with
+`GNOMISH_GITHUB_TOKEN`. The token SHALL never reach a task environment or
+prompts; the adapter SHALL declare its credential name so the variable can
+never be admitted into a child-environment allowlist.
+<!-- implements FR17, NFR-S1 of add-tracker-port -->
+<!-- implements FR18, NFR-S1 of add-sandbox-core -->
 
 #### Scenario: Missing api-url is a load error
 - **WHEN** `tracker.github` lacks `api-url`
@@ -244,7 +246,11 @@ never reach the gnome process environment or prompts; the adapter SHALL declare
 
 #### Scenario: Token stays out of the gnome
 - **WHEN** a stage executes via the agent CLI while a tracker task is being worked
-- **THEN** the gnome process environment contains no tracker credential variables
+- **THEN** the task environment's allowlisted env contains no tracker credential
+
+#### Scenario: Backend switch requires no adapter change
+- **WHEN** the operator switches the configured `SecretsProvider` adapter
+- **THEN** the tracker adapter resolves the same secret name with no code change
 
 ### Requirement: Conditional-request polling economy
 All repeated polls (feed, round-boundary check) SHALL use

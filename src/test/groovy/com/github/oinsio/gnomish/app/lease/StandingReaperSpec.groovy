@@ -38,7 +38,9 @@ class StandingReaperSpec extends Specification {
     // ticks even though this instance holds nothing (FR1), unlike the old beat-riding reaper
     // which only ran while InstanceHeartbeat's thread was alive.
     private final StandingReaper standingReaper =
-    new StandingReaper(reaper, { Duration d -> }, INTERVAL, { [] }, new SystemClock())
+    new StandingReaper(reaper, { Duration d -> }, INTERVAL, {
+        []
+    }, new SystemClock())
 
     private static OpenTask working(String ref, ClaimVersion version) {
         new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('other-instance'), version, 'fixture title')

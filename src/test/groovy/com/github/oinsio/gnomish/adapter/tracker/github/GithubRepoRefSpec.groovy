@@ -22,10 +22,10 @@ class GithubRepoRefSpec extends Specification {
         thrown(IllegalArgumentException)
 
         where:
-        malformed    | description
-        'acme'       | 'no slash'
-        '/widgets'   | 'empty owner'
-        'acme/'      | 'empty repo'
-        ''           | 'empty string'
+        malformed | description
+        'acme' | 'no slash'
+        '/widgets' | 'empty owner'
+        'acme/' | 'empty repo'
+        '' | 'empty string'
     }
 }

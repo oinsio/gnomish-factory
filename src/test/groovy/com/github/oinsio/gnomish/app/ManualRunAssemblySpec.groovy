@@ -74,7 +74,11 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
                 [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
-                [],
+                // The judge check makes criteria.md part of the pipeline law frozen at assemble
+                // time, so the wired CLI judge voter grades against it (D14 of add-sandbox-core).
+                [
+                    new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1)
+                ],
                 new AutonomyLimits(3),
                 AdvancementMode.AUTO)
     }
@@ -97,17 +101,18 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(
+                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], workspaceDir)
 
         then:
         run.ports().executor().class == expectedExecutor
 
         where:
-        interactiveMode                              | expectedExecutor
-        RunArguments.InteractiveMode.NONE             | CliStageExecutor
-        RunArguments.InteractiveMode.ALL               | InteractiveStageExecutor
-        RunArguments.InteractiveMode.EXECUTOR_ONLY     | InteractiveStageExecutor
-        RunArguments.InteractiveMode.JUDGE_ONLY        | CliStageExecutor
+        interactiveMode | expectedExecutor
+        RunArguments.InteractiveMode.NONE | CliStageExecutor
+        RunArguments.InteractiveMode.ALL | InteractiveStageExecutor
+        RunArguments.InteractiveMode.EXECUTOR_ONLY | InteractiveStageExecutor
+        RunArguments.InteractiveMode.JUDGE_ONLY | CliStageExecutor
     }
 
     @Unroll
@@ -116,17 +121,18 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def assembly = newAssembly()
 
         when:
-        def run = assembly.assemble(definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(
+                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], workspaceDir)
 
         then:
         run.ports().judgeVoter().class == expectedJudgeVoter
 
         where:
-        interactiveMode                              | expectedJudgeVoter
-        RunArguments.InteractiveMode.NONE             | CliJudgeVoter
-        RunArguments.InteractiveMode.ALL               | InteractiveJudgeVoter
-        RunArguments.InteractiveMode.EXECUTOR_ONLY     | CliJudgeVoter
-        RunArguments.InteractiveMode.JUDGE_ONLY        | InteractiveJudgeVoter
+        interactiveMode | expectedJudgeVoter
+        RunArguments.InteractiveMode.NONE | CliJudgeVoter
+        RunArguments.InteractiveMode.ALL | InteractiveJudgeVoter
+        RunArguments.InteractiveMode.EXECUTOR_ONLY | CliJudgeVoter
+        RunArguments.InteractiveMode.JUDGE_ONLY | InteractiveJudgeVoter
     }
 
     // FR7, NFR-O1, UX1, D10, task 9.4: the wired CliStageExecutor's rounds reach both the
@@ -137,7 +143,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         given:
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
+                new InMemoryAttemptPersistence(), [], workspaceDir)
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
 
         // Snapshot the held activity right after each of this test's own log lines lands, so
@@ -171,7 +178,9 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         then: 'the renderer saw the whole round'
         loggedEvents.any { it.formattedMessage.contains('round started') }
-        loggedEvents.any { it.formattedMessage.contains('tool started') && it.formattedMessage.contains('Write') }
+        loggedEvents.any {
+            it.formattedMessage.contains('tool started') && it.formattedMessage.contains('Write')
+        }
         loggedEvents.any { it.formattedMessage.contains('round finished') }
 
         and: 'the enricher had already incremented toolCalls by the time the tool-started line logged'
@@ -190,7 +199,8 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         given:
         Files.writeString(workspaceDir.resolve('criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE, new InMemoryAttemptPersistence(), [])
+        def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
+                new InMemoryAttemptPersistence(), [], workspaceDir)
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
         def before = run.holder().activity().activity() as Activity.Executing
 

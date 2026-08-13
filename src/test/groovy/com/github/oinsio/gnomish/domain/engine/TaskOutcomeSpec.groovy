@@ -124,11 +124,11 @@ class TaskOutcomeSpec extends Specification {
         describe(outcome) == expected
 
         where:
-        outcome                                                             | expected
-        new TaskOutcome.Completed(sampleState())                            | 'completed'
-        new TaskOutcome.Paused(sampleState(), 'build')                      | 'paused: build'
-        new TaskOutcome.Escalated(sampleState(), sampleReport())            | 'escalated'
-        new TaskOutcome.Aborted(sampleState(), sampleKey(), 'boom')         | 'aborted: boom'
+        outcome | expected
+        new TaskOutcome.Completed(sampleState()) | 'completed'
+        new TaskOutcome.Paused(sampleState(), 'build') | 'paused: build'
+        new TaskOutcome.Escalated(sampleState(), sampleReport()) | 'escalated'
+        new TaskOutcome.Aborted(sampleState(), sampleKey(), 'boom') | 'aborted: boom'
     }
 
     // FR10: Completed outcomes are values — equal content means equal outcomes

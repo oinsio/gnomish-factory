@@ -155,12 +155,12 @@ class StatusTextRendererSpec extends Specification {
                 new LiveActivity(null, escalation, null))).contains(expectedFragment)
 
         where:
-        escalation                                                                                | expectedFragment
-        new EscalationReport.AttemptsExhausted(3)                                                  | 'attempts exhausted'
-        new EscalationReport.DecisionNeeded('Refactor?', ['a', 'b'])                                | 'decision needed'
-        new EscalationReport.CannotVerify(new CheckRef(0, 'command:x'), 'network error', '')        | 'cannot verify'
-        new EscalationReport.PipelineMismatch('stale-stage')                                        | 'pipeline mismatch'
-        new EscalationReport.CannotExecute('agent crashed')                                         | 'cannot execute'
+        escalation | expectedFragment
+        new EscalationReport.AttemptsExhausted(3) | 'attempts exhausted'
+        new EscalationReport.DecisionNeeded('Refactor?', ['a', 'b']) | 'decision needed'
+        new EscalationReport.CannotVerify(new CheckRef(0, 'command:x'), 'network error', '') | 'cannot verify'
+        new EscalationReport.PipelineMismatch('stale-stage') | 'pipeline mismatch'
+        new EscalationReport.CannotExecute('agent crashed') | 'cannot execute'
     }
 
     // FR11, D7: renderFull renders every Activity kind without throwing
@@ -174,10 +174,10 @@ class StatusTextRendererSpec extends Specification {
                 new LiveActivity(activity, null, null))).contains(expectedFragment)
 
         where:
-        activity                                                                  | expectedFragment
-        new Activity.Executing(STARTED)                                           | 'executing'
-        new Activity.Verifying(new CheckRef(0, 'builtin:files_exist'), STARTED)   | 'verifying builtin:files_exist'
-        new Activity.AwaitingInput('pass/fail? ', STARTED)                        | 'awaiting input: "pass/fail? "'
+        activity | expectedFragment
+        new Activity.Executing(STARTED) | 'executing'
+        new Activity.Verifying(new CheckRef(0, 'builtin:files_exist'), STARTED) | 'verifying builtin:files_exist'
+        new Activity.AwaitingInput('pass/fail? ', STARTED) | 'awaiting input: "pass/fail? "'
     }
 
     // FR7, UX1, D10, D12 of add-agent-executor: executing activity renders live tool detail when present

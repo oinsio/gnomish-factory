@@ -94,16 +94,11 @@ public final class TrackerSeamValidator {
                 continue;
             }
             if (validator != null && entry.getValue() instanceof Map<?, ?> raw) {
-                errors.addAll(validator.validate(file, where, castSubsection(raw)));
+                errors.addAll(validator.validate(file, where, PipelineMapper.castSubsection(raw)));
             }
         }
         if (validator != null && !subsections.containsKey(type)) {
             errors.add(new ConfigError(file, "tracker." + type, "missing required subsection '%s'".formatted(type)));
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> castSubsection(Map<?, ?> raw) {
-        return (Map<String, Object>) raw;
     }
 }

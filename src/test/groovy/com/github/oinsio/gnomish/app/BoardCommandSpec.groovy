@@ -80,7 +80,7 @@ tracker:
         def factory = new RecordingTrackerAdapterFactory(tracker)
         new BoardCommand(
                 Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
                 TrackerValidatorStub.acceptingGithub())
     }
@@ -97,7 +97,7 @@ tracker:
         def factory = new RecordingTrackerAdapterFactory(tracker)
         def command = new BoardCommand(
                 Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
                 TrackerValidatorStub.acceptingGithub())
 
@@ -149,8 +149,8 @@ tracker:
 
         where:
         readyCount || expectTruncated
-        2          || true
-        1          || false
+        2 || true
+        1 || false
     }
 
     // FR6 (task 3.2): the --json flag selects the JSON projection; its absence selects the text
@@ -158,9 +158,9 @@ tracker:
     def "emits JSON with --json and the text board without it"() {
         given:
         def command = newCommand(new RecordingReadOnlyTracker(
-                [
-                    new ReadyTask(new TaskRef('r-1'), AbortFacts.none(), false, false, 'Add widgets')
-                ], []))
+                        [
+                            new ReadyTask(new TaskRef('r-1'), AbortFacts.none(), false, false, 'Add widgets')
+                        ], []))
         def out = new ByteArrayOutputStream()
         def originalOut = System.out
         System.out = new PrintStream(out)
@@ -181,8 +181,8 @@ tracker:
         System.out = originalOut
 
         where:
-        json  || firstChar
-        true  || '{'
+        json || firstChar
+        true || '{'
         false || 'Ready ('
     }
 

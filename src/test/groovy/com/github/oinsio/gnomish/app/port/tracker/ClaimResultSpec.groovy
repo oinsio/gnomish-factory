@@ -33,8 +33,8 @@ class ClaimResultSpec extends Specification {
         describe(result) == expected
 
         where:
-        result                                       | expected
-        new ClaimResult.Acquired()                   | 'acquired'
+        result | expected
+        new ClaimResult.Acquired() | 'acquired'
         new ClaimResult.Held('gnomish-factory-x7k2') | 'held: gnomish-factory-x7k2'
     }
 

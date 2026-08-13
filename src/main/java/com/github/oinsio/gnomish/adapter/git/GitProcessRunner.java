@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,16 +86,36 @@ public final class GitProcessRunner {
      * clone's shared object database, refs, or worktree registry. Everything else (read-only
      * queries such as {@code rev-parse}/{@code worktree list}, and in-worktree operations such as
      * {@code branch}, {@code reset}, {@code clean}, {@code commit}, which only touch one worktree's
-     * own index/working tree or a single, independently-locked ref) is left unlocked.
+     * own index/working tree or a single, independently-locked ref) is left unlocked. Leading
+     * {@code -c key=value} global-option pairs are skipped before classifying, so a fetch that
+     * carries per-invocation config (e.g. the harvest fetch's {@code protocol.ext.allow}) still
+     * serializes like any other fetch.
      */
+    /**
+     * PIT M4 documented exception (build.gradle has the full rationale): {@code
+     * @DoNotMutate} on the {@code i + 1 < args.length} boundary in the {@code -c}
+     * skip-loop below. Mutating it to {@code i + 1 <= args.length} is provably
+     * equivalent — brute-forced over every argument sequence of length 0-5 from
+     * this method's vocabulary, both boundaries classify identically in every
+     * case, because a trailing {@code -c} with no following value only ever
+     * pushes {@code i} past the array end, which the {@code i >= args.length}
+     * guard right after the loop already turns into the same {@code false}
+     * result either way.
+     */
+    @DoNotMutate
     private static boolean isRepoLevelMutating(String... args) {
-        if (args.length == 0) {
+        int i = 0;
+        while (i + 1 < args.length && args[i].equals("-c")) {
+            i += 2;
+        }
+        if (i >= args.length) {
             return false;
         }
-        return switch (args[0]) {
+        return switch (args[i]) {
             case "fetch", "push" -> true;
             case "worktree" ->
-                args.length > 1 && (args[1].equals("add") || args[1].equals("remove") || args[1].equals("prune"));
+                args.length > i + 1
+                        && (args[i + 1].equals("add") || args[i + 1].equals("remove") || args[i + 1].equals("prune"));
             default -> false;
         };
     }
@@ -130,6 +151,10 @@ public final class GitProcessRunner {
     private GitCommandResult execute(Path cwd, String... args) {
         ProcessBuilder builder = new ProcessBuilder(commandLine(args));
         builder.directory(cwd.toFile());
+        // Pin git's message locale for the child process only: callers classify failures by
+        // stderr content (e.g. the harvest fetch's non-fast-forward refusal, FR5 of
+        // add-sandbox-core), and a localized git would defeat that parsing.
+        builder.environment().put("LC_ALL", "C");
 
         Process process;
         try {

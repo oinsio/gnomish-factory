@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
@@ -32,26 +33,35 @@ import java.util.List;
  * and no mutable state, so one instance drives concurrent external checks safely — all
  * loop state is local to {@link #poll} (NFR-R1).
  *
+ * <p>A decided {@link PollStatus.Pass} maps through with its platform run URL intact,
+ * so the recorded check result carries the link a green external check is audited by
+ * (NFR-O2 of add-sandbox-core).
+ *
  * <p>Implements FR3, NFR-R3 of add-stage-engine; FR9 of
- * add-external-check-github-actions.
+ * add-external-check-github-actions; NFR-O2 of add-sandbox-core.
  */
 final class ExternalPolling {
 
     private final ExternalCheckClient externalClient;
+    private final AttemptDelivery attemptDelivery;
     private final Clock clock;
     private final Sleeper sleeper;
 
     /**
      * Wires the poll loop's collaborators: the {@link ExternalCheckClient} polled once
-     * per iteration, the injected {@link Clock} the deadline is measured against, and
-     * the {@link Sleeper} waited between polls (design D8). All immutable (NFR-R1).
+     * per iteration, the {@link AttemptDelivery} precondition confirmed before the loop
+     * starts (FR21 of add-sandbox-core), the injected {@link Clock} the deadline is
+     * measured against, and the {@link Sleeper} waited between polls (design D8). All
+     * immutable (NFR-R1).
      *
      * @param externalClient the port polled once per iteration; never null
+     * @param attemptDelivery the push-precondition seam confirmed before the loop; never null
      * @param clock the injected time source timing the poll deadline; never null
      * @param sleeper the injected sleep seam waited between polls; never null
      */
-    ExternalPolling(ExternalCheckClient externalClient, Clock clock, Sleeper sleeper) {
+    ExternalPolling(ExternalCheckClient externalClient, AttemptDelivery attemptDelivery, Clock clock, Sleeper sleeper) {
         this.externalClient = externalClient;
+        this.attemptDelivery = attemptDelivery;
         this.clock = clock;
         this.sleeper = sleeper;
     }
@@ -75,11 +85,18 @@ final class ExternalPolling {
      * @return the verdict the poll sequence collapses to
      */
     Verdict poll(VerifyCheck.External check, Workspace workspace) {
+        // FR21 of add-sandbox-core: external checks are triggered by the task-branch push, so
+        // delivery of the attempt commit is a verified precondition of the loop — an
+        // undeliverable commit resolves as CannotVerify (no attempt burned) instead of being
+        // left to expire as a poll-timeout quality failure.
+        if (attemptDelivery.ensureDelivered(workspace) instanceof AttemptDelivery.Outcome.Undeliverable undeliverable) {
+            return new Verdict.CannotVerify(undeliverable.reason(), undeliverable.details());
+        }
         Instant deadline = clock.now().plus(check.timeout());
         while (true) {
             switch (externalClient.poll(check, workspace)) {
-                case PollStatus.Pass ignored -> {
-                    return new Verdict.Pass();
+                case PollStatus.Pass pass -> {
+                    return new Verdict.Pass(pass.runUrl());
                 }
                 case PollStatus.Fail f -> {
                     return new Verdict.Fail(f.findings());

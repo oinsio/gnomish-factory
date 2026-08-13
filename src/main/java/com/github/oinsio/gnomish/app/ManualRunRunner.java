@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.BindingProperties;
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.SandboxProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
@@ -9,15 +11,16 @@ import com.github.oinsio.gnomish.adapter.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.engine.SystemClock;
 import com.github.oinsio.gnomish.adapter.engine.ThreadSleeper;
+import com.github.oinsio.gnomish.adapter.environment.ContainerEnvironments;
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -44,7 +47,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>{@code --resume} (FR8) delegates to {@link GitResumeRunner#run}; otherwise {@link
  * RunArguments#mode()} gates the drive (design D8): {@code IN_PLACE} prints {@link #IN_PLACE_REMINDER}
- * then runs {@link #driveInPlace}, {@code GIT} delegates to {@link GitModeRunner}.
+ * then runs the outcome loop in-process, {@code GIT} delegates to {@link GitModeRunner}. The drive
+ * itself is delegated to {@link ManualRunDrive} for file size.
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3, D9, D10 of add-manual-run; FR5-FR8, FR13,
  * FR14, UX1-UX4, design D8, D9 of add-git-workflow.
@@ -66,21 +70,41 @@ public final class ManualRunRunner implements ApplicationRunner {
             "resume",
             "discard-work");
 
-    /** The MDC key this runner sets once {@code taskId} is known (design D9, task 8.2). */
-    private static final String TASK_ID_KEY = "taskId";
-    /** Printed at the start of an in-place run, before the pipeline loads (FR7, UX4). */
-    private static final String IN_PLACE_REMINDER =
+    /**
+     * The MDC key this runner sets once {@code taskId} is known (design D9, task 8.2).
+     * Package-private: {@link ManualRunDrive} sets it too, once the ad-hoc task is synthesized.
+     */
+    static final String TASK_ID_KEY = "taskId";
+    /**
+     * Printed at the start of an in-place run, before the pipeline loads (FR7, UX4).
+     * Package-private: printed from {@link ManualRunDrive}, extracted for file size.
+     */
+    static final String IN_PLACE_REMINDER =
             "in-place mode: no git, no resume — the task's progress lives only in this process;"
                     + " killing it loses all work.";
 
-    private final RunArgumentsParser argumentsParser;
-    private final PipelineStartup pipelineStartup;
-    private final AdHocTaskSynthesizer taskSynthesizer;
-    private final ManualRunAssembly assembly;
-    private final InMemoryAttemptPersistence inPlacePersistence;
-    private final GitModeRunner gitModeRunner;
-    private final GitResumeRunner gitResumeRunner;
+    // Package-private, not private: ManualRunDrive (extracted for file size) reads these directly
+    // from the passed-in instance, mirroring ManualRunAssembly/RunAssembler's own house style.
+    final RunArgumentsParser argumentsParser;
+    final PipelineStartup pipelineStartup;
+    final AdHocTaskSynthesizer taskSynthesizer;
+    final ManualRunAssembly assembly;
+    final InMemoryAttemptPersistence inPlacePersistence;
+    final GitModeRunner gitModeRunner;
+    final GitResumeRunner gitResumeRunner;
+    final ContainerGitModeRunner containerGitModeRunner;
+    final ContainerResumeRunner containerResumeRunner;
+    final BindingProperties bindingProperties;
+    final SandboxProperties sandboxProperties;
     private final SubcommandDispatch subcommandDispatch;
+
+    /**
+     * The container-prerequisite probe {@link SandboxModeSelector#plan} consults (D13 of
+     * add-sandbox-core). Package-private test seam, mirroring {@code ManualRunAssembly}'s own
+     * package-private testing seam: production keeps the real Docker probe; daemon-free specs
+     * assign a scripted boolean so the container dispatch is exercised without a daemon.
+     */
+    BooleanSupplier dockerProbe = ContainerEnvironments::dockerAvailable;
 
     ManualRunRunner(
             RunArgumentsParser argumentsParser,
@@ -93,6 +117,8 @@ public final class ManualRunRunner implements ApplicationRunner {
             SystemClock systemClock,
             ThreadSleeper threadSleeper,
             FactoryProperties factoryProperties,
+            SandboxProperties sandboxProperties,
+            BindingProperties bindingProperties,
             Path worktreesRoot,
             Path homeDir,
             StatusCommand statusCommand,
@@ -113,9 +139,15 @@ public final class ManualRunRunner implements ApplicationRunner {
                 shellCommandCheckRunner,
                 systemClock,
                 threadSleeper,
-                factoryProperties);
+                factoryProperties,
+                sandboxProperties);
         this.gitModeRunner = new GitModeRunner(assembly, worktreesRoot);
         this.gitResumeRunner = new GitResumeRunner(assembly, worktreesRoot, TASK_ID_KEY);
+        this.containerGitModeRunner = new ContainerGitModeRunner(assembly, sandboxProperties, factoryProperties);
+        this.containerResumeRunner =
+                new ContainerResumeRunner(assembly, sandboxProperties, factoryProperties, TASK_ID_KEY);
+        this.bindingProperties = bindingProperties;
+        this.sandboxProperties = sandboxProperties;
         this.subcommandDispatch = SubcommandDispatchFactory.of(
                 assembly,
                 worktreesRoot,
@@ -143,62 +175,11 @@ public final class ManualRunRunner implements ApplicationRunner {
                                 || RUN_FLAGS.stream().noneMatch(args::containsOption)) {
                             return;
                         }
-                        drive(args);
+                        ManualRunDrive.drive(this, args);
                     },
                     log);
         } finally {
             MDC.remove(TASK_ID_KEY);
         }
-    }
-
-    private void drive(ApplicationArguments args) throws IOException {
-        RunArguments runArguments = argumentsParser.parse(args);
-        if (runArguments.mode() == RunArguments.Mode.IN_PLACE) {
-            System.out.println(IN_PLACE_REMINDER);
-        }
-
-        PipelineLoadOutcome loadOutcome = pipelineStartup.load(runArguments);
-        if (loadOutcome instanceof PipelineLoadOutcome.Failed(List<String> renderedErrors)) {
-            throw new PipelineLoadFailedException(renderedErrors);
-        }
-        var loaded = (PipelineLoadOutcome.Loaded) loadOutcome;
-        PipelineDefinition definition = loaded.definition();
-        String resume = runArguments.resume();
-        if (resume != null) {
-            gitResumeRunner.run(
-                    runArguments.dir(), resume, definition, runArguments.interactiveMode(), runArguments.discardWork());
-            return;
-        }
-
-        AdHocTaskSynthesizer.SynthesizedTask synthesized = taskSynthesizer.synthesize(runArguments, definition);
-        MDC.put(TASK_ID_KEY, synthesized.context().taskId());
-
-        switch (runArguments.mode()) {
-            case IN_PLACE -> driveInPlace(definition, synthesized, runArguments, loaded);
-            case GIT ->
-                gitModeRunner.run(
-                        runArguments.dir(),
-                        runArguments.base(),
-                        definition,
-                        synthesized.context(),
-                        synthesized.initialState(),
-                        runArguments.interactiveMode());
-        }
-    }
-
-    /** The preserved add-manual-run flow (FR7, UX4, design D8): runs the outcome loop in-process. */
-    private void driveInPlace(
-            PipelineDefinition definition,
-            AdHocTaskSynthesizer.SynthesizedTask synthesized,
-            RunArguments runArguments,
-            PipelineLoadOutcome.Loaded loaded) {
-        Run run = assembly.assemble(
-                definition,
-                synthesized.context(),
-                synthesized.initialState(),
-                runArguments.interactiveMode(),
-                inPlacePersistence,
-                List.of());
-        run.loop().run(definition, synthesized.context(), synthesized.initialState(), loaded.workspace(), run.ports());
     }
 }

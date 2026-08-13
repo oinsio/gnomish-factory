@@ -44,12 +44,12 @@ class ClaimGuardSpec extends Specification {
         !ClaimGuard.stillOurs(tracker, REF, INSTANCE)
 
         where:
-        label                       | state
-        'Working by another'        | new TrackerTaskState.Working('other-instance-xyz')
-        'Ready'                     | new TrackerTaskState.Ready()
-        'AwaitingHuman'             | new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
-        'Finished'                  | new TrackerTaskState.Finished()
-        'Gone'                      | new TrackerTaskState.Gone()
+        label | state
+        'Working by another' | new TrackerTaskState.Working('other-instance-xyz')
+        'Ready' | new TrackerTaskState.Ready()
+        'AwaitingHuman' | new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
+        'Finished' | new TrackerTaskState.Finished()
+        'Gone' | new TrackerTaskState.Gone()
     }
 
     // NFR-P1: the check is exactly one fetchTask read (the adapter's ETag cache makes it a free 304).

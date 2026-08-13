@@ -88,7 +88,9 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
     // occupancy bookkeeping — assign/release must still complete normally.
     def "a throwing dirty notifier does not propagate out of assign or release"() {
         given:
-        DirtyNotifier notifier = { -> throw new RuntimeException('notifier boom') }
+        DirtyNotifier notifier = {
+            -> throw new RuntimeException('notifier boom')
+        }
         def ledger = new SlotLedger(1, new com.github.oinsio.gnomish.adapter.engine.SystemClock(), notifier)
 
         when:

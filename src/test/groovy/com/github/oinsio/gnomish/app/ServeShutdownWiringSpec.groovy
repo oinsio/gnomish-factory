@@ -126,7 +126,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // never-started StandingReaper is a harmless collaborator here.
     private static ServeShutdown newShutdown(RecordingKiller killer) {
         def inertReaper = new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), { [] } as Supplier, new SystemClock())
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), {
+                    []
+                } as Supplier, new SystemClock())
         new ServeShutdown(new SlotLedger(1), new ClaimLossFlag(), Duration.ofMillis(10), killer, inertReaper)
     }
 
@@ -158,7 +160,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def clock = Clock.systemUTC()
         def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         def lifecycleTracker
-        def notifier = { -> recordedStates << lifecycleTracker.view().state() } as DirtyNotifier
+        def notifier = {
+            -> recordedStates << lifecycleTracker.view().state()
+        } as DirtyNotifier
         lifecycleTracker = new LifecycleStateTracker(clock.instant(), notifier)
         def snapshotWriter = new SnapshotWriter(
                 tempDir.resolve('snapshot-recording.json'),
@@ -225,7 +229,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def automaton = newAutomaton(slotRunner)
         def shutdown = newShutdown(new RecordingKiller())
         Thread capturedHook = null
-        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook ->
+            capturedHook = hook
+        }
 
         when:
         ServeShutdownWiring.runDrain(slotRunner, automaton, shutdown, newObservability(), registrar)
@@ -328,7 +334,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def automaton = newAutomaton(slotRunner)
         def shutdown = newShutdown(new RecordingKiller())
         def observability = newObservability()
-        ServeShutdownWiring.ShutdownHookRegistrar immediateRegistrar = { Thread hook -> hook.run() }
+        ServeShutdownWiring.ShutdownHookRegistrar immediateRegistrar = { Thread hook ->
+            hook.run()
+        }
         tracker.listReady(_) >> []
         tracker.listOpen() >> []
 
@@ -353,7 +361,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def shutdown = newShutdown(new RecordingKiller())
         def hookRef = new AtomicReference<Thread>()
         def observability = newObservabilityFiringHookOnStopping(hookRef)
-        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> hookRef.set(hook) }
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook ->
+            hookRef.set(hook)
+        }
         tracker.listReady(_) >> []
         tracker.listOpen() >> []
 
@@ -374,7 +384,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def killer = new RecordingKiller()
         def shutdown = newShutdown(killer)
         Thread capturedHook = null
-        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook ->
+            capturedHook = hook
+        }
         tracker.listReady(_) >> []
         tracker.listOpen() >> []
 
@@ -394,7 +406,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def automaton = newAutomaton(slotRunner)
         def shutdown = newShutdown(new RecordingKiller())
         Thread capturedHook = null
-        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook ->
+            capturedHook = hook
+        }
         FeedAutomatonStarter starter = { FeedAutomaton a -> }
 
         when:
@@ -413,7 +427,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def killer = new RecordingKiller()
         def shutdown = newShutdown(killer)
         Thread capturedHook = null
-        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook ->
+            capturedHook = hook
+        }
         FeedAutomatonStarter starter = { FeedAutomaton a -> Thread.sleep(50) }
 
         when:
@@ -435,7 +451,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def recordedStates = []
         def observability = newObservability(recordedStates)
         Thread capturedHook = null
-        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook ->
+            capturedHook = hook
+        }
         FeedAutomatonStarter starter = { FeedAutomaton a -> Thread.sleep(50) }
 
         when:
@@ -495,7 +513,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def automaton = newAutomaton(slotRunner)
         def shutdown = newShutdown(new RecordingKiller())
         Thread capturedHook = null
-        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook -> capturedHook = hook }
+        ServeShutdownWiring.ShutdownHookRegistrar registrar = { Thread hook ->
+            capturedHook = hook
+        }
         def starterRunning = new CountDownLatch(1)
         def blockForever = new CountDownLatch(1)
         AtomicReference<Thread> feedThreadRef = new AtomicReference<>()
@@ -506,7 +526,9 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         }
 
         when: 'runForever is driven on its own thread, since it blocks joining the feed thread'
-        def runnerThread = new Thread({ ServeShutdownWiring.runForever(automaton, shutdown, starter, newObservability(), registrar) })
+        def runnerThread = new Thread({
+            ServeShutdownWiring.runForever(automaton, shutdown, starter, newObservability(), registrar)
+        })
         runnerThread.start()
 
         and: 'wait until the feed thread is actually blocked inside the starter'

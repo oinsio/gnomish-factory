@@ -118,7 +118,9 @@ class AdvancementSpec extends Specification {
         executor.requests.size() == 2
 
         and: 'both stages ran — each check runner saw its own stage check'
-        builtinRunner.calls.collect { it.name() } == ['build_check', 'test_check']
+        builtinRunner.calls.collect {
+            it.name()
+        } == ['build_check', 'test_check']
 
         and: 'the second stage started fresh — its executor request is attempt 0 (history reset, FR14)'
         executor.requests[1].stage().name() == 'test'

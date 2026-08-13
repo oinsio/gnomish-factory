@@ -173,12 +173,16 @@ class ReferenceRunSpec extends Specification {
         outcome2.finalState().position() instanceof Position.PipelineEnd
 
         and: 'the human decision reached the design executor request verbatim (decision-carrying resume)'
-        def designRequests = exec2.requests.findAll { it.stage().name() == 'design' }
+        def designRequests = exec2.requests.findAll {
+            it.stage().name() == 'design'
+        }
         designRequests.size() == 1
         designRequests[0].context().decisions() == [decision]
 
         and: 'the build stage retried: attempt 0 then attempt 1, the retry carrying the command failure as feedback'
-        def buildRequests = exec2.requests.findAll { it.stage().name() == 'build' }
+        def buildRequests = exec2.requests.findAll {
+            it.stage().name() == 'build'
+        }
         buildRequests.size() == 2
         buildRequests[0].attempt() == 0
         buildRequests[1].attempt() == 1
@@ -186,10 +190,10 @@ class ReferenceRunSpec extends Specification {
         (buildRequests[1].feedback()[0].verdict() as Verdict.Fail).findings()[0].message() == 'tests red'
 
         and: 'all four check types were exercised'
-        judge2.voteCount == 2                       // design + review
-        command2.calls.size() == 2                  // build attempt 0 (fail) + attempt 1 (pass)
-        builtin2.calls.size() == 1                  // build attempt 1 only (attempt 0 stopped at the failing command)
-        external2.pollCount == 2                     // ci: Running then Pass
+        judge2.voteCount == 2 // design + review
+        command2.calls.size() == 2 // build attempt 0 (fail) + attempt 1 (pass)
+        builtin2.calls.size() == 1 // build attempt 1 only (attempt 0 stopped at the failing command)
+        external2.pollCount == 2 // ci: Running then Pass
 
         and: 'the external poll loop slept the manifest interval once between its two polls'
         sleeper2.slept == [SECOND]
@@ -203,7 +207,9 @@ class ReferenceRunSpec extends Specification {
         //     VirtualClock starting at EPOCH and only the ci poll loop advancing it, every round begins
         //     at or after EPOCH and no round is left without a begin instant.
         persistence2.entries.every { entry ->
-            entry.state.attempts().every { it.startedAt() != null && !it.startedAt().isBefore(Instant.EPOCH) }
+            entry.state.attempts().every {
+                it.startedAt() != null && !it.startedAt().isBefore(Instant.EPOCH)
+            }
         }
     }
 }

@@ -23,15 +23,7 @@ import java.nio.file.Path;
  *
  * <p>Implements FR10 of add-git-workflow.
  */
-public final class WorktreeSalvage {
-
-    private final GitProcessRunner runner;
-    private final Path worktreeRoot;
-
-    public WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot) {
-        this.runner = runner;
-        this.worktreeRoot = worktreeRoot;
-    }
+public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot) implements TaskSalvage {
 
     /**
      * True iff the worktree has any uncommitted change (staged, unstaged, or untracked) relative
@@ -48,6 +40,7 @@ public final class WorktreeSalvage {
      *
      * @throws GitSalvageFailedException if staging or committing the leftovers fails
      */
+    @Override
     public void salvage(String taskId) {
         if (!hasLeftovers()) {
             return;

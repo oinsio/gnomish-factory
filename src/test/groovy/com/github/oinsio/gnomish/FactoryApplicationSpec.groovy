@@ -59,7 +59,9 @@ class FactoryApplicationSpec extends Specification {
 
         when: 'the bundled library jars are listed'
         def bundledLibNames = new ZipFile(jarPath).withCloseable { zip ->
-            zip.entries().findAll { it.name.startsWith('BOOT-INF/lib/') && it.name.endsWith('.jar') }
+            zip.entries().findAll {
+                it.name.startsWith('BOOT-INF/lib/') && it.name.endsWith('.jar')
+            }
             .collect { it.name }
         }
 

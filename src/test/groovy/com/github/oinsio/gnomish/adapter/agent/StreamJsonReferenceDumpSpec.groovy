@@ -51,7 +51,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
         and: 'tokensByModel carries one entry per model in modelUsage, keyed by the resolved model id'
         result.usage().tokensByModel() == [
             'claude-haiku-4-5-20251001': new TokenUsage(530, 14, 0, 0),
-            'claude-opus-4-8[1m]'      : new TokenUsage(4099, 781, 7395, 93494)
+            'claude-opus-4-8[1m]' : new TokenUsage(4099, 781, 7395, 93494)
         ]
 
         and: 'the top-level trace collapses to first-seen tool order with per-tool call counts (Read×1, Write×2, Bash×1)'
@@ -69,7 +69,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
 
         then: 'tokensByModel reports both the main and the subagent model, each with its own four-field split'
         result.usage().tokensByModel() == [
-            'claude-opus-4-8[1m]'      : new TokenUsage(7981, 912, 17802, 87894),
+            'claude-opus-4-8[1m]' : new TokenUsage(7981, 912, 17802, 87894),
             'claude-haiku-4-5-20251001': new TokenUsage(552, 16, 0, 0)
         ]
 
@@ -95,7 +95,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
         and: 'tokensByModel is derived from modelUsage same as any other round'
         result.usage().tokensByModel() == [
             'claude-haiku-4-5-20251001': new TokenUsage(558, 15, 0, 0),
-            'claude-opus-4-8[1m]'      : new TokenUsage(4095, 399, 5629, 51725)
+            'claude-opus-4-8[1m]' : new TokenUsage(4095, 399, 5629, 51725)
         ]
     }
 
@@ -105,7 +105,11 @@ class StreamJsonReferenceDumpSpec extends Specification {
         def events = parser.parse(readerOf('result-without-model-usage'))
 
         expect: 'the result event in this fixture genuinely omits modelUsage (distinct from an empty map)'
-        def resultEvent = events.collect { it.event() }.find { it instanceof AgentEvent.ResultEvent } as AgentEvent.ResultEvent
+        def resultEvent = events.collect {
+            it.event()
+        }.find {
+            it instanceof AgentEvent.ResultEvent
+        } as AgentEvent.ResultEvent
         resultEvent.modelUsage() == null
         resultEvent.usage() != null
 

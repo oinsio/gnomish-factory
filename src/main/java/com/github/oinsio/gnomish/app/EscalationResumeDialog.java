@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.adapter.console.DialogConsole;
+import com.github.oinsio.gnomish.adapter.findings.TrackerFence;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Position;
@@ -76,9 +77,13 @@ final class EscalationResumeDialog {
      * Renders every {@link EscalationReport} variant as a distinct, kind-specific English text
      * block by an exhaustive switch — no {@code default} arm — so a new variant fails to compile
      * here until its render is added (FR9): the text doubles as both the resume-dialog prompt
-     * and the internal-error message for {@code PipelineMismatch}.
+     * and the internal-error message for {@code PipelineMismatch}, and — via the take exits —
+     * as the tracker park report. {@code CannotVerify.details} is the one field carrying
+     * check-produced machine output (a judge's raw message, a command's output tail), so it is
+     * published only through the findings funnel's fence: sanitized, mention-escaped, and
+     * labeled untrusted (FR15 of add-sandbox-core); the other fields are factory-authored.
      *
-     * <p>Implements FR9, D8 of add-manual-run.
+     * <p>Implements FR9, D8 of add-manual-run; FR15 of add-sandbox-core.
      *
      * @param report the escalation reason to render; never null
      * @return the rendered text block; never null, never blank
@@ -92,7 +97,7 @@ final class EscalationResumeDialog {
                         + String.join(", ", decisionNeeded.options());
             case EscalationReport.CannotVerify cannotVerify ->
                 "Could not verify check " + cannotVerify.check().label() + ": " + cannotVerify.reason() + "\n"
-                        + cannotVerify.details();
+                        + TrackerFence.fence(cannotVerify.details());
             case EscalationReport.PipelineMismatch pipelineMismatch ->
                 "Stage '" + pipelineMismatch.staleStage() + "' is no longer defined in the pipeline.";
             case EscalationReport.CannotExecute cannotExecute ->

@@ -27,13 +27,17 @@ class BoardRenderAgreementSpec extends Specification {
         expect:
         model.readyRows().every { row ->
             text.contains(row.ref().id()) && text.contains(row.title()) &&
-            json.ready().rows().any { it.id() == row.ref().id() && it.title() == row.title() }
+            json.ready().rows().any {
+                it.id() == row.ref().id() && it.title() == row.title()
+            }
         }
     }
 
     def "the in-backoff deadline appears as the same instant on both surfaces"() {
         given:
-        def backoffRow = json.ready().rows().find { it.eligibility().reason() == 'inBackoff' }
+        def backoffRow = json.ready().rows().find {
+            it.eligibility().reason() == 'inBackoff'
+        }
 
         expect:
         backoffRow.eligibility().deadline() == BoardReferenceFixture.BACKOFF_DEADLINE.toString()
@@ -42,7 +46,9 @@ class BoardRenderAgreementSpec extends Specification {
 
     def "the finished reason appears on both surfaces"() {
         given:
-        def finishedRow = json.ready().rows().find { it.eligibility().reason() == 'finished' }
+        def finishedRow = json.ready().rows().find {
+            it.eligibility().reason() == 'finished'
+        }
 
         expect:
         text.contains("${finishedRow.id()} - ${finishedRow.title()} — finished")
@@ -50,7 +56,9 @@ class BoardRenderAgreementSpec extends Specification {
 
     def "the WIP-held reason appears on both surfaces"() {
         given:
-        def wipHeldRow = json.ready().rows().find { it.eligibility().reason() == 'wipHeld' }
+        def wipHeldRow = json.ready().rows().find {
+            it.eligibility().reason() == 'wipHeld'
+        }
 
         expect:
         text.contains("${wipHeldRow.id()} - ${wipHeldRow.title()} — WIP-held")
@@ -83,13 +91,17 @@ class BoardRenderAgreementSpec extends Specification {
         text.contains('holder=factory-b-9f00, freshness unknown')
         json.working().find { it.id() == 'github:g/w#1' }.claimUpdatedAt() ==
         BoardReferenceFixture.WORKING_CLAIM_UPDATED_AT.toString()
-        json.working().find { it.id() == 'github:g/w#2' }.claimUpdatedAt() == null
+        json.working().find {
+            it.id() == 'github:g/w#2'
+        }.claimUpdatedAt() == null
     }
 
     def "AwaitingHuman park reasons appear on both surfaces"() {
         expect:
         model.awaitingHumanRows().every { row ->
-            def label = json.awaitingHuman().find { it.id() == row.ref().id() }.parkReason()
+            def label = json.awaitingHuman().find {
+                it.id() == row.ref().id()
+            }.parkReason()
             text.contains("${row.ref().id()} - ${row.title()} (reason=${label})")
         }
     }

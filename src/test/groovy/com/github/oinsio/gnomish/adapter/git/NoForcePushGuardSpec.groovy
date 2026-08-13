@@ -51,7 +51,7 @@ class NoForcePushGuardSpec extends Specification {
             int open = idx + '.run('.length() - 1
             int depth = 0
             int i = open
-            while (i < text.length()) {
+            while (i <text.length()) {
                 char c = text.charAt(i)
                 if (c == '(' as char) {
                     depth++

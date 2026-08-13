@@ -31,9 +31,9 @@ import spock.lang.TempDir
  * TrackerAdapterFactory#credentialEnvVars}, and the real {@code take} explicit-mode flow is
  * driven all the way through {@link TakeCommand} -> {@link TakeDisposition} -> {@link
  * TakeFreshClaim} -> {@link TakeEngineExecution} -> {@link ManualRunAssembly#assemble} -> the
- * wired {@link com.github.oinsio.gnomish.adapter.agent.CliStageExecutor}'s own {@link
- * com.github.oinsio.gnomish.adapter.agent.AgentProcessLauncher}, which actually spawns the fake
- * agent-cli subprocess.
+ * wired {@link com.github.oinsio.gnomish.adapter.agent.CliStageExecutor}, which runs the round
+ * through its {@code HostTaskExecutionEnvironment} — the task environment port that actually spawns
+ * the fake agent-cli subprocess and scrubs the credential from its environment.
  *
  * <p>Implements NFR-S1, D17 of add-tracker-port.
  */
@@ -55,13 +55,10 @@ class TakeCommandCredentialScrubSpec extends Specification implements BareGitRep
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths: the pipeline loader's own referenced-file existence check
-        // (ReferencedFiles, FR6 of load-pipeline-config) resolves `instructions:` relative to
-        // the .gnomish/ root, while the runtime engine (ControlFilePreflight) resolves the same
-        // string relative to the workspace root — the task worktree, i.e. the project root —
-        // so a stage instructions file that must satisfy both needs to exist at both relative
-        // locations. Not a D17/NFR-S1 concern; a pre-existing quirk this end-to-end spec is the
-        // first to exercise for real (every prior take spec short-circuits before CliStageExecutor).
+        // Written at both paths: the runtime now reads control files from the frozen pipeline law
+        // (D14 of add-sandbox-core), resolved — like the loader's referenced-file existence check
+        // (ReferencedFiles, FR6 of load-pipeline-config) — relative to the clone's .gnomish/ root;
+        // the project-root copy is retained but no longer consulted at run time.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
@@ -92,9 +89,8 @@ tracker:
      * A wrapper script standing in for the {@code claude} CLI binary: reports whether {@code
      * CREDENTIAL_VAR} (this test JVM's own {@code HOME}, already present in this JVM's
      * environment and therefore in whatever {@link ProcessBuilder} inherits by default) is
-     * still visible to the spawned process — i.e. whether {@link
-     * com.github.oinsio.gnomish.adapter.agent.AgentProcessLauncher}'s scrub removed it before
-     * this wrapper (the spawned child) ever ran — then execs the real fake-agent plain-round
+     * still visible to the spawned process — i.e. whether the task environment's scrub removed it
+     * before this wrapper (the spawned child) ever ran — then execs the real fake-agent plain-round
      * scenario. Deliberately does NOT export the var itself: that would only prove the wrapper's
      * own shell can set a variable, not that the launcher's scrub actually ran on the inherited
      * environment.
@@ -164,7 +160,9 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     def "a fresh take claim never lets the declared tracker credential reach the spawned agent process"() {
         given: 'a Ready task, claimable, with no branch yet — a genuine fresh TakeFreshClaim run'
         String claimedBy = null
-        tracker.claim(_, _) >> { TaskRef ref, String instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
+            claimedBy = instanceId; new ClaimResult.Acquired()
+        }
         tracker.fetchTask(_) >> {
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
@@ -194,7 +192,9 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     def "with no credential declared, the same variable reaches the spawned agent process"() {
         given:
         String claimedBy = null
-        tracker.claim(_, _) >> { TaskRef ref, String instanceId -> claimedBy = instanceId; new ClaimResult.Acquired() }
+        tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
+            claimedBy = instanceId; new ClaimResult.Acquired()
+        }
         tracker.fetchTask(_) >> {
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),

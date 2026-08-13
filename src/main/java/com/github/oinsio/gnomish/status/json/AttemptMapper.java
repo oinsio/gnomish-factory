@@ -46,10 +46,10 @@ final class AttemptMapper {
     static CheckDto toCheck(CheckResult check) {
         long durationMillis = check.duration().toMillis();
         return switch (check.verdict()) {
-            case Verdict.Pass ignored ->
-                new CheckDto(check.checkRef().label(), "pass", List.of(), durationMillis, null, null);
+            case Verdict.Pass pass ->
+                new CheckDto(check.checkRef().label(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
             case Verdict.Fail fail ->
-                new CheckDto(check.checkRef().label(), "fail", toFindings(fail), durationMillis, null, null);
+                new CheckDto(check.checkRef().label(), "fail", toFindings(fail), durationMillis, null, null, null);
             case Verdict.CannotVerify cannotVerify ->
                 new CheckDto(
                         check.checkRef().label(),
@@ -57,7 +57,8 @@ final class AttemptMapper {
                         List.of(),
                         durationMillis,
                         cannotVerify.reason(),
-                        cannotVerify.details());
+                        cannotVerify.details(),
+                        null);
         };
     }
 

@@ -134,7 +134,9 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "the revocation check runs only after the delegate persist completes"() {
         given: 'the delegate throws — the round itself failed to persist durably'
-        delegate.persist(_ as String, _ as TaskState, _ as ToolTrace) >> { throw new RuntimeException('disk full') }
+        delegate.persist(_ as String, _ as TaskState, _ as ToolTrace) >> {
+            throw new RuntimeException('disk full')
+        }
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)

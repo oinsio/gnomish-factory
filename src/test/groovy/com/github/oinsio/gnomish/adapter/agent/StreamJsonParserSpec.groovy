@@ -51,7 +51,9 @@ class StreamJsonParserSpec extends Specification {
         events.isEmpty()
 
         and: 'the skip reason names the missing subtype=init or model'
-        logged.any { it.formattedMessage.contains('system line without subtype=init or model') }
+        logged.any {
+            it.formattedMessage.contains('system line without subtype=init or model')
+        }
     }
 
     // FR4, D3: a system/init line missing the model field is skipped, not misread as an InitEvent
@@ -139,7 +141,9 @@ class StreamJsonParserSpec extends Specification {
         events.isEmpty()
 
         and: 'the skip reason names the missing result field'
-        logged.any { it.formattedMessage.contains('result line without a result field') }
+        logged.any {
+            it.formattedMessage.contains('result line without a result field')
+        }
     }
 
     // FR4, D3: modelUsage absent is preserved as null, distinct from an empty map
@@ -214,7 +218,9 @@ class StreamJsonParserSpec extends Specification {
 
         when: 'the lines are parsed'
         def events = null
-        def logged = captureAll { events = parser.parse(readerOf(before, unknown, after)) }
+        def logged = captureAll {
+            events = parser.parse(readerOf(before, unknown, after))
+        }
 
         then: 'only the two recognized events are produced'
         events.size() == 2
@@ -295,13 +301,17 @@ class StreamJsonParserSpec extends Specification {
 
         when: 'the lines are parsed'
         List<TimestampedEvent> parsed = null
-        def logged = captureAll { parsed = parser.parse(readerOf(before, noType, after)) }
+        def logged = captureAll {
+            parsed = parser.parse(readerOf(before, noType, after))
+        }
 
         then: 'only the two recognized events are produced'
         parsed.size() == 2
 
         and: 'the skip reason names the missing type/session_id'
-        logged.any { it.formattedMessage.contains('missing type or session_id') }
+        logged.any {
+            it.formattedMessage.contains('missing type or session_id')
+        }
     }
 
     // FR4: a line missing "session_id" is silently skipped, same as a missing type
@@ -372,7 +382,9 @@ class StreamJsonParserSpec extends Specification {
             appender.stop()
             logbackLogger.level = previousLevel
         }
-        return appender.list.findAll { it.formattedMessage.contains('raw agent event') }
+        return appender.list.findAll {
+            it.formattedMessage.contains('raw agent event')
+        }
     }
 
     private static BufferedReader readerOf(String... lines) {

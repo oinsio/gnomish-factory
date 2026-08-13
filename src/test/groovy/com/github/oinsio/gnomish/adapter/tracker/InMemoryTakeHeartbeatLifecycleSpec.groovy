@@ -45,6 +45,8 @@ class InMemoryTakeHeartbeatLifecycleSpec extends TakeHeartbeatLifecycleSpecBase 
     @Override
     int heartbeatCount(Tracker tracker, TaskRef ref) {
         def harness = new InMemoryTrackerHarness(tracker as InMemoryTracker)
-        harness.thread(ref).count { it.kind() == CorrespondenceEntry.Kind.HEARTBEAT }
+        harness.thread(ref).count {
+            it.kind() == CorrespondenceEntry.Kind.HEARTBEAT
+        }
     }
 }

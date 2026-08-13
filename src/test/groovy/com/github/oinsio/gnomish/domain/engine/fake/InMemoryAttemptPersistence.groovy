@@ -33,7 +33,7 @@ class InMemoryAttemptPersistence implements AttemptPersistence {
     @Override
     void persist(String taskId, TaskState state, ToolTrace trace) {
         entries << new Entry(taskId, state, trace)
-        if (failOnCall > 0 && entries.size() == failOnCall) {
+        if (failOnCall> 0 && entries.size() == failOnCall) {
             throw new RuntimeException('persist failed on call ' + failOnCall + ' for task ' + taskId)
         }
     }

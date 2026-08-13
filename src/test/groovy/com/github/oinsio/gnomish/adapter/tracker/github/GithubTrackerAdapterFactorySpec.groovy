@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -57,7 +58,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     private Map<String, Object> subsection() {
         [
             'api-url': wireMock.baseUrl(),
-            'repo'   : "$OWNER/$REPO".toString(),
+            'repo' : "$OWNER/$REPO".toString(),
         ]
     }
 
@@ -71,12 +72,10 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     }
 
     def "missing GNOMISH_GITHUB_TOKEN refuses clearly without touching the network"() {
-        given:
-        def factory = new GithubTrackerAdapterFactory()
-        def previousToken = System.getenv(GithubTrackerAdapterFactory.TOKEN_ENV_VAR)
-
-        expect: 'this test only runs meaningfully when the real environment has no token set'
-        previousToken == null || previousToken.isBlank()
+        given: 'a SecretsProvider that resolves no token (fail-closed) — FR18, NFR-S1 of add-sandbox-core'
+        def factory = new GithubTrackerAdapterFactory({ name ->
+            Optional.empty()
+        } as SecretsProvider)
 
         when:
         factory.create(configFor(subsection()), INSTANCE_ID)
@@ -99,11 +98,11 @@ class GithubTrackerAdapterFactorySpec extends Specification {
                         ]
                         ''')))
         wireMock.stubFor(get(urlEqualTo(
-                "/repos/$OWNER/$REPO/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100"))
+                        "/repos/$OWNER/$REPO/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100"))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
         wireMock.stubFor(get(urlEqualTo("/repos/$OWNER/$REPO/issues/42"))
                 .willReturn(aResponse().withStatus(200).withBody(
-                '{"number":42,"title":"t","body":"b","state":"open","labels":[],"pull_request":null}')))
+                        '{"number":42,"title":"t","body":"b","state":"open","labels":[],"pull_request":null}')))
         wireMock.stubFor(get(urlEqualTo("/repos/$OWNER/$REPO/issues/42/comments?per_page=100"))
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
 
@@ -136,21 +135,21 @@ class GithubTrackerAdapterFactorySpec extends Specification {
 
         then:
         wireMock.verify(1, postRequestedFor(
-                urlEqualTo("/repos/$OWNER/$REPO/labels"))
+                        urlEqualTo("/repos/$OWNER/$REPO/labels"))
                 .withRequestBody(equalToJson(
-                '{"name":"gnomish:ready","color":"2ea44f","description":"Gnomish factory: ready to be claimed"}')))
+                        '{"name":"gnomish:ready","color":"2ea44f","description":"Gnomish factory: ready to be claimed"}')))
         wireMock.verify(1, postRequestedFor(
-                urlEqualTo("/repos/$OWNER/$REPO/labels"))
+                        urlEqualTo("/repos/$OWNER/$REPO/labels"))
                 .withRequestBody(equalToJson(
-                '{"name":"gnomish:working","color":"1f6feb","description":"Gnomish factory: currently being worked"}')))
+                        '{"name":"gnomish:working","color":"1f6feb","description":"Gnomish factory: currently being worked"}')))
         wireMock.verify(1, postRequestedFor(
-                urlEqualTo("/repos/$OWNER/$REPO/labels"))
+                        urlEqualTo("/repos/$OWNER/$REPO/labels"))
                 .withRequestBody(equalToJson(
-                '{"name":"gnomish:needs-human","color":"d73a4a","description":"Gnomish factory: waiting on a human decision"}')))
+                        '{"name":"gnomish:needs-human","color":"d73a4a","description":"Gnomish factory: waiting on a human decision"}')))
         wireMock.verify(1, postRequestedFor(
-                urlEqualTo("/repos/$OWNER/$REPO/labels"))
+                        urlEqualTo("/repos/$OWNER/$REPO/labels"))
                 .withRequestBody(equalToJson(
-                '{"name":"gnomish:delivered","color":"8250df","description":"Gnomish factory: delivered for review"}')))
+                        '{"name":"gnomish:delivered","color":"8250df","description":"Gnomish factory: delivered for review"}')))
     }
 
     // FR9, design D8 of add-tracker-port: refuseForeignRef threads the configured owner/repo into
@@ -207,13 +206,13 @@ class GithubTrackerAdapterFactorySpec extends Specification {
 
         then:
         wireMock.verify(1, postRequestedFor(
-                urlEqualTo("/repos/$OWNER/$REPO/labels"))
+                        urlEqualTo("/repos/$OWNER/$REPO/labels"))
                 .withRequestBody(equalToJson(
-                '{"name":"custom:ready","color":"abcdef","description":"Gnomish factory: ready to be claimed"}')))
+                        '{"name":"custom:ready","color":"abcdef","description":"Gnomish factory: ready to be claimed"}')))
         wireMock.verify(1, postRequestedFor(
-                urlEqualTo("/repos/$OWNER/$REPO/labels"))
+                        urlEqualTo("/repos/$OWNER/$REPO/labels"))
                 .withRequestBody(equalToJson(
-                '{"name":"gnomish:working","color":"1f6feb","description":"Gnomish factory: currently being worked"}')))
+                        '{"name":"gnomish:working","color":"1f6feb","description":"Gnomish factory: currently being worked"}')))
     }
 
     def "expandRef delegates the parsed issue number to GithubRefExpander"() {

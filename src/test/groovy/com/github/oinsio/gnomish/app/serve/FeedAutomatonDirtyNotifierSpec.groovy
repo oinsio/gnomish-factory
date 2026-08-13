@@ -46,7 +46,9 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
                 ]
             },
             listOpen : { -> [] },
-            claim    : { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
         def automaton = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
@@ -61,7 +63,11 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
     def "a same-state Idle-empty poll does not wake the injected dirty notifier"() {
         given:
         def notifier = Mock(DirtyNotifier)
-        Tracker tracker = [listReady: { int limit -> [] }, listOpen: { -> [] }] as Tracker
+        Tracker tracker = [listReady: { int limit ->
+                []
+            }, listOpen: {
+                -> []
+            }] as Tracker
         def automaton = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1), notifier)
 
@@ -74,7 +80,11 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
 
     def "the eleven-arg constructor defaults to a no-op notifier"() {
         given:
-        Tracker tracker = [listReady: { int limit -> [] }, listOpen: { -> [] }] as Tracker
+        Tracker tracker = [listReady: { int limit ->
+                []
+            }, listOpen: {
+                -> []
+            }] as Tracker
         def automaton = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,
                 BASE, CAP, IDLE, WIP_LIMIT, new Random(1))
 

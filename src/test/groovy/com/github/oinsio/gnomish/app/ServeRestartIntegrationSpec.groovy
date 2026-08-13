@@ -15,7 +15,6 @@ import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
 import spock.lang.TempDir
-import spock.util.concurrent.PollingConditions
 
 /**
  * fix-reaper-idle-liveness FR12 of add-factory-serve ("Restart against an empty queue still
@@ -46,6 +45,11 @@ class ServeRestartIntegrationSpec extends Specification implements AppAssemblyFi
     // heartbeat-interval 100ms x the default TTL multiplier (3) = 300ms TTL: long enough that the
     // "not yet adopted" check below is never racy, short enough to keep this spec fast.
     private static final int PRE_TTL_SLEEP_MILLIS = 120
+
+    // The re-claim window is polled, not awaited once: generous enough for a loaded CI runner,
+    // fine-grained enough to catch a claim before the slot behind it aborts and releases it.
+    private static final int RECLAIM_TIMEOUT_SECONDS = 15
+    private static final int RECLAIM_POLL_MILLIS = 10
 
     @TempDir
     Path tempDir
@@ -101,8 +105,9 @@ tracker:
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],
-                TrackerValidatorStub.acceptingGithub(),
-                { FeedAutomaton automaton -> automaton.run() } as FeedAutomatonStarter)
+                TrackerValidatorStub.acceptingGithub(), { FeedAutomaton automaton ->
+                    automaton.run()
+                } as FeedAutomatonStarter)
         def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-restart-integration-under-test').start {
             try {
@@ -121,14 +126,24 @@ tracker:
         failure.get() == null
 
         when: 'the TTL elapses and the standing reaper, then the ordinary feed loop, run on their own'
-        new PollingConditions(timeout: 5, initialDelay: 0, delay: 0.05).eventually {
+        // Each re-claim is latched as it is observed rather than required to hold simultaneously:
+        // the slot that follows a claim aborts within milliseconds (this harness's project dir is
+        // no git clone), releasing the claim again, so demanding both tasks be Working under the
+        // new instance in one and the same poll is a race the spec never meant to assert.
+        boolean reclaimedA = false
+        boolean reclaimedB = false
+        long deadline = System.nanoTime() + Duration.ofSeconds(RECLAIM_TIMEOUT_SECONDS).toNanos()
+        while (!(reclaimedA && reclaimedB) && System.nanoTime() <deadline) {
             def stateA = tracker.fetchTask(TASK_A).state()
             def stateB = tracker.fetchTask(TASK_B).state()
-            assert stateA instanceof TrackerTaskState.Working && stateA.holder() != OLD_INSTANCE_ID
-            assert stateB instanceof TrackerTaskState.Working && stateB.holder() != OLD_INSTANCE_ID
+            reclaimedA = reclaimedA || (stateA instanceof TrackerTaskState.Working && stateA.holder() != OLD_INSTANCE_ID)
+            reclaimedB = reclaimedB || (stateB instanceof TrackerTaskState.Working && stateB.holder() != OLD_INSTANCE_ID)
+            Thread.sleep(RECLAIM_POLL_MILLIS)
         }
 
         then: 'both were reaped and re-claimed by the new instance through the ordinary queue — no manual tick, no exception leaked'
+        reclaimedA
+        reclaimedB
         failure.get() == null
 
         cleanup: 'stop the real feed thread so this spec never leaves a spinning claim loop behind'

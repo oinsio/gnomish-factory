@@ -131,10 +131,10 @@ class ReferencedFilesSpec extends Specification {
         errors == [expected]
 
         where:
-        scenario                      | built                                                                          || expected
-        'missing instructions'        | stage('plan', 'stages/plan/absent.md')                                    || missingInstructions('plan', 'stages/plan/absent.md')
-        'instructions is a directory' | stage('plan', 'stages/plan/as-dir.md')                                    || missingInstructions('plan', 'stages/plan/as-dir.md')
-        'missing judge criteria'      | stage('plan', 'stages/plan/instructions.md', [
+        scenario | built || expected
+        'missing instructions' | stage('plan', 'stages/plan/absent.md') || missingInstructions('plan', 'stages/plan/absent.md')
+        'instructions is a directory' | stage('plan', 'stages/plan/as-dir.md') || missingInstructions('plan', 'stages/plan/as-dir.md')
+        'missing judge criteria' | stage('plan', 'stages/plan/instructions.md', [
             judge('stages/plan/absent.md')
         ]) || missingCriteria('plan', 0, 'stages/plan/absent.md')
         'judge criteria is a directory' | stage('plan', 'stages/plan/instructions.md', [

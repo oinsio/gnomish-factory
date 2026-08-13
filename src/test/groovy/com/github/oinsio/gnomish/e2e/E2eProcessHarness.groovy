@@ -70,9 +70,10 @@ final class E2eProcessHarness {
      * @param extraEnv variables merged into the spawned {@code gnomish run} process's environment
      *     on top of the default inheritance — the seam the Ollama E2E layer (task 11.1) uses to
      *     forward {@code ANTHROPIC_BASE_URL}/auth-token/model env vars down to the real {@code
-     *     claude} CLI the process itself spawns (D7's env-passthrough is inheritance-based, so
-     *     this JVM's own environment already carries them; this parameter exists for specs that
-     *     need to set or override values the harness's own JVM does not have)
+     *     claude} CLI the process itself spawns: the factory's agent adapters re-set exactly these
+     *     seam names from their own (the spawned JVM's) environment as factory-set protocol
+     *     variables ({@code AgentAiSeam}, D6/FR9 of add-sandbox-core), so setting them on the
+     *     factory process is all a spec needs
      * @return the captured exit code, stdout, and stderr
      */
     E2eProcessResult run(
@@ -101,9 +102,15 @@ final class E2eProcessHarness {
             // cast, Groovy's overload resolution picks the Runnable overload here, silently
             // discarding the closure's return value and handing back a Future whose get()
             // always yields null.
-            Future<String> stdoutFuture = pumps.submit({ readAll(process.inputStream) } as Callable<String>)
-            Future<String> stderrFuture = pumps.submit({ readAll(process.errorStream) } as Callable<String>)
-            pumps.submit({ writeStdin(process, scriptedInputLines, keepStdinOpen) } as Runnable)
+            Future<String> stdoutFuture = pumps.submit({
+                readAll(process.inputStream)
+            } as Callable<String>)
+            Future<String> stderrFuture = pumps.submit({
+                readAll(process.errorStream)
+            } as Callable<String>)
+            pumps.submit({
+                writeStdin(process, scriptedInputLines, keepStdinOpen)
+            } as Runnable)
 
             boolean finished = process.waitFor(DEFAULT_TIMEOUT.toSeconds(), TimeUnit.SECONDS)
             if (!finished) {

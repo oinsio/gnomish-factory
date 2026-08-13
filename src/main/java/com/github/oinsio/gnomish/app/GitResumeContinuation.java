@@ -23,11 +23,10 @@ import java.util.List;
  * The four outcome-driven continuation paths {@link GitResumeRunner#run} switches on: {@link
  * #resumeFromRecordedPosition}, {@link #resumeEscalated}, {@link #resumePaused}, {@link
  * #reportCompleted}. Extracted from {@link GitResumeRunner} purely to keep both files within the
- * project's file-size guidance (`.claude/rules/process-invariants.md`).
- *
- * <p>The three engine-rerunning paths share {@link #runToTerminalBoundary}, mirroring {@link
- * GitModeRunner}'s terminal-boundary handling; {@code Escalated}/{@code Paused} are never
- * observed here, since the loop resolves them in-process via its own dialogs first.
+ * project's file-size guidance (`.claude/rules/process-invariants.md`). The three
+ * engine-rerunning paths share {@link #runToTerminalBoundary}, mirroring {@link GitModeRunner}'s
+ * terminal-boundary handling; {@code Escalated}/{@code Paused} are never observed here, since the
+ * loop resolves them in-process via its own dialogs first.
  *
  * <p>Implements FR5, FR8, UX2 of add-git-workflow.
  */
@@ -116,8 +115,8 @@ final class GitResumeContinuation {
     }
 
     /**
-     * Outcome {@code paused}: a checkpoint confirmation mirroring {@link
-     * RunnerOutcomeLoop#handlePaused} — "Press Enter to continue", nothing to reset, no decision
+     * Outcome {@code paused}: a checkpoint confirmation mirroring {@code
+     * RunnerOutcomeLoop.handlePaused} — "Press Enter to continue", nothing to reset, no decision
      * appended, since a manual pause is not a question. Resumes from {@code finalState} directly
      * (already advanced past the paused stage).
      *
@@ -139,8 +138,8 @@ final class GitResumeContinuation {
     }
 
     /**
-     * Outcome {@code completed}: prints the same final status summary {@link
-     * RunnerOutcomeLoop#handleCompleted} prints in-process, and returns — no engine run, no
+     * Outcome {@code completed}: prints the same final status summary {@code
+     * RunnerOutcomeLoop.handleCompleted} prints in-process, and returns — no engine run, no
      * further worktree or branch write.
      *
      * <p>Implements FR8, UX2 of add-git-workflow.
@@ -164,7 +163,8 @@ final class GitResumeContinuation {
         Path worktree = bootstrap.worktreePath();
         var persistence = new GitAttemptPersistence(runner, worktree, bootstrap.taskId());
         var workspace = new DirectoryWorkspace(worktree);
-        var assembled = assembly.assemble(definition, context, state, interactiveMode, persistence, List.of());
+        var assembled =
+                assembly.assemble(definition, context, state, interactiveMode, persistence, List.of(), cloneDir);
 
         try {
             assembled.loop().run(definition, context, state, workspace, assembled.ports());

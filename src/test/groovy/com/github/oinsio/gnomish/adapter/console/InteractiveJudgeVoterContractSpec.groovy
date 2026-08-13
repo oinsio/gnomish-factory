@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.adapter.console
 
 import com.github.oinsio.gnomish.adapter.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.port.contract.JudgeVoterContract
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.TempDir
 
@@ -29,8 +29,9 @@ class InteractiveJudgeVoterContractSpec extends JudgeVoterContract {
     @TempDir
     Path projectRoot
 
-    private VerifyCheck.Judge sampleCheck() {
-        Files.writeString(projectRoot.resolve('criteria.md'), 'Acceptance: the widget spins.')
+    private static final PipelineLaw LAW = PipelineLaw.ofContent(['criteria.md': 'Acceptance: the widget spins.'])
+
+    private static VerifyCheck.Judge sampleCheck() {
         new VerifyCheck.Judge('criteria.md', 'gpt-5', [:], 1)
     }
 
@@ -55,7 +56,7 @@ class InteractiveJudgeVoterContractSpec extends JudgeVoterContract {
                 }
         def io = new ScriptedConsoleIO(script)
         def console = new DialogConsole(io, { json -> 'status' })
-        def voter = new InteractiveJudgeVoter(console)
+        def voter = new InteractiveJudgeVoter(console, LAW)
         def vote = voter.vote(sampleCheck(), context, sampleWorkspace())
         Optional.of(new JudgeVoterContract.VoteOutcome(vote, context))
     }

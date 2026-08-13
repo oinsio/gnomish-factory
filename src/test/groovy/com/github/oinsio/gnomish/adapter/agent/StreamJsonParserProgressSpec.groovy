@@ -50,7 +50,9 @@ class StreamJsonParserProgressSpec extends Specification {
         parser.parse(readerOf('subagent-round'))
 
         then: 'only Task produces ToolStarted, the nested Grep call does not'
-        def toolStartedEvents = recorded.findAll { it instanceof AgentProgressEvent.ToolStarted }
+        def toolStartedEvents = recorded.findAll {
+            it instanceof AgentProgressEvent.ToolStarted
+        }
         toolStartedEvents == [
             new AgentProgressEvent.ToolStarted('Task')
         ]
@@ -63,7 +65,9 @@ class StreamJsonParserProgressSpec extends Specification {
     // FR7, D10: a throwing listener does not interrupt parsing; parse() still returns every event
     def "does not let a throwing listener interrupt parsing or propagate"() {
         given: 'a listener that always throws'
-        AgentProgressListener throwing = { event -> throw new RuntimeException('boom') }
+        AgentProgressListener throwing = { event ->
+            throw new RuntimeException('boom')
+        }
         def parser = new StreamJsonParser(clock, throwing)
 
         when: 'the plain-round fixture is parsed'

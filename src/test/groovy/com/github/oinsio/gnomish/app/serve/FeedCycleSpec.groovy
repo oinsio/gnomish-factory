@@ -50,7 +50,9 @@ class FeedCycleSpec extends Specification {
         // Budgeted: a mutant that breaks claimOrAbandon outright (e.g. assign(null) -> NPE) spins
         // FeedOutageRetry's retry-forever loop; the budget fails the spec instead of hanging it.
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
-        def outageRetry = new FeedOutageRetry(sleeper, { Duration.ofSeconds(1) })
+        def outageRetry = new FeedOutageRetry(sleeper, {
+            Duration.ofSeconds(1)
+        })
         new FeedCycle(tracker, INSTANCE, ledger, runner, BASE, CAP, 2, new Random(0), new FeedStateLogger(), outageRetry)
     }
 
@@ -68,7 +70,9 @@ class FeedCycleSpec extends Specification {
         and: 'a tracker that reports every candidate as already held by another instance'
         def claimCalls = new AtomicInteger()
         Tracker tracker = [
-            claim: { TaskRef ref, String instance -> claimCalls.incrementAndGet(); new ClaimResult.Held('other-instance') },
+            claim: { TaskRef ref, String instance ->
+                claimCalls.incrementAndGet(); new ClaimResult.Held('other-instance')
+            },
         ] as Tracker
 
         when:
@@ -89,7 +93,9 @@ class FeedCycleSpec extends Specification {
         def ledger = new SlotLedger(1)
         ledger.acquire()
         Tracker tracker = [
-            claim: { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim: { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
 
         when:
@@ -116,7 +122,9 @@ class FeedCycleSpec extends Specification {
         // stub one (see ServeShutdownWiringSpec's equivalent note on final production classes).
         Tracker tracker = [
             listOpen: { -> [new Object(), new Object()] },
-            claim   : { TaskRef ref, String instance -> claimCalls.incrementAndGet(); new ClaimResult.Acquired() },
+            claim : { TaskRef ref, String instance ->
+                claimCalls.incrementAndGet(); new ClaimResult.Acquired()
+            },
         ] as Tracker
         def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false, false, 'fixture title')
 
@@ -145,7 +153,9 @@ class FeedCycleSpec extends Specification {
         and: 'a tracker that records which refs are actually offered to claim'
         def claimedRefs = new CopyOnWriteArrayList<String>()
         Tracker tracker = [
-            claim: { TaskRef ref, String instance -> claimedRefs.add(ref.id()); new ClaimResult.Acquired() },
+            claim: { TaskRef ref, String instance ->
+                claimedRefs.add(ref.id()); new ClaimResult.Acquired()
+            },
         ] as Tracker
 
         and: 'FeedCycle log capture for the WARN line'
@@ -169,7 +179,9 @@ class FeedCycleSpec extends Specification {
         claimedRefs == ['github:o/r#other']
 
         and: 'the skip is loud: a WARN naming the occupied ref'
-        appender.list.any { it.level == Level.WARN && it.formattedMessage.contains('github:o/r#zombie') }
+        appender.list.any {
+            it.level == Level.WARN && it.formattedMessage.contains('github:o/r#zombie')
+        }
     }
 
     // FR2, D6: with the occupied ref as the ONLY candidate, the walk finds nothing claimable and
@@ -183,7 +195,9 @@ class FeedCycleSpec extends Specification {
         ledger.acquire()
         def claimCalls = new AtomicInteger()
         Tracker tracker = [
-            claim: { TaskRef ref, String instance -> claimCalls.incrementAndGet(); new ClaimResult.Acquired() },
+            claim: { TaskRef ref, String instance ->
+                claimCalls.incrementAndGet(); new ClaimResult.Acquired()
+            },
         ] as Tracker
 
         when:
@@ -208,7 +222,9 @@ class FeedCycleSpec extends Specification {
         ledger.acquire()
         def claimedRefs = new CopyOnWriteArrayList<String>()
         Tracker tracker = [
-            claim: { TaskRef ref, String instance -> claimedRefs.add(ref.id()); new ClaimResult.Acquired() },
+            claim: { TaskRef ref, String instance ->
+                claimedRefs.add(ref.id()); new ClaimResult.Acquired()
+            },
         ] as Tracker
 
         when:
@@ -233,7 +249,9 @@ class FeedCycleSpec extends Specification {
         def ledger = new SlotLedger(1)
         ledger.acquire()
         Tracker tracker = [
-            claim: { TaskRef ref, String instance -> new ClaimResult.Acquired() },
+            claim: { TaskRef ref, String instance ->
+                new ClaimResult.Acquired()
+            },
         ] as Tracker
         def started = new CopyOnWriteArrayList<TaskRef>()
         def runnerStarted = new CountDownLatch(1)

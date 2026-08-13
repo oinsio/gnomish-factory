@@ -28,13 +28,33 @@ class GithubWorkflowRunVerdictSpec extends Specification {
         status.class == expectedType
 
         where:
-        conclusion    | expectedType
-        'success'     | PollStatus.Pass
-        'failure'     | PollStatus.Fail
-        'cancelled'   | PollStatus.Fail
-        'timed_out'   | PollStatus.Fail
+        conclusion | expectedType
+        'success' | PollStatus.Pass
+        'failure' | PollStatus.Fail
+        'cancelled' | PollStatus.Fail
+        'timed_out' | PollStatus.Fail
         'action_required' | PollStatus.Fail
         'some_future_conclusion_this_adapter_does_not_recognize' | PollStatus.Fail
+    }
+
+    def "a Pass carries the authoritative run's platform URL"() {
+        given: 'NFR-O2 of add-sandbox-core: a green check is auditable from the tracker'
+        def run = new GithubWorkflowRun(
+                1L, 'abc123', 'ci.yml', 1, 'completed', 'success', 'https://github.com/acme/widgets/actions/runs/1')
+
+        when:
+        def status = GithubWorkflowRunVerdict.fromMatchingRun(Optional.of(run))
+
+        then:
+        status == new PollStatus.Pass('https://github.com/acme/widgets/actions/runs/1')
+    }
+
+    def "a Pass of a run without a platform URL carries none"() {
+        when:
+        def status = GithubWorkflowRunVerdict.fromMatchingRun(Optional.of(runWithConclusion('success')))
+
+        then:
+        status == new PollStatus.Pass()
     }
 
     def "a Fail verdict carries no findings yet (task 4.1 populates them)"() {

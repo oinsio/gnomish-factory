@@ -74,7 +74,9 @@ abstract class AttemptPersistenceContract extends Specification implements PortC
     private Object persistAll(List<PersistedEntry> rounds) {
         def adapter = arrange()
         assumeProducible(adapter, 'AttemptPersistence', 'persistence')
-        rounds.each { adapter.get().persist(it.taskId(), it.state(), it.trace()) }
+        rounds.each {
+            adapter.get().persist(it.taskId(), it.state(), it.trace())
+        }
         adapter.get()
     }
 

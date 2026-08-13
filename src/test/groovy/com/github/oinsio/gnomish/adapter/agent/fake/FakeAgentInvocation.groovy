@@ -63,8 +63,12 @@ class FakeAgentInvocation {
         Process process = builder.start()
         ExecutorService pumps = Executors.newFixedThreadPool(2)
         try {
-            Future<String> stdoutFuture = pumps.submit({ readAll(process.inputStream) } as Callable<String>)
-            Future<String> stderrFuture = pumps.submit({ readAll(process.errorStream) } as Callable<String>)
+            Future<String> stdoutFuture = pumps.submit({
+                readAll(process.inputStream)
+            } as Callable<String>)
+            Future<String> stderrFuture = pumps.submit({
+                readAll(process.errorStream)
+            } as Callable<String>)
 
             boolean finished = process.waitFor(DEFAULT_TIMEOUT.toSeconds(), TimeUnit.SECONDS)
             if (!finished) {
@@ -73,7 +77,9 @@ class FakeAgentInvocation {
             }
 
             String stdout = stdoutFuture.get()
-            List<String> lines = stdout.isEmpty() ? [] : stdout.split('\n', -1).findAll { !it.isEmpty() }.toList()
+            List<String> lines = stdout.isEmpty() ? [] : stdout.split('\n', -1).findAll {
+                !it.isEmpty()
+            }.toList()
             return new FakeAgentResult(process.exitValue(), lines, stderrFuture.get())
         } finally {
             pumps.shutdownNow()

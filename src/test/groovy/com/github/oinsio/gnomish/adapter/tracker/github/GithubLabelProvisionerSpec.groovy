@@ -77,7 +77,7 @@ class GithubLabelProvisionerSpec extends Specification {
         defaultDefs().each { d ->
             wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/labels'))
             .withRequestBody(equalToJson(
-            '{"name":"' + d.name() + '","color":"' + d.color() + '","description":"' + d.description() + '"}')))
+                    '{"name":"' + d.name() + '","color":"' + d.color() + '","description":"' + d.description() + '"}')))
         }
     }
 

@@ -39,6 +39,7 @@ other channel to control a scripted double deterministically.
 | `GNOMISH_FAKE_SCENARIO`       | yes      | Name of a subdirectory under `scenarios/` to play back            |
 | `GNOMISH_DECISION_FILE`       | no       | Path the fake writes `decision.json` to, if the scenario has one  |
 | `GNOMISH_FAKE_CAPTURE_ARGV`   | no       | Path to append this invocation's `"$@"` to, one line per call (task 9.5) — unset everywhere except the spec that needs to inspect a later attempt's actual CLI argv |
+| `GNOMISH_FAKE_CAPTURE_STDIN`  | no       | Path to append this invocation's stdin (the round prompt) to, one block per call terminated by a `---` line — unset everywhere except the spec that inspects the prompt. Since add-sandbox-core (FR24, D18) the prompt is delivered on stdin, never argv, so a spec asserting prompt content reads this rather than the argv capture |
 
 Missing `GNOMISH_FAKE_SCENARIO`, or a scenario directory that does not exist,
 is a harness misconfiguration: the script exits 64 (`EX_USAGE`) with a
@@ -52,7 +53,7 @@ Each `scenarios/<name>/` directory may contain:
 |-----------------------|-------------------------------------------------------------------------|
 | `stdout.jsonl`        | printed verbatim to stdout, one stream-json event per line             |
 | `workspace-files/`    | copied recursively into the cwd the fake was launched in               |
-| `decision.json`       | copied to `$GNOMISH_DECISION_FILE` when that env var is set            |
+| `decision.json`       | copied to `$GNOMISH_DECISION_FILE` when that env var is set (parent directories created first, like the real CLI's Write — the in-branch transport names a not-yet-existing `.gnomish-task/decisions/` path) |
 | `sleep-seconds`       | the fake sleeps this many seconds before exiting — a stand-in for a hung CLI (roundTimeout-kill tests) |
 | `exitcode`            | process exit code (plain integer, no newline convention enforced); default `0` |
 | `next-scenario`       | name of the scenario to play on every invocation AFTER the first, in the same cwd (task 9.5) — see below |
@@ -86,6 +87,7 @@ for per-attempt env var overrides.
 | `premature-death`            | process exits non-zero after an orphaned `tool_use` with no matching `tool_result` and no `result` event |
 | `hangs-forever`              | process sleeps well past any test's `roundTimeout` budget before exiting, standing in for a hung CLI (task 6.5) |
 | `decision-then-plain`        | multi-attempt: attempt 1 asks the same decision as `decision-needed`, attempt 2+ (same cwd) plays `plain-round` — the agent-raised decision round-trip (task 9.5, FR3, UX3, D1) |
+| `law-tamper-then-plain`      | multi-attempt: attempt 1 rewrites its own `instructions.md` control file in the workspace (a `TAMPERED LAW` `workspace-files/` overwrite) and produces no output, so a `files_exist` check fails and burns the attempt; attempt 2+ (same cwd) plays `plain-round` — the reward-hacking stand-in proving a mid-run law edit never re-enters the frozen law (FR19, NFR-S2, D14 of add-sandbox-core) |
 
 Every scenario's `stdout.jsonl` is hand-written to resemble the real Claude
 Code CLI's `--output-format stream-json --verbose` protocol (init event,

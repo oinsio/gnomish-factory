@@ -29,7 +29,6 @@ jobs:
     # Skip pull_request runs for same-repo branches — the push run covers them.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # 30-min budget: kills a hung run well below GitHub's 6-hour default (NFR-C1)
 
     steps:
       - name: Checkout

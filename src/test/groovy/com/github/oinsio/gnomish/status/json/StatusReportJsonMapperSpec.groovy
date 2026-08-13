@@ -19,7 +19,6 @@ import com.github.oinsio.gnomish.status.Activity
 import com.github.oinsio.gnomish.status.LiveActivity
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
-import com.github.oinsio.gnomish.status.json.TokenUsageDto
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -159,7 +158,7 @@ class StatusReportJsonMapperSpec extends Specification {
 
         expect:
         AttemptMapper.toCheck(check) ==
-                new CheckDto("builtin:files_exist", "pass", [], 3L, null, null)
+                new CheckDto("builtin:files_exist", "pass", [], 3L, null, null, null)
     }
 
     def "verdict fail renders findings in full"() {
@@ -173,7 +172,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 new CheckDto("command:./gradlew test", "fail",
                 [
                     new FindingDto("command exited with 1", null, "…output tail…")
-                ], 41250L, null, null)
+                ], 41250L, null, null, null)
     }
 
     def "verdict cannotVerify surfaces reason and details, empty findings"() {
@@ -184,7 +183,7 @@ class StatusReportJsonMapperSpec extends Specification {
 
         expect:
         AttemptMapper.toCheck(check) ==
-                new CheckDto("external:ci", "cannotVerify", [], 300000L, "timeout", "poll exceeded 5m")
+                new CheckDto("external:ci", "cannotVerify", [], 300000L, "timeout", "poll exceeded 5m", null)
     }
 
     def "escalation attemptsExhausted renders limit, stage and at are null"() {

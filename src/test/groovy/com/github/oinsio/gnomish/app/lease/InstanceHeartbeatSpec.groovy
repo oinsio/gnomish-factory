@@ -217,7 +217,9 @@ class InstanceHeartbeatSpec extends Specification {
             }
         } as Sleeper
         def gone = [
-            heartbeat: { TaskRef ref, String payload -> new HeartbeatResult.ClaimGone() }
+            heartbeat: { TaskRef ref, String payload ->
+                new HeartbeatResult.ClaimGone()
+            }
         ] as Tracker
         def loopHb = new InstanceHeartbeat(
                 gone, progress, recordingSleeper, clock, INTERVAL, ClaimLostSink.IGNORE)

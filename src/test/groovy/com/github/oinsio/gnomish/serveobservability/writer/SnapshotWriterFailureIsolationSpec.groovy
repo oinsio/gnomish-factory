@@ -32,7 +32,9 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         def target = tempDir.resolve('snapshot.json')
         def staleLedger = tempDir.resolve('ledger-2020-01-01.jsonl')
         Files.writeString(staleLedger, 'stale')
-        def writer = new SnapshotWriter(target, { -> throw new NullPointerException('assembler bug') }, mapper, Duration.ofSeconds(30), clock, 1)
+        def writer = new SnapshotWriter(target, {
+            -> throw new NullPointerException('assembler bug')
+        }, mapper, Duration.ofSeconds(30), clock, 1)
 
         when:
         writer.tick()
@@ -57,7 +59,9 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         def poisoned = new com.github.oinsio.gnomish.serveobservability.Snapshot(
                 malformed.version(), malformed.writtenAt(), malformed.intervalSeconds(), null,
                 malformed.lifecycle(), malformed.feed(), malformed.slots(), malformed.vitals(), malformed.tracker())
-        def writer = new SnapshotWriter(target, { -> poisoned }, mapper, Duration.ofSeconds(30), clock, 1)
+        def writer = new SnapshotWriter(target, {
+            -> poisoned
+        }, mapper, Duration.ofSeconds(30), clock, 1)
 
         when:
         writer.tick()
@@ -76,7 +80,9 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         def blockingFile = tempDir.resolve('not-a-directory')
         Files.writeString(blockingFile, 'not a directory')
         def target = blockingFile.resolve('snapshot.json')
-        def writer = new SnapshotWriter(target, { -> SnapshotWriterSpec.fixtureSnapshot() }, mapper, Duration.ofSeconds(30), clock, 1)
+        def writer = new SnapshotWriter(target, {
+            -> SnapshotWriterSpec.fixtureSnapshot()
+        }, mapper, Duration.ofSeconds(30), clock, 1)
 
         when:
         writer.tick()
@@ -90,7 +96,9 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         given:
         def target = tempDir.resolve('snapshot.json')
         def calls = 0
-        def writer = new SnapshotWriter(target, { -> calls++; throw new RuntimeException('still broken') }, mapper, Duration.ofSeconds(30), clock, 0)
+        def writer = new SnapshotWriter(target, {
+            -> calls++; throw new RuntimeException('still broken')
+        }, mapper, Duration.ofSeconds(30), clock, 0)
 
         when:
         writer.tick()

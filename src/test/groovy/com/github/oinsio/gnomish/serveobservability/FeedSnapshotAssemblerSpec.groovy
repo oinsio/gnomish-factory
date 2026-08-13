@@ -49,7 +49,11 @@ class FeedSnapshotAssemblerSpec extends Specification {
         given:
         def clock = new VirtualClock(Instant.parse('2026-02-02T00:00:00Z'))
         def sleeper = new BudgetedVirtualSleeper(clock)
-        Tracker tracker = [listReady: { int limit -> [] }, listOpen: { -> [] }] as Tracker
+        Tracker tracker = [listReady: { int limit ->
+                []
+            }, listOpen: {
+                -> []
+            }] as Tracker
         SlotRunner runner = { TaskRef ref -> } as SlotRunner
         def automaton = new FeedAutomaton(
                 tracker, InstanceId.generate('gnome'), new SlotLedger(1), runner, sleeper, clock,

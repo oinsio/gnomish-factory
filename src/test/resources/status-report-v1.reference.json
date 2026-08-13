@@ -27,7 +27,8 @@
         "findings" : [ ],
         "durationMillis" : 3,
         "reason" : null,
-        "details" : null
+        "details" : null,
+        "runUrl" : null
       }, {
         "ref" : "command:./gradlew test",
         "verdict" : "fail",
@@ -38,7 +39,8 @@
         } ],
         "durationMillis" : 41250,
         "reason" : null,
-        "details" : null
+        "details" : null,
+        "runUrl" : null
       } ],
       "usage" : {
         "wallMillis" : 183000,

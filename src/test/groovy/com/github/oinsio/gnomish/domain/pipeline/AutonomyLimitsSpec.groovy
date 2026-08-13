@@ -20,10 +20,10 @@ class AutonomyLimitsSpec extends Specification {
 
         where:
         defaultLimit | override | resolved
-        3            | 5        | 5 // override wins over the default
-        5            | 1        | 1 // override wins even when lower
-        3            | null     | 3 // no override: the config.yaml default applies
-        1            | null     | 1 // smallest valid default passes through unchanged
+        3 | 5 | 5 // override wins over the default
+        5 | 1 | 1 // override wins even when lower
+        3 | null | 3 // no override: the config.yaml default applies
+        1 | null | 1 // smallest valid default passes through unchanged
     }
 
     // FR7/D6: range checking belongs to the pure validators (task 4.4) as a
@@ -39,8 +39,8 @@ class AutonomyLimitsSpec extends Specification {
 
         where:
         override | resolved
-        -2       | -2 // invalid override is preserved, not masked by the default
-        null     | 0 //  invalid default is preserved as well
+        -2 | -2 // invalid override is preserved, not masked by the default
+        null | 0 //  invalid default is preserved as well
     }
 
     // FR7: resolved limits are values — StageDefinitions compare by content

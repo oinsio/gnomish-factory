@@ -14,9 +14,12 @@ import java.util.Optional;
  * {@link GithubWorkflowRun}, never queries the platform itself, and never
  * consults {@code status} beyond the presence of {@code conclusion} — task
  * 4.1 later populates {@link PollStatus.Fail}'s findings with failed
- * jobs/steps and log tails; here they are empty.
+ * jobs/steps and log tails; here they are empty. A Pass carries the
+ * authoritative run's platform URL, so a green check is auditable from the
+ * tracker report (NFR-O2 of add-sandbox-core).
  *
- * <p>Implements FR2 of add-external-check-github-actions.
+ * <p>Implements FR2 of add-external-check-github-actions; NFR-O2 of
+ * add-sandbox-core.
  */
 final class GithubWorkflowRunVerdict {
 
@@ -25,16 +28,21 @@ final class GithubWorkflowRunVerdict {
     private GithubWorkflowRunVerdict() {}
 
     /**
-     * Returns {@link PollStatus.Pass} on conclusion {@code success}, {@link
-     * PollStatus.Fail} on any other non-null conclusion (fail-closed), or
-     * {@link PollStatus.Running} when no run matches or the matching run has
-     * no conclusion yet.
+     * Returns {@link PollStatus.Pass} carrying the run's platform URL on
+     * conclusion {@code success}, {@link PollStatus.Fail} on any other non-null
+     * conclusion (fail-closed), or {@link PollStatus.Running} when no run
+     * matches or the matching run has no conclusion yet.
      *
      * @param matchingRun the run selected by {@link
      *     GithubWorkflowRunQuery#latestMatchingRun}, or empty when no run
      *     matches yet
      * @return the mapped poll status; never null
      */
+    // Optional-as-parameter is intentional here: this method exists solely to consume the Optional
+    // GithubWorkflowRunQuery#latestMatchingRun returns (see the class javadoc and this method's own
+    // @param doc); it is package-private, not a public field or a widely reused API, and every caller
+    // (GithubWorkflowRunPoll, this class's specs) already holds that exact Optional in hand.
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     static PollStatus fromMatchingRun(Optional<GithubWorkflowRun> matchingRun) {
         return matchingRun.map(GithubWorkflowRunVerdict::fromConclusion).orElseGet(PollStatus.Running::new);
     }
@@ -59,7 +67,7 @@ final class GithubWorkflowRunVerdict {
             return new PollStatus.Running();
         }
         if (SUCCESS_CONCLUSION.equals(conclusion)) {
-            return new PollStatus.Pass();
+            return new PollStatus.Pass(run.htmlUrl());
         }
         return new PollStatus.Fail(List.of());
     }

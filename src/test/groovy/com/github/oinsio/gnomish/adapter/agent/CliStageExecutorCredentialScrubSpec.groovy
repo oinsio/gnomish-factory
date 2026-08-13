@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
+import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -16,14 +18,19 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * D17, NFR-S1 of add-tracker-port (task 5.17): {@link CliStageExecutor}'s four-argument
- * constructor threads {@code credentialEnvVarsToScrub} into its own {@link
- * AgentProcessLauncher} — a focused unit-level proof, one rung below {@code
- * TakeCommandCredentialScrubSpec}'s full {@code take}-flavored end-to-end wiring proof.
+ * D17, NFR-S1 of add-tracker-port; FR9, D6 of add-sandbox-core: {@link CliStageExecutor}'s
+ * allowlist constructor threads the {@link ChildEnvAllowlist} into the {@code
+ * HostTaskExecutionEnvironment} it runs each round through, which composes the child environment
+ * as base ∪ passthrough ∪ factory-set with declared credential names excluded — a focused
+ * unit-level proof, one rung below {@code TakeCommandCredentialScrubSpec}'s full {@code
+ * take}-flavored end-to-end wiring proof. HOME doubles as the observable credential: it sits in
+ * the host base set, so its absence can only come from the credential exclusion.
  */
 class CliStageExecutorCredentialScrubSpec extends Specification {
 
     private static final String CREDENTIAL_VAR = 'HOME'
+
+    private static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
 
     @TempDir
     Path workspaceDir
@@ -49,7 +56,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
 """
         wrapper.setExecutable(true)
         wrapper.deleteOnExit()
-        new FactoryProperties('factory-01', wrapper.absolutePath, [], null)
+        new FactoryProperties('factory-01', wrapper.absolutePath, [], null, null)
     }
 
     private static StageExecutor.Request requestFor(Path workspaceDir) {
@@ -63,9 +70,14 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                 stage, new DirectoryWorkspace(workspaceDir), 0, [])
     }
 
-    def "the four-argument constructor's scrub list reaches the spawned process"() {
+    def "a declared credential in the allowlist never reaches the spawned process"() {
         given:
-        def executor = new CliStageExecutor(wrapperReporting(), clock, { event -> } as AgentProgressListener, [CREDENTIAL_VAR])
+        def executor = new CliStageExecutor(
+                wrapperReporting(),
+                clock,
+                { event -> } as AgentProgressListener,
+                ChildEnvAllowlist.of([], [CREDENTIAL_VAR]),
+                LAW)
 
         when:
         executor.execute(requestFor(workspaceDir))
@@ -74,9 +86,10 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         reportPath.toFile().text.trim() == 'absent'
     }
 
-    def "with nothing declared to scrub, the same variable reaches the spawned process"() {
+    def "with nothing declared, the same base variable reaches the spawned process"() {
         given:
-        def executor = new CliStageExecutor(wrapperReporting(), clock, { event -> } as AgentProgressListener, [])
+        def executor = new CliStageExecutor(
+                wrapperReporting(), clock, { event -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW)
 
         when:
         executor.execute(requestFor(workspaceDir))

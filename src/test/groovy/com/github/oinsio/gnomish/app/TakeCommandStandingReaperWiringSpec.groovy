@@ -178,7 +178,9 @@ tracker:
         def command = newCommand(new ServeProperties(1, null, null, null, null, null))
 
         when: 'take runs X on another thread, in flight for ~2s'
-        Future<?> run = executor.submit({ command.run(args('take', x.id(), "--dir=$projectDir")) } as Callable)
+        Future<?> run = executor.submit({
+            command.run(args('take', x.id(), "--dir=$projectDir"))
+        } as Callable)
 
         then: 'the standing reaper — started before X is even claimed — reaps the foreign claim WHILE the run is still in flight'
         new PollingConditions(timeout: 3, initialDelay: 0, delay: 0.05).eventually {
@@ -221,7 +223,9 @@ tracker:
         def command = newCommand(new ServeProperties(1, null, null, null, null, null))
 
         when: 'the batch runs both refs sequentially, on another thread'
-        Future<?> run = executor.submit({ command.run(args('take', x1.id(), x2.id(), "--dir=$projectDir")) } as Callable)
+        Future<?> run = executor.submit({
+            command.run(args('take', x1.id(), x2.id(), "--dir=$projectDir"))
+        } as Callable)
 
         and: 'the first task finishes — its own claim and beat registration are fully over'
         new PollingConditions(timeout: 5).eventually {

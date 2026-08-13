@@ -175,7 +175,9 @@ abstract class TrackerContract extends Specification implements PortContractSupp
         def ref = new TaskRef("fixture:race-${repetition}")
         seedTask(adapter, ref, new TrackerTaskState.Ready(), AbortFacts.none())
         def callerCount = 12
-        def callerIds = (1..callerCount).collect { "caller-${repetition}-${it}".toString() }
+        def callerIds = (1..callerCount).collect {
+            "caller-${repetition}-${it}".toString()
+        }
         def barrier = new CyclicBarrier(callerCount)
 
         when: 'every caller calls claim() concurrently, forced to line up at a shared barrier first'
@@ -194,7 +196,9 @@ abstract class TrackerContract extends Specification implements PortContractSupp
                     adapter.claim(ref, callerId)
                 } as Callable)
             }
-            results = futures.collect { it.get(3, TimeUnit.SECONDS) as ClaimResult } as List<ClaimResult>
+            results = futures.collect {
+                it.get(3, TimeUnit.SECONDS) as ClaimResult
+            } as List<ClaimResult>
         } finally {
             pool.shutdownNow()
         }
@@ -202,7 +206,9 @@ abstract class TrackerContract extends Specification implements PortContractSupp
         then: 'exactly one caller acquired the claim, and every other caller was told the winner'
         def winners = results.findAll { it instanceof ClaimResult.Acquired }
         winners.size() == 1
-        def winnerIndex = results.findIndexOf { it instanceof ClaimResult.Acquired }
+        def winnerIndex = results.findIndexOf {
+            it instanceof ClaimResult.Acquired
+        }
         def winnerId = callerIds[winnerIndex]
         def losers = results.findAll { it instanceof ClaimResult.Held }
         losers.size() == callerCount - 1

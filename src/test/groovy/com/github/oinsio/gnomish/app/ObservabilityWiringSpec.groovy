@@ -105,7 +105,9 @@ class ObservabilityWiringSpec extends Specification {
         lifecycleTracker.view().reason() == 'sigterm'
 
         and: 'exactly one stopped ledger line was written'
-        def lines = Files.readString(ledgerFile(now)).readLines().findAll { it.contains('"event":"stopped"') }
+        def lines = Files.readString(ledgerFile(now)).readLines().findAll {
+            it.contains('"event":"stopped"')
+        }
         lines.size() == 1
         lines[0].contains('"reason":"sigterm"')
 
@@ -114,7 +116,9 @@ class ObservabilityWiringSpec extends Specification {
 
         then: 'it is a no-op: the original reason and ledger line stand, no second line was appended'
         lifecycleTracker.view().reason() == 'sigterm'
-        Files.readString(ledgerFile(now)).readLines().findAll { it.contains('"event":"stopped"') }.size() == 1
+        Files.readString(ledgerFile(now)).readLines().findAll {
+            it.contains('"event":"stopped"')
+        }.size() == 1
     }
 
     def "beginDraining()/beginStopping() move the lifecycle tracker through the intermediate states"() {

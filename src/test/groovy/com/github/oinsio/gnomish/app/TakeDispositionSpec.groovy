@@ -115,7 +115,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "an uncaught exception during the claimed run aborts and exits 12, not a bare 1"() {
         given: 'a fresh Ready claim whose terminal tracker write blows up mid-run'
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
-        tracker.finish(*_) >> { throw new RuntimeException('github 500 on finish') }
+        tracker.finish(*_) >> {
+            throw new RuntimeException('github 500 on finish')
+        }
         def disposition = newDisposition()
 
         when:
@@ -270,7 +272,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.ESCALATION
         (result as TakeResult.AwaitingHuman).report().contains('continue?')
-        1 * tracker.park(REF, ParkReason.ESCALATION, { it.contains('continue?') })
+        1 * tracker.park(REF, ParkReason.ESCALATION, {
+            it.contains('continue?')
+        })
     }
 
     // Ready + existing branch + a recorded Completed outcome whose tracker finish never landed (a
@@ -301,7 +305,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         then: 'the deferred finish was posted from the branch-recorded delivery, and the run delivered'
         result instanceof TakeResult.Delivered
-        1 * tracker.finish(REF, { it.contains('PROJ-4') && it.contains('Branch: gnomish/PROJ-4') })
+        1 * tracker.finish(REF, {
+            it.contains('PROJ-4') && it.contains('Branch: gnomish/PROJ-4')
+        })
 
         and: 'no engine round ran — the task branch tip is unchanged (M4: zero rounds, no new commits)'
         gitRunner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-4').stdout().strip() == tipBefore
@@ -398,25 +404,25 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         where:
         expectedAge | openTasks
-        '0s'        | [
+        '0s' | [
             workingOpenTask('gnomish-dead-x1', NOW.plusSeconds(60))
         ]
-        '30s'       | [
+        '30s' | [
             workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(30))
         ]
-        '1m'        | [
+        '1m' | [
             workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(60))
         ]
-        '5m'        | [
+        '5m' | [
             workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(300))
         ]
-        '1h 0m'     | [
+        '1h 0m' | [
             workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(3600))
         ]
-        '2h 5m'     | [
+        '2h 5m' | [
             workingOpenTask('gnomish-dead-x1', NOW.minusSeconds(2 * 3600 + 5 * 60))
         ]
-        'unknown'   | []
+        'unknown' | []
     }
 
     // Scenario "Headless takeover needs the flag" (FR6): no TTY (confirmation UNAVAILABLE) and no
@@ -457,7 +463,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]
-        def confirmation = { r, h, a -> TakeoverConfirmation.Decision.CONFIRMED } as TakeoverConfirmation
+        def confirmation = { r, h, a ->
+            TakeoverConfirmation.Decision.CONFIRMED
+        } as TakeoverConfirmation
         def disposition = newTakeoverDisposition(confirmation, false)
 
         when:
@@ -533,7 +541,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         ]
         tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Mismatch(observed)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held('gnomish-live-x2')
-        def confirmation = { r, h, a -> TakeoverConfirmation.Decision.CONFIRMED } as TakeoverConfirmation
+        def confirmation = { r, h, a ->
+            TakeoverConfirmation.Decision.CONFIRMED
+        } as TakeoverConfirmation
         def disposition = newTakeoverDisposition(confirmation, false)
 
         when:
@@ -642,7 +652,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready but finished propagates a declineFinished failure instead of swallowing it"() {
         given:
         def disposition = newDisposition()
-        tracker.declineFinished(REF, _) >> { throw new RuntimeException('tracker down') }
+        tracker.declineFinished(REF, _) >> {
+            throw new RuntimeException('tracker down')
+        }
 
         when:
         disposition.dispose(

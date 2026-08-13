@@ -87,7 +87,9 @@ class TakeCrashAbortSpec extends Specification {
 
         then:
         0 * tracker.recordAbort(*_)
-        1 * tracker.park(REF, ParkReason.INFRA, { String report -> report.contains('salvage push failed') })
+        1 * tracker.park(REF, ParkReason.INFRA, { String report ->
+            report.contains('salvage push failed')
+        })
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
     }
@@ -96,7 +98,9 @@ class TakeCrashAbortSpec extends Specification {
     // bare 1 — an abort-facts read that throws is treated as none(), so the crash still aborts.
     def "a crash whose abort-facts read fails is treated as none and still aborts"() {
         given: 'the abort-facts read itself throws, as a fully dead tracker would'
-        tracker.fetchTask(REF) >> { throw new RuntimeException('tracker unreachable') }
+        tracker.fetchTask(REF) >> {
+            throw new RuntimeException('tracker unreachable')
+        }
 
         when:
         def result = crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE,

@@ -65,7 +65,9 @@ class ServeShutdownDrainRaceSpec extends ServeShutdownSpecBase {
 
         and: 'a fake feed thread standing in for FeedAutomaton, polling listReady until interrupted'
         def listReadyCalls = new AtomicInteger()
-        Tracker fakeTracker = [listReady: { int limit -> listReadyCalls.incrementAndGet(); [] }] as Tracker
+        Tracker fakeTracker = [listReady: { int limit ->
+                listReadyCalls.incrementAndGet(); []
+            }] as Tracker
         def feedThread = Thread.ofVirtual().unstarted({
             try {
                 while (!Thread.currentThread().isInterrupted()) {

@@ -51,7 +51,7 @@ class E2eProcessHarnessSmokeSpec extends Specification {
             // interactive ExternalCheckClient poll verdict
             'pass',
             // interactive JudgeVoter vote (1 vote configured)
-            ''       // manual-checkpoint confirmation
+            '' // manual-checkpoint confirmation
         ]
 
         when:

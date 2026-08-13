@@ -127,6 +127,77 @@ class PipelineMapperSpec extends Specification {
         s1.advancement() == AdvancementMode.AUTO
     }
 
+    // FR12/FR13/FR16 (add-sandbox-core): the Mechanism sandbox block, a
+    // command's verify-in, and an external check's pin paths load typed
+    def "maps sandbox declarations, verify-in, and external pin paths into the typed model"() {
+        given: 'a stage declaring a sandbox, a fresh-box command, and a pinned external'
+        def dto = new StageDto('Build it', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
+        new ExecutorDto('agent-cli', 'm', null, new SandboxDto(['docker-inside'], true, null)),
+        'i.md',
+        [
+            new VerifyCheckDto.Command('./gradlew test', 'fresh-box'),
+            new VerifyCheckDto.External('ci.yml', '30s', '5m', null, ['.github/workflows/ci.yml']),
+        ] as List<VerifyCheckDto>,
+        null, 'auto')
+
+        when:
+        def result = PipelineMapper.map(config('1', 3), [entry('build', dto)])
+
+        then: 'no mapping errors and the declarations are typed onto the domain model'
+        result.errors().isEmpty()
+        def stage = result.definition().stages()[0]
+        stage.executor().sandbox() == new Sandbox(['docker-inside'], true)
+        (stage.verify()[0] as VerifyCheck.Command).verifyIn() == VerifyCheck.VerifyIn.FRESH_BOX
+        (stage.verify()[1] as VerifyCheck.External).pinPaths() == ['.github/workflows/ci.yml']
+    }
+
+    // FR12/FR13 (add-sandbox-core) defaults: an absent sandbox maps to none(),
+    // an absent verify-in to same-box, and absent pin paths to empty
+    def "applies sandbox, verify-in, and pin-path defaults when the manifest declares none"() {
+        given: 'a stage declaring no sandbox, a plain command, and an unpinned external'
+        def dto = new StageDto('Build', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
+        new ExecutorDto('agent-cli', 'm', null),
+        'i.md',
+        [
+            new VerifyCheckDto.Command('./gradlew test'),
+            new VerifyCheckDto.External('ci.yml', '30s', '5m', null),
+        ] as List<VerifyCheckDto>,
+        null, 'auto')
+
+        when:
+        def result = PipelineMapper.map(config('1', 3), [entry('build', dto)])
+
+        then: 'the defaults land on the typed model'
+        result.errors().isEmpty()
+        def stage = result.definition().stages()[0]
+        stage.executor().sandbox() == Sandbox.none()
+        (stage.verify()[0] as VerifyCheck.Command).verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
+        (stage.verify()[1] as VerifyCheck.External).pinPaths() == []
+    }
+
+    // FR13 (add-sandbox-core): an unknown verify-in is a located mapping error
+    // that discards the definition (mirroring the timeout-class contract)
+    def "an unknown verify-in is a located mapping error"() {
+        when:
+        def result = PipelineMapper.map(config('1', 3), [
+            entry('build', new StageDto('B', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
+            new ExecutorDto('agent-cli', 'm', null), 'i.md',
+            [
+                new VerifyCheckDto.Command('x', 'somewhere-else')
+            ] as List<VerifyCheckDto>,
+            null, 'auto'))
+        ])
+
+        then: 'the definition is discarded and the error names the offending check'
+        result.definition() == null
+        result.errors().size() == 1
+        with(result.errors()[0]) {
+            file() == 'stages/build/stage.yaml'
+            where() == 'verify[0].verifyIn'
+            message() == "unknown verify-in 'somewhere-else'; use 'same-box' or 'fresh-box'"
+        }
+    }
+
     // FR11/D5a: the plain-JDK settings map flows through unchanged as a copy
     def "carries executor and judge settings as plain-JDK maps, defensively copied"() {
         given: 'a mutable settings map handed to the DTO'
@@ -186,10 +257,10 @@ class PipelineMapperSpec extends Specification {
 
         where:
         defaultLimit | override || expected
-        3            | 5        || 5 // override wins
-        3            | null     || 3 // default applies
-        null         | 5        || 5 // no default, override still wins
-        null         | null     || 0 // both absent → 0 (StageSanityRule flags it)
+        3 | 5 || 5 // override wins
+        3 | null || 3 // default applies
+        null | 5 || 5 // no default, override still wins
+        null | null || 0 // both absent → 0 (StageSanityRule flags it)
     }
 
     // FR5 boundary: enum wire values map to the domain enums, both values each
@@ -206,8 +277,8 @@ class PipelineMapperSpec extends Specification {
         s.advancement() == domainAdv
 
         where:
-        wireType    | wireAdv  || domainType             | domainAdv
-        'api'       | 'auto'   || ExecutorType.API       | AdvancementMode.AUTO
+        wireType | wireAdv || domainType | domainAdv
+        'api' | 'auto' || ExecutorType.API | AdvancementMode.AUTO
         'agent-cli' | 'manual' || ExecutorType.AGENT_CLI | AdvancementMode.MANUAL
     }
 
@@ -238,10 +309,10 @@ class PipelineMapperSpec extends Specification {
         check.timeout() == expectedTimeout
 
         where:
-        interval | timeout || expectedInterval          | expectedTimeout
-        '30s'    | '15m'   || Duration.ofSeconds(30)    | Duration.ofMinutes(15)
-        'PT1H'   | 'PT2H'  || Duration.ofHours(1)       | Duration.ofHours(2)
-        '500ms'  | '1s'    || Duration.ofMillis(500)    | Duration.ofSeconds(1)
+        interval | timeout || expectedInterval | expectedTimeout
+        '30s' | '15m' || Duration.ofSeconds(30) | Duration.ofMinutes(15)
+        'PT1H' | 'PT2H' || Duration.ofHours(1) | Duration.ofHours(2)
+        '500ms' | '1s' || Duration.ofMillis(500) | Duration.ofSeconds(1)
     }
 
     // FR11: a null external interval/timeout maps to Duration.ZERO, which
@@ -266,9 +337,9 @@ class PipelineMapperSpec extends Specification {
         check.timeout() == expectedTimeout
 
         where:
-        field      | interval | timeout || expectedInterval       | expectedTimeout
-        'interval' | null     | '15m'   || Duration.ZERO          | Duration.ofMinutes(15)
-        'timeout'  | '30s'    | null    || Duration.ofSeconds(30) | Duration.ZERO
+        field | interval | timeout || expectedInterval | expectedTimeout
+        'interval' | null | '15m' || Duration.ZERO | Duration.ofMinutes(15)
+        'timeout' | '30s' | null || Duration.ofSeconds(30) | Duration.ZERO
     }
 
     // FR11 / duration-parse placement: a malformed timing string is a located
@@ -291,9 +362,9 @@ class PipelineMapperSpec extends Specification {
         ]
 
         where:
-        field      | interval  | timeout   || where              | message
-        'interval' | 'banana'  | '15m'     || 'verify[0].interval' | "malformed duration 'banana'; use e.g. '30s', '15m', '2h'"
-        'timeout'  | '30s'     | 'nonsense'|| 'verify[0].timeout'  | "malformed duration 'nonsense'; use e.g. '30s', '15m', '2h'"
+        field | interval | timeout || where | message
+        'interval' | 'banana' | '15m' || 'verify[0].interval' | "malformed duration 'banana'; use e.g. '30s', '15m', '2h'"
+        'timeout' | '30s' | 'nonsense'|| 'verify[0].timeout' | "malformed duration 'nonsense'; use e.g. '30s', '15m', '2h'"
     }
 
     // FR9: absent timeout-class defaults to quality — unchanged engine behavior
@@ -331,9 +402,9 @@ class PipelineMapperSpec extends Specification {
         check.timeoutClass() == expected
 
         where:
-        raw               || expected
-        'quality'         || VerifyCheck.TimeoutClass.QUALITY
-        'infrastructure'  || VerifyCheck.TimeoutClass.INFRASTRUCTURE
+        raw || expected
+        'quality' || VerifyCheck.TimeoutClass.QUALITY
+        'infrastructure' || VerifyCheck.TimeoutClass.INFRASTRUCTURE
     }
 
     // FR9: an unrecognized timeout-class is a located error identifying the check
@@ -619,9 +690,9 @@ class PipelineMapperSpec extends Specification {
 
         where:
         interval || expected
-        '30s'    || Duration.ofSeconds(30)
-        '15m'    || Duration.ofMinutes(15)
-        'PT2H'   || Duration.ofHours(2)
+        '30s' || Duration.ofSeconds(30)
+        '15m' || Duration.ofMinutes(15)
+        'PT2H' || Duration.ofHours(2)
     }
 
     // FR3 of add-claim-heartbeat: a malformed heartbeat-interval is a located

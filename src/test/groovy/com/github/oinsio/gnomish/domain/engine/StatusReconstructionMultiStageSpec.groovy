@@ -49,7 +49,9 @@ class StatusReconstructionMultiStageSpec extends StatusReconstructionSpecBase {
         // AttemptFinished carries the recorded state BEFORE advancement, so the build round\'s
         // state is still AtStage(build) and the test round\'s state is AtStage(test); the final
         // state is parked past the last stage at PipelineEnd (advancement happens after the loop).
-        def finished = listener.events.findAll { it instanceof EngineEvent.AttemptFinished }
+        def finished = listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }
         def state0 = (finished[0] as EngineEvent.AttemptFinished).newState()
         def state1 = (finished[1] as EngineEvent.AttemptFinished).newState()
         state0.position() == new Position.AtStage('build')

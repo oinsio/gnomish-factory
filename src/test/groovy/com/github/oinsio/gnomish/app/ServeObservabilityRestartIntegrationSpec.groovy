@@ -96,7 +96,11 @@ tracker:
     }
 
     private static List<JsonNode> readLedgerLines(Path ledgerFile) {
-        ledgerFile.toFile().readLines('UTF-8').findAll { !it.isBlank() }.collect { MAPPER.readTree(it) }
+        ledgerFile.toFile().readLines('UTF-8').findAll {
+            !it.isBlank()
+        }.collect {
+            MAPPER.readTree(it)
+        }
     }
 
     private static String instanceIdOf(JsonNode line) {
@@ -146,7 +150,11 @@ tracker:
         Files.exists(ledgerFile)
         def linesAfterSecondRun = readLedgerLines(ledgerFile)
         linesAfterSecondRun.size() == 6
-        linesAfterSecondRun[0..2].collect { instanceIdOf(it) }.unique() == [firstInstanceId]
-        linesAfterSecondRun[3..5].collect { instanceIdOf(it) }.unique() == [secondInstanceId]
+        linesAfterSecondRun[0..2].collect {
+            instanceIdOf(it)
+        }.unique() == [firstInstanceId]
+        linesAfterSecondRun[3..5].collect {
+            instanceIdOf(it)
+        }.unique() == [secondInstanceId]
     }
 }

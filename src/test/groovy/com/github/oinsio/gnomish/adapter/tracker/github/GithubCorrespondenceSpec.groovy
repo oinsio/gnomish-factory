@@ -72,7 +72,7 @@ class GithubCorrespondenceSpec extends Specification {
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/50/comments'))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"note"')))
                 .withRequestBody(WireMock.matchingJsonPath(
-                '$.body', WireMock.containing('Work stopped: task revoked mid-round.'))))
+                        '$.body', WireMock.containing('Work stopped: task revoked mid-round.'))))
         wireMock.verify(0, postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/50/labels')))
     }
 

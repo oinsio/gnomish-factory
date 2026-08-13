@@ -85,8 +85,8 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
 
     private Map snapshot() {
         [
-            branch    : runner.run(clone, 'symbolic-ref', '--short', 'HEAD').stdout().trim(),
-            head      : runner.run(clone, 'rev-parse', 'HEAD').stdout().trim(),
+            branch : runner.run(clone, 'symbolic-ref', '--short', 'HEAD').stdout().trim(),
+            head : runner.run(clone, 'rev-parse', 'HEAD').stdout().trim(),
             porcelain : runner.run(clone, 'status', '--porcelain').stdout(),
             localRefs : runner.run(clone, 'for-each-ref', 'refs/heads/').stdout(),
             worktrees : runner.run(clone, 'worktree', 'list', '--porcelain').stdout(),
@@ -118,7 +118,9 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
         def args = new DefaultApplicationArguments('status', '--dir=' + clone, 'PROJ-1')
 
         when:
-        def output = captureStdout { new StatusCommand(worktreesRoot).run(args) }
+        def output = captureStdout {
+            new StatusCommand(worktreesRoot).run(args)
+        }
 
         then: 'the fetch path was actually exercised, not vacuously true'
         trackingRefExists()

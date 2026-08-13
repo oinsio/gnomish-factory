@@ -79,6 +79,21 @@ class VerifyCheckSpec extends Specification {
         check.command() == './gradlew check'
     }
 
+    // FR13 (add-sandbox-core): a command check carries its freshness knob;
+    // the convenience constructor defaults it to same-box (unchanged behavior)
+    def "Command carries verifyIn, defaulting to SAME_BOX"() {
+        expect: 'the one-arg form is same-box, the explicit form carries its value'
+        new VerifyCheck.Command('./gradlew test').verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
+        new VerifyCheck.Command('./gradlew test', VerifyCheck.VerifyIn.FRESH_BOX).verifyIn() ==
+                VerifyCheck.VerifyIn.FRESH_BOX
+    }
+
+    // FR13 (add-sandbox-core): the freshness knob is a closed two-value enum
+    def "VerifyIn is a closed two-value enum"() {
+        expect: 'exactly same-box and fresh-box, in that order'
+        VerifyCheck.VerifyIn.values()*.name() == ['SAME_BOX', 'FRESH_BOX']
+    }
+
     // FR2/FR11: an external check carries its identifier and polling timing
     def "External exposes the check identifier, poll interval and timeout"() {
         when: 'an external check is modeled'
@@ -89,6 +104,51 @@ class VerifyCheckSpec extends Specification {
         check.checkId() == 'ci/build'
         check.interval() == Duration.ofSeconds(30)
         check.timeout() == Duration.ofMinutes(15)
+    }
+
+    // FR16 (add-sandbox-core): an external check carries its law-declared pin
+    // paths in declaration order; the convenience constructor defaults to empty
+    def "External carries pin paths, defaulting to empty, in declaration order"() {
+        expect: 'the four-arg form has no pin paths, the explicit form carries them ordered'
+        new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+                VerifyCheck.TimeoutClass.QUALITY).pinPaths() == []
+        new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+                VerifyCheck.TimeoutClass.QUALITY, [
+                    '.github/workflows/ci.yml',
+                    'analyzer.xml'
+                ]).pinPaths() ==
+                [
+                    '.github/workflows/ci.yml',
+                    'analyzer.xml'
+                ]
+    }
+
+    // FR16 (add-sandbox-core): the model is immutable — defensive copy isolates
+    // the pin paths from later mutation of the source list
+    def "External is isolated from later mutation of the source pin paths"() {
+        given: 'a mutable source pin-path list'
+        def source = ['ci.yml']
+
+        when: 'the check is created and the source list grows afterwards'
+        def check = new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+                VerifyCheck.TimeoutClass.QUALITY, source)
+        source << 'later-noise'
+
+        then: 'the check still holds only the original pin paths'
+        check.pinPaths() == ['ci.yml']
+    }
+
+    // FR16 (add-sandbox-core): the exposed pin-path list itself cannot be mutated
+    def "External's pin-path list is immutable"() {
+        given: 'an external check with one pin path'
+        def check = new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+                VerifyCheck.TimeoutClass.QUALITY, ['ci.yml'])
+
+        when: 'a caller tries to add into the exposed list'
+        check.pinPaths() << 'intruder'
+
+        then: 'the list rejects the mutation'
+        thrown(UnsupportedOperationException)
     }
 
     // FR11/D6: timing sanity (positivity, interval <= timeout) belongs to the
@@ -104,11 +164,11 @@ class VerifyCheckSpec extends Specification {
         check.timeout() == timeout
 
         where:
-        interval                | timeout                 | reason
-        Duration.ZERO           | Duration.ofMinutes(5)   | 'zero interval'
-        Duration.ofSeconds(-30) | Duration.ofMinutes(5)   | 'negative interval'
-        Duration.ofSeconds(30)  | Duration.ofSeconds(-1)  | 'negative timeout'
-        Duration.ofMinutes(10)  | Duration.ofMinutes(5)   | 'interval above timeout'
+        interval | timeout | reason
+        Duration.ZERO | Duration.ofMinutes(5) | 'zero interval'
+        Duration.ofSeconds(-30) | Duration.ofMinutes(5) | 'negative interval'
+        Duration.ofSeconds(30) | Duration.ofSeconds(-1) | 'negative timeout'
+        Duration.ofMinutes(10) | Duration.ofMinutes(5) | 'interval above timeout'
     }
 
     // FR2/FR11: a judge check carries its acceptance criteria, model pin,

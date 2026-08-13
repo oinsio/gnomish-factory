@@ -56,7 +56,9 @@ class EventEmissionSpec extends EventEmissionSpecBase {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'the keyed events of round 0 all carry AttemptKey(TASK-1, build, 0)'
-        def keyed = listener.events.findAll { !(it instanceof EngineEvent.RunStarted || it instanceof EngineEvent.TaskFinished) }
+        def keyed = listener.events.findAll {
+            !(it instanceof EngineEvent.RunStarted || it instanceof EngineEvent.TaskFinished)
+        }
         def round0 = keyed[0..4]
         round0*.key().every { it == new AttemptKey('TASK-1', 'build', 0) }
 
@@ -65,7 +67,9 @@ class EventEmissionSpec extends EventEmissionSpecBase {
         round1*.key().every { it == new AttemptKey('TASK-1', 'build', 1) }
 
         and: 'each round AttemptFinished.trace() header key equals its round key — trace shares the key'
-        def finished = keyed.findAll { it instanceof EngineEvent.AttemptFinished }
+        def finished = keyed.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }
         (finished[0] as EngineEvent.AttemptFinished).trace().key() == new AttemptKey('TASK-1', 'build', 0)
         (finished[1] as EngineEvent.AttemptFinished).trace().key() == new AttemptKey('TASK-1', 'build', 1)
     }
@@ -83,7 +87,9 @@ class EventEmissionSpec extends EventEmissionSpecBase {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'the single ExecutionFinished carries the fed usage and the round key'
-        def exec = listener.events.findAll { it instanceof EngineEvent.ExecutionFinished }
+        def exec = listener.events.findAll {
+            it instanceof EngineEvent.ExecutionFinished
+        }
         exec.size() == 1
         (exec[0] as EngineEvent.ExecutionFinished).usage() == fed
         (exec[0] as EngineEvent.ExecutionFinished).key() == new AttemptKey('TASK-1', 'build', 0)

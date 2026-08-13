@@ -102,8 +102,8 @@ class PipelineDefinitionSpec extends Specification {
         pipeline.stages() == stages
 
         where:
-        flaw                    | stages
-        'empty'                 | []
+        flaw | stages
+        'empty' | []
         'duplicate stage names' | [stage('plan'), stage('plan')]
     }
 

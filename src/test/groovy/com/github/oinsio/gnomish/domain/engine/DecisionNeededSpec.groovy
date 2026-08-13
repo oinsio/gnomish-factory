@@ -134,8 +134,12 @@ class DecisionNeededSpec extends Specification {
         persistence.entries[0].state.is(outcome.finalState())
 
         and: 'both AttemptStarted and AttemptFinished were emitted for the round'
-        listener.events.findAll { it instanceof EngineEvent.AttemptStarted }.size() == 1
-        listener.events.findAll { it instanceof EngineEvent.AttemptFinished }.size() == 1
+        listener.events.findAll {
+            it instanceof EngineEvent.AttemptStarted
+        }.size() == 1
+        listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }.size() == 1
     }
 
     // FR11/NFR-O1: a DecisionNeeded round whose persist throws aborts the run — the decision
@@ -164,8 +168,12 @@ class DecisionNeededSpec extends Specification {
         finalState.attempts()[0].checkResults().isEmpty()
 
         and: 'no AttemptFinished was emitted for the round whose persist failed'
-        listener.events.findAll { it instanceof EngineEvent.AttemptStarted }.size() == 1
-        listener.events.findAll { it instanceof EngineEvent.AttemptFinished }.isEmpty()
+        listener.events.findAll {
+            it instanceof EngineEvent.AttemptStarted
+        }.size() == 1
+        listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
+        }.isEmpty()
     }
 
     // FR6: a DecisionNeeded after a prior quality failure still does NOT burn an attempt — the

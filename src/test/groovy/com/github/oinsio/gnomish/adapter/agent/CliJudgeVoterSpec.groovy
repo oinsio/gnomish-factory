@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -25,13 +26,15 @@ class CliJudgeVoterSpec extends Specification {
 
     def clock = new VirtualClock()
 
+    private static final PipelineLaw LAW = PipelineLaw.ofContent(['criteria.md': 'The output must be correct.'])
+
     def setup() {
         Files.writeString(workspaceDir.resolve('criteria.md'), 'The output must be correct.')
     }
 
     private JudgeVoter voterFor(String scenario) {
         def properties = FakeAgentSupport.propertiesFor(scenario)
-        new CliJudgeVoter(properties, clock)
+        new CliJudgeVoter(properties, clock, LAW)
     }
 
     private static VerifyCheck.Judge checkFor(Map<String, Object> settings = [:], String criteriaFile = 'criteria.md') {
@@ -133,8 +136,8 @@ class CliJudgeVoterSpec extends Specification {
     def "agent process failing to start yields Vote(CannotVerify)"() {
         given: 'a FactoryProperties pointing at a binary path that cannot be executed'
         def missingBinary = workspaceDir.resolve('no-such-binary-here').toString()
-        def properties = new FactoryProperties('factory-01', missingBinary, [], null)
-        def voter = new CliJudgeVoter(properties, clock)
+        def properties = new FactoryProperties('factory-01', missingBinary, [], null, null)
+        def voter = new CliJudgeVoter(properties, clock, LAW)
 
         when:
         def vote = voter.vote(checkFor(), context(), new DirectoryWorkspace(workspaceDir))
@@ -155,8 +158,10 @@ class CliJudgeVoterSpec extends Specification {
         given:
         def properties = FakeAgentSupport.propertiesFor('judge-verdict-pass')
         def events = []
-        AgentProgressListener listener = { AgentProgressEvent event -> events << event }
-        def voter = new CliJudgeVoter(properties, clock, listener)
+        AgentProgressListener listener = { AgentProgressEvent event ->
+            events << event
+        }
+        def voter = new CliJudgeVoter(properties, clock, listener, LAW)
 
         when:
         voter.vote(checkFor(), context(), new DirectoryWorkspace(workspaceDir))

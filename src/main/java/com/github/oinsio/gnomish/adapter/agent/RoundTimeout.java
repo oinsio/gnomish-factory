@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  * {@code roundTimeout} is a recognized settings key (FR11) but is never
  * rendered as a CLI flag ({@link AgentInvocationOptions}) — it is
  * engine/adapter-side process timeout enforcement instead, consumed by
- * {@link LaunchedAgentProcess#waitForExitOrTimeout}.
+ * {@link com.github.oinsio.gnomish.adapter.environment.ExecHandle#waitForExitOrTimeout}.
  *
  * <p>The pipeline-config loader never coerces this key into a typed {@link
  * Duration} — {@link AgentSettingsValidator} (task 9.1) only checks the raw

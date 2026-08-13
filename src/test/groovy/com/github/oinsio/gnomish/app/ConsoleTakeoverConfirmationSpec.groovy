@@ -84,14 +84,14 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
         confirmation(true, console).confirm(REF, 'gnomish-other-x1', '47m') == expected
 
         where:
-        answer  | expected
-        'y'     | TakeoverConfirmation.Decision.CONFIRMED
-        'yes'   | TakeoverConfirmation.Decision.CONFIRMED
+        answer | expected
+        'y' | TakeoverConfirmation.Decision.CONFIRMED
+        'yes' | TakeoverConfirmation.Decision.CONFIRMED
         '  Y  ' | TakeoverConfirmation.Decision.CONFIRMED
-        'YES'   | TakeoverConfirmation.Decision.CONFIRMED
-        'n'     | TakeoverConfirmation.Decision.DECLINED
-        ''      | TakeoverConfirmation.Decision.DECLINED
-        'nope'  | TakeoverConfirmation.Decision.DECLINED
+        'YES' | TakeoverConfirmation.Decision.CONFIRMED
+        'n' | TakeoverConfirmation.Decision.DECLINED
+        '' | TakeoverConfirmation.Decision.DECLINED
+        'nope' | TakeoverConfirmation.Decision.DECLINED
     }
 
     // FR6, D9: the production wiring factory returns a real, ready confirmation — its return value
@@ -114,5 +114,19 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
 
         then:
         decision == TakeoverConfirmation.Decision.DECLINED
+    }
+
+    // FR6, design D9: systemTty() must hand back a real, fully wired confirmation — never null —
+    // with both production seams present (PIT: NULL_RETURNS on systemTty). The seams themselves
+    // (System.console() probe, stdin/stdout console) stay unexercised: they carry @DoNotMutate as
+    // pure System integration wiring, and building the record is side-effect-free.
+    def "systemTty wires a non-null production confirmation with both seams present"() {
+        when:
+        def production = ConsoleTakeoverConfirmation.systemTty()
+
+        then:
+        production != null
+        production.ttyPresent() != null
+        production.consoleFactory() != null
     }
 }

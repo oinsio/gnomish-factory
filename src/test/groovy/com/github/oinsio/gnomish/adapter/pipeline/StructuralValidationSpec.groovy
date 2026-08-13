@@ -79,15 +79,15 @@ class StructuralValidationSpec extends Specification {
         }
 
         where:
-        scenario                     | stage                                     || expectedWhere        | expectedMessage
-        'missing purpose'            | stageWith(purpose: null)                  || 'purpose'            | "missing required field 'purpose'"
-        'missing executor block'     | stageWith(executor: null)                 || 'executor'           | "missing required field 'executor'"
-        'missing executor type'      | stageWith(executor: exec(type: null))     || 'executor.type'      | "missing required field 'executor.type'"
-        'unknown executor type'      | stageWith(executor: exec(type: 'foo'))    || 'executor.type'      | "unknown executor 'foo'; known executors are api, agent-cli"
-        'missing instructions'       | stageWith(instructions: null)             || 'instructions'       | "missing required field 'instructions'"
-        'missing advancement'        | stageWith(advancement: null)              || 'advancement'        | "missing required field 'advancement'"
-        'unknown advancement'        | stageWith(advancement: 'later')           || 'advancement'        | "unknown advancement 'later'; known modes are auto, manual"
-        'output without id'          | stageWith(outputs: [new ArtifactOutputDto(null)]) || 'outputs[0].id' | "missing required field 'id'"
+        scenario | stage || expectedWhere | expectedMessage
+        'missing purpose' | stageWith(purpose: null) || 'purpose' | "missing required field 'purpose'"
+        'missing executor block' | stageWith(executor: null) || 'executor' | "missing required field 'executor'"
+        'missing executor type' | stageWith(executor: exec(type: null)) || 'executor.type' | "missing required field 'executor.type'"
+        'unknown executor type' | stageWith(executor: exec(type: 'foo')) || 'executor.type' | "unknown executor 'foo'; known executors are api, agent-cli"
+        'missing instructions' | stageWith(instructions: null) || 'instructions' | "missing required field 'instructions'"
+        'missing advancement' | stageWith(advancement: null) || 'advancement' | "missing required field 'advancement'"
+        'unknown advancement' | stageWith(advancement: 'later') || 'advancement' | "unknown advancement 'later'; known modes are auto, manual"
+        'output without id' | stageWith(outputs: [new ArtifactOutputDto(null)]) || 'outputs[0].id' | "missing required field 'id'"
         'internal input without ref' | stageWith(inputs: [
             new ArtifactInputDto.Internal(null)
         ]) || 'inputs[0].producerOutputId' | "missing required field 'producerOutputId'"
@@ -117,13 +117,55 @@ class StructuralValidationSpec extends Specification {
         StructuralValidation.checkStage('stages/build/stage.yaml', stage).isEmpty()
     }
 
+    // --- stage.yaml: tighten-only sandbox policy (add-sandbox-core FR14) ----
+
+    // FR14 delta-spec scenario: tightening is accepted — a sandbox declaring
+    // needs and requiresFresh, but no binding, is structurally clean
+    def "a sandbox that only tightens (needs + requiresFresh) is structurally clean"() {
+        given: 'a stage whose executor declares a binding-free sandbox'
+        def stage = stageWith(executor: exec(sandbox: new SandboxDto(['docker-inside'], true, null)))
+
+        expect:
+        StructuralValidation.checkStage('stages/build/stage.yaml', stage).isEmpty()
+    }
+
+    // FR14 delta-spec scenario: a repo asking for host execution or a named
+    // adapter binding is rejected — binding lives only in factory config
+    def "a repo-declared sandbox binding (#binding) is a located tighten-only error"() {
+        when:
+        def errors = StructuralValidation.checkStage('stages/build/stage.yaml',
+                stageWith(executor: exec(sandbox: new SandboxDto(null, null, binding))))
+
+        then: 'exactly one error locating executor.sandbox.binding'
+        errors.size() == 1
+        with(errors[0] as ConfigError) {
+            file() == 'stages/build/stage.yaml'
+            where() == 'executor.sandbox.binding'
+            message() == "repo may not declare a sandbox binding '$binding'; adapter binding and any weakening live only in factory installation config (a stage manifest may only tighten)" as String
+        }
+
+        where:
+        binding << ['host', 'container']
+    }
+
+    // FR14: an absent sandbox block, and a sandbox with no binding, are clean —
+    // the check fires only on a present binding
+    def "an absent sandbox and a binding-free sandbox contribute no error"() {
+        expect: 'neither an absent sandbox nor a needs-only sandbox is flagged'
+        StructuralValidation.checkStage('stages/build/stage.yaml',
+                stageWith(executor: exec(sandbox: null))).isEmpty()
+        StructuralValidation.checkStage('stages/build/stage.yaml',
+                stageWith(executor: exec(sandbox: new SandboxDto(['x'], false, null)))).isEmpty()
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static ExecutorDto exec(Map overrides) {
         new ExecutorDto(
                 overrides.containsKey('type') ? overrides.type : 'agent-cli',
                 overrides.containsKey('model') ? overrides.model : 'model',
-                overrides.containsKey('settings') ? overrides.settings : null)
+                overrides.containsKey('settings') ? overrides.settings : null,
+                overrides.containsKey('sandbox') ? overrides.sandbox : null)
     }
 
     private static StageDto stageWith(Map overrides) {

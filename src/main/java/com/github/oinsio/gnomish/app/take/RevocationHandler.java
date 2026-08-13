@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.adapter.git.BranchPush;
-import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage;
+import com.github.oinsio.gnomish.adapter.git.TaskSalvage;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -16,9 +16,11 @@ import java.nio.file.Path;
  * back cleanly.
  *
  * <p>The protocol, in order: salvage-commit any uncommitted leftovers ({@link
- * WorktreeSalvage#salvage}, letting a {@code GitSalvageFailedException} propagate — a failed
- * salvage is a genuine local-durability problem, not something this handler can paper over);
- * best-effort push the branch ({@link BranchPush#pushBestEffort}, which never throws); post a
+ * TaskSalvage#salvage} — the host realization commits in the worktree, the sandboxed one commits
+ * in-box and harvests (FR6 of add-sandbox-core), letting a {@code GitSalvageFailedException}
+ * propagate — a failed salvage is a genuine local-durability problem, not something this handler
+ * can paper over); best-effort push the branch ({@link BranchPush#pushBestEffort}, which never
+ * throws); post a
  * structural "work stopped" note; release the claim. The tracker's logical state is deliberately
  * left untouched (FR15) — revocation may have been caused by a human closing the task or claiming
  * it directly, and this handler must not fight that action, only stop working and get out of the
@@ -29,11 +31,11 @@ import java.nio.file.Path;
  *
  * @param tracker the tracker port used for the best-effort {@code postNote} and the {@code
  *     release} that drops this instance's claim; never null
- * @param worktreeSalvage salvages the interrupted round's uncommitted leftovers in the task
- *     worktree; never null
+ * @param worktreeSalvage salvages the interrupted round's uncommitted leftovers — in the task
+ *     worktree (host) or inside the environment with a harvest (sandboxed); never null
  * @param branchPush best-effort pushes the task branch after the salvage commit; never null
  */
-public record RevocationHandler(Tracker tracker, WorktreeSalvage worktreeSalvage, BranchPush branchPush) {
+public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, BranchPush branchPush) {
 
     /**
      * Runs the full revocation protocol for one revoked task: salvage, best-effort push, stop

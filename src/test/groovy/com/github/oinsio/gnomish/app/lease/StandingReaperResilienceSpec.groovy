@@ -71,7 +71,9 @@ class StandingReaperResilienceSpec extends Specification {
             }
             ticks.incrementAndGet()
         } as ReaperDuty
-        def reaper = new StandingReaper(duty, sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(duty, sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
 
         when: 'the reaper starts, sleeps once, then the first tick throws'
         reaper.start()
@@ -111,7 +113,9 @@ class StandingReaperResilienceSpec extends Specification {
             }
             base.sleep(d)
         } as Sleeper
-        def reaper = new StandingReaper(countingDuty(), flaky, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), flaky, INTERVAL, {
+            []
+        }, new SystemClock())
 
         when: 'the reaper starts; the first sleep call throws before any tick runs'
         reaper.start()
@@ -140,7 +144,9 @@ class StandingReaperResilienceSpec extends Specification {
     //     logged as an ERROR and never triggers a respawn.
     def "stop() exits the loop cleanly with no abnormal-death log"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
 
         when: 'the reaper starts and parks in its first interval sleep'
         reaper.start()
@@ -166,7 +172,9 @@ class StandingReaperResilienceSpec extends Specification {
     //     backoff progression itself is StandingReaperSupervisionSpec's job, not this one's.
     def "a truly dead thread is respawned when stop() was not called"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
         def deadWorker = reaper.worker()
@@ -195,7 +203,9 @@ class StandingReaperResilienceSpec extends Specification {
     //     race the design calls out — no respawn happens: the worker reference is unchanged.
     def "a dead thread is not respawned once stop() was already called"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
         def worker = reaper.worker()

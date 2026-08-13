@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.check
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.adapter.environment.ChildEnvAllowlist
+import com.github.oinsio.gnomish.adapter.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.adapter.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
@@ -235,11 +237,15 @@ exit 0''')
 
         when:
         Verdict verdict
-        def events = capture(FindingsFileReader) { verdict = runner.run(check, workspace()) }
+        def events = capture(FindingsFileReader) {
+            verdict = runner.run(check, workspace())
+        }
 
         then:
         verdict instanceof Verdict.Pass
-        events.any { it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content') }
+        events.any {
+            it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content')
+        }
     }
 
     def "exit 0 with no findings file content logs no warning"() {
@@ -248,14 +254,20 @@ exit 0''')
 
         when:
         Verdict verdict
-        def events = capture(FindingsFileReader) { verdict = runner.run(check, workspace()) }
+        def events = capture(FindingsFileReader) {
+            verdict = runner.run(check, workspace())
+        }
 
         then:
         verdict instanceof Verdict.Pass
-        events.every { !it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content') }
+        events.every {
+            !it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content')
+        }
     }
 
-    def "run(...) deletes its GNOMISH_FINDINGS_FILE temp path after classifying the verdict"() {
+    // FR1, NFR-S3 of add-sandbox-core (task 7.3): the findings path lives in the environment's
+    // scratch area, and dispose removes the whole scratch with it after the verdict is classified.
+    def "run(...) allocates the findings path in scratch and disposes it after classifying the verdict"() {
         given: 'a command that echoes the findings-file path so the test can inspect it afterward'
         def check = command('echo $GNOMISH_FINDINGS_FILE > "$PWD/.path-marker"; exit 0')
 
@@ -266,32 +278,33 @@ exit 0''')
 
         then:
         !Files.exists(findingsPath)
+        !Files.exists(findingsPath.parent)
     }
 
-    // FR11, NFR-S1, D11 of add-claim-heartbeat: withCredentialScrub yields a runner whose check
-    // process has the declared credential vars removed from its inherited environment. Observed
-    // through the exit-1 synthetic finding's output tail (the runner exposes no env otherwise) and
-    // proven against real, always-present inherited vars (HOME/USER), mirroring the launcher spec.
-    def "FR11: withCredentialScrub removes the declared credential var from a check's environment"() {
-        given: 'a scrub-scoped runner for HOME and a check that reports HOME and USER, then exits 1'
-        def scrubbingRunner = runner.withCredentialScrub(['HOME'])
+    // FR11, NFR-S1, D11 of add-claim-heartbeat; FR9 of add-sandbox-core: withChildEnv yields a
+    // runner whose check process never sees a declared credential name. Observed through the
+    // exit-1 synthetic finding's output tail (the runner exposes no env otherwise) and proven
+    // against real, always-present base vars (HOME/USER): HOME is in the host base set, so its
+    // absence can only come from the credential exclusion.
+    def "FR11: withChildEnv excludes the declared credential var from a check's environment"() {
+        given: 'an allowlist declaring HOME a credential and a check that reports HOME and USER, then exits 1'
+        def credentialAwareRunner = runner.withChildEnv(ChildEnvAllowlist.of([], ['HOME']))
         def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; '
                 + 'if [ -n "${USER:-}" ]; then echo USER=present; else echo USER=absent; fi; exit 1')
 
         when:
-        def verdict = scrubbingRunner.run(check, workspace())
+        def verdict = credentialAwareRunner.run(check, workspace())
 
-        then: 'the scrubbed name is absent, an untouched inherited name still reaches the check'
+        then: 'the credential name is absent, an untouched base name still reaches the check'
         verdict instanceof Verdict.Fail
         def details = (verdict as Verdict.Fail).findings()[0].details()
         details.readLines().contains('HOME=absent')
         details.readLines().contains('USER=present')
     }
 
-    // FR11 negative control: the base runner scrubs nothing (empty list = no tracker), so a var
-    // present in the factory environment is visible to the check — env inherited unchanged.
-    def "FR11: with no tracker configured the check environment is inherited unchanged"() {
-        given: 'the default runner (empty scrub list) and a check reporting HOME, then exiting 1'
+    // FR9 of add-sandbox-core: the base set reaches a check with no tracker and no passthrough.
+    def "FR11: with no tracker configured a base variable still reaches the check"() {
+        given: 'the default runner (empty allowlist) and a check reporting HOME, then exiting 1'
         def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; exit 1')
 
         when:
@@ -302,15 +315,34 @@ exit 0''')
         (verdict as Verdict.Fail).findings()[0].details().readLines().contains('HOME=present')
     }
 
-    def "deleteQuietly is a no-op when the findings file is null - createFindingsFile's own failure path"() {
-        given: 'reflective access to the private static no-op guard for a null findings path'
-        def method = ShellCommandCheckRunner.getDeclaredMethod('deleteQuietly', Path)
-        method.setAccessible(true)
+    // FR9, M3 of add-sandbox-core (task 7.2): a check's process environment holds ONLY the
+    // allowlisted variables — whatever the factory JVM environment holds, nothing outside the host
+    // base set plus the factory-set findings variable (plus the shell's own names) leaks in.
+    def "M3: no factory environment variable outside the allowlist leaks into a check"() {
+        given: 'a check that dumps every environment variable name it sees, then exits 1'
+        def check = command('env | cut -d= -f1; exit 1')
+        def shellSelfSet = [
+            'PWD',
+            'OLDPWD',
+            'SHLVL',
+            '_',
+            'IFS',
+            'OPTIND',
+            'PS1',
+            'PS2',
+            'PS4',
+            'PPID'
+        ] as Set
 
-        when: 'a mutant that negates the null-check would instead call Files.deleteIfExists(null), throwing NPE'
-        method.invoke(null, [null] as Object[])
+        when:
+        def verdict = runner.run(check, workspace())
 
-        then:
-        noExceptionThrown()
+        then: 'every observed name is allowlisted or shell-internal'
+        verdict instanceof Verdict.Fail
+        def names = (verdict as Verdict.Fail).findings()[0].details().readLines().findAll {
+            !it.isEmpty()
+        } as Set
+        def allowed = (HostTaskExecutionEnvironment.BASE_ENV_NAMES as Set) + ['GNOMISH_FINDINGS_FILE'] + shellSelfSet
+        names.every { allowed.contains(it) }
     }
 }

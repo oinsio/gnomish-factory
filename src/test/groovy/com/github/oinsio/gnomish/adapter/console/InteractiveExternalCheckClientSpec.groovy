@@ -84,6 +84,8 @@ class InteractiveExternalCheckClientSpec extends Specification {
         status instanceof PollStatus.Pass
 
         and: 'the re-prompt named the accepted answers'
-        io.printed.any { it.contains('pass') && it.contains('fail') && it.contains('running') }
+        io.printed.any {
+            it.contains('pass') && it.contains('fail') && it.contains('running')
+        }
     }
 }

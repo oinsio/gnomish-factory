@@ -39,7 +39,9 @@ class GithubConditionalRequestCacheSpec extends Specification {
         RetryConfig.custom()
                 .maxAttempts(4)
                 .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({ it instanceof GithubHttpUncheckedIOException })
+                .retryOnException({
+                    it instanceof GithubHttpUncheckedIOException
+                })
                 .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
                 .build()
     }
@@ -219,7 +221,9 @@ class GithubConditionalRequestCacheSpec extends Specification {
     private void seedKeys(GithubConditionalRequestCache cache, int count) {
         wireMock.stubFor(get(urlMatching('/cap/.*'))
                 .willReturn(aResponse().withStatus(200).withHeader('ETag', '"e"').withBody('x')))
-        (0..<count).each { cache.get(cache.httpClient().newRequest("/cap/${it}"), "/cap/${it}") }
+        (0..<count).each {
+            cache.get(cache.httpClient().newRequest("/cap/${it}"), "/cap/${it}")
+        }
     }
 
     def "retains every entry exactly at capacity: the eldest key is still cached at MAX_ENTRIES entries"() {

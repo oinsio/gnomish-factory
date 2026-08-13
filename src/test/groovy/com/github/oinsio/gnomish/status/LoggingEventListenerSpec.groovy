@@ -54,7 +54,9 @@ class LoggingEventListenerSpec extends Specification {
         def listener = new LoggingEventListener()
 
         when:
-        def events = capture { listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 1)) }
+        def events = capture {
+            listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 1))
+        }
 
         then:
         events.size() == 1
@@ -69,7 +71,9 @@ class LoggingEventListenerSpec extends Specification {
         def listener = new LoggingEventListener()
 
         when:
-        def events = capture { listener.onEvent(new EngineEvent.AttemptStarted(key())) }
+        def events = capture {
+            listener.onEvent(new EngineEvent.AttemptStarted(key()))
+        }
 
         then:
         events.size() == 1
@@ -83,7 +87,9 @@ class LoggingEventListenerSpec extends Specification {
         def listener = new LoggingEventListener()
 
         when:
-        def events = capture { listener.onEvent(new EngineEvent.ExecutionFinished(key(), ExecutorUsage.none())) }
+        def events = capture {
+            listener.onEvent(new EngineEvent.ExecutionFinished(key(), ExecutorUsage.none()))
+        }
 
         then:
         events.size() == 1
@@ -98,7 +104,9 @@ class LoggingEventListenerSpec extends Specification {
         def check = new CheckRef(0, 'builtin:files_exist')
 
         when:
-        def events = capture { listener.onEvent(new EngineEvent.CheckStarted(key(), check)) }
+        def events = capture {
+            listener.onEvent(new EngineEvent.CheckStarted(key(), check))
+        }
 
         then:
         events.size() == 1
@@ -114,7 +122,9 @@ class LoggingEventListenerSpec extends Specification {
         def result = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), java.time.Duration.ofMillis(3))
 
         when:
-        def events = capture { listener.onEvent(new EngineEvent.CheckFinished(key(), result)) }
+        def events = capture {
+            listener.onEvent(new EngineEvent.CheckFinished(key(), result))
+        }
 
         then:
         events.size() == 1
@@ -149,7 +159,9 @@ class LoggingEventListenerSpec extends Specification {
         def outcome = new TaskOutcome.Completed(TaskState.atStageStart('implement'))
 
         when:
-        def events = capture { listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, outcome)) }
+        def events = capture {
+            listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, outcome))
+        }
 
         then:
         events.size() == 1

@@ -117,7 +117,7 @@ public final class GithubHttpClient {
     // PIT M4 documented exception (build.gradle has the full rationale style): @DoNotMutate — an
     // interrupt landing inside the brief window of a real blocking HttpClient#send call is a
     // genuine timing race, not reliably reproducible in a unit test (same rationale as
-    // LaunchedAgentProcess#waitForAtMost's identical shape). The happy-path send and the sibling
+    // HostExecHandle#waitForAtMost's identical shape). The happy-path send and the sibling
     // IOException branch are covered by GithubHttpClientSpec's WireMock scenarios; this isolates
     // only the interrupt-restoration branch so it has nowhere for a mutant to hide as a false
     // SURVIVED/NO_COVERAGE against the rest of doSend.

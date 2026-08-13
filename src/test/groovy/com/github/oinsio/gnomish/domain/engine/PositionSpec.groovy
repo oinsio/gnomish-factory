@@ -53,9 +53,9 @@ class PositionSpec extends Specification {
         describe(position) == expected
 
         where:
-        position                      | expected
+        position | expected
         new Position.AtStage('build') | 'at build'
-        new Position.PipelineEnd()    | 'end'
+        new Position.PipelineEnd() | 'end'
     }
 
     private static String describe(Position position) {

@@ -146,7 +146,7 @@ public final class Engine {
         var verifyOrchestrator = new VerifyOrchestrator(
                 ports.builtinRunner(),
                 ports.commandRunner(),
-                new ExternalPolling(ports.externalClient(), ports.clock(), ports.sleeper()),
+                new ExternalPolling(ports.externalClient(), ports.attemptDelivery(), ports.clock(), ports.sleeper()),
                 new JudgeVoting(ports.judgeVoter()),
                 ports.clock(),
                 ports.listener());
@@ -155,8 +155,8 @@ public final class Engine {
         var currentStage = stage;
         while (true) {
             var result = loop.run(context, currentState, workspace, currentStage);
-            if (result instanceof StageResult.Terminal terminal) {
-                return terminal.outcome();
+            if (result instanceof StageResult.Terminal(var outcome)) {
+                return outcome;
             }
             var passed = (StageResult.Passed) result;
             var next = Advancement.nextStage(definition, currentStage);

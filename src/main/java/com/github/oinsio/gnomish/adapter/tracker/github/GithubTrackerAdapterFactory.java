@@ -3,7 +3,9 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
+import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -27,25 +29,31 @@ import java.util.Optional;
  *
  * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port.
  */
-public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory {
+public record GithubTrackerAdapterFactory(SecretsProvider secretsProvider) implements TrackerAdapterFactory {
 
     /** {@code GNOMISH_GITHUB_TOKEN}: the GitHub tracker credential env var (design D5, NFR-S1). */
     public static final String TOKEN_ENV_VAR = "GNOMISH_GITHUB_TOKEN";
 
-    private static final GithubLabelDef DEFAULT_READY =
-            new GithubLabelDef("gnomish:ready", "2ea44f", "Gnomish factory: ready to be claimed");
-    private static final GithubLabelDef DEFAULT_WORKING =
-            new GithubLabelDef("gnomish:working", "1f6feb", "Gnomish factory: currently being worked");
-    private static final GithubLabelDef DEFAULT_NEEDS_HUMAN =
-            new GithubLabelDef("gnomish:needs-human", "d73a4a", "Gnomish factory: waiting on a human decision");
-    private static final GithubLabelDef DEFAULT_DELIVERED =
-            new GithubLabelDef("gnomish:delivered", "8250df", "Gnomish factory: delivered for review");
+    /**
+     * The production factory, resolving {@code GNOMISH_GITHUB_TOKEN} through the default env/file
+     * {@link SecretsProvider} (FR18, NFR-S1 of add-sandbox-core).
+     */
+    public GithubTrackerAdapterFactory() {
+        this(new EnvFileSecretsProvider());
+    }
 
-    // PIT M4 documented exception: @DoNotMutate — this method's success path (token resolves,
-    // construction proceeds) needs GNOMISH_GITHUB_TOKEN genuinely present in the JVM's process
-    // environment, not reliably possible on module-path JVMs without --add-opens (see requireToken).
-    // GithubTrackerAdapterFactorySpec covers the 3-arg create(...) success path directly (the actual
-    // assembly logic) and this method's missing-token failure path via the real environment.
+    /**
+     * @param secretsProvider the seam through which {@code GNOMISH_GITHUB_TOKEN} is resolved by name
+     *     (FR18, NFR-S1 of add-sandbox-core); never null — the composition root injects the
+     *     installation-configured adapter, and tests a fake
+     */
+    public GithubTrackerAdapterFactory {}
+
+    // PIT M4 documented exception: @DoNotMutate — the token now resolves through the injected
+    // SecretsProvider (the missing-token throw is covered by GithubTrackerAdapterFactorySpec with an
+    // empty provider), but this method's success path drives the WireMock-backed assembly of the
+    // 3-arg create(...) seam (label provisioning, collaborator wiring) — an integration boundary the
+    // spec exercises through that seam directly.
     @DoNotMutate
     @Override
     public Tracker create(TrackerConfig config, String instanceId) {
@@ -62,15 +70,20 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      */
     Tracker create(TrackerConfig config, String instanceId, String token) {
         Map<String, Object> subsection = config.subsection();
-        String apiUrl = requireStringValue(subsection, "api-url");
-        GithubRepoRef repoRef = GithubRepoRef.parse(requireStringValue(subsection, "repo"));
+        String apiUrl = GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "api-url");
+        GithubRepoRef repoRef =
+                GithubRepoRef.parse(GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "repo"));
         String owner = repoRef.owner();
         String repo = repoRef.repo();
 
-        GithubLabelDef readyLabel = resolveLabel(subsection, "ready", DEFAULT_READY);
-        GithubLabelDef workingLabel = resolveLabel(subsection, "working", DEFAULT_WORKING);
-        GithubLabelDef needsHumanLabel = resolveLabel(subsection, "needs-human", DEFAULT_NEEDS_HUMAN);
-        GithubLabelDef deliveredLabel = resolveLabel(subsection, "delivered", DEFAULT_DELIVERED);
+        GithubLabelDef readyLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "ready", GithubTrackerAdapterFactoryLabels.DEFAULT_READY);
+        GithubLabelDef workingLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "working", GithubTrackerAdapterFactoryLabels.DEFAULT_WORKING);
+        GithubLabelDef needsHumanLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "needs-human", GithubTrackerAdapterFactoryLabels.DEFAULT_NEEDS_HUMAN);
+        GithubLabelDef deliveredLabel = GithubTrackerAdapterFactoryLabels.resolveLabel(
+                subsection, "delivered", GithubTrackerAdapterFactoryLabels.DEFAULT_DELIVERED);
 
         var httpClient = new GithubHttpClient(apiUrl, token);
         var cache = new GithubConditionalRequestCache(httpClient);
@@ -105,7 +118,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     }
 
     // PIT M4 documented exception (same integration-boundary rationale as create(config, id)): this
-    // entry point only reads GNOMISH_GITHUB_TOKEN from the real environment and delegates. The
+    // entry point resolves GNOMISH_GITHUB_TOKEN through the SecretsProvider and delegates. The
     // foreign-repo logic (owner/repo threading, verify delegation, exception→refusal translation) is
     // fully covered via the explicit-token testing seam below.
     @DoNotMutate
@@ -124,8 +137,9 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      */
     Optional<String> refuseForeignRef(TrackerConfig config, TaskRef ref, String token) {
         Map<String, Object> subsection = config.subsection();
-        String apiUrl = requireStringValue(subsection, "api-url");
-        GithubRepoRef repoRef = GithubRepoRef.parse(requireStringValue(subsection, "repo"));
+        String apiUrl = GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "api-url");
+        GithubRepoRef repoRef =
+                GithubRepoRef.parse(GithubTrackerAdapterFactoryLabels.requireStringValue(subsection, "repo"));
         var check = new GithubForeignRepoCheck(new GithubHttpClient(apiUrl, token));
         try {
             check.verify(GithubTaskId.parse(ref.id()), repoRef.owner(), repoRef.repo());
@@ -156,45 +170,23 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         return List.of(TOKEN_ENV_VAR);
     }
 
-    // PIT M4 documented exception: @DoNotMutate — GithubTrackerAdapterFactorySpec's "missing
-    // GNOMISH_GITHUB_TOKEN" scenario (a real, unset environment) covers the null branch, but the
-    // blank-but-present half (token.isBlank()) and the success return need GNOMISH_GITHUB_TOKEN set
-    // to a real value in the JVM's process environment — not reliably possible on a module-path JVM
-    // without --add-opens. A genuine integration boundary; the 3-arg create(...) overload (the actual
-    // construction logic) is fully covered via its own explicit-token seam.
+    /**
+     * Resolves {@code GNOMISH_GITHUB_TOKEN} through the {@link SecretsProvider} (FR18, NFR-S1 of
+     * add-sandbox-core), failing closed with a clear {@link GithubTrackerConfigException} when it is
+     * absent or blank — the provider's {@link SecretsProvider#find} already treats blank as absent,
+     * so there is no silent empty value. The token is never logged.
+     *
+     * <p>PIT M4 documented exception: {@code @DoNotMutate} — reachable only from the two
+     * {@code @DoNotMutate} entry points ({@link #create(TrackerConfig, String)} and {@link
+     * #refuseForeignRef(TrackerConfig, TaskRef)}); the missing-token throw is covered behaviorally
+     * by GithubTrackerAdapterFactorySpec with an empty provider, while a resolved token flows into
+     * the WireMock-backed assembly of those entry points — an integration boundary.
+     */
     @DoNotMutate
-    private static String requireToken() {
-        String token = System.getenv(TOKEN_ENV_VAR);
-        if (token == null || token.isBlank()) {
-            throw new GithubTrackerConfigException(
-                    TOKEN_ENV_VAR + " environment variable is required to use the GitHub tracker adapter, but is"
-                            + " missing or blank");
-        }
-        return token;
-    }
-
-    private static String requireStringValue(Map<String, Object> subsection, String key) {
-        Object value = subsection.get(key);
-        if (!(value instanceof String s) || s.isBlank()) {
-            throw new GithubTrackerConfigException(
-                    "tracker.github." + key + " is required to build the GitHub tracker");
-        }
-        return s;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static GithubLabelDef resolveLabel(Map<String, Object> subsection, String key, GithubLabelDef fallback) {
-        Object labels = subsection.get("labels");
-        if (!(labels instanceof Map<?, ?> labelsMap)) {
-            return fallback;
-        }
-        Object entry = labelsMap.get(key);
-        if (!(entry instanceof Map<?, ?> raw)) {
-            return fallback;
-        }
-        Map<String, Object> entryMap = (Map<String, Object>) raw;
-        String name = (String) entryMap.getOrDefault("name", fallback.name());
-        String color = (String) entryMap.getOrDefault("color", fallback.color());
-        return new GithubLabelDef(name, color, fallback.description());
+    private String requireToken() {
+        return secretsProvider
+                .find(TOKEN_ENV_VAR)
+                .orElseThrow(() -> new GithubTrackerConfigException(
+                        TOKEN_ENV_VAR + " is required to use the GitHub tracker adapter, but is missing or blank"));
     }
 }

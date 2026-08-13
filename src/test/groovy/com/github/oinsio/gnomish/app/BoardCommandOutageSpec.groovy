@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.BindingProperties
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.SandboxProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
@@ -90,14 +92,16 @@ tracker:
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, null, false),
+                new BindingProperties('host', [:]),
                 worktreesRoot,
                 homeDir,
                 new StatusCommand(worktreesRoot),
                 new UsageCommand(),
                 boardCommand,
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir,
-                new FactoryProperties(INSTANCE_NAME, null, null, null), [:], [:]),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null), [:], [:]),
                 Clock.systemUTC(),
                 [:],
                 [:],
@@ -113,7 +117,7 @@ tracker:
         def factory = new OutageTrackerAdapterFactory(tracker)
         def boardCommand = new BoardCommand(
                 Clock.systemUTC(),
-                new FactoryProperties(INSTANCE_NAME, null, null, null),
+                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
                 TrackerValidatorStub.acceptingGithub())
         def runner = newRunner(boardCommand)

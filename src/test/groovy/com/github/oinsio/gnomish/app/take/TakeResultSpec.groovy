@@ -67,9 +67,11 @@ class TakeResultSpec extends Specification {
         where:
         component | factory
         'summary' | { -> new TakeResult.Delivered(STATE, '   ') }
-        'report'  | { -> new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, '') }
-        'cause'   | { -> new TakeResult.Aborted(STATE, '') }
-        'note'    | { -> new TakeResult.Revoked(STATE, '') }
-        'reason'  | { -> new TakeResult.Skipped('') }
+        'report' | {
+            -> new TakeResult.AwaitingHuman(STATE, ParkReason.CHECKPOINT, '')
+        }
+        'cause' | { -> new TakeResult.Aborted(STATE, '') }
+        'note' | { -> new TakeResult.Revoked(STATE, '') }
+        'reason' | { -> new TakeResult.Skipped('') }
     }
 }

@@ -75,7 +75,9 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         runner.run(bareRepo, 'rev-parse', BRANCH).stdout().trim() == currentHead()
 
         and: 'a stop note is posted and the claim is released'
-        1 * tracker.postNote(REF, { String note -> note.contains('task closed') })
+        1 * tracker.postNote(REF, { String note ->
+            note.contains('task closed')
+        })
         1 * tracker.release(REF)
 
         and: 'state-changing tracker methods are never called'

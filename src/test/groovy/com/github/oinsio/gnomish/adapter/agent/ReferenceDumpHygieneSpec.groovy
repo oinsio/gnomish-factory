@@ -57,11 +57,15 @@ class ReferenceDumpHygieneSpec extends Specification {
         FIXTURE_NAMES.each { name ->
             Path fixture = resolveFixture(name)
             List<String> scrubbed = readFixtureLines(name)
-                    .collect { line -> ReferenceDumpScrubber.scrub(line, '', '', '') }
+                    .collect { line ->
+                        ReferenceDumpScrubber.scrub(line, '', '', '')
+                    }
             Files.write(fixture, scrubbed, StandardCharsets.UTF_8)
             // NFR-R1, M4: a second in-memory pass over the just-written file changes nothing (idempotent).
             List<String> secondPass = readFixtureLines(name)
-                    .collect { line -> ReferenceDumpScrubber.scrub(line, '', '', '') }
+                    .collect { line ->
+                        ReferenceDumpScrubber.scrub(line, '', '', '')
+                    }
             assert secondPass == scrubbed
         }
     }

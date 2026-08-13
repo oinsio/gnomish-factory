@@ -26,9 +26,9 @@ class HeartbeatResultSpec extends Specification {
         describe(result) == expected
 
         where:
-        result                                                                                    | expected
+        result | expected
         new HeartbeatResult.Beaten(new ClaimVersion('m1', Instant.parse('2026-07-29T10:15:30Z'))) | 'beaten: m1'
-        new HeartbeatResult.ClaimGone()                                                           | 'gone'
+        new HeartbeatResult.ClaimGone() | 'gone'
     }
 
     // FR5, FR8: results are values — equal content means equal results

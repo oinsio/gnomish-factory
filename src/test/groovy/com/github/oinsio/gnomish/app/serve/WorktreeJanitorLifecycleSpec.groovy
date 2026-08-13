@@ -43,8 +43,12 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     //     immediately rather than waiting a full hour for its first scan.
     def "ticks once at startup, before the first sleep"() {
         given:
-        def disposal = { String key -> ticks.incrementAndGet() } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, { -> Set.of() })
+        def disposal = { String key ->
+            ticks.incrementAndGet()
+        } as TaskEnvironmentDisposal
+        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, {
+            -> Set.of()
+        })
 
         when: 'the janitor starts'
         janitor.start()
@@ -63,8 +67,12 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         Path projectDir = Files.createDirectories(worktreesRoot.resolve('my-project').resolve('task-aged'))
         Files.setLastModifiedTime(projectDir, FileTime.from(Instant.now() - Duration.ofDays(30)))
         List<String> disposedKeys = Collections.synchronizedList(new ArrayList<String>())
-        def disposal = { String key -> disposedKeys << key } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, { -> Set.of() })
+        def disposal = { String key ->
+            disposedKeys << key
+        } as TaskEnvironmentDisposal
+        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, {
+            -> Set.of()
+        })
 
         when: 'the janitor starts and reaches its first sleep'
         janitor.start()
@@ -77,8 +85,12 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     // FR14, D10: after the interval elapses, the janitor ticks again — the hourly cadence.
     def "ticks again after the hourly interval elapses"() {
         given:
-        def disposal = { String key -> ticks.incrementAndGet() } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, { -> Set.of() })
+        def disposal = { String key ->
+            ticks.incrementAndGet()
+        } as TaskEnvironmentDisposal
+        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofDays(14), disposal, clock, sleeper, {
+            -> Set.of()
+        })
         janitor.start()
         sleeper.awaitEntered()
 
@@ -98,8 +110,12 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     def "a failing tick does not kill the janitor thread"() {
         given: 'one aged, unheld environment whose disposal always throws'
         Files.createDirectories(worktreesRoot.resolve('my-project').resolve('boom'))
-        def disposal = { String key -> throw new IllegalStateException('disposal boom') } as TaskEnvironmentDisposal
-        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofSeconds(0), disposal, clock, sleeper, { -> Set.of() })
+        def disposal = { String key ->
+            throw new IllegalStateException('disposal boom')
+        } as TaskEnvironmentDisposal
+        def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofSeconds(0), disposal, clock, sleeper, {
+            -> Set.of()
+        })
 
         when: 'the janitor starts, ticks once (throwing), and reaches the next sleep regardless'
         janitor.start()

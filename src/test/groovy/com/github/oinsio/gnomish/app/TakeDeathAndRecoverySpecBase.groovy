@@ -187,7 +187,9 @@ tracker:
         then: 'X is back to Ready, carrying the stale-claim-removed marker naming instance-a, and was NOT claimed by B'
         tracker.fetchTask(X).state() instanceof TrackerTaskState.Ready
         def reapedThread = thread(tracker, X)
-        reapedThread.any { it.startsWith('STALE_CLAIM_REMOVED') && it.contains('instance-a') }
+        reapedThread.any {
+            it.startsWith('STALE_CLAIM_REMOVED') && it.contains('instance-a')
+        }
         reapedThread.every { !it.contains('instance-b') }
 
         when: 'B\'s own round completes'

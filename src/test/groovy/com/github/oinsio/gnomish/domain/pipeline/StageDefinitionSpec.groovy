@@ -82,7 +82,7 @@ class StageDefinitionSpec extends Specification {
     // FR2: the model is immutable — defensive copies isolate from the sources
     def "stage is isolated from later mutation of the source lists"() {
         given: 'mutable source lists'
-        def inputs = [new ArtifactInput.Source()]
+        List<ArtifactInput> inputs = [new ArtifactInput.Source()]
         def outputs = [OUTPUT]
         def checks = [CHECK]
 
@@ -110,10 +110,10 @@ class StageDefinitionSpec extends Specification {
         thrown(UnsupportedOperationException)
 
         where:
-        section   | list             | intruder
-        'inputs'  | { it.inputs() }  | new ArtifactInput.Source()
+        section | list | intruder
+        'inputs' | { it.inputs() } | new ArtifactInput.Source()
         'outputs' | { it.outputs() } | new ArtifactOutput('intruder')
-        'verify'  | { it.verify() }  | new VerifyCheck.Command('intruder')
+        'verify' | { it.verify() } | new VerifyCheck.Command('intruder')
     }
 
     // FR2/Q1: the mechanism section is executor type + pinned model + opaque settings
@@ -128,10 +128,21 @@ class StageDefinitionSpec extends Specification {
         mechanism.settings() == [permissionMode: 'acceptEdits']
     }
 
+    // FR12/FR13 (add-sandbox-core): the Mechanism carries the sandbox
+    // declarations; the three-arg convenience form defaults them to none()
+    def "Executor carries the sandbox declarations, defaulting to none()"() {
+        given: 'a sandbox declaration'
+        def sandbox = new Sandbox(['docker-inside'], true)
+
+        expect: 'the three-arg form defaults sandbox to none(), the four-arg form carries it'
+        new StageDefinition.Executor(ExecutorType.API, 'model', [:]).sandbox() == Sandbox.none()
+        new StageDefinition.Executor(ExecutorType.API, 'model', [:], sandbox).sandbox() == sandbox
+    }
+
     // FR2: the model is immutable — defensive copy isolates from the source map
     def "Executor is isolated from later mutation of the source settings"() {
         given: 'a mutable source settings map'
-        def source = [temperature: 0]
+        Map<String, Object> source = [temperature: 0]
 
         when: 'the mechanism is created and the source map grows afterwards'
         def mechanism = anExecutor(source)

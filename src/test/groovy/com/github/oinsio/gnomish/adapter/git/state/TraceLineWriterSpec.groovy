@@ -69,7 +69,9 @@ class TraceLineWriterSpec extends Specification {
         lines.size() == 3
 
         when:
-        def dtos = lines.collect { TaskStateJson.mapper().readValue(it, TraceLineDto) }
+        def dtos = lines.collect {
+            TaskStateJson.mapper().readValue(it, TraceLineDto)
+        }
 
         then:
         dtos*.seq() == [0, 1, 2]

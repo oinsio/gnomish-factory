@@ -45,11 +45,11 @@ class LedgerTokenUsageSpec extends Specification {
         failure.message.contains("LedgerTokenUsage.${component}")
 
         where:
-        component        | input | output | cacheCreation | cacheRead
-        'input'           | -1L   | 0L     | 0L            | 0L
-        'output'          | 0L    | -1L    | 0L            | 0L
-        'cacheCreation'   | 0L    | 0L     | -1L           | 0L
-        'cacheRead'       | 0L    | 0L     | 0L            | -1L
+        component | input | output | cacheCreation | cacheRead
+        'input' | -1L | 0L | 0L | 0L
+        'output' | 0L | -1L | 0L | 0L
+        'cacheCreation' | 0L | 0L | -1L | 0L
+        'cacheRead' | 0L | 0L | 0L | -1L
     }
 
     def "of() converts an engine TokenUsage field-for-field"() {

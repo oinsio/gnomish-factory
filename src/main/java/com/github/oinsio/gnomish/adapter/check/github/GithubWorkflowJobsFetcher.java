@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
+import com.github.oinsio.gnomish.adapter.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import java.util.ArrayList;
@@ -9,19 +10,15 @@ import java.util.stream.Collectors;
 /**
  * Builds {@link Finding}s for a failed workflow run: lists the run's jobs, narrows to jobs
  * that did not succeed (conclusion != {@code success}, mirroring the fail-closed philosophy
- * of {@link GithubWorkflowRunVerdict} / design D1) and fetches each such job's log, keeping
- * only its tail.
+ * of {@link GithubWorkflowRunVerdict} / design D1) and fetches each such job's log, routed
+ * through the findings funnel at poll time: ANSI/control sequences stripped and only the
+ * capped tail kept ({@link FindingsSanitizer}), so a hostile multi-gigabyte CI log is a
+ * bounded finding, not a resource attack.
  *
- * <p><b>Temporary stand-in.</b> add-sandbox-core's unified findings funnel (FR15) does not
- * exist yet, so FR6's "routed through the funnel" and NFR-C1's "funnel size caps" have
- * nothing to route through. This class is a minimal local substitute sized to exactly what
- * job/log truncation needs — one tail cap per log — and is meant to be replaced by the real
- * funnel once add-sandbox-core lands. It intentionally does not attempt to be a
- * general-purpose cap/funnel implementation.
- *
- * <p>Implements FR6, NFR-C1 of add-external-check-github-actions.
+ * <p>Implements FR6, NFR-C1 of add-external-check-github-actions; FR15, NFR-C1 of
+ * add-sandbox-core.
  */
-public final class GithubWorkflowJobsFetcher {
+public record GithubWorkflowJobsFetcher(GithubConditionalRequestCache cache, String owner, String repo) {
 
     private static final String SUCCESS_CONCLUSION = "success";
 
@@ -30,20 +27,10 @@ public final class GithubWorkflowJobsFetcher {
      * 500-800 lines of typical build output — enough to carry a stack trace or assertion
      * failure (design D5: "the tail of a failed job carries the error") while keeping a
      * handful of failed jobs' findings small enough for one executor request's feedback
-     * context. A placeholder sizing until add-sandbox-core's funnel (FR15) supplies a real,
-     * centrally tuned cap.
+     * context. Applied through the funnel's {@link FindingsSanitizer#capTail} (FR15,
+     * NFR-C1 of add-sandbox-core).
      */
     static final int LOG_TAIL_CAP_CHARS = 4000;
-
-    private final GithubConditionalRequestCache cache;
-    private final String owner;
-    private final String repo;
-
-    public GithubWorkflowJobsFetcher(GithubConditionalRequestCache cache, String owner, String repo) {
-        this.cache = cache;
-        this.owner = owner;
-        this.repo = repo;
-    }
 
     /**
      * Returns one {@link Finding} per job that did not succeed, naming its failed steps and
@@ -85,7 +72,7 @@ public final class GithubWorkflowJobsFetcher {
         String message = failedSteps.isBlank()
                 ? "Job '%s' did not succeed".formatted(job.name())
                 : "Job '%s' failed at step(s): %s".formatted(job.name(), failedSteps);
-        String logTail = capTail(fetchLog(job.id()));
+        String logTail = FindingsSanitizer.capTail(FindingsSanitizer.strip(fetchLog(job.id())), LOG_TAIL_CAP_CHARS);
         String details = run.htmlUrl() == null ? logTail : "run: " + run.htmlUrl() + "\n" + logTail;
         return new Finding(message, job.name(), details);
     }
@@ -98,14 +85,5 @@ public final class GithubWorkflowJobsFetcher {
             case GithubConditionalRequestCache.Fresh fresh -> GithubFreshBody.require(fresh);
             case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
         };
-    }
-
-    /** Keeps only the last {@link #LOG_TAIL_CAP_CHARS} characters of {@code log}, noting truncation. */
-    private static String capTail(String log) {
-        if (log.length() <= LOG_TAIL_CAP_CHARS) {
-            return log;
-        }
-        String tail = log.substring(log.length() - LOG_TAIL_CAP_CHARS);
-        return "[truncated, showing last %d of %d chars]\n%s".formatted(LOG_TAIL_CAP_CHARS, log.length(), tail);
     }
 }

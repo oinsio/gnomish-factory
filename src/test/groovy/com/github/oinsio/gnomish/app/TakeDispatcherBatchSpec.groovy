@@ -98,7 +98,9 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
 
     private static TakeHeartbeat noopHeartbeat() {
         def standingReaper =
-                new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), { [] }, new SystemClock())
+                new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), {
+                    []
+                }, new SystemClock())
         new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag(), standingReaper)
     }
 
@@ -134,7 +136,9 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
         }
         tracker.fetchTask(WORKING_REF) >> trackerTask(WORKING_REF, new TrackerTaskState.Working('someone-else'), 'PROJ-2')
         tracker.fetchTask(FINISHED_REF) >> trackerTask(FINISHED_REF, new TrackerTaskState.Finished(), 'PROJ-3')
-        tracker.claim(READY_REF, INSTANCE.value()) >> { readyClaimed = true; new ClaimResult.Acquired() }
+        tracker.claim(READY_REF, INSTANCE.value()) >> {
+            readyClaimed = true; new ClaimResult.Acquired()
+        }
         def dispatcher = newDispatcher()
         def refs = [
             READY_REF.id(),

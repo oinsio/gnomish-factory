@@ -65,12 +65,12 @@ class HeartbeatProgressSpec extends Specification {
         progress.progressFor(TASK) == new HeartbeatProgress.Progress(stage, attempt)
 
         where:
-        stage       | attempt | event
-        'implement' | 3       | new EngineEvent.AttemptStarted(key('implement', 3))
-        'implement' | 1       | new EngineEvent.ExecutionFinished(key('implement', 1), ExecutorUsage.none())
-        'build'     | 0       | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, 'builtin:files_exist'))
-        'build'     | 4       | new EngineEvent.CheckFinished(key('build', 4), passResult())
-        'review'    | 2       | new EngineEvent.AttemptFinished(key('review', 2), TaskState.atStageStart('review'), trace('review', 2))
+        stage | attempt | event
+        'implement' | 3 | new EngineEvent.AttemptStarted(key('implement', 3))
+        'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), ExecutorUsage.none())
+        'build' | 0 | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, 'builtin:files_exist'))
+        'build' | 4 | new EngineEvent.CheckFinished(key('build', 4), passResult())
+        'review' | 2 | new EngineEvent.AttemptFinished(key('review', 2), TaskState.atStageStart('review'), trace('review', 2))
     }
 
     // FR1: the LATEST event wins — a later stage/attempt overwrites an earlier snapshot.

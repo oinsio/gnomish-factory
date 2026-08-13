@@ -43,11 +43,11 @@ class OutcomeCountsSpec extends Specification {
         failure.message.contains("OutcomeCounts.${component}")
 
         where:
-        component        | delivered | awaitingHuman | aborted | revoked
-        'delivered'       | -1        | 0             | 0       | 0
-        'awaitingHuman'    | 0         | -1            | 0       | 0
-        'aborted'          | 0         | 0             | -1      | 0
-        'revoked'          | 0         | 0             | 0       | -1
+        component | delivered | awaitingHuman | aborted | revoked
+        'delivered' | -1 | 0 | 0 | 0
+        'awaitingHuman' | 0 | -1 | 0 | 0
+        'aborted' | 0 | 0 | -1 | 0
+        'revoked' | 0 | 0 | 0 | -1
     }
 
     def "is value-equal by content"() {

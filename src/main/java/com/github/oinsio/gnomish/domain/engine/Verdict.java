@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The verdict of a single verify check, modeled as one of exactly three sealed
@@ -20,12 +21,24 @@ import java.util.List;
 public sealed interface Verdict {
 
     /**
-     * The check passed. A component-less record, so any two passes are the same
-     * value — there is nothing to distinguish one passing verdict from another.
+     * The check passed, optionally carrying the URL of the authoritative platform
+     * run that decided an external check (NFR-O2 of add-sandbox-core): the verdict
+     * is the recorded check result's payload, so a URL here reaches the tracker
+     * report through the same channel a failing check's findings travel. {@code
+     * runUrl} is {@code null} for every check kind with no platform run to point at
+     * — the no-arg constructor keeps the plain "it passed" verdict for them.
      *
-     * <p>Implements FR4 of add-stage-engine.
+     * <p>Implements FR4 of add-stage-engine; NFR-O2 of add-sandbox-core.
+     *
+     * @param runUrl the authoritative platform run's URL, or {@code null} if none
      */
-    record Pass() implements Verdict {}
+    record Pass(@Nullable String runUrl) implements Verdict {
+
+        /** A pass with no platform run to point at. */
+        public Pass() {
+            this(null);
+        }
+    }
 
     /**
      * A quality failure: the check ran and returned a non-pass verdict, carrying
@@ -68,7 +81,7 @@ public sealed interface Verdict {
     record CannotVerify(String reason, String details) implements Verdict {
 
         public CannotVerify {
-            reason = requireNonBlank(reason, "reason");
+            reason = requireNonBlankReason(reason);
         }
 
         /**
@@ -79,9 +92,9 @@ public sealed interface Verdict {
          * record's canonical constructor, which would silently exempt this
          * validation from the 100% mutation gate.
          */
-        private static String requireNonBlank(String value, String component) {
+        private static String requireNonBlankReason(String value) {
             if (value.isBlank()) {
-                throw new IllegalArgumentException("CannotVerify." + component + " must not be blank");
+                throw new IllegalArgumentException("CannotVerify.reason must not be blank");
             }
             return value;
         }

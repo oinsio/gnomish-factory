@@ -63,7 +63,9 @@ class StandingReaperSupervisionSpec extends Specification {
     //     starting at the base interval, until the cap stops further growth.
     def "consecutive deaths double the backoff up to the 10-minute cap"() {
         given: 'a reaper parked in its first interval sleep'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
 
@@ -93,7 +95,9 @@ class StandingReaperSupervisionSpec extends Specification {
     //     double from where it left off.
     def "a clean tick after a respawn resets the backoff to the base interval"() {
         given: 'a reaper whose first worker has already died twice in a row (backoff at 2x)'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
 
@@ -126,7 +130,9 @@ class StandingReaperSupervisionSpec extends Specification {
     //     restart count, the only surface a persistent fault is visible through.
     def "each respawn logs an ERROR line with a monotonically increasing restart count"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
 
@@ -139,7 +145,9 @@ class StandingReaperSupervisionSpec extends Specification {
         }
 
         then: 'the ERROR lines carry restart counts 1, 2, 3 in order'
-        def errorMessages = appender.list.findAll { it.level == Level.ERROR }*.formattedMessage
+        def errorMessages = appender.list.findAll {
+            it.level == Level.ERROR
+        }*.formattedMessage
         errorMessages.size() == 3
         errorMessages[0].contains('restart #1')
         errorMessages[1].contains('restart #2')
@@ -156,7 +164,9 @@ class StandingReaperSupervisionSpec extends Specification {
     //     never leaks a second ticking worker (the first would otherwise be overwritten and leak).
     def "a second start() while a worker already runs is a no-op"() {
         given: 'a reaper whose worker is parked in its first interval sleep'
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
         def firstWorker = reaper.worker()
@@ -175,7 +185,9 @@ class StandingReaperSupervisionSpec extends Specification {
     //     the death-handling thread checks stopping again once the backoff sleep returns.
     def "stop() during the backoff wait does not respawn"() {
         given:
-        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, { [] }, new SystemClock())
+        def reaper = new StandingReaper(countingDuty(), sleeper, INTERVAL, {
+            []
+        }, new SystemClock())
         reaper.start()
         sleeper.awaitEntered()
         def dyingWorker = reaper.worker()

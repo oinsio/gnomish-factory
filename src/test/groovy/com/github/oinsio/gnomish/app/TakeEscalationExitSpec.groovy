@@ -100,10 +100,10 @@ class TakeEscalationExitSpec extends Specification {
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
 
         where:
-        kind               | escalationReport
-        'CannotVerify'      | new EscalationReport.CannotVerify(new CheckRef(0, 'command:test'), 'timed out', '')
-        'CannotExecute'     | new EscalationReport.CannotExecute('executor crashed')
-        'PipelineMismatch'  | new EscalationReport.PipelineMismatch('old-stage')
+        kind | escalationReport
+        'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, 'command:test'), 'timed out', '')
+        'CannotExecute' | new EscalationReport.CannotExecute('executor crashed')
+        'PipelineMismatch' | new EscalationReport.PipelineMismatch('old-stage')
     }
 
     // FR7 of add-claim-heartbeat: the park write is git-unfenced, so a claim reaped/taken over

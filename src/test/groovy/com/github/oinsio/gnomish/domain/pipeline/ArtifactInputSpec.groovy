@@ -47,8 +47,8 @@ class ArtifactInputSpec extends Specification {
 
         where:
         producerOutputId | reason
-        ''               | 'empty reference'
-        '  '             | 'whitespace-only reference'
+        '' | 'empty reference'
+        '  ' | 'whitespace-only reference'
         'no-such-output' | 'dangling reference — resolution is task 4.3'
     }
 
