@@ -26,6 +26,9 @@ buildscript {
         resolutionStrategy.force "tools.jackson.core:jackson-databind:${buildscriptJacksonVersion}",
             "tools.jackson.core:jackson-core:${buildscriptJacksonVersion}",
             "tools.jackson:jackson-bom:${buildscriptJacksonVersion}"
+        // httpcore5: a plugin drags in 5.4 (GHSA-hf6x-8p5f-cgmf). h2 moves with it.
+        resolutionStrategy.force "org.apache.httpcomponents.core5:httpcore5:${buildscriptHttpcore5Version}",
+            "org.apache.httpcomponents.core5:httpcore5-h2:${buildscriptHttpcore5Version}"
     }
 }
 
@@ -63,6 +66,16 @@ repositories {
 // (build fails on drift); configurations without lock state resolve normally.
 dependencyLocking {
     lockAllConfigurations()
+}
+
+// Security override: the Boot 4.1.0 BOM strictly pins httpclient5:5.6.1, which
+// itself strictly requires httpcore5(-h2):5.4.2 (GHSA-hf6x-8p5f-cgmf) — a
+// `strictly` transitive requirement a plain `constraints {}` entry cannot
+// override, so `force` is used instead (same pattern as the buildscript
+// classpath above). Test-scope only (WireMock/Testcontainers transitive; see
+// gradle.lockfile: testCompileClasspath/testRuntimeClasspath).
+configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
+    resolutionStrategy.force libs.httpcore5.asProvider().get(), libs.httpcore5.h2.get()
 }
 
 dependencies {

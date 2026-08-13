@@ -66,6 +66,10 @@ jackson = "2.22.1"
 # Maven Central (2026-07-28) and stays on the fixed line. classic is kept on
 # the same version.
 logback = "1.6.0"
+# httpcore5: GHSA-hf6x-8p5f-cgmf (CVSS 7.5); a WireMock/Testcontainers
+# transitive drags in 5.4/5.4.2, fixed in 5.4.3. h2 is kept on the same
+# version. Test-scope only (testCompileClasspath/testRuntimeClasspath).
+httpcore5 = "5.4.3"
 
 [libraries]
 # Spring Boot BOM imported via platform() in build.gradle (design D3);
@@ -80,6 +84,11 @@ slf4j-api = { module = "org.slf4j:slf4j-api" }
 # constrains the transitive runtime copies of both artifacts to match.
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 logback-core = { module = "ch.qos.logback:logback-core", version.ref = "logback" }
+# httpcore5 / httpcore5-h2: security override of a WireMock/Testcontainers
+# transitive (see [versions].httpcore5); constrained in build.gradle so both
+# artifacts move together.
+httpcore5 = { module = "org.apache.httpcomponents.core5:httpcore5", version.ref = "httpcore5" }
+httpcore5-h2 = { module = "org.apache.httpcomponents.core5:httpcore5-h2", version.ref = "httpcore5" }
 # @SpringBootTest and Boot test-context support for context-level specs; BOM-managed.
 spring-boot-test = { module = "org.springframework.boot:spring-boot-test" }
 # @ContextConfiguration and the TestContext framework (spock-spring's Spring side); BOM-managed.
