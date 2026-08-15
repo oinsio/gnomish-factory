@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import groovy.transform.ImmutableOptions
 import java.time.Instant
 import spock.lang.Specification
 
@@ -18,7 +19,7 @@ import spock.lang.Specification
  * commit, a database row). The suite persists a representative sequence of rounds and
  * delegates "what did the adapter retain?" to the {@link #retained} hook a concrete
  * subclass implements per its own storage, mapping it onto the suite-local
- * {@link PersistedEntry} triple. The production in-memory persistence (§7.10)
+ * {@code PersistedEntry} triple. The production in-memory persistence (§7.10)
  * subclasses this SAME suite through that hook.
  *
  * <p>The engine-side behaviour that a THROWN persist turns the run into {@code Aborted}
@@ -31,7 +32,15 @@ import spock.lang.Specification
  */
 abstract class AttemptPersistenceContract extends Specification implements PortContractSupport {
 
-    /** The persisted triple, adapter-agnostic, compared by value. */
+    /**
+     * The persisted triple, adapter-agnostic, compared by value.
+     *
+     * <p>{@code @ImmutableOptions}: both component types are Java records that copy their own
+     * collections defensively ({@code List.copyOf} in the compact constructor), so they are
+     * immutable — but a Groovy record only treats a type as immutable if it is on Groovy's own
+     * known list or named here, and otherwise reports the component as mutable.
+     */
+    @ImmutableOptions(knownImmutableClasses = [TaskState, ToolTrace])
     static record PersistedEntry(String taskId, TaskState state, ToolTrace trace) {}
 
     /**
