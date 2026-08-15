@@ -20,9 +20,15 @@ depends only on `domain`; `:sandbox:core` depends only on `domain` /
 `gitobjects`; `application` depends only on `domain`, `gitobjects`,
 `gnomish-plugin-api`, and `:sandbox:core`; each adapter module depends on
 `gnomish-plugin-api` and `application` (plus `:sandbox:core` where it bridges to
-the execution environment) but never on a sibling adapter's internals; sandbox
-backend modules depend on `:sandbox:core`; no production module depends on the
-test-fixtures module; `bootstrap` is the only module that depends on adapters.
+the execution environment, and a sandbox backend module where it drives that
+backend) but never on a sibling adapter's internals — with one declared
+exception: `:adapters:agent` depends on the coarse `:adapters` remainder for the
+shared pipeline-law and briefing packages, narrowed to exactly those packages by
+a named ArchUnit rule; sandbox backend modules depend on `:sandbox:core`, plus
+`application` where the backend realizes an application-owned port; no
+production module depends on the test-fixtures module; `bootstrap` is the only
+module that wires adapters together and the only one that reaches every
+adapter.
 <!-- implements FR2 of split-into-modules -->
 
 #### Scenario: Port-layer modules stay below the adapters
@@ -33,8 +39,12 @@ test-fixtures module; `bootstrap` is the only module that depends on adapters.
 
 #### Scenario: Adapter importing a sibling adapter's internals fails the build
 - **WHEN** an adapter module declares or imports a sibling adapter's internal type
-- **THEN** `check` fails with a named dependency-direction / ArchUnit rule
-  violation identifying the offending edge
+- **THEN** the build fails: an undeclared sibling's types are absent from the
+  compile classpath, so the import fails compilation
+- **AND** a declared sibling dependency fails the module-layering gate naming
+  the offending edge
+- **AND** reach into the coarse `:adapters` remainder beyond `:adapters:agent`'s
+  two declared packages fails the named ArchUnit rule
 
 #### Scenario: Domain stays free of upper layers
 - **WHEN** the boundary rules run against `:domain`
