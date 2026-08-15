@@ -1,11 +1,84 @@
 // Settings for the gnomish-factory build.
 // Implements FR1, NFR-R1 of add-project-skeleton.
+pluginManagement {
+    // Shared build logic lives in the `build-logic` included build, so its
+    // convention plugins are applied by id without publishing anything
+    // (FR6, design D9 of split-into-modules).
+    includeBuild 'build-logic'
+}
+
 plugins {
     // Auto-provisions the pinned JDK toolchain on machines that lack it (design D7).
     // Version is declared here literally because the version catalog is not
     // available to the settings plugins block; all other versions live in
     // gradle/libs.versions.toml (design D2).
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+    // Dependency-analysis gate (FR10 of add-project-skeleton, design D8). From
+    // the multi-module split on it is applied here rather than in the root
+    // build script: the project-scoped plugin only analyses the project it is
+    // applied to, so a root-only application reported "no project health
+    // reports found" and silently skipped every module (FR2, FR6). This
+    // settings-scoped `build-health` variant applies the analysis to every
+    // project in the build; the `dependencyAnalysis {}` configuration and the
+    // `check`-wiring stay in the root build script.
+    // Version literal for the same reason as foojay above: the version catalog
+    // is not available to the settings plugins block. Kept in step with
+    // `[versions].dependency-analysis` in gradle/libs.versions.toml.
+    id 'com.autonomousapps.build-health' version '3.18.0'
 }
 
 rootProject.name = 'gnomish-factory'
+
+// The layered module tree (FR1, design D1 of split-into-modules). Modules are
+// added pass by pass; whatever has not been extracted yet still lives in the
+// root project, which stays the composition root until `:bootstrap` exists.
+include 'domain'
+include 'gitobjects'
+include 'gnomish-plugin-api'
+// Not a layer of the factory: a stand-in third-party adapter that keeps the
+// api's "one declared dependency" promise honest by compiling against it and
+// nothing else (UX3, FR4).
+include 'gnomish-plugin-api:sample'
+// The sandbox port layer (FR8, design D7/D11). Extracted before the `app` split
+// so `:application` has the port edge to depend on when it is carved.
+include 'sandbox:core'
+// The execution-environment backend module (FR8, design D7): the docker-CLI
+// container backend plus the host backend and the subprocess mechanics the two
+// share as package-private collaborators (task 6.1's deviation note). Backends
+// implement the `:sandbox:core` port; future backends (colima / gha / cloud)
+// arrive as sibling modules created by their own changes (Q4).
+include 'sandbox:docker'
+// The application layer (FR3, design D1/D3): the use cases and the ports they
+// drive adapters through, carved out of the old `app` package. The composition
+// half of that package — `main()`, `@Configuration`, and the assembly classes —
+// stays in the root project, which becomes `:bootstrap` once the adapters leave
+// (task 4.7, D2's sequencing correction).
+include 'application'
+// Every port realization that talks to something outside the factory (FR1,
+// FR2, design D1). Pass 1 moved them as one block (D2); pass 2 (task 10) cuts
+// the vendor and technology seams out of it. `:adapters` itself stays: it is
+// the coarse remainder D1 deliberately does not split — the packages whose
+// module overhead would exceed the benefit — and the parent of the modules that
+// left it.
+include 'adapters'
+// The GitHub vendor bundle (task 10.1, FR10): the shared HTTP core plus the
+// tracker and external-check realizations written against it, in one module
+// because D1 keeps the core an internal package of the bundle rather than a
+// third build unit.
+include 'adapters:github'
+// The two technology seams (task 10.2, FR10): the git-subprocess adapter, D1's
+// largest, and the agent-CLI executor. `:adapters:git` is a leaf; `:adapters:agent`
+// is the one module that depends on the coarse remainder, for the frozen
+// pipeline law and the briefing renderer it shares with the console.
+include 'adapters:git'
+include 'adapters:agent'
+// The composition root (FR3, design D1/D3): `main()`, the Spring
+// configuration, the assemblies that bind ports to adapters, the Boot packaging
+// and the E2E layers. Extracted last, from whatever remained in the root
+// project once `:application` and `:adapters` had left (task 4.7, D2's
+// sequencing correction), so the root project now holds no source at all.
+include 'bootstrap'
+// Extracted alongside `:domain` rather than in its own pass (task 7.1): the
+// shared fakes and port-contract suites live in the domain test tree, so the
+// root project's specs lose them the moment `:domain` is carved out (FR7, D8).
+include 'test-fixtures'

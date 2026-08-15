@@ -31,6 +31,10 @@ first.
 **MODIFIED**
 - `app` is split into `application` (use cases + ports) and `bootstrap`
   (composition root, Spring wiring, `main()`).
+- Use cases that reach concrete adapters today are inverted onto ports so they
+  can stay in `application`: the adapter types they consume are either relocated
+  (ports and value types misfiled under `adapter.*`) or hidden behind a new port
+  interface that `bootstrap` binds to the concrete adapter (DEC-2, D12).
 - The `quality-gates` contract is re-expressed over the module tree: root
   `check` aggregates every module's `check` (each running that module's PIT);
   the scoped-target property and CI merge-base scoping operate per module.
@@ -38,8 +42,10 @@ first.
 **REMOVED**
 - The single-module layout and monolithic `build.gradle`.
 
-No port contract or runtime behavior changes — all existing capability specs and
-tests must pass unchanged.
+No port contract or runtime *behavior* changes — every existing capability spec
+holds unchanged. Internal collaborator types do change where a use case is
+inverted onto a port (FR12), so the Spock specs that construct those use cases
+are edited at their construction sites only (FR9, M5).
 
 ## Capabilities
 
@@ -71,7 +77,11 @@ tests must pass unchanged.
   change B).
 - **G4** — Split sandbox adapters so backend-specific dependencies stay out of
   the core, with an unchanged port contract.
-- **G5** — Preserve behavior: every existing spec and test passes unchanged.
+- **G5** — Preserve behavior: every existing capability spec holds, and every
+  Spock spec still passes — edited only where an inverted use case's constructor
+  arguments changed, never in its `given/when/then` assertions.
+- **G6** — Leave `application` genuinely adapter-free, so `bootstrap` holds only
+  composition (`main()`, `@Configuration`, assemblies) and not use-case logic.
 
 ## Non-Goals
 
@@ -119,10 +129,11 @@ tests must pass unchanged.
   modules depend on `:sandbox:core`; no production module depends on
   `test-fixtures`; `bootstrap` is the only module that wires adapters together.
 - **FR3** — `app` SHALL be split into `application` (use cases + ports) and
-  `bootstrap` (composition root, Spring configuration, `main()`); `app` files
-  that import adapter *implementations* move into `bootstrap`; files that
-  consume only ports (including the execution-environment port from
-  `:sandbox:core`) stay in `application`.
+  `bootstrap` (composition root, Spring configuration, `main()`). The split
+  SHALL be by *role*, not by the incidental import set: composition — `main()`,
+  `@Configuration`, assemblies and factories whose job is to instantiate and
+  connect adapters — goes to `bootstrap`; use-case logic stays in
+  `application`, its adapter references inverted per FR12.
 - **FR4** — A `gnomish-plugin-api` module SHALL contain exactly the third-party
   contract surface — port interfaces, the existing tracker SPI factory,
   `SecretsProvider`, SPI validators — and nothing from `application` /
@@ -142,8 +153,11 @@ tests must pass unchanged.
   modules; `:sandbox:core` SHALL carry no backend-specific dependencies (the
   docker backend is subprocess-CLI-based today; future backends' SDKs land in
   their own modules); the `TaskExecutionEnvironment` port contract is unchanged.
-- **FR9** — The split SHALL be behavior-preserving: all existing capability specs
-  and their tests pass with no changes to the specs.
+- **FR9** — The split SHALL be behavior-preserving: every existing capability
+  spec holds unchanged and every Spock spec passes. Spec edits SHALL be confined
+  to collaborator-construction sites forced by FR12 (constructor arguments, test
+  doubles standing in for a newly introduced port); no spec's scenario names,
+  `given/when/then` structure, or assertions SHALL change.
 - **FR10** — Adapters SHALL be split vertically per technology into per-adapter
   modules (second pass); the shared `github` HTTP core stays a package internal
   to its own vendor module (tracker + check).
@@ -152,6 +166,15 @@ tests must pass unchanged.
   that module's PIT); the scoped-target property narrows within a module; CI
   mutation scoping maps changed classes to their owning modules; the union of
   module scopes preserves whole-tree coverage.
+- **FR12** — `application` SHALL contain no import of an adapter
+  implementation. Where a use case reaches one today, the dependency SHALL be
+  inverted by one of two means: (a) **relocation**, when the referenced type is
+  a port interface or a pure value/utility type merely misfiled under
+  `adapter.*` — it moves to its correct layer with no signature change; or
+  (b) **a port interface** owned by `application` (or `domain` where the engine
+  already consumes it), with the concrete adapter bound in `bootstrap`. The
+  inverted seams SHALL be the smallest capability the use case actually needs,
+  not a mirror of the adapter's full class surface.
 
 ### Non-Functional — Performance
 
@@ -192,7 +215,12 @@ tests must pass unchanged.
 - **M3** — The `gnomish-plugin-api` artifact has zero imports from `application`
   or `bootstrap` internals (verified by dependency-analysis).
 - **M4** — Zero adapter → sibling-adapter-internal imports remain.
-- **M5** — All existing specs (575 at the time of writing) pass unchanged.
+- **M5** — All existing specs (575 at the time of writing) pass; the diff over
+  `src/test` touches only construction sites (imports, constructor arguments,
+  test doubles) — zero changes to scenario names, `given/when/then` blocks, or
+  assertions, verifiable by reviewing the spec diff.
+- **M6** — Zero `application` → `..adapter..` imports remain, enforced by the
+  ArchUnit rule of FR2/UX2 rather than by convention.
 
 ## Open Questions
 
@@ -227,6 +255,14 @@ report-only to a failing gate.
   sandbox packages under `adapter/environment` split into `:sandbox:core` and
   backend modules; javadoc `{@link}` references crossing new module boundaries
   are rewritten as plain text.
+- **Port inversion (FR12)** — ports and value types misfiled under `adapter.*`
+  (`ConsoleIO`, `ActivityTracker`, `AgentProgressListener`,
+  `ExternalCheckPinContributor`, `BranchLocation`, `UsageTotals`,
+  `TaskIdSanitizer`, `Segment`/`SegmentPlanner`, the adapter-layer exceptions,
+  …) relocate to `application` / `domain`; the git-subprocess, console,
+  pipeline-loading, workspace and check-runner collaborators of the remaining
+  use cases move behind new `application`-owned ports bound in `bootstrap`.
+  Spock specs for those use cases are edited at their construction sites only.
 - **New artifacts** — `build-logic`, `gnomish-plugin-api`, `:gitobjects`, a
   test-fixtures module, `:sandbox:core`, and the extracted sandbox backend
   module(s).

@@ -1,0 +1,71 @@
+// Build script for the `:sandbox:docker` module (FR8, design D7/D11 of
+// split-into-modules): the execution-environment BACKENDS behind the
+// `:sandbox:core` port — the docker-CLI container backend (one network, one
+// volume, one keep-alive container per task, the egress guard, the
+// lease/self-check chain) and the host backend over worktree + ProcessBuilder
+// mechanics.
+//
+// Deviation from D7's name-implies-scope (recorded at task 6.1): the host
+// backend lives here too, not in a `:sandbox:host` sibling. The two backends
+// share package-private subprocess mechanics by design (ChannelPathResolver,
+// ChildProcessStdin — the docker CLI itself runs as a host process), so a
+// per-backend cut would widen that encapsulation for a two-class module that
+// buys neither of D1's module warrants (no PIT-scoping win, no vendor
+// boundary). Task 5.2's residual-edge note already recorded this destination:
+// "the host and container task environments become the `:sandbox:docker`
+// backend at task 6.1".
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Sandbox backend module: the docker-CLI container backend and the host backend behind the TaskExecutionEnvironment port.'
+
+dependencies {
+    // Version management only (no artifacts), as in `:sandbox:core` (design D3
+    // of add-project-skeleton).
+    implementation platform(libs.spring.boot.dependencies)
+
+    // The port this module implements and the value model its own signatures
+    // are typed in (TaskExecutionEnvironment, ExecCommand/ExecHandle,
+    // CapabilityPassport, ResourceLimits, Segment/SegmentPlanner,
+    // ChildEnvAllowlist) — `api`, consumers compile against them too.
+    api project(':sandbox:core')
+    // Domain value types on public signatures: `Clock`/`Sleeper` (constructor
+    // injection), `Finding` (EgressGuard.denialFindings), `StageDefinition`
+    // (EnvironmentLease).
+    api project(':domain')
+    // The one application port this backend realizes (task 6.1's deviation
+    // note against D1's `:sandbox:docker → :sandbox:core` edge list):
+    // `ContainerEnvironmentReaper` takes `app.serve.TaskEnvironmentDisposal`
+    // on its public constructor — the same adapter-shaped edge every
+    // `:adapters` realization has, and acyclic (`:application` sees only
+    // `:sandbox:core`, never a backend).
+    api project(':application')
+
+    implementation libs.slf4j.api
+
+    // `GuardDenialLog` parses the guard's structured JSONL denials into
+    // findings (NFR-O1 of add-sandbox-core). The BOM carries the CVE-fixed
+    // version, as in `:adapters` (GHSA-5jmj-h7xm-6q6v).
+    implementation platform(libs.jackson.bom)
+    implementation libs.jackson.core
+    implementation libs.jackson.databind
+
+    // Shared fakes (FR7, design D8), test scope only: RecordingDockerCli /
+    // ScriptedSandboxDocker and the TaskExecutionEnvironment port-contract
+    // suite the host backend's spec runs.
+    testImplementation project(':test-fixtures')
+    // Logback's ListAppender backs the specs asserting on the guard-denial and
+    // allowlist log output.
+    testImplementation libs.logback.classic
+}
+
+// The backends sit beside the adapters in the layer diagram (FR2, design
+// D1/D7): they reach the port layer they implement, the domain, and the one
+// application port named above — plus what `:application` re-exposes
+// transitively. Never a sibling backend, an adapter, or the composition root.
+layering {
+    allowedProjects = [':application', ':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core']
+}

@@ -1,0 +1,112 @@
+import org.gradle.api.artifacts.VersionCatalogsExtension
+
+// Java/Groovy compilation, formatting and static-analysis conventions shared by
+// every module (FR6, design D9 of split-into-modules). Extracted verbatim from
+// the pre-split monolithic build.gradle — no gate is relaxed by the move.
+plugins {
+    id 'java'
+    id 'groovy' // Spock specs are Groovy sources under src/test/groovy
+    id 'jacoco' // coverage reports, FR6 / NFR-O1 of add-project-skeleton
+    id 'com.diffplug.spotless' // formatting gate, FR8 of add-project-skeleton (design D7)
+    id 'net.ltgt.errorprone' // Error Prone + NullAway gate, FR9 (design D8)
+}
+
+// Precompiled script plugins have no type-safe `libs` accessor; the main
+// build's catalog is reached through the extension instead (design D9).
+def libs = extensions.getByType(VersionCatalogsExtension).named('libs')
+
+group = 'com.github.oinsio'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(libs.findVersion('java').get().requiredVersion.toInteger())
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+// Dependency locking (NFR-R1 reproducibility, FR11 security scanning of
+// add-project-skeleton, design D9): every module commits its own lockfile,
+// which is what OSV-Scanner reads in CI. Regenerate with
+// `./gradlew check --write-locks` after a dependency change.
+dependencyLocking {
+    lockAllConfigurations()
+}
+
+dependencies {
+    // JSpecify nullness annotations (@NullMarked, @Nullable) for NullAway
+    // (FR9, design D8). compileOnly per the dependency-analysis advice (FR10):
+    // the annotations are consumed only by javac-time analysis.
+    compileOnly libs.findLibrary('jspecify').get()
+
+    // Compiler plugins for javac's annotation-processor path (FR9, design D8);
+    // never leak onto the application classpath.
+    errorprone libs.findLibrary('errorprone-core').get()
+    errorprone libs.findLibrary('nullaway').get()
+}
+
+// Retain formal parameter names in the bytecode. Spring resolves an ambiguous
+// injection point by parameter name — two `Path` beans (`worktreesRoot`,
+// `homeDir`) are told apart that way — and the Boot plugin used to supply this
+// flag implicitly, back when the composition root and every injected class were
+// one module. Library modules apply no Boot plugin (design D9), so the flag
+// belongs here, where it holds for every module (task 4.5 of
+// split-into-modules).
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << '-parameters'
+}
+
+// Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,
+// design D8). Scoped to production compilation: test code is Groovy (Spock),
+// which never goes through javac.
+tasks.named('compileJava', JavaCompile) {
+    options.errorprone {
+        option 'NullAway:AnnotatedPackages', 'com.github.oinsio.gnomish'
+        // Dead-code layer 1 of 3 (design D8): unused private members fail
+        // compilation. Layers 2–3: the dependency-analysis plugin and the 100%
+        // mutation gate.
+        error 'NullAway', 'UnusedMethod', 'UnusedVariable'
+    }
+}
+
+tasks.named('compileTestJava', JavaCompile) {
+    options.errorprone.enabled = false
+}
+
+// The Groovy compiler forks its own worker daemon that does NOT inherit
+// org.gradle.jvmargs from gradle.properties; joint Groovy/Java compilation of a
+// large spec tree overflows its default heap. Give it explicit headroom.
+tasks.named('compileTestGroovy', GroovyCompile) {
+    groovyOptions.forkOptions.memoryMaximumSize = '2g'
+}
+
+// JaCoCo coverage reporting (FR6, NFR-O1 of add-project-skeleton): the plugin
+// is a Gradle core plugin, only its tool version is pinned from the catalog.
+jacoco {
+    toolVersion = libs.findVersion('jacoco').get().requiredVersion
+}
+
+// Spotless formatting gate (FR8 of add-project-skeleton, design D7). The plugin
+// wires `spotlessCheck` into `check`, so misformatted code fails the standard
+// verification lifecycle. palantir-java-format is deterministic and
+// non-configurable — style is never a decision.
+spotless {
+    java {
+        target 'src/*/java/**/*.java'
+        palantirJavaFormat(libs.findVersion('palantir-java-format').get().requiredVersion)
+    }
+    groovy {
+        // Spock specs. greclipse is Spotless's standard Groovy formatter; its
+        // Eclipse/JDT preferences (4-space indent) come from the checked-in
+        // config so daemon defaults never leak into style. The config file lives
+        // once at the repository root, shared by every module.
+        target 'src/*/groovy/**/*.groovy'
+        importOrder()
+        greclipse().configFile(rootProject.file('gradle/spotless-greclipse.properties'))
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}

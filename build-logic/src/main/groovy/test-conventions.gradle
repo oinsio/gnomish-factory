@@ -1,0 +1,45 @@
+import org.gradle.api.artifacts.VersionCatalogsExtension
+
+// Test-stack conventions shared by every module (FR6, design D9 of
+// split-into-modules): Spock 2 on the JUnit Platform and JaCoCo reporting.
+// The mutation gate is `pitest-conventions`, applied here so a module still
+// gets the whole test lifecycle from one plugin id (task 8.1); module-specific
+// PIT exclusions and extra test wiring stay in the module's own build file.
+plugins {
+    id 'java-conventions'
+    id 'pitest-conventions'
+}
+
+def libs = extensions.getByType(VersionCatalogsExtension).named('libs')
+
+dependencies {
+    testImplementation libs.findLibrary('groovy').get()
+    testImplementation libs.findLibrary('spock-core').get()
+    // spock-spring is deliberately NOT declared here: it registers a global
+    // Spock extension that resolves Spring types eagerly at discovery time, so
+    // on a module without Spring on the test runtime classpath every test task
+    // dies with NoClassDefFoundError before a single spec runs. Per
+    // .claude/rules/testing.md it belongs to the modules that actually need a
+    // Spring context — today only the composition root (design D3).
+    // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath.
+    testRuntimeOnly libs.findLibrary('junit-platform-launcher').get()
+}
+
+tasks.named('test') {
+    // Spock 2 runs on the JUnit Platform.
+    useJUnitPlatform()
+    // The suite has grown past Gradle's default test-worker heap; without this the worker JVM
+    // OOMs during JUnit-Platform teardown even though every individual spec has already passed.
+    maxHeapSize = '3g'
+    // Generate coverage reports whenever tests run, so `check` produces them
+    // as part of the single-command verification (FR5 of add-project-skeleton).
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test') // reports need the execution data from test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}

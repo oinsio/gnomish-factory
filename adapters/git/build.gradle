@@ -1,0 +1,94 @@
+// Build script for the `:adapters:git` module (FR10, design D1/D2 of
+// split-into-modules, pass 2): the git-subprocess adapter — the task
+// repository, attempt persistence and delivery, the branch/worktree helpers,
+// the clone hardening and salvage paths, and the `git.state` mappers that read
+// and write the task's state file.
+//
+// D1 warrants it on size alone: ~72 production classes, the largest technology
+// seam in the adapter layer and the one whose specs dominate `:adapters`'
+// mutation gate. It is a leaf — no other adapter package reaches into it and it
+// reaches none of them — so the cut needed no relocation at all.
+plugins {
+    id 'library-conventions'
+    // The container-side git suites drive the real Docker daemon; this
+    // serializes them against every other module's Docker layers (task 5.1).
+    id 'docker-test-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Git adapter: the task repository, attempt persistence and state-file mappers over git as a subprocess.'
+
+dependencies {
+    // Version management only; see the note in `domain/build.gradle`. The
+    // Jackson override carries the CVE fix (GHSA-5jmj-h7xm-6q6v).
+    api platform(libs.spring.boot.dependencies)
+    api platform(libs.jackson.bom)
+
+    // The ports this adapter realizes (`TaskRepository`, `AttemptPersistence`,
+    // `TaskSalvage`, `AttemptDelivery`, the three `TaskGit` facades) and the
+    // value model their signatures are drawn in.
+    api project(':application')
+    api project(':domain')
+    // Git object plumbing: this module writes and reads the task branch's
+    // objects directly where a subprocess would be wasteful.
+    api project(':gitobjects')
+    // The execution-environment backend (task 6.1): `ContainerHarvestFetch` and
+    // the environment-backed persistence name backend types on public
+    // signatures — the "ordinary adapter-to-backend dependency" task 5.2's
+    // residual-edge note anticipated.
+    api project(':sandbox:docker')
+    api project(':sandbox:core')
+
+    implementation libs.slf4j.api
+
+    // The task state file and `task.json` are Jackson documents. The state DTOs
+    // are on this module's own api surface (the `git.state` mappers hand them
+    // out), so the annotations and the mapper travel with them; the parser is an
+    // internal detail.
+    api libs.jackson.annotations
+    api libs.jackson.databind
+    implementation libs.jackson.core
+
+    // Shared fakes and port-contract suites (FR7, design D8), test scope only —
+    // including `BareGitRepoFixture`, the local bare repo the git specs run
+    // against (.claude/rules/testing.md).
+    testImplementation project(':test-fixtures')
+    // Logback's ListAppender backs the specs asserting on log output.
+    testImplementation libs.logback.classic
+}
+
+// PIT exclusions documented for THIS module (task 8.1: each module carries its
+// own exceptions, next to the mutation scope they narrow). Moved here with the
+// specs they name when task 10.2 carved the git seam out of `:adapters`.
+pitest {
+    // add-sandbox-core (tasks 4.5, 4.6, 5.5, 6.5, 9.2-9.4): the Docker-gated integration
+    // suites below drive a real daemon — real containers, volumes and networks through
+    // subprocess `docker`/`git`. A mutant that breaks a wait/retry/kill loop in that
+    // territory doesn't fail fast, it blocks on real OS/Docker I/O that PIT's per-mutation
+    // timeout cannot always interrupt (observed: a killed-container resume mutant hung a
+    // minion for 30+ minutes with zero CPU progress, leaving an orphaned box). Excluding them
+    // removes no production line from mutation coverage — every class they exercise is also
+    // covered by fast, Docker-free unit specs (DockerCommandsSpec,
+    // ContainerTaskExecutionEnvironmentUnitSpec, EgressGuardSpec, ContainerResumeBranch/
+    // ContainerRunSupportSpec) that already feed the gate. Their `app.ContainerMode*E2ESpec`
+    // siblings live in `:bootstrap` and are excluded there.
+    //
+    // They travel with the git seam (task 10.2): each one stands up a bare repo and drives
+    // `ContainerHarvestFetch` / `GitProcessRunner` / `EnvironmentSalvage` against a live
+    // container, so this module's production classes are their real subject.
+    excludedTestClasses = [
+        'com.github.oinsio.gnomish.sandbox.environment.EgressGuardIntegrationSpec',
+        'com.github.oinsio.gnomish.sandbox.environment.JvmProxyEgressE2ESpec',
+        'com.github.oinsio.gnomish.sandbox.environment.ContainerGitMechanicsSpec',
+        'com.github.oinsio.gnomish.sandbox.environment.ContainerReadOnlySurfacesSpec',
+        'com.github.oinsio.gnomish.sandbox.environment.ContainerTaskExecutionEnvironmentContractSpec',
+    ]
+}
+
+// A technology adapter reaches the ports and use cases below it, plus the
+// sandbox backend it hands work to, and nothing sideways (FR2, M4, design D1):
+// no sibling adapter module appears here.
+layering {
+    allowedProjects = [':application', ':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core', ':sandbox:docker']
+}

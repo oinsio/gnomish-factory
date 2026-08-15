@@ -1,0 +1,34 @@
+// UX3, FR4 of split-into-modules: the executable proof that the published
+// contract is self-sufficient. This module is a stand-in for a third-party
+// tracker adapter, and its `dependencies` block below is the whole point — ONE
+// declared dependency. Everything the sources touch must therefore reach them
+// through `:gnomish-plugin-api` (directly or through the `:domain` types it
+// re-exposes, design D4). The day that stops being true, this module stops
+// compiling and `check` goes red.
+//
+// `java-library` + `java-conventions` rather than `library-conventions`: it has
+// no tests of its own — compilation IS the assertion — so `test-conventions`
+// would only add an unused test stack and a PIT task with no covering specs.
+plugins {
+    id 'java-library'
+    id 'java-conventions'
+    // Production-classpath direction gate (FR2, FR7, design D5): the one module
+    // with sources that did not state its layering, so FR7's "no production
+    // module depends on `:test-fixtures`" was asserted everywhere but here.
+    id 'layering-conventions'
+}
+
+description = 'Compile-only proof that a third-party adapter needs gnomish-plugin-api and nothing else (UX3).'
+
+dependencies {
+    api project(':gnomish-plugin-api')
+}
+
+// The transitive closure of the single declared dependency, and nothing more:
+// `:domain` arrives because the api re-exposes its types (design D4). Stating
+// it as data is what makes a future api edge — to an adapter, to
+// `:test-fixtures` — fail `check` here rather than quietly widening what a
+// third-party adapter drags in (UX3, FR7).
+layering {
+    allowedProjects = [':domain', ':gnomish-plugin-api']
+}

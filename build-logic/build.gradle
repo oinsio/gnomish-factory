@@ -1,0 +1,33 @@
+// Build for the convention-plugin sources (FR6, design D9 of split-into-modules).
+// Each `src/main/groovy/*.gradle` file becomes a plugin whose id is the file
+// name, applied by the modules of the main build.
+plugins {
+    id 'groovy-gradle-plugin'
+}
+
+// The CVE overrides for the plugin transitives stay in the root buildscript
+// block: applying a plugin from a precompiled script plugin still puts its jar
+// on the consuming build's buildscript classpath, so `buildscript-gradle.lockfile`
+// is unchanged by this split and the root `force` entries keep guarding those
+// same artifacts (verified: the lockfile still lists them).
+//
+// Same reproducibility / OSV-Scanner posture as the main build: the resolved
+// plugin versions are pinned in a committed lockfile that OSV-Scanner reads.
+dependencyLocking {
+    lockAllConfigurations()
+}
+
+// A plugin applied from a precompiled script plugin must be on this build's
+// implementation classpath, declared by its marker coordinates. `pluginId` and
+// `version` come from the shared catalog so no version is written twice.
+def marker = { Provider<PluginDependency> alias ->
+    def plugin = alias.get()
+    "${plugin.pluginId}:${plugin.pluginId}.gradle.plugin:${plugin.version.requiredVersion}"
+}
+
+dependencies {
+    implementation marker(libs.plugins.spotless)
+    implementation marker(libs.plugins.errorprone)
+    implementation marker(libs.plugins.pitest)
+    implementation marker(libs.plugins.japicmp)
+}

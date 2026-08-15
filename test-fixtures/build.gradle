@@ -1,0 +1,101 @@
+// Build script for the `:test-fixtures` module (FR7, design D8 of
+// split-into-modules): the Spock fixtures, fakes and port-contract suites that
+// more than one module's specs consume.
+//
+// A standalone module rather than Gradle `java-test-fixtures` (design D8):
+// these fixtures span several producing modules (`:domain` fakes, the
+// `:gitobjects` repo fixture), and `java-test-fixtures` would force them under
+// one owner. Its sources therefore live in `src/main/groovy` — production code
+// of a module that only ever appears on a `testImplementation` classpath. FR7
+// forbids any production module from depending on it.
+//
+// `java-library` + `java-conventions` rather than `library-conventions`: this
+// module has no test source set of its own, so `test-conventions` would only
+// add an unused Spock/Groovy test stack and a PIT task with nothing to mutate.
+plugins {
+    id 'java-library'
+    id 'java-conventions'
+}
+
+description = 'Shared Spock fixtures, fakes and port-contract suites consumed by the modules\' test source sets.'
+
+dependencies {
+    // Version management only; see the note in `domain/build.gradle`.
+    implementation platform(libs.spring.boot.dependencies)
+    // Security override, as in the root project and `:application`: the
+    // CVE-fixed Jackson line (GHSA-5jmj-h7xm-6q6v) wins over the Boot BOM's
+    // transitive jackson-bom. Needed here since `:application` exposes Jackson
+    // on its `api` surface.
+    implementation platform(libs.jackson.bom)
+
+    // `api`, not `implementation`: every one of these types appears in the
+    // fixtures' own signatures (a fake implements a `:domain` port, a contract
+    // suite extends Specification), so a consuming spec compiles against them.
+    api project(':domain')
+    api project(':gitobjects')
+    // The tracker port-contract suites are typed in the port's own DTOs.
+    api project(':gnomish-plugin-api')
+    // The application-layer fixtures shared by `:application`'s own specs and
+    // the composition root's (task 4.5 of split-into-modules): the scripted
+    // console, the blocking sleeper and virtual monotonic time, the recording
+    // process-tree killer. Each implements an `:application` port, so the type
+    // is part of a consuming spec's compile surface — `api`, not
+    // `implementation`. It does put `:application` on every consuming module's
+    // TEST classpath, including `:domain`'s; harmless (FR7 only forbids a
+    // PRODUCTION module depending on this one) and the price of one shared
+    // fixtures module rather than per-producer `java-test-fixtures` (design D8).
+    api project(':application')
+    // The adapter-side fixtures the composition root's integration specs share
+    // with `:adapters`' own: the bare-git repo, the scripted docker CLI, the
+    // fake agent binary, the accept-anything tracker validator. Their own
+    // signatures name adapter types, so `api` — which does put `:adapters` on
+    // every consuming module's TEST classpath, the same trade `:application`
+    // above already makes (design D8).
+    api project(':adapters')
+    // The git seam pass 2 cut out of that block (task 10.2): `BareGitRepoFixture`
+    // and `TaskGitFixture` build git-adapter collaborators, but hand back only
+    // paths and port types — `implementation`, per the dependency-analysis gate.
+    // No `:adapters:agent` edge: `FakeAgentBinary` and `FakeAgentSupport` name
+    // the agent adapter in prose and in the scripts they lay down, never in
+    // bytecode.
+    implementation project(':adapters:git')
+    // `ScriptedSandboxDocker` builds the docker environments over a scripted CLI
+    // and hands back `:sandbox:core` port types.
+    api project(':sandbox:core')
+    // The docker-CLI fixtures extend the backend's own collaborators
+    // (`RecordingDockerCli extends DockerCli`), and the
+    // `TaskExecutionEnvironment` port-contract suite lives here so both the
+    // host backend's spec (`:sandbox:docker`) and the container contract suite
+    // (`:adapters`) run the same scenarios (task 6.1).
+    api project(':sandbox:docker')
+    api libs.groovy
+    api libs.spock.core
+
+
+    // `ApplicationArgumentsFixture` returns Spring Boot's own
+    // `DefaultApplicationArguments`, exactly as the runtime hands arguments to
+    // the command layer — the bare artifact, never a running context. Kept
+    // `implementation`: only the two modules that already have Spring on their
+    // test classpath call that fixture, so `:domain` / `:gitobjects` stay clear
+    // of it.
+    implementation libs.spring.boot.asProvider()
+
+    // `GiteaAvailability` probes the Docker daemon through Testcontainers'
+    // `DockerClientFactory` so every Docker-dependent spec — the Gitea E2E layer
+    // in the composition root and the container-environment contract suites in
+    // `:adapters` — skips cleanly by the same check. An internal detail of the
+    // probe, never part of a consuming spec's compile surface.
+    implementation libs.testcontainers
+    // The reference-dump scrubber walks the recorded stream-json with its own
+    // ObjectMapper.
+    implementation libs.jackson.databind
+
+    // PortContractSupport throws org.opentest4j.TestAbortedException for its
+    // per-variant runtime skip — an internal detail of the fixtures, never part
+    // of a consuming spec's compile surface.
+    implementation libs.opentest4j
+    // Spock's Specification reaches JUnit Platform engine types at runtime; as
+    // main-scope classes here they need the engine declared, not inherited from
+    // a test-only classpath (buildHealth advice).
+    runtimeOnly libs.junit.platform.engine
+}

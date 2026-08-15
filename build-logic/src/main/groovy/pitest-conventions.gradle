@@ -1,0 +1,200 @@
+import groovy.xml.XmlSlurper
+import org.gradle.api.artifacts.VersionCatalogsExtension
+
+// Mutation-gate conventions shared by every module with production Java (FR6, FR11,
+// design D6/D9 of split-into-modules): PIT wired into the module's own `check`,
+// targeting that module's production packages and nothing else, so root `check`
+// aggregates every module's run while `:module:check` mutates only that module.
+// Module-specific exclusions stay in the module's build file; split out of
+// `test-conventions` at task 8.1 — one file is one thing.
+plugins {
+    id 'java-conventions'
+    id 'info.solidsoft.pitest' // mutation testing gate, FR6 (design D5)
+}
+
+def libs = extensions.getByType(VersionCatalogsExtension).named('libs')
+
+// The module's own production surface, read once at configuration time (the pitest
+// {} block is eager, not a lazy Property, so the read happens here to stay
+// config-cache safe): `ownPackages` binds targetClasses to this module's packages
+// (FR11, D6), `ownClasses` is what a pitScope list intersects with.
+def ownPackages = [] as TreeSet
+def ownClasses = [] as TreeSet
+sourceSets.main.java.srcDirs.each { srcDir ->
+    fileTree(srcDir) { include '**/*.java' }.visit { details ->
+        if (details.file.isFile()) {
+            def fqcn = details.relativePath.pathString[0..-'.java'.length() - 1].replace('/', '.')
+            ownPackages << fqcn.substring(0, fqcn.lastIndexOf('.'))
+            if (!fqcn.endsWith('.package-info')) {
+                ownClasses << fqcn
+            }
+        }
+    }
+}
+// One glob per package rather than per class: PIT matches globs against the runtime
+// class name, so `pkg.*` also covers the `Outer$Inner` forms an exact list misses.
+def moduleTargets = ownPackages.collect { "${it}.*".toString() }
+
+// pitScope (scope-pit-to-changed-files, FR1/FR5, design D1; re-scoped per module
+// by task 8.1 of split-into-modules): opt-in, CI-only project property carrying
+// the changed-class glob list CI computes from the diff, for the WHOLE build since
+// one CI run covers every module. Each module keeps only the globs matching its own
+// production classes, so modules the diff did not touch skip their gate (D6's "map
+// changed classes to their owning modules"); unset (the local default) runs the full
+// module tree, whose union is the whole production tree. Accepted trade-off: a scoped
+// run can miss a mutation surviving in an unchanged file due to a change elsewhere —
+// "cross-file mutation rot", see design.md's Risks.
+def pitScopeRaw = providers.gradleProperty('pitScope')
+def pitScopeSet = pitScopeRaw.isPresent()
+// PIT's glob syntax: `*` matches any run of characters, the rest is literal; the
+// literal segments are quoted so a `.` cannot match arbitrarily.
+def globToPattern = { String glob ->
+    java.util.regex.Pattern.compile(glob.split(/\*/, -1)
+            .collect { java.util.regex.Pattern.quote(it) }
+            .join('.*'))
+}
+def pitScopeRawGlobs = pitScopeRaw.getOrElse('')
+        .split(',')
+        .collect { it.trim() }
+        .findAll { !it.isEmpty() }
+def pitScopeGlobs = pitScopeRawGlobs.findAll { glob -> ownClasses.any { globToPattern(glob).matcher(it).matches() } }
+// Resolved again in afterEvaluate, once `excludedClasses` is readable, and read by
+// the skip below at execution time. A plain map so the onlyIf spec the configuration
+// cache serializes carries data, not the project.
+def pitScopeResolution = [empty: false]
+
+pitest {
+    // asProvider(): 'pitest' is a prefix of other catalog version aliases.
+    pitestVersion = libs.findVersion('pitest-tool').get().requiredVersion
+    junit5PluginVersion = libs.findVersion('pitest-junit5-plugin').get().requiredVersion
+    // Concurrent PIT minion JVMs for the mutation phase (PIT's default is 1), from
+    // Gradle's own worker ceiling so one standard knob governs load on any machine.
+    // The -2 keeps headroom for the daemon and concurrent tasks; without it, CPU
+    // oversubscription pushes covering tests past PIT's per-mutation timeout and
+    // pitestVerifyAllKilled fails on the TIMED_OUT.
+    threads = Math.max(1, gradle.startParameter.maxWorkerCount - 2)
+    // Java production code only — never Groovy test bytecode (mutating Groovy
+    // produces noisy false-positive survivors; see .claude/rules/testing.md).
+    // Unset (local default) => this module's full production tree; set => the
+    // subset of the CI list belonging to this module (empty => the skip below).
+    targetClasses = pitScopeSet ? pitScopeGlobs : moduleTargets
+    // Set explicitly rather than leaning on PIT's default (which falls back to
+    // targetClasses and finds the specs only by the coincidence that they share
+    // the package tree; an empty test scan is what lets a run count every
+    // mutation as RUN_ERROR and still report ~100%). Deliberately the whole
+    // prefix: a module's specs may sit in a package its production code does not
+    // own, and PIT only mutates this module's classes anyway (mutableCodePaths).
+    targetTests = ['com.github.oinsio.gnomish.*']
+    mutationThreshold = 100 // 100% mutation score gate (FR6)
+    // Per-mutation timeout budget (allowed = recorded test time × factor + const).
+    // PIT records test times during the single-threaded coverage pass, but the
+    // mutation phase runs `threads` minions at once and the same tests then run 2–3×
+    // slower. The raised budget removes load-induced false positives only — TIMED_OUT
+    // never counts as a kill (pitestVerifyAllKilled fails on it), so a genuinely
+    // hanging mutant still reds the build.
+    timeoutFactor = 3.0
+    timeoutConstInMillis = 20000
+    timestampedReports = false // stable report path for CI artifact upload
+    outputFormats = ['XML', 'HTML']
+}
+
+// A scoped run must intersect the CI list with what this module will actually
+// MUTATE, not merely with what it compiles: a diff touching only an exempted
+// class (task 8.6, design D13(b) — `.claude/rules/testing.md`) leaves a non-empty
+// targetClasses that PIT filters to nothing and hard-fails on with "No mutations
+// found". The subtraction waits for afterEvaluate, since `excludedClasses` is set
+// by the module's build file after this plugin applies; unscoped runs are
+// untouched, PIT applies the exclusions itself.
+afterEvaluate {
+    if (!pitScopeSet) {
+        return
+    }
+    def excludedPatterns = pitest.excludedClasses.getOrElse([] as Set).collect(globToPattern)
+    def mutableClasses = ownClasses.findAll { fqcn -> !excludedPatterns.any { it.matcher(fqcn).matches() } }
+    def scoped = pitScopeRawGlobs.findAll { glob -> mutableClasses.any { globToPattern(glob).matcher(it).matches() } }
+    pitest.targetClasses = scoped
+    pitScopeResolution.empty = scoped.isEmpty()
+}
+
+// Per-method exemptions are NOT configured here: they are carried by the
+// project's own `@com.github.oinsio.gnomish.DoNotMutate` marker, which PIT
+// honours build-wide with no Gradle wiring — see `.claude/rules/testing.md`.
+tasks.named('pitest') {
+    // PIT's coverage pass re-runs the covering suite in a separate minion JVM —
+    // including Docker-backed specs that materialize real containers/volumes
+    // named after a fixed per-test id. Undeclared ordering + org.gradle.parallel
+    // lets Gradle run `pitest` and `test` concurrently, racing to create the
+    // same-named Docker objects. `mustRunAfter` serializes them without adding a
+    // real dependency (`pitest` does not consume `test`'s output).
+    mustRunAfter tasks.named('test')
+    // PIT hard-fails ("No mutations found") when there is nothing to mutate, so a
+    // module with no Java production code is skipped rather than weakened with
+    // failWhenNoMutations = false, which would also mask a misconfigured filter.
+    onlyIf('no Java production classes to mutate yet') { !moduleTargets.isEmpty() }
+    // scope-pit-to-changed-files FR4/D4, per module since task 8.1: pitScope set but
+    // matching nothing MUTABLE here means a diff that did not touch this module or is
+    // confined to its exempted classes — skip cleanly (resolved above).
+    onlyIf('pitScope is set but resolves to no mutable classes in this module') {
+        !(pitScopeSet && pitScopeResolution.empty)
+    }
+}
+
+// Fail-closed mutation-status gate (FR6 of add-project-skeleton, M5 of
+// add-agent-executor). PIT's DetectionStatus counts RUN_ERROR, MEMORY_ERROR and
+// TIMED_OUT as "detected", so a degraded run whose minion crashes before running
+// any test reports a green ~100% score — mutationThreshold cannot see the
+// difference. This parses the report and fails unless every mutation was KILLED.
+tasks.register('pitestVerifyAllKilled') {
+    description = 'Fails unless every PIT mutation was KILLED — RUN_ERROR/MEMORY_ERROR/TIMED_OUT do not count as detected.'
+    group = 'verification'
+    dependsOn tasks.named('pitest')
+    def reportFile = layout.buildDirectory.file('reports/pitest/mutations.xml')
+    // Mirror pitest's own skip: no report means nothing was mutated yet.
+    onlyIf('a PIT mutations.xml was produced') { reportFile.get().asFile.exists() }
+    doLast {
+        def xml = new XmlSlurper().parse(reportFile.get().asFile)
+        def offenders = xml.mutation.findAll { it.@status.text() != 'KILLED' }
+        if (!offenders.isEmpty()) {
+            def byStatus = offenders
+                    .groupBy { it.@status.text() }
+                    .collectEntries { status, list -> [status, list.size()] }
+            def sample = offenders.take(10)
+                    .collect { m -> "  ${m.@status.text()}: ${m.mutatedClass.text()}.${m.mutatedMethod.text()} (${m.mutator.text().tokenize('.').last()})" }
+                    .join('\n')
+            throw new GradleException(
+                    "PIT mutation gate is not trustworthy: ${offenders.size()} mutation(s) were not KILLED ${byStatus}. " +
+                    "PIT counts RUN_ERROR/MEMORY_ERROR/TIMED_OUT as 'detected', so the reported score is inflated. " +
+                    "First offenders:\n${sample}\nReport: ${reportFile.get().asFile}")
+        }
+    }
+}
+
+// A module's `check` runs Spock + JaCoCo + PIT as one command (FR5, FR6), so
+// root `check` aggregates every module's run (FR11, design D6).
+tasks.named('check') {
+    dependsOn tasks.named('pitest')
+    dependsOn tasks.named('pitestVerifyAllKilled')
+}
+
+// Opt-in whole-build aggregate (FR11, D6, task 8.2): `pitestAll` at the root is
+// the one-shot full report, deliberately NOT wired into `check`, which already
+// aggregates the same runs through each module.
+rootProject.tasks.named('pitestAll').configure {
+    dependsOn tasks.named('pitest')
+    dependsOn tasks.named('pitestVerifyAllKilled')
+}
+
+// UX2: PIT's failure message names the violated threshold but not the report
+// location, so a finalizer prints the stable path whenever a report was produced
+// (finalizedBy runs even when the finalized task fails).
+tasks.register('pitestReportLocation') {
+    def reportFile = layout.buildDirectory.file('reports/pitest/index.html')
+    onlyIf('no PIT report was produced') { reportFile.get().asFile.exists() }
+    doLast {
+        logger.lifecycle("PIT mutation report: ${reportFile.get().asFile}")
+    }
+}
+
+tasks.named('pitest') {
+    finalizedBy tasks.named('pitestReportLocation')
+}

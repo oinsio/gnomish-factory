@@ -1,0 +1,125 @@
+// Conventions for a module published as a third-party contract artifact
+// (FR5, FR6, design D9/D10 of split-into-modules). Applied by
+// `:gnomish-plugin-api` in task 2.5.
+//
+// What it buys over `library-conventions`: a Maven publication with sources and
+// javadoc (a third party compiles and reads against it, UX3) and a build-time
+// assertion that the module carries a real semver version — the version is the
+// compatibility promise FR5 makes, so a placeholder must not ship.
+plugins {
+    id 'library-conventions'
+    id 'maven-publish'
+    id 'me.champeau.gradle.japicmp'
+}
+
+java {
+    // A contract artifact is read, not just linked: ship the sources and the
+    // javadoc a third-party adapter author needs (UX3).
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            pom {
+                name = project.name
+                description = project.description ?: 'Gnomish Factory published API contract'
+                licenses {
+                    license {
+                        name = 'Apache License, Version 2.0'
+                        url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+            }
+        }
+    }
+}
+
+// FR5: the published surface's version IS the compatibility contract, so a
+// module reaching publication must have replaced the shared placeholder version
+// with a real semver (design D10 — the japicmp gate that consumes it is turned
+// on in change B). MAJOR.MINOR.PATCH with the optional pre-release / build
+// metadata of semver 2.0.0; `-SNAPSHOT` is rejected by the pre-release rule
+// below only insofar as it is not a valid identifier set — it is allowed as a
+// pre-release, but the placeholder `0.1.0-SNAPSHOT` is rejected explicitly.
+def semver = ~/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$/
+// Read through a Property filled in `afterEvaluate`, not `project.version` at
+// apply time: the module sets its own version further down its build script, so
+// an eager read here always sees the placeholder `java-conventions` assigned.
+// A Property (rather than a closure over `project`) keeps the task
+// configuration-cache safe.
+def declaredVersionHolder = objects.property(String)
+afterEvaluate {
+    declaredVersionHolder.set(project.version.toString())
+}
+tasks.register('verifyPublishedApiVersion') {
+    description = 'Fails unless the published API module declares a real semver version (FR5 of split-into-modules).'
+    group = 'verification'
+    def versionProperty = declaredVersionHolder
+    doLast {
+        def declaredVersion = versionProperty.get()
+        if (!(declaredVersion ==~ semver)) {
+            throw new GradleException(
+                    "Published API version '${declaredVersion}' is not a valid semver: " +
+                    'the version is the compatibility contract (FR5), so it must be set explicitly on this module.')
+        }
+        if (declaredVersion.endsWith('-SNAPSHOT')) {
+            throw new GradleException(
+                    "Published API version '${declaredVersion}' is still the shared placeholder: " +
+                    'set a real semver version on this module (FR5, design D10).')
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyPublishedApiVersion')
+}
+
+// Binary-compatibility tracking over the published contract (FR5, design D10).
+// The compared surface is deliberately the whole runtime classpath, not just
+// this module's jar: the api re-exposes `:domain` types through an `api`
+// dependency (design D4), so those types are part of the semver promise too.
+//
+// REPORT-ONLY in this change — `failOnModification = false`. The surface is
+// still moving while the split relocates types, so a hard gate would fight
+// every move; change B flips this to failing once the api is consumed from
+// outside (D10). Until a first version is published there is nothing to compare
+// against, so the task skips cleanly unless `-PapiBaselineVersion=<semver>`
+// names a released baseline.
+def apiBaselineVersion = providers.gradleProperty('apiBaselineVersion')
+
+configurations.register('apiCompatibilityBaseline') {
+    canBeConsumed = false
+    canBeResolved = true
+    description = 'The previously released API artifact japicmp compares the current surface against.'
+}
+
+dependencies {
+    if (apiBaselineVersion.isPresent()) {
+        apiCompatibilityBaseline "${project.group}:${project.name}:${apiBaselineVersion.get()}"
+    }
+}
+
+tasks.register('japicmpReport', me.champeau.gradle.japicmp.JapicmpTask) {
+    description = 'Reports binary-compatibility changes in the published API surface against the configured baseline (FR5, design D10).'
+    group = 'verification'
+    onlyIf('no -PapiBaselineVersion baseline to compare against') { apiBaselineVersion.isPresent() }
+    oldClasspath.from(configurations.named('apiCompatibilityBaseline'))
+    newClasspath.from(tasks.named('jar'), configurations.named('runtimeClasspath'))
+    // Report everything that moved, not only the breaking subset: while the
+    // surface is settling, an addition is as interesting as a removal.
+    onlyBinaryIncompatibleModified = false
+    failOnModification = false
+    failOnSourceIncompatibility = false
+    // The baseline is resolved without the consumer's own compile classpath, so
+    // unresolvable references in unrelated types must not abort the report.
+    ignoreMissingClasses = true
+    txtOutputFile = layout.buildDirectory.file('reports/japicmp/api-compatibility.txt')
+    htmlOutputFile = layout.buildDirectory.file('reports/japicmp/api-compatibility.html')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('japicmpReport')
+}

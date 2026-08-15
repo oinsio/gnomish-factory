@@ -1,0 +1,29 @@
+// Build-metadata conventions for the root project (FR6, design D9 of
+// split-into-modules). Once `:bootstrap` was carved out of the root remainder
+// (task 4.7) the root project holds no source at all: what is left is the
+// build-wide metadata — the formatting gate over the build files themselves,
+// and the `check` lifecycle task the root-only gates (dependency-analysis, the
+// git-hook installer) hang off.
+plugins {
+    // `check`, `clean` and the lifecycle tasks, without pulling in `java`:
+    // the root project compiles nothing.
+    id 'base'
+    // Formatting gate, FR8 of add-project-skeleton (design D7). The Java and
+    // Groovy source formats live in `java-conventions`, applied per module;
+    // this covers the build files, which no module owns.
+    id 'com.diffplug.spotless'
+}
+
+spotless {
+    format 'misc', {
+        // Build metadata hygiene only; docs are deliberately excluded
+        // (markdown trailing spaces are semantic, archived changes immutable).
+        // '*/*.gradle' covers every module build file plus the `build-logic`
+        // included build (whose own sources Spotless cannot reach from inside
+        // that build), so a new module needs no entry here (FR6).
+        target '*.gradle', '*/*.gradle', 'build-logic/src/main/groovy/*.gradle',
+            'gradle.properties', 'gradle/libs.versions.toml', '.gitignore', '.gitattributes'
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}

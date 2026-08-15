@@ -28,6 +28,10 @@ errorprone-plugin = "5.1.0"
 nullaway = "0.13.8"
 jspecify = "1.0.1"
 dependency-analysis = "3.18.0"
+# japicmp Gradle plugin: binary-compatibility report over the published API
+# contract (FR5, design D10 of split-into-modules). Report-only in this change;
+# change B flips it to a failing gate.
+japicmp-plugin = "0.4.6"
 # ArchUnit for the domain/adapter purity gate (FR10 of load-pipeline-config,
 # design D7). 1.5.0 verified on Maven Central 2026-08-13; its shaded ASM
 # supports Java 25 bytecode (class-file version 69).
@@ -76,6 +80,15 @@ httpcore5 = "5.4.3"
 # spring-boot-starter deliberately has no version — it is BOM-managed.
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter" }
+# The bare Boot artifact: @ConfigurationProperties/@Name for the typed
+# configuration records of `:sandbox:core`, which needs the annotations without
+# a running context (design D3, D11 of split-into-modules). BOM-managed.
+spring-boot = { module = "org.springframework.boot:spring-boot" }
+# @AutoConfiguration: how an adapter module exports its `@Configuration` to the
+# composition root explicitly, instead of being swept up by a component scan
+# reaching across the module boundary (task 4.8, design D3 of
+# split-into-modules). BOM-managed.
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure" }
 # SLF4J API: production code logs through it (FR4); BOM-managed.
 slf4j-api = { module = "org.slf4j:slf4j-api" }
 # Logback backend classes (ListAppender, Logger) used by the logging-level
@@ -99,6 +112,11 @@ spring-beans = { module = "org.springframework:spring-beans" }
 groovy = { module = "org.apache.groovy:groovy", version.ref = "groovy" }
 # Gradle 9 no longer injects the launcher; version is Boot-BOM-managed.
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+# junit-platform-engine: `:test-fixtures` publishes Spock Specification subclasses
+# as main-scope classes, so the engine types Spock's base class touches must be on
+# the consumer's runtime classpath by an explicit declaration (buildHealth advice,
+# FR7 of split-into-modules); JUnit-BOM-managed.
+junit-platform-engine = { module = "org.junit.platform:junit-platform-engine" }
 # opentest4j: the port-contract opt-out seam (PortContractSupport) throws
 # TestAbortedException for a runtime, per-variant skip on the JUnit Platform
 # (FR14 of add-manual-run) — a direct source reference, so the
@@ -153,3 +171,4 @@ pitest = { id = "info.solidsoft.pitest", version.ref = "pitest-plugin" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
 dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
+japicmp = { id = "me.champeau.gradle.japicmp", version.ref = "japicmp-plugin" }

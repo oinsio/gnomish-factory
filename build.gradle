@@ -1,14 +1,17 @@
-import groovy.xml.XmlSlurper
+// Build script for the gnomish-factory root project.
+//
+// The root project holds no source: since `:bootstrap` was carved out of the
+// remainder (task 4.7 of split-into-modules), every production class and spec
+// lives in a module and the root is build-wide metadata only — the formatting
+// gate over the build files (via `build-metadata-conventions`), the
+// dependency-analysis gate, and the git-hook installer. Everything a module
+// needs comes from the `build-logic` convention plugins (FR6, design D9).
 
-// Build script for the gnomish-factory walking skeleton.
-// Implements FR1 of add-project-skeleton (design D1–D3):
-// single module, Java 25 toolchain, Spring Boot plugin + BOM,
-// Spock (Groovy) test stack. All versions come from gradle/libs.versions.toml.
-
-// Dependency locking for the buildscript classpath (plugins). Together with
-// the project-configuration locking below (see `dependencyLocking`), this
-// produces `buildscript-gradle.lockfile` — part of the machine-readable
-// dependency inventory that OSV-Scanner consumes in CI (FR11, design D9).
+// Dependency locking for the buildscript classpath (the convention plugins'
+// own transitives). Together with the project-configuration locking from
+// `java-conventions`, this produces the committed lock state OSV-Scanner reads
+// in CI (FR11, design D9). `:bootstrap` carries the same block for the Boot
+// Gradle plugin, which is applied there.
 // The `buildscript` block must precede `plugins`, hence its position here.
 buildscript {
     configurations.classpath {
@@ -17,6 +20,15 @@ buildscript {
         // Versions live in gradle.properties (the `buildscript*` keys), because
         // the version catalog is not visible to the buildscript classpath;
         // referencing them by name keeps version bumps out of this file.
+        // `build-logic/build.gradle` reads the same keys for the plugin jars
+        // that moved onto its classpath.
+        // Every artifact forced below currently arrives through the Boot Gradle
+        // plugin, i.e. on `:bootstrap`'s classpath rather than this one (see
+        // that module's identical block, and this project's lockfile, which no
+        // longer lists them). They are kept here as the standing guard for the
+        // root's own plugin classpath: a convention-plugin transitive that
+        // reintroduces one must land on the fixed version, not the vulnerable
+        // one that made it a documented override.
         // commons-lang3: a plugin drags in 3.16.0 transitively (GHSA-j288-q9x7-2f5v).
         resolutionStrategy.force "org.apache.commons:commons-lang3:${buildscriptCommonsLang3Version}"
         // tools.jackson (Jackson 3.x): a plugin drags in 3.1.4; jackson-databind
@@ -33,708 +45,11 @@ buildscript {
 }
 
 plugins {
-    id 'java'
-    id 'groovy' // Spock specs are Groovy sources under src/test/groovy
-    id 'jacoco' // coverage reports, FR6 / NFR-O1 of add-project-skeleton
-    alias(libs.plugins.spring.boot)
-    alias(libs.plugins.pitest) // mutation testing gate, FR6 (design D5)
-    alias(libs.plugins.spotless) // formatting gate, FR8 (design D7)
-    alias(libs.plugins.errorprone) // Error Prone + NullAway gate, FR9 (design D8)
-    alias(libs.plugins.dependency.analysis) // unused/misdeclared deps gate, FR10 (design D8)
-}
-
-group = 'com.github.oinsio'
-version = '0.1.0-SNAPSHOT'
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(libs.versions.java.get().toInteger())
-    }
-}
-
-repositories {
-    mavenCentral()
-}
-
-// Dependency locking (NFR-R1 reproducibility, FR11 security scanning of
-// add-project-skeleton, design D9). The committed `gradle.lockfile` (plus
-// `buildscript-gradle.lockfile` above) pins every resolved version and is the
-// file OSV-Scanner actually scans in CI — OSV-Scanner reads Gradle lock-files,
-// not the version catalog. After changing dependencies, regenerate with:
-//   ./gradlew check --write-locks
-// Default lock mode: configurations with lock state must match it exactly
-// (build fails on drift); configurations without lock state resolve normally.
-dependencyLocking {
-    lockAllConfigurations()
-}
-
-// Security override: the Boot 4.1.0 BOM strictly pins httpclient5:5.6.1, which
-// itself strictly requires httpcore5(-h2):5.4.2 (GHSA-hf6x-8p5f-cgmf) — a
-// `strictly` transitive requirement a plain `constraints {}` entry cannot
-// override, so `force` is used instead (same pattern as the buildscript
-// classpath above). Test-scope only (WireMock/Testcontainers transitive; see
-// gradle.lockfile: testCompileClasspath/testRuntimeClasspath).
-configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
-    resolutionStrategy.force libs.httpcore5.asProvider().get(), libs.httpcore5.h2.get()
-}
-
-dependencies {
-    // Spring-family versions are managed by the Boot BOM (design D3).
-    implementation platform(libs.spring.boot.dependencies)
-    // Security override: import the Jackson BOM at the CVE-fixed version
-    // (GHSA-5jmj-h7xm-6q6v, see libs.versions.toml). Boot 4.1.0 imports
-    // jackson-bom 2.21.4 transitively; declaring 2.22.1 here wins by Gradle's
-    // highest-version conflict resolution and bumps the whole family at once.
-    // Drop once a Boot 4.1.x upgrade manages 2.22.1+.
-    implementation platform(libs.jackson.bom)
-
-    // Security override: force the transitive logback copies (pulled in by
-    // spring-boot-starter's logging, BOM-pinned at 1.5.34) to the CVE fix
-    // (GHSA-jhq6-gfmj-v8fx). Both artifacts must move together — logback
-    // requires classic and core on the same version.
-    constraints {
-        implementation libs.logback.core
-        implementation libs.logback.classic
-    }
-
-    implementation libs.spring.boot.starter
-    // Production code compiles against the SLF4J API directly (FR4, design
-    // D10); declared honestly per the dependency-analysis gate rather than
-    // leaning on the starter's transitive copy. Version is BOM-managed.
-    implementation libs.slf4j.api
-
-    // JSpecify nullness annotations (@NullMarked, @Nullable) for NullAway
-    // (FR9, design D8). compileOnly per the dependency-analysis advice (FR10):
-    // the annotations are consumed only by javac-time analysis; the JVM
-    // tolerates absent annotation types at runtime, and spring-core 7 ships
-    // jspecify on the runtime classpath transitively anyway.
-    compileOnly libs.jspecify
-
-    // Compiler plugins for javac's annotation-processor path (FR9, design D8);
-    // never leak onto the application classpath.
-    errorprone libs.errorprone.core
-    errorprone libs.nullaway
-
-    testImplementation libs.groovy
-    testImplementation libs.spock.core
-    // The context-level bootstrap specs (task 3.3) compile against
-    // @SpringBootTest (spring-boot-test), @ContextConfiguration (spring-test)
-    // and @Autowired (spring-beans), so all three are testImplementation —
-    // the promotion the task-2.6 buildHealth advice anticipated (FR10).
-    // spock-spring is a discovered global extension with no compile-time
-    // reference from spec bytecode; buildHealth re-advised testRuntimeOnly in
-    // the GREEN step as anticipated, and that advice is followed here.
-    testRuntimeOnly libs.spock.spring
-    testImplementation libs.spring.boot.test
-    testImplementation libs.spring.test
-    testImplementation libs.spring.beans
-    // The logging-level spec (FR4) emits through the SLF4J API and captures
-    // events with Logback's ListAppender, so it compiles against both.
-    // slf4j-api is inherited via testImplementation -> implementation; the
-    // Logback backend classes need an explicit test declaration (BOM-managed).
-    testImplementation libs.logback.classic
-    // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath.
-    testRuntimeOnly libs.junit.platform.launcher
-    // The port-contract suites' opt-out seam (PortContractSupport) throws
-    // org.opentest4j.TestAbortedException for a runtime per-variant skip, a
-    // direct source reference, so buildHealth requires it declared directly
-    // (FR14 of add-manual-run); version is JUnit-BOM-managed.
-    testImplementation libs.opentest4j
-    // ArchUnit for the domain-purity gate (FR10 of load-pipeline-config,
-    // design D7): DomainPuritySpec asserts via ArchRule.check(...) that
-    // `domain` never depends on `adapter`, java.nio.file, or Jackson.
-    testImplementation libs.archunit
-    // Testcontainers for the Gitea E2E layer only (task 6.5 of add-git-workflow,
-    // .claude/rules/testing.md): GenericContainer("gitea/gitea:1.27.0") plus
-    // DockerClientFactory.isDockerAvailable() for the Docker-absent skip path.
-    testImplementation libs.testcontainers
-    // Jackson for the .gnomish/ YAML loader in the adapter layer (FR1 of
-    // load-pipeline-config, design D1/D2). jackson-databind provides the
-    // ObjectMapper + annotations the adapter DTOs use; jackson-dataformat-yaml
-    // supplies the YAMLFactory the mapper reads with. The domain stays
-    // Jackson-free (guarded by ArchUnit). Versions are BOM-managed: Boot 4.1.0
-    // pins Jackson 2.x (com.fasterxml.jackson, 2.x line) via its jackson-2-bom.
-    // annotations (@JsonTypeInfo/@JsonSubTypes on the DTOs) and core
-    // (JsonFactory, extended by YAMLFactory) are compiled against directly, so
-    // the dependency-analysis gate requires them declared, not left transitive.
-    implementation libs.jackson.annotations
-    implementation libs.jackson.core
-    implementation libs.jackson.databind
-    implementation libs.jackson.dataformat.yaml
-
-    // Resilience4j retry for the tracker adapter's HTTP client core (task 4.4 of
-    // add-tracker-port, NFR-R2): infrastructure failures of tracker calls are retried.
-    implementation libs.resilience4j.retry
-    // resilience4j-core: GithubRetryConfig references IntervalFunction directly
-    // (buildHealth advice — a transitive of resilience4j-retry used directly
-    // must be declared directly).
-    implementation libs.resilience4j.core
-
-    // WireMock for tracker/AI API contract tests, in-JVM (.claude/rules/testing.md,
-    // add-tracker-port task 4.x): no Docker needed for HTTP contract-level specs.
-    testImplementation libs.wiremock
-    // GithubHttpClientSpec builds its own fast RetryConfig with IntervalFunction
-    // directly; buildHealth reports the main-scope `implementation
-    // libs.resilience4j.core` above as already sufficient for test code
-    // (implementation is on testImplementation's extendsFrom chain), so no
-    // separate testImplementation declaration is needed.
-    // WireMock 3.13.1's HttpServerFactoryLoader needs an internally consistent
-    // Jetty 11 stack (its own jetty-bom import); the Boot 4.1.0 BOM otherwise
-    // wins conflict resolution on jetty-server/-http/-io/etc. (their highest
-    // version, 12.1.10) while jetty-servlet/-webapp (which Boot does not
-    // manage) stay on 11 — the mixed 11/12 classpath then fails at
-    // WireMockServer startup with "Jetty 11 is not present" (task 4.4).
-    // enforcedPlatform (not platform) forces every jetty-bom-managed version to
-    // the pinned Jetty 11 line on the test classpaths, overriding the Boot BOM's
-    // constraint so WireMock gets one consistent Jetty 11 stack in tests. The
-    // version lives in the catalog ([versions].jetty); it clears
-    // GHSA-mmxm-8w33-wc4h (http2-common), and the residual Jetty 11 advisories
-    // are test-scope only — see osv-scanner.toml for the accepted-risk entries.
-    testImplementation enforcedPlatform(libs.jetty.bom)
-    // NB: handlebars (GHSA-r4gv-qr8j-p3pg) cannot be bumped here — its only fix,
-    // 4.5.2, drops com.github.jknack.handlebars.helper.NumberHelper, which
-    // WireMock 3.13.1 loads at startup (NoClassDefFoundError). Test-scope only
-    // and templates are developer-authored, so it is an accepted risk until
-    // WireMock 4.x — see osv-scanner.toml.
-}
-
-// Error Prone + NullAway static-analysis gate (FR9 of add-project-skeleton,
-// design D8). The net.ltgt.errorprone plugin handles the JDK internals access
-// itself (forked javac with the required --add-exports/--add-opens for
-// JDK 16+), verified on the Java 25 toolchain — no manual jvmargs needed.
-// Scoped to production compilation: test code is Groovy (Spock), which never
-// goes through javac, so Error Prone is explicitly off for compileTestJava.
-tasks.named('compileJava', JavaCompile) {
-    options.errorprone {
-        // NullAway null-safety as a build breaker over the JSpecify
-        // annotations; the project package tree is the annotated scope.
-        option 'NullAway:AnnotatedPackages', 'com.github.oinsio.gnomish'
-        // Dead-code layer 1 of 3 (design D8): unused private members fail
-        // compilation. Layers 2–3: dependency-analysis plugin (task 2.6)
-        // and the 100% mutation gate.
-        error 'NullAway', 'UnusedMethod', 'UnusedVariable'
-    }
-}
-
-tasks.named('compileTestJava', JavaCompile) {
-    options.errorprone.enabled = false
-}
-
-// The Groovy compiler forks its own worker daemon that does NOT inherit
-// org.gradle.jvmargs from gradle.properties; as the Spock spec tree has grown,
-// its default heap started overflowing (java.lang.OutOfMemoryError: Java heap
-// space) on joint Groovy/Java compilation. Give it explicit headroom.
-tasks.named('compileTestGroovy', GroovyCompile) {
-    groovyOptions.forkOptions.memoryMaximumSize = '2g'
-}
-
-// JaCoCo coverage reporting (FR6, NFR-O1 of add-project-skeleton):
-// XML for machine consumption (CI, future quality gates), HTML for humans.
-// The 'jacoco' plugin is a Gradle core plugin; only its tool version is
-// pinned here via the version catalog (design D2).
-jacoco {
-    toolVersion = libs.versions.jacoco.get()
-}
-
-tasks.named('test') {
-    // Spock 2 runs on the JUnit Platform.
-    useJUnitPlatform()
-    // The suite has grown past Gradle's default test-worker heap; without this the worker JVM
-    // OOMs during JUnit-Platform teardown even though every individual spec has already passed.
-    maxHeapSize = '3g'
-    // Generate coverage reports whenever tests run, so `check` produces them
-    // as part of the single-command verification (FR5 of add-project-skeleton).
-    finalizedBy tasks.named('jacocoTestReport')
-
-    // E2E layer (task 9.1 of add-manual-run, M1): E2eProcessHarness spawns
-    // `gnomish run` as a real process via `java -jar`, so the executable jar must
-    // exist before any E2E spec runs. `dependsOn bootJar` guarantees that for
-    // every `test` invocation, including the common `./gradlew test --tests
-    // "*E2E*"` filtered run; the cost is negligible for non-E2E runs since
-    // bootJar only repackages what's already compiled. The `e2e.jarPath` system
-    // property is the harness's sole, idiomatic way to locate the jar — no
-    // build/libs/*.jar glob that could match a stale or ambiguous artifact.
-    dependsOn tasks.named('bootJar')
-    systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
-
-    // Reference-dump hygiene spec (design D2, FR6 of harden-reference-dump-scrubber): under the
-    // plain `test` task the classpath copy in build/resources/test is NOT the committed source
-    // file, so an in-place rewrite there would silently touch nothing. The hygiene spec resolves
-    // the committed fixtures via this property instead. Harmless here — it is just a path that is
-    // only read.
-    systemProperty 'referenceDumpDir', file('src/test/resources/stream-json-reference').absolutePath
-
-    // Gated fixture refresh (design D2, FR6 of harden-reference-dump-scrubber): the
-    // ReferenceDumpHygieneSpec rewrite feature is gated on @Requires({ System.getProperty(
-    // 'rescrubReferenceDumps') }). Test tasks fork a JVM, so a `-D` on the Gradle command line
-    // lands on the Gradle JVM only — forward it explicitly (same idiom as paidSmoke.claudeBinary
-    // on paidSmokeTest). Absent by default, so the gate stays skipped and `check` never mutates
-    // the committed fixtures; set `-DrescrubReferenceDumps=true` to run the one-off refresh.
-    if (System.getProperty('rescrubReferenceDumps') != null) {
-        systemProperty 'rescrubReferenceDumps', System.getProperty('rescrubReferenceDumps')
-    }
-
-    // The Ollama E2E layer (task 11.1, M1, D11) needs a native local Ollama install and a
-    // logged-in `claude` CLI — not free/deterministic like the rest of this task's specs (the
-    // fake-agent-binary suites, the self-contained e2e.* harness above). Excluded here and run
-    // instead via the dedicated `ollamaE2eTest` task below, so `./gradlew build`/`check` never
-    // requires Ollama.
-    exclude 'com/github/oinsio/gnomish/e2e/ollama/**'
-
-    // The paid smoke layer (task 11.3, M4, D11) spends real money against the real Anthropic
-    // backend by design — never run implicitly. Excluded here and run only via the dedicated
-    // `paidSmokeTest` task below, so `./gradlew build`/`check`/`test` never spends a cent.
-    exclude 'com/github/oinsio/gnomish/e2e/paidsmoke/**'
-}
-
-tasks.named('jacocoTestReport') {
-    dependsOn tasks.named('test') // reports need the execution data from test
-    reports {
-        xml.required = true
-        html.required = true
-    }
-}
-
-// Ollama E2E harness (task 11.1, M1, D11): real `claude` CLI pointed at a local Ollama instance
-// (native Anthropic API since Ollama v0.14 — no shim/proxy needed, just `ANTHROPIC_BASE_URL`).
-// Deliberately outside `check`/`test`/`build` — dockerized Ollama has no Metal access on macOS
-// and is unusably slow, so this targets a native dev-machine Ollama install, not Testcontainers
-// (D11). Individual specs under `e2e.ollama` skip themselves cleanly via `OllamaAvailability`
-// (Spock `@IgnoreIf`) when Ollama or the `claude` CLI is not present — this task itself always
-// "succeeds" (0 or more skipped tests), so CI can run it opportunistically without a hard Ollama
-// requirement, though it is intended as a local/manual dev-machine task per D11.
-tasks.register('ollamaE2eTest', Test) {
-    description = 'Runs the Ollama-backed local E2E specs (real claude CLI + local Ollama); skips cleanly when Ollama is absent.'
-    group = 'verification'
-    useJUnitPlatform()
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    include 'com/github/oinsio/gnomish/e2e/ollama/**'
-    dependsOn tasks.named('bootJar')
-    systemProperty 'e2e.jarPath', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
-    // Always show individual outcomes (PASSED/SKIPPED) so a developer can see the skip-with-reason
-    // message from OllamaAvailability/@IgnoreIf directly in the console, not just an aggregate count.
-    testLogging {
-        events 'passed', 'skipped', 'failed'
-        showStandardStreams = false
-    }
-}
-
-// Paid smoke task (task 11.3, M4, D11's "(3b) Paid smoke"): real `claude` CLI against the real
-// Anthropic backend (a logged-in, authenticated CLI — not Ollama, which OllamaAvailability's
-// weaker "resolves on PATH" check is enough for since Ollama never validates the auth token).
-// Deliberately outside `check`/`test`/`build` and never wired into CI: this task spends real
-// money by design (M4). `PaidSmokeReferenceDumpSpec`'s login preflight fails each recording
-// feature fast with a specific reason (not authenticated, binary missing, hung on an interactive
-// login prompt) rather than hanging — see ClaudeLoginPreflight. Run manually on CLI version bumps,
-// parser changes, unexplained divergence between this layer and the fake-agent/Ollama layers, and
-// before archiving this change; its dumps refresh the committed stream-json-reference fixtures.
-tasks.register('paidSmokeTest', Test) {
-    description = 'Manual, paid smoke test against the real claude CLI backend; refreshes stream-json reference dumps. Never run in CI.'
-    group = 'verification'
-    useJUnitPlatform()
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    include 'com/github/oinsio/gnomish/e2e/paidsmoke/**'
-    // The on-disk source resource directory (not the build/resources/test copy) so a recording
-    // spec's writes land in the committed fixture, the same on-disk-vs-copy distinction
-    // e2e.jarPath draws for the bootJar artifact below.
-    systemProperty 'referenceDumpDir', file('src/test/resources/stream-json-reference').absolutePath
-    // Test tasks fork a separate JVM, so a `-D` on the Gradle command line never reaches it on its
-    // own — this project property (`-PpaidSmoke.claudeBinary=...`) is explicitly forwarded as the
-    // forked JVM's system property of the same name, the seam PaidSmokeReferenceDumpSpec/
-    // ClaudeLoginPreflight read the CLI binary override from (defaults to `claude` on PATH).
-    if (project.hasProperty('paidSmoke.claudeBinary')) {
-        systemProperty 'paidSmoke.claudeBinary', project.property('paidSmoke.claudeBinary')
-    }
-    testLogging {
-        events 'passed', 'skipped', 'failed'
-        // Unlike ollamaE2eTest's clean-skip convention, a login-preflight failure here must be
-        // immediately visible on the console — this task runs manually and a hidden failure reason
-        // could read as a hang or an opaque red X instead of "run `claude login` and retry."
-        exceptionFormat = 'full'
-        showExceptions = true
-        showCauses = true
-        showStandardStreams = true
-    }
-}
-
-// PIT mutation testing (FR6 of add-project-skeleton, design D5).
-// Spock 2 runs on the JUnit Platform, hence the JUnit 5 PIT plugin.
-//
-// pitScope (scope-pit-to-changed-files, FR1/FR5, design D1): opt-in, CI-only
-// project property that narrows targetClasses to the changed-file glob list
-// CI computes from the diff. Unset (the local developer default) always runs
-// the full-tree mutation set below. Captured once here at configuration time
-// (the pitest {} block is configured eagerly, not via a lazy Property) so the
-// read stays config-cache safe — same pattern as mainJavaSources below.
-// Accepted trade-off: only the unset/full-tree run guarantees whole-project
-// mutation coverage; a scoped CI run can miss a mutation surviving in an
-// unchanged file due to a change elsewhere ("cross-file mutation rot" — see
-// design.md's Risks / Trade-offs, scope-pit-to-changed-files).
-def pitScopeRaw = providers.gradleProperty('pitScope')
-def pitScopeSet = pitScopeRaw.isPresent()
-def pitScopeGlobs = pitScopeRaw.getOrElse('')
-        .split(',')
-        .collect { it.trim() }
-        .findAll { !it.isEmpty() }
-
-pitest {
-    // asProvider(): 'pitest' is a prefix of other catalog version aliases.
-    pitestVersion = libs.versions.pitest.tool.get()
-    junit5PluginVersion = libs.versions.pitest.junit5.plugin.get()
-    // Concurrent PIT minion JVMs for the mutation phase (PIT's default is 1).
-    // Derived from Gradle's own worker ceiling (--max-workers /
-    // org.gradle.workers.max, defaults to the core count) so one standard
-    // Gradle knob governs load on any machine. Gradle does not schedule the
-    // minions — the pitest task occupies a single worker slot and the minions
-    // are child processes of PIT's forked main JVM — so the -2 keeps headroom
-    // for the daemon and concurrently running tasks; without it, CPU
-    // oversubscription can push covering tests past PIT's per-mutation timeout
-    // and pitestVerifyAllKilled fails the build on the resulting TIMED_OUT.
-    threads = Math.max(1, gradle.startParameter.maxWorkerCount - 2)
-    // Java production code only — never Groovy test bytecode (mutating Groovy
-    // produces noisy false-positive survivors; see .claude/rules/testing.md).
-    // pitScope unset (local default) => full tree; pitScope set => narrowed to
-    // the CI-supplied glob list (empty list is handled by the onlyIf skip below).
-    targetClasses = pitScopeSet && !pitScopeGlobs.isEmpty() ? pitScopeGlobs : ['com.github.oinsio.gnomish.*']
-    // Set the test scope explicitly rather than leaning on PIT's default (which
-    // falls back to the targetClasses pattern) — that default only finds the
-    // Spock specs by the coincidence that they share the production package
-    // tree, and would silently discover zero tests the moment a spec moved. An
-    // empty test scan is what lets a run count every mutation as RUN_ERROR and
-    // still report ~100% (see pitestVerifyAllKilled below).
-    targetTests = ['com.github.oinsio.gnomish.*']
-    // FR6 documented exception: the application bootstrap class is only
-    // main() + SpringApplication.run(), unreachable by unit tests by design
-    // (design D5, D10). Everything else must reach 100%.
-    //
-    // FR11/D9 documented exception (add-factory-serve, task 5.5): RealProcessTreeKiller walks
-    // ProcessHandle.current().descendants() and destroys them — spawning and killing real OS
-    // processes in a unit test would be heavy and flaky for no coverage benefit. The sequencing
-    // that decides whether/when it runs (ServeShutdown: interrupt feed, flag occupied claims,
-    // wait the grace window, then always call the process-tree killer) is fully covered by
-    // ServeShutdownSpec against a fake ProcessTreeKiller, so excluding this thin real
-    // implementation removes no production DECISION from mutation coverage, only the
-    // unverifiable OS-process bytes themselves — the same "main()/bootstrap wiring" category as
-    // FactoryApplication above.
-    excludedClasses = [
-        'com.github.oinsio.gnomish.FactoryApplication',
-        'com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller',
-    ]
-    // M1/M4 documented exception: the E2E layer (task 9.1 of add-manual-run)
-    // spawns the real `gnomish run` process via `java -jar`, reading the jar
-    // path from the `e2e.jarPath` system property that only the `test` task
-    // wires (from the bootJar output, see the `tasks.named('test')` block
-    // below). PIT's own coverage/mutation child JVMs are a separate process
-    // launch that never receives that property, so E2eProcessHarness's
-    // precondition check fails immediately for every E2E spec — unrelated to
-    // any mutation. These specs are black-box integration coverage over
-    // classes (`app`, `status`, `adapter.*`) that already have dedicated unit
-    // Spock specs feeding the mutation gate directly; excluding the E2E specs
-    // from PIT's test scan does not remove any production line from mutation
-    // coverage, only from being (re-)run once per mutant by PIT itself, which
-    // would also be prohibitively slow for a real-process spawn per mutant.
-    //
-    // M5 documented exception (harden-reference-dump-scrubber): ReferenceDumpHygieneSpec
-    // resolves the committed fixtures through the `referenceDumpDir` system property that only
-    // the `test` task wires — exactly like `e2e.jarPath` above, PIT's child JVMs never receive
-    // it, so its precondition fails for every data-driven iteration, unrelated to any mutation.
-    // It is a Groovy test-support hygiene guard over committed fixtures (the scrubber is Groovy,
-    // outside `targetClasses`), so excluding it removes no production line from mutation coverage;
-    // the scrubber's behaviour is covered by ReferenceDumpScrubberSpec's unit scenarios (M5).
-    //
-    // M4 documented exception (add-tracker-port, task 6.5): FactoryApplicationSpec's
-    // "bootJar stays headless" feature resolves the packaged jar through the `e2e.jarPath`
-    // system property that only the `test` task wires (from the bootJar output) — exactly the
-    // same PIT-minion-never-receives-it gap as the E2E layer above, unrelated to any mutation.
-    // This feature was green under plain `test` before this change; it only started failing
-    // PIT's own pre-mutation coverage pass here because task 4.1 (add-tracker-port) added
-    // WireMock, which pulls jetty/servlet jars onto testRuntimeClasspath — the assertion itself
-    // still holds against the real bootJar, it is PIT's separate process launch that never sees
-    // the property. Excluding the whole spec (not just the one feature — PIT's exclusion glob
-    // has no per-feature granularity) removes no production line from mutation coverage: the
-    // other three features in this spec assert Spring wiring already exercised by dozens of
-    // other unit specs across the codebase, and the headless-jar guarantee itself is not
-    // tracker-port production code.
-    //
-    // M5 documented exception (add-claim-heartbeat): InstanceHeartbeatLifecycleSpec drives the REAL
-    // background beat thread through a rendezvous BlockingSleeper (register → worker → awaitEntered →
-    // releaseOne → join). Under PIT mutation a loop/register/beat mutant either makes the worker
-    // never enter its sleep (the test's unbounded awaitEntered/join then blocks) or drops the sleep
-    // so the worker busy-spins — both surface as TIMED_OUT, not a clean kill, and no covering-test
-    // change fixes a genuinely non-terminating background loop. This is the same "background/blocking
-    // thread under a mutated loop" category as the E2E specs above. Excluding it removes NO production
-    // line from mutation coverage: every InstanceHeartbeat line it touches is also driven
-    // SYNCHRONOUSLY on the test thread by InstanceHeartbeatSpec — loop() (sleep, empty-and-stop,
-    // per-tick failure) via seedHeldForTest + a bounded sleeper, register()'s single-thread guard via
-    // "a single instance-level thread serves all claims", and beat()'s ClaimGone branch via the
-    // direct-tick specs — so the mutation gate still holds; only the timing-sensitive lifecycle
-    // rehearsal (which stays green under plain `test`) is kept out of PIT's per-mutation re-runs.
-    //
-    // M1/M2 documented exception (add-tracker-port / add-claim-heartbeat): GithubTrackerContractSpec
-    // runs the full port contract against the real GitHub adapter over WireMock, including the 12-way
-    // concurrent `claim` race (5 repetitions x 12 caller threads on distinct issues). Under PIT's
-    // single-JVM coverage minion — every one of ~2500 test classes loaded and instrumented together —
-    // that race is timing-sensitive: it intermittently fails PIT's pre-mutation green-suite check
-    // (the minion reported the spec's first feature failing on one run, then passed the identical
-    // suite on the next), which PIT treats as a hard "suite not green" abort rather than a mutation
-    // result. The spec is deterministically green under plain `test` (verified across repeated runs);
-    // this is the same "timing-sensitive concurrency rehearsal under instrumentation" category as
-    // InstanceHeartbeatLifecycleSpec above. Excluding it removes NO production line from mutation
-    // coverage: every Github* class the contract exercises has its own dedicated unit spec feeding the
-    // gate (GithubClaimLeaseSpec, GithubHeartbeatSpec, GithubStateWritesSpec, GithubCorrespondenceSpec,
-    // GithubDecisionsSpec, GithubFeedQuerySpec, GithubTaskFetcherSpec, GithubOpenQuerySpec,
-    // GithubStaleClaimRemovalSpec), and the composed GithubTracker by GithubTrackerSpec — so the
-    // whole-tree mutation gate still holds; only the cross-adapter contract rehearsal is kept out of
-    // PIT's per-mutation re-runs.
-    excludedTestClasses = [
-        'com.github.oinsio.gnomish.e2e.*',
-        'com.github.oinsio.gnomish.adapter.agent.ReferenceDumpHygieneSpec',
-        'com.github.oinsio.gnomish.FactoryApplicationSpec',
-        'com.github.oinsio.gnomish.app.lease.InstanceHeartbeatLifecycleSpec',
-        'com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerContractSpec',
-        // add-sandbox-core (tasks 4.5, 4.6, 5.5, 6.5, 9.2-9.4): the container-mode
-        // adapter is proven against a real Docker daemon — real containers,
-        // volumes, networks, and (for the E2E layer) a real Gitea remote, driven
-        // through subprocess `docker`/`git`. Same category as
-        // RealProcessTreeKiller/InstanceHeartbeatLifecycleSpec above: a mutant
-        // that breaks a wait/retry/kill loop in this territory doesn't fail
-        // fast, it blocks on real OS/Docker I/O that PIT's per-mutation timeout
-        // cannot always interrupt (observed: a killed-container resume mutant
-        // hung a minion for 30+ minutes with zero CPU progress, well past its
-        // computed timeout budget, leaving an orphaned box). Excluding them
-        // removes no production line from mutation coverage — every adapter
-        // class they exercise is also covered by fast, Docker-free unit specs
-        // (DockerCommandsSpec, ContainerTaskExecutionEnvironmentUnitSpec,
-        // EgressGuardSpec, ContainerResumeBranch/ContainerRunSupportSpec, etc.)
-        // that already feed the mutation gate; only the slow, hang-prone
-        // whole-daemon rehearsal is kept out of PIT's per-mutant re-run.
-        'com.github.oinsio.gnomish.app.ContainerModePipelineE2ESpec',
-        'com.github.oinsio.gnomish.app.ContainerModeIsolationE2ESpec',
-        'com.github.oinsio.gnomish.app.ContainerModeResumeE2ESpec',
-        'com.github.oinsio.gnomish.adapter.environment.EgressGuardIntegrationSpec',
-        'com.github.oinsio.gnomish.adapter.environment.ContainerGitMechanicsSpec',
-        'com.github.oinsio.gnomish.adapter.environment.ContainerReadOnlySurfacesSpec',
-        'com.github.oinsio.gnomish.adapter.environment.ContainerTaskExecutionEnvironmentContractSpec',
-    ]
-    // M4 documented exception: a handful of methods on `record` classes
-    // (ExecutorUsage, StatusReport, Finding, Decision, UsageTotals of add-git-workflow;
-    // PipelineDefinition.findStage of add-claim-heartbeat, whose NULL_RETURNS mutant
-    // crashed the minion deterministically with zero tests observed)
-    // carry the project's own
-    // @com.github.oinsio.gnomish.DoNotMutate marker instead of a build.gradle
-    // glob exclusion. PIT's Gregor engine mutates by hot-swapping bytecode into
-    // an already-loaded class via JVMTI RedefineClasses; the JVM rejects
-    // redefinition that changes a class's NestHost/NestMembers/Record/
-    // PermittedSubclasses attributes, which some (not all) mutations of these
-    // methods trigger — a known, still-open PIT limitation on JDK 17+
-    // (hcoles/pitest#1285), not a real coverage gap: PIT reports RUN_ERROR
-    // (its minion JVM crashed before any test result was observed) rather than
-    // SURVIVED, and sibling mutations of the very same method are unaffected
-    // and get killed normally. No PIT config or JVM flag works around a
-    // JVMTI-level restriction.
-    //
-    // `excludedMethods` (a plain glob over bare method names, confirmed against
-    // PIT core: no class-qualified syntax exists, see hcoles/pitest#301,
-    // unresolved) would be unsafe here: several of these methods share a name
-    // (`requireNonBlank`) with ~13 unrelated private validators on other record
-    // classes across the codebase, and a name-only glob would silently exempt
-    // all of them from the 100% gate. The annotation is PIT's own supported,
-    // class-and-method-precise mechanism instead (`ExcludedAnnotationInterceptorFactory`,
-    // feature `FANN`, on by default — matches any annotation named `Generated`/
-    // `DoNotMutate`/`CoverageIgnore`, no extra Gradle wiring needed).
-    //
-    // Every annotated method is otherwise fully covered by its own unit spec
-    // (ExecutorUsageSpec, StatusReportSpec/AttemptBoundaryEquivalenceSpec,
-    // FindingSpec, DecisionSpec, UsageTextRendererSpec/UsageHistoryWalkerSpec for
-    // UsageTotals); the annotation only stops PIT from *mutating*
-    // it, so those methods never emit a mutation entry at all — a real RUN_ERROR
-    // from anywhere else is a broken run, not an accepted exception, and is
-    // failed hard by pitestVerifyAllKilled below (mutationThreshold alone cannot
-    // catch it: PIT counts RUN_ERROR as "detected").
-    // This whole-tree mutation gate (with the JaCoCo coverage report above) is
-    // what M5 of add-claim-heartbeat relies on: the same coverage/mutation gates
-    // per .claude/rules/testing.md hold for the new heartbeat production code.
-    //
-    // M5 documented exception (add-factory-serve, task 9.2): TakeBatchExitCode's private
-    // isNewSmallestNonZero(int, int) carries @DoNotMutate for a different reason than the
-    // JVMTI/record class above — a genuine SURVIVED, not a RUN_ERROR. Its `<` is provably
-    // equivalent to `<=` here: the caller only ever reassigns its running minimum to the
-    // returned boolean's value, so when code == currentSmallest the mutated `<=` branch
-    // reassigns to the exact int already held — an internal no-op with zero externally
-    // observable difference, since aggregate() surfaces nothing but that one final int. No
-    // covering test can kill a mutation with no observable effect (the classic strict-vs-
-    // non-strict equivalent mutant in a running-minimum loop), and no restructuring changes
-    // that fact — see the method's own comment for the full trace.
-    mutationThreshold = 100 // 100% mutation score gate (FR6)
-    // Per-mutation timeout budget (allowed = recorded test time × factor +
-    // const). PIT records test times during the single-threaded coverage pass,
-    // i.e. on an unloaded machine — but the mutation phase runs `threads`
-    // minions at once, and under that CPU load the same tests run 2–3× slower.
-    // PIT's default budget (1.25× + 4000ms) produced 17 load-induced TIMED_OUT
-    // at threads=12, all in classes whose covering specs spawn real
-    // subprocesses (CliStageExecutor/CliJudgeVoter fake-agent runs) or block
-    // on concurrency seams (InMemoryTracker). The raised budget only removes
-    // those false positives — it is NOT a quality trade-off: TIMED_OUT never
-    // counts as a kill here (pitestVerifyAllKilled fails on it), so a mutant
-    // that genuinely hangs still reds the build, just after a longer wait.
-    // Genuine infinite hangs are also fixed at the source, not by budget:
-    // TrackerContract fails fast (bounded get + shutdownNow) after the one
-    // real deadlocking mutant ever observed (InMemoryTracker.claim, CI-only).
-    // Second calibration (add-claim-heartbeat): a full-tree run produced 4 more
-    // load-induced TIMED_OUT (TakeClaimAndWork's beat register/unregister,
-    // AgentProcessLauncher, LaunchedAgentProcess) — every one KILLED cleanly
-    // when re-run scoped, i.e. off-budget, not surviving. Their covering specs
-    // either spawn real subprocesses or hold REAL-TIME bounded waits (the
-    // heartbeat lifecycle rehearsals poll up to 10s), which load does not
-    // shrink while the recorded-time-based budget assumes it scales; the
-    // raised const absorbs that fixed real-time component. The dropped-
-    // register/unregister mutants also gained a millisecond-fast interaction
-    // killer in TakeDispositionSpec so the slow rehearsals are no longer the
-    // deciding test for them.
-    // Third calibration attempt (add-factory-serve, task 9.2) — NOT a budget issue, const kept
-    // at 20000: full-tree and scoped runs both reproduced 10 TIMED_OUT, identically, in
-    // FeedAutomaton.drain/step, FeedCycle's claimOrAbandon/startSlot lambdas, and
-    // ServeCommand.provisionTracker/run, and raising the const to 45000 changed nothing —
-    // because those mutants make the code genuinely NON-TERMINATING, not slow. Two shapes:
-    // a permit-accounting mutant (a dropped SlotLedger abandon/assign/release or startSlot
-    // call, a negated drain empty-poll check) parks the covering spec forever in the ledger's
-    // unbounded Semaphore.acquire/awaitDrained; and any mutant that turns a bug into a
-    // RuntimeException inside a tracker call spins FeedOutageRetry's deliberate retry-forever
-    // (NFR-R3) indefinitely. No budget kills a genuine hang — fixed at the source instead,
-    // same as TrackerContract above: the serve specs run every hang-capable call (drain,
-    // repeated step, ServeCommand.run) on a bounded worker thread, use a budget-capped
-    // virtual sleeper (BudgetedVirtualSleeper), and assert SlotLedger permit counts directly,
-    // so each such mutant dies as an ordinary red assertion (KILLED) within seconds. An 11th,
-    // intermittent member of the same category: CloneMutationLock's dropped-unlock mutant parks
-    // a second same-clone acquisition forever in the non-interruptible ReentrantLock.lock() —
-    // its specs' bounded get()/await() went red fine, but their `executor.close()` cleanup then
-    // joined the parked thread forever, hanging the minion after the failure; those cleanups now
-    // use shutdownNow() + a bounded awaitTermination instead.
-    timeoutFactor = 3.0
-    timeoutConstInMillis = 20000
-    timestampedReports = false // stable report path for CI artifact upload
-    outputFormats = ['XML', 'HTML']
-}
-
-tasks.named('pitest') {
-    // PIT's own coverage-calculation pass re-runs the whole covering test suite
-    // in a separate minion JVM — including the Docker-backed container-mode E2E
-    // specs (task 9.2-9.4), which materialize real containers/volumes/networks
-    // named after a fixed per-test taskId. With no ordering declared between
-    // `pitest` and `test`, org.gradle.parallel lets Gradle run them
-    // concurrently, so both processes race to create the same-named Docker
-    // objects: `docker run --name` conflicts, or a seed-clone helper's `.git`
-    // guard sees the other process's still-in-progress clone and skips
-    // re-seeding, leaving the volume without the identity config `seedClone`
-    // was supposed to write — surfacing downstream as "unable to auto-detect
-    // email address" or a container-name conflict, nondeterministically.
-    // `mustRunAfter` serializes them without adding a real dependency (`pitest`
-    // does not need `test`'s output — jacocoTestReport is the one that does).
-    mustRunAfter tasks.named('test')
-    // PIT hard-fails ("No mutations found", exit 1) when there is nothing to
-    // mutate. Until the first production class lands (task 3.x of
-    // add-project-skeleton) the task is skipped instead of weakening the gate
-    // with failWhenNoMutations = false (which would also mask a misconfigured
-    // targetClasses filter forever). The source set is captured at
-    // configuration time, keeping the onlyIf spec configuration-cache safe.
-    def mainJavaSources = sourceSets.main.allJava
-    onlyIf('no Java production classes to mutate yet') { !mainJavaSources.isEmpty() }
-    // scope-pit-to-changed-files FR4/D4: pitScope set but empty (a branch that
-    // changed no production Java files) means nothing to mutate — skip cleanly
-    // rather than let PIT hard-fail on an empty targetClasses match. Booleans/
-    // lists captured above at configuration time, not re-read here.
-    onlyIf('pitScope is set but resolves to no classes') { !(pitScopeSet && pitScopeGlobs.isEmpty()) }
-}
-
-// Fail-closed mutation-status gate (FR6 of add-project-skeleton, M5 of
-// add-agent-executor). PIT's DetectionStatus counts RUN_ERROR, MEMORY_ERROR and
-// TIMED_OUT as "detected", so a degraded run where the minion JVM crashes before
-// running any test (e.g. a stale test classpath, an incompatible minion JDK)
-// reports a green ~100% score while verifying almost nothing — mutationThreshold
-// cannot see the difference. This check parses the report and fails unless EVERY
-// mutation was genuinely KILLED, turning a broken PIT run into a red build
-// instead of a false green. Runs after `pitest`, on the same stable report path.
-def pitestMutationsXml = layout.buildDirectory.file('reports/pitest/mutations.xml')
-tasks.register('pitestVerifyAllKilled') {
-    description = 'Fails unless every PIT mutation was KILLED — RUN_ERROR/MEMORY_ERROR/TIMED_OUT do not count as detected.'
-    group = 'verification'
-    dependsOn tasks.named('pitest')
-    def reportFile = pitestMutationsXml // config-cache-safe capture
-    // Mirror pitest's own skip: no report means nothing was mutated yet.
-    onlyIf('a PIT mutations.xml was produced') { reportFile.get().asFile.exists() }
-    doLast {
-        def xml = new XmlSlurper().parse(reportFile.get().asFile)
-        def offenders = xml.mutation.findAll { it.@status.text() != 'KILLED' }
-        if (!offenders.isEmpty()) {
-            def byStatus = offenders
-                    .groupBy { it.@status.text() }
-                    .collectEntries { status, list -> [status, list.size()] }
-            def sample = offenders.take(10)
-                    .collect { m -> "  ${m.@status.text()}: ${m.mutatedClass.text()}.${m.mutatedMethod.text()} (${m.mutator.text().tokenize('.').last()})" }
-                    .join('\n')
-            throw new GradleException(
-                    "PIT mutation gate is not trustworthy: ${offenders.size()} mutation(s) were not KILLED ${byStatus}. " +
-                    "PIT counts RUN_ERROR/MEMORY_ERROR/TIMED_OUT as 'detected', so the reported score is inflated. " +
-                    "First offenders:\n${sample}\nReport: ${reportFile.get().asFile}")
-        }
-    }
-}
-
-// The mutation gate is part of the standard verification lifecycle: `check`
-// runs Spock + JaCoCo + PIT as one command (FR5, FR6). pitestVerifyAllKilled
-// closes the RUN_ERROR-counts-as-detected loophole in the same lifecycle.
-tasks.named('check') {
-    dependsOn tasks.named('pitest')
-    dependsOn tasks.named('pitestVerifyAllKilled')
-}
-
-// UX2: a failed mutation gate must point to the HTML report. PIT's own
-// failure message names the violated threshold but not the report location,
-// so a finalizer prints the stable path whenever a report was produced
-// (finalizedBy runs even when the finalized task fails).
-def pitestReportIndex = layout.buildDirectory.file('reports/pitest/index.html')
-tasks.register('pitestReportLocation') {
-    def reportFile = pitestReportIndex // config-cache-safe capture
-    onlyIf('no PIT report was produced') { reportFile.get().asFile.exists() }
-    doLast {
-        logger.lifecycle("PIT mutation report: ${reportFile.get().asFile}")
-    }
-}
-
-tasks.named('pitest') {
-    finalizedBy tasks.named('pitestReportLocation')
-}
-
-// Spotless formatting gate (FR8 of add-project-skeleton, design D7).
-// The plugin wires `spotlessCheck` into `check` automatically, so misformatted
-// code fails the standard verification lifecycle. palantir-java-format is
-// deterministic and non-configurable — style is never a decision. It runs on
-// the Gradle daemon JVM (verified on JDK 26: no `--add-exports` jvmargs
-// needed with this formatter version; Spotless isolates javac access itself).
-spotless {
-    java {
-        target 'src/*/java/**/*.java'
-        palantirJavaFormat(libs.versions.palantir.java.format.get())
-    }
-    groovy {
-        // Spock specs. greclipse is Spotless's standard Groovy formatter;
-        // its Eclipse/JDT preferences (4-space indent) come from the
-        // checked-in config so daemon defaults never leak into style.
-        target 'src/*/groovy/**/*.groovy'
-        importOrder()
-        greclipse().configFile('gradle/spotless-greclipse.properties')
-        trimTrailingWhitespace()
-        endWithNewline()
-    }
-    format 'misc', {
-        // Build metadata hygiene only; docs are deliberately excluded
-        // (markdown trailing spaces are semantic, archived changes immutable).
-        target '*.gradle', 'gradle.properties', 'gradle/libs.versions.toml', '.gitignore', '.gitattributes'
-        trimTrailingWhitespace()
-        endWithNewline()
-    }
+    // `base` + the Spotless build-file format (FR6, design D9); the root
+    // project applies no java/test convention because it has no sources.
+    id 'build-metadata-conventions'
+    // dependency-analysis is applied build-wide from settings.gradle (FR10,
+    // design D8); only its configuration and `check` wiring live here.
 }
 
 // Dependency-analysis gate (FR10 of add-project-skeleton, design D8, dead-code
@@ -763,6 +78,17 @@ dependencyAnalysis {
                 severity 'fail'
             }
         }
+        // `:gnomish-plugin-api:sample` is the executable statement of UX3: a
+        // third-party adapter compiles against `gnomish-plugin-api` and NOTHING
+        // else. DAGP's used-transitive rule would have it declare `:domain`
+        // directly — the exact opposite of the promise the module exists to
+        // prove. Narrowly scoped to that one rule in that one module; every
+        // other check still fails the build there.
+        project(':gnomish-plugin-api:sample') {
+            onUsedTransitiveDependencies {
+                severity 'ignore'
+            }
+        }
     }
 }
 
@@ -770,6 +96,18 @@ dependencyAnalysis {
 // buildHealth is the plugin's aggregate verification task at the root project.
 tasks.named('check') {
     dependsOn tasks.named('buildHealth')
+}
+
+// Opt-in whole-build mutation run (FR11, design D6, task 8.2 of
+// split-into-modules). Since the split there is no whole-tree PIT task: every
+// module mutates its own production packages and root `check` aggregates those
+// runs. This task is the one-shot full report on demand — `./gradlew pitestAll`
+// — without the rest of `check`, and is deliberately NOT wired into `check`,
+// which would run each module's gate twice. Each module contributes itself from
+// `pitest-conventions`; the reports stay per module (see README).
+tasks.register('pitestAll') {
+    description = 'Runs every module\'s PIT mutation gate; opt-in, not part of `check`.'
+    group = 'verification'
 }
 
 // Formatting layer 2 of 3 (UX3, design D7): a git pre-commit hook running

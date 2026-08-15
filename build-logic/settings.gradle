@@ -1,0 +1,24 @@
+// Settings for the `build-logic` included build — the home of the shared
+// convention plugins (FR6, design D9 of split-into-modules).
+//
+// This build is deliberately standalone: it is composed into the main build via
+// `includeBuild 'build-logic'` in the root settings.gradle, so its plugins are
+// available by id (`java-conventions`, ...) without publishing anything.
+
+dependencyResolutionManagement {
+    repositories {
+        gradlePluginPortal() // plugin marker artifacts (spotless, errorprone, pitest)
+        mavenCentral()
+    }
+    versionCatalogs {
+        // The main build's catalog, reused verbatim: convention plugins and the
+        // modules they configure must agree on every version (FR6, design D9).
+        // An included build does not inherit the main build's catalog, hence the
+        // explicit `from(files(...))` import of the very same file.
+        create('libs') {
+            from(files('../gradle/libs.versions.toml'))
+        }
+    }
+}
+
+rootProject.name = 'build-logic'

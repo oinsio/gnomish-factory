@@ -281,6 +281,52 @@ See [`docs/operator-guide.md`](docs/operator-guide.md) for the full guide: the t
 
 Java 25 LTS on virtual threads, built with Gradle 9.x. Minimal Spring Boot (`spring-boot-starter` only) provides dependency injection, configuration binding, and Logback logging — no web server, no database. Tracker and AI provider calls go through the async `java.net.http.HttpClient` guarded by Resilience4j; agent CLIs and `git` run as subprocesses. Tests are written in Spock 2 with WireMock for API contracts, JaCoCo + PIT for coverage and mutation testing, and Testcontainers for the E2E layer. Compile-time quality is enforced by Error Prone + NullAway (JSpecify nullness, unused-code checks as errors), the dependency-analysis plugin, and a Spotless format gate. CI additionally runs CodeQL, OSV-Scanner, and Gitleaks for security scanning. Full rationale: [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md).
 
+## Project structure
+
+<!-- implements FR1, FR2, FR4, UX1, UX2 of split-into-modules -->
+
+The build is a layered Gradle module tree with a one-way dependency direction. Nothing points back up: the domain knows nothing about anything, adapters know the ports they realize, and only the composition root knows which realization is bound to which port.
+
+```mermaid
+flowchart TB
+    bootstrap[":bootstrap<br/>main(), @Configuration, assemblies"]
+    github[":adapters:github"]
+    git[":adapters:git"]
+    agent[":adapters:agent"]
+    coarse[":adapters<br/>console, pipeline, secrets, ..."]
+    docker[":sandbox:docker"]
+    application[":application<br/>use cases + ports"]
+    api[":gnomish-plugin-api"]
+    sandboxcore[":sandbox:core"]
+    domain[":domain"]
+    gitobjects[":gitobjects"]
+
+    bootstrap --> github & git & agent & coarse & docker
+    agent --> coarse
+    github & git & agent & coarse & docker --> application
+    application --> api & sandboxcore & gitobjects
+    api --> domain
+    sandboxcore --> domain
+    application --> domain
+```
+
+| Module                | Holds                                                                                                                         |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `:domain`             | the stage engine and the pipeline model — pure, no I/O, no framework                                                          |
+| `:gitobjects`         | git-object plumbing shared below the adapter layer                                                                            |
+| `:gnomish-plugin-api` | the published third-party contract: tracker port, `SecretsProvider`, the adapter SPI ([README](gnomish-plugin-api/README.md)) |
+| `:sandbox:core`       | the execution-environment port, capability passport and reconciliation                                                        |
+| `:sandbox:docker`     | the docker-CLI and host backends behind that port                                                                             |
+| `:application`        | the use cases (`run`, `take`, `serve`, `status`, `usage`) and the ports they drive adapters through                           |
+| `:adapters:github`    | the GitHub vendor bundle: tracker and external-check clients over one shared HTTP core                                        |
+| `:adapters:git`       | the git-subprocess adapter: task repository, attempt persistence, state-file mappers                                          |
+| `:adapters:agent`     | the agent-CLI executor and judge voter                                                                                        |
+| `:adapters`           | the coarse remainder: console, `.gnomish/` loader, check runners, secrets, pipeline law, the in-memory reference tracker      |
+| `:test-fixtures`      | Spock fixtures shared across modules, consumed at test scope only                                                             |
+| `build-logic/`        | an included build of convention plugins; every module build file is thin                                                      |
+
+The direction is enforced, not documented: each module declares the sibling projects its production classpath may reach (`verifyModuleLayering`), the dependency-analysis plugin fails any undeclared or unused edge, and ArchUnit rules hold the package-level boundaries inside a module. A violation fails `./gradlew check` naming the rule and the offending edge.
+
 ## Building
 
 <!-- implements UX1 of add-project-skeleton -->
@@ -293,7 +339,20 @@ One command answers "is my change OK?":
 ./gradlew check
 ```
 
-It compiles with Error Prone + NullAway, runs the Spock suite, generates JaCoCo coverage reports, enforces the PIT mutation gate (100%), verifies Spotless formatting, and runs the dependency-analysis `buildHealth` check. Reports land in `build/reports/jacoco/test/html/index.html` and `build/reports/pitest/index.html`. `./gradlew build` additionally produces the boot jar.
+It compiles with Error Prone + NullAway, runs the Spock suite, generates JaCoCo coverage reports, enforces the PIT mutation gate (100%), verifies Spotless formatting, and runs the dependency-analysis `buildHealth` check. Every module runs its own gates, so reports land per module — `<module>/build/reports/jacoco/test/html/index.html` and `<module>/build/reports/pitest/index.html`. `./gradlew build` additionally produces the boot jar.
+
+<!-- implements FR11, NFR-P1, UX1 of split-into-modules -->
+
+Working inside one module? Verify just that module — it runs that module's tests, coverage and mutation gate, and mutates **only** that module's production classes:
+
+```bash
+./gradlew :application:check      # everything, one module
+./gradlew :application:pitest     # the mutation gate alone
+```
+
+There is no whole-tree mutation task: `./gradlew check` aggregates every module's run, which together cover the full production tree. For a one-shot full mutation report without the rest of `check`, use the opt-in aggregate `./gradlew pitestAll`.
+
+Narrowing further is possible within a module via `-PpitScope=<comma-separated class globs>`; CI uses it to scope the gate to the classes a branch changed, and each module keeps only the globs it owns. Leave it unset locally — an unset run is the one that guarantees whole-module coverage.
 
 Formatting is applied automatically: a Claude Code hook formats files as the agent edits them, and a git pre-commit hook (installed into `.git/hooks/` by any `./gradlew check` run) formats staged files as a safety net. Manual fallback: `./gradlew spotlessApply`.
 

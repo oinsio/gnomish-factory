@@ -1,0 +1,21 @@
+// Conventions for a plain library module — everything a module needs that is
+// not the composition root (FR6, design D9 of split-into-modules).
+//
+// `java-library` (rather than bare `java`) is the point of this plugin: a
+// library module distinguishes its `api` surface from its `implementation`
+// details, which is how `:gnomish-plugin-api` re-exposes `:domain` transitively
+// (design D4) and how the acyclic layering stays enforceable (FR2).
+plugins {
+    id 'java-library'
+    id 'java-conventions'
+    id 'test-conventions'
+}
+
+// Library modules are consumed as jars by sibling modules, never launched:
+// no Spring Boot plugin, no bootJar, no main class. The composition root
+// (`:bootstrap`, design D3) is the only module that adds those.
+tasks.named('jar') {
+    manifest {
+        attributes('Implementation-Title': project.name, 'Implementation-Version': project.version)
+    }
+}

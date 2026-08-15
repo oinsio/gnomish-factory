@@ -2,7 +2,7 @@
 
 ## Context
 
-Driven by G1–G4 and FR1–FR11 of `split-into-modules`. Today the project is one
+Driven by G1–G6 and FR1–FR12 of `split-into-modules`. Today the project is one
 Gradle module: ~770 production Java classes, ~580 Spock specs, an 800-line
 `build.gradle`, PIT wired into `check` and mutating the whole tree locally.
 `domain` is already clean (its only `app` / `adapter` references are javadoc
@@ -77,9 +77,9 @@ overhead exceeds the benefit; they stay coarse until a concrete reason appears.
 Gradle overhead for no scoping or boundary gain.
 
 **Layer homes for the non-adapter packages.** `board`, `dashboard`,
-`serveobservability` → `:application`; `status`, `usage` → `:application`
-except their adapter-importing files, which follow the D3 rule into
-`:bootstrap`; `gitobjects` + the root `DoNotMutate` marker → `:gitobjects`;
+`serveobservability`, `status` and `usage` → `:application` (their four
+adapter-importing files are inverted per D12 rather than sunk into
+`:bootstrap`); `gitobjects` + the root `DoNotMutate` marker → `:gitobjects`;
 root config-properties types follow their consumers (`FactoryProperties`,
 `ServeProperties` → `:application`; `SandboxProperties`, `BindingProperties`,
 `ResourceLimits` → `:sandbox:core`); `FactoryApplication` → `:bootstrap`.
@@ -93,18 +93,44 @@ into `:adapters:*`. Each pass keeps the whole suite green before the next
 starts. **Alternative — single big-bang move:** rejected; unreviewable diff and
 no green checkpoint to bisect against.
 
+**Sequencing correction (task 4.1).** `:bootstrap` is extracted *after* the
+adapters move (task 5.1), not before. While the adapters still live in the root
+project, a separate `:bootstrap` module would have to depend on `project(':')` —
+an inverted edge that task 5.1 would immediately re-point, and that would drag
+`bootJar` and the E2E specs across module boundaries twice. The root project is
+already the composition root, so the order becomes 4.1–4.6 → 5.1 → 4.7–4.9:
+carve `:application`, move the adapters out, and whatever remains in the root is
+`:bootstrap` by construction.
+
 ### D3 — Bootstrap owns all wiring (FR3, NFR-R1)
 `app` splits into `application` (use cases + ports, adapter-free) and `bootstrap`
 (`@SpringBootApplication`, `main()`, all `@Configuration`). The split rule is by
-import kind, not a fixed file list: `app` files importing adapter
-*implementations* move into `bootstrap`; files consuming only ports — including
-the execution-environment use-case files (`RunAssembler`, `ManualRunRunner`,
-`SandboxModeSelector`, …), which after D11 import the port from `:sandbox:core`
-— stay in `application`. Adapters expose factories / `@Configuration` but
-perform no cross-module component scanning; `bootstrap` is the single scan root.
-This preserves the flat classpath and centralizes wiring so no new runtime
-failure mode appears. **Alternative — leave `app` intact:** rejected; it is the
-exact node that mixes wiring with logic (the change's premise).
+**role**: composition — `main()`, `@Configuration`, and the assembly/factory
+classes whose job is to instantiate and connect adapters — goes to `bootstrap`;
+use-case logic stays in `application`, with its adapter references inverted per
+D12. Adapters expose factories / `@Configuration` but perform no cross-module
+component scanning; `bootstrap` is the single scan root. This preserves the flat
+classpath and centralizes wiring so no new runtime failure mode appears.
+**Alternative — leave `app` intact:** rejected; it is the exact node that mixes
+wiring with logic (the change's premise).
+
+**Correction (task 4.1, measured against the tree).** D3 originally read the
+rule as *by import kind* — "any `adapter.*` import → `bootstrap`" — and asserted
+that `RunAssembler`, `ManualRunRunner` and `SandboxModeSelector` consume only the
+`:sandbox:core` port and so stay in `application`. Both halves are wrong against
+the current code. All three construct concrete adapters
+(`adapter.check.*` runners, `adapter.console.DialogConsole`,
+`adapter.environment.ContainerEnvironments`, `adapter.law.PipelineLawReader`),
+and applying the import-kind rule literally sends 57 files to `bootstrap` — then
+11 more transitively, because `application` files import them (`TakeSlotRunner` →
+`ManualRunAssembly`, `ServeCommand` → `SlotLedger`, `TakeFinishReport` →
+`TerminalWriteRetry`, …), which `application` may not do. The fixpoint is 70
+`bootstrap` / 257 `application`, and it drags genuine use cases
+(`TakeEngineExecution`, `TakeReconcile`, `GitModeRunner`) into the composition
+root — exactly the "`bootstrap` regrows into a second `app`" outcome D11
+rejects. The rule is therefore restated as *by role* above, and the import
+problem is solved by inverting the dependencies (D12) rather than by relocating
+their holders.
 
 ### D4 — `gnomish-plugin-api` surface, spike-derived (FR4, FR5, resolves Q3)
 The spike (github adapter imports minus its own packages) gives the transitive
@@ -142,6 +168,30 @@ resolves during the extraction, giving M4:
 
 **Alternative — publish `application` as the api:** rejected; it exposes
 internals and defeats FR5's free-to-change guarantee.
+
+**Correction (task 2.3, found during extraction).** `ExternalCheckClient` and
+`Workspace` cannot move into the api: `:domain`'s own engine consumes both
+(`EnginePorts`, `Engine`, `ExternalPolling`, `VerifyOrchestrator`, and four
+`domain.engine.port` interfaces type their signatures in `Workspace`), so
+relocating them would make `:domain` depend on `gnomish-plugin-api` and close
+exactly the cycle FR2 forbids. They stay in `:domain` and reach a third party
+through the same transitive `api` edge as the value types — the api module holds
+the tracker ports, `SecretsProvider`, `TrackerAdapterFactory` and
+`TrackerSubsectionValidator`. UX3's "one declared dependency" is unaffected.
+
+**Correction (task 2.1).** D1's layer-home note sends the root `DoNotMutate`
+marker to `:gitobjects`, but four `:domain` types carry it and FR2 forbids
+`:domain` depending on anything internal. The marker therefore travels with
+`:domain`, which every upper module already depends on; `:gitobjects` keeps the
+self-contained copy it already had (D19 of add-sandbox-core). No module gains a
+dependency, and the marker is still absent from the api module itself. Because
+PIT matches the annotation by *simple* name, both copies keep working.
+
+**Relocation of `TrackerSubsectionValidator` (task 2.3).** It moves package as
+well as module — `adapter.pipeline` → `app`, next to the `TrackerAdapterFactory`
+SPI. Leaving an `adapter.*` package inside the published contract would misread
+to a third party and would trip D5's "`application..` must not depend on
+`..adapter..`" rule from `app`'s own command classes, which consume it.
 
 ### D5 — Boundary enforcement: Gradle deps + dependency-analysis + ArchUnit (FR2, UX2, M3, M4)
 Gradle project dependencies already make a sibling adapter's internals
@@ -186,6 +236,12 @@ fixtures to one producing module). Fixtures are shared across many modules, so a
 standalone module fits better. **Alternative — `java-test-fixtures` per module:**
 rejected for cross-module sharing; would force fixtures to live under one owner.
 
+**Sequencing correction (task 2.1).** `:test-fixtures` is extracted with
+`:domain`, not in its own later pass: the shared engine fakes and the
+port-contract suites live in the domain test tree, so carving out `:domain`
+strands every other module's specs the moment it happens. Task 7 then only has
+the remaining fixtures to sweep.
+
 ### D9 — Convention plugins in `build-logic` (FR6, M2)
 `build-logic` is an included build providing: `java-conventions` (toolchain,
 Spotless, Error Prone + NullAway, JaCoCo), `test-conventions` (Spock, PIT
@@ -220,6 +276,111 @@ the third-party surface before changes B/C define the discovery and binding
 story. **Alternative — move the nine files into `bootstrap`:** rejected; they
 are use cases, and `bootstrap` would regrow into a second `app`.
 
+**Package relocation (task 3.1, implied by D5).** The extracted types move out
+of `com.github.oinsio.gnomish.adapter.environment` into
+`com.github.oinsio.gnomish.sandbox`. A port-layer module `:application` depends
+on cannot live in an `adapter.*` package: D5's ArchUnit rule ("`application..`
+must not depend on `..adapter..`") would fail task 4.6 on exactly the nine
+use-case files D3 keeps in `application`. Same reasoning as D4's
+`TrackerSubsectionValidator` relocation; the churn is import lines only. The
+backends keep the `adapter.environment` package until task 6.1 carves
+`:sandbox:docker`.
+
+### D12 — Invert the use cases' adapter dependencies (FR3, FR12, G6)
+D3's correction leaves 70 files bound for `bootstrap`. Rather than accept that,
+each adapter reference held by a use case is inverted, in two buckets measured
+against the tree:
+
+**(a) Relocation — 29 types, no signature change.** A large share of the
+"adapter" references are not adapters at all: port interfaces (`ConsoleIO`,
+`ActivityTracker`, `StatusRenderer`, `AgentProgressListener`,
+`RoundEnvironmentSource`, `JudgeEnvironmentSource`, `CheckEnvironmentSource`,
+`ExternalCheckPinContributor`, `TaskSalvage`, `BranchLocation`,
+`BranchStateResult`, `UsageHistoryResult`), value types (`UsageTotals`,
+`UsageRow`, `TaskListRow`, `DeliveredBranchState`, `AttemptCommitRef`,
+`AgentProgressEvent`, `Segment`), pure utilities (`TaskIdSanitizer`,
+`TaskWorktreePath`, `SegmentPlanner`, `ChildEnvAllowlist`) and adapter-layer
+exceptions. They are misfiled under `adapter.*`; moving them to `application`
+(or `:sandbox:core` for the sandbox pair) is the same treatment D4 gave
+`FindingsSanitizer` and `TrackerSubsectionValidator`. Measured effect: 70 → 59.
+
+**(b) Port interfaces — the genuine adapters.** `SystemClock` / `ThreadSleeper`
+are already implementations of the `Clock` / `Sleeper` ports that exist in
+`:domain`; replacing their direct construction with injection of the port costs
+nothing and takes 59 → 46. The residual 46 are held by real collaborators — the
+git subprocess surface (`GitProcessRunner`, `GitTaskRepository`,
+`GitAttemptPersistence`, the worktree/branch helpers), the console
+(`DialogConsole`, `SystemConsoleIO`), pipeline loading (`PipelineLoader`,
+`PipelineLawReader`), `DirectoryWorkspace`, the check runners, and
+`ContainerEnvironments`. Each gets an `application`-owned port sized to the
+capability the use case actually needs, bound in `bootstrap`.
+
+*Rationale:* neither change B nor change C touches this surface — B's NG4 keeps
+secrets/observability/workspace as module boundaries only and it reaches just
+`ExternalCheckPinContributor`; C migrates `SandboxModeSelector`'s enum identity
+but not its `ContainerEnvironments` probe. Left undone, the 46 files stay in the
+composition root indefinitely, and FR2's ArchUnit rule would be enforcing a
+boundary drawn around the wrong set of files.
+
+*Cost, accepted deliberately:* 151 of 461 spec files reference the bucket-(b)
+adapters and are edited at their construction sites. FR9 and M5 were rewritten
+to permit exactly that and nothing more — no scenario, `given/when/then` or
+assertion changes — so the behavior-preservation guarantee still has teeth.
+
+**Alternative — mechanical rule + closure (70/257), document the deviation:**
+rejected; it makes `bootstrap` a second `app` and leaves G2/G6 unmet.
+**Alternative — defer bucket (b) to a follow-up change:** rejected; the boundary
+rules land in this change, so shipping them around a knowingly wrong file set
+would bake the wrong layering into the enforced gate.
+
+### D13 — Closing the coverage gap per-module PIT exposes (FR11, NFR-P1, M5)
+D6 makes a property visible that the whole-tree run hid: a class is now gated
+only by its own module's specs. Measured at task 8.1, the gap concentrates in
+`:application` (and, before its closure there, `:adapters`), because tasks
+4.5/5.1 partitioned specs by what *compiles* — "stays with the composition root
+if it imports an adapter or reaches a fixture that does" — which answers where
+a spec MAY live, not whose coverage it carries. Three distinct causes get three
+distinct treatments, decided per class, never as a blanket:
+
+**(a) Spec ownership.** A spec whose subject is a module's own class and which
+needs neither the composition root nor a real daemon moves to that module —
+including specs that drive a use case through the in-memory reference adapter,
+which is a test fake by design (unit specs of the application layer, not
+integration specs of `bootstrap`). File moves only; no spec body changes, so
+M5 is untouched. A spec that assembles the real run through `ManualRunAssembly`
+(which names `adapter.check` types on its fields — composition by D3's by-role
+rule) is genuinely a composition-root integration spec and stays.
+
+**(b) Arid wiring.** Factories, assemblies and seams whose uncovered mutations
+are all delegation-shaped (a removed void hand-off, a nulled return of a
+constructed collaborator). A unit test killing such a mutant asserts "method
+calls method" — it duplicates the implementation, resists refactoring, and adds
+no confidence. These classes are excluded per class with a written rationale —
+the same documented-exception discipline testing.md already applies to `main()`
+wiring, and the category Google's mutation infrastructure suppresses wholesale
+as "arid nodes".
+
+**(c) Decision-bearing orchestration.** The take/resume/serve chain classes
+whose uncovered mutations negate real conditionals. These get port-fake unit
+specs in `:application` — new files, outside M5's budget by construction. A
+class whose branches turn out to be trivial guards over delegation may instead
+carry a per-class integration-covered exemption naming the `:bootstrap` suite
+that drives it, per the orchestration-testing distinction (mock-tests of simple
+coordinators are change-detectors; complex orchestration deserves unit specs).
+
+*Rationale:* the 100%-with-named-exemptions gate keeps its teeth only while
+every exemption is individually reviewable; the closure work is in-change
+because the gap is a direct product of this change's own re-scoping, and task
+9.1's "full suite green" gate must not carry a knowingly red module.
+**Alternative — cross-module mutation (`additionalMutableCodePaths` /
+`crossModule`):** rejected; it re-couples the modules PIT-wise, produces
+duplicate per-class results, and reintroduces the whole-tree run time D6 exists
+to remove. **Alternative — lower `mutationThreshold` for `:application`:**
+rejected; a threshold is a blanket, not a reviewable list, and it surrenders
+the gate exactly where the most orchestration logic lives. **Alternative —
+defer the orchestration specs to a follow-up change:** rejected by decision;
+see the in-change rationale above.
+
 ## Risks / Trade-offs
 
 - **Large mechanical move breaks imports / conflicts** → two-pass, module-by-
@@ -230,7 +391,9 @@ are use cases, and `bootstrap` would regrow into a second `app`.
   surface settles.
 - **Per-module PIT misses cross-module behavior** → `targetClasses` is Java
   production per module; integration behavior is covered by `bootstrap` and the
-  E2E layer; justify any <100% module per testing.md.
+  E2E layer. The loss this predicts materialized at task 8.1 and is closed by
+  D13: spec-ownership moves, per-class arid-wiring exemptions, and port-fake
+  unit specs for decision-bearing orchestration — never a lowered threshold.
 - **Hidden `app ↔ adapter` cycles surface during the split** → `bootstrap`
   absorbs the composition root and ports invert the direction, breaking cycles
   by construction (D3).
@@ -247,14 +410,18 @@ are use cases, and `bootstrap` would regrow into a second `app`.
 2. Extract `:domain` (already clean), `:gitobjects`, and `:gnomish-plugin-api`
    (spike surface).
 3. Extract `:sandbox:core` (port layer, D11); backend classes stay put for now.
-4. Split `app` → `:application` + `:bootstrap` by the D3 import rule; suite
-   green.
+4. Invert the use cases' adapter dependencies (D12) and carve `:application`;
+   the composition classes stay in the root project, which is the composition
+   root today. Suite green.
 5. Move adapters into a `:adapters` block; add dependency-analysis + ArchUnit
-   boundary rules; resolve the five leaks; suite green.
+   boundary rules; resolve the five leaks; suite green. Only then extract
+   `:bootstrap` from what remains in the root project.
 6. Extract `:sandbox:docker`; extract `:test-fixtures`.
 7. Turn on per-module PIT wired into each module's `check`; re-express the
    quality-gates contract (root aggregation, per-module property, CI module
-   scoping); drop the whole-tree PIT task.
+   scoping); drop the whole-tree PIT task. Close the coverage gap the
+   re-scoping exposes (D13): spec-ownership moves, arid-wiring exemptions,
+   port-fake unit specs for the orchestration chain.
 8. Pass-1 verification: full suite, file-size caps, wall-time baseline.
 9. Pass 2: split `:adapters` into `:adapters:github` (vendor bundle),
    `:adapters:git`, and `:adapters:agent`; keep the small adapters coarse (D1).

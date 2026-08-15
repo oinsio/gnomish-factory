@@ -1,0 +1,104 @@
+// Build script for the `:adapters:github` module (FR10, design D1/D2 of
+// split-into-modules, pass 2): the GitHub vendor bundle. One module holds all
+// three GitHub packages — `adapter.github` (the shared HTTP core: client, retry
+// config, rate-limit accounting, conditional-request cache), `adapter.tracker
+// .github` (the `Tracker` port realization) and `adapter.check.github` (the
+// `ExternalCheckClient` realization over Actions) — because D1 makes the shared
+// core an INTERNAL package of the vendor bundle rather than a module of its own:
+// splitting it out would buy a third build unit and publish plumbing that only
+// these two adapters may use.
+//
+// The two sibling realizations still must not reach into each other; that line
+// is drawn inside this module by `GithubAdapterBoundarySpec`, which predates the
+// split and keeps its scope.
+//
+// This is D1's first module warrant of both kinds at once: a vendor boundary
+// (the DEC-9/DEC-10 plugin exemplar — the first adapter a third party would
+// replace) and a PIT-scoping win (~70 production classes with the build's
+// heaviest WireMock suite behind them).
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'GitHub vendor adapter bundle: the tracker and external-check port realizations over one shared HTTP core.'
+
+dependencies {
+    // Version management only; see the note in `domain/build.gradle`. The
+    // Jackson override carries the CVE fix (GHSA-5jmj-h7xm-6q6v). `api`, as in
+    // `:adapters`: the artifacts below travel on this module's `api` surface,
+    // so their constraints have to travel with them.
+    api platform(libs.spring.boot.dependencies)
+    api platform(libs.jackson.bom)
+
+    // The ports these adapters realize and the value model their signatures are
+    // drawn in: the tracker port family and `SecretsProvider` from the published
+    // contract, `Workspace` / `Finding` / `PollStatus` / `TrackerConfig` from the
+    // domain, and the `app` types the check client and the sanitizer sit on
+    // (`ExternalCheckPinContributor`, `AttemptCommitWorkspace`,
+    // `FindingsSanitizer`). Each is used directly here, which the
+    // dependency-analysis gate requires stated rather than inherited.
+    api project(':gnomish-plugin-api')
+    api project(':application')
+    api project(':domain')
+
+    implementation libs.slf4j.api
+
+    // The tracker and check JSON payloads. All three are `implementation`: the
+    // DTOs are package-private to this bundle, so no Jackson type reaches a
+    // consumer through this module's api surface — which the dependency-analysis
+    // gate is what establishes, and which is one more thing the vendor cut buys
+    // (in `:adapters` two of the three were `api`).
+    implementation libs.jackson.annotations
+    implementation libs.jackson.databind
+    implementation libs.jackson.core
+
+    // Retry for the HTTP client core (NFR-R2 of add-tracker-port):
+    // infrastructure failures of tracker calls are retried. `resilience4j-core`
+    // is declared directly because `GithubRetryConfig` names `IntervalFunction`
+    // itself.
+    implementation libs.resilience4j.retry
+    implementation libs.resilience4j.core
+
+    // Shared fakes and the tracker / external-check port-contract suites (FR7,
+    // design D8), test scope only.
+    testImplementation project(':test-fixtures')
+    // WireMock for the tracker/check HTTP contract specs, in-JVM — no Docker
+    // (.claude/rules/testing.md). The pinned Jetty 11 line and its accepted-risk
+    // advisories are documented in the root build script and osv-scanner.toml.
+    testImplementation libs.wiremock
+    testImplementation enforcedPlatform(libs.jetty.bom)
+    // Logback's ListAppender backs the specs asserting on log output.
+    testImplementation libs.logback.classic
+}
+
+// PIT exclusions documented for THIS module (task 8.1: each module carries its
+// own exceptions, next to the mutation scope they narrow). Moved here with the
+// spec they name when task 10.1 carved the vendor bundle out of `:adapters`.
+pitest {
+    // M1/M2 documented exception (add-tracker-port / add-claim-heartbeat):
+    // GithubTrackerContractSpec runs the full port contract against the real GitHub adapter
+    // over WireMock, including the 12-way concurrent `claim` race (5 repetitions x 12 caller
+    // threads on distinct issues). Under PIT's single-JVM coverage minion — every test class
+    // loaded and instrumented together — that race is timing-sensitive: it intermittently
+    // fails PIT's pre-mutation green-suite check, which PIT treats as a hard "suite not green"
+    // abort rather than a mutation result. The spec is deterministically green under plain
+    // `test`. Excluding it removes NO production line from mutation coverage: every Github*
+    // class the contract exercises has its own dedicated unit spec feeding the gate
+    // (GithubClaimLeaseSpec, GithubHeartbeatSpec, GithubStateWritesSpec, GithubCorrespondenceSpec,
+    // GithubDecisionsSpec, GithubFeedQuerySpec, GithubTaskFetcherSpec, GithubOpenQuerySpec,
+    // GithubStaleClaimRemovalSpec), and the composed GithubTracker by GithubTrackerSpec.
+    excludedTestClasses = [
+        'com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerContractSpec',
+    ]
+}
+
+// A vendor adapter reaches the ports and use cases below it and nothing else
+// (FR2, M4, design D1): no sibling adapter module appears here, which is what
+// pass 2 buys over the package-level rule that stood in for it — a sibling's
+// types are now simply absent from the compile classpath. `:sandbox:core`
+// arrives transitively through `:application`, which re-exposes it.
+layering {
+    allowedProjects = [':application', ':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core']
+}

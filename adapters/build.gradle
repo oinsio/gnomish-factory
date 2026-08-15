@@ -1,0 +1,89 @@
+// Build script for the `:adapters` module (FR1, FR2, FR10, design D1/D2 of
+// split-into-modules): the COARSE REMAINDER of the adapter layer, after pass 2
+// cut out the seams D1 warrants a module for. What is left is what D1
+// deliberately does not split — the interactive console, the `.gnomish/` YAML
+// loader and its validators, the shared `check` runners, the env/file secrets
+// provider, the pipeline law reader and the briefing renderer — plus
+// `tracker/inmemory`, the reference adapter kept in-tree as the test double
+// (DEC-10). Each is small enough that a module of its own would buy neither of
+// D1's warrants and cost a build unit.
+//
+// The seams that left: `:adapters:github` (task 10.1), `:adapters:git` and
+// `:adapters:agent` (task 10.2). Their isolation is now Gradle's compile
+// classpath rather than a package-level rule — none of the three can see the
+// others' types at all. `:adapters:agent` is the one module that depends on
+// THIS one, for the frozen pipeline law and the briefing sections it shares
+// with the console; that edge is D1's sanctioned option and is held to those
+// two packages by `AgentCoarseReachSpec` over there.
+//
+// The direction is one-way and acyclic (FR2): this module depends on the ports
+// and use cases below it, and above it only the composition root — which is the
+// only place that knows which realization is bound — and that one agent edge.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Adapter layer: every port realization that talks to something outside the factory.'
+
+dependencies {
+    // Version management only; see the note in `domain/build.gradle`. The
+    // Jackson override carries the CVE fix (GHSA-5jmj-h7xm-6q6v).
+    // `api`, not `implementation`: some of the artifacts below are on this
+    // module's `api` surface, so their version constraints have to travel with
+    // them or a consumer resolves them versionless.
+    api platform(libs.spring.boot.dependencies)
+    api platform(libs.jackson.bom)
+
+    // The ports these adapters realize and the use-case types their signatures
+    // are drawn in. `:application` re-exposes `:domain`, `:gnomish-plugin-api`,
+    // `:sandbox:core` and `:gitobjects` as `api` dependencies, but each is used
+    // directly here too, which the dependency-analysis gate requires stated
+    // rather than inherited.
+    api project(':application')
+    api project(':domain')
+    api project(':gnomish-plugin-api')
+    api project(':sandbox:core')
+    api project(':gitobjects')
+    // The execution-environment backends (task 6.1): the environment-source
+    // bridges construct host environments and lease container ones, and
+    // `ContainerHarvestFetch` / `SandboxCheckEnvironmentSource` name backend
+    // types on public signatures — the "ordinary adapter-to-backend
+    // dependency" task 5.2's residual-edge note anticipated.
+    api project(':sandbox:docker')
+
+    implementation libs.slf4j.api
+
+    // The `.gnomish/` YAML loader. The domain stays Jackson-free (guarded by
+    // `DomainPuritySpec`). `api` for the two the DTOs expose on public
+    // signatures; the rest is an internal detail of the loader.
+    api libs.jackson.annotations
+    api libs.jackson.databind
+    implementation libs.jackson.core
+    implementation libs.jackson.dataformat.yaml
+
+    // No Spring and no retry stack here any more: both were the GitHub HTTP
+    // client's (resilience4j) and the tracker registry's (`@AutoConfiguration`
+    // on `TrackerAdapterConfiguration`), and task 10.1 moved the first into
+    // `:adapters:github` and the second into the composition root. The coarse
+    // adapters talk to the filesystem, the terminal and subprocesses, so they
+    // need neither — and the dependency-analysis gate is what says so.
+
+    // Shared fakes and port-contract suites (FR7, design D8), test scope only.
+    testImplementation project(':test-fixtures')
+    // No WireMock, no Jetty and no ArchUnit here any more (task 10.2): the HTTP
+    // contract specs left with `:adapters:github`, the egress-guard suite that
+    // stood one up with `:adapters:git`, and the sibling-isolation gate has no
+    // seam left to police inside this module — every seam D1 named is a module
+    // now, and the one remaining edge is asserted from `:adapters:agent`.
+    // Logback's ListAppender backs the specs asserting on log output.
+    testImplementation libs.logback.classic
+}
+
+// Adapters reach the ports and use cases below them (FR2, design D1). Pass 2
+// left no seam inside this module, so there is nothing sideways left to state:
+// every module named here sits below it.
+layering {
+    allowedProjects = [':application', ':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core', ':sandbox:docker']
+}

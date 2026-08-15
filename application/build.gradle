@@ -1,0 +1,181 @@
+// Build script for the `:application` module (FR3, design D1/D3 of
+// split-into-modules): the use cases and the ports they drive them through —
+// the `run` / `take` / `serve` / `status` / `usage` / `board` / `dashboard`
+// commands, the run and resume flows, the slot and heartbeat machinery, and the
+// observability projections.
+//
+// The defining property, enforced by `ApplicationLayeringSpec` (task 4.6, D5):
+// nothing here imports `..adapter..`. Every collaborator with an external system
+// behind it — git, Docker, the tracker HTTP clients, the agent CLIs, the
+// terminal, the `.gnomish/` YAML loader — is reached through a port declared in
+// this module and bound by the composition root (design D12). What stayed
+// behind with the composition root is the wiring itself: `@Configuration`,
+// `main()`, and the assembly classes whose job is to instantiate and connect
+// adapters (D3's by-role rule).
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Application layer: the use cases and the ports they drive adapters through.'
+
+dependencies {
+    // Version management only (no artifacts): the Boot BOM pins the
+    // spring-boot and Jackson versions used below (design D3 of
+    // add-project-skeleton).
+    // `api`, not `implementation`: the spring-boot and Jackson artifacts below
+    // are on this module's `api` surface, so their version constraints have to
+    // travel with them or a consumer resolves them versionless.
+    api platform(libs.spring.boot.dependencies)
+    // Security override, matching the root project: the CVE-fixed Jackson line
+    // (GHSA-5jmj-h7xm-6q6v) wins over the Boot BOM's transitive jackson-bom.
+    api platform(libs.jackson.bom)
+
+    // `api`, not `implementation`: the use cases' own signatures are typed in
+    // the domain model (TaskContext, TaskState, TaskOutcome, PipelineDefinition,
+    // the engine ports) and in the tracker port family, so every consumer — the
+    // adapters and the composition root — compiles against them too.
+    api project(':domain')
+    api project(':gnomish-plugin-api')
+    // `api` likewise: `SandboxRunPieces` and the run/resume flows expose
+    // `TaskExecutionEnvironment`, `Segment` and the binding types (design D11).
+    api project(':sandbox:core')
+    // Bare-object reads of a task branch: `SandboxRunPieces.attemptReader` and
+    // the observability projections are typed in `GitObjects`.
+    api project(':gitobjects')
+
+    implementation libs.slf4j.api
+
+    // Annotations only — never a running context, which is the composition
+    // root's concern (design D3): `@Component` on the startup collaborators and
+    // `@ConfigurationProperties` / `@Name` on `FactoryProperties` /
+    // `ServeProperties` (design D1's layer-home rule sends the root
+    // config-properties types to their consumers). `api` because those runtime
+    // annotations sit on public types the composition root reads.
+    api libs.spring.boot.asProvider()
+
+    // The observability projections and the `status --json` / `usage --json` /
+    // board / dashboard renderers serialize through Jackson. Reading the
+    // `.gnomish/` YAML stays in the loading adapter, behind `PipelineSource`.
+    // `api`: the DTO records carry Jackson annotations and expose mapper types,
+    // so a consumer compiles against them.
+    api libs.jackson.annotations
+    api libs.jackson.core
+    api libs.jackson.databind
+
+    // Shared fakes and port-contract suites (FR7, design D8), test scope only.
+    testImplementation project(':test-fixtures')
+    // TEST SCOPE ONLY (task 8.1 of split-into-modules): the specs whose subject is a use case in
+    // this module but which drive it through the in-memory reference adapter moved here from
+    // `:bootstrap`, so that a class is covered by its own module's mutation gate. The adapters
+    // already reached this test classpath transitively — `:test-fixtures` exposes them as `api`
+    // (design D8) — and the dependency-analysis gate wants a direct use declared directly.
+    // The production direction is unaffected and still enforced: `verifyModuleLayering` walks the
+    // production classpaths only, and `:adapters` is absent from `allowedProjects` below (FR2).
+    testImplementation project(':adapters')
+    // …and the git seam pass 2 cut out of it (task 10.2): the status, usage and
+    // resume specs read what the git adapter wrote. Test scope only, as above.
+    testImplementation project(':adapters:git')
+    // The logging specs assert through Logback's ListAppender (the SLF4J backend
+    // is the composition root's choice, so this is a test-only declaration).
+    testImplementation libs.logback.classic
+    // The layering gate itself (task 4.6, D5): ArchUnit rules asserting no
+    // `..adapter..` dependency and the acyclic direction.
+    testImplementation libs.archunit
+}
+
+// PIT exclusions documented for THIS module (task 8.1 of split-into-modules:
+// each module's mutation scope is its own production packages, so each module
+// carries its own exceptions). The engine configuration lives in
+// `pitest-conventions`; per-method exemptions are `@DoNotMutate` markers on the
+// methods themselves (.claude/rules/testing.md) — TakeBatchExitCode's
+// isNewSmallestNonZero is this module's one equivalent-mutant case.
+pitest {
+    // FR11/D9 documented exception (add-factory-serve, task 5.5): RealProcessTreeKiller walks
+    // ProcessHandle.current().descendants() and destroys them — spawning and killing real OS
+    // processes in a unit test would be heavy and flaky for no coverage benefit. The sequencing
+    // that decides whether/when it runs (ServeShutdown: interrupt feed, flag occupied claims,
+    // wait the grace window, then always call the process-tree killer) is fully covered by
+    // ServeShutdownSpec against a fake ProcessTreeKiller, so excluding this thin real
+    // implementation removes no production DECISION from mutation coverage, only the
+    // unverifiable OS-process bytes themselves — the same "main()/bootstrap wiring" category
+    // as `:bootstrap`'s FactoryApplication.
+    // Arid-wiring exemptions (task 8.6 of split-into-modules, design D13(b); the category and the
+    // bar every entry below has to clear are in `.claude/rules/testing.md`, "Per-class exemptions").
+    // Each was read through before being listed: none holds a conditional, a loop or a computed
+    // value, so every one of its mutations is a nulled return of an object it just constructed or a
+    // removed hand-off between two objects it holds — "method calls method". The named suite is the
+    // one that really drives the class end to end, so what is dropped here is the mutation gate on
+    // the construction itself, never the coverage of the graph being constructed.
+    excludedClasses = [
+        'com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller',
+        // Builds a TakeCommand, defaulting the seams; driven by :bootstrap's TakeCommandSpec.
+        'com.github.oinsio.gnomish.app.TakeCommandFactory',
+        // The five `with*` copies of the seam parameter object; driven by :bootstrap's
+        // TakeCommandStandingReaperWiringSpec / TakeCommandBatchSpec / TakeHeartbeatLifecycleSpecBase,
+        // each of which overrides one seam and asserts the resulting take run's behavior.
+        'com.github.oinsio.gnomish.app.TakeCommandSeams',
+        // Builds the take + serve commands and bundles them with the pre-built ones; driven by
+        // :bootstrap's SubcommandDispatchSpec (routing) and ManualRunRunner's own specs.
+        'com.github.oinsio.gnomish.app.SubcommandDispatchFactory',
+        // Wires the resume chain behind a TakeClaimAndWork; driven by :bootstrap's TakeBareAutoSpec
+        // and TakeSlotRunnerSpec, which run the whole claim-and-resume flow through it.
+        'com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory',
+        // Straight-line assembly of the serve runtime over ServeAssembly's leaf builders; driven by
+        // :bootstrap's ServeCommandSpec, which starts the assembled runtime.
+        'com.github.oinsio.gnomish.app.ServeRuntimeAssembly',
+
+        // Integration-covered exemptions (task 8.7 of split-into-modules, design D13(c); the bar is
+        // in `.claude/rules/testing.md`, "Per-class exemptions ... integration-covered"). Each of
+        // the three is covered scenario by scenario by a :bootstrap suite that CANNOT move down:
+        // every one of them builds a real TakeSlotRunner over a real git clone and the composition
+        // root's own assembly, which task 8.5 established is a composition-root integration spec by
+        // D3's by-role rule. Their collaborators here (TakeSlotRunner, FeedAutomaton, ServeShutdown,
+        // ObservabilityWiring) are final classes exposing no state for their hand-offs, so a
+        // same-module spec could asserted only "method calls method" over hand-built stand-ins.
+        // ServeShutdownWiringSpec, 12 scenarios — including both halves of the truth-in-reporting
+        // decision (stopped(sigterm) when SIGTERM lands mid-drain vs stopped(drainComplete) after)
+        // and the interrupt-status restoration, all driven through this class's own
+        // ShutdownHookRegistrar seam.
+        'com.github.oinsio.gnomish.app.ServeShutdownWiring',
+        // ServeCommandSpec, 10 scenarios — startup refusal and failure paths, the shared
+        // heartbeat/claim-loss wiring, the ledger-writer attach, --drain vs the forever loop, the
+        // janitor and standing reaper actually starting, and the --slots override.
+        'com.github.oinsio.gnomish.app.ServeCommand',
+        // TakeSlotRunnerSpec, 9 scenarios — the take cycle, the MDC frame, all three optional
+        // attachments present and absent, outcome logging, and the swallowed fetch failure.
+        'com.github.oinsio.gnomish.app.serve.TakeSlotRunner',
+        // SubcommandDispatchSpec, 10 scenarios — one per routed subcommand plus the `run` fall-through,
+        // each asserting the routed command really ran. Its six collaborators are final command
+        // classes the composition root assembles; a same-module spec would need stand-ins for all six.
+        'com.github.oinsio.gnomish.app.SubcommandDispatch',
+        // TakeCommandSpec, 10 scenarios (plus TakeCommandStandingReaperWiringSpec for the reaper
+        // thread's lifetime) — startup refusals, explicit and bare mode, short-ref expansion and the
+        // foreign-ref refusal. The three mutations here are the reaper start/stop frame and the
+        // hand-off to TakeRefDispatch, all covered there against a real tracker adapter.
+        'com.github.oinsio.gnomish.app.TakeCommand',
+    ]
+    // M5 documented exception (add-claim-heartbeat): InstanceHeartbeatLifecycleSpec drives the REAL
+    // background beat thread through a rendezvous BlockingSleeper (register → worker → awaitEntered →
+    // releaseOne → join). Under PIT mutation a loop/register/beat mutant either makes the worker
+    // never enter its sleep (the test's unbounded awaitEntered/join then blocks) or drops the sleep
+    // so the worker busy-spins — both surface as TIMED_OUT, not a clean kill, and no covering-test
+    // change fixes a genuinely non-terminating background loop. Excluding it removes NO production
+    // line from mutation coverage: every InstanceHeartbeat line it touches is also driven
+    // SYNCHRONOUSLY on the test thread by InstanceHeartbeatSpec — loop() (sleep, empty-and-stop,
+    // per-tick failure) via seedHeldForTest + a bounded sleeper, register()'s single-thread guard via
+    // "a single instance-level thread serves all claims", and beat()'s ClaimGone branch via the
+    // direct-tick specs — so the gate still holds; only the timing-sensitive lifecycle rehearsal
+    // (which stays green under plain `test`) is kept out of PIT's per-mutation re-runs.
+    excludedTestClasses = [
+        'com.github.oinsio.gnomish.app.lease.InstanceHeartbeatLifecycleSpec',
+    ]
+}
+
+// The use-case layer reaches the ports below it and nothing else (FR2) — in
+// particular no adapter module, which is the module-level twin of
+// `ApplicationLayeringSpec`'s package-level rule.
+layering {
+    allowedProjects = [':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core']
+}

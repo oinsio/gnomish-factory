@@ -43,10 +43,11 @@ test-fixtures module; `bootstrap` is the only module that depends on adapters.
 ### Requirement: Composition root isolated in bootstrap
 `app` SHALL be split into `application` (use cases and ports, adapter-free) and
 `bootstrap` (the single composition root holding `@SpringBootApplication`,
-`main()`, and all wiring); the `app` files that import adapter *implementations*
-move into `bootstrap`, while files consuming only ports — including the
-execution-environment port from `:sandbox:core` — stay in `application`. The
-flat classpath is preserved: the split introduces no new runtime failure mode.
+`main()`, and all wiring). The split SHALL be by *role*: composition — `main()`,
+`@Configuration`, and the assembly/factory classes whose job is to instantiate
+and connect adapters — belongs to `bootstrap`; use-case logic stays in
+`application`, with its adapter references inverted. The flat classpath is
+preserved: the split introduces no new runtime failure mode.
 <!-- implements FR3, NFR-R1 of split-into-modules -->
 
 #### Scenario: application module has no adapter imports
@@ -66,15 +67,49 @@ flat classpath is preserved: the split introduces no new runtime failure mode.
 - **THEN** the same adapter set is wired and startup succeeds on the flat
   classpath, with no new wiring failure mode
 
+### Requirement: Use-case dependencies inverted onto ports
+`application` SHALL contain no import of an adapter implementation. Where a use
+case reaches one, the dependency SHALL be inverted either by relocating the
+referenced type — when it is a port interface or a pure value/utility type
+merely misfiled under `adapter.*`, moved with its signature unchanged — or by
+introducing a port interface owned by `application` (or `domain`, where the
+engine already consumes it) that `bootstrap` binds to the concrete adapter. An
+inverted seam SHALL express the smallest capability the use case needs, not a
+mirror of the adapter's class surface.
+<!-- implements FR12 of split-into-modules -->
+
+#### Scenario: A use case reaches its collaborator through a port
+- **WHEN** a use case in `application` needs a git subprocess, the console,
+  pipeline loading, a workspace, a check runner, or the container-availability
+  probe
+- **THEN** it declares a port interface owned by `application` or `domain`
+- **AND** the concrete adapter satisfying it is supplied by `bootstrap`
+
+#### Scenario: A relocated port keeps its signature
+- **WHEN** a type misfiled under `adapter.*` is moved to its correct layer
+- **THEN** only its package declaration and its importers' import lines change
+- **AND** no method signature, field, or behavior of that type changes
+
+#### Scenario: An adapter import in application fails the build
+- **WHEN** a class under `application` imports any `..adapter..` type
+- **THEN** `check` fails with the named ArchUnit rule identifying the offending
+  class and the imported adapter type
+
 ### Requirement: Behavior-preserving split
-The module split SHALL be behavior-preserving: every existing capability spec and
-its tests pass with no changes to the specs.
+The module split SHALL be behavior-preserving: every existing capability spec
+holds unchanged and every pre-existing Spock spec passes. Spec-file edits SHALL
+be confined to the collaborator-construction sites forced by the port inversion.
 <!-- implements FR9 of split-into-modules -->
 
-#### Scenario: Full suite passes unchanged after the split
+#### Scenario: Full suite passes after the split
 - **WHEN** the full test suite runs after the modules are in place
 - **THEN** all pre-existing specs pass
-- **AND** no pre-existing spec file was edited to make them pass
+
+#### Scenario: Spec edits are confined to construction sites
+- **WHEN** the diff over the test sources is reviewed
+- **THEN** it changes only imports, constructor arguments, and the test doubles
+  standing in for a newly introduced port
+- **AND** no scenario name, `given`/`when`/`then` block, or assertion is changed
 
 ### Requirement: Vertical adapter modules per technology
 In the second pass, adapters SHALL be split vertically per technology:
