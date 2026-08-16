@@ -7,12 +7,22 @@ Defines the automated quality gates that guard the codebase: a single `./gradlew
 ## Requirements
 
 ### Requirement: Single verification command
-The build SHALL expose one command — `./gradlew check` — that compiles production and test code, runs the full Spock suite, produces the JaCoCo report, and runs PIT mutation testing.
+The build SHALL expose one command — `./gradlew check` — that compiles
+production and test code, runs the full Spock suite, produces the JaCoCo
+report, and runs PIT mutation testing. With the module tree in place, root
+`check` SHALL aggregate every module's `check`, each running that module's PIT.
+<!-- implements FR11 of split-into-modules -->
 
 #### Scenario: One command runs everything
 - **WHEN** a developer runs `./gradlew check` on a fresh clone with JDK 25
-- **THEN** compilation, Spock tests, JaCoCo, and PIT all execute
-- **AND** the command exits 0 only if every gate passes
+- **THEN** compilation, Spock tests, JaCoCo, and PIT all execute across every
+  module
+- **AND** the command exits 0 only if every gate in every module passes
+
+#### Scenario: A single module's check is self-contained
+- **WHEN** a developer runs `check` for one module
+- **THEN** that module's tests, coverage, and PIT mutation testing run
+- **AND** no other module's production classes are mutated
 
 ### Requirement: Mutation testing gate
 PIT SHALL mutate Java production classes only and SHALL fail the build when the mutation score is below the threshold (100%; explicitly documented exceptions may lower it to 95% for code unreachable by unit tests). The set of mutated classes MAY be narrowed to an explicit scope (see "Scoped mutation target"); the threshold and documented exceptions apply unchanged to whichever classes are in scope.
@@ -28,21 +38,32 @@ PIT SHALL mutate Java production classes only and SHALL fail the build when the 
 - **THEN** its target classes include only Java production packages
 
 ### Requirement: Scoped mutation target
-The build SHALL accept an optional property that narrows PIT's target classes to an explicit list; when the property is absent the build SHALL mutate the full production package tree exactly as before.
+Each module's build SHALL accept the optional scoped-target property that
+narrows PIT's target classes to an explicit list within that module; when the
+property is absent each module SHALL mutate its full production package tree,
+so root `check` covers the union — the whole production tree — exactly as the
+monolith did.
 <!-- implements FR1, FR5 of scope-pit-to-changed-files -->
+<!-- implements FR11 of split-into-modules -->
 
 #### Scenario: Property narrows the mutation scope
-- **WHEN** `./gradlew check` runs with the scoped-target property set to one or more class globs under the production base package
+- **WHEN** a module's `check` runs with the scoped-target property set to one or
+  more class globs under that module's production packages
 - **THEN** PIT mutates only classes matching those globs
-- **AND** the 100% mutation-score gate and `pitestVerifyAllKilled` apply to that scoped set
+- **AND** the 100% mutation-score gate and `pitestVerifyAllKilled` apply to that
+  scoped set
 
 #### Scenario: Absent property preserves full-project mutation
-- **WHEN** `./gradlew check` runs without the scoped-target property (e.g. a local developer run)
-- **THEN** PIT mutates the full `com.github.oinsio.gnomish.*` tree as it does today
+- **WHEN** `./gradlew check` runs without the scoped-target property (e.g. a
+  local developer run)
+- **THEN** every module mutates its full production package tree
+- **AND** the union of module scopes equals the full production tree, as before
+  the split
 
 #### Scenario: Empty scope is a clean pass
-- **WHEN** the scoped-target property is set but resolves to no production classes
-- **THEN** the mutation task is skipped and the build succeeds
+- **WHEN** the scoped-target property is set but resolves to no production
+  classes in a module
+- **THEN** that module's mutation task is skipped and the build succeeds
 - **AND** the build does NOT fail with PIT's "No mutations found" error
 
 ### Requirement: Coverage reporting
@@ -79,21 +100,36 @@ The build SHALL detect unused and misdeclared dependencies and fail the gate on 
 - **THEN** the dependency-analysis task fails naming the dependency
 
 ### Requirement: Continuous integration
-A CI workflow SHALL run `./gradlew check` on every push and pull request and SHALL publish JaCoCo and PIT reports as build artifacts. On pull-request and branch runs the mutation gate SHALL be scoped to the production Java classes changed relative to the merge base with `main`; whole-project mutation coverage is guaranteed by local/manual `./gradlew check`, not by CI. The CI build job SHALL NOT declare a per-job timeout: it runs to completion under GitHub's 6-hour default, and superseded in-flight runs for the same ref SHALL be cancelled by workflow concurrency. Every other CI workflow job that supports a per-job timeout SHALL set `timeout-minutes: 30`; a job whose reusable-workflow form forbids a per-job timeout is exempt.
+A CI workflow SHALL run `./gradlew check` on every push and pull request and
+SHALL publish JaCoCo and PIT reports as build artifacts. On pull-request and
+branch runs the mutation gate SHALL be scoped per module: the production Java
+classes changed relative to the merge base with `main` map to their owning
+modules, and only those modules' mutation gates run, targeted at the changed
+classes; whole-tree mutation coverage is guaranteed by local/manual
+`./gradlew check`, not by CI. The CI build job SHALL NOT declare a per-job
+timeout: it runs to completion under GitHub's 6-hour default, and superseded
+in-flight runs for the same ref SHALL be cancelled by workflow concurrency.
+Every other CI workflow job that supports a per-job timeout SHALL set
+`timeout-minutes: 30`; a job whose reusable-workflow form forbids a per-job
+timeout is exempt.
 <!-- implements FR1, FR2, NFR-C1 of remove-ci-build-timeout -->
 <!-- implements FR2, FR3, FR4, NFR-C1 of scope-pit-to-changed-files -->
+<!-- implements FR11 of split-into-modules -->
 
 #### Scenario: CI enforces the gates
-- **WHEN** a commit is pushed with a failing test or a surviving mutant in a changed production class
+- **WHEN** a commit is pushed with a failing test or a surviving mutant in a
+  changed production class
 - **THEN** the CI run fails
 
 #### Scenario: Mutation gate is scoped to the diff
 - **WHEN** a branch changes a subset of production Java files
-- **THEN** the CI mutation run targets only the classes derived from those changed files
+- **THEN** the CI mutation run targets only the owning modules' gates, with the
+  classes derived from those changed files
 
 #### Scenario: Diff with no production changes still passes
 - **WHEN** a branch changes only docs, tests, or CI configuration
-- **THEN** the CI mutation run targets no classes and passes without a "No mutations found" failure
+- **THEN** the CI mutation run targets no classes and passes without a "No
+  mutations found" failure
 
 #### Scenario: Reports are downloadable
 - **WHEN** a CI run completes (pass or fail)
@@ -114,6 +150,28 @@ A CI workflow SHALL run `./gradlew check` on every push and pull request and SHA
 ### Requirement: Security scanning
 CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every push and pull request; CodeQL analysis of the codebase on every pull request and on pushes to `main`.
 
+The OSV-Scanner gate SHALL evaluate **every** committed Gradle lockfile in the
+repository — root and per-module, project and buildscript — against a **single**
+repository-root suppression allowlist, independent of the directory each
+lockfile lives in. Adding a module that contributes a lockfile SHALL require no
+per-module scan configuration.
+
+A suppression in that allowlist SHALL be permitted only for an artifact confined
+to test or buildscript classpaths, SHALL state the affected scope and why no
+adoptable fix exists, and SHALL carry an expiry date after which the gate fails
+again. No advisory affecting a production runtime classpath may be suppressed;
+it is fixed by pinning a non-vulnerable version instead.
+
+Security version overrides SHALL be declared in the project's single version
+source (`gradle/libs.versions.toml`, or `gradle.properties` for buildscript
+classpaths, which cannot read the catalog), each naming the advisory it clears
+and the condition for dropping the override; the committed lock state SHALL be
+regenerated so the scanned lockfiles reflect them.
+
+The project SHALL document one command that reproduces the CI scan verdict
+locally.
+<!-- implements FR1, FR2, FR6, FR7, FR8, FR9, NFR-S1, NFR-S2, NFR-S3 of fix-osv-dependency-gate -->
+
 #### Scenario: Vulnerable dependency fails CI
 - **WHEN** a dependency version with a known OSV/CVE advisory is present in the build
 - **THEN** the OSV-Scanner job fails naming the dependency and advisory
@@ -122,12 +180,65 @@ CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable 
 - **WHEN** a commit contains a string matching a known secret pattern
 - **THEN** the Gitleaks job fails identifying the offending commit and location
 
+#### Scenario: The allowlist governs a module lockfile
+- **WHEN** an advisory listed in the repository-root allowlist appears in a
+  lockfile inside a module directory rather than at the repository root
+- **THEN** the scan treats it as suppressed and does not fail the run
+- **AND** no configuration file exists in that module directory to make it so
+
+#### Scenario: A newly added module needs no scan wiring
+- **WHEN** a module is added to the build and contributes its own lockfile
+- **THEN** the existing allowlist applies to it with no edit to the scan job or
+  to any per-module configuration
+
+#### Scenario: A production-scope advisory is fixed, never suppressed
+- **WHEN** an advisory affects an artifact resolved onto a production runtime
+  classpath
+- **THEN** the build pins a non-vulnerable version of that artifact
+- **AND** the allowlist contains no entry for that advisory
+
+#### Scenario: A suppression expires
+- **WHEN** the current date passes a suppression's recorded expiry date
+- **THEN** the OSV-Scanner job fails on that advisory again, forcing a
+  re-decision
+
+#### Scenario: A reviewer can judge a suppression in place
+- **WHEN** a reviewer opens the allowlist
+- **THEN** each entry states the affected classpath scope, why no adoptable fix
+  exists, and its expiry date, without consulting git history or an external
+  document
+
+#### Scenario: The failure names the responsible module
+- **WHEN** the scan fails on a vulnerable artifact
+- **THEN** the reported row identifies the package, version, advisory ID, and the
+  source lockfile path, so the owning module is identifiable without re-running
+  the scan
+
+#### Scenario: A developer reproduces the CI verdict locally
+- **WHEN** a developer regenerates the lock state and runs the documented local
+  scan command
+- **THEN** the verdict matches what CI reports for the same lock state,
+  including which advisories are suppressed
+
 ### Requirement: Reproducible build
-The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the Java toolchain is pinned to 25, and dependency versions are declared in a single location.
+The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the Java toolchain is pinned to 25, and dependency versions are declared in a single location. A security override of a BOM-managed or `strictly`-constrained transitive SHALL be applied on every configuration where the affected artifact resolves, and its effect SHALL be visible in the committed lock state rather than implied by build-script intent.
+<!-- implements FR3, FR4, FR5, NFR-R1, NFR-R2 of fix-osv-dependency-gate -->
 
 #### Scenario: Wrapper pins the toolchain
 - **WHEN** the project is built on a machine with a different default JDK
 - **THEN** Gradle uses the pinned Java 25 toolchain or fails with a clear message
+
+#### Scenario: An override reaches every configuration that resolves the artifact
+- **WHEN** a security override pins an artifact that several modules resolve
+  transitively
+- **THEN** every lockfile listing that artifact records the pinned version
+- **AND** a module the override fails to reach is detected as a stale lockfile
+  entry rather than passing silently
+
+#### Scenario: The scan reads regenerated lock state
+- **WHEN** a version override is changed in the single version source
+- **THEN** the lock state is regenerated and committed before the scan is
+  considered authoritative
 
 ### Requirement: Source file size cap
 Every production Java source file SHALL stay within the 200-line hard cap of
@@ -174,3 +285,65 @@ construction site for the standard set in test sources.
   tests as before the migration
 - **AND** no production source changes and no assertion changes are part
   of the migration
+
+### Requirement: Hardware-derived heavy-JVM budget
+The build SHALL limit how many memory-heavy forked JVMs (test JVMs and the mutation engine)
+run concurrently to a budget computed from the host's total RAM and processor count, reserving
+fixed allowances for the build daemon and OS headroom. On hardware where the formula yields
+less than one slot, the budget SHALL clamp to 1 so heavy tasks degrade to serial execution
+instead of failing. Tasks that do not fork heavy JVMs (compilation, static analysis,
+formatting) SHALL NOT be constrained by this budget.
+<!-- implements FR1, FR2, NFR-R1 of adapt-build-load-to-hardware -->
+
+#### Scenario: Concurrency scales with the machine
+- **WHEN** a clean `./gradlew build` runs on a machine whose RAM fits N test JVMs beside the
+  daemon and headroom
+- **THEN** at most N heavy JVMs execute concurrently
+- **AND** the build completes green with no resource-induced failures (minion deaths,
+  worker-handshake timeouts, truncated HTTP-stub connections)
+
+#### Scenario: Small machine degrades to serial heavy tasks
+- **WHEN** the build runs on a machine where the formula yields zero or negative slots
+- **THEN** heavy JVMs run one at a time
+- **AND** the build still configures and executes
+
+#### Scenario: Light tasks keep full parallelism
+- **WHEN** the heavy-JVM budget is saturated
+- **THEN** compilation, static-analysis, and formatting tasks continue to run in parallel at
+  Gradle's default worker count
+
+### Requirement: No committed per-machine worker cap
+The repository SHALL NOT commit a machine-specific global worker limit
+(`org.gradle.workers.max`); a fresh clone SHALL build green with default Gradle settings on any
+machine meeting the documented hardware minimum, with no edits to committed files.
+<!-- implements FR3 of adapt-build-load-to-hardware -->
+
+#### Scenario: Fresh clone needs no tuning
+- **WHEN** a developer clones the repository onto a machine meeting the documented minimum and
+  runs `./gradlew build`
+- **THEN** the build passes without modifying any committed configuration
+- **AND** `git grep org.gradle.workers.max` finds no committed occurrence
+
+### Requirement: Heavy-JVM budget override
+The build SHALL accept a Gradle property that overrides the computed heavy-JVM budget; when
+set (via command line, user-level Gradle properties, or CI environment) it SHALL take
+precedence over the hardware formula.
+<!-- implements FR4 of adapt-build-load-to-hardware -->
+
+#### Scenario: Override takes precedence
+- **WHEN** the build runs with the override property set to K
+- **THEN** at most K heavy JVMs execute concurrently regardless of detected hardware
+
+### Requirement: Budget decision is logged
+The build SHALL log, once per build, the effective heavy-JVM budget together with its inputs —
+detected RAM, detected processor count, and the override property when one is set — so an
+operator can see why a given concurrency was chosen and detect a stale override.
+<!-- implements NFR-O1, UX2 of adapt-build-load-to-hardware -->
+
+#### Scenario: Computed budget is visible
+- **WHEN** the build runs without the override property
+- **THEN** the log names the computed budget, the detected RAM, and the detected core count
+
+#### Scenario: Override is discoverable
+- **WHEN** the build runs with the override property set
+- **THEN** the log names the override property and its value as the source of the budget

@@ -1,0 +1,130 @@
+import com.github.oinsio.gnomish.build.HardwareSpec
+import com.github.oinsio.gnomish.build.HeavyJvmBudget
+import org.gradle.api.artifacts.VersionCatalogsExtension
+
+// Test-stack conventions shared by every module (FR6, design D9 of
+// split-into-modules): Spock 2 on the JUnit Platform and JaCoCo reporting.
+// The mutation gate is `pitest-conventions`, applied here so a module still
+// gets the whole test lifecycle from one plugin id (task 8.1); module-specific
+// PIT exclusions and extra test wiring stay in the module's own build file.
+plugins {
+    id 'java-conventions'
+    id 'pitest-conventions'
+}
+
+def libs = extensions.getByType(VersionCatalogsExtension).named('libs')
+
+dependencies {
+    testImplementation libs.findLibrary('groovy').get()
+    testImplementation libs.findLibrary('spock-core').get()
+    // spock-spring is deliberately NOT declared here: it registers a global
+    // Spock extension that resolves Spring types eagerly at discovery time, so
+    // on a module without Spring on the test runtime classpath every test task
+    // dies with NoClassDefFoundError before a single spec runs. Per
+    // .claude/rules/testing.md it belongs to the modules that actually need a
+    // Spring context — today only the composition root (design D3).
+    // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath.
+    testRuntimeOnly libs.findLibrary('junit-platform-launcher').get()
+}
+
+// --- Security overrides on the test classpaths (FR3, FR4, design D2/D3 of
+// fix-osv-dependency-gate) ---
+//
+// The Apache HTTP-components stack arrives only as a WireMock / Testcontainers
+// transitive, i.e. test scope in every module that has one, and the Spring Boot
+// 4.1.0 BOM pins `httpclient5` with `strictly` — which in turn strictly requires
+// the `httpcore5` pair. A `constraints {}` entry cannot RAISE a `strictly`
+// requirement (it fails resolution instead), so the CVE fixes are applied with
+// `force`: GHSA-hjcp-jmpx-g3qm on httpclient5, GHSA-hf6x-8p5f-cgmf /
+// GHSA-v3jc-474w-2wm6 on httpcore5(-h2). Versions live in the catalog.
+//
+// This block lives here rather than in a module build file on purpose: it began
+// in `:bootstrap` only, and `:adapters:github` — the build's other WireMock
+// module — kept locking the vulnerable httpcore5 because nothing carried the
+// override there. Applied from the shared test-stack plugin it reaches every
+// module that has a test classpath, including modules added later, and there is
+// one place to bump. On a module that never resolves these artifacts a `force`
+// is inert: it selects a version if something asks for the module, and adds
+// nothing to the classpath if nothing does.
+configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
+    resolutionStrategy.force libs.findLibrary('httpclient5').get().get(),
+        libs.findLibrary('httpcore5').get().get(),
+        libs.findLibrary('httpcore5-h2').get().get()
+}
+
+// --- Heavy-JVM concurrency budget (adapt-build-load-to-hardware, D1/D2/D5) ---
+//
+// How much of the machine the forked JVMs are allowed to take. The module split
+// made this load-bearing: every module's `test` task forks a 3g JVM, so a full
+// `build` at Gradle's default (one worker per core) asks for ~42g of test heap
+// alone on a 14-core box, on top of the 4g daemon and the minion pool of the one
+// module PIT mutates at a time (`MutationEngineLock`). Measured at the default on
+// this tree, that oversubscription does not merely slow the build, it corrupts
+// its verdicts: PIT minions died with "insufficient memory", Gradle's own worker
+// handshakes timed out after 10s, and WireMock-backed github specs failed on
+// truncated connections — every one of them passing when its module ran alone.
+//
+// The invariant is a memory budget, not a worker count, so it is computed from
+// the host (FR1) instead of committed as a per-machine constant. Only the heavy
+// JVMs are throttled — compilation, Error Prone and Spotless keep full per-core
+// parallelism (G2). Raise TEST_HEAP_GB and maxHeapSize together, and re-measure a
+// clean build: the failures this prevents are load-dependent, so one green
+// incremental run proves nothing.
+final int TEST_HEAP_GB = 3 // must match `maxHeapSize` below
+final int DAEMON_GB = 4 // must match `org.gradle.jvmargs` in gradle.properties
+final int HEADROOM_GB = 4 // OS, IDE, and the deliberately unbounded PIT minions
+
+def machine = providers.of(HardwareSpec) {}.get()
+def totalRamGb = (int) (machine.totalRamBytes / (1024L * 1024L * 1024L))
+def byMemory = ((totalRamGb - DAEMON_GB - HEADROOM_GB) as int).intdiv(TEST_HEAP_GB)
+// Floor of 1 (NFR-R1): a machine too small for the formula degrades to serial
+// heavy tasks rather than failing to configure.
+def computedSlots = Math.max(1, Math.min(machine.processors - 2, byMemory))
+
+// FR4/D5: one override for per-machine or CI tuning without touching committed
+// files — usable as `-Pgnomish.heavyJvmSlots=N`, from `~/.gradle/gradle.properties`,
+// or as `ORG_GRADLE_PROJECT_gnomish.heavyJvmSlots` in CI. It replaces the formula
+// outright, which is also the answer for containers whose reported RAM is the
+// host's rather than their cgroup limit (proposal Q1).
+def override = providers.gradleProperty('gnomish.heavyJvmSlots')
+def slots = override.isPresent() ? Math.max(1, override.get() as int) : computedSlots
+
+def heavyJvmBudget = gradle.sharedServices.registerIfAbsent('heavyJvmBudget', HeavyJvmBudget) {
+    parameters.slots = slots
+    parameters.totalRamGb = totalRamGb
+    parameters.processors = machine.processors
+    parameters.source = override.isPresent()
+            ? "gnomish.heavyJvmSlots=${override.get()} (override)".toString()
+            : "hardware formula min(cores-2, (ram-${DAEMON_GB}-${HEADROOM_GB})/${TEST_HEAP_GB})".toString()
+    maxParallelUsages = slots
+}
+
+// Every Test task, not just `test` (FR2): a module that adds a second suite forks
+// just as heavy a JVM.
+tasks.withType(Test).configureEach {
+    usesService(heavyJvmBudget)
+    // `usesService` alone takes the slot without ever instantiating the service, so
+    // the decision would never be logged (NFR-O1). Resolving the provider in the
+    // first heavy task to start creates it — once per build, at execution time, so
+    // the line survives a configuration-cache hit (D6, UX2).
+    doFirst('announce the heavy-JVM budget') { heavyJvmBudget.get() }
+}
+
+tasks.named('test') {
+    // Spock 2 runs on the JUnit Platform.
+    useJUnitPlatform()
+    // The suite has grown past Gradle's default test-worker heap; without this the worker JVM
+    // OOMs during JUnit-Platform teardown even though every individual spec has already passed.
+    maxHeapSize = "${TEST_HEAP_GB}g"
+    // Generate coverage reports whenever tests run, so `check` produces them
+    // as part of the single-command verification (FR5 of add-project-skeleton).
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test') // reports need the execution data from test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}

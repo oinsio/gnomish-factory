@@ -1,0 +1,44 @@
+// Build script for the `:domain` module (FR1, FR2, design D1 of
+// split-into-modules): the pipeline/engine domain model and its driven-port
+// interfaces. The bottom of the layering — it depends on no other project.
+//
+// It also hosts the root-package `@DoNotMutate` PIT marker. Design D1 lists
+// `:gitobjects` as the marker's home, but four domain types carry it, and
+// `:domain` depends on nothing internal (FR2) — so the marker travels with the
+// module every other module already depends on, and `:gitobjects` keeps the
+// self-contained copy it already had. See the change's design.md deviation note.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Pipeline and engine domain model plus its driven-port interfaces.'
+
+dependencies {
+    // Version management only (no artifacts): slf4j-api, logback and the JUnit
+    // BOM behind opentest4j are all BOM-pinned in this project rather than
+    // versioned in the catalog, so every module that uses them imports the same
+    // platform the root module does (design D3 of add-project-skeleton).
+    implementation platform(libs.spring.boot.dependencies)
+
+    // The engine logs through the SLF4J API directly; the backend is the
+    // composition root's choice, never the domain's.
+    implementation libs.slf4j.api
+
+    // Shared fakes and port-contract suites (FR7, design D8). No production
+    // module may depend on `:test-fixtures` — test scope only.
+    testImplementation project(':test-fixtures')
+
+    // Specs that assert on emitted log events capture them with Logback's
+    // ListAppender — a direct source reference, so the dependency-analysis gate
+    // requires the backend declared here.
+    testImplementation libs.logback.classic
+}
+
+// `:domain` is the bottom layer: it depends on nothing internal at all
+// (FR2). The domain-purity gate covers the package level; this covers the
+// module level.
+layering {
+    allowedProjects = []
+}

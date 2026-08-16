@@ -1,0 +1,19 @@
+// Applied by every module whose test task materializes real Docker containers
+// (task 5.1 of split-into-modules): the container-environment contract suites in
+// `:adapters` and the container-mode / Gitea E2E layers in the composition root.
+//
+// The two tasks take a build-wide lock with `maxParallelUsages = 1`, so Gradle
+// never runs them at the same time. See `DockerDaemonLock` for the measurement
+// that made this necessary — concurrently they exhaust the daemon and the
+// seed-clone helper fails after the clone itself has already succeeded.
+//
+// Every other module's test task is unaffected and still runs in parallel.
+import com.github.oinsio.gnomish.build.DockerDaemonLock
+
+def dockerDaemon = gradle.sharedServices.registerIfAbsent('dockerDaemon', DockerDaemonLock) {
+    maxParallelUsages = 1
+}
+
+tasks.withType(Test).configureEach {
+    usesService(dockerDaemon)
+}

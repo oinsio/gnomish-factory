@@ -1,0 +1,199 @@
+// Build script for the `:bootstrap` module (FR3, design D1/D3 of
+// split-into-modules): the composition root — `@SpringBootApplication`,
+// `main()`, every `@Configuration`, and the assembly/factory classes whose job
+// is to instantiate adapters and connect them to the ports the use cases
+// declare. It is the only module allowed to depend on `:adapters` (D3), which
+// is what makes it the composition root, and it owns the Boot packaging
+// (`bootJar`) and the E2E layers that run the packaged jar.
+
+// Dependency locking for this module's buildscript (plugin) classpath. The Boot
+// Gradle plugin is applied here, so its transitives — and the CVE forces that
+// guard them — travel with it out of the root build script (FR11, design D9).
+// Versions live in gradle.properties (the `buildscript*` keys; the version
+// catalog is not visible to the buildscript classpath) and the per-artifact
+// advisory rationale is in the root `build.gradle`, which keeps the same block
+// as the standing guard for the convention plugins' own classpath.
+// The `buildscript` block must precede `plugins`, hence its position here.
+buildscript {
+    configurations.classpath {
+        resolutionStrategy.activateDependencyLocking()
+        resolutionStrategy.force "org.apache.commons:commons-lang3:${buildscriptCommonsLang3Version}"
+        resolutionStrategy.force "tools.jackson.core:jackson-databind:${buildscriptJacksonVersion}",
+            "tools.jackson.core:jackson-core:${buildscriptJacksonVersion}",
+            "tools.jackson:jackson-bom:${buildscriptJacksonVersion}"
+        resolutionStrategy.force "org.apache.httpcomponents.core5:httpcore5:${buildscriptHttpcore5Version}",
+            "org.apache.httpcomponents.core5:httpcore5-h2:${buildscriptHttpcore5Version}"
+        resolutionStrategy.force "org.apache.httpcomponents.client5:httpclient5:${buildscriptHttpclient5Version}"
+    }
+}
+
+plugins {
+    // Convention plugins from the `build-logic` included build (FR6, design D9):
+    // java-conventions = toolchain, Spotless, Error Prone + NullAway, JaCoCo;
+    // test-conventions = Spock, JaCoCo reporting, PIT wired into `check`.
+    // `library-conventions` is deliberately not applied: this module is the
+    // executable, not a library.
+    id 'java-conventions'
+    id 'test-conventions'
+    // The container-mode and Gitea E2E layers drive the real Docker daemon;
+    // this serializes them against `:adapters`' own container suites (task 5.1).
+    id 'docker-test-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+    alias(libs.plugins.spring.boot)
+}
+
+description = 'Composition root: main(), the Spring configuration, and the assemblies that bind ports to adapters.'
+
+// How this module is checked — the `test` task's E2E wiring, its mutation
+// scope, and the two manual layers that run outside `check` — lives in its own
+// script plugin, so this file states what the module *is* and that one states
+// how it is verified (FR6, M2, task 9.2).
+apply from: 'verification.gradle'
+
+// The httpclient5 / httpcore5(-h2) test-classpath security overrides moved to
+// `test-conventions`: `:adapters:github` needed them too (D3 of fix-osv-dependency-gate).
+
+dependencies {
+    // The layer modules this composition root wires together (FR1, design
+    // D1/D2). `:application` re-exposes the layers below it as `api`
+    // dependencies, but each stays declared here as well — they are used
+    // directly, which the dependency-analysis gate requires stated rather than
+    // inherited.
+    implementation project(':domain')
+    implementation project(':gitobjects')
+    implementation project(':gnomish-plugin-api')
+    implementation project(':application')
+    implementation project(':sandbox:core')
+    // The adapters (FR1, FR2, design D1/D3): binding a port to its realization
+    // is exactly the thing only the composition root may do, and this is the
+    // only module in the build declaring this edge.
+    implementation project(':adapters')
+    // The GitHub vendor bundle (task 10.1), declared alongside the coarse block
+    // it left: this module names `GithubCheckClientFactory` and the tracker
+    // registry names `GithubTrackerAdapterFactory` — which is why the registry
+    // itself moved here, see `adapter.tracker.TrackerAdapterConfiguration`.
+    implementation project(':adapters:github')
+    // The two technology seams (task 10.2): the run assemblies bind the git
+    // repository, persistence and salvage ports, and select the agent-CLI
+    // executor and judge voter — port-to-realization binding, the composition
+    // root's own job.
+    implementation project(':adapters:git')
+    implementation project(':adapters:agent')
+    // The execution-environment backends (task 6.1): `ContainerRunSupport` and
+    // the run assemblies construct `ContainerEnvironments` and drive the
+    // lease/self-check chain directly — composition, by D3's by-role rule.
+    implementation project(':sandbox:docker')
+    // Shared fakes and port-contract suites (FR7, design D8), test scope only.
+    testImplementation project(':test-fixtures')
+
+    // Spring-family versions are managed by the Boot BOM (design D3).
+    implementation platform(libs.spring.boot.dependencies)
+    // Security override: import the Jackson BOM at the CVE-fixed version
+    // (GHSA-5jmj-h7xm-6q6v, see libs.versions.toml). Boot 4.1.0 imports
+    // jackson-bom 2.21.4 transitively; declaring 2.22.1 here wins by Gradle's
+    // highest-version conflict resolution and bumps the whole family at once.
+    // Drop once a Boot 4.1.x upgrade manages 2.22.1+.
+    implementation platform(libs.jackson.bom)
+
+    // Security overrides on the logging stack spring-boot-starter pulls in:
+    // logback (BOM-pinned 1.5.34) to GHSA-jhq6-gfmj-v8fx's fix, and the log4j
+    // pair (BOM-pinned 2.25.4) to GHSA-qv9r-c865-cp47's. Each pair must move
+    // together. The log4j one is this build's only PRODUCTION-scope advisory —
+    // `log4j-to-slf4j` is Boot's logging bridge, on runtimeClasspath — so it is
+    // pinned, never suppressed (NFR-S1, D4 of fix-osv-dependency-gate).
+    constraints {
+        implementation libs.logback.core
+        implementation libs.logback.classic
+        implementation libs.log4j.api
+        implementation libs.log4j.to.slf4j
+    }
+
+    implementation libs.spring.boot.starter
+    // Production code compiles against the SLF4J API directly (FR4, design
+    // D10); declared honestly per the dependency-analysis gate rather than
+    // leaning on the starter's transitive copy. Version is BOM-managed.
+    implementation libs.slf4j.api
+
+    // The Groovy/Spock/JUnit-launcher test stack and the JSpecify + Error Prone
+    // compiler plugins are declared by the convention plugins (design D9).
+
+    // The context-level bootstrap specs (task 3.3) compile against
+    // @SpringBootTest (spring-boot-test), @ContextConfiguration (spring-test)
+    // and @Autowired (spring-beans). spock-spring is a discovered global
+    // extension with no compile-time reference from spec bytecode, hence
+    // testRuntimeOnly (buildHealth advice); it is declared per module rather
+    // than in `test-conventions` because it resolves Spring types at discovery
+    // time, so it may only go on a test classpath that has Spring — which, per
+    // design D3, is this module's alone.
+    testRuntimeOnly libs.spock.spring
+    testImplementation libs.spring.boot.test
+    testImplementation libs.spring.test
+    testImplementation libs.spring.beans
+    // The logging-level spec (FR4) emits through the SLF4J API and captures
+    // events with Logback's ListAppender, so it compiles against both.
+    testImplementation libs.logback.classic
+    // ArchUnit for the whole-tree boundary gates (DomainPuritySpec and the four
+    // others): the composition root is the only module that sees every layer at
+    // once, which is the scope a whole-tree gate wants (task 5.2).
+    testImplementation libs.archunit
+    // Testcontainers for the Gitea E2E layer only (task 6.5 of add-git-workflow,
+    // .claude/rules/testing.md): GenericContainer("gitea/gitea:1.27.0") plus
+    // DockerClientFactory.isDockerAvailable() for the Docker-absent skip path.
+    testImplementation libs.testcontainers
+    // Jackson moved to `:adapters` with the `.gnomish/` YAML loader and the
+    // tracker/check DTOs (task 5.1); nothing this module still compiles names
+    // it. What remains is the packaging obligation: the Boot fat jar has to
+    // carry the mapper, the core factory and the YAML dataformat, so they stay
+    // declared `runtimeOnly` here. Versions are BOM-managed.
+    runtimeOnly libs.jackson.core
+    runtimeOnly libs.jackson.databind
+    runtimeOnly libs.jackson.dataformat.yaml
+    // A spec here builds an ObjectMapper of its own to read what the run wrote.
+    testImplementation libs.jackson.databind
+
+    // Resilience4j moved to `:adapters` with the tracker HTTP client core (task
+    // 5.1). Test scope only here: a spec builds its own fast RetryConfig with
+    // IntervalFunction directly.
+    testImplementation libs.resilience4j.retry
+    testImplementation libs.resilience4j.core
+
+    // WireMock for tracker/AI API contract tests, in-JVM (.claude/rules/testing.md,
+    // add-tracker-port task 4.x): no Docker needed for HTTP contract-level specs.
+    testImplementation libs.wiremock
+    // WireMock 3.13.1's HttpServerFactoryLoader needs an internally consistent
+    // Jetty 11 stack (its own jetty-bom import); the Boot 4.1.0 BOM otherwise
+    // wins conflict resolution on jetty-server/-http/-io/etc. while
+    // jetty-servlet/-webapp (which Boot does not manage) stay on 11 — the mixed
+    // 11/12 classpath then fails at WireMockServer startup with "Jetty 11 is not
+    // present" (task 4.4). enforcedPlatform (not platform) forces every
+    // jetty-bom-managed version to the pinned Jetty 11 line on the test
+    // classpaths. The version lives in the catalog ([versions].jetty); it clears
+    // GHSA-mmxm-8w33-wc4h (http2-common), and the residual Jetty 11 advisories
+    // are test-scope only — see osv-scanner.toml for the accepted-risk entries.
+    testImplementation enforcedPlatform(libs.jetty.bom)
+    // NB: handlebars (GHSA-r4gv-qr8j-p3pg) cannot be bumped here — its only fix,
+    // 4.5.2, drops com.github.jknack.handlebars.helper.NumberHelper, which
+    // WireMock 3.13.1 loads at startup (NoClassDefFoundError). Test-scope only
+    // and templates are developer-authored, so it is an accepted risk until
+    // WireMock 4.x — see osv-scanner.toml.
+}
+
+// The composition root is the one module allowed to reach the adapters (FR2,
+// design D3) — that is what makes it the composition root. The set is still
+// stated rather than left open: `:test-fixtures` must never appear on a
+// production classpath (FR7).
+layering {
+    allowedProjects = [
+        ':adapters',
+        ':adapters:agent',
+        ':adapters:git',
+        ':adapters:github',
+        ':application',
+        ':domain',
+        ':gitobjects',
+        ':gnomish-plugin-api',
+        ':sandbox:core',
+        ':sandbox:docker'
+    ]
+}

@@ -1,0 +1,122 @@
+// Build script for the `:adapters:agent` module (FR10, design D1/D2 of
+// split-into-modules, pass 2): the agent-CLI executor adapter — the command
+// line and invocation options, the stream-JSON round parser, the prompt
+// builders, the round timeout and the CLI judge voter, plus the host/fresh
+// environment sources that give a round its working copy.
+//
+// D1 warrants it as its own module for the PIT-scoping win (~35 production
+// classes with the build's largest fixture-driven suite behind them) and
+// because it is the executor seam a second CLI vendor would sit beside.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Agent-CLI executor adapter: stage rounds and judge votes driven through a coding-agent CLI subprocess.'
+
+dependencies {
+    // Version management only; see the note in `domain/build.gradle`. The
+    // Jackson override carries the CVE fix (GHSA-5jmj-h7xm-6q6v).
+    api platform(libs.spring.boot.dependencies)
+    api platform(libs.jackson.bom)
+
+    // The ports this adapter realizes (`StageExecutor`, `JudgeVoter`, the round
+    // and judge environment sources) and the value model they are drawn in.
+    api project(':application')
+    api project(':domain')
+    // The coarse adapter remainder, for the frozen pipeline law and the
+    // briefing sections the prompt builders render (D1's "pass 2 decides
+    // whether `:adapters:agent` depends on the coarse module or the two move
+    // with it" — it depends on it). This is the one sibling edge pass 2 keeps,
+    // and `AgentCoarseReachSpec` in this module is what holds it to exactly the
+    // two packages named here; the reverse edge is gone, task 10.2 having moved
+    // `AgentSettingsValidator` to the loader's own package.
+    api project(':adapters')
+    // The execution environment a round runs in (task 6.1): the host and fresh
+    // judge environment sources construct backends directly. `implementation`,
+    // not `api` — the backend is never on this module's own signatures, only
+    // inside the sources that build one.
+    implementation project(':sandbox:docker')
+    api project(':sandbox:core')
+
+    implementation libs.slf4j.api
+
+    // The agent CLI's stream-JSON output. The DTOs are internal to this module,
+    // so no Jackson type reaches a consumer through its api surface.
+    implementation libs.jackson.annotations
+    implementation libs.jackson.databind
+    implementation libs.jackson.core
+
+    // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and
+    // the scenario library the round specs drive instead of a real CLI.
+    testImplementation project(':test-fixtures')
+    // One spec resumes a round interrupted mid-verification and asserts against
+    // the git adapter's `SnapshotTipCheck`. Test scope only: no production class
+    // here names a sibling adapter, which is what the layering gate below pins.
+    testImplementation project(':adapters:git')
+    // Logback's ListAppender backs the specs asserting on log output.
+    testImplementation libs.logback.classic
+    // The sibling-reach gate (task 10.2, D5/M4): ArchUnit holds this module's
+    // one permitted coarse edge to the two packages it is declared for.
+    testImplementation libs.archunit
+}
+
+// The reference-dump fixtures live in this module now (task 10.2; they moved to
+// `:adapters` at task 5.1 and travel with the agent seam). Both properties keep
+// the contract they had in the root build script: the hygiene spec resolves the
+// COMMITTED files rather than the classpath copy, and the gated rewrite feature
+// only runs when explicitly asked for.
+tasks.named('test') {
+    systemProperty 'referenceDumpDir', file('src/test/resources/stream-json-reference').absolutePath
+    if (System.getProperty('rescrubReferenceDumps') != null) {
+        systemProperty 'rescrubReferenceDumps', System.getProperty('rescrubReferenceDumps')
+    }
+    // The fake agent's script and scenario library live in `:test-fixtures` but
+    // are resolved from disk, not the classpath: they reach a consumer inside a
+    // jar, and neither `sh <path>` nor a scenarios-directory walk can work
+    // against a `jar:` URI. Same idiom as `referenceDumpDir` (task 5.1).
+    systemProperty 'fakeAgentDir', rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath
+}
+
+// PIT exclusions documented for THIS module (task 8.1: each module carries its
+// own exceptions, next to the mutation scope they narrow). Moved here with the
+// spec they name when task 10.2 carved the agent seam out of `:adapters`.
+pitest {
+    // PIT's coverage and mutation minions are separate JVM launches that inherit
+    // nothing from the `test` task, so the fake agent's on-disk location has to be
+    // handed to them explicitly — without it every fake-agent spec fails PIT's
+    // pre-mutation green-suite check (41 of them, observed at task 8.1) for a
+    // reason that has nothing to do with any mutation. Supplying the property is
+    // the right fix here rather than excluding the specs: the fixtures are a
+    // deterministic on-disk directory, and those specs are the only coverage
+    // several `adapter.agent` classes have.
+    jvmArgs = ["-DfakeAgentDir=${rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath}".toString()]
+    // M5 documented exception (harden-reference-dump-scrubber): ReferenceDumpHygieneSpec
+    // resolves the committed fixtures through the `referenceDumpDir` system property that
+    // only the `test` task wires (see above) — PIT's child JVMs are a separate process
+    // launch that never receives it, so its precondition fails for every data-driven
+    // iteration, unrelated to any mutation. It is a Groovy test-support hygiene guard over
+    // committed fixtures (the scrubber is Groovy, outside `targetClasses`), so excluding it
+    // removes no production line from mutation coverage; the scrubber's behaviour is covered
+    // by ReferenceDumpScrubberSpec's unit scenarios (M5).
+    excludedTestClasses = [
+        'com.github.oinsio.gnomish.adapter.agent.ReferenceDumpHygieneSpec',
+    ]
+}
+
+// The one adapter module with a sibling edge, and it is stated here rather than
+// left implicit: `:adapters` is the coarse remainder, not another technology
+// seam, and `AgentCoarseReachSpec` narrows the reach to `adapter.law` and
+// `adapter.briefing` (FR2, M4, design D1).
+layering {
+    allowedProjects = [
+        ':adapters',
+        ':application',
+        ':domain',
+        ':gitobjects',
+        ':gnomish-plugin-api',
+        ':sandbox:core',
+        ':sandbox:docker'
+    ]
+}

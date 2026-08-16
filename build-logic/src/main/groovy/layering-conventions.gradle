@@ -1,0 +1,87 @@
+// The build half of the acyclic-direction gate (FR2, UX2, M4, design D5 of
+// split-into-modules). Each module declares the complete set of sibling projects
+// its production classpaths may reach:
+//
+//     layering {
+//         allowedProjects = [':domain', ':gitobjects']
+//     }
+//
+// `verifyModuleLayering` then walks the resolved `compileClasspath` and
+// `runtimeClasspath` graphs and fails `check` naming any project outside that
+// set. Two properties make it worth having on top of the Gradle dependencies
+// themselves:
+//
+//  * it is TRANSITIVE, so an edge cannot slip in by being inherited through an
+//    `api` dependency of a dependency — the thing a per-module reading of
+//    `build.gradle` will not catch;
+//  * it states the whole direction as data, once per module, so the layering is
+//    reviewable rather than reconstructed.
+//
+// The dependency-analysis plugin is the other half and answers a different
+// question: it reports MISDECLARED and UNUSED edges (declared-set == used-set),
+// never forbidden ones. Together they give FR2 both directions — nothing
+// undeclared, nothing forbidden.
+//
+// Test classpaths are deliberately out of scope: `:test-fixtures` legitimately
+// pulls the layers it builds fixtures for onto every consuming module's test
+// classpath (design D8), while FR7 constrains production modules only. Keeping
+// the gate on production scope is also what makes it prove FR7 — `:test-fixtures`
+// never appears on a production classpath.
+import com.github.oinsio.gnomish.build.LayeringExtension
+
+def layering = extensions.create('layering', LayeringExtension)
+layering.allowedProjects.convention([] as Set)
+
+// Walks a resolved configuration's component graph and collects every project
+// (as opposed to external module) it reaches, excluding the module itself.
+def projectDependenciesOf = { String configurationName ->
+    configurations.named(configurationName).get().incoming.resolutionResult.rootComponent.map { root ->
+        Set<String> found = []
+        Set<Object> seen = []
+        List queue = [root]
+        while (!queue.isEmpty()) {
+            def component = queue.remove(0)
+            if (!seen.add(component.id)) {
+                continue
+            }
+            if (component != root && component.id instanceof ProjectComponentIdentifier) {
+                found.add(((ProjectComponentIdentifier) component.id).projectPath)
+            }
+            component.dependencies.each { dependency ->
+                if (dependency instanceof ResolvedDependencyResult) {
+                    queue.add(dependency.selected)
+                }
+            }
+        }
+        found
+    }
+}
+
+tasks.register('verifyModuleLayering') {
+    description = 'Fails if this module reaches any project the FR2 layering direction forbids.'
+    group = 'verification'
+    def allowed = layering.allowedProjects
+    def modulePath = project.path
+    def classpaths = [
+        compileClasspath: projectDependenciesOf('compileClasspath'),
+        runtimeClasspath: projectDependenciesOf('runtimeClasspath')
+    ]
+    doLast {
+        Set<String> allowedProjects = allowed.get()
+        classpaths.each { name, projects ->
+            def forbidden = (projects.get() - allowedProjects).sort()
+            if (!forbidden.isEmpty()) {
+                throw new GradleException(
+                        "Module layering violation (FR2/UX2 of split-into-modules): ${modulePath} reaches " +
+                        "${forbidden.join(', ')} on its ${name}. Allowed: " +
+                        "${allowedProjects.isEmpty() ? '(nothing internal)' : allowedProjects.sort().join(', ')}. " +
+                        'Either the edge is wrong, or the layering changed and this module\'s ' +
+                        '`layering { allowedProjects }` has to say so.')
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyModuleLayering')
+}

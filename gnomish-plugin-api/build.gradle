@@ -1,0 +1,58 @@
+// Build script for the `:gnomish-plugin-api` module (FR4, FR5, design D4/D10 of
+// split-into-modules): the third-party contract surface a tracker adapter is
+// written against — the `Tracker` port and its DTO family, `SecretsProvider`,
+// the `TrackerAdapterFactory` SPI, and the `TrackerSubsectionValidator` SPI.
+//
+// Nothing else belongs here. `application` and `bootstrap` internals are out by
+// definition (M3); implementations live in the adapter modules.
+plugins {
+    // `published-api-conventions` = library conventions + `maven-publish`
+    // (sources and javadoc jars for UX3), the real-semver assertion, and the
+    // report-only japicmp surface report (FR5, design D10).
+    id 'published-api-conventions'
+    // The FR2 direction gate; `layering { allowedProjects }` below states this
+    // module's whole permitted reach (task 5.2).
+    id 'layering-conventions'
+}
+
+// FR5, design D10: the api is versioned independently of the rest of the build,
+// which still carries the shared `0.1.0-SNAPSHOT` placeholder from
+// `java-conventions`. First real release of the contract surface; change B is
+// where it is first consumed from outside and where the japicmp gate starts
+// failing on an incompatible move.
+version = '0.1.0'
+
+description = 'Third-party contract surface: tracker/secrets ports, the tracker SPI factory and its subsection validator.'
+
+dependencies {
+    // `api`, not `implementation` (design D4, UX3): the ports' own signatures
+    // are typed in `:domain` value types — TrackerConfig, ConfigError, Clock,
+    // and (through the check/workspace ports the adapters also implement)
+    // Finding, PollStatus, VerifyCheck. Exposing `:domain` transitively is what
+    // lets a third party compile against ONE declared dependency.
+    //
+    // The check-side ports (`ExternalCheckClient`, `Workspace`) deliberately
+    // stay in `:domain` rather than moving here as design D4 sketched: the
+    // engine consumes them from inside `:domain`, so relocating them would make
+    // `:domain` depend on this module and close the layering cycle FR2 forbids.
+    // They reach a third party through this same transitive edge, so the
+    // "single declared dependency" contract is unaffected.
+    api project(':domain')
+
+    // Shared fakes and port-contract suites (FR7, design D8), test scope only.
+    testImplementation project(':test-fixtures')
+}
+
+// M3 / FR4: the published contract must carry nothing from `application` or
+// `bootstrap`. The dependency-analysis gate (settings.gradle) already fails this
+// module if it *uses* a type it has not declared, so the declared project set IS
+// the used project set; `verifyModuleLayering` pins that set to what the FR2
+// layering allows, transitively. Anything from an upper layer would have to
+// appear here first, and does not.
+//
+// Task 5.2 replaced this module's own `verifyApiContractSurface` with the shared
+// gate: same assertion, same failure mode, now stated the same way by every
+// module instead of once here.
+layering {
+    allowedProjects = [':domain']
+}

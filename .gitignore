@@ -12,6 +12,10 @@ Thumbs.db
 # Gradle
 .gradle/
 build/
+# `build/` matches a directory of that name at ANY depth, which also swallows the
+# `com.github.oinsio.gnomish.build` source package holding build-logic's shared
+# services and value sources — new files there would be silently untracked.
+!build-logic/src/main/groovy/com/github/oinsio/gnomish/build/
 !gradle/wrapper/gradle-wrapper.jar
 
 # Java

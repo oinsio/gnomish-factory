@@ -99,42 +99,48 @@ jobs:
       # run to those classes (scope-pit-to-changed-files FR2/FR3, design D2).
       # --diff-filter=d drops deletions (a deleted class cannot be mutated); a
       # rename shows as delete+add, so only the added path survives, which is
-      # correct. Each surviving src/main/java/**/*.java path is stripped of its
-      # prefix/suffix and '/' -> '.' mapped to a fully-qualified class name used
-      # verbatim as a PIT glob. No production Java changes -> empty string,
-      # which is the empty-scope case build.gradle's pitScope skip handles
-      # (FR4, design D4).
+      # correct. Production sources live under <module>/src/main/java since the
+      # module split (split-into-modules task 8.3), and modules nest (sandbox/
+      # core), so the module prefix is stripped by matching on the source-root
+      # segment rather than by counting path components. The result is one flat
+      # list of fully-qualified class names across the whole build; each module
+      # keeps the subset that belongs to it (pitest-conventions) and the modules
+      # the diff did not touch skip their gate — design D6's "map changed classes
+      # to their owning modules". No production Java changes -> empty string,
+      # the empty-scope case the pitest skip handles (FR4, design D4).
       - name: Compute changed production classes
         id: changed-classes
         run: |
-          classes="$(git diff --diff-filter=d --name-only "${{ steps.diff-base.outputs.base }}...HEAD" -- 'src/main/java/**/*.java' \
-            | sed -e 's#^src/main/java/##' -e 's#\.java$##' -e 's#/#.#g' \
+          classes="$(git diff --diff-filter=d --name-only "${{ steps.diff-base.outputs.base }}...HEAD" -- '*/src/main/java/*.java' \
+            | sed -e 's#^.*/src/main/java/##' -e 's#\.java$##' -e 's#/#.#g' \
             | paste -sd ',' -)"
           echo "classes=${classes}" >> "$GITHUB_OUTPUT"
 
-      # -PpitScope narrows PIT's targetClasses to the changed-class list; when
-      # the list is empty this passes -PpitScope="" which is exactly the
-      # set-but-empty case build.gradle's onlyIf skips cleanly (no "No
-      # mutations found" failure). PIT stays part of the single `check`
-      # lifecycle (scope-pit-to-changed-files FR2-FR4, NFR-C1).
+      # -PpitScope narrows each module's PIT targetClasses to the changed
+      # classes it owns; when the list is empty (or names no class in a module)
+      # that module's gate is skipped cleanly (no "No mutations found" failure).
+      # PIT stays part of the single `check` lifecycle, now aggregated per module
+      # (scope-pit-to-changed-files FR2-FR4, split-into-modules FR11, NFR-C1).
       - name: Run quality gates
         run: ./gradlew check "-PpitScope=${{ steps.changed-classes.outputs.classes }}"
 
       # Reports are uploaded even when the build fails — a red gate is exactly
       # when the HTML/XML reports are needed (NFR-O1). 14-day retention keeps
-      # storage cost bounded (NFR-C1).
-      - name: Upload JaCoCo report
+      # storage cost bounded (NFR-C1). Each module writes its own reports since
+      # the split (split-into-modules FR11, task 8.3), so the paths glob over
+      # every module and the artifact keeps the module directory in each entry.
+      - name: Upload JaCoCo reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
-          path: build/reports/jacoco/test/
+          path: '**/build/reports/jacoco/test/'
           retention-days: 14
 
-      - name: Upload PIT report
+      - name: Upload PIT reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: pit-report
-          path: build/reports/pitest/
+          path: '**/build/reports/pitest/'
           retention-days: 14

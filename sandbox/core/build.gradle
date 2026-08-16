@@ -1,0 +1,55 @@
+// Build script for the `:sandbox:core` module (FR8, design D7/D11 of
+// split-into-modules): the sandbox PORT layer — the `TaskExecutionEnvironment`
+// port and its value model, the capability-passport negotiation
+// (CapabilityPassport / SandboxNeed / SandboxReconciler / AdapterBinding /
+// BindingResolver) and the typed `factory.sandbox.*` / `factory.bindings.*`
+// configuration.
+//
+// It is a first-party port module, not an adapter (D11): `:application` depends
+// on it, backends implement it. Nothing backend-specific may land here — no
+// docker-CLI mechanics, no testcontainers, no backend SDK — which is exactly the
+// property the split buys by construction. The backends live in
+// `:sandbox:docker` (task 6.1).
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Sandbox port layer: the TaskExecutionEnvironment port, capability-passport negotiation, and typed sandbox configuration.'
+
+dependencies {
+    // Version management only (no artifacts), as in `:domain`: the Boot BOM pins
+    // the spring-boot version used below (design D3 of add-project-skeleton).
+    implementation platform(libs.spring.boot.dependencies)
+
+    // `api`, not `implementation`: the port's own signatures are typed in
+    // `:domain` value types — `Sandbox` (SandboxReconciler) and `Clock`
+    // (ExecHandle.waitForExitOrTimeout) — so every consumer of this module
+    // compiles against them too.
+    api project(':domain')
+
+    // `ChildEnvAllowlist` logs the credential names it redacts through the SLF4J
+    // API directly; the backend is the composition root's choice (design D3 of
+    // add-project-skeleton), and `:domain` declares slf4j as `implementation`,
+    // so it is not inherited transitively.
+    implementation libs.slf4j.api
+
+    // @ConfigurationProperties / @Name on the three configuration records
+    // (design D1's layer-home rule: root config-properties types follow their
+    // consumers). The bare `spring-boot` artifact, not the starter: this module
+    // needs the annotations only, never a running context — that is
+    // `:bootstrap`'s concern (design D3).
+    implementation libs.spring.boot.asProvider()
+
+    // No `:test-fixtures` edge (unlike `:domain` / `:gitobjects`): the port
+    // layer's specs construct their subjects directly and need no shared fake,
+    // and the dependency-analysis gate fails an unused declaration.
+}
+
+// The sandbox PORT layer sits directly above the domain (FR2, design D11): it
+// must never reach `:application`, an adapter, a sandbox backend, or the
+// composition root.
+layering {
+    allowedProjects = [':domain']
+}

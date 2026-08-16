@@ -1,0 +1,30 @@
+// Build script for the `:gitobjects` module (FR1, design D1 of split-into-modules):
+// the internal shared git-object library — a bare-repo commit/tree writer driven
+// through `git` plumbing subprocesses.
+//
+// The module deliberately depends on nothing but the JDK (design D19 of
+// add-sandbox-core, pinned by GitObjectsBoundarySpec): no factory types, no
+// logging backend, no Jackson. That property is what makes it extractable at
+// all, and FR2 now enforces it at the Gradle level too — there is no
+// production-scope declaration below because there is nothing to declare.
+// The Spock/Groovy test stack and the JSpecify + Error Prone compiler plugins
+// come from the convention plugins (design D9).
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Internal shared git-object library: bare-repo commit/tree writes over git plumbing.'
+
+dependencies {
+    // Shared fakes and port-contract suites (FR7, design D8). No production
+    // module may depend on `:test-fixtures` — test scope only.
+    testImplementation project(':test-fixtures')
+}
+
+// `:gitobjects` is an extraction-ready library: the JDK and SLF4J only, never
+// a factory module (FR2, design D19 of add-sandbox-core).
+layering {
+    allowedProjects = []
+}

@@ -1,0 +1,44 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+# To regenerate this file, run: ./gradlew :dependencies --write-locks
+com.diffplug.durian:durian-collect:1.2.0=runtimeClasspath,testRuntimeClasspath
+com.diffplug.durian:durian-core:1.2.0=runtimeClasspath,testRuntimeClasspath
+com.diffplug.durian:durian-io:1.2.0=runtimeClasspath,testRuntimeClasspath
+com.diffplug.durian:durian-swt.os:4.3.0=runtimeClasspath,testRuntimeClasspath
+com.diffplug.spotless:com.diffplug.spotless.gradle.plugin:8.9.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.diffplug.spotless:spotless-lib-extra:4.9.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.diffplug.spotless:spotless-lib:4.9.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.diffplug.spotless:spotless-plugin-gradle:8.9.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.github.siom79.japicmp:japicmp:0.23.1=compileClasspath
+com.googlecode.concurrent-trees:concurrent-trees:2.6.1=runtimeClasspath,testRuntimeClasspath
+com.googlecode.javaewah:JavaEWAH:1.2.3=runtimeClasspath,testRuntimeClasspath
+com.squareup.okhttp3:okhttp:4.12.0=runtimeClasspath,testRuntimeClasspath
+com.squareup.okio:okio-jvm:3.6.0=runtimeClasspath,testRuntimeClasspath
+com.squareup.okio:okio:3.6.0=runtimeClasspath,testRuntimeClasspath
+com.sun.istack:istack-commons-runtime:3.0.8=compileClasspath
+com.sun.xml.fastinfoset:FastInfoset:1.2.16=compileClasspath
+commons-codec:commons-codec:1.22.0=runtimeClasspath,testRuntimeClasspath
+dev.equo.ide:solstice:1.8.2=runtimeClasspath,testRuntimeClasspath
+info.solidsoft.gradle.pitest:gradle-pitest-plugin:1.19.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+info.solidsoft.pitest:info.solidsoft.pitest.gradle.plugin:1.19.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+jakarta.activation:jakarta.activation-api:1.2.1=compileClasspath
+jakarta.xml.bind:jakarta.xml.bind-api:2.3.2=compileClasspath
+me.champeau.gradle.japicmp:me.champeau.gradle.japicmp.gradle.plugin:0.4.6=compileClasspath
+me.champeau.gradle:japicmp-gradle-plugin:0.4.6=compileClasspath
+net.ltgt.errorprone:net.ltgt.errorprone.gradle.plugin:5.1.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+net.ltgt.gradle:gradle-errorprone-plugin:5.1.0=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.eclipse.jgit:org.eclipse.jgit:7.7.0.202606012155-r=runtimeClasspath,testRuntimeClasspath
+org.eclipse.platform:org.eclipse.osgi:3.24.200=runtimeClasspath,testRuntimeClasspath
+org.glassfish.jaxb:jaxb-runtime:2.3.2=compileClasspath
+org.glassfish.jaxb:txw2:2.3.2=compileClasspath
+org.javassist:javassist:3.30.2-GA=compileClasspath
+org.jetbrains.kotlin:kotlin-stdlib-common:1.9.10=runtimeClasspath,testRuntimeClasspath
+org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10=runtimeClasspath,testRuntimeClasspath
+org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10=runtimeClasspath,testRuntimeClasspath
+org.jetbrains.kotlin:kotlin-stdlib:1.9.10=runtimeClasspath,testRuntimeClasspath
+org.jetbrains:annotations:13.0=runtimeClasspath,testRuntimeClasspath
+org.jvnet.staxex:stax-ex:1.8.1=compileClasspath
+org.slf4j:slf4j-api:2.0.18=runtimeClasspath,testRuntimeClasspath
+org.tukaani:xz:1.9=runtimeClasspath,testRuntimeClasspath
+empty=annotationProcessor,testAnnotationProcessor
