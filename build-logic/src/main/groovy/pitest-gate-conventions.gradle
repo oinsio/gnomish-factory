@@ -1,0 +1,70 @@
+import groovy.xml.XmlSlurper
+
+// What the build does with a PIT run's result: the fail-closed status gate, the
+// `check` / `pitestAll` wiring and the report-path finalizer. Split out of
+// `pitest-conventions` (which configures the engine itself) when that file reached
+// the project's file-size cap — one file is one thing. Applied by
+// `pitest-conventions`; never applied directly by a module.
+plugins {
+    id 'info.solidsoft.pitest'
+}
+
+// Fail-closed mutation-status gate (FR6 of add-project-skeleton, M5 of
+// add-agent-executor). PIT's DetectionStatus counts RUN_ERROR, MEMORY_ERROR and
+// TIMED_OUT as "detected", so a degraded run whose minion crashes before running
+// any test reports a green ~100% score — mutationThreshold cannot see the
+// difference. This parses the report and fails unless every mutation was KILLED.
+tasks.register('pitestVerifyAllKilled') {
+    description = 'Fails unless every PIT mutation was KILLED — RUN_ERROR/MEMORY_ERROR/TIMED_OUT do not count as detected.'
+    group = 'verification'
+    dependsOn tasks.named('pitest')
+    def reportFile = layout.buildDirectory.file('reports/pitest/mutations.xml')
+    // Mirror pitest's own skip: no report means nothing was mutated yet.
+    onlyIf('a PIT mutations.xml was produced') { reportFile.get().asFile.exists() }
+    doLast {
+        def xml = new XmlSlurper().parse(reportFile.get().asFile)
+        def offenders = xml.mutation.findAll { it.@status.text() != 'KILLED' }
+        if (!offenders.isEmpty()) {
+            def byStatus = offenders
+                    .groupBy { it.@status.text() }
+                    .collectEntries { status, list -> [status, list.size()] }
+            def sample = offenders.take(10)
+                    .collect { m -> "  ${m.@status.text()}: ${m.mutatedClass.text()}.${m.mutatedMethod.text()} (${m.mutator.text().tokenize('.').last()})" }
+                    .join('\n')
+            throw new GradleException(
+                    "PIT mutation gate is not trustworthy: ${offenders.size()} mutation(s) were not KILLED ${byStatus}. " +
+                    "PIT counts RUN_ERROR/MEMORY_ERROR/TIMED_OUT as 'detected', so the reported score is inflated. " +
+                    "First offenders:\n${sample}\nReport: ${reportFile.get().asFile}")
+        }
+    }
+}
+
+// A module's `check` runs Spock + JaCoCo + PIT as one command (FR5, FR6), so
+// root `check` aggregates every module's run (FR11, design D6).
+tasks.named('check') {
+    dependsOn tasks.named('pitest')
+    dependsOn tasks.named('pitestVerifyAllKilled')
+}
+
+// Opt-in whole-build aggregate (FR11, D6, task 8.2): `pitestAll` at the root is
+// the one-shot full report, deliberately NOT wired into `check`, which already
+// aggregates the same runs through each module.
+rootProject.tasks.named('pitestAll').configure {
+    dependsOn tasks.named('pitest')
+    dependsOn tasks.named('pitestVerifyAllKilled')
+}
+
+// UX2: PIT's failure message names the violated threshold but not the report
+// location, so a finalizer prints the stable path whenever a report was produced
+// (finalizedBy runs even when the finalized task fails).
+tasks.register('pitestReportLocation') {
+    def reportFile = layout.buildDirectory.file('reports/pitest/index.html')
+    onlyIf('no PIT report was produced') { reportFile.get().asFile.exists() }
+    doLast {
+        logger.lifecycle("PIT mutation report: ${reportFile.get().asFile}")
+    }
+}
+
+tasks.named('pitest') {
+    finalizedBy tasks.named('pitestReportLocation')
+}

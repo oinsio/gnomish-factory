@@ -1,5 +1,4 @@
-import groovy.xml.XmlSlurper
-import org.gradle.api.artifacts.VersionCatalogsExtension
+import com.github.oinsio.gnomish.build.MutationEngineLock
 
 // Mutation-gate conventions shared by every module with production Java (FR6, FR11,
 // design D6/D9 of split-into-modules): PIT wired into the module's own `check`,
@@ -10,9 +9,18 @@ import org.gradle.api.artifacts.VersionCatalogsExtension
 plugins {
     id 'java-conventions'
     id 'info.solidsoft.pitest' // mutation testing gate, FR6 (design D5)
+    // What happens to a run's result — status gate, `check` wiring, report path.
+    id 'pitest-gate-conventions'
 }
 
 def libs = extensions.getByType(VersionCatalogsExtension).named('libs')
+
+// One module mutates at a time (see `MutationEngineLock`): every module's `pitest`
+// sizes its minion pool to the whole machine, so letting two of them overlap
+// oversubscribes the CPUs badly enough to crash minions and red the gate.
+def mutationEngine = gradle.sharedServices.registerIfAbsent('mutationEngine', MutationEngineLock) {
+    maxParallelUsages = 1
+}
 
 // The module's own production surface, read once at configuration time (the pitest
 // {} block is eager, not a lazy Property, so the read happens here to stay
@@ -67,12 +75,15 @@ pitest {
     // asProvider(): 'pitest' is a prefix of other catalog version aliases.
     pitestVersion = libs.findVersion('pitest-tool').get().requiredVersion
     junit5PluginVersion = libs.findVersion('pitest-junit5-plugin').get().requiredVersion
-    // Concurrent PIT minion JVMs for the mutation phase (PIT's default is 1), from
-    // Gradle's own worker ceiling so one standard knob governs load on any machine.
-    // The -2 keeps headroom for the daemon and concurrent tasks; without it, CPU
-    // oversubscription pushes covering tests past PIT's per-mutation timeout and
-    // pitestVerifyAllKilled fails on the TIMED_OUT.
-    threads = Math.max(1, gradle.startParameter.maxWorkerCount - 2)
+    // Concurrent PIT minion JVMs for the mutation phase (PIT's default is 1), sized
+    // to the machine's cores (FR5/D4 of adapt-build-load-to-hardware): under
+    // `MutationEngineLock` the single mutating module is entitled to the box. Read
+    // from the processor count rather than `maxWorkerCount`, which no longer encodes
+    // anything about memory now that the global worker cap is gone. The -2 keeps
+    // headroom for the daemon and concurrent tasks; without it, CPU oversubscription
+    // pushes covering tests past PIT's per-mutation timeout and pitestVerifyAllKilled
+    // fails on the TIMED_OUT.
+    threads = Math.max(1, Runtime.runtime.availableProcessors() - 2)
     // Java production code only — never Groovy test bytecode (mutating Groovy
     // produces noisy false-positive survivors; see .claude/rules/testing.md).
     // Unset (local default) => this module's full production tree; set => the
@@ -94,6 +105,15 @@ pitest {
     // hanging mutant still reds the build.
     timeoutFactor = 3.0
     timeoutConstInMillis = 20000
+    // Deliberately NO -Xmx for the minions. Bounding it looks like the fix for the
+    // "Minion did not start or died during analysis ... insufficient memory" deaths
+    // this build hit, but it trades them for a worse failure: some mutants only die
+    // because a covering spec fails first, and a hot-spinning one (removing
+    // `Sleeper::sleep` from InstanceHeartbeat's loop) then exhausts a capped heap
+    // before that spec finishes — MEMORY_ERROR with numberOfTestsRun=0, reproducible
+    // at both 1g and 4g. Total memory pressure is governed by the heavy-JVM budget
+    // (`test-conventions`) instead, which bounds how many minion pools and 3g test
+    // JVMs coexist.
     timestampedReports = false // stable report path for CI artifact upload
     outputFormats = ['XML', 'HTML']
 }
@@ -120,6 +140,19 @@ afterEvaluate {
 // project's own `@com.github.oinsio.gnomish.DoNotMutate` marker, which PIT
 // honours build-wide with no Gradle wiring — see `.claude/rules/testing.md`.
 tasks.named('pitest') {
+    usesService(mutationEngine)
+    // One slot of the machine's heavy-JVM budget (FR2/D4): a minion pool is a
+    // deliberate under-approximation of one slot, accepted because
+    // `MutationEngineLock` keeps it to one pool machine-wide and HEADROOM_GB covers
+    // the minions (proposal Q2). Looked up rather than registered: the budget is
+    // computed in `test-conventions`, which applies THIS plugin from its `plugins`
+    // block — so this script body runs first, and only the deferred task
+    // configuration below is late enough to see the registration.
+    def heavyJvmBudget = gradle.sharedServices.registrations.named('heavyJvmBudget').get().service
+    usesService(heavyJvmBudget)
+    // Instantiate on first use so the budget decision is logged even in a build whose
+    // only heavy task is this one (NFR-O1) — see the same doFirst in `test-conventions`.
+    doFirst('announce the heavy-JVM budget') { heavyJvmBudget.get() }
     // PIT's coverage pass re-runs the covering suite in a separate minion JVM —
     // including Docker-backed specs that materialize real containers/volumes
     // named after a fixed per-test id. Undeclared ordering + org.gradle.parallel
@@ -137,64 +170,4 @@ tasks.named('pitest') {
     onlyIf('pitScope is set but resolves to no mutable classes in this module') {
         !(pitScopeSet && pitScopeResolution.empty)
     }
-}
-
-// Fail-closed mutation-status gate (FR6 of add-project-skeleton, M5 of
-// add-agent-executor). PIT's DetectionStatus counts RUN_ERROR, MEMORY_ERROR and
-// TIMED_OUT as "detected", so a degraded run whose minion crashes before running
-// any test reports a green ~100% score — mutationThreshold cannot see the
-// difference. This parses the report and fails unless every mutation was KILLED.
-tasks.register('pitestVerifyAllKilled') {
-    description = 'Fails unless every PIT mutation was KILLED — RUN_ERROR/MEMORY_ERROR/TIMED_OUT do not count as detected.'
-    group = 'verification'
-    dependsOn tasks.named('pitest')
-    def reportFile = layout.buildDirectory.file('reports/pitest/mutations.xml')
-    // Mirror pitest's own skip: no report means nothing was mutated yet.
-    onlyIf('a PIT mutations.xml was produced') { reportFile.get().asFile.exists() }
-    doLast {
-        def xml = new XmlSlurper().parse(reportFile.get().asFile)
-        def offenders = xml.mutation.findAll { it.@status.text() != 'KILLED' }
-        if (!offenders.isEmpty()) {
-            def byStatus = offenders
-                    .groupBy { it.@status.text() }
-                    .collectEntries { status, list -> [status, list.size()] }
-            def sample = offenders.take(10)
-                    .collect { m -> "  ${m.@status.text()}: ${m.mutatedClass.text()}.${m.mutatedMethod.text()} (${m.mutator.text().tokenize('.').last()})" }
-                    .join('\n')
-            throw new GradleException(
-                    "PIT mutation gate is not trustworthy: ${offenders.size()} mutation(s) were not KILLED ${byStatus}. " +
-                    "PIT counts RUN_ERROR/MEMORY_ERROR/TIMED_OUT as 'detected', so the reported score is inflated. " +
-                    "First offenders:\n${sample}\nReport: ${reportFile.get().asFile}")
-        }
-    }
-}
-
-// A module's `check` runs Spock + JaCoCo + PIT as one command (FR5, FR6), so
-// root `check` aggregates every module's run (FR11, design D6).
-tasks.named('check') {
-    dependsOn tasks.named('pitest')
-    dependsOn tasks.named('pitestVerifyAllKilled')
-}
-
-// Opt-in whole-build aggregate (FR11, D6, task 8.2): `pitestAll` at the root is
-// the one-shot full report, deliberately NOT wired into `check`, which already
-// aggregates the same runs through each module.
-rootProject.tasks.named('pitestAll').configure {
-    dependsOn tasks.named('pitest')
-    dependsOn tasks.named('pitestVerifyAllKilled')
-}
-
-// UX2: PIT's failure message names the violated threshold but not the report
-// location, so a finalizer prints the stable path whenever a report was produced
-// (finalizedBy runs even when the finalized task fails).
-tasks.register('pitestReportLocation') {
-    def reportFile = layout.buildDirectory.file('reports/pitest/index.html')
-    onlyIf('no PIT report was produced') { reportFile.get().asFile.exists() }
-    doLast {
-        logger.lifecycle("PIT mutation report: ${reportFile.get().asFile}")
-    }
-}
-
-tasks.named('pitest') {
-    finalizedBy tasks.named('pitestReportLocation')
 }
