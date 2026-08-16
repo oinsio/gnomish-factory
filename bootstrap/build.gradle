@@ -23,6 +23,7 @@ buildscript {
             "tools.jackson:jackson-bom:${buildscriptJacksonVersion}"
         resolutionStrategy.force "org.apache.httpcomponents.core5:httpcore5:${buildscriptHttpcore5Version}",
             "org.apache.httpcomponents.core5:httpcore5-h2:${buildscriptHttpcore5Version}"
+        resolutionStrategy.force "org.apache.httpcomponents.client5:httpclient5:${buildscriptHttpclient5Version}"
     }
 }
 
@@ -50,14 +51,8 @@ description = 'Composition root: main(), the Spring configuration, and the assem
 // how it is verified (FR6, M2, task 9.2).
 apply from: 'verification.gradle'
 
-// Security override: the Boot 4.1.0 BOM strictly pins httpclient5:5.6.1, which
-// itself strictly requires httpcore5(-h2):5.4.2 (GHSA-hf6x-8p5f-cgmf) — a
-// `strictly` transitive requirement a plain `constraints {}` entry cannot
-// override, so `force` is used instead. Test-scope only (WireMock/Testcontainers
-// transitive; see gradle.lockfile: testCompileClasspath/testRuntimeClasspath).
-configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
-    resolutionStrategy.force libs.httpcore5.asProvider().get(), libs.httpcore5.h2.get()
-}
+// The httpclient5 / httpcore5(-h2) test-classpath security overrides moved to
+// `test-conventions`: `:adapters:github` needed them too (D3 of fix-osv-dependency-gate).
 
 dependencies {
     // The layer modules this composition root wires together (FR1, design
@@ -101,13 +96,17 @@ dependencies {
     // Drop once a Boot 4.1.x upgrade manages 2.22.1+.
     implementation platform(libs.jackson.bom)
 
-    // Security override: force the transitive logback copies (pulled in by
-    // spring-boot-starter's logging, BOM-pinned at 1.5.34) to the CVE fix
-    // (GHSA-jhq6-gfmj-v8fx). Both artifacts must move together — logback
-    // requires classic and core on the same version.
+    // Security overrides on the logging stack spring-boot-starter pulls in:
+    // logback (BOM-pinned 1.5.34) to GHSA-jhq6-gfmj-v8fx's fix, and the log4j
+    // pair (BOM-pinned 2.25.4) to GHSA-qv9r-c865-cp47's. Each pair must move
+    // together. The log4j one is this build's only PRODUCTION-scope advisory —
+    // `log4j-to-slf4j` is Boot's logging bridge, on runtimeClasspath — so it is
+    // pinned, never suppressed (NFR-S1, D4 of fix-osv-dependency-gate).
     constraints {
         implementation libs.logback.core
         implementation libs.logback.classic
+        implementation libs.log4j.api
+        implementation libs.log4j.to.slf4j
     }
 
     implementation libs.spring.boot.starter

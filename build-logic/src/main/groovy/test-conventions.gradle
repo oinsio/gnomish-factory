@@ -27,6 +27,31 @@ dependencies {
     testRuntimeOnly libs.findLibrary('junit-platform-launcher').get()
 }
 
+// --- Security overrides on the test classpaths (FR3, FR4, design D2/D3 of
+// fix-osv-dependency-gate) ---
+//
+// The Apache HTTP-components stack arrives only as a WireMock / Testcontainers
+// transitive, i.e. test scope in every module that has one, and the Spring Boot
+// 4.1.0 BOM pins `httpclient5` with `strictly` — which in turn strictly requires
+// the `httpcore5` pair. A `constraints {}` entry cannot RAISE a `strictly`
+// requirement (it fails resolution instead), so the CVE fixes are applied with
+// `force`: GHSA-hjcp-jmpx-g3qm on httpclient5, GHSA-hf6x-8p5f-cgmf /
+// GHSA-v3jc-474w-2wm6 on httpcore5(-h2). Versions live in the catalog.
+//
+// This block lives here rather than in a module build file on purpose: it began
+// in `:bootstrap` only, and `:adapters:github` — the build's other WireMock
+// module — kept locking the vulnerable httpcore5 because nothing carried the
+// override there. Applied from the shared test-stack plugin it reaches every
+// module that has a test classpath, including modules added later, and there is
+// one place to bump. On a module that never resolves these artifacts a `force`
+// is inert: it selects a version if something asks for the module, and adds
+// nothing to the classpath if nothing does.
+configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
+    resolutionStrategy.force libs.findLibrary('httpclient5').get().get(),
+        libs.findLibrary('httpcore5').get().get(),
+        libs.findLibrary('httpcore5-h2').get().get()
+}
+
 // --- Heavy-JVM concurrency budget (adapt-build-load-to-hardware, D1/D2/D5) ---
 //
 // How much of the machine the forked JVMs are allowed to take. The module split

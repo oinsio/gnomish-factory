@@ -358,6 +358,17 @@ Formatting is applied automatically: a Claude Code hook formats files as the age
 
 Dependency locking is active — after changing dependencies, run `./gradlew check --write-locks` and commit the updated lockfiles (they keep builds reproducible and feed OSV-Scanner).
 
+<!-- implements FR9, UX4 of fix-osv-dependency-gate -->
+
+The vulnerability gate reads those lockfiles, so it can be reproduced locally before pushing — same verdict CI produces, same suppressions ([osv-scanner.toml](osv-scanner.toml)):
+
+```bash
+./gradlew check --write-locks
+osv-scanner scan source --config=osv-scanner.toml -r ./   # brew install osv-scanner
+```
+
+`--config` is not optional: the scanner otherwise looks for a config next to each lockfile, and the lock state lives in module directories, so the repo-root allowlist would be ignored. For the same reason there is exactly one allowlist — a per-module `osv-scanner.toml` would be shadowed by the explicit flag. An entry there is accepted risk on a test- or buildscript-scope artifact only and carries an expiry date; anything on a production classpath is fixed by pinning a version in [gradle/libs.versions.toml](gradle/libs.versions.toml) instead.
+
 CI (GitHub Actions) runs `check`, CodeQL, OSV-Scanner, and Gitleaks on every push and pull request once the GitHub remote exists. After creating the remote, enable **Secret scanning** and **Push protection** in the repository settings.
 
 ## Development process
