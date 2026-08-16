@@ -42,6 +42,13 @@ The loader SHALL apply catalog-free sanity rules that do not require a live targ
 - **THEN** validation reports a located error naming the unknown provider and
   the discovered provider set, before any stage runs
 
+#### Scenario: Defaulted github provider absent from the registry is a located error
+- **WHEN** an `external` check omits `provider` and no discovered provider
+  serves `github` (the github plugin jar is absent from the classpath)
+- **THEN** validation reports a located error naming the defaulted `github`
+  provider and the discovered set, exactly as for an explicitly named unknown
+  provider — the factory itself still starts
+
 #### Scenario: External check provider defaults to github and validates its params
 - **WHEN** an `external` check omits `provider` but declares provider-specific `params`
 - **THEN** the loader records `provider: github` and invokes the github `CheckParamsValidator` on the `params`

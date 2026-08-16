@@ -29,6 +29,42 @@ Every check provider SHALL supply a `CheckParamsValidator` SPI keyed by its
 - **AND** a provider with no matching validator selection is never asked to
   validate another provider's params
 
+### Requirement: Each check provider validates its operator subsection
+Every check provider SHALL expose, through its SPI factory, a validator for its
+`factory.check.<provider>` operator subsection — symmetric to the tracker
+subsection validator — covering the connection form (exactly one of inline
+connection keys or a `connection: <name>` profile reference) and the provider's
+own keys. Problems SHALL be reported as located `ConfigError` data aggregated
+with other load errors, never thrown.
+<!-- implements FR4 of add-plugin-architecture -->
+<!-- implements FR5 of add-plugin-architecture -->
+
+#### Scenario: Malformed operator subsection is a located load error
+- **WHEN** `factory.check.github` declares both inline connection keys and a
+  `connection:` profile reference, or omits a key the provider requires
+- **THEN** loading reports a located `ConfigError` from the github subsection
+  validator, aggregated with every other validation problem
+
+### Requirement: Check providers declare their credentials through the SPI
+Every check provider SHALL declare its credential environment-variable names
+through the check SPI, resolved from its configured connection — inline
+subsection or named profile — and the factory SHALL derive the
+child-environment scrub and never-allowlist set for check credentials from
+these declarations; core SHALL NOT name any vendor credential constant.
+<!-- implements FR17 of add-plugin-architecture -->
+
+#### Scenario: A plugin's credential is scrubbed without a core constant
+- **WHEN** the github check provider is loaded as a discovered plugin and a
+  stage running its `external` check executes via the agent CLI
+- **THEN** the child environment is scrubbed of the provider's declared
+  credential name, and no core source names that variable
+
+#### Scenario: Declared check credential cannot be allowlisted
+- **WHEN** operator config lists a discovered check provider's declared
+  credential name as a child-environment passthrough variable
+- **THEN** startup fails with a configuration error naming the variable,
+  matching the tracker credential treatment
+
 ### Requirement: Check provider is selected per-check in the stage manifest
 Check provider selection SHALL be per-check within a stage manifest, not
 per-project. A single stage's `verify` list MAY hold several `external` checks

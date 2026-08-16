@@ -24,6 +24,22 @@ port — a profile shares connection data, never the provider choice.
 - **THEN** each port resolves its own connection independently; sharing is
   opt-in per subsection, never implied by the vendor
 
+### Requirement: Profile-resolved credential names join the scrub set
+A credential name a port resolves from a connection profile SHALL enter the
+child-environment scrub and never-allowlist machinery exactly as an
+adapter-declared name does: the SPI credential declaration is
+connection-aware, so the declared set follows the profile. A profile SHALL
+carry the credential name only, never a credential value.
+<!-- implements FR16 of add-plugin-architecture -->
+<!-- implements FR17 of add-plugin-architecture -->
+
+#### Scenario: Renamed credential in a profile is still scrubbed
+- **WHEN** a profile names a non-default credential for a vendor and a stage
+  runs via the agent CLI
+- **THEN** the profile-resolved name is scrubbed from the child environment and
+  cannot be admitted into the passthrough allowlist, exactly as the vendor's
+  default name would be
+
 ### Requirement: A connection profile reference is validated at load
 A subsection referencing an undefined profile name SHALL be a located config
 error naming the missing profile. A subsection SHALL declare exactly one of the

@@ -60,8 +60,12 @@ pinned to.
 An http check that needs authorization SHALL name a credential resolved through
 `SecretsProvider` at the factory level and applied as a request header at
 runtime. The committed manifest SHALL carry only the credential name and
-non-secret request shape, never the secret value.
+non-secret request shape, never the secret value. Each resolved http check's
+credential name SHALL join the declared credential set, so it is scrubbed from
+the child environment and barred from the passthrough allowlist like any
+provider-declared name.
 <!-- implements FR11 of add-plugin-architecture -->
+<!-- implements FR17 of add-plugin-architecture -->
 <!-- implements NFR-S1 of add-plugin-architecture -->
 
 #### Scenario: Secret is injected at request time, never stored in the manifest
@@ -69,3 +73,5 @@ non-secret request shape, never the secret value.
 - **THEN** the factory resolves it through `SecretsProvider` and sets the request
   header at runtime
 - **AND** the committed manifest contains only the credential name, not its value
+- **AND** that credential name joins the child-environment scrub /
+  never-allowlist set for the run

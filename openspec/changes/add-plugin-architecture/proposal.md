@@ -22,7 +22,9 @@ like a third party's would. Depends on A (needs `gnomish-plugin-api`).
   in packaging (DEC-8, DEC-11, DEC-12, DEC-13).
 - Check port raised to the tracker pattern: a new `CheckClientFactory` SPI
   interface in `gnomish-plugin-api` (with `provider()`, a generic `create`, a
-  per-provider `CheckParamsValidator`, and the pin-contribution hook), plus a
+  per-provider `CheckParamsValidator`, an operator-subsection validator, a
+  connection-aware credential-name declaration replacing core's hardwired
+  vendor constants, and the pin-contribution hook), plus a
   `Map<provider, CheckClientFactory>` registry via `ServiceLoader`
   (DEC-14–DEC-18).
 - Named per-vendor connection profiles in operator config, so one vendor serving
@@ -75,6 +77,11 @@ like a third party's would. Depends on A (needs `gnomish-plugin-api`).
 - `github-tracker` / `github-external-check`: their connection config MAY
   reference a named vendor connection profile instead of duplicating endpoint +
   credential name per port.
+- `plugin-api-contract`: the api surface gains the check SPI
+  (`CheckClientFactory` + `CheckParamsValidator` + `ExternalCheckPinContributor`)
+  and the tracker SPI additions (`type()`, `subsectionValidator()`, the
+  connection-aware credential declaration), and the japicmp check flips from
+  report-only to a failing gate.
 
 ## Goals
 
@@ -136,7 +143,8 @@ like a third party's would. Depends on A (needs `gnomish-plugin-api`).
   discriminator-based selection — assessed independently per port.
 - **FR5** — The check port SHALL gain a `provider` discriminator, a
   `Map<provider, CheckClientFactory>` registry discovered via `ServiceLoader`,
-  and a per-provider `CheckParamsValidator` SPI — matching the tracker port.
+  a per-provider `CheckParamsValidator` SPI, and a validator for its
+  `factory.check.<provider>` operator subsection — matching the tracker port.
 - **FR6** — Check provider selection SHALL be per-check in the stage manifest
   (not per-project); a single stage MAY hold multiple `external` checks with
   different providers, each resolved independently.
@@ -172,6 +180,13 @@ like a third party's would. Depends on A (needs `gnomish-plugin-api`).
   (endpoint + credential name); a port subsection referencing a profile by name
   SHALL resolve its connection and credential from it, while provider selection
   stays independent per port.
+- **FR17** — Every provider SPI (tracker and check) SHALL declare its credential
+  environment-variable names, resolved from its configured connection — inline
+  subsection or named profile — and the factory SHALL derive the
+  child-environment scrub and never-allowlist set from these declarations alone;
+  core SHALL NOT name any vendor credential constant. The `http` provider's
+  credentials are named per-check in the manifest (FR11); each resolved check's
+  credential name SHALL join the same declared set.
 
 ### Non-Functional — Observability
 
@@ -239,16 +254,18 @@ like a third party's would. Depends on A (needs `gnomish-plugin-api`).
 ## Impact
 
 - **Ports** — the check port gains a new `CheckClientFactory` SPI (`provider()`,
-  generic `create`, validator + pin-contribution hooks) and a `ServiceLoader`
-  registry; `TrackerAdapterFactory` gains `type()` and exposes its subsection
-  validator, so tracker discovery moves to `ServiceLoader`; the
-  `VerifyCheck.External` record gains `provider` + `params`; the engine keeps
-  its single `ExternalCheckClient` port behind a provider-dispatching composite.
+  generic `create`, params + subsection validators, credential declaration +
+  pin-contribution hooks) and a `ServiceLoader` registry; `TrackerAdapterFactory`
+  gains `type()`, exposes its subsection validator, and its credential
+  declaration becomes connection-aware, so tracker discovery moves to
+  `ServiceLoader`; the `VerifyCheck.External` record gains `provider` + `params`;
+  the engine keeps its single `ExternalCheckClient` port behind a
+  provider-dispatching composite.
 - **Modules** — `:adapters:github` becomes a discovered plugin bundle over a
   private core; `gnomish-plugin-api` gains the `CheckClientFactory` +
   `CheckParamsValidator` + `ExternalCheckPinContributor` SPI surface and
-  `TrackerAdapterFactory.type()`/`subsectionValidator()`, and turns on the
-  japicmp gate.
+  `TrackerAdapterFactory.type()`/`subsectionValidator()`/the connection-aware
+  credential declaration, and turns on the japicmp gate.
 - **New code** — a core `http` check provider, the factory-side egress allowlist,
   per-port `ServiceLoader` registries, and per-provider validators.
 - **Manifests** — `external:` entries gain an optional `provider`; absence

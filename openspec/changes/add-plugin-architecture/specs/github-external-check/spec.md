@@ -13,10 +13,13 @@ connection/credentials block; exactly one of the two forms SHALL be declared
 (the vendor-connection-profile capability). The env/file
 adapter backs the token name with `GNOMISH_GITHUB_ACTIONS_TOKEN`,
 replacing the provisional direct env read; the adapter SHALL declare
-that name as a credential so it can never be admitted into a
+that name — through the check SPI's connection-aware credential
+declaration, resolving the profile-supplied name when a `connection:`
+profile is referenced — so it can never be admitted into a
 child-environment allowlist, matching the tracker token's treatment.
 <!-- implements FR26 of add-sandbox-core -->
 <!-- implements FR16 of add-plugin-architecture -->
+<!-- implements FR17 of add-plugin-architecture -->
 <!-- implements UX3 of add-plugin-architecture -->
 
 #### Scenario: Operator enables the adapter with config alone

@@ -10,8 +10,12 @@ green at each group boundary.
 - [ ] 1.1 Spec: a `ServiceLoader`-built tracker registry keyed by `type()`
   discovers a factory shipped via `META-INF/services` with no core edit (FR1, D1)
 - [ ] 1.2 Add `type()` and `subsectionValidator()` (default: none) to
-  `TrackerAdapterFactory` in `gnomish-plugin-api`; implement in github
-  (`"github"` + its subsection validator) and inmemory (FR1, FR4, D1, D3)
+  `TrackerAdapterFactory` in `gnomish-plugin-api`, and reshape
+  `credentialEnvVars()` to its connection-aware `credentialEnvVars(config)`
+  form (D11); implement in github (`"github"` + its subsection validator) and
+  inmemory, and update the `gnomish-plugin-api:sample` stand-in
+  (`SampleTrackerAdapter`) to the widened interface (FR1, FR4, FR17, D1, D3,
+  D11)
 - [ ] 1.3 Refactor `GithubTrackerAdapterFactory` / `InMemoryTrackerAdapterFactory`
   to a public no-arg constructor; move `SecretsProvider` + config to method args
   (FR2, D2)
@@ -30,9 +34,12 @@ green at each group boundary.
   from a `ServiceLoader` registry; github is one provider, not special (FR5, D3)
 - [ ] 2.2 Define the `CheckClientFactory` SPI in `gnomish-plugin-api` —
   `provider()`, no-arg construction, generic `create(SecretsProvider,
-  subsection)`, `paramsValidator()`, `pinContributor()` (move
+  subsection)`, `paramsValidator()`, `subsectionValidator()` for the
+  `factory.check.<provider>` operator subsection, the connection-aware
+  credential declaration, `pinContributor()` (move
   `ExternalCheckPinContributor` into the api) — and adapt
-  `GithubCheckClientFactory` to implement it (FR5, FR2, FR15, D2, D3)
+  `GithubCheckClientFactory` to implement it (FR5, FR2, FR15, FR17, D2, D3,
+  D11, D12)
 - [ ] 2.3 Add the `CheckParamsValidator` SPI mirroring
   `TrackerSubsectionValidator`; ship the github validator exposed through its
   factory; derive the validator registry from the discovered factory registry
@@ -44,6 +51,15 @@ green at each group boundary.
   fail-fast on missing/duplicate provider (FR5, FR6, NFR-R1, D1, D10)
 - [ ] 2.5 Contract spec: a second (test-only) check provider passes the same
   port-level suite as github, proving no github special-casing (FR3, FR5)
+- [ ] 2.6 Replace the hardwired `GithubCheckClientFactory.TOKEN_ENV_VAR` in
+  `RunAssembler`'s credential-name wiring with the union of SPI-declared
+  credential names from the selected providers; spec: a plugin's credential is
+  scrubbed and cannot be allowlisted with no core constant naming it (FR17,
+  D11, check-provider-model delta)
+- [ ] 2.7 Spec: a malformed `factory.check.<provider>` operator subsection —
+  both or neither connection forms, or a missing provider key — is a located
+  `ConfigError` from the provider's `subsectionValidator()`, aggregated with
+  other load errors (FR4, FR5, D12)
 
 ## 3. External check model: provider + params
 
@@ -60,8 +76,10 @@ green at each group boundary.
 - [ ] 3.5 Spec: a pre-existing `external:` manifest without `provider` still
   resolves to github unchanged (FR13, M4)
 - [ ] 3.6 Spec: an `external` check naming a provider absent from the discovered
-  registry is a located load error naming the provider and the discovered set
-  (UX1, pipeline-config delta)
+  registry is a located load error naming the provider and the discovered set —
+  including the defaulted `github` when the github jar is absent, and uniformly
+  across run modes (manual run included, D10) (UX1, FR13, M2, pipeline-config
+  delta)
 
 ## 4. Built-in http check provider
 
@@ -74,7 +92,8 @@ green at each group boundary.
 - [ ] 4.4 Implement `pending_when` reusing the `External` poll loop; timeout
   classifies via `timeoutClass`; absent `pending_when` = degenerate poll (FR10, D4)
 - [ ] 4.5 Implement http auth: resolve credential by name via `SecretsProvider`,
-  set the header at runtime; manifest holds only the name (FR11, NFR-S1)
+  set the header at runtime; manifest holds only the name, and the resolved
+  name joins the run's scrub / never-allowlist set (FR11, FR17, NFR-S1, D11)
 - [ ] 4.6 Ship the github `CheckParamsValidator`'s http counterpart validating the
   http `params` shape at the seam (FR6, http-check-provider)
 - [ ] 4.7 Spec: the http provider contributes no pin paths — only law-declared
@@ -114,16 +133,20 @@ green at each group boundary.
 
 - [ ] 7.1 Implement named per-vendor connection profiles in operator config
   (`factory.connections.<name>`), referenced as `connection: <name>` from each
-  port subsection; ports still select independently (FR16, UX3, D8,
-  vendor-connection-profile delta)
+  port subsection; ports still select independently; hand the set of defined
+  profile names to the subsection validators at the load seam (FR16, UX3, D8,
+  D12, vendor-connection-profile delta)
 - [ ] 7.2 Spec: a github tracker + github checks share one named connection
   profile without duplicating creds; a mixed-vendor config still works; an
-  undefined profile reference is a located config error (FR16, UX3, D8)
+  undefined profile reference is a located config error; a profile-resolved
+  credential name is scrubbed and cannot be allowlisted like a declared
+  constant (FR16, FR17, UX3, D8, D11)
 - [ ] 7.3 Land the `gnomish-plugin-api` additions (the `CheckClientFactory` SPI
-  with `CheckParamsValidator` + `ExternalCheckPinContributor`,
-  `TrackerAdapterFactory.type()`/`subsectionValidator()`, `External`
-  provider/params), then flip japicmp from report-only to a failing gate against
-  that baseline (FR14, D9, M5)
+  with `CheckParamsValidator` + `ExternalCheckPinContributor` + its subsection
+  validator and credential declaration,
+  `TrackerAdapterFactory.type()`/`subsectionValidator()`/`credentialEnvVars(config)`,
+  `External` provider/params), then flip japicmp from report-only to a failing
+  gate against that baseline (FR14, D9, M5, plugin-api-contract delta)
 
 ## 8. Acceptance + traceability
 

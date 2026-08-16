@@ -13,11 +13,14 @@ consistent with pipeline-config error reporting. The token SHALL be resolved
 through the `SecretsProvider` port by name — never from yaml and never read
 from process env directly; the env/file adapter backs the name with
 `GNOMISH_GITHUB_TOKEN`. The token SHALL never reach a task environment or
-prompts; the adapter SHALL declare its credential name so the variable can
+prompts; the adapter SHALL declare its credential name — through the SPI's
+connection-aware credential declaration, resolving the profile-supplied name
+when a `connection:` profile is referenced — so the variable can
 never be admitted into a child-environment allowlist.
 <!-- implements FR17, NFR-S1 of add-tracker-port -->
 <!-- implements FR18, NFR-S1 of add-sandbox-core -->
 <!-- implements FR16 of add-plugin-architecture -->
+<!-- implements FR17 of add-plugin-architecture -->
 <!-- implements UX3 of add-plugin-architecture -->
 
 #### Scenario: Missing api-url is a load error
