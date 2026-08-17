@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
@@ -24,8 +25,9 @@ import org.springframework.boot.ApplicationArguments;
  * {@code gnomish take [<ref>]} (FR9, FR10, FR17 of add-tracker-port; design D4, D15, D16): the
  * single-task tracker CLI, wired beside {@code run}/{@code status}/{@code usage} with its own flag set
  * (parsed by {@link TakeArgumentsParser}). Given a {@code <ref>}, dispatches to explicit mode; bare,
- * to bare-auto mode — both via {@link TakeDispatcher}. The resulting {@link TakeResult} is converted
- * to a process exit code via {@link TakeExitCodeMapper} and surfaced by throwing {@link
+ * to bare-auto mode — both via {@link TakeDispatcher}. The resulting {@link
+ * com.github.oinsio.gnomish.app.take.TakeResult} is converted to a process exit code via {@link
+ * com.github.oinsio.gnomish.app.take.TakeExitCodeMapper} and surfaced by throwing {@link
  * TakeExitCodeException} — never a direct {@code System.exit} (project convention).
  *
  * <p>Pipeline load, the FR17 no-{@code tracker:}-section refusal, and tracker-adapter resolution are
@@ -37,7 +39,7 @@ import org.springframework.boot.ApplicationArguments;
  * around dispatch, so it runs for the whole invocation regardless of how it ends (fix-reaper-idle-
  * liveness FR1, FR5).
  *
- * <p>Not a Spring {@code @Component}: {@link ManualRunRunner} constructs it imperatively (via {@link
+ * <p>Not a Spring {@code @Component}: {@code ManualRunRunner} constructs it imperatively (via {@link
  * TakeCommandFactory}), exactly like {@link GitModeRunner}/{@link GitResumeRunner}.
  *
  * <p>Implements FR9, FR10, FR17, D4, D15, D16 of add-tracker-port.
@@ -54,6 +56,7 @@ final class TakeCommand {
     private final FactoryProperties factoryProperties;
     private final Clock clock;
     private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
+    private final SecretsProvider secretsProvider;
     private final PipelineSource pipelineSource;
     private final Sleeper heartbeatSleeper;
     private final Sleeper reaperSleeper;
@@ -65,7 +68,7 @@ final class TakeCommand {
      * The canonical construction; {@link TakeCommandFactory} supplies the {@code heartbeatSleeper}
      * (task 6.1), {@code reaperSleeper} (fix-reaper-idle-liveness FR5), {@code
      * heartbeatMonotonicTime} (task 6.6), {@code takeoverConfirmation} (task 6.2), and {@code
-     * serveProperties} (task 6.2) test seams, defaulting them to production values for the {@link
+     * serveProperties} (task 6.2) test seams, defaulting them to production values for the {@code
      * ManualRunRunner} wiring.
      *
      * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
@@ -75,6 +78,8 @@ final class TakeCommand {
      *     the abort-backoff base/cap defaults (design D5, D6, D10); never null
      * @param clock supplies "now" for bare-mode backoff and the abort timestamp; never null
      * @param trackerAdapterRegistry known tracker adapter factories, keyed by {@code tracker.type}
+     * @param secretsProvider the seam the resolved adapter reads its credentials through, handed to
+     *     the factory per call rather than captured in it (FR2, design D2 of add-plugin-architecture)
      * @param pipelineSource known adapter subsection validators, keyed by {@code
      *     tracker.type}, so {@code take} rejects a malformed {@code tracker.<type>} at load time (FR17)
      * @param heartbeatSleeper the beat-interval sleeper injected into the per-invocation heartbeat (FR1)
@@ -96,6 +101,7 @@ final class TakeCommand {
             FactoryProperties factoryProperties,
             Clock clock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
             Sleeper heartbeatSleeper,
             Sleeper reaperSleeper,
@@ -109,6 +115,7 @@ final class TakeCommand {
         this.factoryProperties = factoryProperties;
         this.clock = clock;
         this.trackerAdapterRegistry = trackerAdapterRegistry;
+        this.secretsProvider = secretsProvider;
         this.pipelineSource = pipelineSource;
         this.heartbeatSleeper = heartbeatSleeper;
         this.reaperSleeper = reaperSleeper;
@@ -135,8 +142,8 @@ final class TakeCommand {
             TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
             InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
             TrackerAdapterFactory factory = TakeCommandSupport.resolveFactory(trackerConfig, trackerAdapterRegistry);
-            Tracker tracker = factory.create(trackerConfig, instanceId.value());
-            List<String> credentialEnvVarsToScrub = factory.credentialEnvVars();
+            Tracker tracker = factory.create(secretsProvider, trackerConfig, instanceId.value());
+            List<String> credentialEnvVarsToScrub = factory.credentialEnvVars(trackerConfig);
 
             // Task 6.1 of add-claim-heartbeat (FR1): the instance heartbeat is built once per
             // invocation over this run's tracker and beat/TTL config; its progress listener is fanned
@@ -158,6 +165,7 @@ final class TakeCommand {
                         factoryProperties,
                         clock,
                         trackerAdapterRegistry,
+                        secretsProvider,
                         takeoverConfirmation);
                 TakeRefDispatch.run(
                         dispatcher,

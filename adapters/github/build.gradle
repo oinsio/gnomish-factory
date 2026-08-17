@@ -40,7 +40,12 @@ dependencies {
     // `FindingsSanitizer`). Each is used directly here, which the
     // dependency-analysis gate requires stated rather than inherited.
     api project(':gnomish-plugin-api')
-    api project(':application')
+    // `implementation`, not `api`, since task 2.2 of add-plugin-architecture moved
+    // `ExternalCheckPinContributor` into `:gnomish-plugin-api`: no `:application`
+    // type travels on this module's api surface any more — the SPI it implements is
+    // entirely the published contract, which is what a third-party bundle's shape
+    // would be too.
+    implementation project(':application')
     api project(':domain')
 
     implementation libs.slf4j.api

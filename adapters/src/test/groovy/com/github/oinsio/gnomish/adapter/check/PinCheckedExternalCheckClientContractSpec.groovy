@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor
-import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
@@ -25,21 +24,8 @@ class PinCheckedExternalCheckClientContractSpec extends ExternalCheckClientContr
     @TempDir
     Path tempDir
 
-    private static PollStatus scriptedStatus(ExternalCheckClientContract.PollVariant variant) {
-        switch (variant) {
-                    case ExternalCheckClientContract.PollVariant.PASS -> new PollStatus.Pass()
-                    case ExternalCheckClientContract.PollVariant.FAIL_WITH_FINDINGS ->
-                    new PollStatus.Fail([
-                        new Finding('CI check failed', null, null)
-                    ])
-                    case ExternalCheckClientContract.PollVariant.RUNNING -> new PollStatus.Running()
-                    case ExternalCheckClientContract.PollVariant.CANNOT_VERIFY ->
-                    new PollStatus.CannotVerify('service unavailable', '')
-                }
-    }
-
     @Override
-    protected Optional<PollStatus> arrange(ExternalCheckClientContract.PollVariant variant) {
+    protected Optional<PollStatus> arrange(PollVariant variant) {
         GitObjects gitObjects = openGitObjects(seedBareRepo(tempDir, ['README.md': 'seed']), tempDir)
         def guarded = new PinCheckedExternalCheckClient(
                 new ScriptedExternalCheckClient([scriptedStatus(variant)]),
@@ -47,7 +33,7 @@ class PinCheckedExternalCheckClientContractSpec extends ExternalCheckClientContr
                 gitObjects,
                 'refs/heads/base')
         def check = new VerifyCheck.External(
-                'ci', Duration.ofSeconds(1), Duration.ofSeconds(10), VerifyCheck.TimeoutClass.QUALITY)
+                'ci', 'github', Duration.ofSeconds(1), Duration.ofSeconds(10), VerifyCheck.TimeoutClass.QUALITY)
         Optional.of(guarded.poll(check, new FakeWorkspace()))
     }
 }

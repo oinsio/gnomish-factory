@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.TakeLifecycleRevocationSpecBase
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
@@ -43,7 +44,11 @@ class InMemoryTakeLifecycleRevocationSpec extends TakeLifecycleRevocationSpecBas
         // captures the mutable `tracker` field by reference and picks up the decorator installed
         // by closeOnSecondFetch below, exactly as TakeCommand resolves a live Tracker at run time.
         def factory = new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         tracker
                     }
 
@@ -56,7 +61,7 @@ class InMemoryTakeLifecycleRevocationSpec extends TakeLifecycleRevocationSpecBas
 
     @Override
     List<String> thread(Tracker trackerArg, TaskRef ref) {
-        harness.thread(ref).collect { "${it.kind()}: ${it.text()}".toString() }
+        harness.threadAsStrings(ref)
     }
 
     @Override

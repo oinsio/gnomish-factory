@@ -46,11 +46,11 @@ class StageSanityRuleSpec extends Specification {
     }
 
     private static VerifyCheck ext(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     private static VerifyCheck extPins(String checkId, List<String> pinPaths) {
-        new VerifyCheck.External(checkId, Duration.ofSeconds(30), Duration.ofMinutes(1),
+        new VerifyCheck.External(checkId, 'ci-platform', Duration.ofSeconds(30), Duration.ofMinutes(1),
                 VerifyCheck.TimeoutClass.QUALITY, pinPaths)
     }
 
@@ -301,7 +301,7 @@ class StageSanityRuleSpec extends Specification {
         expect: 'the blank-checkId and interval errors precede the pin-path error'
         StageSanityRule.validate([
             stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
-                new VerifyCheck.External('', Duration.ZERO, Duration.ofSeconds(1),
+                new VerifyCheck.External('', 'ci-platform', Duration.ZERO, Duration.ofSeconds(1),
                 VerifyCheck.TimeoutClass.QUALITY, ['/abs.yml'])
             ])
         ]) == [

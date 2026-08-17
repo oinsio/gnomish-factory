@@ -8,6 +8,8 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -93,7 +95,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
     }
 
     private TakeDispatcher newDispatcher(TakeoverConfirmation confirmation = TakeoverConfirmation.UNAVAILABLE) {
-        new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], confirmation)
+        new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation)
     }
 
     private static TakeHeartbeat noopHeartbeat() {
@@ -106,7 +108,11 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
 
     private static TrackerAdapterFactory passthroughFactory() {
         new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         throw new UnsupportedOperationException('not used by this fixture')
                     }
 

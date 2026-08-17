@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import java.nio.file.Files
 import java.nio.file.Path
@@ -117,6 +118,7 @@ tracker:
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
     }
 

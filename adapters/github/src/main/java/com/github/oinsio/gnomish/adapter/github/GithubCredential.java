@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.github;
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The one connection key both github providers read the same way: {@code credential}, naming the
@@ -25,6 +28,13 @@ public final class GithubCredential {
 
     /** The connection key naming this provider's credential environment variable. */
     public static final String KEY = "credential";
+
+    /**
+     * Key fragments that mark a config key as credential-shaped: matched case-insensitively against
+     * a normalized (hyphens/underscores stripped) form of each subsection key, so {@code token},
+     * {@code api-token}, {@code apiToken}, and {@code access-token} are all caught alike.
+     */
+    private static final Set<String> TOKEN_KEY_FRAGMENTS = Set.of("token");
 
     private GithubCredential() {}
 
@@ -57,5 +67,33 @@ public final class GithubCredential {
                 file,
                 where + "." + KEY,
                 "'%s' must be a non-blank credential environment variable name".formatted(KEY)));
+    }
+
+    /**
+     * Rejects every credential-shaped key in a subsection (NFR-S1): both github providers name their
+     * credential, never carry one, so a {@code token}-shaped key is a located error rather than an
+     * ignored extra. Shared so the tracker and check subsections apply one normalization rule.
+     *
+     * @param subsection the raw subsection, already profile-resolved; never null
+     * @param file the offending configuration file
+     * @param where the located field prefix of the subsection
+     * @param scope where the key was written, as the message names it (e.g. {@code config.yaml})
+     * @param envVar the provider's credential environment variable, named in the message
+     * @return one located problem per credential-shaped key; empty when the subsection carries none
+     */
+    public static List<ConfigError> rejectTokenKeys(
+            Map<String, Object> subsection, String file, String where, String scope, String envVar) {
+        List<ConfigError> errors = new ArrayList<>();
+        for (String key : subsection.keySet()) {
+            String normalized = key.replace("-", "").replace("_", "").toLowerCase(Locale.ROOT);
+            if (TOKEN_KEY_FRAGMENTS.stream().anyMatch(normalized::contains)) {
+                errors.add(new ConfigError(
+                        file,
+                        where + "." + key,
+                        "'%s' must not appear in %s; %s is read from the environment only"
+                                .formatted(key, scope, envVar)));
+            }
+        }
+        return List.copyOf(errors);
     }
 }

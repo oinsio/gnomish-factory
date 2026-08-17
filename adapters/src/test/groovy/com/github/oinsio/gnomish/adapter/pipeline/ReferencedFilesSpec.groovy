@@ -1,16 +1,16 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.command
+import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.judge
+import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.missingCriteria
+import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.missingInstructions
+import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.stage
+
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition.Executor
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import spock.lang.IgnoreIf
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -33,72 +33,15 @@ import spock.lang.TempDir
  * (it would falsely resolve to the root directory). So this check only inspects
  * non-blank references.
  *
- * Path traversal (../ escaping the root) is task 6.4: ReferencedFiles delegates the
- * resolve-within-root decision to PathSafety (NFR-S2). Traversal is checked first — an
- * escaping reference is reported as a traversal error and its existence is never checked,
- * so a single reference never yields both a traversal and a "does not exist" error.
- * Implements FR6 and NFR-S2 of load-pipeline-config.
+ * Path traversal (../ escaping the root) is task 6.4 and is specified separately, in
+ * {@link ReferencedFilesTraversalSpec} (NFR-S2); this spec assumes every reference it
+ * builds resolves within the root.
+ * Implements FR6 of load-pipeline-config.
  */
-class ReferencedFilesSpec extends Specification {
+class ReferencedFilesSpec extends Specification implements GnomishTreeWriter {
 
     @TempDir
     Path root
-
-    private void write(String relative, String text) {
-        Path target = root.resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
-    }
-
-    private static StageDefinition stage(
-            String name, String instructionsRef, List<VerifyCheck> verify = []) {
-        new StageDefinition(
-                name,
-                'purpose',
-                [],
-                [],
-                new Executor(ExecutorType.API, 'model', [:]),
-                instructionsRef,
-                verify,
-                new AutonomyLimits(1),
-                AdvancementMode.AUTO)
-    }
-
-    private static VerifyCheck.Judge judge(String criteriaFile) {
-        new VerifyCheck.Judge(criteriaFile, 'model', [:], 1)
-    }
-
-    private static VerifyCheck.Command command() {
-        new VerifyCheck.Command('true')
-    }
-
-    private static ConfigError missingInstructions(String stageName, String ref) {
-        new ConfigError(
-                "stages/${stageName}/stage.yaml".toString(),
-                'instructions',
-                "referenced instructions file '${ref}' does not exist".toString())
-    }
-
-    private static ConfigError missingCriteria(String stageName, int index, String ref) {
-        new ConfigError(
-                "stages/${stageName}/stage.yaml".toString(),
-                "verify[${index}].criteriaFile".toString(),
-                "referenced acceptance-criteria file '${ref}' does not exist".toString())
-    }
-
-    private static ConfigError escapingInstructions(String stageName, String ref) {
-        new ConfigError(
-                "stages/${stageName}/stage.yaml".toString(),
-                'instructions',
-                "referenced instructions file '${ref}' escapes the configuration root".toString())
-    }
-
-    private static ConfigError escapingCriteria(String stageName, int index, String ref) {
-        new ConfigError(
-                "stages/${stageName}/stage.yaml".toString(),
-                "verify[${index}].criteriaFile".toString(),
-                "referenced acceptance-criteria file '${ref}' escapes the configuration root".toString())
-    }
 
     def "all referenced files present yields no errors"() {
         given: 'a stage whose instructions file and both judge criteria files exist on disk'
@@ -149,7 +92,7 @@ class ReferencedFilesSpec extends Specification {
             stage('plan', 'stages/plan/instructions.md', [
                 command(),
                 new VerifyCheck.Builtin('files_exist', [:]),
-                new VerifyCheck.External('ci', Duration.ofSeconds(5), Duration.ofSeconds(60), VerifyCheck.TimeoutClass.QUALITY)
+                new VerifyCheck.External('ci', 'github', Duration.ofSeconds(5), Duration.ofSeconds(60), VerifyCheck.TimeoutClass.QUALITY)
             ] as List<VerifyCheck>)
         ]
 
@@ -219,102 +162,12 @@ class ReferencedFilesSpec extends Specification {
         def stages = [
             stage('plan', 'stages/plan/instructions.md')
         ]
-        def before = snapshot(root)
+        def before = snapshot()
 
         when:
         ReferencedFiles.check(root, stages)
 
         then: 'nothing on disk changed (NFR-R1: read-only)'
-        snapshot(root) == before
-    }
-
-    def "a traversing instructions ref is rejected as escaping the root, not existence-checked (NFR-S2)"() {
-        expect: 'the escape is reported as traversal; existence of the outside file is never checked'
-        ReferencedFiles.check(root, [stage('plan', ref)]) == [
-            escapingInstructions('plan', ref)
-        ]
-
-        where:
-        ref << [
-            '../outside.md',
-            '../../etc/passwd',
-            '/etc/passwd'
-        ]
-    }
-
-    def "a traversing judge criteria ref is rejected as escaping the root (NFR-S2)"() {
-        given: 'instructions exist so the only reported problem is the escaping criteria'
-        write('stages/plan/instructions.md', 'do it\n')
-
-        expect:
-        ReferencedFiles.check(root, [
-            stage('plan', 'stages/plan/instructions.md', [judge(ref)])
-        ]) ==
-        [
-            escapingCriteria('plan', 0, ref)
-        ]
-
-        where:
-        ref << [
-            '../outside.md',
-            '/etc/passwd'
-        ]
-    }
-
-    def "an escaping ref is reported as traversal only, never also as does-not-exist (NFR-S2)"() {
-        given: 'both refs escape via ..; neither file exists under the root'
-        def stages = [
-            stage('plan', '../outside.md', [judge('../gone.md')])
-        ]
-
-        expect: 'exactly the two traversal errors — no existence error is added for the same refs'
-        ReferencedFiles.check(root, stages) == [
-            escapingInstructions('plan', '../outside.md'),
-            escapingCriteria('plan', 0, '../gone.md')
-        ]
-    }
-
-    @IgnoreIf({ !PathSafetySpec.symlinksSupported() })
-    def "a symlink whose target is outside the root is rejected as escaping (NFR-S2)"() {
-        given: 'a file OUTSIDE the root, a symlink INSIDE .gnomish/ pointing at it'
-        Path outsideDir = Files.createTempDirectory('gnomish-outside')
-        Path outside = Files.writeString(outsideDir.resolve('secret.md'), 'secret\n')
-        Files.createDirectories(root.resolve('stages/plan'))
-        Files.createSymbolicLink(root.resolve('stages/plan/instructions.md'), outside)
-
-        expect: 'the real path escapes the root, so the reference is rejected as traversal'
-        ReferencedFiles.check(root, [
-            stage('plan', 'stages/plan/instructions.md')
-        ]) ==
-        [
-            escapingInstructions('plan', 'stages/plan/instructions.md')
-        ]
-
-        cleanup:
-        Files.deleteIfExists(outside)
-        Files.deleteIfExists(outsideDir)
-    }
-
-    @IgnoreIf({ !PathSafetySpec.symlinksSupported() })
-    def "a symlink whose target stays within the root is allowed and existence-checked (NFR-S2)"() {
-        given: 'a real file inside the root and a symlink inside the root pointing at it'
-        Files.createDirectories(root.resolve('stages/plan'))
-        Path realFile = Files.writeString(root.resolve('stages/plan/real.md'), 'ok\n')
-        Files.createSymbolicLink(root.resolve('stages/plan/instructions.md'), realFile)
-
-        expect: 'a within-root symlink is not an escape and its target exists — no error'
-        ReferencedFiles.check(root, [
-            stage('plan', 'stages/plan/instructions.md')
-        ]).isEmpty()
-    }
-
-    private static Map<String, String> snapshot(Path root) {
-        Map<String, String> files = [:]
-        Files.walk(root).withCloseable { stream ->
-            stream.filter { Files.isRegularFile(it) }.forEach { p ->
-                files.put(root.relativize(p).toString(), Files.readString(p))
-            }
-        }
-        files
+        snapshot() == before
     }
 }

@@ -92,7 +92,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
 
     /** A resume runner whose per-run support runs over the scripted fake docker (seam ctor). */
     protected ContainerResumeRunner runner(InputStream input, PrintStream output) {
-        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, List<String> creds ->
+        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
             def environments = docker.environments(
             TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
             new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s)

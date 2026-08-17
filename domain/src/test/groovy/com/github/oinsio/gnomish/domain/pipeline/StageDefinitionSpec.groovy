@@ -71,7 +71,7 @@ class StageDefinitionSpec extends Specification {
         def checks = [
             new VerifyCheck.Builtin('files_exist', [paths: ['README.md']]),
             new VerifyCheck.Command('./gradlew check'),
-            new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
+            new VerifyCheck.External('ci/build', 'ci-platform', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
             new VerifyCheck.Judge('stages/implement/acceptance.md', 'claude-sonnet-4-5', [:], 3),
         ]
 

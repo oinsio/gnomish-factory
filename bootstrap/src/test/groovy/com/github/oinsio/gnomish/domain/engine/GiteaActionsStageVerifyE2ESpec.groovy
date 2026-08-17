@@ -170,7 +170,8 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     }
 
     private static VerifyCheck.External check() {
-        new VerifyCheck.External(CHECK_ID, Duration.ofSeconds(5), Duration.ofMinutes(8), VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External(CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(8),
+                VerifyCheck.TimeoutClass.QUALITY)
     }
 
     // Blocks until the green run for {@code sha} has concluded green, polling through the same
@@ -186,7 +187,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         }
     }
 
-    private String pushWorkflow(Path work, GitProcessRunner git, String yaml, String message) {
+    private static String pushWorkflow(Path work, GitProcessRunner git, String yaml, String message) {
         Files.writeString(work.resolve(CHECK_ID), yaml)
         git.run(work, 'add', '.')
         git.run(work, '-c', 'user.email=e2e@example.invalid', '-c', 'user.name=e2e', 'commit', '-q', '-m', message)

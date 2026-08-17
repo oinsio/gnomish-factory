@@ -35,6 +35,24 @@ abstract class ExternalCheckClientContract extends Specification implements Port
      */
     protected abstract Optional<PollStatus> arrange(PollVariant variant)
 
+    /**
+     * The canonical {@link PollStatus} for a {@code variant}: what a subclass loads into a
+     * scripted client when its adapter is driven over the fake rather than a real service.
+     *
+     * @param variant which poll status the row needs
+     * @return the canonical status for that variant
+     */
+    protected static PollStatus scriptedStatus(PollVariant variant) {
+        return switch (variant) {
+                    case PollVariant.PASS -> new PollStatus.Pass()
+                    case PollVariant.FAIL_WITH_FINDINGS -> new PollStatus.Fail([
+                        new Finding('CI check failed', null, null)
+                    ])
+                    case PollVariant.RUNNING -> new PollStatus.Running()
+                    case PollVariant.CANNOT_VERIFY -> new PollStatus.CannotVerify('service unavailable', '')
+                }
+    }
+
     // FR14: poll returns a non-null PollStatus of the declared sealed type (FR3)
     def "poll returns a non-null PollStatus"() {
         given: 'a client arranged to report success'

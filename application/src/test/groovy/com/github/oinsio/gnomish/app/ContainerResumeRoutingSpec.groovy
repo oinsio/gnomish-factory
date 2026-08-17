@@ -11,11 +11,9 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
-import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -59,16 +57,11 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         support.pendingVerification() >> { pending }
     }
 
-    private static TaskRecord recordWith(RecordedOutcome outcome, EscalationReport escalation = null) {
-        new TaskRecord(new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of()),
-                'base-sha', NOW, outcome, escalation, false)
-    }
-
     private String resume(boolean discardWork = false) {
         def runner = new ContainerResumeRunner(assemblyRunningLoop(executor, console),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
                 new SandboxProperties(null, null, null, null, null, null, false),
-                new FactoryProperties(null, null, null, null, null), 'taskId', { _c, _t, _s, _sp, _fp, _cred ->
+                new FactoryProperties(null, null, null, null, null), 'taskId', { _c, _t, _s, _sp, _fp, _def, _cred ->
                     support
                 } as ContainerSupportFactory)
         def originalOut = System.out

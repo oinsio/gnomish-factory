@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -25,12 +26,24 @@ import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
  * config): {@link #expandRef} always throws, matching the port's stance that this adapter exists
  * for reference/contract purposes, not for explicit-mode {@code take <ref>} against short refs.
  *
- * <p>Implements FR1, FR3 of add-tracker-port.
+ * <p>Discovered through {@code ServiceLoader} like any other provider (FR1 of
+ * add-plugin-architecture): it declares no credentials and grades no subsection, so it inherits both
+ * SPI defaults and needs the {@link SecretsProvider} for nothing.
+ *
+ * <p>Implements FR1, FR3 of add-tracker-port; FR1, FR2 of add-plugin-architecture.
  */
 public final class InMemoryTrackerAdapterFactory implements TrackerAdapterFactory {
 
+    /** {@code tracker.type: inmemory} — this adapter's discovery discriminator (FR1). */
+    public static final String TYPE = "inmemory";
+
     @Override
-    public Tracker create(TrackerConfig config, String instanceId) {
+    public String type() {
+        return TYPE;
+    }
+
+    @Override
+    public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
         return new InMemoryTracker();
     }
 

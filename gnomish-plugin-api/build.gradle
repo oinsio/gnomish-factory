@@ -1,7 +1,10 @@
 // Build script for the `:gnomish-plugin-api` module (FR4, FR5, design D4/D10 of
-// split-into-modules): the third-party contract surface a tracker adapter is
-// written against — the `Tracker` port and its DTO family, `SecretsProvider`,
-// the `TrackerAdapterFactory` SPI, and the `TrackerSubsectionValidator` SPI.
+// split-into-modules): the third-party contract surface a plugin is written
+// against — the `Tracker` port and its DTO family, `SecretsProvider`, the
+// `TrackerAdapterFactory` SPI with `TrackerSubsectionValidator`, and (task 2.2 of
+// add-plugin-architecture) the `CheckClientFactory` SPI with
+// `CheckParamsValidator`, `CheckSubsectionValidator` and the
+// `ExternalCheckPinContributor` hook it exposes.
 //
 // Nothing else belongs here. `application` and `bootstrap` internals are out by
 // definition (M3); implementations live in the adapter modules.
@@ -22,7 +25,7 @@ plugins {
 // failing on an incompatible move.
 version = '0.1.0'
 
-description = 'Third-party contract surface: tracker/secrets ports, the tracker SPI factory and its subsection validator.'
+description = 'Third-party contract surface: tracker/secrets ports and the tracker and check SPI factories with their validators.'
 
 dependencies {
     // `api`, not `implementation` (design D4, UX3): the ports' own signatures

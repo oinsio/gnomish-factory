@@ -1,11 +1,9 @@
 package com.github.oinsio.gnomish.app
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import java.nio.file.Files
@@ -38,11 +36,11 @@ import spock.lang.Timeout
  *
  * <p>Implements FR9 of add-serve-observability.
  */
-class ServeObservabilityIntegrationSpec extends Specification implements AppAssemblyFixture {
+class ServeObservabilityIntegrationSpec extends Specification
+implements AppAssemblyFixture, ServeObservabilityFixture {
 
     static final String INSTANCE_NAME = 'gnomish-observability'
     static final String INSTANCE_ID_PATTERN = /^gnomish-observability-[0-9a-z]{6}$/
-    private static final ObjectMapper MAPPER = new ObjectMapper()
 
     @TempDir
     Path tempDir
@@ -54,37 +52,9 @@ class ServeObservabilityIntegrationSpec extends Specification implements AppAsse
 
     def setup() {
         projectDir = tempDir.resolve('project')
-        Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
-purpose: build it
-executor:
-  type: agent-cli
-  model: model-x
-instructions: stages/build/instructions.md
-advancement: auto
-''')
-        Files.writeString(projectDir.resolve('.gnomish/config.yaml'), '''\
-schemaVersion: "1"
-autonomy:
-  attemptLimit: 3
-tracker:
-  type: github
-  github:
-    api-url: https://api.github.com
-    repo: acme/widgets
-''')
+        writeMinimalProject(projectDir)
         worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
-    }
-
-    /** Drain never drives the forever-loop starter; fails loudly if that ever changes. */
-    static class RefusingStarter implements FeedAutomatonStarter {
-        @Override
-        void start(FeedAutomaton automaton) {
-            throw new IllegalStateException('drain must never use the forever-loop starter')
-        }
     }
 
     ServeCommand newCommand() {
@@ -99,24 +69,9 @@ tracker:
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
                 new RefusingStarter())
-    }
-
-    static JsonNode readJson(Path file) {
-        MAPPER.readTree(file.toFile())
-    }
-
-    static List<JsonNode> readLedgerLines(Path ledgerFile) {
-        ledgerFile.toFile().readLines('UTF-8').findAll {
-            !it.isBlank()
-        }.collect {
-            MAPPER.readTree(it)
-        }
-    }
-
-    static String instanceIdOf(JsonNode line) {
-        line.get('instance').get('instanceId').asText()
     }
 
     @Timeout(10)

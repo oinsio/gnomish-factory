@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments;
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.BranchPush;
@@ -89,16 +88,21 @@ final class ContainerRunSupport implements SandboxRunSupport {
         this.push = new BranchPush(runner);
     }
 
-    /** Builds the run's container support. Delegated to {@link ContainerRunSupportFactory} for file size. */
+    /**
+     * Builds the run's container support. Delegated to {@link ContainerRunSupportFactory} for file
+     * size. {@code checkCredentialEnvVars} is the union the configured check providers declared
+     * through the SPI (FR17, design D11 of add-plugin-architecture) — the composition root resolves
+     * it once and hands it down, so nothing here names a vendor credential constant.
+     */
     static ContainerRunSupport create(
             Path cloneDir,
             String taskId,
             List<Segment> segments,
             SandboxProperties sandboxProperties,
-            FactoryProperties factoryProperties,
+            List<String> checkCredentialEnvVars,
             List<String> credentialEnvVarsToScrub) {
         return ContainerRunSupportFactory.create(
-                cloneDir, taskId, segments, sandboxProperties, factoryProperties, credentialEnvVarsToScrub);
+                cloneDir, taskId, segments, sandboxProperties, checkCredentialEnvVars, credentialEnvVarsToScrub);
     }
 
     /** The strict sandboxed persistence with the best-effort post-round push (FR5, FR21, FR22). */

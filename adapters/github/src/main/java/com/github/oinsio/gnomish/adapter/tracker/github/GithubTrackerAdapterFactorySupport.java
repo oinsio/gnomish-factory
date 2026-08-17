@@ -1,18 +1,21 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import java.util.Map;
 
 /**
- * Label-definition defaults and config-driven resolution for {@link GithubTrackerAdapterFactory}
- * (FR5): the four default label defs — names {@code gnomish:ready}/{@code working}/{@code
+ * Subsection reading for {@link GithubTrackerAdapterFactory}: the connection halves every entry
+ * point needs ({@code api-url} as an {@link GithubHttpClient}, {@code repo} as a {@link
+ * GithubRepoRef}) plus the label-definition defaults and their config-driven resolution (FR5) —
+ * the four default label defs, names {@code gnomish:ready}/{@code working}/{@code
  * needs-human}/{@code delivered}; colors from GitHub's common palette — {@code 2ea44f}/{@code
- * 1f6feb}/{@code d73a4a}/{@code 8250df}; each with a short operator-hint description — plus the
- * override-from-config lookup and the shared "required string subsection value" validation used
- * when assembling a {@code GithubTracker}.
+ * 1f6feb}/{@code d73a4a}/{@code 8250df}; each with a short operator-hint description.
  *
- * <p>Extracted from {@link GithubTrackerAdapterFactory} for file size; the behavior is unchanged.
+ * <p>Extracted from {@link GithubTrackerAdapterFactory} for file size, and so that {@code create}
+ * and {@code refuseForeignRef} read the same subsection keys in exactly one place; the behavior is
+ * unchanged.
  */
-final class GithubTrackerAdapterFactoryLabels {
+final class GithubTrackerAdapterFactorySupport {
 
     static final GithubLabelDef DEFAULT_READY =
             new GithubLabelDef("gnomish:ready", "2ea44f", "Gnomish factory: ready to be claimed");
@@ -23,9 +26,19 @@ final class GithubTrackerAdapterFactoryLabels {
     static final GithubLabelDef DEFAULT_DELIVERED =
             new GithubLabelDef("gnomish:delivered", "8250df", "Gnomish factory: delivered for review");
 
-    private GithubTrackerAdapterFactoryLabels() {}
+    private GithubTrackerAdapterFactorySupport() {}
 
-    static String requireStringValue(Map<String, Object> subsection, String key) {
+    /** The {@code tracker.github.repo} binding, split into its owner/repo halves. */
+    static GithubRepoRef requireRepoRef(Map<String, Object> subsection) {
+        return GithubRepoRef.parse(requireStringValue(subsection, "repo"));
+    }
+
+    /** An HTTP client bound to the configured {@code tracker.github.api-url} and {@code token}. */
+    static GithubHttpClient httpClientFor(Map<String, Object> subsection, String token) {
+        return new GithubHttpClient(requireStringValue(subsection, "api-url"), token);
+    }
+
+    private static String requireStringValue(Map<String, Object> subsection, String key) {
         Object value = subsection.get(key);
         if (!(value instanceof String s) || s.isBlank()) {
             throw new GithubTrackerConfigException(

@@ -1,20 +1,15 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.gitobjects.CommitRequest
-import com.github.oinsio.gnomish.gitobjects.GitObjects
-import com.github.oinsio.gnomish.gitobjects.GitObjectsFixture
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.gitobjects.TreeEdit
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -26,21 +21,13 @@ import spock.lang.TempDir
  * degradations (no attempt commit in the workspace, unresolvable base) are CannotVerify.
  * Runs on real temp repositories — no git mocking.
  */
-class PinCheckedExternalCheckClientSpec extends Specification implements GitObjectsFixture {
+class PinCheckedExternalCheckClientSpec extends Specification implements PinCheckFixture {
 
     @TempDir
     Path tempDir
 
-    GitObjects gitObjects
-    ObjectId baseTip
-
     def setup() {
-        Path bare = seedBareRepo(tempDir, [
-            '.github/workflows/ci.yml': "name: ci\n",
-            'config/analyzer.yml': "rules: strict\n",
-        ])
-        gitObjects = openGitObjects(bare, tempDir)
-        baseTip = gitObjects.resolveRef('refs/heads/base').orElseThrow()
+        seedPinnedRepo(tempDir)
     }
 
     private ObjectId attemptCommitWith(List<TreeEdit> edits) {
@@ -48,19 +35,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
                         'refs/heads/gnomish/task-1', Optional.empty(), baseTip, edits, metadata()))
     }
 
-    private static Workspace workspaceAt(ObjectId attempt) {
-        def ref = new AttemptCommitRef()
-        ref.record(attempt.hex())
-        new AttemptCommitWorkspace(ref)
-    }
-
-    private static VerifyCheck.External check(List<String> pinPaths) {
-        new VerifyCheck.External(
-                '.github/workflows/ci.yml', Duration.ofSeconds(1), Duration.ofSeconds(5),
-                VerifyCheck.TimeoutClass.QUALITY, pinPaths)
-    }
-
-    private RecordingClient delegate = new RecordingClient()
+    private ScriptedExternalCheckClient delegate = new ScriptedExternalCheckClient([new PollStatus.Pass()])
 
     private PinCheckedExternalCheckClient guard(ExternalCheckPinContributor contributor) {
         new PinCheckedExternalCheckClient(delegate, contributor, gitObjects, 'refs/heads/base')
@@ -79,7 +54,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
 
         then:
         status == new PollStatus.Pass()
-        delegate.polls == 1
+        delegate.pollCount == 1
     }
 
     def "a rewritten adapter-contributed definition file fails before the adapter is invoked"() {
@@ -102,7 +77,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         fail.findings()[0].location() == '.github/workflows/ci.yml'
 
         and: 'the adapter was never invoked'
-        delegate.polls == 0
+        delegate.pollCount == 0
     }
 
     def "a modified law-declared pin path fails even when the adapter file is untouched"() {
@@ -119,7 +94,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         then:
         status instanceof PollStatus.Fail
         ((PollStatus.Fail) status).findings()*.location() == ['config/analyzer.yml']
-        delegate.polls == 0
+        delegate.pollCount == 0
     }
 
     def "a pinned path deleted on the gnome branch is a diff"() {
@@ -135,7 +110,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         then:
         status instanceof PollStatus.Fail
         ((PollStatus.Fail) status).findings()[0].message().contains('was removed relative to the base branch')
-        delegate.polls == 0
+        delegate.pollCount == 0
     }
 
     def "a pinned path that exists only on the gnome branch is a diff"() {
@@ -150,7 +125,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         then:
         status instanceof PollStatus.Fail
         ((PollStatus.Fail) status).findings()[0].message().contains('is absent from the base branch')
-        delegate.polls == 0
+        delegate.pollCount == 0
     }
 
     def "a pinned path absent from both sides is byte-identical vacuously"() {
@@ -165,19 +140,19 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
 
         then:
         status == new PollStatus.Pass()
-        delegate.polls == 1
+        delegate.pollCount == 1
     }
 
     def "an empty union passes vacuously without touching git"() {
         given: 'the "Interactive client with nothing declared passes the pin" scenario'
-        def workspace = new AttemptCommitWorkspace(new AttemptCommitRef())
+        def workspace = AttemptCommitWorkspaces.empty()
 
         when: 'the workspace carries no attempt commit at all — vacuous pass must not need one'
         def status = guard(ExternalCheckPinContributor.none()).poll(check([]), workspace)
 
         then:
         status == new PollStatus.Pass()
-        delegate.polls == 1
+        delegate.pollCount == 1
     }
 
     def "early substitution is caught at the point of use against the base branch"() {
@@ -199,18 +174,18 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         then: 'the comparison is against the base branch, not the previous round, so the diff is caught'
         status instanceof PollStatus.Fail
         ((PollStatus.Fail) status).findings()[0].location() == '.github/workflows/ci.yml'
-        delegate.polls == 0
+        delegate.pollCount == 0
     }
 
     def "a non-empty pin set with a workspace carrying no attempt commit is CannotVerify"() {
         when:
         def status = guard({ c -> [c.checkId()] as Set })
-        .poll(check([]), new WorkspaceWithoutCommit())
+        .poll(check([]), new FakeWorkspace())
 
         then:
         status instanceof PollStatus.CannotVerify
         ((PollStatus.CannotVerify) status).reason().contains('attempt-commit workspace')
-        delegate.polls == 0
+        delegate.pollCount == 0
     }
 
     def "an unresolvable base ref is CannotVerify, never a silent pass"() {
@@ -229,7 +204,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
         then:
         status instanceof PollStatus.CannotVerify
         ((PollStatus.CannotVerify) status).reason().contains('base branch')
-        delegate.polls == 0
+        delegate.pollCount == 0
     }
 
     def "law-declared and adapter-contributed paths are one union — the same path is compared once"() {
@@ -249,15 +224,4 @@ class PinCheckedExternalCheckClientSpec extends Specification implements GitObje
     private static byte[] bytes(String text) {
         text.getBytes(StandardCharsets.UTF_8)
     }
-
-    private static final class RecordingClient implements ExternalCheckClient {
-        int polls = 0
-
-        PollStatus poll(VerifyCheck.External check, Workspace workspace) {
-            polls++
-            new PollStatus.Pass()
-        }
-    }
-
-    private static final class WorkspaceWithoutCommit implements Workspace {}
 }

@@ -2,8 +2,6 @@ package com.github.oinsio.gnomish.adapter.pipeline
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
-import java.nio.file.Files
-import java.nio.file.Path
 
 /**
  * Shared fixture builder for the invalid-fixture battery (task 7.2, success metric
@@ -24,15 +22,7 @@ import java.nio.file.Path
  *
  * <p>M2 / UX1 / UX2 of load-pipeline-config.
  */
-trait InvalidFixtureSupport {
-
-    abstract Path getRoot()
-
-    void write(String relative, String text) {
-        Path target = getRoot().resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
-    }
+trait InvalidFixtureSupport implements GnomishTreeWriter {
 
     /**
      * Writes a minimal valid tree: {@code config.yaml} (schemaVersion 1, default
@@ -65,7 +55,7 @@ advancement: auto
 
     /** Loads the built tree and asserts the outcome is Invalid, returning its error list. */
     List<ConfigError> loadInvalid() {
-        def outcome = PipelineLoader.load(getRoot())
+        def outcome = PipelineLoader.load(getRoot(), [:], TrackerValidatorStub.discoveredGithubCheckProvider())
         assert outcome instanceof LoadOutcome.Invalid
         (outcome as LoadOutcome.Invalid).errors()
     }

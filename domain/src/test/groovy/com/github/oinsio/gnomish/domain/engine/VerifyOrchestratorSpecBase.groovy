@@ -35,12 +35,12 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
     }
 
     static VerifyCheck.External external(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     static VerifyCheck.External external(String checkId, Duration interval, Duration timeout,
             VerifyCheck.TimeoutClass timeoutClass) {
-        new VerifyCheck.External(checkId, interval, timeout, timeoutClass)
+        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, timeoutClass)
     }
 
     static VerifyCheck.Judge judge(int votes) {

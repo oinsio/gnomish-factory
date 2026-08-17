@@ -5,9 +5,7 @@ import com.github.oinsio.gnomish.app.CheckSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Validates the {@code factory.check.github} operator subsection (FR4, FR5, design D12 of
@@ -30,12 +28,6 @@ public final class GithubCheckSubsectionValidator implements CheckSubsectionVali
     /** The two connection keys; declaring one without the other is the both-or-neither error. */
     private static final List<String> CONNECTION_KEYS = List.of("api-url", "repo");
 
-    /**
-     * Key fragments marking a config key as credential-shaped, matched case-insensitively against a
-     * normalized (hyphens/underscores stripped) key, mirroring the tracker subsection validator.
-     */
-    private static final Set<String> TOKEN_KEY_FRAGMENTS = Set.of("token");
-
     @Override
     public List<ConfigError> validate(String file, String where, Map<String, Object> subsection) {
         List<ConfigError> errors = new ArrayList<>();
@@ -48,10 +40,11 @@ public final class GithubCheckSubsectionValidator implements CheckSubsectionVali
                                 .formatted(where, key)));
             }
         }
-        if (subsection.get("repo") instanceof String repo && !repo.isBlank() && !isOwnerName(repo)) {
+        if (subsection.get("repo") instanceof String repo && !repo.isBlank() && isNotOwnerName(repo)) {
             errors.add(new ConfigError(file, where + ".repo", "repo must be 'owner/name', got: '%s'".formatted(repo)));
         }
-        rejectTokenKeys(subsection, file, where, errors);
+        errors.addAll(GithubCredential.rejectTokenKeys(
+                subsection, file, where, "operator configuration", GithubCheckClientFactory.TOKEN_ENV_VAR));
         errors.addAll(GithubCredential.validateName(subsection, file, where));
         return List.copyOf(errors);
     }
@@ -68,23 +61,14 @@ public final class GithubCheckSubsectionValidator implements CheckSubsectionVali
         return s;
     }
 
-    /** True for exactly one non-empty segment on either side of a single {@code /}. */
-    private static boolean isOwnerName(String repo) {
+    /**
+     * True unless {@code repo} holds exactly one non-empty segment on either side of a single
+     * {@code /}. Package-private so {@link GithubCheckClientFactory} guards its own coordinate
+     * split with the very predicate that grades {@code factory.check.github.repo} at the load seam,
+     * rather than restating it. Stated negatively because both call sites reject on it.
+     */
+    static boolean isNotOwnerName(String repo) {
         int slash = repo.indexOf('/');
-        return slash > 0 && slash == repo.lastIndexOf('/') && slash != repo.length() - 1;
-    }
-
-    private static void rejectTokenKeys(
-            Map<String, Object> subsection, String file, String where, List<ConfigError> errors) {
-        for (String key : subsection.keySet()) {
-            String normalized = key.replace("-", "").replace("_", "").toLowerCase(Locale.ROOT);
-            if (TOKEN_KEY_FRAGMENTS.stream().anyMatch(normalized::contains)) {
-                errors.add(new ConfigError(
-                        file,
-                        where + "." + key,
-                        "'%s' must not appear in operator configuration; %s is read from the environment only"
-                                .formatted(key, GithubCheckClientFactory.TOKEN_ENV_VAR)));
-            }
-        }
+        return slash <= 0 || slash != repo.lastIndexOf('/') || slash == repo.length() - 1;
     }
 }

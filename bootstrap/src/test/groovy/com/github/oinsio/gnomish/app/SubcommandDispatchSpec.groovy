@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -42,6 +44,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         TakeCommandFactory.of(
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, 'taskId',
                 testProperties(), Clock.systemUTC(), [:],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
     }
 
@@ -49,16 +52,17 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         new ServeCommand(
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
                 testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
-                new SystemClock(), [:], TrackerValidatorStub.acceptingGithubSource(),
+                new SystemClock(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter)
     }
 
     private BoardCommand newBoardCommand() {
-        new BoardCommand(Clock.systemUTC(), testProperties(), [:], TrackerValidatorStub.acceptingGithubSource())
+        new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource())
     }
 
     private DashboardCommand newDashboardCommand() {
         new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:],
+        MapSecretsProvider.NONE,
         TrackerValidatorStub.acceptingGithubSource())
     }
 
@@ -172,9 +176,12 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // `expandRef` is intentionally unimplemented (never called by this fixture's `serve` path):
     // Groovy's map-to-interface coercion throws UnsupportedOperationException if it ever were.
     private static TrackerAdapterFactory factoryReturning(Tracker t) {
-        [create: { TrackerConfig config, String instanceId ->
+        [
+            type: { 'github' },
+            create: { SecretsProvider secrets, TrackerConfig config, String instanceId ->
                 t
-            }] as TrackerAdapterFactory
+            },
+        ] as TrackerAdapterFactory
     }
 
     /** A minimal, valid `.gnomish/` tree with a `tracker: github` section, under {@code root}. */
@@ -204,6 +211,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                         newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
                         testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
                         new SystemClock(), [github: factoryReturning(Stub(Tracker))],
+                        MapSecretsProvider.NONE,
                         TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                             starterInvoked.set(true)
                         } as FeedAutomatonStarter),
@@ -246,7 +254,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 dispatch.serveCommand(),
                 new BoardCommand(Clock.systemUTC(), testProperties(),
-                [github: factoryReturning(Stub(Tracker))], TrackerValidatorStub.acceptingGithubSource()),
+                [github: factoryReturning(Stub(Tracker))], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 dispatch.dashboardCommand())
         def args = new DefaultApplicationArguments('board', "--dir=${worktreesRoot}".toString())
         def originalOut = System.out
@@ -289,7 +297,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 dispatch.serveCommand(), dispatch.boardCommand(),
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(),
-                [github: factoryReturning(Stub(Tracker))], TrackerValidatorStub.acceptingGithubSource()))
+                [github: factoryReturning(Stub(Tracker))], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
         def args = new DefaultApplicationArguments('dashboard', "--dir=${worktreesRoot}".toString())
 
         when:

@@ -1,12 +1,8 @@
 package com.github.oinsio.gnomish.adapter.console
 
-import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.domain.engine.PollStatus
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClientContract
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import java.time.Duration
 
 /**
  * {@link InteractiveExternalCheckClient} against the abstract {@link
@@ -22,28 +18,17 @@ import java.time.Duration
  */
 class InteractiveExternalCheckClientContractSpec extends ExternalCheckClientContract {
 
-    private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci-build', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
-    }
-
-    private static Workspace sampleWorkspace() {
-        new Workspace() {}
-    }
-
     @Override
-    protected Optional<PollStatus> arrange(ExternalCheckClientContract.PollVariant variant) {
-        if (variant == ExternalCheckClientContract.PollVariant.CANNOT_VERIFY) {
+    protected Optional<PollStatus> arrange(PollVariant variant) {
+        List<String> script = switch (variant) {
+                    case PollVariant.PASS -> ['pass']
+                    case PollVariant.RUNNING -> ['running']
+                    case PollVariant.FAIL_WITH_FINDINGS -> ['fail', 'CI check failed', '']
+                    case PollVariant.CANNOT_VERIFY -> null
+                }
+        if (script == null) {
             return Optional.empty()
         }
-        List<String> script = switch (variant) {
-                    case ExternalCheckClientContract.PollVariant.PASS -> ['pass']
-                    case ExternalCheckClientContract.PollVariant.RUNNING -> ['running']
-                    case ExternalCheckClientContract.PollVariant.FAIL_WITH_FINDINGS ->
-                    ['fail', 'CI check failed', '']
-                }
-        def io = new ScriptedConsoleIO(script)
-        def console = new DialogConsole(io, { json -> 'status' })
-        def client = new InteractiveExternalCheckClient(console)
-        Optional.of(client.poll(sampleCheck(), sampleWorkspace()))
+        Optional.of(ExternalCheckDialogFixture.poll(new ScriptedConsoleIO(script)))
     }
 }

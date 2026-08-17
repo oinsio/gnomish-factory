@@ -37,10 +37,29 @@ import org.jspecify.annotations.Nullable;
  * check's law-declared pin paths across verbatim (FR13, FR16 of
  * add-sandbox-core).
  *
+ * <p>This mapper also carries the {@code external} check's provider selection into the
+ * model: a declared {@code provider} verbatim, an absent one as {@link #DEFAULT_PROVIDER}
+ * (FR13 of add-plugin-architecture), with the provider-owned {@code params} copied across
+ * as an opaque plain-JDK map. Grading either — that the provider exists, that its params
+ * are well-formed — belongs to the load seam that holds the discovered registry
+ * ({@link ExternalCheckSeamValidator}), not here.
+ *
  * <p>Implements FR2, FR11, D2, D5, D5a of load-pipeline-config; FR9 of
- * add-external-check-github-actions; FR13, FR16 of add-sandbox-core.
+ * add-external-check-github-actions; FR13, FR16 of add-sandbox-core; FR7, FR13 of
+ * add-plugin-architecture.
  */
 final class VerifyCheckMapper {
+
+    /**
+     * The provider an {@code external} check resolves to when its manifest names none — the
+     * migration default of FR13 (add-plugin-architecture), so every manifest written before
+     * providers existed keeps selecting the provider it was written against (M4).
+     *
+     * <p>The default is <em>recorded</em> in the mapped model rather than applied later at
+     * dispatch: a defaulted selection is then visible in the typed model, in reports and to the
+     * load seam that grades it against the discovered registry — never a silent guess.
+     */
+    static final String DEFAULT_PROVIDER = "github";
 
     private VerifyCheckMapper() {}
 
@@ -95,7 +114,23 @@ final class VerifyCheckMapper {
                 DurationConfig.parse(manifest, "verify[%d].timeout".formatted(index), external.timeout(), errors);
         VerifyCheck.TimeoutClass timeoutClass = mapTimeoutClass(manifest, index, external.timeoutClass(), errors);
         return new VerifyCheck.External(
-                PipelineMapper.orEmpty(external.checkId()), interval, timeout, timeoutClass, copyPinPaths(external));
+                PipelineMapper.orEmpty(external.checkId()),
+                mapProvider(external.provider()),
+                PipelineMapper.copySettings(external.params()),
+                interval,
+                timeout,
+                timeoutClass,
+                copyPinPaths(external));
+    }
+
+    /**
+     * Resolves the check's provider selection (FR13 of add-plugin-architecture): an absent {@code
+     * provider} becomes {@link #DEFAULT_PROVIDER}, any declared one is carried verbatim — including
+     * one no discovered jar serves, which the load seam reports as a located error naming it
+     * (task 3.6). Whether a provider exists is registry knowledge the mapper does not hold.
+     */
+    private static String mapProvider(@Nullable String provider) {
+        return provider == null ? DEFAULT_PROVIDER : provider;
     }
 
     /**

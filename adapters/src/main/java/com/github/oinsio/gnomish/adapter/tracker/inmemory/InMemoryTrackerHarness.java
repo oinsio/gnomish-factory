@@ -167,6 +167,15 @@ public record InMemoryTrackerHarness(InMemoryTracker adapter) {
         }
     }
 
+    /**
+     * {@link #thread} rendered as {@code "kind: text"} lines, oldest first — the exact assertion
+     * format every {@code InMemoryTakeLifecycle*Spec}'s {@code thread(Tracker, TaskRef)} override
+     * produces, factored here once rather than repeated per spec.
+     */
+    public List<String> threadAsStrings(TaskRef ref) {
+        return thread(ref).stream().map(e -> e.kind() + ": " + e.text()).toList();
+    }
+
     private TrackedTask requireSeeded(TaskRef ref) {
         TrackedTask task = adapter.store.get(ref);
         if (task == null) {

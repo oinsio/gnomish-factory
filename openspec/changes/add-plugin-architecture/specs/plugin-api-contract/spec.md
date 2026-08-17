@@ -5,8 +5,10 @@ A `gnomish-plugin-api` module SHALL contain exactly the third-party contract
 surface — port interfaces, the tracker SPI factory (bearing `type()`,
 `subsectionValidator()`, and the connection-aware credential declaration), the
 check SPI factory `CheckClientFactory` (with `CheckParamsValidator`, the
-`ExternalCheckPinContributor` hook, its subsection validator, and its
-credential declaration), `SecretsProvider`, and SPI validator interfaces — and
+`ExternalCheckPinContributor` hook, its subsection validator, and both halves
+of its credential declaration — from the configured connection and, for a
+provider whose targets are per-check, from a check's own params),
+`SecretsProvider`, and SPI validator interfaces — and
 nothing from `application` or `bootstrap` internals. Domain value and config
 types referenced by these ports stay in `domain` and are exposed through a
 transitive `api` dependency.

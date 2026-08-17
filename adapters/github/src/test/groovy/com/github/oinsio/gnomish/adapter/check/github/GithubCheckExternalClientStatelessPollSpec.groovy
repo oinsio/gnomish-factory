@@ -44,7 +44,7 @@ class GithubCheckExternalClientStatelessPollSpec extends Specification {
     }
 
     private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci.yml', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External('ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
     private static AttemptCommitWorkspace sampleWorkspace() {

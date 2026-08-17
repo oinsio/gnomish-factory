@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
 import com.github.oinsio.gnomish.app.lease.VirtualMonotonicTime
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -133,6 +134,7 @@ tracker:
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
     }
 
@@ -147,6 +149,7 @@ tracker:
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(sleeper)

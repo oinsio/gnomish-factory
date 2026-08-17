@@ -240,25 +240,24 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
     }
 
-    // FR3: create()'s conditional adds the GitHub check token to the scrubbed credential set only
-    // when factory.check.github is actually configured — exercised through the real static
-    // factory (construction alone never touches docker), and observed via
-    // ContainerEnvironments#scrubsCredential, a testing seam over the composed allowlist (FR9),
-    // since neither branch is otherwise observable without materializing a real environment.
-    def "create scrubs the GitHub check token from the allowlist's credential set only when the check is configured"() {
+    // FR3 of add-sandbox-core; FR17, D11 of add-plugin-architecture: create() scrubs whatever
+    // credential names the configured check providers declared through the SPI — handed down by the
+    // composition root, never named here. Observed via ContainerEnvironments#scrubsCredential, a
+    // testing seam over the composed allowlist (FR9), since neither branch is otherwise observable
+    // without materializing a real environment.
+    def "create scrubs exactly the check credential names the composition root resolved"() {
         given:
-        def configured = testProperties(check: new FactoryProperties.Check(
-                new FactoryProperties.Check.Github('https://api.github.com', 'acme/widgets')))
-        def unconfigured = testProperties()
         def segments = [
             new Segment(AdapterBinding.CONTAINER, [stage()])
         ]
 
         when:
-        def configuredSupport =
-                ContainerRunSupport.create(cloneDir, 'T-CFG', segments, sandbox, configured, [])
+        def configuredSupport = ContainerRunSupport.create(
+                cloneDir, 'T-CFG', segments, sandbox, [
+                    GithubCheckClientFactory.TOKEN_ENV_VAR
+                ], [])
         def unconfiguredSupport =
-                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, unconfigured, [])
+                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, [], [])
 
         then:
         configuredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)

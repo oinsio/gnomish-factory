@@ -17,16 +17,10 @@ import spock.lang.TempDir
  * directories is task 6.2's concern, not this class's.
  * Implements FR1, FR8 of load-pipeline-config.
  */
-class GnomishFilesSpec extends Specification {
+class GnomishFilesSpec extends Specification implements GnomishTreeWriter {
 
     @TempDir
     Path root
-
-    private void write(String relative, String text) {
-        Path target = root.resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
-    }
 
     private void stage(String name, String manifest) {
         write("stages/${name}/stage.yaml", manifest)
@@ -155,26 +149,16 @@ class GnomishFilesSpec extends Specification {
         write('config.yaml', 'schemaVersion: "1"\n')
         write('pipeline.yaml', 'stages:\n  - plan\n')
         stage('plan', 'purpose: plan\n')
-        def before = snapshot(root)
+        def before = snapshot()
 
         when: 'the tree is read twice'
         def first = GnomishFiles.read(root)
         def second = GnomishFiles.read(root)
 
         then: 'nothing on disk changed (NFR-R1: read-only)'
-        snapshot(root) == before
+        snapshot() == before
 
         and: 'repeated reads are equal (NFR-R1: deterministic)'
         first == second
-    }
-
-    private static Map<String, String> snapshot(Path root) {
-        Map<String, String> files = [:]
-        Files.walk(root).withCloseable { stream ->
-            stream.filter { Files.isRegularFile(it) }.forEach { p ->
-                files.put(root.relativize(p).toString(), Files.readString(p))
-            }
-        }
-        files
     }
 }

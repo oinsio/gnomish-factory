@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory;
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
@@ -35,7 +33,9 @@ final class ContainerRunSupportFactory {
      * @param taskId the task whose environments this run owns; never blank
      * @param segments the run's segment plan; never empty
      * @param sandboxProperties the operator sandbox config; never null
-     * @param factoryProperties factory config, for the external-check credential name; never null
+     * @param checkCredentialEnvVars the credential names the configured check providers declared
+     *     through the SPI (FR17, design D11 of add-plugin-architecture), resolved once by the
+     *     composition root — no vendor constant is named here
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential names;
      *     empty for plain {@code gnomish run}
      */
@@ -44,13 +44,11 @@ final class ContainerRunSupportFactory {
             String taskId,
             List<Segment> segments,
             SandboxProperties sandboxProperties,
-            FactoryProperties factoryProperties,
+            List<String> checkCredentialEnvVars,
             List<String> credentialEnvVarsToScrub) {
         var runner = new GitProcessRunner();
         List<String> credentials = new ArrayList<>(credentialEnvVarsToScrub);
-        if (factoryProperties.check().github().configured()) {
-            credentials.add(GithubCheckClientFactory.TOKEN_ENV_VAR);
-        }
+        credentials.addAll(checkCredentialEnvVars);
         var allowlist = ChildEnvAllowlist.of(sandboxProperties.envPassthrough(), credentials);
         var environments = ContainerEnvironments.forTask(
                 TaskIdSanitizer.sanitize(taskId),

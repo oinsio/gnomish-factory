@@ -14,7 +14,7 @@ import spock.lang.Shared
 import spock.lang.Specification
 
 /**
- * The golden-fixture acceptance spec (task 7.1, success metric M1): a single,
+ * The reference-fixture acceptance spec (task 7.1, success metric M1): a single,
  * genuinely valid committed {@code .gnomish/} resource tree is loaded through the
  * real {@link PipelineLoader} and the resulting {@link PipelineDefinition} is
  * asserted field-by-field. Where the loader spec makes a light "loads in order"
@@ -41,22 +41,22 @@ import spock.lang.Specification
  *
  * <p>M1 / FR1, FR2, FR4 of load-pipeline-config.
  */
-class GoldenPipelineSpec extends Specification {
+class ReferencePipelineSpec extends Specification {
 
     @Shared
     PipelineDefinition model
 
     def setupSpec() {
-        def outcome = PipelineLoader.load(fixtureRoot())
+        def outcome = PipelineLoader.load(fixtureRoot(), [:], TrackerValidatorStub.discoveredGithubCheckProvider())
         assert outcome instanceof LoadOutcome.Loaded
         model = (outcome as LoadOutcome.Loaded).definition()
     }
 
     private static Path fixtureRoot() {
-        Paths.get(GoldenPipelineSpec.getResource('/.gnomish-fixtures/valid').toURI())
+        Paths.get(ReferencePipelineSpec.getResource('/.gnomish-fixtures/valid').toURI())
     }
 
-    def "M1/FR1: the golden fixture loads into a Loaded outcome with the tree-wide fields"() {
+    def "M1/FR1: the reference fixture loads into a Loaded outcome with the tree-wide fields"() {
         expect: 'the tree-wide schema version and pipeline-wide default limits'
         model.schemaVersion() == '1'
         model.defaultLimits().attemptLimit() == 3
@@ -153,6 +153,10 @@ class GoldenPipelineSpec extends Specification {
         external.checkId() == 'ci/build'
         external.interval() == Duration.ofSeconds(30)
         external.timeout() == Duration.ofMinutes(5)
+
+        and: 'a fixture predating providers still resolves to github, with no params (FR13, M4)'
+        external.provider() == 'github'
+        external.params() == [:]
 
         and: 'judge: criteria file, pinned model, opaque settings, odd vote count >= 1'
         def judge = verify[3] as VerifyCheck.Judge

@@ -7,6 +7,8 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
@@ -99,7 +101,11 @@ tracker:
 
     private static TrackerAdapterFactory factoryReturning(Tracker t) {
         new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         t
                     }
 
@@ -111,7 +117,11 @@ tracker:
 
     private static TrackerAdapterFactory factoryThrowingOnCreate(RuntimeException failure) {
         new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         throw failure
                     }
 
@@ -143,6 +153,7 @@ tracker:
                 Clock.systemUTC(),
                 new SystemClock(),
                 registry,
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
                 starter)
     }
@@ -382,6 +393,7 @@ tracker:
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: factory],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
                 new CapturingStarter())
 

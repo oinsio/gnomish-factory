@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches;
@@ -70,18 +70,6 @@ public class ManualRunConfiguration {
     }
 
     /**
-     * The GitHub Actions external-check factory, holding the same {@link SecretsProvider} bean the
-     * tracker registry uses (leak 3 of design D4, task 5.3 of split-into-modules): binding the
-     * provider is the composition root's job, so the adapter no longer carries a convenience
-     * constructor reaching for the env/file implementation — which was a github-adapter-to-secrets-
-     * adapter edge the sibling-isolation rule counted.
-     */
-    @Bean
-    public GithubCheckClientFactory githubCheckClientFactory(SecretsProvider secretsProvider) {
-        return new GithubCheckClientFactory(secretsProvider);
-    }
-
-    /**
      * The one git subprocess runner every git-backed port shares (design D8 of add-git-workflow):
      * repo-level mutating commands serialize per clone through the runner, so handing every port
      * the same instance is what keeps concurrent slots correct.
@@ -110,10 +98,26 @@ public class ManualRunConfiguration {
      * composition root's {@code tracker.type} → subsection-validator registry over it so a
      * malformed {@code tracker.<type>} subsection stays a located load error (FR17 of
      * add-tracker-port) without any command having to thread that registry down to the loader.
+     *
+     * <p>The discovered check providers' params validators are closed over the same way (FR6, FR13
+     * of add-plugin-architecture), so an {@code external} check naming an undiscovered provider —
+     * or a served one with malformed {@code params} — is a located load error in manual run exactly
+     * as in every other mode (design D10).
+     *
+     * <p>The operator's named connection profiles ride along for the third cross-source reason
+     * (FR16, design D8/D12): {@code factory.connections} is operator configuration while the
+     * subsection referencing one is repo-side, so only this root sees both — an undefined {@code
+     * connection: <name>} is therefore a located load error rather than a mid-{@code take} failure.
      */
     @Bean
-    public PipelineSource pipelineSource(Map<String, TrackerSubsectionValidator> trackerSubsectionValidatorRegistry) {
-        return new GnomishDirPipelineSource(trackerSubsectionValidatorRegistry);
+    public PipelineSource pipelineSource(
+            Map<String, TrackerSubsectionValidator> trackerSubsectionValidatorRegistry,
+            Map<String, CheckParamsValidator> checkParamsValidatorRegistry,
+            FactoryProperties factoryProperties) {
+        return new GnomishDirPipelineSource(
+                trackerSubsectionValidatorRegistry,
+                checkParamsValidatorRegistry,
+                ConnectionProfiles.of(factoryProperties.connections()));
     }
 
     @Bean

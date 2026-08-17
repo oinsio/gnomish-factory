@@ -47,7 +47,7 @@ class VerifyCheckSpec extends Specification {
     // FR2: the model is immutable — defensive copy isolates from the source map
     def "Builtin is isolated from later mutation of the source params"() {
         given: 'a mutable source params map'
-        def source = [paths: ['README.md']]
+        Map<String, Object> source = [paths: ['README.md']]
 
         when: 'the check is created and the source map grows afterwards'
         def check = new VerifyCheck.Builtin('files_exist', source)
@@ -98,7 +98,7 @@ class VerifyCheckSpec extends Specification {
     def "External exposes the check identifier, poll interval and timeout"() {
         when: 'an external check is modeled'
         VerifyCheck check = new VerifyCheck.External(
-                'ci/build', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY)
+                'ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY)
 
         then: 'the variant exposes exactly the identifier and both durations'
         check.checkId() == 'ci/build'
@@ -106,13 +106,78 @@ class VerifyCheckSpec extends Specification {
         check.timeout() == Duration.ofMinutes(15)
     }
 
+    // FR7 (add-plugin-architecture): the external variant carries the provider
+    // discriminator and opaque provider-owned params alongside the unchanged
+    // engine-common fields — no fifth sealed variant is introduced for it
+    def "External carries its provider and opaque params beside the engine-common fields"() {
+        when: 'an external check is modeled with a provider and provider-owned params'
+        VerifyCheck check = new VerifyCheck.External('quality-gate', 'http', [url: 'https://sonar/api', pollKey: 'status'],
+        Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.INFRASTRUCTURE,
+        ['sonar-project.properties'])
+
+        then: 'the provider and params are exposed'
+        check.provider() == 'http'
+        check.params() == [url: 'https://sonar/api', pollKey: 'status']
+
+        and: 'the engine-common fields are unchanged'
+        check.checkId() == 'quality-gate'
+        check.interval() == Duration.ofSeconds(30)
+        check.timeout() == Duration.ofMinutes(15)
+        check.timeoutClass() == VerifyCheck.TimeoutClass.INFRASTRUCTURE
+        check.pinPaths() == ['sonar-project.properties']
+    }
+
+    // FR7: params are flat JDK data (D5a), so the domain stays Jackson-free —
+    // and a provider that needs no selectors gets an empty map from the
+    // convenience constructor
+    def "External params default to empty and hold only plain JDK types"() {
+        expect: 'the provider-only form carries no params'
+        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
+                VerifyCheck.TimeoutClass.QUALITY).params().isEmpty()
+
+        and: 'declared params are plain JDK maps, lists and scalars'
+        new VerifyCheck.External('ci', 'http', [headers: [accept: 'application/json'], retries: 2, strict: true],
+        Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY, []).params() ==
+        [headers: [accept: 'application/json'], retries: 2, strict: true]
+    }
+
+    // FR7: the model is immutable — defensive copy isolates the params from
+    // later mutation of the source map, and the exposed map rejects mutation
+    def "External params are copied defensively and exposed immutably"() {
+        given: 'a mutable source params map'
+        def source = [url: 'https://sonar/api']
+
+        when: 'the check is created and the source map grows afterwards'
+        def check = new VerifyCheck.External('gate', 'http', source, Duration.ofSeconds(30),
+                Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY, [])
+        source.intruder = 'later noise'
+
+        then: 'the check still holds only the original params'
+        check.params() == [url: 'https://sonar/api']
+
+        when: 'a caller tries to put into the exposed map'
+        check.params().put('intruder', true)
+
+        then: 'the map rejects the mutation'
+        thrown(UnsupportedOperationException)
+    }
+
+    // FR13: the provider default belongs to the loader, not the model — the
+    // record carries whatever selection it is handed, including an unserved one,
+    // so the load seam can see and report it
+    def "External carries its provider verbatim, defaulting nothing"() {
+        expect: 'a provider no jar serves is carried untouched for the load seam to report'
+        new VerifyCheck.External('ci', 'nobody-serves-this', Duration.ofSeconds(30), Duration.ofMinutes(5),
+                VerifyCheck.TimeoutClass.QUALITY).provider() == 'nobody-serves-this'
+    }
+
     // FR16 (add-sandbox-core): an external check carries its law-declared pin
     // paths in declaration order; the convenience constructor defaults to empty
     def "External carries pin paths, defaulting to empty, in declaration order"() {
         expect: 'the four-arg form has no pin paths, the explicit form carries them ordered'
-        new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY).pinPaths() == []
-        new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, [
                     '.github/workflows/ci.yml',
                     'analyzer.xml'
@@ -130,7 +195,7 @@ class VerifyCheckSpec extends Specification {
         def source = ['ci.yml']
 
         when: 'the check is created and the source list grows afterwards'
-        def check = new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        def check = new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, source)
         source << 'later-noise'
 
@@ -141,7 +206,7 @@ class VerifyCheckSpec extends Specification {
     // FR16 (add-sandbox-core): the exposed pin-path list itself cannot be mutated
     def "External's pin-path list is immutable"() {
         given: 'an external check with one pin path'
-        def check = new VerifyCheck.External('ci', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        def check = new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, ['ci.yml'])
 
         when: 'a caller tries to add into the exposed list'
@@ -156,7 +221,7 @@ class VerifyCheckSpec extends Specification {
     // carry an insane value so the validator can still see and report it
     def "External carries insane timing (#reason) without throwing"() {
         when: 'an external check is modeled with timing that violates FR11'
-        def check = new VerifyCheck.External('ci/build', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
+        def check = new VerifyCheck.External('ci/build', 'github', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
 
         then: 'the record carries the values untouched for the validator to report'
         notThrown(Exception)
@@ -202,7 +267,7 @@ class VerifyCheckSpec extends Specification {
     // FR2: the model is immutable — defensive copy isolates from the source map
     def "Judge is isolated from later mutation of the source settings"() {
         given: 'a mutable source settings map'
-        def source = [temperature: 0]
+        Map<String, Object> source = [temperature: 0]
 
         when: 'the check is created and the source map grows afterwards'
         def check = new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', source, 1)
@@ -231,8 +296,8 @@ class VerifyCheckSpec extends Specification {
         new VerifyCheck.Builtin('files_exist', [paths: []]) ==
         new VerifyCheck.Builtin('files_exist', [paths: []])
         new VerifyCheck.Command('make test') == new VerifyCheck.Command('make test')
-        new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) ==
-                new VerifyCheck.External('ci/build', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) ==
+                new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
         new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3) ==
         new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3)
     }

@@ -94,7 +94,7 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
         def httpClient = new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken())
         def client = new GithubCheckExternalClient(httpClient, GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME)
         def check = new VerifyCheck.External(
-                CHECK_ID, Duration.ofSeconds(5), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+                CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
         def workspace = workspaceAt(headSha)
 
         new PollingConditions(timeout: 480, initialDelay: 5, delay: 5).eventually {

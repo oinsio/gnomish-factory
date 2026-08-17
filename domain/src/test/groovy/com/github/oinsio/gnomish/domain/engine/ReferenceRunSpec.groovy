@@ -60,7 +60,7 @@ class ReferenceRunSpec extends Specification {
     }
 
     static VerifyCheck.External external(String checkId) {
-        new VerifyCheck.External(checkId, SECOND, TIMEOUT, VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External(checkId, 'ci-platform', SECOND, TIMEOUT, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     static VerifyCheck.Judge judge(int votes) {

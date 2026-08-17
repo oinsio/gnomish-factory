@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import java.nio.file.Path;
@@ -19,12 +20,23 @@ import java.util.List;
 @FunctionalInterface
 interface ContainerSupportFactory {
 
-    /** Builds the run's sandbox support, bound to the task branch that already exists. */
+    /**
+     * Builds the run's sandbox support, bound to the task branch that already exists.
+     *
+     * <p>{@code definition} is passed because the container environments compose their child
+     * environment before the run assembly exists, and the credential names to scrub are no longer
+     * knowable from configuration alone: the built-in {@code http} check provider takes its
+     * credential name from each check's own manifest params (FR11, FR17, design D11 of
+     * add-plugin-architecture). The composition root's binding is what reads them out — through the
+     * discovered registry, over params core never interprets — so this seam only has to carry the
+     * pipeline that names them.
+     */
     SandboxRunSupport create(
             Path cloneDir,
             String taskId,
             List<Segment> segments,
             SandboxProperties sandboxProperties,
             FactoryProperties factoryProperties,
+            PipelineDefinition definition,
             List<String> credentialEnvVarsToScrub);
 }

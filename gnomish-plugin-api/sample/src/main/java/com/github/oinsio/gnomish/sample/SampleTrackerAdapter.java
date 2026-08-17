@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The SPI half of the sample adapter: the {@link TrackerAdapterFactory} the factory resolves by
@@ -22,14 +23,16 @@ import java.util.Map;
  */
 public final class SampleTrackerAdapter implements TrackerAdapterFactory, TrackerSubsectionValidator {
 
-    private final SecretsProvider secrets;
+    /** Public and no-arg, as {@code ServiceLoader} discovery requires (FR2 of add-plugin-architecture). */
+    public SampleTrackerAdapter() {}
 
-    public SampleTrackerAdapter(SecretsProvider secrets) {
-        this.secrets = secrets;
+    @Override
+    public String type() {
+        return "sample";
     }
 
     @Override
-    public Tracker create(TrackerConfig config, String instanceId) {
+    public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
         secrets.find("GNOMISH_SAMPLE_TOKEN");
         return new SampleTracker();
     }
@@ -40,8 +43,13 @@ public final class SampleTrackerAdapter implements TrackerAdapterFactory, Tracke
     }
 
     @Override
-    public List<String> credentialEnvVars() {
+    public List<String> credentialEnvVars(TrackerConfig config) {
         return List.of("GNOMISH_SAMPLE_TOKEN");
+    }
+
+    @Override
+    public Optional<TrackerSubsectionValidator> subsectionValidator() {
+        return Optional.of(this);
     }
 
     @Override

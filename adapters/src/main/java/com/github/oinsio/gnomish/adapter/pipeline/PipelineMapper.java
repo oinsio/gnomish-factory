@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -101,13 +102,25 @@ public final class PipelineMapper {
      *     mapping errors when a duration is malformed
      */
     public static Result map(ConfigDto config, List<StageEntry> entries) {
+        return map(config, entries, ConnectionProfiles.none());
+    }
+
+    /**
+     * The connection-aware form (FR16, design D8 of add-plugin-architecture): identical, except
+     * that the tracker subsection's {@code connection: <name>} reference is resolved against the
+     * operator's named profiles, so the domain {@link TrackerConfig} always carries flat, inline
+     * connection data.
+     *
+     * @param profiles the operator-declared connection profiles; never null, possibly none
+     */
+    public static Result map(ConfigDto config, List<StageEntry> entries, ConnectionProfiles profiles) {
         int defaultLimit = attemptDefault(config);
         List<ConfigError> errors = new ArrayList<>();
         List<StageDefinition> stages = new ArrayList<>();
         for (StageEntry entry : entries) {
             stages.add(mapStage(entry, defaultLimit, errors));
         }
-        TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), errors);
+        TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), profiles, errors);
         if (!errors.isEmpty()) {
             return new Result(null, errors);
         }

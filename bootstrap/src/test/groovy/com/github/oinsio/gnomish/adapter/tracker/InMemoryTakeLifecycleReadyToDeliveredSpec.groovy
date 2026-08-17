@@ -3,13 +3,11 @@ package com.github.oinsio.gnomish.adapter.tracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.TakeLifecycleReadyToDeliveredSpecBase
-import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeLifecycleReadyToDeliveredSpecBase}
@@ -29,21 +27,14 @@ class InMemoryTakeLifecycleReadyToDeliveredSpec extends TakeLifecycleReadyToDeli
         InMemoryTracker tracker = new InMemoryTracker()
         new InMemoryTrackerHarness(tracker).seed(
                 ref, new TaskSnapshot(ref.id(), title, body), new TrackerTaskState.Ready(), AbortFacts.none())
-        def factory = new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
-                        tracker
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture: ref is already canonical')
-                    }
-                }
-        [tracker, factory]
+        [
+            tracker,
+            new FixedTrackerAdapterFactory({ tracker })
+        ]
     }
 
     @Override
     List<String> thread(Tracker tracker, TaskRef ref) {
-        def harness = new InMemoryTrackerHarness(tracker as InMemoryTracker)
-        harness.thread(ref).collect { "${it.kind()}: ${it.text()}".toString() }
+        new InMemoryTrackerHarness(tracker as InMemoryTracker).threadAsStrings(ref)
     }
 }

@@ -57,7 +57,7 @@ final class ServeAssembly {
                 abortHandler,
                 trackerConfig.abortThreshold(),
                 taskIdMdcKey,
-                factory.credentialEnvVars(),
+                factory.credentialEnvVars(trackerConfig),
                 heartbeat.instance(),
                 heartbeat.flag(),
                 tracker,

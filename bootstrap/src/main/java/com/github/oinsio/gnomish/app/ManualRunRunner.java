@@ -2,14 +2,15 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
+import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
@@ -20,9 +21,11 @@ import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -55,6 +58,10 @@ import org.springframework.stereotype.Component;
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3, D9, D10 of add-manual-run; FR5-FR8, FR13,
  * FR14, UX1-UX4, design D8, D9 of add-git-workflow.
  */
+// Null-marked explicitly (JSpecify): this module carries no package-info, and the application
+// module's one does not reach this source root, so without the class-level marker the
+// ApplicationRunner override here reads as unannotated against its null-marked supertype.
+@NullMarked
 @Component
 public final class ManualRunRunner implements ApplicationRunner {
 
@@ -115,7 +122,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             SystemConsoleIO systemConsoleIO,
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
-            GithubCheckClientFactory githubCheckClientFactory,
+            Map<String, CheckClientFactory> checkClientRegistry,
             InMemoryAttemptPersistence attemptPersistence,
             SystemClock systemClock,
             ThreadSleeper threadSleeper,
@@ -131,6 +138,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             DashboardCommand dashboardCommand,
             Clock javaTimeClock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
             ServeProperties serveProperties) {
         this.argumentsParser = argumentsParser;
@@ -141,17 +149,37 @@ public final class ManualRunRunner implements ApplicationRunner {
                 systemConsoleIO,
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
-                githubCheckClientFactory,
+                checkClientRegistry,
+                secretsProvider,
                 systemClock,
                 threadSleeper,
                 factoryProperties,
                 sandboxProperties);
         this.gitModeRunner = new GitModeRunner(assembly, git, worktreesRoot);
         this.gitResumeRunner = new GitResumeRunner(assembly, git, worktreesRoot, TASK_ID_KEY);
-        this.containerGitModeRunner = new ContainerGitModeRunner(
-                assembly, git, sandboxProperties, factoryProperties, ContainerRunSupport::create);
+        // The container support seam is bound over the check providers' own credential declarations
+        // (FR17, design D11 of add-plugin-architecture): resolved once here from the discovered
+        // registry, so the container environments scrub a plugin's credential with no core source
+        // naming it. The seam's own signature is unchanged — the names ride in as captured state.
+        // The manifest half of the same declaration (FR11): the built-in http provider names its
+        // credential per check, so the loaded pipeline is asked too — through the registry, over
+        // params core never interprets — and both halves reach the container's child environment.
+        // A profile-resolved credential name reaches the container's scrub set exactly as an inline
+        // one does (FR16, FR17, design D8/D11): the subsections are resolved against
+        // `factory.connections` before the providers are asked what they name.
+        List<String> checkCredentials = CheckProviderSeam.credentialEnvVars(
+                CheckProviderSeam.resolve(
+                        factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections())),
+                checkClientRegistry);
+        ContainerSupportFactory containerSupport = (clone, id, segments, sandboxProps, _, definition, creds) -> {
+            var credentials = new ArrayList<>(checkCredentials);
+            credentials.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));
+            return ContainerRunSupport.create(clone, id, segments, sandboxProps, credentials, creds);
+        };
+        this.containerGitModeRunner =
+                new ContainerGitModeRunner(assembly, git, sandboxProperties, factoryProperties, containerSupport);
         this.containerResumeRunner = new ContainerResumeRunner(
-                assembly, git, sandboxProperties, factoryProperties, TASK_ID_KEY, ContainerRunSupport::create);
+                assembly, git, sandboxProperties, factoryProperties, TASK_ID_KEY, containerSupport);
         this.bindingProperties = bindingProperties;
         this.sandboxProperties = sandboxProperties;
         this.subcommandDispatch = SubcommandDispatchFactory.of(
@@ -165,6 +193,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                 javaTimeClock,
                 systemClock,
                 trackerAdapterRegistry,
+                secretsProvider,
                 pipelineSource,
                 statusCommand,
                 usageCommand,

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import spock.lang.Specification
@@ -20,12 +21,12 @@ class TakeCommandSupportSpec extends Specification {
         def trackerConfig = new TrackerConfig('fixture', 3, [:])
         def tracker = Mock(Tracker)
         def factory = Mock(TrackerAdapterFactory) {
-            create(trackerConfig, 'gnomish-factory-a1') >> tracker
+            create(MapSecretsProvider.NONE, trackerConfig, 'gnomish-factory-a1') >> tracker
         }
         def registry = [fixture: factory]
 
         when:
-        def resolved = TakeCommandSupport.resolveTracker(trackerConfig, registry, 'gnomish-factory-a1')
+        def resolved = TakeCommandSupport.resolveTracker(trackerConfig, registry, MapSecretsProvider.NONE, 'gnomish-factory-a1')
 
         then:
         resolved == tracker
@@ -36,7 +37,7 @@ class TakeCommandSupportSpec extends Specification {
         def trackerConfig = new TrackerConfig('unknown-type', 3, [:])
 
         when:
-        TakeCommandSupport.resolveTracker(trackerConfig, [:], 'gnomish-factory-a1')
+        TakeCommandSupport.resolveTracker(trackerConfig, [:], MapSecretsProvider.NONE, 'gnomish-factory-a1')
 
         then:
         def ex = thrown(UsageException)
@@ -49,7 +50,7 @@ class TakeCommandSupportSpec extends Specification {
         def registry = [inmemory: Mock(TrackerAdapterFactory), github: Mock(TrackerAdapterFactory)]
 
         when:
-        TakeCommandSupport.resolveTracker(trackerConfig, registry, 'gnomish-factory-a1')
+        TakeCommandSupport.resolveTracker(trackerConfig, registry, MapSecretsProvider.NONE, 'gnomish-factory-a1')
 
         then: 'FR17: the message names the registered types as a stable, sorted list'
         def ex = thrown(UsageException)

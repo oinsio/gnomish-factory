@@ -34,11 +34,17 @@ public record CheckRef(int index, String label) {
      * Derives a {@code CheckRef} for a check at {@code index} in a stage's verify
      * list, computing its label by an exhaustive switch over the sealed
      * {@link VerifyCheck} variants (design D3): {@code Builtin} → {@code builtin:<name>},
-     * {@code Command} → {@code command:<command>}, {@code External} → {@code external:<checkId>},
-     * {@code Judge} → {@code judge:<criteriaFile>}. No {@code default} arm, so a new
-     * variant fails to compile until its label mapping is added.
+     * {@code Command} → {@code command:<command>}, {@code External} →
+     * {@code external:<provider>:<checkId>}, {@code Judge} → {@code judge:<criteriaFile>}. No
+     * {@code default} arm, so a new variant fails to compile until its label mapping is added.
      *
-     * <p>Implements FR4 of add-stage-engine.
+     * <p>An {@code external} check's label carries its {@code provider} as well as its
+     * {@code checkId} because the identity findings are correlated under across attempts is the
+     * pair, not the id alone (FR8 of add-plugin-architecture): two providers may each serve a
+     * check named {@code ci/build}, and merging their findings would attribute one platform's
+     * failures to the other.
+     *
+     * <p>Implements FR4 of add-stage-engine; FR8 of add-plugin-architecture.
      *
      * @param index the zero-based position in the stage's ordered verify list
      * @param check the check whose type and salient field derive the label
@@ -49,7 +55,8 @@ public record CheckRef(int index, String label) {
                 switch (check) {
                     case VerifyCheck.Builtin(String name, var _) -> "builtin:" + name;
                     case VerifyCheck.Command(String command, var _) -> "command:" + command;
-                    case VerifyCheck.External(String checkId, var _, var _, var _, var _) -> "external:" + checkId;
+                    case VerifyCheck.External(String checkId, String provider, var _, var _, var _, var _, var _) ->
+                        "external:" + provider + ":" + checkId;
                     case VerifyCheck.Judge(String criteriaFile, var _, var _, var _) -> "judge:" + criteriaFile;
                 };
         return new CheckRef(index, label);

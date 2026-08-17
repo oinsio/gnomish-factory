@@ -11,9 +11,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
-import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -70,11 +68,6 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         store.attemptPersistence(_, _) >> { persistence }
         store.readRecordedState(_) >> TaskState.atStageStart('build')
         store.readTaskRecord(_) >> { record }
-    }
-
-    private static TaskRecord recordWith(RecordedOutcome outcome, EscalationReport escalation = null) {
-        new TaskRecord(new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of()),
-                'base-sha', NOW, outcome, escalation, false)
     }
 
     ScriptedConsoleIO console = new ScriptedConsoleIO([''])

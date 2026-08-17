@@ -41,7 +41,7 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
     }
 
     private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci.yml', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External('ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
     private static AttemptCommitWorkspace sampleWorkspace() {
@@ -61,24 +61,24 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
                 .build()
     }
 
-    private GithubCheckExternalClient clientFor(String baseUrl) {
+    private static GithubCheckExternalClient clientFor(String baseUrl) {
         new GithubCheckExternalClient(new GithubHttpClient(baseUrl, 'tok', fastRetryConfig()), 'acme', 'widgets')
     }
 
     @Override
-    protected Optional<PollStatus> arrange(ExternalCheckClientContract.PollVariant variant) {
+    protected Optional<PollStatus> arrange(PollVariant variant) {
         switch (variant) {
-            case ExternalCheckClientContract.PollVariant.PASS:
+            case PollVariant.PASS:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('''
                         {"workflow_runs":[
                             {"id":1,"head_sha":"abc123","path":"ci.yml","run_attempt":1,"status":"completed","conclusion":"success"}
                         ]}
                         ''')))
                 break
-            case ExternalCheckClientContract.PollVariant.RUNNING:
+            case PollVariant.RUNNING:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('{"workflow_runs":[]}')))
                 break
-            case ExternalCheckClientContract.PollVariant.FAIL_WITH_FINDINGS:
+            case PollVariant.FAIL_WITH_FINDINGS:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('''
                         {"workflow_runs":[
                             {"id":1,"head_sha":"abc123","path":"ci.yml","run_attempt":1,"status":"completed",
@@ -94,7 +94,7 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
                 wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/actions/jobs/10/logs'))
                         .willReturn(aResponse().withStatus(200).withBody('boom: assertion failed')))
                 break
-            case ExternalCheckClientContract.PollVariant.CANNOT_VERIFY:
+            case PollVariant.CANNOT_VERIFY:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL))
                 .willReturn(aResponse().withStatus(503).withBody('service unavailable')))
                 break

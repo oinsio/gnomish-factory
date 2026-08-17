@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import java.nio.file.Path;
@@ -11,10 +12,10 @@ import java.time.Clock;
 import java.util.Map;
 
 /**
- * Builds the {@link SubcommandDispatch} for {@link ManualRunRunner}: wires the {@code take} command
+ * Builds the {@link SubcommandDispatch} for {@code ManualRunRunner}: wires the {@code take} command
  * ({@link TakeCommandFactory#of}) and the {@code serve} command ({@link ServeCommand}, driving
  * {@link FeedAutomaton#run}), then bundles them with the pre-built {@code status}/{@code
- * usage}/{@code board}/{@code dashboard} commands. Extracted from {@link ManualRunRunner}'s
+ * usage}/{@code board}/{@code dashboard} commands. Extracted from {@code ManualRunRunner}'s
  * constructor for file size; the runner keeps the per-invocation assembly and the run-drive flow.
  *
  * <p>Implements FR9 of add-tracker-port; FR1 of add-factory-serve; FR1 of add-board-command; FR1
@@ -35,6 +36,7 @@ final class SubcommandDispatchFactory {
             Clock javaTimeClock,
             SystemClock systemClock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
             StatusCommand statusCommand,
             UsageCommand usageCommand,
@@ -48,6 +50,7 @@ final class SubcommandDispatchFactory {
                 factoryProperties,
                 javaTimeClock,
                 trackerAdapterRegistry,
+                secretsProvider,
                 pipelineSource,
                 TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties));
         var serveCommand = new ServeCommand(
@@ -61,6 +64,7 @@ final class SubcommandDispatchFactory {
                 javaTimeClock,
                 systemClock,
                 trackerAdapterRegistry,
+                secretsProvider,
                 pipelineSource,
                 FeedAutomaton::run);
         return new SubcommandDispatch(

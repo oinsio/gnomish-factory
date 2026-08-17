@@ -26,14 +26,16 @@ import spock.lang.TempDir
  * adapter.tracker}, because importing the concrete {@link GithubTrackerSubsectionValidator} is
  * forbidden everywhere else by {@code TrackerPortBoundarySpec}.
  *
- * <p>Implements FR9, FR17 of add-tracker-port.
+ * <p>Implements FR9, FR17 of add-tracker-port; FR1, M1 of add-plugin-architecture.
  */
 class TrackerAdapterConfigurationSpec extends Specification {
 
     @TempDir
     Path gnomishRoot
 
-    def "the adapter registry is wired with github and inmemory adapter factories"() {
+    // FR1 of add-plugin-architecture: the registry is populated by ServiceLoader, from the
+    // META-INF/services entries the two adapter jars carry — not by any Map.of(...) in this class.
+    def "the adapter registry is discovered from the classpath's service entries"() {
         given:
         def configuration = new TrackerAdapterConfiguration()
 
@@ -46,12 +48,15 @@ class TrackerAdapterConfigurationSpec extends Specification {
         registry['inmemory'] instanceof InMemoryTrackerAdapterFactory
     }
 
-    def "the subsection-validator registry is wired with the real github content validator"() {
+    // FR1, design D1/D3: the validator registry is derived from the discovered factories rather than
+    // discovered separately, so the two registries are keyed identically by construction; inmemory
+    // grades no subsection content and therefore contributes no entry.
+    def "the subsection-validator registry is derived from the discovered factories"() {
         given:
         def configuration = new TrackerAdapterConfiguration()
 
         when:
-        def registry = configuration.trackerSubsectionValidatorRegistry()
+        def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry())
 
         then:
         registry.keySet() == ['github'] as Set
@@ -90,8 +95,9 @@ advancement: auto
         write('stages/plan/instructions.md', 'plan\n')
 
         when:
-        def registry = new TrackerAdapterConfiguration().trackerSubsectionValidatorRegistry()
-        def outcome = PipelineLoader.load(gnomishRoot, registry)
+        def configuration = new TrackerAdapterConfiguration()
+        def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry())
+        def outcome = PipelineLoader.load(gnomishRoot, registry, [:])
 
         then: 'one Invalid outcome carries both the bad-color adapter error and the core error'
         outcome instanceof LoadOutcome.Invalid

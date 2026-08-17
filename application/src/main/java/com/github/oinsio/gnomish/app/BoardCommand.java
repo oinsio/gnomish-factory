@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.board.BoardComposition;
@@ -39,16 +40,19 @@ final class BoardCommand {
     private final Clock clock;
     private final FactoryProperties factoryProperties;
     private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
+    private final SecretsProvider secretsProvider;
     private final PipelineSource pipelineSource;
 
     BoardCommand(
             Clock javaTimeClock,
             FactoryProperties factoryProperties,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource) {
         this.clock = javaTimeClock;
         this.factoryProperties = factoryProperties;
         this.trackerAdapterRegistry = trackerAdapterRegistry;
+        this.secretsProvider = secretsProvider;
         this.pipelineSource = pipelineSource;
     }
 
@@ -64,7 +68,8 @@ final class BoardCommand {
         PipelineDefinition definition = TakeCommandSupport.loadPipeline(boardArguments.dir(), pipelineSource);
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
         InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-        Tracker tracker = TakeCommandSupport.resolveTracker(trackerConfig, trackerAdapterRegistry, instanceId.value());
+        Tracker tracker = TakeCommandSupport.resolveTracker(
+                trackerConfig, trackerAdapterRegistry, secretsProvider, instanceId.value());
 
         BoardModel model = BoardComposition.compose(
                 tracker, trackerConfig, factoryProperties.tracker(), clock, boardArguments.limit());

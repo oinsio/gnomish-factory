@@ -3,13 +3,14 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Map;
 
 /**
  * Builds {@link TakeCommand} instances, defaulting the test-seam collaborators the production wiring
- * ({@link ManualRunRunner}) and most take specs never override to {@link TakeCommandSeams#DEFAULTS}.
+ * ({@code ManualRunRunner}) and most take specs never override to {@link TakeCommandSeams#DEFAULTS}.
  * Extracted from {@link TakeCommand} so that class keeps a single canonical constructor. A spec that
  * needs to override a seam builds a {@link TakeCommandSeams} from {@code DEFAULTS} and layers on only
  * the fields it cares about (e.g. {@code TakeCommandSeams.DEFAULTS.withHeartbeatSleeper(sleeper)}).
@@ -27,6 +28,7 @@ final class TakeCommandFactory {
             FactoryProperties factoryProperties,
             Clock clock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource) {
         return of(
                 assembly,
@@ -36,6 +38,7 @@ final class TakeCommandFactory {
                 factoryProperties,
                 clock,
                 trackerAdapterRegistry,
+                secretsProvider,
                 pipelineSource,
                 TakeCommandSeams.DEFAULTS);
     }
@@ -50,6 +53,7 @@ final class TakeCommandFactory {
             FactoryProperties factoryProperties,
             Clock clock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
             TakeCommandSeams seams) {
         return new TakeCommand(
@@ -60,6 +64,7 @@ final class TakeCommandFactory {
                 factoryProperties,
                 clock,
                 trackerAdapterRegistry,
+                secretsProvider,
                 pipelineSource,
                 seams.heartbeatSleeper(),
                 seams.reaperSleeper(),

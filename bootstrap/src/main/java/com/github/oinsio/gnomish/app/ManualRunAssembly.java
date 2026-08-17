@@ -3,10 +3,10 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
@@ -18,6 +18,8 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -48,12 +50,17 @@ import org.jspecify.annotations.Nullable;
 // test-independent, not a real coverage gap. This is a stateful assembly holder, never compared or
 // hashed, so as a plain class its methods mutate and are killed normally by
 // ManualRunAssemblyWiringSpec (M5).
+// Null-marked explicitly (JSpecify): this module carries no package-info, and the application
+// module's one does not reach this source root, so without the class-level marker every override
+// here reads as unannotated against its null-marked port.
+@NullMarked
 public final class ManualRunAssembly implements RunAssembly {
 
     final SystemConsoleIO systemConsoleIO;
     final FilesExistCheckRunner filesExistCheckRunner;
     final ShellCommandCheckRunner shellCommandCheckRunner;
-    final GithubCheckClientFactory githubCheckClientFactory;
+    final Map<String, CheckClientFactory> checkClientRegistry;
+    final SecretsProvider secretsProvider;
     final SystemClock systemClock;
     final ThreadSleeper threadSleeper;
     final FactoryProperties factoryProperties;
@@ -65,7 +72,8 @@ public final class ManualRunAssembly implements RunAssembly {
             SystemConsoleIO systemConsoleIO,
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
-            GithubCheckClientFactory githubCheckClientFactory,
+            Map<String, CheckClientFactory> checkClientRegistry,
+            SecretsProvider secretsProvider,
             SystemClock systemClock,
             ThreadSleeper threadSleeper,
             FactoryProperties factoryProperties,
@@ -75,7 +83,8 @@ public final class ManualRunAssembly implements RunAssembly {
         this.systemConsoleIO = systemConsoleIO;
         this.filesExistCheckRunner = filesExistCheckRunner;
         this.shellCommandCheckRunner = shellCommandCheckRunner;
-        this.githubCheckClientFactory = githubCheckClientFactory;
+        this.checkClientRegistry = checkClientRegistry;
+        this.secretsProvider = secretsProvider;
         this.systemClock = systemClock;
         this.threadSleeper = threadSleeper;
         this.factoryProperties = factoryProperties;
@@ -93,7 +102,8 @@ public final class ManualRunAssembly implements RunAssembly {
             SystemConsoleIO systemConsoleIO,
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
-            GithubCheckClientFactory githubCheckClientFactory,
+            Map<String, CheckClientFactory> checkClientRegistry,
+            SecretsProvider secretsProvider,
             SystemClock systemClock,
             ThreadSleeper threadSleeper,
             FactoryProperties factoryProperties,
@@ -102,7 +112,8 @@ public final class ManualRunAssembly implements RunAssembly {
                 systemConsoleIO,
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
-                githubCheckClientFactory,
+                checkClientRegistry,
+                secretsProvider,
                 systemClock,
                 threadSleeper,
                 factoryProperties,
@@ -120,17 +131,23 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withExtraListener(EngineEventListener listener) {
+        return copyWith(listener, sandbox);
+    }
+
+    /** Shared copy construction: collaborators carried over, the two optional seams supplied. */
+    private ManualRunAssembly copyWith(@Nullable EngineEventListener listener, @Nullable SandboxRunPieces pieces) {
         return new ManualRunAssembly(
                 systemConsoleIO,
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
-                githubCheckClientFactory,
+                checkClientRegistry,
+                secretsProvider,
                 systemClock,
                 threadSleeper,
                 factoryProperties,
                 sandboxProperties,
                 listener,
-                sandbox);
+                pieces);
     }
 
     /**
@@ -146,17 +163,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withSandbox(SandboxRunPieces pieces) {
-        return new ManualRunAssembly(
-                systemConsoleIO,
-                filesExistCheckRunner,
-                shellCommandCheckRunner,
-                githubCheckClientFactory,
-                systemClock,
-                threadSleeper,
-                factoryProperties,
-                sandboxProperties,
-                extraListener,
-                pieces);
+        return copyWith(extraListener, pieces);
     }
 
     /**
@@ -189,11 +196,11 @@ public final class ManualRunAssembly implements RunAssembly {
     /**
      * Selects and pin-guards the run's {@link ExternalCheckClient}. Delegated to {@link
      * RunAssembler#externalCheckClient} for file size; package-private testing seam: specs inject a
-     * {@code checkClientFactory} with a fake secrets provider.
+     * {@code registry} of hand-built providers over a fake secrets provider.
      */
     ExternalCheckClient externalCheckClient(
-            DialogConsole console, Path lawSourceRoot, GithubCheckClientFactory checkClientFactory) {
-        return RunAssembler.externalCheckClient(this, console, lawSourceRoot, checkClientFactory);
+            DialogConsole console, Path lawSourceRoot, Map<String, CheckClientFactory> registry) {
+        return RunAssembler.externalCheckClient(this, console, lawSourceRoot, registry, CheckRunContext.none());
     }
 
     /**

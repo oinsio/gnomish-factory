@@ -7,6 +7,8 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
@@ -114,7 +116,11 @@ tracker:
 
     private static TrackerAdapterFactory fixedFactory(Tracker t) {
         new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         t
                     }
 
@@ -139,6 +145,7 @@ tracker:
                 testProps(),
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: fixedFactory(tracker)],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
                 TakeCommandSeams.DEFAULTS
                 .withServeProperties(serveProperties)
