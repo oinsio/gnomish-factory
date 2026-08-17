@@ -1,0 +1,3 @@
+# The GitHub tracker provider, discovered exactly the way a third-party plugin jar is
+# (FR1, FR12, design D1/D7 of add-plugin-architecture) — no built-in shortcut.
+com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
