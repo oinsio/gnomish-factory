@@ -33,6 +33,7 @@ class ThreeProviderPlatformFixture {
     static final String REPO = 'acme/widgets'
     static final String WORKFLOW = 'ci.yml'
     static final String QUALITY_GATE = '/api/qualitygates/project_status'
+    static final String STUCK_QUALITY_GATE = '/api/qualitygates/stuck_status'
     static final String RUNS_PATH = "/repos/${REPO}/actions/workflows/${WORKFLOW}/runs"
     static final String GREEN_SHA = 'abc123'
     static final String RED_SHA = 'def456'
@@ -61,6 +62,7 @@ class ThreeProviderPlatformFixture {
         stubRun(RED_SHA, RED_RUN, 'failure')
         stubFailedJobs()
         stubQualityGate()
+        stubStuckQualityGate()
     }
 
     void stop() {
@@ -104,6 +106,22 @@ class ThreeProviderPlatformFixture {
                 Duration.ofMillis(50), Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY, [])
     }
 
+    /**
+     * The same SonarQube quality gate on an endpoint that never leaves {@code IN_PROGRESS}: the
+     * poll loop keeps waiting until the (deliberately tiny) timeout elapses, so the http provider's
+     * timeout really is driven end to end and classified by the check's own {@code timeoutClass}.
+     */
+    VerifyCheck.External stuckQualityGate(VerifyCheck.TimeoutClass timeoutClass) {
+        new VerifyCheck.External(
+                'stuck-gate', 'http',
+                [
+                    url: "https://127.0.0.1:${wireMock.httpsPort()}${STUCK_QUALITY_GATE}".toString(),
+                    'pass-when': ['json-path': 'projectStatus.status', equals: 'OK'],
+                    'pending-when': ['json-path': 'projectStatus.status', equals: 'IN_PROGRESS'],
+                ],
+                Duration.ofMillis(20), Duration.ofMillis(120), timeoutClass, [])
+    }
+
     static VerifyCheck.External actionsRun() {
         new VerifyCheck.External(
                 WORKFLOW, 'github', Duration.ofMillis(50), Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY)
@@ -136,5 +154,11 @@ class ThreeProviderPlatformFixture {
                 .willReturn(aResponse().withStatus(200).withBody('{"projectStatus":{"status":"IN_PROGRESS"}}')))
         wireMock.stubFor(get(url).inScenario(SCENARIO).whenScenarioStateIs('analysed')
                 .willReturn(aResponse().withStatus(200).withBody('{"projectStatus":{"status":"OK"}}')))
+    }
+
+    /** A quality gate stuck in analysis: every poll answers pending, so the loop can only time out. */
+    private void stubStuckQualityGate() {
+        wireMock.stubFor(get(urlEqualTo(STUCK_QUALITY_GATE))
+                .willReturn(aResponse().withStatus(200).withBody('{"projectStatus":{"status":"IN_PROGRESS"}}')))
     }
 }

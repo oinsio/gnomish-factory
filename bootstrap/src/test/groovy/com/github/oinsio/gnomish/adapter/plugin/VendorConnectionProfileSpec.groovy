@@ -199,6 +199,11 @@ tracker:
         expect: 'the declared set follows the profile, not the provider constant'
         declared == [RENAMED_CREDENTIAL]
 
+        and: 'and it is scrubbed from a composed child environment even when a layer carries it'
+        !ChildEnvAllowlist.of([], declared)
+        .compose([RENAMED_CREDENTIAL], [(RENAMED_CREDENTIAL): 'planted-token'])
+        .containsKey(RENAMED_CREDENTIAL)
+
         when: 'an operator tries to pass that very variable through to the gnome'
         ChildEnvAllowlist.of([RENAMED_CREDENTIAL], declared)
 
