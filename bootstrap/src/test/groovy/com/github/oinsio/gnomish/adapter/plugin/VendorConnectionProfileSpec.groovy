@@ -157,6 +157,34 @@ tracker:
         e.message.contains('declare exactly one form')
     }
 
+    // FR16, "An inline key the profile also defines is a located error": the check port's twin,
+    //     on the repo side — the same per-key verdict reaches the operator as a load error, not a
+    //     startup exception, because the offending subsection lives in the target repo's config.
+    def "declaring both the reference and an inline profile key in the tracker subsection is a located load error"() {
+        given: 'the tracker subsection re-inlines api-url, the very key the profile carries'
+        writeTree("""\
+tracker:
+  type: github
+  github:
+    connection: ${PROFILE}
+    api-url: https://ghe.acme.test
+    repo: acme/widgets
+""")
+
+        when:
+        def outcome = PipelineLoader.load(
+                gnomishRoot, trackerValidators(), [:], ConnectionProfiles.of(profileConfig()))
+
+        then: 'the error is located at the overlapping key, naming the profile it conflicts with'
+        outcome instanceof LoadOutcome.Invalid
+        def error = (outcome as LoadOutcome.Invalid).errors().find {
+            it.where() == 'tracker.github.api-url'
+        }
+        error.file() == 'config.yaml'
+        error.message().contains("declares both 'connection: ${PROFILE}'")
+        error.message().contains('declare exactly one form')
+    }
+
     // FR17, "Renamed credential in a profile is still scrubbed": the profile-supplied name enters
     //     the run's declared-credential set through the SPI, so passthrough refuses it exactly as it
     //     refuses a vendor's default constant — no core source names either.

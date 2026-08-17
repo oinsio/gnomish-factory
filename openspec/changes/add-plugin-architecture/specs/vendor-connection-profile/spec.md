@@ -41,19 +41,30 @@ carry the credential name only, never a credential value.
   default name would be
 
 ### Requirement: A connection profile reference is validated at load
-A subsection referencing an undefined profile name SHALL be a located config
-error naming the missing profile. A subsection SHALL declare exactly one of the
-two forms — inline connection keys or a `connection: <name>` reference;
-declaring both or neither SHALL be a located config error.
+Core SHALL grade the `connection:` reference itself, and only it: a blank or
+non-string reference and a name no `factory.connections` profile defines SHALL
+each be a located config error. A referencing subsection MAY still declare
+inline keys the profile does not define — they overlay the profile (design D8)
+— but each inline key the referenced profile also defines SHALL be a located
+config error of its own, naming that key. A subsection declaring *neither*
+form is not a core-level error: what it is missing only the provider knows, so
+it stays that provider's own missing-key validation error.
 <!-- implements FR16 of add-plugin-architecture -->
 
 #### Scenario: Undefined profile name is a located error
 - **WHEN** a port subsection declares `connection: <name>` and no
   `factory.connections.<name>` profile exists
-- **THEN** loading fails with a located error naming the missing profile
+- **THEN** loading fails with a located error naming the missing profile and
+  listing the profiles that are defined
 
-#### Scenario: Ambiguous connection declaration is a located error
-- **WHEN** a subsection declares both a `connection:` reference and inline
-  endpoint keys, or neither
-- **THEN** validation reports a located error identifying the subsection and
-  the conflict
+#### Scenario: An inline key the profile also defines is a located error
+- **WHEN** a subsection declares a `connection:` reference and, inline, a key
+  the referenced profile also carries
+- **THEN** validation reports a located error at that key, identifying the
+  subsection, the profile and the conflict
+
+#### Scenario: A non-overlapping inline key overlays the profile
+- **WHEN** a subsection declares a `connection:` reference plus an inline key
+  the referenced profile does not define
+- **THEN** loading succeeds and the provider is handed the profile's keys with
+  the subsection's own overlaid, the reference key itself dropped
