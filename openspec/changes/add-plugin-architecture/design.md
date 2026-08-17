@@ -75,14 +75,17 @@ rejected:* a standalone `ServiceLoader` SPI per validator — a second registry 
 port that can drift from the factory registry, and it would force a
 discriminator onto the plain functional `TrackerSubsectionValidator`.
 
-**D4 — Q8 resolved: `pass_when` supports both jsonPath and regex (FR10).**
-The http verdict language accepts a `pass_when` with an optional `jsonPath`
+**D4 — Q8 resolved: `pass-when` supports both `json-path` and regex (FR10).**
+The http verdict language accepts a `pass-when` with an optional `json-path`
 selector, an optional `regex` extraction, and an `equals` comparison; default is
-HTTP 2xx. Both extractors are offered because CI/quality REST APIs split between
-JSON status bodies (jsonPath) and plain-text/heterogeneous bodies (regex);
-supporting only one would force an adapter for the other. `pending_when` uses the
+HTTP 2xx. The `json-path` dialect is a deliberate subset of JSONPath — an
+optional `$` root, dot-separated field names, `[n]` array indexes — implemented
+over Jackson, not a full JSONPath engine. Both extractors are offered because
+CI/quality REST APIs split between JSON status bodies (`json-path`) and
+plain-text/heterogeneous bodies (regex); supporting only one would force an
+adapter for the other. `pending-when` uses the
 same extractor grammar to detect a non-terminal state and drives the reused
-`External` poll loop; absent `pending_when` = a one-shot probe. *Alternative
+`External` poll loop; absent `pending-when` = a one-shot probe. *Alternative
 rejected:* jsonPath-only — excludes non-JSON endpoints; regex-only — brittle on
 structured JSON. *Alternative rejected:* a full expression DSL — over-built for a
 pass/pending predicate.
@@ -133,8 +136,10 @@ port's subsection, rather than duplicating connection + creds per port. The
 profile lives in operator config (`factory.connections.<name>`: endpoint,
 credential name — the operator owns credentials); a port subsection — the
 repo-side `tracker.github` or the factory-side `factory.check.github` —
-references it as `connection: <name>` instead of inlining those keys, declaring
-exactly one of the two forms. Each port still selects its provider independently
+references it as `connection: <name>` instead of inlining those keys. A
+referencing subsection may still declare inline keys the profile does not
+define — they overlay it — but an inline key the referenced profile also
+defines is ambiguous and is a load error per overlapping key. Each port still selects its provider independently
 (D1); they simply share a named connection profile. A profile carries the
 credential *name* only, never a value; how a profile-resolved name reaches the
 child-environment scrub set is D11, and how a `connection:` reference is
@@ -211,12 +216,15 @@ port. For the check port the manifest-side `params` are covered by
 subsection gets its own validator exposed by the same factory —
 `subsectionValidator()`, symmetric to
 `TrackerAdapterFactory.subsectionValidator()` — validating the connection form
-(exactly one of inline keys or `connection: <name>`, D8) and the provider's
-own keys. Because a `connection:` reference can appear in the repo-side
-`tracker.github` subsection while profiles live in operator config, subsection
-validators receive the set of defined profile names alongside the subsection
-content; the composition root hands that set to the loader, so an undefined
-reference is a located load error aggregated with the rest
+(a well-formed `connection: <name>` reference with no inline key overlapping
+the referenced profile, D8) and the provider's own keys. Because a
+`connection:` reference can appear in the repo-side `tracker.github`
+subsection while profiles live in operator config, subsection validators
+receive the defined profiles as a `ConnectionProfiles` value — names for
+reporting an undefined reference, content for detecting overlapping keys —
+alongside the subsection content; the composition root hands that value to the
+loader, so an undefined reference is a located load error aggregated with the
+rest
 (vendor-connection-profile capability), never a first-use failure.
 *Rationale:* validation stays at the seam that already aggregates located
 `ConfigError`s, and the cross-source knowledge — which profiles exist —
@@ -251,9 +259,34 @@ All four questions carried into this change are resolved:
 - **Q4** — Resolved by D6: trusted-classpath posture + startup observability; no
   isolation now (NG3, NG5).
 - **Q6** — Resolved by D8: shared per-vendor connection block, per-port selection.
-- **Q8** — Resolved by D4: `pass_when` supports both jsonPath and regex, with
-  `pending_when` reusing the same grammar.
+- **Q8** — Resolved by D4: `pass-when` supports both `json-path` (a deliberate
+  JSONPath subset) and regex, with `pending-when` reusing the same grammar.
 
 Residual (not blocking): whether a later change adds signed-jar verification once
 genuinely third-party (non-first-party) providers appear — tracked with ai-provider
 pluginization (proposal NG1).
+
+Residual (not blocking): G4's "built-in path ≡ third-party path" is proven for the
+*loading* mechanism (ServiceLoader discovery, jar removal without core changes —
+FR12, M2) but not for *compilability*: `adapters/github` still declares
+`implementation project(':application')` for two types a genuine third-party
+bundle cannot reach (recorded as a group-6 deviation in tasks.md; task 7.3 did
+not resolve it). The two gaps differ in kind:
+
+- `AttemptCommitWorkspace` (`app.workspace`) — a **contract defect**: the check
+  SPI accepts the api's `Workspace`, but the protocol requires a downcast to this
+  hidden `:application` type to read the attempt-commit sha, so a third-party
+  external check cannot learn which commit it verifies. Same shape as the Gradle
+  internal-API anti-pattern.
+- `FindingsSanitizer` (`app.findings`) — an **SDK-completeness gap**: log
+  strip/cap is a security invariant every check plugin should apply before
+  findings reach the tracker, but only first-party code can.
+
+Recommended resolution (a follow-up change, since it grows the api surface and
+re-baselines japicmp): publish a minimal `AttemptCommitWorkspace` *interface*
+(`attemptCommitSha()`) in `gnomish-plugin-api` with the record in `:application`
+implementing it; move `FindingsSanitizer` (dependency-free) into the api as a
+contract utility; then drop the `:application` edge from `adapters/github` and
+its `layering.allowedProjects`, and extend `gnomish-plugin-api:sample` with a
+`CheckClientFactory` implementation so "compiles against the api alone" is
+enforced by the build, not prose.

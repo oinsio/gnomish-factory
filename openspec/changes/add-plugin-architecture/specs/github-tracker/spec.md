@@ -6,9 +6,11 @@ The adapter SHALL declare and validate its `tracker.github` subsection:
 `labels.{ready,working,needs-human,delivered}` as `{name, color}` objects with
 hex color validation. In place of the inline `api-url`, the subsection MAY
 reference a named operator-config connection profile as `connection: <name>`,
-resolving the endpoint and the token's credential name from the profile;
-exactly one of the two forms SHALL be declared (the vendor-connection-profile
-capability). Validation SHALL aggregate errors and fail fast at load,
+resolving the endpoint and the token's credential name from the profile (the
+vendor-connection-profile capability). A referencing subsection MAY still
+declare inline keys the referenced profile does not define — they overlay the
+profile — but declaring an inline key the referenced profile also defines is
+ambiguous and SHALL be a load error, one per overlapping key. Validation SHALL aggregate errors and fail fast at load,
 consistent with pipeline-config error reporting. The token SHALL be resolved
 through the `SecretsProvider` port by name — never from yaml and never read
 from process env directly; the env/file adapter backs the name with
@@ -32,7 +34,13 @@ never be admitted into a child-environment allowlist.
 - **WHEN** `tracker.github` declares `connection: <name>` and the operator
   config defines that profile
 - **THEN** the adapter resolves the endpoint and the token's credential name
-  from the profile, and the subsection carries no duplicated connection keys
+  from the profile; inline keys the profile does not define overlay it
+
+#### Scenario: Overlapping inline key alongside a profile reference is a load error
+- **WHEN** `tracker.github` declares `connection: <name>` and, inline, a key
+  the referenced profile also defines
+- **THEN** loading fails with a located error per overlapping key, naming both
+  the reference and the ambiguous inline key
 
 #### Scenario: Token stays out of the gnome
 - **WHEN** a stage executes via the agent CLI while a tracker task is being worked

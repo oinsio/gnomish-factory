@@ -13,31 +13,36 @@ endpoint without writing an adapter.
 - **THEN** the engine resolves the built-in http check client from the registry —
   the same resolution path used for github or any third-party provider
 
-### Requirement: The http verdict is a declarative pass_when, with optional pending_when polling
-The http check verdict SHALL be declared, not coded: a `pass_when` condition —
-HTTP 2xx by default, optionally narrowed by a jsonPath and/or regex extraction
-compared with `equals` — decides pass versus fail. An optional `pending_when`
+### Requirement: The http verdict is a declarative pass-when, with optional pending-when polling
+The http check verdict SHALL be declared, not coded: a `pass-when` condition —
+HTTP 2xx by default, optionally narrowed by a `json-path` and/or `regex`
+extraction compared with `equals` — decides pass versus fail. The `json-path`
+dialect is a deliberate subset of JSONPath — an optional `$` root,
+dot-separated field names, and `[n]` array indexes (e.g.
+`$.projectStatus.conditions[0].status`) — not a full JSONPath engine; anything
+the subset cannot address is `regex` territory. An optional `pending-when`
 condition SHALL mark a response as not-yet-terminal, causing the check to poll
 (reusing the `External` poll loop, `interval` / `timeout`) until a terminal
-result or the timeout. A check with no `pending_when` is a one-shot probe — a
+result or the timeout. A check with no `pending-when` is a one-shot probe — a
 degenerate poll of a single request.
 <!-- implements FR10 of add-plugin-architecture -->
 
 #### Scenario: One-shot probe passes on 2xx
-- **WHEN** an http check declares only a `pass_when` of the default 2xx and the
+- **WHEN** an http check declares only a `pass-when` of the default 2xx and the
   endpoint returns 200
 - **THEN** the check passes after a single request, performing no polling
 
-#### Scenario: pass_when narrows on an extracted value
-- **WHEN** an http check's `pass_when` extracts a field (jsonPath and/or regex)
+#### Scenario: pass-when narrows on an extracted value
+- **WHEN** an http check's `pass-when` extracts a field (`json-path` and/or
+  `regex`)
   and compares it with `equals`
 - **THEN** the check passes only when the extracted value equals the declared one,
   and fails with the response captured as findings otherwise
 
-#### Scenario: pending_when polls until terminal
-- **WHEN** an http check declares a `pending_when` that matches the response
+#### Scenario: pending-when polls until terminal
+- **WHEN** an http check declares a `pending-when` that matches the response
 - **THEN** the check polls at `interval` until the response no longer matches
-  `pending_when`, then evaluates `pass_when`
+  `pending-when`, then evaluates `pass-when`
 - **AND** reaching `timeout` while still pending classifies per the check's
   timeout class, reusing the `External` timeout semantics
 

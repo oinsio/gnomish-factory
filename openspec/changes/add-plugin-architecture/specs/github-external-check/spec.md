@@ -9,8 +9,11 @@ Actions adapter with configuration alone, no code changes. In place of the
 inline base URL and token name, the check subsection MAY reference a named
 operator-config connection profile as `connection: <name>` — the same profile
 the github tracker may reference, so one vendor keeps a single
-connection/credentials block; exactly one of the two forms SHALL be declared
-(the vendor-connection-profile capability). The env/file
+connection/credentials block (the vendor-connection-profile capability). A
+referencing subsection MAY still declare inline keys the referenced profile
+does not define — they overlay the profile — but declaring an inline key the
+referenced profile also defines is ambiguous and SHALL be a load error, one
+per overlapping key. The env/file
 adapter backs the token name with `GNOMISH_GITHUB_ACTIONS_TOKEN`,
 replacing the provisional direct env read; the adapter SHALL declare
 that name — through the check SPI's connection-aware credential
