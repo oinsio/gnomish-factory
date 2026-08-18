@@ -59,9 +59,13 @@ a transitive `api` dependency.
 `gnomish-plugin-api` SHALL be independently versioned by semver; the semver
 surface is the api module plus the `domain` types it exposes transitively.
 Changes to `application` internals or to `domain` types not exposed through the
-api SHALL NOT require an api version bump; in this change japicmp tracks the
-surface in report-only mode.
+api SHALL NOT require an api version bump. The japicmp check SHALL run as a
+failing gate — flipped from report-only now that the first external consumer
+exists — armed against the baseline this change ships (the surface including
+the check SPI and the tracker SPI additions), breaking the build on an
+incompatible api change.
 <!-- implements FR5 of split-into-modules -->
+<!-- implements FR14 of add-plugin-architecture -->
 
 #### Scenario: Internal refactor leaves the api version untouched
 - **WHEN** an `application` or unexposed `domain` internal is refactored without
@@ -70,8 +74,13 @@ surface in report-only mode.
 
 #### Scenario: An exposed domain type change surfaces in the japicmp report
 - **WHEN** a `domain` type exposed through the api's ports changes incompatibly
-- **THEN** the japicmp report records the change against the baseline (the
-  failing gate arrives in change B)
+- **THEN** the japicmp report records the change against the baseline
+
+#### Scenario: An incompatible api change breaks the build
+- **WHEN** a type exposed by `gnomish-plugin-api` — or a `domain` type it
+  exposes transitively — changes incompatibly against the japicmp baseline
+- **THEN** the build fails at the japicmp gate naming the incompatible change,
+  not merely a report entry
 
 ### Requirement: Secrets reached only through the api port
 Module boundaries SHALL prevent adapters from reaching secrets internals except
