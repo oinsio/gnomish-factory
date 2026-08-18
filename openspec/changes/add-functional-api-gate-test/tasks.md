@@ -3,8 +3,8 @@
 ## 1. Extract the gate convention (FR7, D1)
 
 - [ ] 1.1 Create `build-logic/src/main/groovy/api-compatibility-gate-conventions.gradle`: move the japicmp block from `published-api-conventions.gradle` verbatim — api surface definition, committed-baseline wiring, `apiBaselineVersion` override configuration, `updateApiCompatibilityBaseline`, `japicmpApiGate`, `check` wiring — with `plugins { id 'java-library'; id 'me.champeau.gradle.japicmp' }` as its only prerequisites
-- [ ] 1.2 Slim `published-api-conventions.gradle` to publication + semver verification, applying `api-compatibility-gate-conventions`; confirm both files are ≤120 lines (M3)
-- [ ] 1.3 Run root `check` — `:gnomish-plugin-api:japicmpApiGate` still passes against the real committed baseline; `updateApiCompatibilityBaseline` produces an identical baseline (no diff)
+- [ ] 1.2 Slim `published-api-conventions.gradle` to publication + semver verification, applying `api-compatibility-gate-conventions` and dropping the now-redundant `me.champeau.gradle.japicmp` id from its `plugins` block; confirm both files are ≤120 lines (M3)
+- [ ] 1.3 Run root `check` — `:gnomish-plugin-api:japicmpApiGate` still passes against the real committed baseline; `updateApiCompatibilityBaseline` produces an identical baseline (no diff). Precondition: `close-plugin-api-compilability-gap`'s re-baseline is landed, else "no diff" cannot hold
 
 ## 2. functionalTest suite wiring (FR1, FR9, D2)
 
@@ -14,17 +14,17 @@
 ## 3. Functional gate spec (FR2–FR6, D3, D4)
 
 - [ ] 3.1 Spec scaffolding in `build-logic/src/functionalTest/groovy/`: `setupSpec` writes the inline mini project (settings, build applying `api-compatibility-gate-conventions`, one public Java class, no repositories) into a temp dir; header documents the deliberate scenario ordering (D4)
-- [ ] 3.2 FR6: run `updateApiCompatibilityBaseline` in the fixture — baseline jars appear; a following `japicmpApiGate` run passes
-- [ ] 3.3 FR2: remove a public method from the fixture source — `buildAndFail()` on the gate; output names a binary incompatibility; assert the japicmp detail is surfaced in the failure (NFR-O1)
+- [ ] 3.2 FR6: run `updateApiCompatibilityBaseline` in the fixture — baseline jars appear; a following `japicmpApiGate` run passes. Run this first fixture build with `--offline` so a hermeticity failure (NFR-R1) surfaces before the remaining scenarios are written
+- [ ] 3.3 FR2: remove a public method from the fixture source — `buildAndFail()` on the gate; output names a binary incompatibility; surface the japicmp detail by reading the fixture's `build/reports/japicmp/api-compatibility.txt` and including it in the assertion message (NFR-O1)
 - [ ] 3.4 FR3: restore the method and add a new public method — gate passes without re-baselining
-- [ ] 3.5 FR4: empty the fixture's baseline dir — gate fails with the "cannot be armed" message; re-arm via `updateApiCompatibilityBaseline` afterwards
-- [ ] 3.6 FR5: run `check` on the fixture — `japicmpApiGate` outcome is SUCCESS (not SKIPPED, not absent)
+- [ ] 3.5 FR4: empty the fixture's baseline dir — gate fails with the arming error (the "No API compatibility baseline ... the gate cannot run" message); re-arm via `updateApiCompatibilityBaseline` afterwards
+- [ ] 3.6 FR5: invalidate the gate's outputs (delete the fixture's `build/reports/japicmp`), then run `check` on the fixture — `japicmpApiGate` outcome is SUCCESS (not SKIPPED, not UP-TO-DATE, not absent)
 - [ ] 3.7 NFR-R1: run the suite with `--offline` — green; NFR-P1: record suite wall-time, confirm ≤ ~2 min cold
 
 ## 4. Retire the textual assertions (FR8, D5)
 
 - [ ] 4.1 In `ApiCompatibilityGateSpec`, delete the "armed to fail, not to report" feature method and `conventionFile()`; add a single data-shaped assertion that `gnomish-plugin-api/build.gradle` applies `published-api-conventions`
-- [ ] 4.2 Rewrite the spec's javadoc: manual task-7.3 verification paragraph replaced by a pointer to the functional suite; confirm M2 (`grep` finds no assertion on `*.gradle` text in the spec)
+- [ ] 4.2 Rewrite the spec's javadoc: manual task-7.3 verification paragraph replaced by a pointer to the functional suite, keeping the FR14/M5 traceability references of `add-plugin-architecture` intact; confirm M2 (`grep` finds no assertion on `*.gradle` text in the spec)
 
 ## 5. Verification (M1–M3)
 

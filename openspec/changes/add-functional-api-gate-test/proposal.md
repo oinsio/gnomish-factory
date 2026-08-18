@@ -83,10 +83,12 @@ _None._
   relative to the baseline does not fail the gate (an addition is a MINOR bump, not a
   re-baseline event).
 - FR4: the suite SHALL prove the arming precondition: with an empty baseline directory the
-  gate fails with the "cannot be armed" error rather than silently passing.
+  gate fails with the arming error — the message stating the gate cannot run without a
+  baseline — rather than silently passing.
 - FR5: the suite SHALL prove participation in `check`: running `check` on the mini project
-  executes the gate task with outcome SUCCESS — not SKIPPED, not absent — so an
-  `onlyIf { false }` or a dropped `dependsOn` fails the test.
+  executes the gate task with a successful outcome — not SKIPPED, not absent — so an
+  `onlyIf { false }` or a dropped `dependsOn` fails the test; the spec invalidates the
+  gate's outputs beforehand so the asserted outcome is SUCCESS, not UP-TO-DATE.
 - FR6: the suite SHALL prove the baseline workflow: `updateApiCompatibilityBaseline`
   regenerates the baseline from the current surface, after which the previously failing
   gate passes.
@@ -95,7 +97,7 @@ _None._
   minimal prerequisites — not the full `library-conventions` chain (Spotless, Error Prone,
   PIT, toolchain).
 - FR8: the text-matching feature method of `ApiCompatibilityGateSpec` SHALL be removed;
-  the spec keeps the two baseline-data checks and MAY keep a single assertion that
+  the spec SHALL keep the two baseline-data checks and a single assertion that
   `:gnomish-plugin-api` applies the published-api convention (data of the repo, not
   behavior of the gate).
 - FR9: `functionalTest` SHALL run as part of `:build-logic:check` and therefore in CI's
@@ -145,6 +147,8 @@ involved — none apply.)
 
 - `build-logic/build.gradle`: new `functionalTest` suite wiring, `gradleTestKit()` and
   Spock dependencies for it.
+- `build-logic/gradle.lockfile` and the new suite's lock state: refreshed for the
+  `functionalTest` configurations.
 - `build-logic/src/main/groovy/published-api-conventions.gradle`: gate block moves out;
   applies the new convention instead.
 - `build-logic/src/main/groovy/<gate convention>.gradle`: new file (name decided in
@@ -153,3 +157,6 @@ involved — none apply.)
 - `bootstrap/src/test/groovy/.../ApiCompatibilityGateSpec.groovy`: textual feature method
   removed, javadoc updated to point at the functional suite.
 - No production module behavior changes; `:gnomish-plugin-api` build result is identical.
+- Sequencing: apply after `close-plugin-api-compilability-gap` lands — task 1.3 asserts
+  that `updateApiCompatibilityBaseline` regenerates an identical baseline, which holds
+  only against that change's re-baselined jars.

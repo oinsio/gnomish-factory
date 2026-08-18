@@ -25,7 +25,8 @@ proxy for the gate's behavior.
 
 #### Scenario: An absent baseline fails as unarmed, not as passing
 - **WHEN** the gate task runs with an empty baseline directory
-- **THEN** the build fails with the error stating the gate cannot be armed
+- **THEN** the build fails with the arming error stating the gate cannot run
+  without a baseline
 <!-- implements FR4 of add-functional-api-gate-test -->
 
 #### Scenario: The gate executes as part of check
