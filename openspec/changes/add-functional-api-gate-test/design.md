@@ -35,7 +35,10 @@ exercises the full chain on every root `check`.
 Declared via `testing.suites` with `gradleTestKit()` and the Groovy/Spock
 dependencies, registered in `gradlePlugin.testSourceSets` so
 `GradleRunner.withPluginClasspath()` injects the precompiled plugins, and wired
-into `:build-logic:check` (FR1, FR9). Spock, not JUnit, because the whole
+into `:build-logic:check` (FR1, FR9). Because `build-logic` is an included
+build whose tasks the root never invokes on its own, the root `check` also
+gains a `dependsOn` on the included build's `:check` — otherwise FR9's
+"therefore in CI" clause would not hold. Spock, not JUnit, because the whole
 project tests in Spock and data-driven feature methods fit the
 scenario-per-arming-aspect shape.
 *Rationale:* this is the layout Gradle's plugin-development plugin integrates
@@ -84,6 +87,27 @@ checked as data; "convention Y bites" is behavior, now checked behaviorally.
 *Alternative rejected:* deleting the spec entirely — the baseline-data checks
 guard against a hollowed-out committed baseline, which the fixture-based suite
 cannot detect.
+
+**D6 — The mini project declares `mavenCentral()` and every fixture build runs
+`--offline` against the outer build's Gradle user home.**
+`JapicmpTask` resolves its worker's JAXB and Guava runtime at execution time
+from the *consuming* project's repositories, from coordinates hardcoded in the
+plugin (`resolveJaxb` / `resolveGuava`, 0.4.6) — no task property overrides
+them, and TestKit's injected plugin classpath does not satisfy them. A fixture
+with no repositories therefore fails the gate task on resolution, not on
+compatibility (observed while applying task 3.2, which is why that task runs the
+first fixture build `--offline`). So `build-logic` pre-resolves exactly those
+coordinates in an unlocked `japicmpWorkerRuntime` configuration declared as an
+input of `functionalTest`, and the runner passes `-g <outer gradle user home>`
+plus `--offline`: the artifacts are in that cache before any scenario starts and
+nothing is fetched while one runs (NFR-R1's outcome, not its original wording —
+the requirement text was corrected).
+*Alternative rejected:* materialising the worker runtime into a local
+flat/metadata-less repository inside the fixture — Gradle drops transitives for
+such repositories, so the worker classpath would silently lose modules and fail
+in a way unrelated to the gate.
+*Alternative rejected:* leaving the fixture online — the suite would then flake
+on network resolution, which NFR-R1 exists to prevent.
 
 ## Risks / Trade-offs
 

@@ -108,9 +108,12 @@ _None._
 - NFR-P1: the functional suite SHALL keep setup shared (one compiled fixture and baseline
   reused across feature methods where possible) and add no more than ~2 minutes to a cold
   root `check`; TestKit builds are whole-Gradle invocations and must not multiply.
-- NFR-R1: the suite SHALL be hermetic: the mini project resolves plugins and japicmp from
-  the TestKit plugin classpath and declares no remote repositories, so tests pass offline
-  and cannot flake on network resolution.
+- NFR-R1: the suite SHALL be hermetic: no scenario SHALL fetch anything over the network,
+  so the suite passes offline and cannot flake on resolution. The convention plugins arrive
+  through the TestKit plugin classpath; japicmp's worker runtime — which the plugin resolves
+  from the CONSUMING project by hardcoded coordinates, so the plugin classpath cannot cover
+  it (design D6) — is pre-resolved by the outer build and read from its cache, with every
+  fixture build run `--offline`.
 - NFR-O1: on gate failure inside the mini build, the test failure message SHALL surface
   the underlying japicmp output (the named incompatible member), so a broken run is
   diagnosable from the CI log alone.
@@ -132,8 +135,10 @@ involved — none apply.)
   `onlyIf { false }` to the gate task, or removing the `check` wiring) makes
   `:build-logic:functionalTest` fail — verified once for each of the three mutations
   during implementation.
-- M2: `grep` finds no assertion on the text of `*.gradle` files in
-  `ApiCompatibilityGateSpec` after the change.
+- M2: `grep` finds no assertion on the text of convention scripts under `build-logic`
+  in `ApiCompatibilityGateSpec` after the change; the spec's single remaining `.gradle`
+  read is the data-shaped FR8 check that `gnomish-plugin-api/build.gradle` applies the
+  published-api convention.
 - M3: `published-api-conventions.gradle` and the extracted gate convention are each within
   the project file-size target (≤120 lines).
 
@@ -147,6 +152,9 @@ involved — none apply.)
 
 - `build-logic/build.gradle`: new `functionalTest` suite wiring, `gradleTestKit()` and
   Spock dependencies for it.
+- root `build.gradle`: `check` gains a dependency on the included build's `:check` —
+  `build-logic` is an included build, so its verification (and with it the functional
+  suite, FR9) never runs under CI's root `check` without this edge.
 - `build-logic/gradle.lockfile` and the new suite's lock state: refreshed for the
   `functionalTest` configurations.
 - `build-logic/src/main/groovy/published-api-conventions.gradle`: gate block moves out;

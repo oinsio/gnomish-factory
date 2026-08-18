@@ -15,12 +15,15 @@ import spock.lang.Specification
  * because a check that silently skips whenever its baseline is unavailable is a report with extra
  * steps, not a gate.
  *
- * <p>What this spec pins is the arming, in the two halves that can rot independently: the baseline
- * jars exist and really carry this change's SPI surface, and the convention that consumes them is
- * configured to FAIL rather than report. The gate's own bite — a deliberately incompatible change
- * breaking the build — is japicmp's behavior over that configuration, verified against these very
- * artifacts while applying task 7.3 (removing {@code CheckClientFactory.provider()} fails
- * {@code japicmpApiGate} with "Detected binary changes"; restoring it passes).
+ * <p>What this spec pins is repository DATA the gate depends on and nothing else: the committed
+ * baseline jars exist and really carry this change's SPI surface, and this module is under the
+ * convention that carries the gate. The gate's own arming and bite — an incompatible change failing
+ * the build, an addition passing, an empty baseline failing as unarmed, the gate running under
+ * {@code check} — are behavior, and are proven by executing the gate convention in an isolated
+ * TestKit build: {@code build-logic}'s {@code ApiCompatibilityGateFunctionalSpec} (FR1-FR6 of
+ * add-functional-api-gate-test), which runs on every {@code :build-logic:check}. Nothing here
+ * asserts the text of a convention script any more: that verified wording, not behavior, and broke
+ * on harmless refactors while missing real disarming (FR8).
  *
  * <p>Lives in {@code :bootstrap} for the same reason as {@link ModuleBuildFileSpec}: it is a
  * whole-tree gate, and this is the module whose {@code test} task wires {@code repoRoot} and
@@ -73,22 +76,15 @@ class ApiCompatibilityGateSpec extends Specification {
         SHIPPED_SPI.every { entries.contains(it) }
     }
 
-    // M5: the flip itself. Report-only wording and non-failing flags are exactly what this change
-    //     supersedes, so they must not survive in the convention that runs on every `check`.
-    def "the published-api convention is armed to fail, not to report"() {
+    // M5, FR8 of add-functional-api-gate-test: the module really is under the convention that
+    //     carries the gate. Which is a fact about this build file — data; that the gate BITES is
+    //     behavior, proven by executing it (see the javadoc above).
+    def "the published api module applies the published-api convention"() {
         given:
-        def convention = conventionFile().text
+        def buildFile = publishedApiBuildFile().text
 
-        expect: 'binary-incompatible changes fail the build'
-        convention.contains('failOnModification = true')
-        convention.contains('onlyBinaryIncompatibleModified = true')
-
-        and: 'the gate runs as part of check, under a name that says what it does'
-        convention.contains("dependsOn tasks.named('japicmpApiGate')")
-
-        and: 'the superseded report-only arming is gone'
-        !convention.contains('failOnModification = false')
-        !convention.contains('japicmpReport')
+        expect:
+        buildFile =~ /id 'published-api-conventions'/
     }
 
     private static List<File> baselineJars() {
@@ -103,8 +99,8 @@ class ApiCompatibilityGateSpec extends Specification {
         }
     }
 
-    private static File conventionFile() {
-        def file = repoRoot().resolve('build-logic/src/main/groovy/published-api-conventions.gradle')
+    private static File publishedApiBuildFile() {
+        def file = repoRoot().resolve('gnomish-plugin-api/build.gradle')
         assert Files.isRegularFile(file): "missing ${file}"
         file.toFile()
     }

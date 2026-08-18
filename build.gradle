@@ -148,3 +148,13 @@ tasks.register('installGitHooks', Copy) {
 tasks.named('check') {
     dependsOn tasks.named('installGitHooks')
 }
+
+// FR9 of add-functional-api-gate-test: `build-logic` is an INCLUDED build, so
+// none of its verification runs unless the root asks for it — CI invokes
+// `./gradlew check` and nothing else. Without this edge the TestKit suite that
+// proves the api-compatibility gate still bites would only ever run when someone
+// remembered `./gradlew -p build-logic check`, which is precisely the "verified
+// once, manually" failure this change removes.
+tasks.named('check') {
+    dependsOn gradle.includedBuild('build-logic').task(':check')
+}
