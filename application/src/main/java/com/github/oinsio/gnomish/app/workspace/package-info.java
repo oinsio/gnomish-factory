@@ -3,7 +3,7 @@
  * the run hands to check runners and console adapters: {@link
  * com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace} (host mode — the operator-supplied
  * {@code --dir} directory, exposing its root path) and {@link
- * com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace} (sandboxed mode — the
+ * com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace} (sandboxed mode — the
  * {@code AttemptCommitRef} naming the round's harvested attempt commit). The domain never
  * inspects a workspace (design D1); consumers downcast to the variant their mode implies.
  *

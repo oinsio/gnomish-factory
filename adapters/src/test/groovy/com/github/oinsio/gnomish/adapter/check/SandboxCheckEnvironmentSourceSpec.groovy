@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -42,7 +42,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
     private static Workspace attemptWorkspace() {
         def ref = new AttemptCommitRef()
         ref.record(SHA)
-        new AttemptCommitWorkspace(ref)
+        new RecordedAttemptCommitWorkspace(ref)
     }
 
     private static EnvironmentLease leased(TaskExecutionEnvironment env) {

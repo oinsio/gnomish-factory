@@ -25,6 +25,12 @@ dependencies {
     // and judge environment sources) and the value model they are drawn in.
     api project(':application')
     api project(':domain')
+    // `FindingsSanitizer`, which the judge verdict extractor strips its message
+    // text with. Declared directly since close-plugin-api-compilability-gap moved
+    // the utility into the published contract (FR2): it used to arrive through
+    // `:application`. `implementation` — it is applied inside this module, never
+    // on its signatures.
+    implementation project(':gnomish-plugin-api')
     // The coarse adapter remainder, for the frozen pipeline law and the
     // briefing sections the prompt builders render (D1's "pass 2 decides
     // whether `:adapters:agent` depends on the coarse module or the two move

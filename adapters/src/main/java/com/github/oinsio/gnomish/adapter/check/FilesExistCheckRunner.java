@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.pipeline.PathSafety;
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
@@ -29,7 +29,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Two legs, one runner for every environment adapter (FR21, D15 of
  * add-sandbox-core): over a {@link DirectoryWorkspace} (host modes) existence
- * is the workspace filesystem, as today; over an {@link AttemptCommitWorkspace}
+ * is the workspace filesystem, as today; over an {@link RecordedAttemptCommitWorkspace}
  * (sandboxed mode) existence is answered from the harvested attempt commit's
  * tree via bare git object reads in the factory clone — no environment access,
  * so uncommitted box residue never counts. The factory-clone reader is bound
@@ -78,7 +78,7 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
             return new Verdict.CannotVerify(e.reason(), "");
         }
 
-        if (workspace instanceof AttemptCommitWorkspace attemptWorkspace) {
+        if (workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace) {
             return runAgainstAttemptCommit(files, attemptWorkspace);
         }
         if (!(workspace instanceof DirectoryWorkspace directoryWorkspace)) {
@@ -108,7 +108,7 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
      * tree-path validation (absolute, {@code ..}, {@code .git}) is the sandboxed twin of the
      * host leg's workspace-escape refusal.
      */
-    private Verdict runAgainstAttemptCommit(List<String> files, AttemptCommitWorkspace workspace) {
+    private Verdict runAgainstAttemptCommit(List<String> files, RecordedAttemptCommitWorkspace workspace) {
         if (attemptReader == null) {
             return new Verdict.CannotVerify(
                     "files_exist has no factory-clone reader bound for the sandboxed workspace", "");

@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -27,10 +27,10 @@ class FreshJudgeEnvironmentsSpec extends Specification {
         }, 'gnomish/task-1')
     }
 
-    private static AttemptCommitWorkspace workspaceAt(String sha) {
+    private static RecordedAttemptCommitWorkspace workspaceAt(String sha) {
         def ref = new AttemptCommitRef()
         ref.record(sha)
-        new AttemptCommitWorkspace(ref)
+        new RecordedAttemptCommitWorkspace(ref)
     }
 
     def "a vote's environment is fresh and materialized from the attempt commit"() {

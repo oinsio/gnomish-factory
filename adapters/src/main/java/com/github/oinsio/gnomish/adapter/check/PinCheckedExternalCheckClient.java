@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * union of the stage law's declared {@link VerifyCheck.External#pinPaths()} and the
  * {@link ExternalCheckPinContributor}'s adapter contribution; comparison reads both sides
  * as bare git objects in the factory clone ({@link GitObjects}, D11) — the base branch tip
- * versus the harvested attempt commit carried by the {@link AttemptCommitWorkspace}.
+ * versus the harvested attempt commit carried by the {@link RecordedAttemptCommitWorkspace}.
  *
  * <p>Outcomes: an empty union passes vacuously and the poll goes straight through (the
  * interactive client with nothing declared); any difference — changed bytes, a path added
@@ -67,7 +67,7 @@ public record PinCheckedExternalCheckClient(
             return delegate.poll(check, workspace);
         }
 
-        if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
+        if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return new PollStatus.CannotVerify(
                     "pin-check requires the attempt-commit workspace",
                     "external check '" + check.checkId() + "' declares pin paths " + pins

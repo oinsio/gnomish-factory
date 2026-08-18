@@ -14,17 +14,13 @@ class HttpExternalCheckClientContractSpec extends ExternalCheckClientContract im
     @Override
     protected Optional<PollStatus> arrange(PollVariant variant) {
         Optional.of(switch (variant) {
-                    case PollVariant.PASS -> poll([url: URL], new HttpCheckFixture.ScriptedExchange(200, 'ok'))
-                    case PollVariant.FAIL_WITH_FINDINGS -> poll([url: URL], new HttpCheckFixture.ScriptedExchange(500, 'boom'))
+                    case PollVariant.PASS -> poll([url: URL], new ScriptedExchange(200, 'ok'))
+                    case PollVariant.FAIL_WITH_FINDINGS -> poll([url: URL], new ScriptedExchange(500, 'boom'))
                     case PollVariant.RUNNING -> poll(
                             [url: URL, ('pending-when'): [('json-path'): 'state', equals: 'RUNNING']],
-                            new HttpCheckFixture.ScriptedExchange(200, '{"state":"RUNNING"}'))
+                            new ScriptedExchange(200, '{"state":"RUNNING"}'))
                     case PollVariant.CANNOT_VERIFY -> poll(
-                            [url: URL], new HttpCheckFixture.ScriptedExchange(new IOException('unreachable')))
+                            [url: URL], new ScriptedExchange(new IOException('unreachable')))
                 })
-    }
-
-    private PollStatus poll(Map<String, Object> params, HttpCheckFixture.ScriptedExchange exchange) {
-        new HttpExternalCheckClient(exchange, providing([:])).poll(check(params), null)
     }
 }

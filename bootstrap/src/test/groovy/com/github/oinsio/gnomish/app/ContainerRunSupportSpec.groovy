@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -8,7 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -101,7 +100,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         createTask(support)
         def attemptCommit = new AttemptCommitRef()
         attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
-        support.pieces(null).judgeEnvironments().environmentFor(new AttemptCommitWorkspace(attemptCommit))
+        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
 
         when:
         support.keepStopped()
@@ -204,7 +203,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         support.lease().environmentFor('build')
         def attemptCommit = new AttemptCommitRef()
         attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
-        support.pieces(null).judgeEnvironments().environmentFor(new AttemptCommitWorkspace(attemptCommit))
+        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
 
         when:
         support.completeAndDispose(TaskState.atStageStart('build'))
@@ -284,9 +283,9 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
     // D15: workspace() returns the real attempt-commit workspace, not null — the engine workspace
     // of a sandboxed run is never a host path.
-    def "workspace returns a real AttemptCommitWorkspace"() {
+    def "workspace returns a real RecordedAttemptCommitWorkspace"() {
         expect:
-        support().workspace() instanceof AttemptCommitWorkspace
+        support().workspace() instanceof RecordedAttemptCommitWorkspace
     }
 
     // FR6: salvage() is wired to the run's real lease, not a disconnected stub — proven by

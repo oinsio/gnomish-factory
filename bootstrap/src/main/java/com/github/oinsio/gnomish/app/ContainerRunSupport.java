@@ -17,7 +17,7 @@ import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
@@ -128,8 +128,8 @@ final class ContainerRunSupport implements SandboxRunSupport {
 
     /** The engine workspace of a sandboxed run: the attempt-commit ref, never a host path (D15). */
     @Override
-    public AttemptCommitWorkspace workspace() {
-        return new AttemptCommitWorkspace(attemptCommit);
+    public RecordedAttemptCommitWorkspace workspace() {
+        return new RecordedAttemptCommitWorkspace(attemptCommit);
     }
 
     /** The factory-side lifecycle repository over bare git objects (FR25, D19). */

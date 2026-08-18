@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.gitobjects.CommitRequest
@@ -42,10 +42,10 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
         new FilesExistCheckRunner().withAttemptReader(gitObjects)
     }
 
-    private AttemptCommitWorkspace workspace() {
+    private RecordedAttemptCommitWorkspace workspace() {
         def ref = new AttemptCommitRef()
         ref.record(attempt.hex())
-        new AttemptCommitWorkspace(ref)
+        new RecordedAttemptCommitWorkspace(ref)
     }
 
     def "files present in the attempt commit yield Pass"() {

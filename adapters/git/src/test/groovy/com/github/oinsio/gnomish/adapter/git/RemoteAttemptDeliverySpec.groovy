@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import java.nio.file.Files
 import java.nio.file.Path
@@ -42,10 +42,10 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
         gitOutput(clone, 'rev-parse', 'HEAD').trim()
     }
 
-    private static AttemptCommitWorkspace workspaceAt(String sha) {
+    private static RecordedAttemptCommitWorkspace workspaceAt(String sha) {
         def ref = new AttemptCommitRef()
         ref.record(sha)
-        new AttemptCommitWorkspace(ref)
+        new RecordedAttemptCommitWorkspace(ref)
     }
 
     private RemoteAttemptDelivery delivery() {

@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource;
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.util.function.Supplier;
@@ -43,7 +43,7 @@ public final class FreshJudgeEnvironments implements JudgeEnvironmentSource {
 
     @Override
     public synchronized TaskExecutionEnvironment environmentFor(Workspace workspace) {
-        String sha = ((AttemptCommitWorkspace) workspace).attemptCommitSha();
+        String sha = ((RecordedAttemptCommitWorkspace) workspace).attemptCommitSha();
         if (current != null && sha.equals(currentSha)) {
             return current;
         }

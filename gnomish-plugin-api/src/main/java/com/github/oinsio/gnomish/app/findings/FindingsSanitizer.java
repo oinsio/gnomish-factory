@@ -3,19 +3,25 @@ package com.github.oinsio.gnomish.app.findings;
 import java.util.regex.Pattern;
 
 /**
- * The sanitization half of the unified findings funnel (design D9): environment-derived
- * findings text passes through here before any log line, so ANSI/terminal escape sequences
- * and control characters are stripped once, in one tested place, and log volume is bounded
- * by a tail cap noting truncation. Findings as <em>data</em> are deliberately untouched —
- * {@code state.json} carries them in full — sanitization applies at the sinks: log lines
- * through {@link #forLog}, tracker publication through {@link TrackerFence}.
+ * The sanitization half of the findings funnel: environment-derived findings text passes
+ * through here before it reaches any sink, so ANSI/terminal escape sequences and control
+ * characters are stripped once, in one tested place, and log volume is bounded by a tail cap
+ * noting truncation. Findings as <em>data</em> are deliberately untouched — {@code state.json}
+ * carries them in full — sanitization applies at the sinks: log lines through {@link #forLog},
+ * tracker publication through the engine's fenced-publication renderer.
  *
  * <p>Stripping removes ANSI CSI/OSC/Fe sequences and every ISO control character except
  * {@code \n} and {@code \t} (including DEL and the C1 range), neutralizing
  * terminal-escape attacks on the operator's console and log processors while keeping the
  * text's line structure readable.
  *
- * <p>Implements FR15, NFR-C1 of add-sandbox-core.
+ * <p>Published here rather than in {@code application} because the invariant is contract-grade:
+ * an external-check plugin sinks untrusted machine output (CI log tails, command stderr) into
+ * findings exactly as first-party adapters do, so it must be able to apply the same hygiene with
+ * this module as its only declared dependency (design D3).
+ *
+ * <p>Implements FR15, NFR-C1 of add-sandbox-core; FR2, NFR-S1 of
+ * close-plugin-api-compilability-gap.
  */
 public final class FindingsSanitizer {
 

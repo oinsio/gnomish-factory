@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
@@ -15,7 +15,7 @@ import java.util.function.Supplier;
  * the round's leased environment — released as a no-op, the lease owns it;
  * {@code verify-in: fresh-box} checks run in a fresh environment materialized
  * (and self-checked, FR8) from the attempt commit carried by the {@link
- * AttemptCommitWorkspace}, proving branch self-sufficiency — disposed on
+ * RecordedAttemptCommitWorkspace}, proving branch self-sufficiency — disposed on
  * release. A failed fresh-box materialization (guard, runtime, self-check)
  * surfaces as {@link CheckEnvironmentUnavailableException} → {@code
  * CannotVerify}: an infrastructure failure, no stage attempt burned (NFR-R1).
@@ -76,7 +76,7 @@ public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSour
     }
 
     private Acquired freshBox(Workspace workspace) {
-        if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
+        if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             throw new CheckEnvironmentUnavailableException(
                     "verify-in: fresh-box requires an attempt-commit workspace, got "
                             + workspace.getClass().getName());

@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import java.net.http.HttpRequest
 import java.time.Duration
 
 /**
@@ -15,13 +17,23 @@ trait HttpCheckFixture {
     static final String URL = 'https://ci.example.invalid/api/status'
 
     /** An external check selecting the http provider, with the given per-check params. */
-    static VerifyCheck.External check(Map<String, Object> params, String checkId = 'quality-gate') {
+    VerifyCheck.External check(Map<String, Object> params, String checkId = 'quality-gate') {
         new VerifyCheck.External(
                 checkId, HttpCheckClientFactory.PROVIDER, params, Duration.ofSeconds(1),
                 Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY, [])
     }
 
-    static SecretsProvider providing(Map<String, String> secrets) {
+    /** Runs the provider against a scripted exchange, outside any run context or workspace. */
+    PollStatus poll(Map<String, Object> params, ScriptedExchange exchange) {
+        poll(params, exchange, [:])
+    }
+
+    /** The same run, with the named secrets the manifest's auth section may resolve against. */
+    PollStatus poll(Map<String, Object> params, ScriptedExchange exchange, Map<String, String> secrets) {
+        new HttpExternalCheckClient(exchange, providing(secrets)).poll(check(params), null)
+    }
+
+    SecretsProvider providing(Map<String, String> secrets) {
         { name -> Optional.ofNullable(secrets[name]) } as SecretsProvider
     }
 
@@ -31,7 +43,7 @@ trait HttpCheckFixture {
         int status
         String body
         Exception failure
-        java.net.http.HttpRequest lastRequest
+        HttpRequest lastRequest
 
         ScriptedExchange(int status, String body) {
             this.status = status
@@ -43,7 +55,7 @@ trait HttpCheckFixture {
         }
 
         @Override
-        Response send(java.net.http.HttpRequest request) throws IOException, InterruptedException {
+        Response send(HttpRequest request) throws IOException, InterruptedException {
             lastRequest = request
             if (failure != null) {
                 throw failure

@@ -7,7 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
@@ -67,7 +67,7 @@ class HttpCheckTimeoutClassSpec extends Specification {
         ref.record(ThreeProviderPlatformFixture.GREEN_SHA)
 
         when:
-        def verdict = polling.poll(check, new AttemptCommitWorkspace(ref))
+        def verdict = polling.poll(check, new RecordedAttemptCommitWorkspace(ref))
 
         then: 'the loop really polled the stuck gate over TLS before resolving on the deadline'
         platform.wireMock.verify(moreThanOrExactly(1), getRequestedFor(urlPathEqualTo(STUCK_QUALITY_GATE)))

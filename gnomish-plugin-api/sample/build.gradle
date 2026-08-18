@@ -1,6 +1,8 @@
-// UX3, FR4 of split-into-modules: the executable proof that the published
-// contract is self-sufficient. This module is a stand-in for a third-party
-// tracker adapter, and its `dependencies` block below is the whole point — ONE
+// UX3, FR4 of split-into-modules; FR4/G1 of close-plugin-api-compilability-gap:
+// the executable proof that the published contract is self-sufficient. This
+// module is a stand-in for a third-party bundle realizing BOTH SPIs — the
+// tracker factory and, since the check authoring path was closed, the check
+// factory — and its `dependencies` block below is the whole point — ONE
 // declared dependency. Everything the sources touch must therefore reach them
 // through `:gnomish-plugin-api` (directly or through the `:domain` types it
 // re-exposes, design D4). The day that stops being true, this module stops

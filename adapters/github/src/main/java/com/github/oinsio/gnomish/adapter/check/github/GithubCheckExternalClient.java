@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.check.github;
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
+import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
@@ -10,10 +10,12 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 
 /**
  * The {@link ExternalCheckClient} adapter for GitHub Actions: reads the attempt commit of the
- * round under verification from the engine's {@link AttemptCommitWorkspace} (FR26 of
- * add-sandbox-core — the adapter-local workspace stand-in is gone), and polls the configured
- * {@code (owner, repo)} through {@link GithubWorkflowRunPoll} (run query, verdict mapping,
- * findings) for runs of exactly that commit.
+ * round under verification by narrowing the engine-supplied {@code Workspace} to the published
+ * {@link AttemptCommitWorkspace} contract (FR26 of add-sandbox-core — the adapter-local workspace
+ * stand-in is gone; FR1/FR3 of close-plugin-api-compilability-gap — the narrowed type is api
+ * surface, so this vendor bundle compiles against {@code gnomish-plugin-api} alone), and polls
+ * the configured {@code (owner, repo)} through {@link GithubWorkflowRunPoll} (run query, verdict
+ * mapping, findings) for runs of exactly that commit.
  *
  * <p>Only {@link GithubHttpClient} (auth, retries), its {@link GithubConditionalRequestCache}
  * (ETag cache, an optimization only — NFR-C1), and the configured repository coordinates are held
@@ -44,7 +46,8 @@ public record GithubCheckExternalClient(GithubConditionalRequestCache cache, Str
      * Polls once for {@code check.checkId()}'s runs at the attempt commit carried by {@code
      * workspace}.
      *
-     * <p>Implements NFR-R2 of add-external-check-github-actions; FR26 of add-sandbox-core.
+     * <p>Implements NFR-R2 of add-external-check-github-actions; FR26 of add-sandbox-core; FR1
+     * of close-plugin-api-compilability-gap.
      *
      * @param check the external check to poll; {@code checkId} is the workflow file path (FR1)
      * @param workspace MUST be an {@link AttemptCommitWorkspace}

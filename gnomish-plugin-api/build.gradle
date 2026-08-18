@@ -4,7 +4,10 @@
 // `TrackerAdapterFactory` SPI with `TrackerSubsectionValidator`, and (task 2.2 of
 // add-plugin-architecture) the `CheckClientFactory` SPI with
 // `CheckParamsValidator`, `CheckSubsectionValidator` and the
-// `ExternalCheckPinContributor` hook it exposes.
+// `ExternalCheckPinContributor` hook it exposes, plus (FR1/FR2 of
+// close-plugin-api-compilability-gap) the two pieces a check plugin needs at
+// compile time: the `AttemptCommitWorkspace` workspace-capability interface and
+// the `FindingsSanitizer` contract utility.
 //
 // Nothing else belongs here. `application` and `bootstrap` internals are out by
 // definition (M3); implementations live in the adapter modules.
@@ -23,9 +26,15 @@ plugins {
 // `java-conventions`. First real release of the contract surface; change B is
 // where it is first consumed from outside and where the japicmp gate starts
 // failing on an incompatible move.
+//
+// FR5 of close-plugin-api-compilability-gap: `compat-baseline/` was deliberately
+// regenerated (`updateApiCompatibilityBaseline`) for the grown surface — the
+// `AttemptCommitWorkspace` interface and the `FindingsSanitizer` utility. The
+// growth is additive for every pre-existing type, so no pre-1.0 version bump is
+// owed and `japicmpApiGate` stays green against the committed jars.
 version = '0.1.0'
 
-description = 'Third-party contract surface: tracker/secrets ports and the tracker and check SPI factories with their validators.'
+description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 
 dependencies {
     // `api`, not `implementation` (design D4, UX3): the ports' own signatures

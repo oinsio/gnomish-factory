@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.check.http;
 
 import com.github.oinsio.gnomish.app.CheckRunContext;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
@@ -109,7 +109,7 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
      * placeholder would.
      */
     private static @Nullable String attemptCommit(Workspace workspace) {
-        if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
+        if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return null;
         }
         try {
@@ -141,8 +141,7 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
     /** A CannotVerify naming the endpoint and preserving the cause as details (NFR-O1). */
     private static PollStatus.CannotVerify cannotVerify(String target, Exception cause) {
         return new PollStatus.CannotVerify(
-                "http check could not reach " + target,
-                cause.getClass().getName() + ": " + String.valueOf(cause.getMessage()));
+                "http check could not reach " + target, cause.getClass().getName() + ": " + cause.getMessage());
     }
 
     private static String excerpt(String body) {
