@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
@@ -91,7 +93,7 @@ tracker:
                 new SystemConsoleIO(System.in, System.out),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
-                new GithubCheckClientFactory(new EnvFileSecretsProvider()),
+                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
@@ -106,9 +108,11 @@ tracker:
                 boardCommand,
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir,
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null), [:],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource()),
                 Clock.systemUTC(),
                 [:],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
                 new ServeProperties(0, null, null, null, null, null))
     }
@@ -124,6 +128,7 @@ tracker:
                 Clock.systemUTC(),
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
         def runner = newRunner(boardCommand)
         def args = new DefaultApplicationArguments('board', "--dir=${projectDir}".toString())
@@ -247,7 +252,12 @@ class OutageTrackerAdapterFactory implements TrackerAdapterFactory {
     }
 
     @Override
-    Tracker create(TrackerConfig config, String instanceId) {
+    String type() {
+        'github'
+    }
+
+    @Override
+    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
         tracker
     }
 

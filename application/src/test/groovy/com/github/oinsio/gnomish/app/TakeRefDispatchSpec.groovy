@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -64,7 +65,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
             locate(_, _) >> new BranchLocation.NotFound()
         }, Stub(TaskWorktreeGit))
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
-                ['github': Stub(TrackerAdapterFactory)], TakeoverConfirmation.UNAVAILABLE)
+                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE)
     }
 
     private void dispatch(List<String> refs) {
@@ -134,7 +135,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     def "refuses a foreign canonical ref before fetching the task"() {
         given:
         factory = Stub(TrackerAdapterFactory) {
-            refuseForeignRef(_, _) >> Optional.of('ref names another repository')
+            refuseForeignRef(_, _, _) >> Optional.of('ref names another repository')
         }
 
         when:

@@ -1,0 +1,2 @@
+# The in-memory reference tracker provider (FR1, design D1 of add-plugin-architecture).
+com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerAdapterFactory

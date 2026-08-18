@@ -100,6 +100,19 @@ public sealed interface VerifyCheck {
      *
      * @param checkId the external check identifier the poller looks up (e.g. a CI
      *     check name); liveness of the target is deliberately not validated (NG7)
+     * @param provider the check-provider discriminator this check is served by
+     *     (e.g. {@code github}, {@code http}) — the key the composition root
+     *     resolves a client from its discovered registry with (FR7 of
+     *     add-plugin-architecture). A manifest that names none is defaulted by
+     *     the loader, which records the defaulted value here explicitly rather
+     *     than leaving the selection implicit (FR13); whether a provider exists
+     *     is a load-seam concern, not this record's
+     * @param params the provider-owned per-check selectors, opaque to the engine
+     *     and to every other provider — plain JDK types like {@link Builtin}
+     *     params (D5a), so the domain stays Jackson-free (FR7 of
+     *     add-plugin-architecture). Their keys and values are graded at the load
+     *     seam by the selected provider's own params validator; possibly empty,
+     *     immutable
      * @param interval how often to poll for the verdict
      * @param timeout how long to poll before giving up (a quality failure by default)
      * @param timeoutClass how a poll timeout at {@code timeout} classifies —
@@ -118,23 +131,49 @@ public sealed interface VerifyCheck {
      *     (task 2.4). Possibly empty; immutable
      */
     record External(
-            String checkId, Duration interval, Duration timeout, TimeoutClass timeoutClass, List<String> pinPaths)
+            String checkId,
+            String provider,
+            Map<String, Object> params,
+            Duration interval,
+            Duration timeout,
+            TimeoutClass timeoutClass,
+            List<String> pinPaths)
             implements VerifyCheck {
 
         public External {
+            params = Map.copyOf(params);
             pinPaths = List.copyOf(pinPaths);
         }
 
         /**
-         * Convenience constructor for callers that declare no pin paths — every
-         * call site predating add-sandbox-core keeps compiling unchanged, with
-         * {@link #pinPaths()} defaulting to empty (the adapter's own contributed
-         * paths still apply, FR16 of add-sandbox-core).
+         * Convenience constructor for a check whose provider needs no per-check
+         * selectors: {@link #params()} defaults to empty, {@link #pinPaths()} to
+         * empty (the adapter's own contributed paths still apply, FR16 of
+         * add-sandbox-core). The {@code provider} stays explicit — a provider
+         * default is the loader's business (FR13 of add-plugin-architecture), and
+         * defaulting it here would hide the selection inside the domain.
          *
-         * <p>Implements FR16 of add-sandbox-core.
+         * <p>Implements FR16 of add-sandbox-core; FR7 of add-plugin-architecture.
          */
-        public External(String checkId, Duration interval, Duration timeout, TimeoutClass timeoutClass) {
-            this(checkId, interval, timeout, timeoutClass, List.of());
+        public External(
+                String checkId, String provider, Duration interval, Duration timeout, TimeoutClass timeoutClass) {
+            this(checkId, provider, Map.of(), interval, timeout, timeoutClass, List.of());
+        }
+
+        /**
+         * Convenience constructor for a check that declares pin paths but no
+         * provider params.
+         *
+         * <p>Implements FR16 of add-sandbox-core; FR7 of add-plugin-architecture.
+         */
+        public External(
+                String checkId,
+                String provider,
+                Duration interval,
+                Duration timeout,
+                TimeoutClass timeoutClass,
+                List<String> pinPaths) {
+            this(checkId, provider, Map.of(), interval, timeout, timeoutClass, pinPaths);
         }
     }
 

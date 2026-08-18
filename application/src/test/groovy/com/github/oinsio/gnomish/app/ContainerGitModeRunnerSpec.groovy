@@ -50,7 +50,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
         def runner = new ContainerGitModeRunner(assemblyRunningLoop(executor),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
                 new SandboxProperties(null, null, null, null, null, null, false),
-                new FactoryProperties(null, null, null, null, null), { _c, _t, _s, _sp, _fp, _cred ->
+                new FactoryProperties(null, null, null, null, null), { _c, _t, _s, _sp, _fp, _def, _cred ->
                     support
                 } as ContainerSupportFactory)
         def originalOut = System.out

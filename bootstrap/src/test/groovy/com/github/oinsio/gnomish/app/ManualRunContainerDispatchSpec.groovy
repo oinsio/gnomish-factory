@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.BindingProperties
@@ -48,7 +49,7 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 new SystemConsoleIO(System.in, System.out),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
-                new GithubCheckClientFactory(new EnvFileSecretsProvider()),
+                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
@@ -61,11 +62,13 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 homeDir,
                 new StatusCommand(TaskGitFixture.real(), worktreesRoot),
                 new UsageCommand(TaskGitFixture.real()),
-                new BoardCommand(Clock.systemUTC(), testProperties(), [:], TrackerValidatorStub.plainSource()),
+                new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource()),
                 Clock.systemUTC(),
                 [:],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
                 new ServeProperties(0, null, null, null, null, null))
         // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.

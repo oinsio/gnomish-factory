@@ -5,11 +5,17 @@
 // What it buys over `library-conventions`: a Maven publication with sources and
 // javadoc (a third party compiles and reads against it, UX3) and a build-time
 // assertion that the module carries a real semver version — the version is the
-// compatibility promise FR5 makes, so a placeholder must not ship.
+// compatibility promise FR5 makes, so a placeholder must not ship — plus the
+// binary-compatibility gate that enforces that promise, applied from
+// `api-compatibility-gate-conventions`.
 plugins {
     id 'library-conventions'
     id 'maven-publish'
-    id 'me.champeau.gradle.japicmp'
+    // The japicmp binary-compatibility gate over this module's surface, in its
+    // own single-purpose convention (FR7, design D1 of
+    // add-functional-api-gate-test) so `build-logic`'s TestKit suite can drive
+    // it on a miniature project.
+    id 'api-compatibility-gate-conventions'
 }
 
 java {
@@ -75,51 +81,4 @@ tasks.register('verifyPublishedApiVersion') {
 
 tasks.named('check') {
     dependsOn tasks.named('verifyPublishedApiVersion')
-}
-
-// Binary-compatibility tracking over the published contract (FR5, design D10).
-// The compared surface is deliberately the whole runtime classpath, not just
-// this module's jar: the api re-exposes `:domain` types through an `api`
-// dependency (design D4), so those types are part of the semver promise too.
-//
-// REPORT-ONLY in this change — `failOnModification = false`. The surface is
-// still moving while the split relocates types, so a hard gate would fight
-// every move; change B flips this to failing once the api is consumed from
-// outside (D10). Until a first version is published there is nothing to compare
-// against, so the task skips cleanly unless `-PapiBaselineVersion=<semver>`
-// names a released baseline.
-def apiBaselineVersion = providers.gradleProperty('apiBaselineVersion')
-
-configurations.register('apiCompatibilityBaseline') {
-    canBeConsumed = false
-    canBeResolved = true
-    description = 'The previously released API artifact japicmp compares the current surface against.'
-}
-
-dependencies {
-    if (apiBaselineVersion.isPresent()) {
-        apiCompatibilityBaseline "${project.group}:${project.name}:${apiBaselineVersion.get()}"
-    }
-}
-
-tasks.register('japicmpReport', me.champeau.gradle.japicmp.JapicmpTask) {
-    description = 'Reports binary-compatibility changes in the published API surface against the configured baseline (FR5, design D10).'
-    group = 'verification'
-    onlyIf('no -PapiBaselineVersion baseline to compare against') { apiBaselineVersion.isPresent() }
-    oldClasspath.from(configurations.named('apiCompatibilityBaseline'))
-    newClasspath.from(tasks.named('jar'), configurations.named('runtimeClasspath'))
-    // Report everything that moved, not only the breaking subset: while the
-    // surface is settling, an addition is as interesting as a removal.
-    onlyBinaryIncompatibleModified = false
-    failOnModification = false
-    failOnSourceIncompatibility = false
-    // The baseline is resolved without the consumer's own compile classpath, so
-    // unresolvable references in unrelated types must not abort the report.
-    ignoreMissingClasses = true
-    txtOutputFile = layout.buildDirectory.file('reports/japicmp/api-compatibility.txt')
-    htmlOutputFile = layout.buildDirectory.file('reports/japicmp/api-compatibility.html')
-}
-
-tasks.named('check') {
-    dependsOn tasks.named('japicmpReport')
 }

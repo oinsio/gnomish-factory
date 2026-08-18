@@ -80,8 +80,8 @@ final class ContainerResumeRunner {
                     + "\" — locally, as a remote-tracking ref, or on origin; nothing to resume");
         }
 
-        var support =
-                supportFactory.create(cloneDir, taskId, segments, sandboxProperties, factoryProperties, List.of());
+        var support = supportFactory.create(
+                cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());
         TaskRecord taskJson = support.readTaskJson();
         String recordedTaskId = taskJson.context().taskId();
         MDC.put(taskIdMdcKey, recordedTaskId);

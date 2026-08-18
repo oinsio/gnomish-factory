@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.time.Duration;
@@ -43,9 +44,14 @@ final class TrackerConfigMapper {
      * from the DTO the loader parsed out of the factory's own clone), and
      * passes through the ONE raw subsection matching {@code type} (already
      * schema-validated at the seam, task 3.2/4.2) for downstream short-ref
-     * expansion and adapter construction (task 5.15) to consume.
+     * expansion and adapter construction (task 5.15) to consume — with its
+     * {@code connection: <name>} reference resolved against the operator's named
+     * connection profiles first (FR16, design D8 of add-plugin-architecture), so
+     * every consumer downstream reads one inline connection shape and the adapter
+     * never learns that a profile was involved.
      */
-    static @Nullable TrackerConfig map(@Nullable TrackerDto tracker, List<ConfigError> errors) {
+    static @Nullable TrackerConfig map(
+            @Nullable TrackerDto tracker, ConnectionProfiles profiles, List<ConfigError> errors) {
         if (tracker == null) {
             return null;
         }
@@ -64,6 +70,7 @@ final class TrackerConfigMapper {
                 interval,
                 multiplier,
                 wipLimit,
-                PipelineMapper.castSubsection(tracker.subsections().get(type)));
+                profiles.resolve(
+                        PipelineMapper.castSubsection(tracker.subsections().get(type))));
     }
 }

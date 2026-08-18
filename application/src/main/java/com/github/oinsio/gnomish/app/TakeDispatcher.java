@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -26,32 +27,15 @@ import org.slf4j.MDC;
  *
  * <p>Implements FR9, FR10, D8, D15, D16 of add-tracker-port.
  */
-final class TakeDispatcher {
-
-    private final TaskGit git;
-    private final Path worktreesRoot;
-    private final String taskIdMdcKey;
-    private final FactoryProperties factoryProperties;
-    private final Clock clock;
-    private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
-    private final TakeoverConfirmation takeoverConfirmation;
-
-    TakeDispatcher(
-            TaskGit git,
-            Path worktreesRoot,
-            String taskIdMdcKey,
-            FactoryProperties factoryProperties,
-            Clock clock,
-            Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
-            TakeoverConfirmation takeoverConfirmation) {
-        this.git = git;
-        this.worktreesRoot = worktreesRoot;
-        this.taskIdMdcKey = taskIdMdcKey;
-        this.factoryProperties = factoryProperties;
-        this.clock = clock;
-        this.trackerAdapterRegistry = trackerAdapterRegistry;
-        this.takeoverConfirmation = takeoverConfirmation;
-    }
+record TakeDispatcher(
+        TaskGit git,
+        Path worktreesRoot,
+        String taskIdMdcKey,
+        FactoryProperties factoryProperties,
+        Clock clock,
+        Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+        SecretsProvider secretsProvider,
+        TakeoverConfirmation takeoverConfirmation) {
 
     TakeResult runExplicit(
             TakeArguments takeArguments,
@@ -106,7 +90,7 @@ final class TakeDispatcher {
         // configured binding (GitHub: neither the configured repo nor a rename predecessor of it)
         // is refused here — before fetchTask ever touches the foreign repo — as exit 15 (Skipped),
         // never silently acted on. Adapters whose refs carry no repo binding return empty.
-        Optional<String> foreignRefusal = factory.refuseForeignRef(trackerConfig, ref);
+        Optional<String> foreignRefusal = factory.refuseForeignRef(secretsProvider, trackerConfig, ref);
         if (foreignRefusal.isPresent()) {
             return new TakeResult.Skipped(foreignRefusal.get());
         }

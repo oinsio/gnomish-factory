@@ -147,41 +147,56 @@ class FactoryPropertiesSpec extends Specification {
             !(it.name.startsWith('set') && it.parameterCount> 0)
         }
     }
-    // FR26 of add-sandbox-core: the check section defaults to the all-unset github binding
-    def "check section defaults to an unconfigured github binding"() {
+
+    // FR26 of add-sandbox-core; FR5 of add-plugin-architecture: no check provider configured is an
+    //     empty section, not a vendor-shaped record with every key unset
+    def "check section defaults to no configured provider"() {
         expect:
-        !new FactoryProperties(null, null, null, null, null).check().github().configured()
+        new FactoryProperties(null, null, null, null, null).check().isEmpty()
     }
 
-    // FR26 of add-sandbox-core: both keys set == the adapter is constructed from config alone
-    def "a fully configured github check binding exposes both keys"() {
+    // FR5, design D12 of add-plugin-architecture: the section is an open-ended map of provider
+    //     subsections carried as raw content — core interprets no key, so a provider it has never
+    //     heard of binds exactly like the bundled one
+    def "a configured provider subsection is carried through verbatim"() {
+        when:
+        def properties = new FactoryProperties(null, null, null, null,
+                [github: [('api-url'): 'https://api.github.com', repo: 'acme/widgets'],
+                    sonar: [('api-url'): 'https://sonar.example']])
+
+        then:
+        properties.check().keySet() == ['github', 'sonar'] as Set
+        properties.check()['github'] == [('api-url'): 'https://api.github.com', repo: 'acme/widgets']
+        properties.check()['sonar'] == [('api-url'): 'https://sonar.example']
+    }
+
+    // FR5 of add-plugin-architecture: a subsection key with no content binds to an empty map rather
+    //     than a null the providers would each have to defend against
+    def "a provider subsection with no content binds to an empty map"() {
+        when:
+        def properties = new FactoryProperties(null, null, null, null, [github: null])
+
+        then:
+        properties.check()['github'] == [:]
+    }
+
+    // FR5 of add-plugin-architecture: the bound section is defensively copied, so a caller that
+    //     mutates the map it passed cannot reshape a provider's configuration afterwards
+    def "the bound check section is immutable"() {
         given:
-        def check = new FactoryProperties.Check(
-                new FactoryProperties.Check.Github('https://api.github.com', 'acme/widgets'))
+        Map<String, Map<String, Object>> source = [github: [('api-url'): 'https://api.github.com']]
+        def properties = new FactoryProperties(null, null, null, null, source)
 
         when:
-        def properties = new FactoryProperties(null, null, null, null, check)
+        source['sonar'] = [:] as Map<String, Object>
 
         then:
-        properties.check().github().configured()
-        properties.check().github().apiUrl() == 'https://api.github.com'
-        properties.check().github().repo() == 'acme/widgets'
-    }
+        properties.check().keySet() == ['github'] as Set
 
-    // FR26 of add-sandbox-core: half a binding is a configuration mistake, never a silently
-    //     disabled adapter
-    def "a partial github check binding of only #present is rejected at bind time"() {
         when:
-        new FactoryProperties.Check.Github(apiUrl, repo)
+        properties.check()['github'].put('repo', 'acme/widgets')
 
         then:
-        def e = thrown(IllegalArgumentException)
-        e.message.contains('factory.check.github')
-        e.message.contains(present)
-
-        where:
-        apiUrl | repo | present
-        'https://api.github.com' | null | 'api-url'
-        null | 'acme/widgets' | 'repo'
+        thrown(UnsupportedOperationException)
     }
 }

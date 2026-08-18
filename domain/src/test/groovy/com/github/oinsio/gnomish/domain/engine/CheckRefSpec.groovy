@@ -25,8 +25,28 @@ class CheckRefSpec extends Specification {
         index | check || expectedLabel
         0 | new VerifyCheck.Builtin('files_exist', [:]) || 'builtin:files_exist'
         1 | new VerifyCheck.Command('./gradlew test') || 'command:./gradlew test'
-        2 | new VerifyCheck.External('ci/build', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) || 'external:ci/build'
+        2 | new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) || 'external:github:ci/build'
         3 | new VerifyCheck.Judge('criteria/build.md', 'model-x', [:], 1) || 'judge:criteria/build.md'
+    }
+
+    // FR8 (add-plugin-architecture): the identity findings correlate under is the
+    // provider + checkId pair — one checkId served by two providers is two identities,
+    // so one platform's findings are never attributed to the other
+    def "of keeps the same checkId under two providers distinct"() {
+        given: 'the same checkId declared under two different providers'
+        def onGithub = new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(10),
+                Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        def onHttp = new VerifyCheck.External('ci/build', 'http', Duration.ofSeconds(10),
+                Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+
+        when: 'each is identified at the same verify-list position'
+        def githubRef = CheckRef.of(0, onGithub)
+        def httpRef = CheckRef.of(0, onHttp)
+
+        then: 'the labels carry the provider and the identities stay distinct'
+        githubRef.label() == 'external:github:ci/build'
+        httpRef.label() == 'external:http:ci/build'
+        githubRef != httpRef
     }
 
     // FR4: the index and label are exposed exactly as constructed

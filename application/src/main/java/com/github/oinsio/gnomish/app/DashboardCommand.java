@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.board.BoardComposition;
@@ -52,6 +53,7 @@ final class DashboardCommand {
     private final Path homeDir;
     private final FactoryProperties factoryProperties;
     private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
+    private final SecretsProvider secretsProvider;
     private final PipelineSource pipelineSource;
 
     DashboardCommand(
@@ -60,12 +62,14 @@ final class DashboardCommand {
             Path homeDir,
             FactoryProperties factoryProperties,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource) {
         this.clock = javaTimeClock;
         this.sleeper = sleeper;
         this.homeDir = homeDir;
         this.factoryProperties = factoryProperties;
         this.trackerAdapterRegistry = trackerAdapterRegistry;
+        this.secretsProvider = secretsProvider;
         this.pipelineSource = pipelineSource;
     }
 
@@ -82,7 +86,8 @@ final class DashboardCommand {
         PipelineDefinition definition = TakeCommandSupport.loadPipeline(dashboardArguments.dir(), pipelineSource);
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
         InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-        Tracker tracker = TakeCommandSupport.resolveTracker(trackerConfig, trackerAdapterRegistry, instanceId.value());
+        Tracker tracker = TakeCommandSupport.resolveTracker(
+                trackerConfig, trackerAdapterRegistry, secretsProvider, instanceId.value());
         String instanceName = factoryProperties.instanceName();
         Path outputFile = dashboardArguments.out() != null
                 ? dashboardArguments.out()

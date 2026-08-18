@@ -2,9 +2,11 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.PinCheckedExternalCheckClient
+import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckTokenException
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
+import com.github.oinsio.gnomish.app.CheckClientFactory
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
@@ -112,7 +114,11 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
     }
     private static FactoryProperties githubCheckProperties() {
         new FactoryProperties(null, null, null, null,
-                new FactoryProperties.Check(new FactoryProperties.Check.Github('https://api.github.com', 'acme/widgets')))
+                [(GithubCheckClientFactory.PROVIDER): [('api-url'): 'https://api.github.com', repo: 'acme/widgets']])
+    }
+
+    private static Map<String, CheckClientFactory> githubRegistry() {
+        [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()]
     }
 
     // FR16, D10, task 8.4 of add-sandbox-core: every assembly binds its external-check client
@@ -122,33 +128,44 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
         assemble(TaskState.atStageStart('build')).ports().externalClient() instanceof PinCheckedExternalCheckClient
     }
 
-    // FR26 of add-sandbox-core: with factory.check.github.* configured, the GitHub Actions
-    //     adapter is built from config with the token resolved by name through the SecretsProvider.
-    def "a configured github check binding resolves the token through the SecretsProvider"() {
+    // FR5, FR6, D10 of add-plugin-architecture: with any factory.check.<provider> subsection
+    //     configured, the seam behind the guard is the provider-dispatching composite — the engine
+    //     port is unchanged, and which provider answers is decided per check rather than at wiring.
+    def "a configured check provider puts the dispatching composite behind the guard"() {
         given:
-        def resolved = []
-        def factory = new GithubCheckClientFactory({ name ->
-            resolved << name
-            Optional.of('tok')
-        } as com.github.oinsio.gnomish.app.port.secrets.SecretsProvider)
         def assembly = newAssembly(githubCheckProperties())
         def console = assembly.dialogConsole(context(), TaskState.atStageStart('build'))
 
         when:
-        def client = assembly.externalCheckClient(console, java.nio.file.Path.of('.'), factory)
+        def client = assembly.externalCheckClient(console, java.nio.file.Path.of('.'), githubRegistry())
 
         then:
         client instanceof PinCheckedExternalCheckClient
-        resolved == [
-            GithubCheckClientFactory.TOKEN_ENV_VAR
-        ]
+        client.delegate() instanceof ProviderDispatchingExternalCheckClient
     }
 
-    // FR26 of add-sandbox-core: a token that does not resolve fails the assembly at wiring time,
-    //     naming the missing secret — no stage runs with an unauthenticated adapter.
-    def "a configured github check binding with no resolvable token fails the assembly"() {
+    // FR3 of add-plugin-architecture: a configured provider's client is built lazily, on first
+    //     selection — assembling resolves no credential, so a provider no check ever selects stays
+    //     entirely unexercised. (Before providers existed the token resolved at wiring time and a
+    //     missing one failed the assembly; the fail-closed moment now sits at first poll instead.)
+    def "assembling a configured check provider resolves no credential"() {
+        given:
+        def resolved = []
+        def assembly = new ManualRunAssembly(
+                new com.github.oinsio.gnomish.app.console.SystemConsoleIO(
+                        new ByteArrayInputStream(new byte[0]), System.out),
+                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
+                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
+                githubRegistry(), { name ->
+                    resolved << name; Optional.of('tok')
+                } as SecretsProvider,
+                new com.github.oinsio.gnomish.domain.engine.time.SystemClock(),
+                new com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper(),
+                githubCheckProperties(),
+                new SandboxProperties(null, null, null, null, null, null, false))
+
         when:
-        newAssembly(githubCheckProperties()).assemble(
+        assembly.assemble(
                 definition(),
                 context(),
                 TaskState.atStageStart('build'),
@@ -158,21 +175,21 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 java.nio.file.Path.of('.'))
 
         then:
-        def e = thrown(GithubCheckTokenException)
-        e.message.contains('GNOMISH_GITHUB_ACTIONS_TOKEN')
+        resolved.isEmpty()
     }
 
-    // FR26, NFR-S1 of add-sandbox-core: the configured adapter declares its credential name, so
-    //     listing it as child-env passthrough fails the assembly naming the variable — the same
-    //     treatment the tracker token gets.
-    def "the external-check token cannot be allowlisted as passthrough when the adapter is configured"() {
-        given: 'an assembly whose operator passthrough lists the check token name'
+    // FR17, D11 of add-plugin-architecture: the credential names come from the configured
+    //     providers' own SPI declarations, so listing one as child-env passthrough fails the
+    //     assembly naming the variable — with no core source naming that variable.
+    def "a discovered provider's declared credential cannot be allowlisted as passthrough"() {
+        given: 'an assembly whose operator passthrough lists the check provider\'s credential name'
         def assembly = new ManualRunAssembly(
                 new com.github.oinsio.gnomish.app.console.SystemConsoleIO(
                         new ByteArrayInputStream(new byte[0]), System.out),
                 new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
                 new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
-                new GithubCheckClientFactory(new com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider()),
+                githubRegistry(),
+                new com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider(),
                 new com.github.oinsio.gnomish.domain.engine.time.SystemClock(),
                 new com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper(),
                 githubCheckProperties(),

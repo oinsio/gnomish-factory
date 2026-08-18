@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -83,6 +85,7 @@ advancement: auto
                 testProperties(instanceName: INSTANCE_NAME),
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
     }
 
@@ -191,7 +194,11 @@ tracker:
     repo: acme/widgets
 ''')
         def factory = new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         tracker
                     }
 
@@ -200,7 +207,7 @@ tracker:
                     }
 
                     Optional<String> refuseForeignRef(
-                            TrackerConfig config, TaskRef ref) {
+                            SecretsProvider secrets, TrackerConfig config, TaskRef ref) {
                         Optional.of("Task id names repo other/repo but the factory is configured for acme/widgets")
                     }
                 }
@@ -309,7 +316,11 @@ tracker:
         tracker.fetchTask(REF) >> new TrackerTask(
                 REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Finished(), AbortFacts.none(), false)
         def factory = new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         tracker
                     }
 

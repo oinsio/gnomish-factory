@@ -1,9 +1,12 @@
 package com.github.oinsio.gnomish;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 /**
  * Immutable typed configuration of a factory instance, bound from the {@code factory.*} external
@@ -33,12 +36,22 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     defaults to an empty list when unset
  * @param tracker the tracker abort-backoff policy defaults ({@code factory.tracker.*}); defaults
  *     to {@link Tracker#Tracker(Duration, Duration)}'s own defaults when unset
- * @param check the external-check adapter bindings ({@code factory.check.*}); defaults to the
- *     all-unset section (no platform adapter configured) when absent
+ * @param check the check providers' operator subsections ({@code factory.check.<provider>.*}),
+ *     keyed by provider discriminator and carried as raw untyped content; defaults to an empty map
+ *     (no check provider configured) when absent
+ * @param connections the named per-vendor connection profiles ({@code factory.connections.<name>.*}),
+ *     keyed by profile name and carried as raw untyped content, that a port subsection references as
+ *     {@code connection: <name>} instead of inlining endpoint and credential-name keys (FR16, design
+ *     D8 of add-plugin-architecture); defaults to an empty map (no profile defined) when absent
  */
 @ConfigurationProperties("factory")
 public record FactoryProperties(
-        String instanceName, String agentCliBinary, List<String> agentCliEnvPassthrough, Tracker tracker, Check check) {
+        String instanceName,
+        String agentCliBinary,
+        List<String> agentCliEnvPassthrough,
+        Tracker tracker,
+        Map<String, Map<String, Object>> check,
+        Map<String, Map<String, Object>> connections) {
 
     private static final String DEFAULT_INSTANCE_NAME = "gnomish-factory";
     private static final String DEFAULT_AGENT_CLI_BINARY = "claude";
@@ -47,17 +60,39 @@ public record FactoryProperties(
     // Spring's reflective constructor binding can pass null for these record components despite
     // the compile-time @NullMarked contract, and FactoryPropertiesSpec constructs this record
     // with an explicit null for both to exercise exactly that path.
+    // @ConstructorBinding is required, not decorative: the convenience constructor below makes this
+    // record's constructors ambiguous to Spring's binder, which then reports "No default constructor
+    // found" and fails every context. This names the canonical one as the binding target.
+    @ConstructorBinding
     public FactoryProperties(
             @Nullable String instanceName,
             @Nullable String agentCliBinary,
             @Nullable List<String> agentCliEnvPassthrough,
             @Nullable Tracker tracker,
-            @Nullable Check check) {
+            @Nullable Map<String, Map<String, Object>> check,
+            @Nullable Map<String, Map<String, Object>> connections) {
         this.instanceName = defaultInstanceName(instanceName);
         this.agentCliBinary = defaultAgentCliBinary(agentCliBinary);
         this.agentCliEnvPassthrough = defaultEnvPassthrough(agentCliEnvPassthrough);
         this.tracker = defaultTracker(tracker);
-        this.check = defaultCheck(check);
+        this.check = defaultSubsections(check);
+        this.connections = defaultSubsections(connections);
+    }
+
+    /**
+     * Convenience for the callers predating named connection profiles (FR16 of
+     * add-plugin-architecture): no profile is defined, so every port subsection declares its
+     * connection inline. Property binding ignores this one — {@code @ConstructorBinding} above names
+     * the canonical constructor as the binding target, which is exactly why that annotation is
+     * needed once a second constructor exists.
+     */
+    public FactoryProperties(
+            @Nullable String instanceName,
+            @Nullable String agentCliBinary,
+            @Nullable List<String> agentCliEnvPassthrough,
+            @Nullable Tracker tracker,
+            @Nullable Map<String, Map<String, Object>> check) {
+        this(instanceName, agentCliBinary, agentCliEnvPassthrough, tracker, check, null);
     }
 
     /**
@@ -105,70 +140,22 @@ public record FactoryProperties(
     }
 
     /**
-     * Resolves the unset case to the all-unset check section (no platform external-check adapter
-     * configured). Kept as an explicit method for the same PIT record-constructor reason as
-     * {@link #defaultInstanceName}.
+     * Resolves the unset case to an empty map (no check provider configured, no connection profile
+     * defined) and defends the map's immutability. No key or value is interpreted here: both {@code
+     * factory.check} and {@code factory.connections} are open-ended sets of named subsections whose
+     * content only the provider's own {@code CheckSubsectionValidator} may grade (FR4, FR5, FR16,
+     * design D12 of add-plugin-architecture) — which is why the vendor-shaped {@code Check.Github}
+     * record with its both-or-neither constructor is gone from core. Kept as an explicit method for
+     * the same PIT record-constructor reason as {@link #defaultInstanceName}.
      */
-    private static Check defaultCheck(@Nullable Check check) {
-        return check == null ? new Check(null) : check;
-    }
-
-    /**
-     * The {@code factory.check} external-check adapter bindings (FR26 of add-sandbox-core):
-     * installation-level configuration enabling a platform external-check adapter with config
-     * alone — the stage manifests keep declaring only the check itself.
-     *
-     * @param github the GitHub Actions adapter binding ({@code factory.check.github.*}), or the
-     *     all-unset section when absent
-     */
-    public record Check(Github github) {
-
-        public Check(@Nullable Github github) {
-            this.github = github == null ? new Github(null, null) : github;
+    private static Map<String, Map<String, Object>> defaultSubsections(
+            @Nullable Map<String, Map<String, Object>> sections) {
+        if (sections == null) {
+            return Map.of();
         }
-
-        /**
-         * The GitHub Actions external-check adapter binding (FR26 of add-sandbox-core): the
-         * adapter is constructed if and only if both keys are set; setting exactly one is a
-         * configuration mistake rejected at bind time, never a silently disabled adapter. The
-         * token is never configured here — it resolves by name ({@code
-         * GNOMISH_GITHUB_ACTIONS_TOKEN}) through the {@code SecretsProvider} at wiring time.
-         *
-         * @param apiUrl the platform API base URL ({@code factory.check.github.api-url}), or
-         *     {@code null} when the adapter is not configured
-         * @param repo the {@code owner/name} repository the checks run in ({@code
-         *     factory.check.github.repo}), or {@code null} when the adapter is not configured
-         */
-        public record Github(
-                @Nullable String apiUrl, @Nullable String repo) {
-
-            public Github {
-                if ((apiUrl == null) != (repo == null)) {
-                    throw new IllegalArgumentException(
-                            "factory.check.github requires both api-url and repo (or neither); got only "
-                                    + (apiUrl != null ? "api-url" : "repo"));
-                }
-            }
-
-            /**
-             * True when both keys are set and the adapter should be constructed (FR26).
-             *
-             * <p>PIT M4 documented exception (build.gradle has the full rationale):
-             * {@code @DoNotMutate} because PIT's Gregor engine crashes its own minion JVM
-             * (RUN_ERROR, not a real test gap) mutating some bytecode shapes of methods on
-             * nested {@code record} classes on JDK 17+ (hcoles/pitest#1285, a JVMTI
-             * RedefineClasses restriction on NestHost/NestMembers/Record attributes): the
-             * {@code BOOLEAN_TRUE_RETURN} mutant of this method died as RUN_ERROR while its
-             * {@code BOOLEAN_FALSE_RETURN} sibling was killed normally. Both behavior legs
-             * stay covered by FactoryPropertiesSpec ("check section defaults to an
-             * unconfigured github binding" and "a fully configured github check binding
-             * exposes both keys").
-             */
-            @DoNotMutate
-            public boolean configured() {
-                return apiUrl != null;
-            }
-        }
+        var copy = new LinkedHashMap<String, Map<String, Object>>();
+        sections.forEach((name, content) -> copy.put(name, content == null ? Map.of() : Map.copyOf(content)));
+        return Map.copyOf(copy);
     }
 
     /**

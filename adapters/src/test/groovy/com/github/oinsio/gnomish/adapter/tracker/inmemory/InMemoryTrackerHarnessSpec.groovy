@@ -244,4 +244,22 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         thread[0].text().contains('instance-a')
         thread[1].text().contains('delivered: build complete')
     }
+
+    def "threadAsStrings formats each entry as 'kind: text', oldest first"() {
+        given: 'a tracker with one seeded Ready task'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:thread-as-strings')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+
+        when: 'the task is claimed and then finished with a summary'
+        tracker.claim(ref, 'instance-a')
+        tracker.finish(ref, 'delivered: build complete')
+
+        then: 'each formatted line pairs the entry kind with its narrating text, in order'
+        harness.threadAsStrings(ref) == [
+            "${CorrespondenceEntry.Kind.CLAIM}: ${harness.thread(ref)[0].text()}".toString(),
+            "${CorrespondenceEntry.Kind.FINISH}: ${harness.thread(ref)[1].text()}".toString()
+        ]
+    }
 }

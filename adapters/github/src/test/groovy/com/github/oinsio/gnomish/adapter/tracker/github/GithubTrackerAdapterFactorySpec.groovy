@@ -29,8 +29,8 @@ import spock.lang.Specification
  * assembly tests: it takes the token explicitly rather than reading {@code GNOMISH_GITHUB_TOKEN}
  * from the environment, since mutating the real process environment is not reliably possible on
  * a module-path JVM without {@code --add-opens}. The public, environment-reading entry point
- * ({@code create(TrackerConfig, String)}) is covered separately by the missing-token test, which
- * needs no environment manipulation at all.
+ * ({@code create(SecretsProvider, TrackerConfig, String)}) is covered separately by the
+ * missing-token test, which needs no environment manipulation at all.
  *
  * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port.
  */
@@ -39,17 +39,6 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     private static final String OWNER = 'acme'
     private static final String REPO = 'widgets'
     private static final String INSTANCE_ID = 'gnomish-factory-x7k2q1'
-
-    /**
-     * The stand-in for the {@link SecretsProvider} the composition root injects (task 5.3 of
-     * split-into-modules removed the factory's env/file convenience constructor, which was an
-     * adapter-to-sibling-adapter edge). It resolves nothing: every feature below either passes the
-     * token explicitly to the package-private {@code create} overload or asserts the fail-closed
-     * missing-token path.
-     */
-    private static final SecretsProvider NO_SECRETS = { name ->
-        Optional.empty()
-    } as SecretsProvider
 
     WireMockServer wireMock
 
@@ -77,19 +66,34 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     // the launcher scrubs exactly this name from the gnome's CLI subprocess environment.
     def "credentialEnvVars declares GNOMISH_GITHUB_TOKEN"() {
         expect:
-        new GithubTrackerAdapterFactory(NO_SECRETS).credentialEnvVars() == [
+        new GithubTrackerAdapterFactory().credentialEnvVars(configFor(subsection())) == [
             GithubTrackerAdapterFactory.TOKEN_ENV_VAR
         ]
     }
 
+    // FR1, design D1 of add-plugin-architecture: the discovery discriminator this factory is
+    // registered under, and the value an operator writes as tracker.type.
+    def "type declares the github discriminator"() {
+        expect:
+        new GithubTrackerAdapterFactory().type() == 'github'
+    }
+
+    // FR4, design D1/D3 of add-plugin-architecture: the factory carries its own tracker.github
+    // content validator, so the load seam grades the subsection with the validator belonging to the
+    // very provider that later builds the live tracker — no separate registry to drift from.
+    def "subsectionValidator exposes the github content validator"() {
+        expect:
+        new GithubTrackerAdapterFactory().subsectionValidator().get() instanceof GithubTrackerSubsectionValidator
+    }
+
     def "missing GNOMISH_GITHUB_TOKEN refuses clearly without touching the network"() {
         given: 'a SecretsProvider that resolves no token (fail-closed) — FR18, NFR-S1 of add-sandbox-core'
-        def factory = new GithubTrackerAdapterFactory({ name ->
-            Optional.empty()
-        } as SecretsProvider)
+        def factory = new GithubTrackerAdapterFactory()
 
         when:
-        factory.create(configFor(subsection()), INSTANCE_ID)
+        factory.create({ name ->
+            Optional.empty()
+        } as SecretsProvider, configFor(subsection()), INSTANCE_ID)
 
         then:
         def ex = thrown(GithubTrackerConfigException)
@@ -118,12 +122,11 @@ class GithubTrackerAdapterFactorySpec extends Specification {
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
 
         when:
-        Tracker tracker = new GithubTrackerAdapterFactory(NO_SECRETS)
+        Tracker tracker = new GithubTrackerAdapterFactory()
                 .create(configFor(subsection()), INSTANCE_ID, 'contract-test-token')
 
         then: 'label provisioning already ran at construction time (startup smoke test, NFR-R4)'
         wireMock.verify(1, getRequestedFor(urlEqualTo("/repos/$OWNER/$REPO/labels?per_page=100")))
-        0 * _
 
         when: 'the assembled tracker is actually used'
         def readyTasks = tracker.listReady(10)
@@ -142,7 +145,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
                 .willReturn(aResponse().withStatus(201).withBody('{}')))
 
         when:
-        new GithubTrackerAdapterFactory(NO_SECRETS).create(configFor(subsection()), INSTANCE_ID, 'contract-test-token')
+        new GithubTrackerAdapterFactory().create(configFor(subsection()), INSTANCE_ID, 'contract-test-token')
 
         then:
         wireMock.verify(1, postRequestedFor(
@@ -171,7 +174,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/other-org/other-repo'))
                 .willReturn(aResponse().withStatus(200).withBody('{"full_name":"other-org/renamed-repo"}')))
-        def factory = new GithubTrackerAdapterFactory(NO_SECRETS)
+        def factory = new GithubTrackerAdapterFactory()
 
         when:
         def refusal = factory.refuseForeignRef(
@@ -189,7 +192,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     // or query for the common case.
     def "refuseForeignRef proceeds (empty) with no HTTP call when the id names the configured repo"() {
         given:
-        def factory = new GithubTrackerAdapterFactory(NO_SECRETS)
+        def factory = new GithubTrackerAdapterFactory()
 
         when:
         def refusal = factory.refuseForeignRef(
@@ -213,7 +216,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         ]
 
         when:
-        new GithubTrackerAdapterFactory(NO_SECRETS).create(configFor(subsection), INSTANCE_ID, 'contract-test-token')
+        new GithubTrackerAdapterFactory().create(configFor(subsection), INSTANCE_ID, 'contract-test-token')
 
         then:
         wireMock.verify(1, postRequestedFor(
@@ -228,7 +231,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
 
     def "expandRef delegates the parsed issue number to GithubRefExpander"() {
         given:
-        def factory = new GithubTrackerAdapterFactory(NO_SECRETS)
+        def factory = new GithubTrackerAdapterFactory()
 
         when: 'a bare issue number ref is expanded'
         def ref = factory.expandRef(configFor(subsection()), '42')
@@ -239,7 +242,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
 
     def "expandRef strips a leading hash before parsing the issue number"() {
         given:
-        def factory = new GithubTrackerAdapterFactory(NO_SECRETS)
+        def factory = new GithubTrackerAdapterFactory()
 
         when: 'a hash-prefixed short ref is expanded'
         def ref = factory.expandRef(configFor(subsection()), '#42')

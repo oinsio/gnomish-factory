@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -116,7 +118,11 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     /** Declares CREDENTIAL_VAR via TrackerAdapterFactory#credentialEnvVars (design D17). */
     private TrackerAdapterFactory fakeFactoryDeclaringCredential() {
         new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         tracker
                     }
 
@@ -124,7 +130,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                         throw new UnsupportedOperationException('not used by this fixture')
                     }
 
-                    List<String> credentialEnvVars() {
+                    List<String> credentialEnvVars(TrackerConfig config) {
                         [CREDENTIAL_VAR]
                     }
                 }
@@ -133,7 +139,11 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
     /** Inherits the interface's empty default credentialEnvVars() — nothing declared. */
     private TrackerAdapterFactory fakeFactoryDeclaringNoCredential() {
         new TrackerAdapterFactory() {
-                    Tracker create(TrackerConfig config, String instanceId) {
+                    String type() {
+                        'github'
+                    }
+
+                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
                         tracker
                     }
 
@@ -152,6 +162,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                 factoryProperties,
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
     }
 

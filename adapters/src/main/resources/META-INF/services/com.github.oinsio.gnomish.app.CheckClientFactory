@@ -1,0 +1,4 @@
+# The built-in generic http check provider (FR9, design D4 of add-plugin-architecture).
+# It is discovered exactly like a vendor jar's provider — this entry is the only
+# thing that makes it selectable; no core source names the class.
+com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory

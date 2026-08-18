@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import java.util.ArrayList;
@@ -61,6 +62,24 @@ public final class TrackerSeamValidator {
      */
     public static List<ConfigError> validate(
             String file, @Nullable TrackerDto tracker, Map<String, TrackerSubsectionValidator> registry) {
+        return validate(file, tracker, registry, ConnectionProfiles.none());
+    }
+
+    /**
+     * The connection-aware form (FR16, design D8/D12 of add-plugin-architecture): identical, except
+     * that the adapter subsection may reference a named operator-declared connection profile as
+     * {@code connection: <name>} instead of inlining its endpoint and credential-name keys. The
+     * profiles live in operator configuration while this subsection is repo-side, so the composition
+     * root hands the defined set down here as plain data — an undefined reference is then a located
+     * load error alongside every other one, never a mid-{@code take} failure.
+     *
+     * @param profiles the operator-declared {@code factory.connections} profiles; never null
+     */
+    public static List<ConfigError> validate(
+            String file,
+            @Nullable TrackerDto tracker,
+            Map<String, TrackerSubsectionValidator> registry,
+            ConnectionProfiles profiles) {
         if (tracker == null) {
             return List.of();
         }
@@ -73,7 +92,7 @@ public final class TrackerSeamValidator {
         if (validator == null) {
             errors.add(new ConfigError(file, "tracker.type", "unknown tracker type '%s'".formatted(type)));
         }
-        checkSubsections(file, type, validator, tracker.subsections(), errors);
+        checkSubsections(file, type, validator, tracker.subsections(), profiles, errors);
         return List.copyOf(errors);
     }
 
@@ -83,6 +102,7 @@ public final class TrackerSeamValidator {
             String type,
             @Nullable TrackerSubsectionValidator validator,
             Map<String, Object> subsections,
+            ConnectionProfiles profiles,
             List<ConfigError> errors) {
         for (Map.Entry<String, Object> entry : new TreeMap<>(subsections).entrySet()) {
             String name = entry.getKey();
@@ -94,8 +114,15 @@ public final class TrackerSeamValidator {
                         "subsection '%s' does not match declared tracker type '%s'".formatted(name, type)));
                 continue;
             }
-            if (validator != null && entry.getValue() instanceof Map<?, ?> raw) {
-                errors.addAll(validator.validate(file, where, PipelineMapper.castSubsection(raw)));
+            if (entry.getValue() instanceof Map<?, ?> raw) {
+                Map<String, Object> subsection = PipelineMapper.castSubsection(raw);
+                // The `connection:` reference is the one key core owns here (FR16): graded even for
+                // an adapter that contributes no validator of its own, since an undefined profile is
+                // a seam problem, not adapter-owned content.
+                errors.addAll(profiles.validateReference(file, where, subsection));
+                if (validator != null) {
+                    errors.addAll(validator.validate(file, where, subsection, profiles));
+                }
             }
         }
         if (validator != null && !subsections.containsKey(type)) {

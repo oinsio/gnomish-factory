@@ -17,8 +17,11 @@ final class ContainerSupportFixture {
 
     /** The real per-run container support, over the real Docker runtime. */
     static ContainerSupportFactory real() {
-        { Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox, FactoryProperties factory, List<String> credentialEnvVarsToScrub ->
-            ContainerRunSupport.create(cloneDir, taskId, segments, sandbox, factory, credentialEnvVarsToScrub)
+        { Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox, FactoryProperties factory, definition, List<String> credentialEnvVarsToScrub ->
+            // The check providers' credential declarations are resolved by the composition root and
+            // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
+            // provider, so the declared set is empty.
+            ContainerRunSupport.create(cloneDir, taskId, segments, sandbox, List.<String> of(), credentialEnvVarsToScrub)
         } as ContainerSupportFactory
     }
 }

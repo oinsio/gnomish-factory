@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
-import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
@@ -25,8 +24,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import java.io.IOException
-import java.io.UncheckedIOException
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
@@ -94,11 +91,6 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false) {
         chain.resumeExisting(CLONE_DIR, completingPipeline(), RunArguments.InteractiveMode.NONE,
                 discardWork, 'PROJ-1', tracker, REF, INSTANCE)
-    }
-
-    private TaskRecord recordWith(RecordedOutcome outcome, EscalationReport escalation, boolean pending) {
-        new TaskRecord(new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of()),
-                'base-sha', NOW, outcome, escalation, pending)
     }
 
     // FR10, D10, NFR-C1: the branch's `.gnomish-task/` is GONE — the delivery cleanup commit ran but

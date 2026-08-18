@@ -2,9 +2,8 @@
 // split-into-modules): the composition root — `@SpringBootApplication`,
 // `main()`, every `@Configuration`, and the assembly/factory classes whose job
 // is to instantiate adapters and connect them to the ports the use cases
-// declare. It is the only module allowed to depend on `:adapters` (D3), which
-// is what makes it the composition root, and it owns the Boot packaging
-// (`bootJar`) and the E2E layers that run the packaged jar.
+// declare. It is the only module allowed to depend on `:adapters` (D3), which is
+// what makes it the composition root; it owns the Boot packaging and the E2E layers.
 
 // Dependency locking for this module's buildscript (plugin) classpath. The Boot
 // Gradle plugin is applied here, so its transitives — and the CVE forces that
@@ -52,8 +51,7 @@ description = 'Composition root: main(), the Spring configuration, and the assem
 apply from: 'verification.gradle'
 
 // The httpclient5 / httpcore5(-h2) test-classpath security overrides moved to
-// `test-conventions`: `:adapters:github` needed them too (D3 of fix-osv-dependency-gate).
-
+// `test-conventions` (D3 of fix-osv-dependency-gate).
 dependencies {
     // The layer modules this composition root wires together (FR1, design
     // D1/D2). `:application` re-exposes the layers below it as `api`
@@ -69,11 +67,12 @@ dependencies {
     // is exactly the thing only the composition root may do, and this is the
     // only module in the build declaring this edge.
     implementation project(':adapters')
-    // The GitHub vendor bundle (task 10.1), declared alongside the coarse block
-    // it left: this module names `GithubCheckClientFactory` and the tracker
-    // registry names `GithubTrackerAdapterFactory` — which is why the registry
-    // itself moved here, see `adapter.tracker.TrackerAdapterConfiguration`.
-    implementation project(':adapters:github')
+    // The GitHub vendor bundle — `runtimeOnly` since task 2.4 of
+    // add-plugin-architecture: no production source here names a github type, both
+    // ports resolving it through `ServiceLoader` instead, so the bundle need only
+    // carry its `META-INF/services` entries at runtime (FR12, made structural by
+    // the dependency-analysis gate).
+    runtimeOnly project(':adapters:github')
     // The two technology seams (task 10.2): the run assemblies bind the git
     // repository, persistence and salvage ports, and select the agent-CLI
     // executor and judge voter — port-to-realization binding, the composition
@@ -86,6 +85,8 @@ dependencies {
     implementation project(':sandbox:docker')
     // Shared fakes and port-contract suites (FR7, design D8), test scope only.
     testImplementation project(':test-fixtures')
+    // Named by specs only (discovery/seam/dispatch assert on the bundled provider).
+    testImplementation project(':adapters:github')
 
     // Spring-family versions are managed by the Boot BOM (design D3).
     implementation platform(libs.spring.boot.dependencies)

@@ -5,8 +5,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClientContract
@@ -41,13 +41,15 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
     }
 
     private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci.yml', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External('ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
+    // Through the shared fixture, whose declared return type is the published
+    // `AttemptCommitWorkspace` contract: this bundle's test source names no `:application`
+    // type either, matching its production classpath (FR3, design D6 of
+    // close-plugin-api-compilability-gap).
     private static AttemptCommitWorkspace sampleWorkspace() {
-        def ref = new AttemptCommitRef()
-        ref.record('abc123')
-        new AttemptCommitWorkspace(ref)
+        AttemptCommitWorkspaces.at('abc123')
     }
 
     private static RetryConfig fastRetryConfig() {
@@ -61,24 +63,24 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
                 .build()
     }
 
-    private GithubCheckExternalClient clientFor(String baseUrl) {
+    private static GithubCheckExternalClient clientFor(String baseUrl) {
         new GithubCheckExternalClient(new GithubHttpClient(baseUrl, 'tok', fastRetryConfig()), 'acme', 'widgets')
     }
 
     @Override
-    protected Optional<PollStatus> arrange(ExternalCheckClientContract.PollVariant variant) {
+    protected Optional<PollStatus> arrange(PollVariant variant) {
         switch (variant) {
-            case ExternalCheckClientContract.PollVariant.PASS:
+            case PollVariant.PASS:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('''
                         {"workflow_runs":[
                             {"id":1,"head_sha":"abc123","path":"ci.yml","run_attempt":1,"status":"completed","conclusion":"success"}
                         ]}
                         ''')))
                 break
-            case ExternalCheckClientContract.PollVariant.RUNNING:
+            case PollVariant.RUNNING:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('{"workflow_runs":[]}')))
                 break
-            case ExternalCheckClientContract.PollVariant.FAIL_WITH_FINDINGS:
+            case PollVariant.FAIL_WITH_FINDINGS:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('''
                         {"workflow_runs":[
                             {"id":1,"head_sha":"abc123","path":"ci.yml","run_attempt":1,"status":"completed",
@@ -94,7 +96,7 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
                 wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/actions/jobs/10/logs'))
                         .willReturn(aResponse().withStatus(200).withBody('boom: assertion failed')))
                 break
-            case ExternalCheckClientContract.PollVariant.CANNOT_VERIFY:
+            case PollVariant.CANNOT_VERIFY:
                 wireMock.stubFor(get(urlEqualTo(RUNS_URL))
                 .willReturn(aResponse().withStatus(503).withBody('service unavailable')))
                 break

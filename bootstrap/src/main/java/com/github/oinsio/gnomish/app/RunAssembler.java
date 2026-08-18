@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.check.PinCheckedExternalCheckClient;
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory;
+import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient;
 import com.github.oinsio.gnomish.adapter.console.InteractiveExternalCheckClient;
 import com.github.oinsio.gnomish.adapter.law.PipelineLawReader;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
@@ -28,6 +29,7 @@ import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -103,7 +105,8 @@ final class RunAssembler {
         // token when that adapter is configured (FR26) — validated here, before any dialog, so a
         // credential name in passthrough fails the run at assembly time.
         var childEnv = ChildEnvAllowlist.of(
-                assembly.sandboxProperties.envPassthrough(), credentialNames(assembly, credentialEnvVarsToScrub));
+                assembly.sandboxProperties.envPassthrough(),
+                credentialNames(assembly, definition, credentialEnvVarsToScrub));
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
         var builtinRunner = sandbox == null
@@ -125,7 +128,12 @@ final class RunAssembler {
                         sandbox),
                 builtinRunner,
                 commandRunner,
-                externalCheckClient(assembly, console, lawSourceRoot, assembly.githubCheckClientFactory),
+                externalCheckClient(
+                        assembly,
+                        console,
+                        lawSourceRoot,
+                        assembly.checkClientRegistry,
+                        RunCheckRunContext.of(context, holder)),
                 ExecutorAdapterSelector.judgeVoter(
                         console,
                         interactiveMode,
@@ -147,49 +155,78 @@ final class RunAssembler {
     /**
      * The declared credential names the run's {@link ChildEnvAllowlist} refuses in passthrough
      * and scrubs from every composed child environment: the active tracker adapter's (supplied by
-     * the caller), plus {@code GNOMISH_GITHUB_ACTIONS_TOKEN} whenever the GitHub Actions
-     * external-check adapter is configured — the adapter declares its credential name so it can
-     * never be admitted into a child environment, matching the tracker token's treatment (FR26,
-     * NFR-S1 of add-sandbox-core).
+     * the caller) unioned with every configured check provider's own SPI declaration (FR17, design
+     * D11 of add-plugin-architecture).
+     *
+     * <p>This used to name {@code GithubCheckClientFactory.TOKEN_ENV_VAR} here, in core. It cannot:
+     * once github is a discovered plugin, core has no vendor constant to name, and a credential
+     * name supplied as configuration data by a connection profile is invisible to a compile-time
+     * constant anyway. So the names come from the providers themselves, and a plugin's credential
+     * is scrubbed — and barred from the passthrough allowlist — with no core source naming it.
+     *
+     * <p>Two declarations are unioned, because credentials reach a provider two ways: from its
+     * configured connection subsection, and — for the built-in {@code http} provider, which serves
+     * arbitrary endpoints — from each check's own manifest params (FR11). A manifest-named
+     * credential is therefore scrubbed and refused in passthrough exactly like a configured one.
      */
-    private static List<String> credentialNames(ManualRunAssembly assembly, List<String> credentialEnvVarsToScrub) {
-        if (!assembly.factoryProperties.check().github().configured()) {
-            return credentialEnvVarsToScrub;
-        }
+    private static List<String> credentialNames(
+            ManualRunAssembly assembly, PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
         var names = new ArrayList<>(credentialEnvVarsToScrub);
-        names.add(GithubCheckClientFactory.TOKEN_ENV_VAR);
+        names.addAll(CheckProviderSeam.credentialEnvVars(checkSubsections(assembly), assembly.checkClientRegistry));
+        names.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, assembly.checkClientRegistry));
         return names;
     }
 
     /**
-     * Selects and pin-guards the run's {@link ExternalCheckClient} (task 8.4 of
-     * add-sandbox-core): with {@code factory.check.github.*} configured, the GitHub Actions
-     * adapter built by {@code checkClientFactory} (base URL and repo from config, token via the
-     * {@code SecretsProvider} — a missing token fails the assembly naming the secret, FR26);
-     * otherwise the interactive console client, which contributes no pin paths. Either way the
-     * client is wrapped in the {@link PinCheckedExternalCheckClient} (FR16, D10) comparing against
-     * the law source clone: {@code lawSourceRoot} is the factory clone checked out at the base
-     * branch in git/take modes (D14), so {@code HEAD} there <em>is</em> the bound base branch; the
-     * in-place mode's workspace may not be a git repository at all, in which case a check that
-     * declares pin paths degrades fail-closed to CannotVerify while a pinless interactive check
-     * passes vacuously. Package-private testing seam: specs call {@link
-     * ManualRunAssembly#externalCheckClient} with a fake secrets provider.
+     * The operator's {@code factory.check.<provider>} subsections with every {@code connection:
+     * <name>} reference resolved against {@code factory.connections} (FR16, design D8 of
+     * add-plugin-architecture), so a provider is built — and asked for its credential names — over
+     * the same inline-shaped connection data whether the operator inlined it or shared a profile
+     * between the ports one vendor serves.
+     */
+    private static Map<String, Map<String, Object>> checkSubsections(ManualRunAssembly assembly) {
+        return CheckProviderSeam.resolve(
+                assembly.factoryProperties.check(), ConnectionProfiles.of(assembly.factoryProperties.connections()));
+    }
+
+    /**
+     * Selects and pin-guards the run's {@link ExternalCheckClient} (task 8.4 of add-sandbox-core;
+     * FR5, FR6, design D10 of add-plugin-architecture): with any {@code factory.check.<provider>}
+     * subsection configured, a {@link ProviderDispatchingExternalCheckClient} over the discovered
+     * {@code registry} — each check routed to its provider's client, built lazily on first
+     * selection so a dormant provider resolves no credential; otherwise the interactive console
+     * client, which contributes no pin paths.
+     *
+     * <p>The engine port is unchanged either way: the composite <em>is</em> an {@code
+     * ExternalCheckClient}, so per-check provider selection stays wiring rather than engine
+     * semantics. Either client is wrapped in the {@link PinCheckedExternalCheckClient} (FR16, D10)
+     * comparing against the law source clone: {@code lawSourceRoot} is the factory clone checked
+     * out at the base branch in git/take modes (D14), so {@code HEAD} there <em>is</em> the bound
+     * base branch; the in-place mode's workspace may not be a git repository at all, in which case
+     * a check that declares pin paths degrades fail-closed to CannotVerify while a pinless
+     * interactive check passes vacuously. The pin contribution dispatches per provider too, so the
+     * guard unions the selected provider's paths exactly as the single-provider wiring did.
+     *
+     * <p>Package-private testing seam: specs call {@link ManualRunAssembly#externalCheckClient}
+     * with a hand-built registry over a fake secrets provider.
      */
     static ExternalCheckClient externalCheckClient(
             ManualRunAssembly assembly,
             DialogConsole console,
             Path lawSourceRoot,
-            GithubCheckClientFactory checkClientFactory) {
-        var github = assembly.factoryProperties.check().github();
+            Map<String, CheckClientFactory> registry,
+            CheckRunContext runContext) {
+        var configured = checkSubsections(assembly);
         ExternalCheckClient client;
         ExternalCheckPinContributor contributor;
-        if (github.configured()) {
-            client = checkClientFactory.create(
-                    Objects.requireNonNull(github.apiUrl()), Objects.requireNonNull(github.repo()));
-            contributor = checkClientFactory.pinContributor();
-        } else {
+        if (configured.isEmpty()) {
             client = new InteractiveExternalCheckClient(console);
             contributor = ExternalCheckPinContributor.none();
+        } else {
+            var dispatching = new ProviderDispatchingExternalCheckClient(
+                    registry, configured, assembly.secretsProvider, runContext);
+            client = dispatching;
+            contributor = dispatching.pinContributor();
         }
         var gitObjects = GitObjects.open(
                 lawSourceRoot.resolve(".git"), Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir"))));

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
@@ -48,7 +49,7 @@ import org.springframework.boot.ApplicationArguments;
  * builds (FR1, FR4, FR9, FR12 of add-serve-observability) — snapshot writer + ledger appender,
  * started beside the worktree janitor and stopped by {@link ServeShutdownWiring}, which also
  * drives either the drain path (FR10, NFR-O2, M3) or the forever loop (FR11, design D9) — see its
- * Javadoc for the full sequence. Not a Spring {@code @Component}: {@link ManualRunRunner}
+ * Javadoc for the full sequence. Not a Spring {@code @Component}: {@code ManualRunRunner}
  * constructs it imperatively, exactly like {@link TakeCommand}.
  *
  * <p>Implements FR2, FR4, FR10, FR11, FR12, FR13, NFR-O2, M3, D3, D7, D9 of add-factory-serve.
@@ -67,6 +68,7 @@ final class ServeCommand {
     private final Clock clock;
     private final com.github.oinsio.gnomish.domain.engine.port.Clock feedClock;
     private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
+    private final SecretsProvider secretsProvider;
     private final PipelineSource pipelineSource;
     private final FeedAutomatonStarter starter;
     /**
@@ -84,6 +86,7 @@ final class ServeCommand {
             Clock clock,
             com.github.oinsio.gnomish.domain.engine.port.Clock feedClock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
+            SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
             FeedAutomatonStarter starter) {
         this.assembly = assembly;
@@ -96,6 +99,7 @@ final class ServeCommand {
         this.clock = clock;
         this.feedClock = feedClock;
         this.trackerAdapterRegistry = trackerAdapterRegistry;
+        this.secretsProvider = secretsProvider;
         this.pipelineSource = pipelineSource;
         this.starter = starter;
     }
@@ -163,7 +167,7 @@ final class ServeCommand {
     private Tracker provisionTracker(
             TrackerAdapterFactory factory, TrackerConfig trackerConfig, InstanceId instanceId) {
         try {
-            return factory.create(trackerConfig, instanceId.value());
+            return factory.create(secretsProvider, trackerConfig, instanceId.value());
         } catch (RuntimeException startupFailure) {
             System.err.println("gnomish serve: startup failed provisioning tracker " + bindingDescription(trackerConfig)
                     + ": " + startupFailure.getMessage());

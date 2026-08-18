@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.e2e
 
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader
+import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import java.nio.file.Files
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -26,7 +28,11 @@ class E2eFixtureLoadSpec extends Specification {
     PipelineDefinition model
 
     def setupSpec() {
-        def outcome = PipelineLoader.load(E2eFixture.gnomishDir())
+        // The fixture's `external` check names no provider, so it resolves to the defaulted
+        // github (FR13) — which the load seam grades against the discovered providers, stood in
+        // for here (FR6 of add-plugin-architecture).
+        def outcome = PipelineLoader.load(E2eFixture.gnomishDir(), [:],
+        TrackerValidatorStub.discoveredGithubCheckProvider())
         assert outcome instanceof LoadOutcome.Loaded
         model = (outcome as LoadOutcome.Loaded).definition()
     }
@@ -53,6 +59,6 @@ class E2eFixtureLoadSpec extends Specification {
 
     def "M1: the fixture project root carries marker.txt for the files_exist check"() {
         expect:
-        java.nio.file.Files.exists(E2eFixture.projectRoot().resolve('marker.txt'))
+        Files.exists(E2eFixture.projectRoot().resolve('marker.txt'))
     }
 }

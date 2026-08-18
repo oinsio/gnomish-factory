@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.pipeline;
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineMapper.StageEntry;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Ok;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Result;
+import com.github.oinsio.gnomish.app.CheckParamsValidator;
+import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -20,7 +22,10 @@ import org.jspecify.annotations.Nullable;
  * unbuildable" logic). Also runs {@link TrackerSeamValidator} (FR17 of
  * add-tracker-port) right after mapping, since it needs the parsed {@code
  * tracker} DTO that mapping already has in hand; its errors append to the same
- * shared list as every other tier here.
+ * shared list as every other tier here. The check seam
+ * ({@link ExternalCheckSeamValidator}, FR6/FR13 of add-plugin-architecture) runs
+ * last, over the mapped stages, since it grades the provider selection the mapper
+ * has just recorded.
  *
  * <p>Implements FR1, FR3 of fix-oversized-adapters (D1): extracted from
  * {@link PipelineLoader} with identical {@code @Nullable} return semantics and
@@ -48,6 +53,8 @@ final class PipelineModelBuilder {
             Result<PipelineDto> pipeline,
             Map<String, StageDto> stages,
             Map<String, TrackerSubsectionValidator> trackerValidators,
+            Map<String, CheckParamsValidator> checkProviders,
+            ConnectionProfiles profiles,
             List<ConfigError> errors) {
         if (!(config instanceof Ok<ConfigDto>(ConfigDto value))
                 || !(pipeline instanceof Ok<PipelineDto>(PipelineDto value1))) {
@@ -61,9 +68,9 @@ final class PipelineModelBuilder {
         if (entries == null) {
             return null;
         }
-        PipelineMapper.Result mapped = PipelineMapper.map(value, entries);
+        PipelineMapper.Result mapped = PipelineMapper.map(value, entries, profiles);
         errors.addAll(mapped.errors());
-        errors.addAll(TrackerSeamValidator.validate("config.yaml", value.tracker(), trackerValidators));
+        errors.addAll(TrackerSeamValidator.validate("config.yaml", value.tracker(), trackerValidators, profiles));
         PipelineDefinition model = mapped.definition();
         if (model == null) {
             return null;
@@ -71,6 +78,7 @@ final class PipelineModelBuilder {
         errors.addAll(PipelineValidator.validate(model));
         errors.addAll(ReferencedFiles.check(root, model.stages()));
         errors.addAll(AgentSettingsValidator.validate(model));
+        errors.addAll(ExternalCheckSeamValidator.validate(model.stages(), checkProviders));
         return model;
     }
 

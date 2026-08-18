@@ -5,8 +5,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
-import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -44,13 +44,15 @@ class GithubCheckExternalClientStatelessPollSpec extends Specification {
     }
 
     private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci.yml', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        new VerifyCheck.External('ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
+    // Through the shared fixture, whose declared return type is the published
+    // `AttemptCommitWorkspace` contract: this bundle's test source names no `:application`
+    // type either, matching its production classpath (FR3, design D6 of
+    // close-plugin-api-compilability-gap).
     private static AttemptCommitWorkspace sampleWorkspace() {
-        def ref = new AttemptCommitRef()
-        ref.record('abc123')
-        new AttemptCommitWorkspace(ref)
+        AttemptCommitWorkspaces.at('abc123')
     }
 
     def "a second instance polling after a simulated crash-and-takeover reaches the same verdict with no shared state"() {

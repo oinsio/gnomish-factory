@@ -2,9 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
-import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -20,7 +18,7 @@ import org.jspecify.annotations.Nullable;
  * inside a task container instead of a host worktree. The task branch is
  * created with {@code task.json} factory-side over bare git objects (FR25,
  * D19) — no worktree ever exists; the environment materializes lazily on the
- * first round through the {@link ContainerRunSupport} lease, rounds close per
+ * first round through the {@code ContainerRunSupport} lease, rounds close per
  * the snapshot-first protocol (FR21), and the terminal boundary follows D19's
  * ordering: Completed disposes the environment before the outcome and cleanup
  * commits; every non-completed exit keeps the environment stopped with volume
@@ -71,23 +69,11 @@ record ContainerGitModeRunner(
         System.out.println("container mode: branch " + TaskIdSanitizer.branchName(taskId));
         System.out.println("container mode: environment " + TaskIdSanitizer.sanitize(taskId));
 
-        var support =
-                supportFactory.create(cloneDir, taskId, segments, sandboxProperties, factoryProperties, List.of());
-        createTask(support, taskId, context, base);
+        var support = supportFactory.create(
+                cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());
+        GitFreshTaskSupport.createTask(support.taskRepository(), taskId, context, base);
 
         ContainerTerminalDrive.run(
                 assembly, support, definition, context, initialState, interactiveMode, cloneDir, null);
-    }
-
-    /** The container twin of {@link GitFreshTaskSupport#createTask}: same remap, bare-object creator. */
-    private static void createTask(
-            SandboxRunSupport support, String taskId, TaskContext context, @Nullable String base) {
-        try {
-            support.taskRepository().createTask(context, base == null ? "HEAD" : base);
-        } catch (GitTaskRepositoryException e) {
-            throw new UsageException("could not start git-mode task \"" + taskId + "\": " + e.getMessage()
-                    + " — this is a fresh run, not --resume; pick a different --task-id, fix --base, or resume the"
-                    + " existing task instead");
-        }
     }
 }

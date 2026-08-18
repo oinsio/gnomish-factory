@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -13,7 +14,6 @@ import com.github.oinsio.gnomish.board.BoardComposition
 import com.github.oinsio.gnomish.board.json.BoardJsonMapper
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
@@ -52,32 +52,7 @@ class BoardCompositionAgreementSpec extends Specification implements Application
     Path projectDir
 
     def setup() {
-        projectDir = tempDir.resolve('project')
-        Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
-        Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
-purpose: build it
-executor:
-  type: agent-cli
-  model: model-x
-instructions: stages/build/instructions.md
-advancement: auto
-''')
-        Files.writeString(projectDir.resolve('.gnomish/config.yaml'), '''\
-schemaVersion: "1"
-autonomy:
-  attemptLimit: 3
-tracker:
-  type: github
-  abort-threshold: 3
-  wip-limit: 3
-  github:
-    api-url: https://api.github.com
-    repo: acme/widgets
-''')
+        projectDir = GnomishProjectFixture.writeGnomishProject(tempDir.resolve('project'), 3)
     }
 
     def "the dashboard's BoardComposition.compose call agrees with gnomish board's own model for the same tracker state, including the in-backoff deadline"() {
@@ -97,7 +72,7 @@ tracker:
         def factoryProperties = new FactoryProperties(
                 INSTANCE_NAME, null, null, new FactoryProperties.Tracker(Duration.ofMinutes(2), Duration.ofHours(1)), null)
         def trackerValidatorRegistry = TrackerValidatorStub.acceptingGithubSource()
-        def boardCommand = new BoardCommand(clock, factoryProperties, [github: factory], trackerValidatorRegistry)
+        def boardCommand = new BoardCommand(clock, factoryProperties, [github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry)
 
         and: 'the board CLI\'s default readyLimit (50), stood in for as the dashboard\'s own choice too'
         int readyLimit = 50

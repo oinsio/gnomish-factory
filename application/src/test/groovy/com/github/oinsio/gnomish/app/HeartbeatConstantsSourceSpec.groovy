@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -19,7 +18,7 @@ import spock.lang.TempDir
  *
  * <p>This spec pins the SOURCE and immutability properties only; the parsing
  * and validation of the two keys is covered by {@code TrackerDtoSpec},
- * {@code PipelineMapperSpec}, and {@code TrackerConfigRuleSpec} (task 5.1) and
+ * {@code PipelineMapperHeartbeatSpec}, and {@code TrackerConfigRuleSpec} (task 5.1) and
  * is not re-tested here.
  */
 class HeartbeatConstantsSourceSpec extends Specification {
@@ -37,7 +36,7 @@ class HeartbeatConstantsSourceSpec extends Specification {
      * {@code tracker} section pins the two heartbeat protocol constants.
      */
     private static void writeTree(Path root, String interval, int multiplier) {
-        write(root, 'config.yaml', """\
+        GnomishProjectFixture.writeGnomishFile(root, 'config.yaml', """\
 schemaVersion: "1"
 autonomy:
   attemptLimit: 3
@@ -48,22 +47,7 @@ tracker:
   github:
     api-url: https://api.github.com
 """)
-        write(root, 'pipeline.yaml', 'stages:\n  - plan\n')
-        write(root, 'stages/plan/stage.yaml', '''\
-purpose: plan the work
-executor:
-  type: agent-cli
-  model: some-model
-instructions: stages/plan/instructions.md
-advancement: auto
-''')
-        write(root, 'stages/plan/instructions.md', 'plan it\n')
-    }
-
-    private static void write(Path root, String relative, String text) {
-        Path target = root.resolve('.gnomish').resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
+        GnomishProjectFixture.writePlanStage(root)
     }
 
     private static RunArguments argsFor(Path dir) {

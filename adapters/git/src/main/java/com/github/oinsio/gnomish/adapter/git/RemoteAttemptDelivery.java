@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace;
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import java.nio.file.Path;
@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The push-verifying {@link AttemptDelivery} for sandboxed git modes (FR21 of
- * add-sandbox-core): confirms the attempt commit carried by the {@link AttemptCommitWorkspace}
+ * add-sandbox-core): confirms the attempt commit carried by the {@link RecordedAttemptCommitWorkspace}
  * is on the remote before an external check's poll loop starts. First the cheap read: {@code
  * ls-remote} the task branch and, when the remote tip is an object the factory clone already
  * has, answer from ancestry alone with no push. Otherwise the commit is (or may be) undelivered:
@@ -44,7 +44,7 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
 
     @Override
     public Outcome ensureDelivered(Workspace workspace) {
-        if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
+        if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return new Outcome.Undeliverable(
                     "attempt-commit delivery requires the attempt-commit workspace",
                     "workspace is " + workspace.getClass().getName() + ", which carries no attempt commit");

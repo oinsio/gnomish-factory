@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -63,7 +64,7 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
                 new SystemConsoleIO(System.in, System.out),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
-                new GithubCheckClientFactory(new EnvFileSecretsProvider()),
+                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
@@ -77,11 +78,13 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
                 homeDir,
                 new StatusCommand(TaskGitFixture.real(), worktreesRoot),
                 new UsageCommand(TaskGitFixture.real()),
-                new BoardCommand(Clock.systemUTC(), testProperties(), [:], TrackerValidatorStub.plainSource()),
+                new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource()),
                 Clock.systemUTC(),
                 [:],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
                 new ServeProperties(0, null, null, null, null, null))
     }

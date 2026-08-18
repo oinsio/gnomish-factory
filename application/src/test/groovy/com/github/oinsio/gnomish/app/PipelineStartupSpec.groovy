@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -21,23 +20,12 @@ class PipelineStartupSpec extends Specification {
     private final PipelineStartup startup = new PipelineStartup(TrackerValidatorStub.plainSource())
 
     private void write(String relative, String text) {
-        Path target = projectRoot.resolve('.gnomish').resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
+        GnomishProjectFixture.writeGnomishFile(projectRoot, relative, text)
     }
 
     private void writeValidTree() {
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
-        write('pipeline.yaml', 'stages:\n  - plan\n')
-        write('stages/plan/stage.yaml', '''\
-purpose: plan the work
-executor:
-  type: agent-cli
-  model: some-model
-instructions: stages/plan/instructions.md
-advancement: auto
-''')
-        write('stages/plan/instructions.md', 'plan it\n')
+        GnomishProjectFixture.writePlanStage(projectRoot)
     }
 
     def "FR1/D3: a valid .gnomish/ under --dir loads and returns the definition and workspace"() {

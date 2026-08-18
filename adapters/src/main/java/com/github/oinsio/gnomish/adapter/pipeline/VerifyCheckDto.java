@@ -67,6 +67,13 @@ public sealed interface VerifyCheckDto {
      * sanity are the mapper/validator concern (tasks 5.3, 4.4).
      *
      * @param checkId the external check identifier, or {@code null} when omitted
+     * @param provider the check-provider discriminator, or {@code null} when
+     *     omitted — the mapper defaults it to {@code github} and records that
+     *     choice explicitly in the domain model (FR13 of add-plugin-architecture)
+     * @param params the provider-owned per-check selectors; {@code null}/absent
+     *     means none. Opaque here (plain JDK map, D5a): the selected provider's
+     *     own validator grades them at the load seam (FR6 of
+     *     add-plugin-architecture)
      * @param interval the raw poll-interval string, or {@code null} when omitted
      * @param timeout the raw poll-timeout string, or {@code null} when omitted
      * @param timeoutClass the raw timeout-class string ({@code quality} or
@@ -81,19 +88,25 @@ public sealed interface VerifyCheckDto {
      */
     record External(
             @Nullable String checkId,
+            @Nullable String provider,
+            @Nullable Map<String, Object> params,
             @Nullable String interval,
             @Nullable String timeout,
             @Nullable String timeoutClass,
             @Nullable List<String> pinPaths)
             implements VerifyCheckDto {
 
-        /** Convenience for construction outside Jackson binding (e.g. tests): no {@code pinPaths}. */
+        /**
+         * Convenience for construction outside Jackson binding (e.g. tests): no
+         * {@code provider}, {@code params} or {@code pinPaths} — the pre-provider
+         * manifest shape.
+         */
         External(
                 @Nullable String checkId,
                 @Nullable String interval,
                 @Nullable String timeout,
                 @Nullable String timeoutClass) {
-            this(checkId, interval, timeout, timeoutClass, null);
+            this(checkId, null, null, interval, timeout, timeoutClass, null);
         }
     }
 

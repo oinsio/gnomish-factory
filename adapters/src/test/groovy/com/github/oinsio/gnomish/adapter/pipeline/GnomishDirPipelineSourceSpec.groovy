@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
+import com.github.oinsio.gnomish.app.CheckParamsValidator
+import com.github.oinsio.gnomish.app.TrackerSubsectionValidator
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import java.nio.file.Files
 import java.nio.file.Path
@@ -22,7 +24,7 @@ class GnomishDirPipelineSourceSpec extends Specification {
     @TempDir
     Path tempDir
 
-    def source = new GnomishDirPipelineSource([:])
+    def source = new GnomishDirPipelineSource([:], TrackerValidatorStub.discoveredGithubCheckProvider())
 
     private Path projectWithDefinition() {
         Path project = Files.createDirectories(tempDir.resolve('project'))
@@ -60,15 +62,33 @@ class GnomishDirPipelineSourceSpec extends Specification {
         e.message.contains('config.yaml')
     }
 
-    def "the validator registry is defensively copied at construction"() {
+    def "both registries are defensively copied at construction"() {
         given:
-        def mutable = [:]
-        def built = new GnomishDirPipelineSource(mutable)
+        Map<String, TrackerSubsectionValidator> mutableTrackers = [:]
+        Map<String, CheckParamsValidator> mutableProviders = [:]
+        def built = new GnomishDirPipelineSource(mutableTrackers, mutableProviders)
 
         when:
-        mutable['github'] = null
+        mutableTrackers['github'] = null
+        mutableProviders['github'] = null
 
         then:
         built.trackerValidatorRegistry().isEmpty()
+        built.checkProviderRegistry().isEmpty()
+    }
+
+    // FR6, FR13 (add-plugin-architecture): the source closes the discovered
+    // check-provider registry over the load, so an external check resolving to a
+    // provider nobody discovered is a located load error rather than a mid-run failure
+    def "an external check whose provider was never discovered is a located load error"() {
+        given: 'a source built over an empty check-provider registry'
+        def bare = new GnomishDirPipelineSource([:], [:])
+
+        when:
+        def outcome = bare.load(projectWithDefinition())
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors()*.where().contains('verify[2].provider')
     }
 }

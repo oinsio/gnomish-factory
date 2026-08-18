@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -8,7 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -101,7 +100,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         createTask(support)
         def attemptCommit = new AttemptCommitRef()
         attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
-        support.pieces(null).judgeEnvironments().environmentFor(new AttemptCommitWorkspace(attemptCommit))
+        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
 
         when:
         support.keepStopped()
@@ -204,7 +203,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         support.lease().environmentFor('build')
         def attemptCommit = new AttemptCommitRef()
         attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
-        support.pieces(null).judgeEnvironments().environmentFor(new AttemptCommitWorkspace(attemptCommit))
+        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
 
         when:
         support.completeAndDispose(TaskState.atStageStart('build'))
@@ -240,25 +239,24 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
     }
 
-    // FR3: create()'s conditional adds the GitHub check token to the scrubbed credential set only
-    // when factory.check.github is actually configured — exercised through the real static
-    // factory (construction alone never touches docker), and observed via
-    // ContainerEnvironments#scrubsCredential, a testing seam over the composed allowlist (FR9),
-    // since neither branch is otherwise observable without materializing a real environment.
-    def "create scrubs the GitHub check token from the allowlist's credential set only when the check is configured"() {
+    // FR3 of add-sandbox-core; FR17, D11 of add-plugin-architecture: create() scrubs whatever
+    // credential names the configured check providers declared through the SPI — handed down by the
+    // composition root, never named here. Observed via ContainerEnvironments#scrubsCredential, a
+    // testing seam over the composed allowlist (FR9), since neither branch is otherwise observable
+    // without materializing a real environment.
+    def "create scrubs exactly the check credential names the composition root resolved"() {
         given:
-        def configured = testProperties(check: new FactoryProperties.Check(
-                new FactoryProperties.Check.Github('https://api.github.com', 'acme/widgets')))
-        def unconfigured = testProperties()
         def segments = [
             new Segment(AdapterBinding.CONTAINER, [stage()])
         ]
 
         when:
-        def configuredSupport =
-                ContainerRunSupport.create(cloneDir, 'T-CFG', segments, sandbox, configured, [])
+        def configuredSupport = ContainerRunSupport.create(
+                cloneDir, 'T-CFG', segments, sandbox, [
+                    GithubCheckClientFactory.TOKEN_ENV_VAR
+                ], [])
         def unconfiguredSupport =
-                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, unconfigured, [])
+                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, [], [])
 
         then:
         configuredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)
@@ -285,9 +283,9 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
     // D15: workspace() returns the real attempt-commit workspace, not null — the engine workspace
     // of a sandboxed run is never a host path.
-    def "workspace returns a real AttemptCommitWorkspace"() {
+    def "workspace returns a real RecordedAttemptCommitWorkspace"() {
         expect:
-        support().workspace() instanceof AttemptCommitWorkspace
+        support().workspace() instanceof RecordedAttemptCommitWorkspace
     }
 
     // FR6: salvage() is wired to the run's real lease, not a disconnected stub — proven by

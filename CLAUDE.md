@@ -2,8 +2,6 @@
 
 External orchestrator: AI agents ("gnomes") take tasks from a task tracker and complete them autonomously through a pipeline of verifiable stages; humans handle only escalations. See README.md for the architecture overview.
 
-**Status: design phase — no code yet. Tech stack is chosen (see below and docs/adr/0001-tech-stack.md).**
-
 ## Tech stack (ADR 0001)
 
 - Java 25 LTS (virtual threads), Gradle 9.x (Groovy DSL)

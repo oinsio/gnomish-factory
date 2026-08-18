@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.dashboard.DashboardWatchLoop
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.nio.file.Files
@@ -32,32 +34,8 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
     Path homeDir
 
     def setup() {
-        projectDir = tempDir.resolve('project')
+        projectDir = GnomishProjectFixture.writeGnomishProject(tempDir.resolve('project'))
         homeDir = tempDir.resolve('home')
-        Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
-        Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
-purpose: build it
-executor:
-  type: agent-cli
-  model: model-x
-instructions: stages/build/instructions.md
-advancement: auto
-''')
-        Files.writeString(projectDir.resolve('.gnomish/config.yaml'), '''\
-schemaVersion: "1"
-autonomy:
-  attemptLimit: 3
-tracker:
-  type: github
-  abort-threshold: 3
-  github:
-    api-url: https://api.github.com
-    repo: acme/widgets
-''')
     }
 
     /**
@@ -80,6 +58,7 @@ tracker:
                 homeDir,
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: new RecordingTrackerAdapterFactory(tracker)],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
     }
 
@@ -167,7 +146,7 @@ tracker:
         given:
         def tracker = new RecordingReadOnlyTracker([], []) {
             @Override
-            List<com.github.oinsio.gnomish.app.port.tracker.ReadyTask> listReady(int limit) {
+            List<ReadyTask> listReady(int limit) {
                 super.listReady(limit)
                 throw new RuntimeException('tracker unreachable')
             }

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -97,6 +98,7 @@ tracker:
                 testProps(),
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
                 TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
     }

@@ -5,12 +5,11 @@ import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
+import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 
 /**
@@ -32,29 +31,7 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
  *
  * <p>Implements FR1, FR2 of refactor-app-spec-fixtures.
  */
-trait AppAssemblyFixture {
-
-    /**
-     * Builds a {@link FactoryProperties} for tests, defaulting to the
-     * dominant {@code new FactoryProperties('test-instance', null, null,
-     * null, null)} literal seen across app-layer specs. Pass overrides by key —
-     * {@code instanceName}, {@code agentCliBinary},
-     * {@code agentCliEnvPassthrough}, {@code tracker} — for the sites that
-     * vary one of these (fake-agent binary paths, per-instance names, env
-     * passthrough lists, and — for {@code AbortLifecycleFixture}'s
-     * backoff-clock scenario — a non-default {@link FactoryProperties.Tracker});
-     * {@code tracker} defaults to {@code null} (= default {@code Tracker}).
-     *
-     * <p>Implements FR2 of refactor-app-spec-fixtures.
-     */
-    FactoryProperties testProperties(Map overrides = [:]) {
-        new FactoryProperties(
-                overrides.getOrDefault('instanceName', 'test-instance') as String,
-                overrides['agentCliBinary'] as String,
-                overrides['agentCliEnvPassthrough'] as List<String>,
-                overrides['tracker'] as FactoryProperties.Tracker,
-                overrides['check'] as FactoryProperties.Check)
-    }
+trait AppAssemblyFixture implements FactoryPropertiesFixture {
 
     /**
      * Builds a fresh {@link ManualRunAssembly} from the standard
@@ -79,7 +56,8 @@ trait AppAssemblyFixture {
                 new SystemConsoleIO(input ?: defaultConsoleInput(), output),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
-                new GithubCheckClientFactory(new EnvFileSecretsProvider()),
+                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
+                new EnvFileSecretsProvider(),
                 new SystemClock(),
                 new ThreadSleeper(),
                 factoryProperties,
@@ -117,33 +95,11 @@ trait AppAssemblyFixture {
      * A {@link TrackerAdapterFactory} whose {@code create} always returns the
      * given fake/mock {@code Tracker} and whose {@code expandRef} always
      * throws, since no spec using this fixture exercises short-ref expansion
-     * through a real tracker adapter.
+     * through a real tracker adapter. Delegates to the canonical {@link
+     * FixedTrackerAdapterFactory} in the {@code adapter.tracker} package
+     * rather than keeping a second definition of the same fixture here.
      */
     static TrackerAdapterFactory fakeFactory(Tracker t) {
-        new FixedTrackerAdapterFactory(t)
-    }
-}
-
-/**
- * A {@link TrackerAdapterFactory} whose {@code create} always returns the
- * fixed {@code tracker} it was built with and whose {@code expandRef} always
- * throws. Groovy traits cannot declare an anonymous inner class directly, so
- * this is the named class {@link AppAssemblyFixture#fakeFactory} delegates
- * to.
- */
-class FixedTrackerAdapterFactory implements TrackerAdapterFactory {
-
-    private final Tracker tracker
-
-    FixedTrackerAdapterFactory(Tracker tracker) {
-        this.tracker = tracker
-    }
-
-    Tracker create(TrackerConfig config, String instanceId) {
-        tracker
-    }
-
-    TaskRef expandRef(TrackerConfig config, String rawRef) {
-        throw new UnsupportedOperationException('not used by this fixture')
+        new FixedTrackerAdapterFactory({ t })
     }
 }

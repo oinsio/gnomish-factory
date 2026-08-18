@@ -177,8 +177,10 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         // infrastructure failure and the task could not complete — completion proves the skip.
         def sandboxProps = sandbox('garbage-output')
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
+        // No check provider is configured in this spec, so the SPI-declared check-credential set
+        // the composition root resolves (FR17, D11 of add-plugin-architecture) is empty.
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                factoryProps, [])
+                List.<String> of(), [])
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
 
         and: 'the interrupted round: work written and snapshot-committed in-box, then the factory died'

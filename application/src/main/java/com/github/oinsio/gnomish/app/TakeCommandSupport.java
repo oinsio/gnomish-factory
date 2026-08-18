@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
@@ -92,14 +93,20 @@ final class TakeCommandSupport {
      *
      * @param trackerConfig the project's validated {@code tracker} section; never null
      * @param registry known tracker adapter factories, keyed by {@code tracker.type}; never null
+     * @param secrets the seam the resolved adapter reads its credentials through — supplied here
+     *     rather than captured in the factory, which {@code ServiceLoader} builds with no args
+     *     (FR2, design D2 of add-plugin-architecture); never null
      * @param instanceId this process's minted {@code InstanceId} value, passed through to the
      *     resolved factory's {@link TrackerAdapterFactory#create} (task 5.15); never null
      * @return a live {@link Tracker} for {@code trackerConfig.type()}
      * @throws UsageException if no factory is registered for {@code trackerConfig.type()}
      */
     static Tracker resolveTracker(
-            TrackerConfig trackerConfig, Map<String, TrackerAdapterFactory> registry, String instanceId) {
-        return resolveFactory(trackerConfig, registry).create(trackerConfig, instanceId);
+            TrackerConfig trackerConfig,
+            Map<String, TrackerAdapterFactory> registry,
+            SecretsProvider secrets,
+            String instanceId) {
+        return resolveFactory(trackerConfig, registry).create(secrets, trackerConfig, instanceId);
     }
 
     /**

@@ -1,11 +1,7 @@
 package com.github.oinsio.gnomish.adapter.console
 
-import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.domain.engine.PollStatus
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import java.time.Duration
 import spock.lang.Specification
 
 /**
@@ -15,22 +11,12 @@ import spock.lang.Specification
  */
 class InteractiveExternalCheckClientSpec extends Specification {
 
-    private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci-build', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
-    }
-
-    private static Workspace sampleWorkspace() {
-        new Workspace() {}
-    }
-
     def "pass answer yields PollStatus.Pass"() {
         given:
         def io = new ScriptedConsoleIO(['pass'])
-        def console = new DialogConsole(io, { json -> 'status' })
-        def client = new InteractiveExternalCheckClient(console)
 
         when:
-        def status = client.poll(sampleCheck(), sampleWorkspace())
+        def status = ExternalCheckDialogFixture.poll(io)
 
         then:
         status instanceof PollStatus.Pass
@@ -42,11 +28,9 @@ class InteractiveExternalCheckClientSpec extends Specification {
     def "running answer yields PollStatus.Running"() {
         given:
         def io = new ScriptedConsoleIO(['running'])
-        def console = new DialogConsole(io, { json -> 'status' })
-        def client = new InteractiveExternalCheckClient(console)
 
         when:
-        def status = client.poll(sampleCheck(), sampleWorkspace())
+        def status = ExternalCheckDialogFixture.poll(io)
 
         then:
         status instanceof PollStatus.Running
@@ -60,11 +44,9 @@ class InteractiveExternalCheckClientSpec extends Specification {
             'flaky test',
             ''
         ])
-        def console = new DialogConsole(io, { json -> 'status' })
-        def client = new InteractiveExternalCheckClient(console)
 
         when:
-        def status = client.poll(sampleCheck(), sampleWorkspace())
+        def status = ExternalCheckDialogFixture.poll(io)
 
         then:
         status instanceof PollStatus.Fail
@@ -75,11 +57,9 @@ class InteractiveExternalCheckClientSpec extends Specification {
     def "unrecognized input re-prompts naming the accepted answers before an eventual valid answer"() {
         given:
         def io = new ScriptedConsoleIO(['bogus', 'pass'])
-        def console = new DialogConsole(io, { json -> 'status' })
-        def client = new InteractiveExternalCheckClient(console)
 
         when:
-        def status = client.poll(sampleCheck(), sampleWorkspace())
+        def status = ExternalCheckDialogFixture.poll(io)
 
         then:
         status instanceof PollStatus.Pass

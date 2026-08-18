@@ -16,7 +16,7 @@ class GithubCheckPinPathsSpec extends Specification {
 
     def "contributes exactly the checkId workflow file, one path and nothing else"() {
         given:
-        def check = new VerifyCheck.External('.github/workflows/ci.yml', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
+        def check = new VerifyCheck.External('.github/workflows/ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
 
         when:
         def pinPaths = GithubCheckPinPaths.contributedBy(check)
@@ -27,7 +27,7 @@ class GithubCheckPinPathsSpec extends Specification {
 
     def "a different checkId contributes its own single path, proving the pin follows checkId rather than being hardcoded"() {
         given:
-        def check = new VerifyCheck.External('.github/workflows/lint.yml', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
+        def check = new VerifyCheck.External('.github/workflows/lint.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
 
         when:
         def pinPaths = GithubCheckPinPaths.contributedBy(check)

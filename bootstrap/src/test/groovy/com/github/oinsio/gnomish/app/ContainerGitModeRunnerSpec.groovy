@@ -35,7 +35,6 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     def docker = new ScriptedSandboxDocker()
     def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false)
     Path cloneDir
@@ -43,8 +42,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir, 'init')
     }
 
     private static StageDefinition stage() {
@@ -85,7 +83,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
      * to raise {@link AbortedException}, that abort itself proving {@code run()} reached the loop.
      */
     private void run(String taskId, String base, PrintStream output, InputStream input = lines()) {
-        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, List<String> creds ->
+        def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
             def environments = docker.environments(TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
             new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s)
         } as ContainerSupportFactory
@@ -148,8 +146,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
         given: 'a second commit moves HEAD away from the ref that will be passed as --base'
         def rootSha = gitOutput(cloneDir, 'rev-parse', 'HEAD').trim()
         Files.writeString(cloneDir.resolve('second.txt'), 'more\n')
-        gitRunner.run(cloneDir, 'add', 'second.txt')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'second')
+        commitAll(cloneDir, 'second')
         def head = gitOutput(cloneDir, 'rev-parse', 'HEAD').trim()
         assert head != rootSha
 

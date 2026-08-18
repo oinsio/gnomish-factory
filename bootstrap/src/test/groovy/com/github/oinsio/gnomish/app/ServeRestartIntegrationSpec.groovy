@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
@@ -106,6 +107,7 @@ tracker:
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                     automaton.run()
                 } as FeedAutomatonStarter)

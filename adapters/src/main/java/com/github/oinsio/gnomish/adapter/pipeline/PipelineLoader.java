@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.adapter.pipeline.GnomishFiles.RawConfig;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishFiles.RawStage;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Ok;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Result;
+import com.github.oinsio.gnomish.app.CheckParamsValidator;
+import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
@@ -58,14 +60,19 @@ import java.util.Map;
  *       semantic rules), {@link ReferencedFiles} (file existence + traversal), and
  *       {@link AgentSettingsValidator}
  *       (agent-cli/judge settings schema, task 9.1 of add-agent-executor), run
- *       only when a {@link PipelineDefinition} was produced.</li>
+ *       only when a {@link PipelineDefinition} was produced;</li>
+ *   <li><b>check-seam</b> — {@link ExternalCheckSeamValidator} (FR6, FR13 of
+ *       add-plugin-architecture): each {@code external} check's provider against the
+ *       discovered registry, and its provider-owned {@code params} against that
+ *       provider's own validator; like the other model-dependent tiers it runs only
+ *       when a {@link PipelineDefinition} was produced.</li>
  * </ol>
  *
  * <p><b>Aggregation order (deterministic, NFR-R1).</b> Errors are concatenated
  * coarsest-file-first, in tier order: parse (config, pipeline, then stages in
  * discovery order), structural (same order), consistency, mapping, tracker-seam,
- * domain, referenced-files, then settings. The same tree always yields an equal
- * outcome.
+ * domain, referenced-files, settings, then check-seam. The same tree always yields
+ * an equal outcome.
  *
  * <p><b>No execution (NFR-S1) / no writes (NFR-R1).</b> The loader only reads text,
  * parses, and validates: it never runs a configured {@code command}, model, or
@@ -83,26 +90,6 @@ public final class PipelineLoader {
     private static final String PIPELINE = "pipeline.yaml";
 
     /**
-     * Loads and validates the {@code .gnomish/} tree rooted at {@code gnomishRoot} with no known
-     * tracker adapters — every {@code tracker.type} is reported unknown by the tracker-seam tier
-     * (the documented empty-registry mode of {@link TrackerSeamValidator}). Suitable for callers
-     * that never load a project with a {@code tracker:} section; production callers that do
-     * ({@link com.github.oinsio.gnomish.app.PipelineStartup}, {@code TakeCommandSupport}) pass the
-     * Spring-supplied registry via {@link #load(Path, Map)}.
-     *
-     * <p>Implements FR1, FR8 of load-pipeline-config.
-     *
-     * @param gnomishRoot the {@code .gnomish/} directory root
-     * @return {@link LoadOutcome.Loaded} with the validated model when the tree has
-     *     no problem, else {@link LoadOutcome.Invalid} with every located error
-     * @throws IOException when a required file cannot be read (an I/O fault, never a
-     *     validation problem — FR8/D3)
-     */
-    public static LoadOutcome load(Path gnomishRoot) throws IOException {
-        return load(gnomishRoot, Map.of());
-    }
-
-    /**
      * Loads and validates the {@code .gnomish/} tree rooted at {@code gnomishRoot}, delegating each
      * {@code tracker.<type>} subsection's content validation to {@code trackerValidators} (FR17 of
      * add-tracker-port): a subsection whose {@code type} has a registered validator is handed to it,
@@ -114,15 +101,48 @@ public final class PipelineLoader {
      *
      * <p>Implements FR1, FR8 of load-pipeline-config; FR17 of add-tracker-port.
      *
+     * <p>The check seam is delegated the same way (FR6, FR13 of add-plugin-architecture): {@code
+     * checkProviders} is keyed by every discovered check provider, so an {@code external} check
+     * naming one nobody serves — including the {@code github} the loader defaults to when a
+     * manifest names none — is a located load error, and a served check's provider-owned {@code
+     * params} are graded by that provider's own validator.
+     *
+     * <p>Implements FR1, FR8 of load-pipeline-config; FR17 of add-tracker-port; FR6, FR13 of
+     * add-plugin-architecture.
+     *
      * @param gnomishRoot the {@code .gnomish/} directory root
      * @param trackerValidators known adapter subsection validators, keyed by {@code tracker.type};
      *     an empty map means no adapters are known and every declared type is reported unknown
+     * @param checkProviders known check providers' params validators, keyed by {@code provider}; an
+     *     empty map means no provider is known and every {@code external} check's provider is
+     *     reported unknown
      * @return {@link LoadOutcome.Loaded} with the validated model when the tree has
      *     no problem, else {@link LoadOutcome.Invalid} with every located error
      * @throws IOException when a required file cannot be read (an I/O fault, never a
      *     validation problem — FR8/D3)
      */
-    public static LoadOutcome load(Path gnomishRoot, Map<String, TrackerSubsectionValidator> trackerValidators)
+    public static LoadOutcome load(
+            Path gnomishRoot,
+            Map<String, TrackerSubsectionValidator> trackerValidators,
+            Map<String, CheckParamsValidator> checkProviders)
+            throws IOException {
+        return load(gnomishRoot, trackerValidators, checkProviders, ConnectionProfiles.none());
+    }
+
+    /**
+     * The connection-aware form (FR16, design D8/D12 of add-plugin-architecture): identical, except
+     * that the operator's named connection profiles travel down with the registries, so a {@code
+     * tracker.<type>} subsection referencing one as {@code connection: <name>} is validated against
+     * the defined set at load time and mapped with the reference already resolved.
+     *
+     * @param profiles the operator-declared {@code factory.connections} profiles; an empty set means
+     *     every {@code connection:} reference is an undefined one, reported as a located load error
+     */
+    public static LoadOutcome load(
+            Path gnomishRoot,
+            Map<String, TrackerSubsectionValidator> trackerValidators,
+            Map<String, CheckParamsValidator> checkProviders,
+            ConnectionProfiles profiles)
             throws IOException {
         RawConfig raw = GnomishFiles.read(gnomishRoot);
         List<ConfigError> errors = new ArrayList<>();
@@ -137,8 +157,8 @@ public final class PipelineLoader {
         List<String> pipelineNames = pipelineStageNames(pipeline);
         errors.addAll(StageConsistency.check(pipelineNames, raw.stages()));
 
-        PipelineDefinition model =
-                PipelineModelBuilder.mapAndValidate(gnomishRoot, config, pipeline, stages, trackerValidators, errors);
+        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(
+                gnomishRoot, config, pipeline, stages, trackerValidators, checkProviders, profiles, errors);
 
         if (errors.isEmpty() && model != null) {
             return new LoadOutcome.Loaded(model);

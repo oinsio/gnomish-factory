@@ -2,22 +2,12 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
-import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
-import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
-import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
-import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
@@ -44,31 +34,7 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
     Path projectDir
 
     def setup() {
-        projectDir = tempDir.resolve('project')
-        Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
-        Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
-purpose: build it
-executor:
-  type: agent-cli
-  model: model-x
-instructions: stages/build/instructions.md
-advancement: auto
-''')
-        Files.writeString(projectDir.resolve('.gnomish/config.yaml'), '''\
-schemaVersion: "1"
-autonomy:
-  attemptLimit: 3
-tracker:
-  type: github
-  abort-threshold: 3
-  github:
-    api-url: https://api.github.com
-    repo: acme/widgets
-''')
+        projectDir = GnomishProjectFixture.writeGnomishProject(tempDir.resolve('project'))
     }
 
     // Task 5.1 note (from AbortLifecycleFixture): tracker.type is 'github' purely to satisfy
@@ -76,12 +42,16 @@ tracker:
     // TrackerValidatorStub; this spec's own trackerAdapterRegistry below overrides which adapter
     // actually backs 'github' for the run, resolving RecordingReadOnlyTracker instead of a real
     // GitHub adapter.
-    private BoardCommand newCommand(RecordingReadOnlyTracker tracker) {
-        def factory = new RecordingTrackerAdapterFactory(tracker)
+    private static BoardCommand newCommand(RecordingReadOnlyTracker tracker) {
+        commandBackedBy(new RecordingTrackerAdapterFactory(tracker))
+    }
+
+    private static BoardCommand commandBackedBy(RecordingTrackerAdapterFactory factory) {
         new BoardCommand(
                 Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
+                MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())
     }
 
@@ -95,11 +65,7 @@ tracker:
         ]
         def tracker = new RecordingReadOnlyTracker(ready, open)
         def factory = new RecordingTrackerAdapterFactory(tracker)
-        def command = new BoardCommand(
-                Clock.fixed(Instant.parse('2026-08-05T00:00:00Z'), ZoneOffset.UTC),
-                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
-                [github: factory],
-                TrackerValidatorStub.acceptingGithubSource())
+        def command = commandBackedBy(factory)
 
         when:
         command.run(args('board', "--dir=${projectDir}".toString()))
@@ -212,129 +178,5 @@ tracker:
 
         cleanup:
         System.out = originalOut
-    }
-}
-
-/**
- * A strict read-only {@link Tracker} fake: {@code listReady}/{@code listOpen} are recorded and
- * answered from fixed data; every write/coordination method throws {@link AssertionError}, so a
- * board code path that ever calls one fails the test immediately rather than silently passing
- * (NG3 of add-board-command).
- */
-class RecordingReadOnlyTracker implements Tracker {
-
-    private final List<ReadyTask> ready
-    private final List<OpenTask> open
-    int listReadyCalls = 0
-    int listOpenCalls = 0
-    Integer lastLimit
-
-    RecordingReadOnlyTracker(List<ReadyTask> ready, List<OpenTask> open) {
-        this.ready = ready
-        this.open = open
-    }
-
-    @Override
-    List<ReadyTask> listReady(int limit) {
-        listReadyCalls++
-        lastLimit = limit
-        ready
-    }
-
-    @Override
-    List<OpenTask> listOpen() {
-        listOpenCalls++
-        open
-    }
-
-    private static UnsupportedOperationException notReadOnly(String method) {
-        new UnsupportedOperationException("BoardCommand must never call Tracker.$method (NG3 of add-board-command)")
-    }
-
-    @Override
-    TrackerTask fetchTask(TaskRef ref) {
-        throw notReadOnly('fetchTask')
-    }
-
-    @Override
-    List<HumanReply> collectDecisions(TaskRef ref) {
-        throw notReadOnly('collectDecisions')
-    }
-
-    @Override
-    ClaimResult claim(TaskRef ref, String instanceId) {
-        throw notReadOnly('claim')
-    }
-
-    @Override
-    void release(TaskRef ref) {
-        throw notReadOnly('release')
-    }
-
-    @Override
-    void park(TaskRef ref, ParkReason reason, String report) {
-        throw notReadOnly('park')
-    }
-
-    @Override
-    void finish(TaskRef ref, String summary) {
-        throw notReadOnly('finish')
-    }
-
-    @Override
-    void declineFinished(TaskRef ref, String message) {
-        throw notReadOnly('declineFinished')
-    }
-
-    @Override
-    void recordAbort(TaskRef ref, AbortRecord record) {
-        throw notReadOnly('recordAbort')
-    }
-
-    @Override
-    void recordProgress(TaskRef ref) {
-        throw notReadOnly('recordProgress')
-    }
-
-    @Override
-    void acknowledgeDecision(TaskRef ref, String decisionText) {
-        throw notReadOnly('acknowledgeDecision')
-    }
-
-    @Override
-    void postNote(TaskRef ref, String text) {
-        throw notReadOnly('postNote')
-    }
-
-    @Override
-    HeartbeatResult heartbeat(TaskRef ref, String progressPayload) {
-        throw notReadOnly('heartbeat')
-    }
-
-    @Override
-    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
-        throw notReadOnly('removeStaleClaim')
-    }
-}
-
-/** Records the {@code instanceId} it was called with (design D8: minted but never written). */
-class RecordingTrackerAdapterFactory implements TrackerAdapterFactory {
-
-    private final Tracker tracker
-    String capturedInstanceId
-
-    RecordingTrackerAdapterFactory(Tracker tracker) {
-        this.tracker = tracker
-    }
-
-    @Override
-    Tracker create(TrackerConfig config, String instanceId) {
-        capturedInstanceId = instanceId
-        tracker
-    }
-
-    @Override
-    TaskRef expandRef(TrackerConfig config, String rawRef) {
-        throw new UnsupportedOperationException('not used by this fixture')
     }
 }

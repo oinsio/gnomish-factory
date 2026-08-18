@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.adapter.github.GithubCredential;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Validates the {@code tracker.github} subsection content (FR17 of
@@ -18,7 +18,9 @@ import java.util.Set;
  * labels" requirement) but any configured label entry must be a well-formed
  * {@code {name, color}} object with a valid 6-digit hex color, and no
  * credential-shaped key may appear at all (NFR-S1: the token comes only from
- * {@code GNOMISH_GITHUB_TOKEN}, read at adapter construction, never yaml).
+ * {@code GNOMISH_GITHUB_TOKEN} — or the variable {@code credential} names when
+ * a connection profile renames it, FR16 of add-plugin-architecture — read at
+ * adapter construction, never yaml).
  *
  * <p>This class only checks subsection content; it does not read the
  * environment, build the API client, or apply label defaults — those are
@@ -28,20 +30,14 @@ import java.util.Set;
  */
 public final class GithubTrackerSubsectionValidator implements TrackerSubsectionValidator {
 
-    /**
-     * Key fragments that mark a config key as credential-shaped: matched
-     * case-insensitively against a normalized (hyphens/underscores stripped)
-     * form of each subsection key, so {@code token}, {@code api-token},
-     * {@code apiToken}, and {@code access-token} are all caught alike.
-     */
-    private static final Set<String> TOKEN_KEY_FRAGMENTS = Set.of("token");
-
     @Override
     public List<ConfigError> validate(String file, String where, Map<String, Object> subsection) {
         List<ConfigError> errors = new ArrayList<>();
         requireNonBlankString(subsection, "api-url", file, where, errors);
         requireNonBlankString(subsection, "repo", file, where, errors);
-        rejectTokenKeys(subsection, file, where, errors);
+        errors.addAll(GithubCredential.rejectTokenKeys(
+                subsection, file, where, "config.yaml", GithubTrackerAdapterFactory.TOKEN_ENV_VAR));
+        errors.addAll(GithubCredential.validateName(subsection, file, where));
         Object labels = subsection.get("labels");
         if (labels != null) {
             errors.addAll(GithubLabelsValidator.validate(file, where + ".labels", labels));
@@ -54,20 +50,6 @@ public final class GithubTrackerSubsectionValidator implements TrackerSubsection
         Object value = subsection.get(key);
         if (!(value instanceof String s) || s.isBlank()) {
             errors.add(new ConfigError(file, where + "." + key, "missing required key '%s'".formatted(key)));
-        }
-    }
-
-    private static void rejectTokenKeys(
-            Map<String, Object> subsection, String file, String where, List<ConfigError> errors) {
-        for (String key : subsection.keySet()) {
-            String normalized = key.replace("-", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
-            if (TOKEN_KEY_FRAGMENTS.stream().anyMatch(normalized::contains)) {
-                errors.add(new ConfigError(
-                        file,
-                        where + "." + key,
-                        "'%s' must not appear in config.yaml; GNOMISH_GITHUB_TOKEN is read from the environment only"
-                                .formatted(key)));
-            }
         }
     }
 }

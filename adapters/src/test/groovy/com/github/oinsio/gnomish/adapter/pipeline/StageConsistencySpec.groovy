@@ -28,7 +28,7 @@ import spock.lang.TempDir
  * pipeline.yaml is a different concern (StageOrderRule, task 4.2).
  * Implements FR6 of load-pipeline-config.
  */
-class StageConsistencySpec extends Specification {
+class StageConsistencySpec extends Specification implements GnomishTreeWriter {
 
     private static RawStage withManifest(String name) {
         new RawStage(name, "purpose: ${name}\n")
@@ -128,12 +128,6 @@ class StageConsistencySpec extends Specification {
 
     @TempDir
     Path root
-
-    private void write(String relative, String text) {
-        Path target = root.resolve(relative)
-        Files.createDirectories(target.parent)
-        Files.writeString(target, text)
-    }
 
     def "wired through GnomishFiles: a real tree with a missing manifest and a dangling dir reports both"() {
         given: 'pipeline names plan (dir, no manifest) and a dangling orphan dir with a manifest'

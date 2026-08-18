@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
-import com.github.oinsio.gnomish.app.workspace.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Files
@@ -94,7 +94,7 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
         def httpClient = new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken())
         def client = new GithubCheckExternalClient(httpClient, GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME)
         def check = new VerifyCheck.External(
-                CHECK_ID, Duration.ofSeconds(5), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+                CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
         def workspace = workspaceAt(headSha)
 
         new PollingConditions(timeout: 480, initialDelay: 5, delay: 5).eventually {
@@ -102,9 +102,9 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
             assert status instanceof PollStatus.Pass: "latest poll was ${status} — runner logs: ${runner.logs()}"
         }
     }
-    private static AttemptCommitWorkspace workspaceAt(String sha) {
+    private static RecordedAttemptCommitWorkspace workspaceAt(String sha) {
         def ref = new AttemptCommitRef()
         ref.record(sha)
-        new AttemptCommitWorkspace(ref)
+        new RecordedAttemptCommitWorkspace(ref)
     }
 }

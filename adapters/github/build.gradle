@@ -39,8 +39,14 @@ dependencies {
     // (`ExternalCheckPinContributor`, `AttemptCommitWorkspace`,
     // `FindingsSanitizer`). Each is used directly here, which the
     // dependency-analysis gate requires stated rather than inherited.
+    //
+    // These two project edges are the whole compile classpath of this bundle:
+    // `:application` is gone (FR3, M1 of close-plugin-api-compilability-gap), so the
+    // first-party vendor adapter now compiles against exactly what a third-party
+    // bundle would — the published contract plus the domain value model it exposes
+    // transitively. Re-adding an `:application` edge here, on any configuration
+    // including test, re-opens the G4 gap this change closed.
     api project(':gnomish-plugin-api')
-    api project(':application')
     api project(':domain')
 
     implementation libs.slf4j.api
@@ -97,8 +103,14 @@ pitest {
 // A vendor adapter reaches the ports and use cases below it and nothing else
 // (FR2, M4, design D1): no sibling adapter module appears here, which is what
 // pass 2 buys over the package-level rule that stood in for it — a sibling's
-// types are now simply absent from the compile classpath. `:sandbox:core`
-// arrives transitively through `:application`, which re-exposes it.
+// types are now simply absent from the compile classpath.
+//
+// The allow-list is down to the published contract and the domain (FR3 of
+// close-plugin-api-compilability-gap): `:application` left with the
+// `RecordedAttemptCommitWorkspace` downcast, and `:gitobjects` / `:sandbox:core`
+// reached this module only through `:application`'s `api` edges, so they went with
+// it. This list IS the "a third party could build this bundle" claim, checked by
+// the build rather than asserted in prose.
 layering {
-    allowedProjects = [':application', ':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core']
+    allowedProjects = [':domain', ':gnomish-plugin-api']
 }
