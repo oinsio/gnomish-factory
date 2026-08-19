@@ -15,10 +15,11 @@ security boundary moves to the VM: hardware isolation per task, a real
 Docker daemon legally inside (its own kernel — ladder step 3), egress
 enforced by a host-side packet filter in front of the same guard. The
 trigger is "the operator needs a hardware boundary locally" — in-box
-Docker is the frequent special case, not the only reason. The
-`colima-agent-sandbox.md` exploration (2026-07) closed the research
-questions; threat-registry items addressed: #21 (hardware task↔task
-boundary), #24/#25 (Docker inside without socket passthrough or
+Docker is the frequent special case, not the only reason. A hands-on
+Colima exploration closed the research questions empirically;
+its findings are fixed as decisions in this change's `design.md`.
+Threat-registry items addressed (`docs/sandbox-threat-registry.md`):
+#21 (hardware task↔task boundary), #24/#25 (Docker inside without socket passthrough or
 privileged), #43 (silent isolation degradation, the vz→QEMU class).
 
 ## What Changes
@@ -253,8 +254,14 @@ privileged), #43 (silent isolation degradation, the vz→QEMU class).
 - Q4: Linux host parity — Colima on Linux vs plain Lima/QEMU and the
   nftables rule shape; verify at implementation start.
 - Q5: re-verify the tool landscape at implementation start (Colima/Lima
-  state, Apple container + socktainer maturity, DiskImageKit, vmnet) —
-  the deferred list carries revisit triggers.
+  project state first). Deferred alternatives and their revisit triggers:
+  Apple `container` + socktainer (revisit around 2027-01 — partial Docker
+  API compatibility, socktainer releases lag behind `container`);
+  DiskImageKit golden image + copy-on-write session overlay (when the
+  fleet reaches macOS 27 — removes the VM cold-start cost); vmnet per-VM
+  NAT (same milestone — replaces the hand-rolled packet-filter anchor);
+  Tart (only if macOS guests are ever needed, e.g. iOS builds — the core
+  team departed, not foundation material).
 
 ## Impact
 

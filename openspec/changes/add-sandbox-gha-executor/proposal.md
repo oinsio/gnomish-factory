@@ -13,7 +13,7 @@ GHA adapter of the `TaskExecutionEnvironment` port, so whole stages
 honest core of this change is its **risk passport**: GHA has the weakest
 egress control in the adapter family (no factory-owned guard in front of
 the runner), the local gateway and depot are unreachable, and workflows
-on gnome branches can expose repository secrets (threat #26 — a deceived
+on gnome branches can expose repository secrets (threat #26 of `docs/sandbox-threat-registry.md` — a deceived
 gnome exfiltrating CI secrets is a documented industry incident class).
 The adapter is built so these risks are structural non-events where
 possible (workflow definitions from the default branch only, read-only

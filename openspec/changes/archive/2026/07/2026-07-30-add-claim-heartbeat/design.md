@@ -8,7 +8,7 @@ This change turns the claim into a lease (FR1–FR10) consumed by the existing
 `take`, and extends the credential scrub to command checks (FR11). Decisions
 below are grounded in the 2026-07-20 explore session and its best-practice
 research (Kleppmann's fencing argument, DynamoDB Lock Client, Kubernetes
-Leases, SQS visibility timeout, Temporal heartbeats); `explore-notes-factory-loop.md`
+Leases, SQS visibility timeout, Temporal heartbeats); `docs/adr/0002-claim-lease-protocol.md`
 carries the full reasoning. Multi-instance behavior is designed in from the
 start — the follow-up `add-factory-serve` adds concurrency within an instance,
 not a new protocol.
@@ -137,7 +137,7 @@ report — burns tokens to recompute what the branch already stores.
 process construction receives the same adapter-declared credential list the
 agent launcher gets (tracker-port D17 seam) and excludes those variables; no
 tracker configured → env inherited unchanged. *Alternative rejected:* a full
-env allowlist — that is sandbox Tier 0 (`explore-notes-sandbox.md`),
+env allowlist — that is sandbox Tier 0 (`docs/operator-guide-sandbox.md`),
 deliberately out of scope here.
 
 **D12 — Structural formats follow the existing marker shape.** (FR1, FR4,

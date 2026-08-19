@@ -46,3 +46,7 @@ Keep the recommended message short: a Conventional Commits subject line (≤ ~72
 ## Documentation language
 
 All project documentation, specs, rules, code comments, and commit messages are written in English.
+
+## No references to temporary files
+
+`openspec/**` artifacts (proposals, designs, specs, tasks) may only reference project files that live under `docs/` — never scratch/explore locations, which are not part of the durable record and may be deleted at any time. When an idea needs to be cited from an ephemeral note: either inline the relevant meaning directly into the OpenSpec artifact, or propose creating a durable `docs/` file (an ADR, an operator guide, a scope note) and reference that instead.

@@ -4,10 +4,10 @@
 
 Driven by FR1–FR13, NFR-S1/S2, NFR-C1 of the proposal. Change A's port
 contract was made host-agnostic for exactly this adapter (operator
-decision 2026-07-23: no shared-FS assumption, git transport and streams
+decision: no shared-FS assumption, git transport and streams
 only), so the engine needs no changes and the only local-adapter touch
 is the container adapter's neighbor-stack realization (D10). The explore
-sessions (2026-07-23) settled the k8s-first direction, the Docker
+sessions settled the k8s-first direction, the Docker
 ladder in k8s, the metadata-endpoint hazard, and the "volume is cache"
 invariant; this design fixes the remaining structure.
 

@@ -103,7 +103,7 @@ stays out: this change makes one task from a tracker work end-to-end, by any ins
 
 - **NG1**: Factory loop — parallelism, slot scheduling, hold-slot policy, continuous
   polling, heartbeat/stale-claim protocol (separate change; backlog recorded in
-  `explore-notes-factory-loop.md`).
+  `docs/factory-loop-scope-notes.md`).
 - **NG2**: Jira adapter (port is designed for it; implementation later).
 - **NG3**: External CI checks on the task branch — the first `external` check type
   from the stage contract (deferred to a QC-focused change; its scope is already
