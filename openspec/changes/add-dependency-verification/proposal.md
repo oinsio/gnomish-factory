@@ -6,21 +6,31 @@ registry (`open-adapter-binding-registry`, NFR-S1) accepts a documented
 residual on exactly this: a malicious jar shipping a provider under a trusted
 id with the expected passport cannot be stopped at runtime. Gradle dependency
 verification closes that gap at build time — every artifact on every classpath
-is pinned to a recorded checksum / trusted signing key, so an unexpected jar
-never reaches the JVM. This is the JVM analog of GitHub Actions SHA-pinning,
-and it hardens the whole supply chain (Maven-Hijack-class packaging attacks,
-compromised mirrors), not just the sandbox SPI.
+is pinned to a recorded checksum, so an unexpected jar never reaches the JVM.
+This is the JVM analog of GitHub Actions SHA-pinning, and it hardens the whole
+supply chain (Maven-Hijack-class packaging attacks, compromised mirrors), not
+just the sandbox SPI.
+
+The repository already pins dependency *versions*: dependency locking is
+active on all configurations in every module (lockfiles feed the OSV-Scanner
+CVE gate), and the documented update flow is `./gradlew check --write-locks`.
+Verification adds the missing half — locking pins *which versions* resolve,
+verification pins *which bytes* those versions are — and the two must share
+one update flow so a dependency bump stays a single command.
 
 ## What Changes
 
 **ADDED**
 - Gradle dependency verification enabled repository-wide:
-  `gradle/verification-metadata.xml` records checksums (and trusted PGP keys
-  where publishers sign) for every resolved artifact — libraries, Gradle
-  plugins, and `build-logic` dependencies included.
-- A documented, low-friction maintenance workflow: bootstrap generation, the
-  update step for dependency bumps, and the Dependabot PR flow (Dependabot does
-  not update the metadata file, so the flow must say who/what regenerates it).
+  `gradle/verification-metadata.xml` records checksums for every resolved
+  artifact — libraries, Gradle plugins, and `build-logic` dependencies
+  included. (PGP trusted keys are a documented upgrade path, not part of this
+  change — see design D1.)
+- A documented, low-friction maintenance workflow: bootstrap generation, and
+  one combined update step for dependency bumps that regenerates both the
+  existing lockfiles and the verification metadata, including the Dependabot
+  PR flow (Dependabot updates neither file, so the flow must say who/what
+  regenerates them).
 - CI enforcement: verification is active on every CI build with no bypass
   flag; an unverified or mismatched artifact fails the build with an
   actionable error.
@@ -48,8 +58,9 @@ compromised mirrors), not just the sandbox SPI.
   and `build-logic`) is pinned: a swapped or injected jar fails the build
   before any code runs.
 - **G2** — Dependency updates stay low-friction: a version bump (manual or
-  Dependabot) needs one documented regeneration step and a reviewable metadata
-  diff — no hand-editing of checksums.
+  Dependabot) needs one documented regeneration step — shared with the
+  existing lockfile update — and a reviewable metadata diff; no hand-editing
+  of checksums.
 - **G3** — Close the NFR-S1 residual of `open-adapter-binding-registry`: the
   "malicious jar under a trusted id" scenario is stopped at build time.
 
@@ -68,8 +79,8 @@ compromised mirrors), not just the sandbox SPI.
 ## Users & Scenarios
 
 - **U1** — A maintainer bumps a dependency (or merges a Dependabot PR): they
-  run the documented regeneration command, review the metadata diff alongside
-  the version diff, and CI stays green.
+  run the documented regeneration command, review the lockfile and metadata
+  diffs alongside the version diff, and CI stays green.
 - **U2** — A compromised mirror / repository serves a tampered jar for a
   pinned version: the local or CI build fails naming the artifact and the
   checksum mismatch; nothing executes.
@@ -83,17 +94,20 @@ compromised mirrors), not just the sandbox SPI.
 
 - **FR1** — `gradle/verification-metadata.xml` SHALL pin every artifact
   resolved by any resolvable configuration — libraries, Gradle plugins,
-  `build-logic` dependencies — by checksum, with trusted PGP keys used where
-  the publisher signs.
+  `build-logic` dependencies — by checksum. (PGP trusted keys are a deferred
+  upgrade, resolved in design D1 — not required by this change.)
 - **FR2** — A build resolving an artifact that is absent from, or mismatches,
   the metadata SHALL fail with an error naming the artifact, the reason, and
   the fix (the regeneration command).
 - **FR3** — The regeneration workflow SHALL be a single documented command
+  that updates both the dependency lockfiles and the verification metadata,
   producing a deterministic, reviewable diff; contributors SHALL NOT hand-edit
   checksums.
 - **FR4** — The Dependabot flow SHALL be documented end-to-end: how a
-  version-bump PR gets its metadata update (manual step by the reviewer or an
-  automated follow-up), so Dependabot PRs do not rot red.
+  version-bump PR gets its lockfile and metadata update (manual step by the
+  reviewer or an automated follow-up), so Dependabot PRs do not rot red. The
+  flow SHALL extend the existing reviewer-run `--write-locks` step, not add a
+  second parallel procedure.
 - **FR5** — CI SHALL run with verification enforced and SHALL NOT carry any
   bypass flag; local builds MAY use the documented escape hatch
   (`--write-verification-metadata`) only to regenerate.
@@ -148,11 +162,14 @@ compromised mirrors), not just the sandbox SPI.
 
 - **Build** — new `gradle/verification-metadata.xml`; possibly a helper task /
   documented command in the build; no production-code change.
-- **CI** — `ci.yml` relies on verification being on by default; optional
-  wrapper-validation step (Q3).
-- **Process** — dependency-update flow gains one step; documented next to the
-  Dependabot config it affects.
+- **CI** — `ci.yml` relies on verification being on by default; wrapper
+  validation is already active there via `setup-gradle`'s
+  `validate-wrappers: true` (Q3 → design D3), so no new CI step.
+- **Process** — the existing dependency-update step (`--write-locks`) grows
+  into one combined regeneration command; documented next to the Dependabot
+  config it affects.
 - **Depends on / relates** — closes the NFR-S1 residual documented in
   `open-adapter-binding-registry` (D2/Risks); complements existing supply-chain
-  gates (OSV-Scanner CVE gate scans *known* versions; this pins *which bytes*
+  gates (dependency locking pins *which versions* resolve and feeds the
+  OSV-Scanner CVE gate, which scans *known* versions; this pins *which bytes*
   those versions are).
