@@ -376,10 +376,9 @@ Locking (lockfiles, feeds OSV-Scanner below) pins *which versions* resolve; veri
 
 <!-- implements FR9, UX4 of fix-osv-dependency-gate -->
 
-The vulnerability gate reads those lockfiles, so it can be reproduced locally before pushing — same verdict CI produces, same suppressions ([osv-scanner.toml](osv-scanner.toml)):
+The vulnerability gate reads those lockfiles, so it can be reproduced locally before pushing — same verdict CI produces, same suppressions ([osv-scanner.toml](osv-scanner.toml)). Regenerate lock state with the combined command above (plain `--write-locks` leaves verification metadata stale and the next `check` fails-closed on it), then scan:
 
 ```bash
-./gradlew check --write-locks
 osv-scanner scan source --config=osv-scanner.toml -r ./   # brew install osv-scanner
 ```
 
