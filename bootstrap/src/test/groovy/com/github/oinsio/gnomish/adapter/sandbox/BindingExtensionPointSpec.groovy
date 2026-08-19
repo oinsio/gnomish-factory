@@ -8,12 +8,8 @@ import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingResolver
-import com.github.oinsio.gnomish.sandbox.BindingTrustTable
-import com.github.oinsio.gnomish.sandbox.CapabilityPassport
-import com.github.oinsio.gnomish.sandbox.SandboxBindingProvider
 import com.github.oinsio.gnomish.sandbox.SandboxReconciler
 import com.github.oinsio.gnomish.sandbox.SegmentPlanner
-import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -43,8 +39,8 @@ class BindingExtensionPointSpec extends Specification {
     // M4: bind → reconcile → plan, over a backend nothing in production names
     def "a staged first-party backend is bound, reconciled and planned end to end"() {
         given: 'the stand-in backend staged as its own jar would carry it, trusted by an injected table'
-        def loader = stagedBackend()
-        def registry = SandboxBindingDiscovery.discover(loader, trustedWithStandIn())
+        def loader = StagedBackend.loader(backendJarRoot)
+        def registry = SandboxBindingDiscovery.discover(loader, StagedBackend.trustTable())
 
         and: 'an operator binding every stage to it, and a stage declaring needs its passport satisfies'
         def resolver = new BindingResolver(
@@ -76,8 +72,8 @@ class BindingExtensionPointSpec extends Specification {
     // discovered backend buys no exemption from the contract
     def "a need the staged backend's passport does not satisfy is still reported unmet"() {
         given: 'the stand-in backend bound to a stage declaring a need outside its passport'
-        def loader = stagedBackend()
-        def registry = SandboxBindingDiscovery.discover(loader, trustedWithStandIn())
+        def loader = StagedBackend.loader(backendJarRoot)
+        def registry = SandboxBindingDiscovery.discover(loader, StagedBackend.trustTable())
         def binding = registry.require(StubVmBindingProvider.CONFIG_NAME)
 
         when:
@@ -89,19 +85,6 @@ class BindingExtensionPointSpec extends Specification {
 
         cleanup:
         loader.close()
-    }
-
-    private URLClassLoader stagedBackend() {
-        Path services = backendJarRoot.resolve('META-INF/services')
-        Files.createDirectories(services)
-        Files.writeString(services.resolve(SandboxBindingProvider.name), StubVmBindingProvider.name + '\n')
-        new URLClassLoader([
-            backendJarRoot.toUri().toURL()
-        ] as URL[], getClass().classLoader)
-    }
-
-    private static Map<String, CapabilityPassport> trustedWithStandIn() {
-        BindingTrustTable.firstParty() + [(StubVmBindingProvider.CONFIG_NAME): StubVmBindingProvider.PASSPORT]
     }
 
     private static PipelineDefinition pipeline(List<StageDefinition> stages) {

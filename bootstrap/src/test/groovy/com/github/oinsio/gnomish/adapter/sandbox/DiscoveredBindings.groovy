@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.sandbox
 
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
-import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 
 /**
  * Test access to the package-private {@link SandboxBindingDiscovery}, for the specs outside this
@@ -17,10 +16,5 @@ class DiscoveredBindings {
     /** The bindings this build's classpath contributes, ratified by the production trust table. */
     static AdapterBindingRegistry real() {
         SandboxBindingDiscovery.discover()
-    }
-
-    /** The class-loader-explicit form, for staging a backend's presence or absence (M3, M4). */
-    static AdapterBindingRegistry from(ClassLoader loader, Map<String, CapabilityPassport> trustTable) {
-        SandboxBindingDiscovery.discover(loader, trustTable)
     }
 }

@@ -5,8 +5,6 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingResolver
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
-import com.github.oinsio.gnomish.sandbox.SandboxBindingProvider
-import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -48,10 +46,10 @@ class SandboxBindingDiscoverySpec extends Specification {
     // extension point, exercised with no edit to the discovery or registry mechanism
     def "a service entry the core names nowhere is discovered and becomes selectable"() {
         given: 'a backend "jar": a service entry naming a provider no production source references'
-        def loader = stagedBackend()
+        def loader = StagedBackend.loader(backendJarRoot)
 
         when: 'discovery runs with the stand-in registered in an injected trust table'
-        def registry = SandboxBindingDiscovery.discover(loader, trustedWithStandIn())
+        def registry = SandboxBindingDiscovery.discover(loader, StagedBackend.trustTable())
 
         then: 'the stand-in is selectable beside the two bindings the build itself ships'
         registry.require(StubVmBindingProvider.CONFIG_NAME).passport() == StubVmBindingProvider.PASSPORT
@@ -74,7 +72,7 @@ class SandboxBindingDiscoverySpec extends Specification {
     // gated by the core's own table, not by what the classpath happens to carry
     def "a staged backend absent from the trust table is refused fail-fast"() {
         given: 'the same staged service entry, ratified against the production trust table'
-        def loader = stagedBackend()
+        def loader = StagedBackend.loader(backendJarRoot)
 
         when:
         SandboxBindingDiscovery.discover(loader, BindingTrustTable.firstParty())
@@ -118,20 +116,5 @@ class SandboxBindingDiscoverySpec extends Specification {
         failure.message.contains(BindingNames.CONTAINER)
         failure.message.contains('[host]')
         failure.message.contains('factory.bindings.default=host')
-    }
-
-    /** A loader carrying a service entry for the stand-in backend, as its jar would. */
-    private URLClassLoader stagedBackend() {
-        Path services = backendJarRoot.resolve('META-INF/services')
-        Files.createDirectories(services)
-        Files.writeString(services.resolve(SandboxBindingProvider.name), StubVmBindingProvider.name + '\n')
-        new URLClassLoader([
-            backendJarRoot.toUri().toURL()
-        ] as URL[], getClass().classLoader)
-    }
-
-    /** The production trust table plus the stand-in's own registration — the reviewed one-liner. */
-    private static Map<String, CapabilityPassport> trustedWithStandIn() {
-        BindingTrustTable.firstParty() + [(StubVmBindingProvider.CONFIG_NAME): StubVmBindingProvider.PASSPORT]
     }
 }

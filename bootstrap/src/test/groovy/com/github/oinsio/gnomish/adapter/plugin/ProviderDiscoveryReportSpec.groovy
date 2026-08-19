@@ -50,7 +50,7 @@ class ProviderDiscoveryReportSpec extends Specification {
     //     unchanged — the reporting bean wraps its own result rather than growing a branch.
     def "reporting logs every line and returns the registry unchanged"() {
         given:
-        def appender = LogCaptureSupport.attach(ProviderDiscoveryReport)
+        def capture = LogCaptureSupport.attach(ProviderDiscoveryReport)
         def registry = [github: new StubProvider()]
 
         when:
@@ -60,11 +60,11 @@ class ProviderDiscoveryReportSpec extends Specification {
         returned.is(registry)
 
         and: 'every rendered line was logged at INFO'
-        appender.list*.formattedMessage == ProviderDiscoveryReport.render('tracker', registry)
-        appender.list.every { it.level == Level.INFO }
+        capture.list*.formattedMessage == ProviderDiscoveryReport.render('tracker', registry)
+        capture.list.every { it.level == Level.INFO }
 
         cleanup:
-        LogCaptureSupport.detach(ProviderDiscoveryReport, appender)
+        capture.detach()
     }
 
     // NFR-O1: "including which jar contributed each provider" — a packaged distribution loads

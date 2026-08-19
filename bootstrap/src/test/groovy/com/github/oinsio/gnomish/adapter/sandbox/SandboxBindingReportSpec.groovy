@@ -65,7 +65,7 @@ class SandboxBindingReportSpec extends Specification {
     // the discovered one — reporting wraps the result rather than replacing it
     def "the configuration bean reports the discovered bindings and returns them"() {
         given:
-        def appender = LogCaptureSupport.attach(ProviderDiscoveryReport)
+        def capture = LogCaptureSupport.attach(ProviderDiscoveryReport)
 
         when:
         def registry = new SandboxBindingConfiguration().adapterBindingRegistry()
@@ -77,7 +77,7 @@ class SandboxBindingReportSpec extends Specification {
         ])
 
         and: 'and both were logged with their passports before anything else could run'
-        def logged = appender.list*.formattedMessage
+        def logged = capture.list*.formattedMessage
         logged.any {
             it.startsWith('discovered ') && it.contains('sandbox binding provider(s)')
         }
@@ -87,6 +87,6 @@ class SandboxBindingReportSpec extends Specification {
         }
 
         cleanup:
-        LogCaptureSupport.detach(ProviderDiscoveryReport, appender)
+        capture.detach()
     }
 }
