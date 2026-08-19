@@ -151,6 +151,15 @@ Findings here use the same severity scale; anything exploitable or fail-open is 
 ### Verdict                   — ready to archive / not ready (blockers listed)
 ```
 
+Each Recommendations item must be self-contained — the reader acts on it without hunting
+through the report sections above. Format per item:
+
+```
+N. **SEVERITY — <short title>** (`file:line`)
+   Problem: what is wrong and why it matters, restated here even if described earlier.
+   Fix: the concrete change to make.
+```
+
 Every finding must carry a `file:line` reference and an actionable recommendation — no vague
 "consider reviewing". When uncertain, downgrade severity rather than guessing. End with a
 reminder that nothing was modified and the human decides what to apply.
