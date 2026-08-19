@@ -33,6 +33,12 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Stale claim** — a claim whose version stayed unchanged for a TTL measured
   on the observer's own clock; eligible for takeover. *Not:* judged by
   comparing timestamps across instances.
+- **Reaper** — the standing duty that finds stale claims: each tick it lists
+  the open tasks, checks every `Working` claim against the TTL, and returns
+  stale-claimed tasks to `Ready`. It never claims a task for itself.
+- **Zombie** — a former claim holder whose lease went stale (or was reaped)
+  while its process may still be running; its writes are stopped by the fence,
+  not by asking it to stop.
 - **Fence** — the mechanism that stops a stale holder's writes: the task
   branch's non-fast-forward push. The task branch is never force-pushed.
 - **Park** — set the task to a waiting tracker status (escalation or a manual
@@ -66,8 +72,11 @@ terms) live in `.claude/rules/process-invariants.md`.
   built-in declarative, `command`, `external`, or `judge`.
 - **Judge** — LLM-as-judge verification via the `JudgeVoter` port: acceptance
   criteria in, structured verdict (`passed`, `findings[]`) out.
-- **Findings** — the structured results of a failed or noteworthy check, fed
-  back to the gnome on retry and reported to the tracker.
+- **Findings** — structured, machine-readable observations reported to the
+  tracker: message, optional location, optional details. Most come from a
+  failed or noteworthy check and are fed back to the gnome on retry; a
+  **denial** is a finding no check produced, so it is reported but never fed
+  back.
 - **Quality failure** — an explicit non-pass verdict (red tests, judge
   findings); burns an attempt. **Infrastructure failure** — a verdict could
   not be obtained (network, 5xx); never burns an attempt.
@@ -81,11 +90,21 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Box** — the disposable isolated execution environment a gnome runs in;
   destroyed after the task. *Not:* a synonym for container — a box may be a
   container or a VM.
+- **Passport (capability passport)** — the capability declaration a sandbox
+  backend ships with its binding (isolation level, egress control, ...). A
+  stage's needs are reconciled against the bound adapter's passport,
+  fail-closed; the factory core owns the trust table mapping each trusted
+  binding id to the passport it is expected to declare.
 - **Guard** — the egress proxy on the host (mitmproxy-based); the only
   network exit the box has, enforcing a default-deny allowlist and logging
   denials.
 - **Allowlist** — the explicit list of permitted egress destinations; the
   default is deny. *Never:* whitelist.
+- **Denial** — one egress attempt the guard refused, recorded as a finding
+  (destination host, port, and for plain HTTP the method and query-free path —
+  never a request body). A denial is observability, not a gate: it rides the
+  attempt it happened in into the report and changes no verdict, no stage
+  outcome, and no retry feedback. *Never:* block, violation.
 - **Artifact depot** — a host-side proxy for package registries; the box
   talks only to it, and it alone talks to the upstream registries.
 - **Docker-strategy ladder** — the ordered escalation of ways to give a task

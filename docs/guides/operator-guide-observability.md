@@ -42,7 +42,7 @@ host a distinct configured name.
 
 Atomically overwritten (temp file + rename) on a timer and immediately on
 state transitions (FR1). Six sections plus two self-description scalars —
-see [`snapshot-v1.reference.json`](../src/test/resources/snapshot-v1.reference.json)
+see [`snapshot-v1.reference.json`](../../application/src/test/resources/snapshot-v1.reference.json)
 for the exact shape:
 
 | Section | Answers | Key fields |
@@ -92,7 +92,7 @@ the daemon switching to a new day's filename, so a `tail -F` never chases a
 rename (FR14). "Last night" is therefore always 1–2 files, identifiable
 purely by the date in the filename — no timestamp parsing needed to find
 them (UX2). See
-[`ledger-v1.reference.jsonl`](../src/test/resources/ledger-v1.reference.jsonl)
+[`ledger-v1.reference.jsonl`](../../application/src/test/resources/ledger-v1.reference.jsonl)
 for exact shapes; every line carries `version`, a `type` discriminator, and
 the same `instance` block as the snapshot.
 

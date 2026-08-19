@@ -46,12 +46,42 @@ heartbeats.
   progress (stage, attempt, last-alive time) — progress in the issue thread
   for free (NFR-O). No state hand-off to the next holder is needed: state
   already lives in the branch and is richer than any heartbeat payload.
-- **Confirmed by analogy**: SQS `maxReceiveCount` → DLQ mirrors our K-attempt
-  fuse → `park(INFRA)`; SQS "terminate visibility timeout" mirrors `release`;
+- **Confirmed by analogy**: SQS `maxReceiveCount` → DLQ mirrors our abort
+  threshold → `park(INFRA)`; SQS "terminate visibility timeout" mirrors `release`;
   at-least-once delivery under any lease means duplicate delivery is possible,
   so work must be idempotent — ours is (rounds live in the branch, resumable);
   Kubernetes `leaseTransitions` mirrors our "stale claim removed" marker as an
   audit trail of holder changes.
+
+## Sequence: stale-claim takeover
+
+The scenario that exercises every decision above — the holder dies, the reaper
+returns the task, another instance takes over, and the fence stops the zombie:
+
+```mermaid
+sequenceDiagram
+    participant A as Instance A (holder)
+    participant T as Tracker
+    participant R as Reaper (on instance B)
+    participant B as Instance B
+    participant G as Task branch (git)
+
+    A->>T: claim comment (task → Working)
+    loop every beat
+        A->>T: PATCH claim comment (progress, alive)
+    end
+    Note over A: process stalls — beats stop
+    R->>T: read claim, remember version + first-seen (own clock)
+    Note over R: TTL elapses, version unchanged → stale
+    R->>T: delete claim comment, task → Ready
+    B->>T: claim comment (task → Working)
+    B->>G: fetch state, resume from branch
+    Note over A: process wakes — now a zombie
+    A--xG: push rejected: non-fast-forward (fence)
+    A->>T: PATCH claim comment (beat)
+    T-->>A: 404 — comment gone
+    Note over A: claim lost → stop at round boundary
+```
 
 ## Consequences
 

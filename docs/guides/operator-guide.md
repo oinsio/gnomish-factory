@@ -5,8 +5,9 @@
 This guide is for the human on the other end of `gnomish take` — the operator who
 hands tasks to the factory through a GitHub issue tracker and resolves the
 escalations it can't decide alone. It assumes the factory is already built and a
-target project has a working `.gnomish/` pipeline (see the main README for `gnomish
-run`); this document covers the tracker-driven single-task workflow layered on top.
+target project has a working `.gnomish/` pipeline (see
+[`operator-guide-run.md`](operator-guide-run.md) for `gnomish run`); this document
+covers the tracker-driven single-task workflow layered on top.
 Where gnome processes actually execute — the container sandbox, host mode, the
 egress allowlist — is
 [`docs/operator-guide-sandbox.md`](operator-guide-sandbox.md)'s territory.
@@ -63,7 +64,7 @@ flowchart LR
    **The beat interval is your throughput knob (mind the shared write budget).**
    Each held `Working` task costs one tracker write per beat — 12 writes/hour
    per task at the `5m` default — and every instance shares the *same* token's
-   write budget (GitHub's secondary-limit ballpark is ~500 writes/hour). So
+   write budget (GitHub's secondary limit is roughly 500 writes/hour). So
    `beat interval × number of concurrent working tasks` is what bounds how many
    tasks you can run at once before that shared budget, not compute, is the
    constraint. Shortening the interval buys faster stale-claim recovery at the
@@ -510,7 +511,7 @@ the factory itself never reads project fields or column membership directly.
 
 A reference cron GitHub Action that syncs "column → ready label" using the `gh`
 CLI ships alongside this guide at
-[`docs/examples/board-bridge.yml`](examples/board-bridge.yml). Copy it into
+[`docs/examples/board-bridge.yml`](../examples/board-bridge.yml). Copy it into
 `.github/workflows/` in the target repo and adjust the column name and project
 number for your board.
 
@@ -587,8 +588,8 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 | 3    | pipeline load failure                                                                              |
 | 10   | parked as escalation — a decision is needed                                                        |
 | 11   | parked as a manual checkpoint                                                                      |
-| 12   | infrastructure abort, below the fuse — task returned to `Ready`                                    |
-| 13   | parked as infra — fuse tripped, or an infrastructure escalation                                    |
+| 12   | infrastructure abort, below the abort threshold — task returned to `Ready`                         |
+| 13   | parked as infra — abort threshold reached, or an infrastructure escalation                         |
 | 14   | revoked — claim lost mid-run (issue closed or reassigned under a working gnome)                    |
 | 15   | refused or skipped (held by another instance, already delivered, closed/nonexistent, foreign repo) |
 

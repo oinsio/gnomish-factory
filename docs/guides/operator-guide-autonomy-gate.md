@@ -51,7 +51,7 @@ Only trust two kinds of sources to set `gnomish:ready`:
   `operator-guide.md`).
 - **Trusted, reviewed automation** whose trigger conditions are themselves
   gated by repo write access — for example the
-  [`board-bridge.yml`](examples/board-bridge.yml) reference workflow, which
+  [`board-bridge.yml`](../examples/board-bridge.yml) reference workflow, which
   reacts only to a Projects v2 board that only collaborators can edit.
 
 Never wire anything that lets **untrusted input** apply the label, directly
@@ -91,7 +91,7 @@ pull request from an untrusted fork — because structurally, it is one:
   only if the workflow genuinely needs to report a status back — never
   `contents: write`, and never the broad legacy default of "all
   permissions" GitHub used to apply. This repo's own
-  [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) is the
+  [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) is the
   working example: `permissions: contents: read` at the workflow level.
 - These workflows MUST NOT have access to privileged or
   organization-level secrets — deployment credentials, publishing tokens,

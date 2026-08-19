@@ -228,7 +228,7 @@ the heartbeat constants in the repo, not in any one instance's config.
 Every `Working` task an instance holds gets re-beaten on the configured
 heartbeat interval (default 5 minutes → 12 writes/hour per task), and every
 instance running against a project shares the **same** token's write budget
-(GitHub's secondary-limit ballpark is roughly 500 writes/hour). The heartbeat
+(GitHub's secondary limit is roughly 500 writes/hour). The heartbeat
 dominates steady-state writes, so at the default 5-minute interval:
 
 ```

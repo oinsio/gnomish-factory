@@ -45,7 +45,7 @@ flowchart LR
 ```
 
 Before the first gnome process in every box, a fail-closed **self-check**
-proves the cage from inside: direct egress fails, a non-allowlisted host is
+proves the box's isolation from inside: direct egress fails, a non-allowlisted host is
 denied, an allowlisted host passes, and the isolation in effect matches the
 adapter's passport. A failed probe rejects the environment as an
 infrastructure failure naming the probe (UX2) — no round executes in a box
@@ -114,9 +114,9 @@ what it means:
   in `env`; it does not stop a process from reading `~/.aws/credentials`.
 - There is no egress control: any process can reach any destination.
 
-Host mode remains fully supported for trusted setups — dogfooding, licensed
-toolchains, iOS/GPU builds — but treat it as running the gnome with your own
-hands. Mode-independent process discipline (stdin prompts, the findings
+Host mode remains fully supported for trusted setups — running the factory on
+this project's own repository, licensed toolchains, iOS/GPU builds — but treat
+it as running the gnome with your own hands. Mode-independent process discipline (stdin prompts, the findings
 funnel, law binding, factory git hardening) still applies.
 
 ## Environment passthrough
@@ -158,7 +158,14 @@ factory.sandbox.egress-allowlist=api.anthropic.com,repo.maven.apache.org,registr
 ```
 
 Every denial is logged as structured metadata (host, path, method — never
-bodies) and attached to the task report as findings. Reading them (UX3):
+bodies) and attached to the round that caused it. Where to look:
+
+- `gnomish status` — an `egress denial:` line under the round's summary
+- `status.json` / the task branch's `state.json` — `attempts[].denials[]`,
+  one entry per denial, in the same shape a failed check's `findings[]` uses
+
+Denials are observability, never a gate: a round that denied something still
+passes if its checks pass. Reading them (UX3):
 
 - **A denied registry/tooling host right after a build step** — the toolchain
   needs a new entry. Add it and return the task.
