@@ -4,7 +4,7 @@
 #
 # Gnomish Factory has no inbound HTTP and does not read GitHub Projects v2
 # boards directly: issue labels and structural comments are its only source
-# of truth (see docs/operator-guide.md, "Projects v2 Boards: Display Only").
+# of truth (see docs/guides/operator-guide.md, "Projects v2 Boards: Display Only").
 #
 # This workflow is the bridge: on a cron, it reads a Projects v2 board's
 # "Status" field via the GraphQL API and applies the factory's ready label

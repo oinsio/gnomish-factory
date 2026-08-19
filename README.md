@@ -104,14 +104,14 @@ sequenceDiagram
 
 The CLI is one boot jar with seven subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
 
-| Command                     | What it does                                                                          | Reference                                                              |
-|-----------------------------|----------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| `gnomish run`               | drive one ad-hoc task through the pipeline, no tracker                               | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)             |
-| `gnomish take`              | claim the head of the tracker's ready queue (or act on one issue by ref) and work it | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                     |
-| `gnomish serve`             | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler           | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)         |
-| `gnomish status` / `usage`  | read-only task state and resource/cost usage, straight from the task branch          | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)     |
-| `gnomish board`             | Kanban view over the tracker's task states                                           | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                     |
-| `gnomish dashboard`         | self-contained HTML page over the daemon snapshot, ledger, and board                 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md) |
+| Command                    | What it does                                                                         | Reference                                                                            |
+|----------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| `gnomish run`              | drive one ad-hoc task through the pipeline, no tracker                               | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)             |
+| `gnomish take`             | claim the head of the tracker's ready queue (or act on one issue by ref) and work it | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                     |
+| `gnomish serve`            | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler           | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)         |
+| `gnomish status` / `usage` | read-only task state and resource/cost usage, straight from the task branch          | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)     |
+| `gnomish board`            | Kanban view over the tracker's task states                                           | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                     |
+| `gnomish dashboard`        | self-contained HTML page over the daemon snapshot, ledger, and board                 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md) |
 
 ```bash
 # one ad-hoc task, no tracker (git mode by default: task branch + worktree + resume)
@@ -157,24 +157,24 @@ Everything beyond the one command — per-module verification and mutation scopi
 
 The full map of the project's documentation, by the question it answers:
 
-| Document                                                                                        | Read it when you want to...                                                                    |
-|-------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-| [`docs/glossary.md`](docs/glossary.md)                                                          | learn the project's terms — the normative dictionary every doc and class name follows; start here |
-| [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)                        | run one ad-hoc task through a pipeline (`gnomish run`): flags, git mode, resume, exit codes       |
-| [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                | run the factory against a tracker (`take`, `board`): labels, escalations, recovery                |
-| [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                    | run the autonomous daemon (`serve`): slots, write budget, cron operation                          |
-| [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)                | inspect a task from its branch (`status`, `usage`) and their JSON contracts                       |
-| [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)            | put the factory's state on a wall display (`dashboard`)                                           |
-| [`docs/guides/operator-guide-observability.md`](docs/guides/operator-guide-observability.md)    | monitor an unattended daemon: snapshot, ledger, dead-man's-switch alerting                        |
-| [`docs/guides/operator-guide-sandbox.md`](docs/guides/operator-guide-sandbox.md)                | configure where gnome processes execute: container box, egress allowlist, host mode               |
-| [`docs/guides/operator-guide-autonomy-gate.md`](docs/guides/operator-guide-autonomy-gate.md)    | understand who may mark a task ready — the security gate on autonomous execution                  |
-| [`docs/guides/operator-guide-github-actions-check.md`](docs/guides/operator-guide-github-actions-check.md) | wire a stage's `external` check to GitHub Actions                                       |
-| [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md)                              | work on the factory itself: module map, build gates, dependency verification, OSV                 |
-| [`docs/guides/adapter-author-guide.md`](docs/guides/adapter-author-guide.md)                    | implement a new tracker adapter against the plugin contract                                       |
-| [`gnomish-plugin-api/README.md`](gnomish-plugin-api/README.md)                                  | see what the published plugin contract contains and how it is versioned                           |
-| [`docs/adr/`](docs/adr)                                                                         | read the recorded architecture decisions (tech stack, claim-lease protocol)                       |
-| [`docs/sandbox-threat-registry.md`](docs/sandbox-threat-registry.md)                            | consult the sandbox threat model, threat by numbered threat                                       |
-| [`docs/examples/`](docs/examples)                                                               | copy reference material: the board-bridge workflow, the sandbox image recipe                      |
+| Document                                                                                                   | Read it when you want to...                                                                       |
+|------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| [`docs/glossary.md`](docs/glossary.md)                                                                     | learn the project's terms — the normative dictionary every doc and class name follows; start here |
+| [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)                                   | run one ad-hoc task through a pipeline (`gnomish run`): flags, git mode, resume, exit codes       |
+| [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                           | run the factory against a tracker (`take`, `board`): labels, escalations, recovery                |
+| [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                               | run the autonomous daemon (`serve`): slots, write budget, cron operation                          |
+| [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)                           | inspect a task from its branch (`status`, `usage`) and their JSON contracts                       |
+| [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)                       | put the factory's state on a wall display (`dashboard`)                                           |
+| [`docs/guides/operator-guide-observability.md`](docs/guides/operator-guide-observability.md)               | monitor an unattended daemon: snapshot, ledger, dead-man's-switch alerting                        |
+| [`docs/guides/operator-guide-sandbox.md`](docs/guides/operator-guide-sandbox.md)                           | configure where gnome processes execute: container box, egress allowlist, host mode               |
+| [`docs/guides/operator-guide-autonomy-gate.md`](docs/guides/operator-guide-autonomy-gate.md)               | understand who may mark a task ready — the security gate on autonomous execution                  |
+| [`docs/guides/operator-guide-github-actions-check.md`](docs/guides/operator-guide-github-actions-check.md) | wire a stage's `external` check to GitHub Actions                                                 |
+| [`docs/guides/developer-guide.md`](docs/guides/developer-guide.md)                                         | work on the factory itself: module map, build gates, dependency verification, OSV                 |
+| [`docs/guides/adapter-author-guide.md`](docs/guides/adapter-author-guide.md)                               | implement a new tracker adapter against the plugin contract                                       |
+| [`gnomish-plugin-api/README.md`](gnomish-plugin-api/README.md)                                             | see what the published plugin contract contains and how it is versioned                           |
+| [`docs/adr/`](docs/adr)                                                                                    | read the recorded architecture decisions (tech stack, claim-lease protocol)                       |
+| [`docs/sandbox-threat-registry.md`](docs/sandbox-threat-registry.md)                                       | consult the sandbox threat model, threat by numbered threat                                       |
+| [`docs/examples/`](docs/examples)                                                                          | copy reference material: the board-bridge workflow, the sandbox image recipe                      |
 
 ## Development process
 
