@@ -70,7 +70,7 @@ class StageAttemptLoopSpec extends Specification {
     }
 
     static ExecutionResult.Completed completed(ExecutorUsage usage) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     // FR4, FR13: a check that CannotVerify escalates without burning an attempt, and the
@@ -188,7 +188,7 @@ class StageAttemptLoopSpec extends Specification {
         clock.instant = begin
         def stageDef = stage('build', 3, [builtin('files_exist')])
         executor.scripted << new ExecutionResult.DecisionNeeded('which db?', ['pg', 'mysql'],
-        ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+        ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())

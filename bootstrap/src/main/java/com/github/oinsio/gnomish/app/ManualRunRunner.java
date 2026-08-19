@@ -18,7 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
+import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -117,7 +117,7 @@ public final class ManualRunRunner implements ApplicationRunner {
      * package-private testing seam: production keeps the real Docker probe; daemon-free specs
      * assign a scripted boolean so the container dispatch is exercised without a daemon.
      */
-    BooleanSupplier dockerProbe = ContainerEnvironments::dockerAvailable;
+    BooleanSupplier dockerProbe = DockerRuntimeProbe::dockerAvailable;
 
     ManualRunRunner(
             RunArgumentsParser argumentsParser,

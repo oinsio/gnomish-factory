@@ -294,7 +294,7 @@ class StatusReportJsonMapperSpec extends Specification {
         ])
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
-                [], ExecutorUsage.none(), judgeUsage)
+                [], ExecutorUsage.none(), judgeUsage, [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
         def report = StatusReport.build(context, state, 3, LiveActivity.idle())
 
@@ -316,7 +316,7 @@ class StatusReportJsonMapperSpec extends Specification {
         def judgeUsage = new JudgeUsage([[:]])
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
-                [], ExecutorUsage.none(), judgeUsage)
+                [], ExecutorUsage.none(), judgeUsage, [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
         def report = StatusReport.build(context, state, 3, LiveActivity.idle())
 
@@ -338,6 +338,48 @@ class StatusReportJsonMapperSpec extends Specification {
         def context = new TaskContext("task-1", "Title", "Body", [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [], ExecutorUsage.none())
         return StatusReport.build(context, state, 3, new LiveActivity(activity, null, null))
+    }
+
+    // FR4, NFR-O1, NFR-S1, M1 of fix-denial-report-attachment: the whole point of the change —
+    //     a blocked exfiltration attempt during an OTHERWISE PASSING attempt is visible to the
+    //     reviewer, and visible as a finding rather than as a changed outcome
+    def "M1: a passing attempt shows its denial while staying passed"() {
+        given: 'a round that passed every check and denied one egress attempt'
+        def denial = new Finding(
+                "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
+        def check = new CheckResult(new CheckRef(0, "builtin:files_exist"), new Verdict.Pass(), Duration.ofMillis(3))
+        def attempt = new AttemptRecord(
+                0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
+                [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+
+        when:
+        def dto = mapper.toDto(reportOf(attempt)).currentStage().attempts()[0]
+
+        then: 'the attempt is passed — a denial gates nothing (proposal NG3)'
+        dto.result() == "passed"
+
+        and: 'and it carries the denial in the check-finding shape: host, path, method, no body (NFR-S1)'
+        dto.denials() == [
+            new FindingDto(
+            "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
+        ]
+    }
+
+    // UX2: a task that never denied reports an empty array, not a fabricated or omitted one
+    def "UX2: an attempt with no denials renders an empty array"() {
+        given:
+        def attempt = new AttemptRecord(
+                0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
+                [], ExecutorUsage.none(), JudgeUsage.none(), [])
+
+        expect:
+        mapper.toDto(reportOf(attempt)).currentStage().attempts()[0].denials() == []
+    }
+
+    private static StatusReport reportOf(AttemptRecord attempt) {
+        def context = new TaskContext("task-1", "Title", "Body", [])
+        def state = new TaskState(new Position.AtStage("implement"), 1, [attempt], ExecutorUsage.none())
+        return StatusReport.build(context, state, 3, new LiveActivity(null, null, null))
     }
 
     private static StatusReport outcomeReport(Outcome outcome) {
@@ -376,7 +418,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 Instant.parse("2026-07-16T14:35:10Z"),
                 [passCheck, failCheck],
                 attemptUsage,
-                JudgeUsage.none())
+                JudgeUsage.none(), [])
 
         def totalsUsage = new ExecutorUsage(
                 Duration.ofMillis(232000),

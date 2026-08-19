@@ -1,9 +1,8 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -20,22 +19,16 @@ import spock.lang.TempDir
  * FR13, FR6 of add-git-workflow (task 5.3): {@code gnomish status --dir <clone> <task>} renders
  * text/JSON v1 from the branch state reader and shows the worktree path. Real git repos throughout
  * (matching {@code BranchStateReaderSpec}'s adapter-layer convention) — no stubbing of the reader.
+ * The seeded-clone setup comes from {@link SeededCloneFixture} (test-fixtures, shared with the
+ * git adapter's own usage-walker specs).
  */
-class StatusCommandSpec extends Specification implements BareGitRepoFixture {
+class StatusCommandSpec extends Specification implements SeededCloneFixture, StdoutCaptureFixture {
 
     @TempDir
     Path tempDir
 
-    def runner = new GitProcessRunner()
-    Path cloneDir
-    Path worktreesRoot
-
     def setup() {
-        cloneDir = initWorkingRepo(tempDir, 'clone')
-        new File(cloneDir.toFile(), 'a.txt').text = 'first'
-        runner.run(cloneDir, 'add', 'a.txt')
-        runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
+        setupSeededClone()
     }
 
     private StatusCommand newCommand() {
@@ -50,42 +43,6 @@ class StatusCommandSpec extends Specification implements BareGitRepoFixture {
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
         persistence.persist(taskId, state, trace)
-    }
-
-    private static String captureStdout(Closure action) {
-        def originalOut = System.out
-        def out = new ByteArrayOutputStream()
-        System.out = new PrintStream(out, true, 'UTF-8')
-        try {
-            action.call()
-        } finally {
-            System.out = originalOut
-        }
-        return out.toString('UTF-8')
-    }
-
-    /**
-     * Like {@link #captureStdout}, but for actions expected to throw: runs {@code action} with
-     * stdout captured, swallows exactly {@code thrownType} (asserting it was thrown) and returns
-     * whatever reached stdout before the throw, so callers can assert on both in one block.
-     */
-    private static String captureStdoutExpectingThrow(Class<? extends Throwable> thrownType, Closure action) {
-        def originalOut = System.out
-        def out = new ByteArrayOutputStream()
-        System.out = new PrintStream(out, true, 'UTF-8')
-        try {
-            action.call()
-            throw new AssertionError("expected ${thrownType.simpleName} to be thrown, but action completed normally")
-        } catch (AssertionError rethrow) {
-            throw rethrow
-        } catch (Throwable t) {
-            if (!thrownType.isInstance(t)) {
-                throw t
-            }
-        } finally {
-            System.out = originalOut
-        }
-        return out.toString('UTF-8')
     }
 
     def "FR13: text render of a found task prints the status block"() {

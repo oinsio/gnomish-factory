@@ -42,6 +42,7 @@
         "details" : null,
         "runUrl" : null
       } ],
+      "denials" : [ ],
       "usage" : {
         "wallMillis" : 183000,
         "tokensByModel" : {

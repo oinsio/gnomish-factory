@@ -98,7 +98,7 @@ class StatusEventListenerSpec extends Specification {
         def listener = new StatusEventListener(holder, fixedClock())
         def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none())
+        ExecutorUsage.none(), JudgeUsage.none(), [])
         def newState = TaskState.atStageStart('implement').recordUnburnedRound(round)
 
         when: 'an AttemptFinished event arrives'
@@ -195,7 +195,7 @@ class StatusEventListenerSpec extends Specification {
         def ctx = context()
         def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none())
+        ExecutorUsage.none(), JudgeUsage.none(), [])
         def newState = TaskState.atStageStart('implement').recordUnburnedRound(round)
         def escalation = new EscalationReport.DecisionNeeded('Refactor or patch?', ['refactor', 'patch'])
         def outcome = new TaskOutcome.Escalated(newState, escalation)

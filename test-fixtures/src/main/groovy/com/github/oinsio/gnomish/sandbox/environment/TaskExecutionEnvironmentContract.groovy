@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.domain.engine.port.contract.PortContractSupport
+import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -94,7 +96,7 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         // cat forever — dies as a red Exited assertion within the budget rather than as a TIMED_OUT.
         def handle = e.exec(shell('cat', 'piped-prompt-content'))
         def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(12), {
-            -> java.time.Instant.now()
+            -> Instant.now()
         })
         def out = readFully(handle.output())
 
@@ -220,6 +222,33 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         e.passport() != null
     }
 
+    // FR1, NFR-R1 of fix-denial-report-attachment: denials are readable through the port itself,
+    //     and an environment with no egress guard answers empty rather than refusing the question
+    def "denialFindings answers through the port, empty for a guard-less environment"() {
+        given: 'a materialized environment that made no denied request'
+        def e = materialized()
+
+        expect: 'a truthful empty answer, never null and never a failure'
+        e.denialFindings() == []
+    }
+
+    // FR5 of fix-denial-report-attachment: the cursor is offered, never imposed — an environment
+    //     with no denial source has no position to hand back and accepts an offer as a no-op
+    def "denialCursor and restoreDenialCursor answer through the port, whatever the denial source"() {
+        given: 'a materialized environment that has read no denials'
+        def e = materialized()
+
+        expect: 'no position to commit yet'
+        e.denialCursor().isEmpty()
+
+        when: 'a cursor from an unrelated source is offered'
+        e.restoreDenialCursor(new DenialCursor('some-other-source', '2026-08-19T10:00:00Z'))
+
+        then: 'the offer is accepted without failing, and denials still read truthfully'
+        noExceptionThrown()
+        e.denialFindings() == []
+    }
+
     // FR1, FR6: waitForExitOrTimeout returns Exited for a fast command
     def "waitForExitOrTimeout returns Exited within budget"() {
         given: 'a materialized environment'
@@ -228,7 +257,7 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         when: 'a fast command runs under a generous timeout'
         def handle = e.exec(shell('true'))
         def wait = handle.waitForExitOrTimeout(Duration.ofSeconds(30), {
-            -> java.time.Instant.now()
+            -> Instant.now()
         })
 
         then: 'it exited naturally'

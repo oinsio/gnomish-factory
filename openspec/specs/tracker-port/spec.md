@@ -203,7 +203,7 @@ as specified above). Every shipped adapter SHALL pass the identical suite.
 - **THEN** every run yields exactly one winner — no run yields zero or two
 
 ### Requirement: Adapter author guide
-The change SHALL ship an adapter author guide (`docs/adapter-author-guide.md`)
+The change SHALL ship an adapter author guide (`docs/guides/adapter-author-guide.md`)
 covering: the state dictionary and transition matrix with the three-level
 distinction (tracker state / run outcome / scheduler slot); per-operation port
 semantics; the contract suite as law with the in-memory adapter as the worked

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -44,7 +43,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         new ExecutionResult.Completed(
                 new ExecutorUsage(Duration.ZERO, [], [:]),
                 new ToolTrace(
-                        new AttemptKey('T-1', 'work', 1), []))
+                        new AttemptKey('T-1', 'work', 1), []), [])
     }
 
     def "FR21: the matching round skips the agent, records the attempt commit, and completes with empty telemetry"() {

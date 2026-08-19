@@ -104,6 +104,42 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         stateFileJson == liveJson
     }
 
+    // FR4, M1 of fix-denial-report-attachment: the equivalence must hold with denials present too
+    //     — a denial the round recorded has to survive the commit and read back the same on both
+    //     sides, or a resuming instance would see a different history than the live run did
+    def "FR4: a passing attempt's denial survives the state file and renders identically on both sides"() {
+        given: 'a passing round that recorded one egress denial'
+        def taskId = 'manual-20260716-143502-d1'
+        def denial = new Finding(
+                'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
+        def check = new CheckResult(
+                new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def attempt = new AttemptRecord(
+                0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-16T14:35:10Z'),
+                [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+        def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], ExecutorUsage.none())
+        def context = new TaskContext(taskId, 'Fix flaky OrderServiceSpec', 'body', [])
+        def liveReport = StatusReport.build(context, state, 3, LiveActivity.idle())
+
+        and: 'the round committed to the task branch exactly as the git adapters would'
+        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot)
+        taskRepository.createTask(context, null)
+        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
+        new GitAttemptPersistence(runner, worktree, taskId)
+                .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
+
+        when: 'the branch is read back and both renderings go through the same mapper'
+        def result = new BranchStateReader(runner).read(cloneDir, taskId)
+        def stateFileReport = (result as BranchStateResult.Found).report()
+
+        then: 'the denial came back with the attempt, and the attempt is still passed (FR2)'
+        stateFileReport.attempts()[0].denials() == [denial]
+        stateFileReport.attempts()[0].result() == AttemptRecord.Result.PASSED
+
+        and: 'the two renderings are byte-identical, denials included'
+        mapper.serialize(stateFileReport) == mapper.serialize(withoutLiveOnlyFields(liveReport))
+    }
+
     /** Same attempt/state shape as {@code StatusReportJsonMapperSpec#referenceReport}. */
     private static TaskState referenceTaskState() {
         def passCheck = new CheckResult(
@@ -125,7 +161,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
                 Instant.parse('2026-07-16T14:35:10Z'),
                 [passCheck, failCheck],
                 attemptUsage,
-                JudgeUsage.none())
+                JudgeUsage.none(), [])
 
         def totalsUsage = new ExecutorUsage(
                 Duration.ofMillis(232000),

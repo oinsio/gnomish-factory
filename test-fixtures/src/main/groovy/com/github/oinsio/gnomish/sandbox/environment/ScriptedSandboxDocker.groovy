@@ -24,6 +24,9 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
             if (args[0] == 'inspect' && args.contains('{{.State.Running}} {{.State.FinishedAt}}')) {
                 return new DockerResult(1, '', 'No such object') // fresh materialize path
             }
+            if (args[0] == 'inspect' && args.contains('{{.Id}}')) {
+                return new DockerResult(0, 'sha256:guard-container\n', '') // the guard's denial-source identity
+            }
             if (args[0] == 'inspect' && args.contains('{{.State.Running}}')) {
                 return new DockerResult(0, 'true\n', '') // guard already running
             }

@@ -31,7 +31,7 @@ class FakesSanitySpec extends Specification {
     }
 
     private static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), trace())
+        new ExecutionResult.Completed(ExecutorUsage.none(), trace(), [])
     }
 
     private static StageExecutor.Request request(int attempt) {
@@ -41,7 +41,7 @@ class FakesSanitySpec extends Specification {
     def "ScriptedExecutor returns queued results in order and records each request"() {
         given: 'an executor scripted with two results'
         def r0 = completed()
-        def r1 = new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), trace())
+        def r1 = new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), trace(), [])
         def executor = new ScriptedExecutor([r0, r1])
 
         when: 'two rounds are executed'

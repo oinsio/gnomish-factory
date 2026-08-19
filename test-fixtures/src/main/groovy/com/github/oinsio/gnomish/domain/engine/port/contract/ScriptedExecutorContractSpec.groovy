@@ -19,18 +19,20 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
  */
 class ScriptedExecutorContractSpec extends StageExecutorContract {
 
-    private static ExecutionResult scriptedResult(StageExecutorContract.ExecutorVariant variant) {
+    private static ExecutionResult scriptedResult(ExecutorVariant variant) {
         def trace = new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
         switch (variant) {
-                    case StageExecutorContract.ExecutorVariant.COMPLETED ->
-                    new ExecutionResult.Completed(ExecutorUsage.none(), trace)
-                    case StageExecutorContract.ExecutorVariant.DECISION_NEEDED ->
-                    new ExecutionResult.DecisionNeeded('which path?', ['a', 'b'], ExecutorUsage.none(), trace)
+                    case ExecutorVariant.COMPLETED ->
+                    new ExecutionResult.Completed(ExecutorUsage.none(), trace, [])
+                    case ExecutorVariant.DECISION_NEEDED ->
+                    new ExecutionResult.DecisionNeeded('which path?', ['a', 'b'], ExecutorUsage.none(), trace, [])
+                    default ->
+                    throw new IllegalArgumentException("Unhandled ExecutorVariant: $variant")
                 }
     }
 
     @Override
-    protected Optional<StageExecutor> arrange(StageExecutorContract.ExecutorVariant variant) {
+    protected Optional<StageExecutor> arrange(ExecutorVariant variant) {
         Optional.of(new ScriptedExecutor([scriptedResult(variant)]))
     }
 }

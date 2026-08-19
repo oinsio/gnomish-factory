@@ -64,6 +64,10 @@ this change is its prerequisite, not its part.
   during an otherwise passing attempt — host, path, method, no request body.
 - U2: any factory instance resuming a task reads `state.json` and sees the
   denial history of past attempts without re-reading guard logs.
+- U3: a reviewer reading the report of a task that survived a factory crash
+  sees each denial under the round it happened in — the resumed round does not
+  inherit the denials of the rounds before it, which already have their own
+  attempt records.
 
 ## Requirements
 
@@ -82,6 +86,13 @@ this change is its prerequisite, not its part.
 - FR4: `state.json` and `status.json` SHALL surface the attempt's denials
   additively (existing documents without the field remain readable; readers
   of the new field see the same finding shape used by check findings).
+- FR5: the denial read position SHALL survive the factory process: it is
+  committed in `state.json` with the attempt it delimits (paired with the
+  identity of the denial source it was read from) and offered back to the
+  environment on resume, so a resumed round reports its own denials instead of
+  replaying what the surviving denial source still holds. An offered position
+  SHALL be applied only when its source identity matches the environment's live
+  denial source, and ignored otherwise.
 
 ### Non-Functional Reliability
 
@@ -97,8 +108,8 @@ this change is its prerequisite, not its part.
 ### Non-Functional Security
 
 - NFR-S1: surfaced denial findings carry only structured metadata (host,
-  path, method) — never request bodies — preserving the guard's body-free
-  capture contract end to end.
+  query-free path, method) — never request bodies, never a query string —
+  preserving the guard's body-free capture contract end to end.
 
 ## Operator Experience Criteria
 

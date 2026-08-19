@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Duration
@@ -11,12 +12,12 @@ import java.time.Instant
 import spock.lang.Specification
 
 /**
- * FR3, FR8, D5, D9, D13 of add-sandbox-core: the per-task construction seam for
- * guarded container environments, verified without a daemon — the docker
- * availability probe's decision (ok-exit true, non-zero false, unreachable
- * runtime false, never a silent fallback), the judge-role environment wiring,
- * the round key exposed for bookkeeping, and disposeExisting's full teardown of
- * the round key's objects.
+ * FR3, FR8, D5, D9 of add-sandbox-core: the per-task construction seam for
+ * guarded container environments, verified without a daemon — the per-role
+ * environment wiring, the restored denial cursor reaching each role's guard
+ * (FR5 of fix-denial-report-attachment), the round key exposed for bookkeeping,
+ * and disposeExisting's full teardown of the round key's objects. The docker
+ * availability probe moved out with its class ({@code DockerRuntimeProbeSpec}).
  */
 class ContainerEnvironmentsSpec extends Specification {
 
@@ -28,44 +29,10 @@ class ContainerEnvironmentsSpec extends Specification {
     def harvester = { String container, String branch -> } as ContainerHarvest
     def sleeper = { Duration d -> } as Sleeper
 
-    private static DockerResult refuseWithDaemonOutage(List<String> args) {
-        throw new DockerUnavailableException('Cannot connect to the Docker daemon', null)
-    }
-
     private ContainerEnvironments environments() {
         new ContainerEnvironments(
                 docker, KEY, Path.of('/factory/clone'), harvester, sandbox,
                 clock, ChildEnvAllowlist.none(), sleeper, Path.of('/factory/guard-config'))
-    }
-
-    // D13, G2: the probe answers exactly what the daemon answered — never a hardwired boolean
-    def "dockerAvailable is #available when the docker version probe exits #exit"() {
-        given: 'a runtime whose version probe exits with the scripted code'
-        docker.onRun = { args -> new DockerResult(exit, '', '') }
-
-        expect:
-        ContainerEnvironments.dockerAvailable(docker) == available
-        docker.runs == [
-            [
-                'version',
-                '--format',
-                '{{.Server.Version}}'
-            ]
-        ]
-
-        where:
-        exit | available
-        0 | true
-        1 | false
-    }
-
-    // D13, NFR-R1: an unreachable runtime is the fail-closed false, not an escaping exception
-    def "dockerAvailable is false when the docker runtime is unreachable"() {
-        given:
-        docker.onRun = this.&refuseWithDaemonOutage
-
-        expect:
-        !ContainerEnvironments.dockerAvailable(docker)
     }
 
     // FR8, D9: the judge role gets a real self-checked container environment, never a null seam
@@ -76,7 +43,10 @@ class ContainerEnvironmentsSpec extends Specification {
         then: 'a non-null decorator over the container adapter, guard attached'
         judge != null
         judge.passport() == CapabilityPassport.container()
-        judge.guard() != null
+
+        and: 'the denial read reaches this role\'s own guard container (FR1 of fix-denial-report-attachment)'
+        judge.denialFindings() == []
+        docker.runs.last() == GuardCommands.guardLogs(KEY + '-j', 1000, null)
     }
 
     // FR3, FR8: the round role gets a real self-checked container environment, never a null seam
@@ -87,7 +57,10 @@ class ContainerEnvironmentsSpec extends Specification {
         then:
         round != null
         round.passport() == CapabilityPassport.container()
-        round.guard() != null
+
+        and:
+        round.denialFindings() == []
+        docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, null)
     }
 
     // FR13: the fresh verify-in: fresh-box role gets a real self-checked container environment,
@@ -99,7 +72,29 @@ class ContainerEnvironmentsSpec extends Specification {
         then:
         verification != null
         verification.passport() == CapabilityPassport.container()
-        verification.guard() != null
+
+        and:
+        verification.denialFindings() == []
+        docker.runs.last() == GuardCommands.guardLogs(KEY + '-v', 1000, null)
+    }
+
+    // FR5 of fix-denial-report-attachment: a resume hands the run the cursor its last attempt
+    // committed, and every environment built afterwards offers it to its own guard — so a round
+    // box reattaching to the surviving guard container continues the delta instead of replaying it
+    def "FR5: a restored cursor reaches the guard of every environment built afterwards"() {
+        given: 'the guard container named by the committed cursor is the live one'
+        docker.onRun = { List<String> args ->
+            args == GuardCommands.inspectGuardId(KEY) ? new DockerResult(0, 'sha256:container-1\n', '')
+            : new DockerResult(0, '', '')
+        }
+        def seam = environments()
+
+        when:
+        seam.restoreDenialCursor(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
+        seam.roundEnvironment().denialFindings()
+
+        then: 'the round box reads its guard log from the committed position, not from the start'
+        docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T10:00:00.000000001Z')
     }
 
     // FR6: the round key is exposed verbatim for keep/dispose bookkeeping

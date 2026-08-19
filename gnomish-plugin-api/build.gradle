@@ -32,7 +32,14 @@ plugins {
 // `AttemptCommitWorkspace` interface and the `FindingsSanitizer` utility. The
 // growth is additive for every pre-existing type, so no pre-1.0 version bump is
 // owed and `japicmpApiGate` stays green against the committed jars.
-version = '0.1.0'
+//
+// FR2 of fix-denial-report-attachment: 0.1.0 -> 0.2.0, the first BREAKING move of
+// the surface. `AttemptRecord` and both `ExecutionResult` variants — re-exposed
+// `:domain` types, so inside the semver promise — gained a `denials` component,
+// which removes their old canonical constructors. Pre-1.0, a breaking change is
+// a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
+// reviewer sees the break and the bump that accepts it in one diff.
+version = '0.2.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 

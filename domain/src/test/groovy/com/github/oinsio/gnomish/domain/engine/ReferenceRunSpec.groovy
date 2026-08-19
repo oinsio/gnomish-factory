@@ -87,7 +87,7 @@ class ReferenceRunSpec extends Specification {
     }
 
     static ExecutionResult.Completed completed(String stageName) {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', stageName, 0), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', stageName, 0), []), [])
     }
 
     static Verdict.Fail fail(String message) {
@@ -114,7 +114,7 @@ class ReferenceRunSpec extends Specification {
         and: 'run-1 fakes: the design executor asks a human instead of completing'
         def exec1 = new ScriptedExecutor([
             new ExecutionResult.DecisionNeeded('which db?', ['postgres', 'mysql'],
-            ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'design', 0), []))
+            ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'design', 0), []), [])
         ])
         def ports1 = portsFor(exec1, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter())

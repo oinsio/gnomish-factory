@@ -105,6 +105,13 @@ terms) live in `.claude/rules/process-invariants.md`.
   never a request body). A denial is observability, not a gate: it rides the
   attempt it happened in into the report and changes no verdict, no stage
   outcome, and no retry feedback. *Never:* block, violation.
+- **Denial cursor** — the read position in a guard's denial log, paired with
+  the identity of the guard container it was read from. It defines which
+  denials belong to the round asking: each read starts where the previous one
+  ended. Committed in `state.json` with the attempt it delimits, because the
+  guard container outlives the factory process; a resuming instance offers it
+  back, and the guard applies it only if it names the container now live.
+  *Never:* offset, bookmark, watermark.
 - **Artifact depot** — a host-side proxy for package registries; the box
   talks only to it, and it alone talks to the upstream registries.
 - **Docker-strategy ladder** — the ordered escalation of ways to give a task

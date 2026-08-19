@@ -40,7 +40,16 @@ import java.util.List;
  * attempts[].startedAt} survive into the git-workflow state file and stay byte-equivalent across
  * an attempt boundary. Required non-null.
  *
- * <p>Implements FR13 of add-stage-engine; FR15 of add-manual-run.
+ * <p>{@code denials} is the round's egress denials — what the execution environment's guard
+ * blocked while the gnome worked — and is deliberately kept OUT of every verdict path (FR2 of
+ * fix-denial-report-attachment): a denial is observability, not a gate, so it never feeds the
+ * round's {@code result}, the stage's overall verdict, or the prior-failure feedback a retry
+ * carries. That is exactly why it is a slot of its own rather than another {@code checkResults}
+ * entry: a passing attempt has nowhere else to put one. Defensively copied, unmodifiable, and
+ * usually empty.
+ *
+ * <p>Implements FR13 of add-stage-engine; FR15 of add-manual-run; FR2 of
+ * fix-denial-report-attachment.
  *
  * @param round the round's sequence number within the current stage; never negative
  * @param result the engine's explicit classification of how the round ended; never
@@ -52,6 +61,8 @@ import java.util.List;
  *     {@link ExecutorUsage#none()} when nothing to report
  * @param judgeUsage the per-vote judge token usage for the round; never null,
  *     {@link JudgeUsage#none()} when no judge check ran
+ * @param denials the egress denials the round's environment recorded; defensively copied,
+ *     unmodifiable, possibly empty; never an input to any verdict
  */
 public record AttemptRecord(
         int round,
@@ -59,7 +70,8 @@ public record AttemptRecord(
         Instant startedAt,
         List<CheckResult> checkResults,
         ExecutorUsage executorUsage,
-        JudgeUsage judgeUsage) {
+        JudgeUsage judgeUsage,
+        List<Finding> denials) {
 
     /**
      * How a recorded round ended, set explicitly by the engine when it records the
@@ -81,6 +93,7 @@ public record AttemptRecord(
         round = requireNonNegative(round, "round");
         startedAt = requireNonNull(startedAt, "startedAt");
         checkResults = List.copyOf(checkResults);
+        denials = List.copyOf(denials);
     }
 
     /**

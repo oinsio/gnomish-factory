@@ -1,14 +1,15 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The per-task construction seam for guarded container environments (the
@@ -27,7 +28,6 @@ import java.util.Set;
  *
  * <p>Implements FR3, FR8, FR13, D5, D9 of add-sandbox-core.
  */
-@SuppressWarnings("ClassCanBeRecord")
 public final class ContainerEnvironments {
 
     private final DockerCli docker;
@@ -39,6 +39,9 @@ public final class ContainerEnvironments {
     private final ChildEnvAllowlist allowlist;
     private final Sleeper sleeper;
     private final Path guardConfigRoot;
+
+    /** The cursor a previous lease committed, offered to every environment built here; see {@link #restoreDenialCursor}. */
+    private @Nullable DenialCursor restoredCursor;
 
     /**
      * The production construction: a fresh docker subprocess seam per task. Exists because
@@ -91,37 +94,6 @@ public final class ContainerEnvironments {
         this.allowlist = allowlist;
         this.sleeper = sleeper;
         this.guardConfigRoot = guardConfigRoot;
-    }
-
-    /**
-     * Whether the Docker runtime answers at all — the container-mode
-     * prerequisite probe behind the fail-closed D13 refusal ("install Docker or
-     * explicitly bind host"), never a silent fallback (G2).
-     *
-     * <p>PIT M4 documented exception: {@code @DoNotMutate} — this wrapper only
-     * binds the probe to the real {@code docker} binary of the machine the test
-     * happens to run on (an integration boundary, the same category as {@code
-     * forTask}'s production wiring): a unit test cannot deterministically assert
-     * its boolean against a daemon it does not control. The whole probe decision
-     * — ok-exit true, non-zero false, unreachable-runtime false — lives in the
-     * package-private overload below and is fully covered by
-     * ContainerEnvironmentsSpec.
-     *
-     * @return true iff the docker daemon responded
-     */
-    @DoNotMutate
-    public static boolean dockerAvailable() {
-        return dockerAvailable(new DockerCli());
-    }
-
-    /** The seam-testable probe behind {@link #dockerAvailable()}: true iff {@code docker version} answers ok. */
-    static boolean dockerAvailable(DockerCli docker) {
-        try {
-            return docker.run(List.of("version", "--format", "{{.Server.Version}}"))
-                    .ok();
-        } catch (DockerUnavailableException e) {
-            return false;
-        }
     }
 
     /** The round-box environment for this task's key; self-checked on every materialize (FR8). */
@@ -187,8 +159,25 @@ public final class ContainerEnvironments {
         new ContainerOrphanSweeper(docker).sweep(Set.of(baseKey, baseKey + "-j", baseKey + "-v"));
     }
 
+    /**
+     * Hands this run the denial cursor the task's last attempt committed (FR5 of
+     * fix-denial-report-attachment), so a resume onto a surviving guard container reports
+     * only its own rounds' denials instead of replaying the container's whole log. Offered
+     * to every environment built afterwards; a guard whose live container is not the one
+     * the cursor names ignores it, which is what a fresh role box always does.
+     *
+     * @param cursor the committed cursor; never null
+     */
+    public void restoreDenialCursor(DenialCursor cursor) {
+        restoredCursor = cursor;
+    }
+
     private SelfCheckedEnvironment environment(String key) {
-        return ContainerEnvironmentBuilder.build(
+        var built = ContainerEnvironmentBuilder.build(
                 docker, key, sourceClone, harvester, sandbox, clock, allowlist, sleeper, guardConfigRoot);
+        if (restoredCursor != null) {
+            built.restoreDenialCursor(restoredCursor);
+        }
+        return built;
     }
 }

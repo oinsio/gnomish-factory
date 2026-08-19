@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import java.nio.file.Path
 import spock.lang.Specification
 
 /**
@@ -16,7 +18,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     def delegate = Mock(TaskExecutionEnvironment)
     def docker = new RecordingDockerCli()
-    def guard = new EgressGuard(docker, 'k1', 'mitm:12', [], java.nio.file.Path.of('/tmp/guard-k1'))
+    def guard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'))
 
     def "FR8: materialize delegates and then self-checks — a failing probe propagates and no process ran"() {
         given: 'a self-check that fails at its first probe (guard cannot come up)'
@@ -80,6 +82,94 @@ class SelfCheckedEnvironmentSpec extends Specification {
         seenContent.get() == content
         seenScratch == '/real/scratch'
         seenPassport.is(passport)
-        environment.guard().is(guard)
+    }
+
+    // FR1 of fix-denial-report-attachment: the guard is reachable ONLY through the port contract —
+    // a consumer holding the port type gets the denials without knowing this adapter exists
+    def "FR1: denialFindings surfaces the guard's denials through the port type"() {
+        given: 'a guard whose log holds one denied destination'
+        docker.onRun = { List<String> args ->
+            args[0] == 'logs'
+            ? new DockerResult(0, '2026-08-19T10:00:00.000000000Z GNOMISH-EGRESS-DENY '
+            + '{"kind":"connect","host":"evil.example.com","port":443}\n', '')
+            : new DockerResult(0, '', '')
+        }
+        TaskExecutionEnvironment environment = new SelfCheckedEnvironment(
+                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+
+        expect: 'the denial reads back through the port, with no downcast to the adapter type'
+        environment.denialFindings()*.message() == [
+            'egress denied: evil.example.com:443'
+        ]
+    }
+
+    // FR5 of fix-denial-report-attachment: the cursor delimiting a round's denials reaches the
+    // factory — and comes back on resume — through the port, never by naming the guard
+    def "FR5: the denial cursor is read and restored through the port type"() {
+        given: 'a guard container with a known identity and one denial'
+        docker.onRun = { List<String> args ->
+            if (args == GuardCommands.inspectGuardId('k1')) {
+                return new DockerResult(0, 'sha256:container-1\n', '')
+            }
+            args[0] == 'logs'
+                    ? new DockerResult(0, '2026-08-19T10:00:00.000000000Z GNOMISH-EGRESS-DENY '
+                    + '{"kind":"connect","host":"evil.example.com","port":443}\n', '')
+                    : new DockerResult(0, '', '')
+        }
+        TaskExecutionEnvironment environment = new SelfCheckedEnvironment(
+                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+
+        when: 'a round reads its denials'
+        environment.denialFindings()
+
+        then: 'the position to commit is reachable through the contract'
+        environment.denialCursor().orElseThrow()
+                == new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z')
+
+        when: 'a resumed lease — a fresh guard wrapper — is handed the cursor of THIS container'
+        def continuingGuard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'))
+        TaskExecutionEnvironment continuing = new SelfCheckedEnvironment(
+                delegate,
+                new EnvironmentSelfCheck(delegate, continuingGuard, docker, 'k1', 'runc', [], { d -> }),
+                continuingGuard)
+        continuing.restoreDenialCursor(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
+        continuing.denialFindings()
+
+        then: 'the offer reached the guard: the read starts at the committed position'
+        docker.runs.last() == [
+            'logs',
+            '--tail',
+            '1000',
+            '--timestamps',
+            '--since',
+            '2026-08-19T10:00:00.000000001Z',
+            'gnomish-guard-k1'
+        ]
+
+        when: 'a resumed lease is instead handed a cursor from another container'
+        def resumedGuard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'))
+        TaskExecutionEnvironment resumed = new SelfCheckedEnvironment(
+                delegate,
+                new EnvironmentSelfCheck(delegate, resumedGuard, docker, 'k1', 'runc', [], { d -> }),
+                resumedGuard)
+        resumed.restoreDenialCursor(new DenialCursor('sha256:container-elsewhere', '2026-08-19T11:00:00Z'))
+
+        then: 'the offer reached the guard, which dropped it and read the live log from its start'
+        resumed.denialFindings()*.message() == [
+            'egress denied: evil.example.com:443'
+        ]
+    }
+
+    // NFR-R1: denial observability never takes a healthy round down
+    def "NFR-R1: an unreadable guard log degrades to an empty list, never a failure"() {
+        given: 'the guard container is gone'
+        docker.onRun = { List<String> args ->
+            new DockerResult(1, '', 'No such container')
+        }
+        TaskExecutionEnvironment environment = new SelfCheckedEnvironment(
+                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+
+        expect:
+        environment.denialFindings() == []
     }
 }

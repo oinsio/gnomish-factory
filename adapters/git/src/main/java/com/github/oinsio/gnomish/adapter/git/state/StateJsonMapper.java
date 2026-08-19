@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionExcepti
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
-import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
@@ -12,6 +11,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Maps between the domain's {@link TaskState} tree and the {@code state.json}
@@ -52,18 +52,39 @@ public final class StateJsonMapper {
     }
 
     /**
-     * Builds the {@code state.json} DTO tree from a domain {@link TaskState}.
+     * Builds the {@code state.json} DTO tree from a domain {@link TaskState}, with
+     * no egress cursor — the shape a writer with no denial source produces (host
+     * mode).
      *
      * @param state the task state to render; never null
      * @return the equivalent {@code state.json} DTO tree
      */
     public static StateJsonDto toDto(TaskState state) {
+        return toDto(state, null);
+    }
+
+    /**
+     * Builds the {@code state.json} DTO tree from a domain {@link TaskState},
+     * carrying the environment's denial read position at commit time (FR5 of
+     * fix-denial-report-attachment) so a resuming instance can continue the delta
+     * rather than replay its source's whole log.
+     *
+     * <p>The cursor is deliberately not part of {@link TaskState}: it describes the
+     * environment that produced the attempt, not the task's position in its
+     * pipeline, and only the environment interprets it.
+     *
+     * @param state the task state to render; never null
+     * @param egressCursor the environment's denial cursor, or null when it has none
+     * @return the equivalent {@code state.json} DTO tree
+     */
+    public static StateJsonDto toDto(TaskState state, @Nullable StateEgressCursorDto egressCursor) {
         return new StateJsonDto(
                 1,
                 toPosition(state.position()),
                 state.attemptsUsed(),
                 state.attempts().stream().map(StateJsonMapper::toAttempt).toList(),
-                StateUsageMapper.toUsage(state.totals()));
+                StateUsageMapper.toUsage(state.totals()),
+                egressCursor);
     }
 
     /**
@@ -101,6 +122,7 @@ public final class StateJsonMapper {
                 toResult(record.result()),
                 record.startedAt().toString(),
                 record.checkResults().stream().map(StateJsonMapper::toCheck).toList(),
+                StateFindingMapper.toDtos(record.denials()),
                 StateUsageMapper.toUsage(record.executorUsage()),
                 StateUsageMapper.toJudgeUsage(record.judgeUsage()));
     }
@@ -122,7 +144,8 @@ public final class StateJsonMapper {
                 Instant.parse(dto.startedAt()),
                 dto.checks().stream().map(StateJsonMapper::fromCheck).toList(),
                 StateUsageMapper.fromUsage(dto.executorUsage()),
-                StateUsageMapper.fromJudgeUsage(dto.judgeUsage()));
+                StateUsageMapper.fromJudgeUsage(dto.judgeUsage()),
+                StateFindingMapper.fromDtos(dto.denials()));
     }
 
     private static String toResult(AttemptRecord.Result result) {
@@ -151,7 +174,14 @@ public final class StateJsonMapper {
                 new StateCheckDto(
                         check.checkRef().label(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
             case Verdict.Fail fail ->
-                new StateCheckDto(check.checkRef().label(), "fail", toFindings(fail), durationMillis, null, null, null);
+                new StateCheckDto(
+                        check.checkRef().label(),
+                        "fail",
+                        StateFindingMapper.toDtos(fail.findings()),
+                        durationMillis,
+                        null,
+                        null,
+                        null);
             case Verdict.CannotVerify cannotVerify ->
                 new StateCheckDto(
                         check.checkRef().label(),
@@ -171,7 +201,7 @@ public final class StateJsonMapper {
         Verdict verdict =
                 switch (dto.verdict()) {
                     case "pass" -> new Verdict.Pass(dto.runUrl());
-                    case "fail" -> new Verdict.Fail(fromFindings(dto.findings()));
+                    case "fail" -> new Verdict.Fail(StateFindingMapper.fromDtos(dto.findings()));
                     case "cannotVerify" ->
                         new Verdict.CannotVerify(
                                 Objects.requireNonNull(dto.reason(), "reason"),
@@ -179,17 +209,5 @@ public final class StateJsonMapper {
                     default -> throw new IllegalArgumentException("Unknown Verdict: " + dto.verdict());
                 };
         return new CheckResult(ref, verdict, Duration.ofMillis(dto.durationMillis()));
-    }
-
-    private static List<StateFindingDto> toFindings(Verdict.Fail fail) {
-        return fail.findings().stream()
-                .map(finding -> new StateFindingDto(finding.message(), finding.location(), finding.details()))
-                .toList();
-    }
-
-    private static List<Finding> fromFindings(List<StateFindingDto> findings) {
-        return findings.stream()
-                .map(dto -> new Finding(dto.message(), dto.location(), dto.details()))
-                .toList();
     }
 }

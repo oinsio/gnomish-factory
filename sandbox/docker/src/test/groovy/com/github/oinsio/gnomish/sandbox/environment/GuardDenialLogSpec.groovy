@@ -28,15 +28,39 @@ class GuardDenialLogSpec extends Specification {
     def "UX3: a plain-HTTP denial carries method and path so the operator sees what was attempted"() {
         given:
         def log = 'GNOMISH-EGRESS-DENY {"kind":"http","host":"evil.example.com","port":80,' +
-                '"method":"POST","path":"/exfil?data=secret"}\n'
+                '"method":"POST","path":"/exfil"}\n'
 
         when:
         def findings = GuardDenialLog.findings(log)
 
         then:
         findings[0].message() == 'egress denied: evil.example.com:80'
-        findings[0].location() == 'evil.example.com:80/exfil?data=secret'
+        findings[0].location() == 'evil.example.com:80/exfil'
         findings[0].details() == 'kind=http method=POST'
+    }
+
+    // NFR-S1 of fix-denial-report-attachment: the query string is gnome-chosen payload, not
+    //     destination metadata — the denied request's own exfiltration attempt must not ride the
+    //     finding into the committed report, so the path is cut at the first '?'
+    def "NFR-S1: the query string is stripped from the denied path"() {
+        given: 'a denial whose query string carries the very data the guard blocked'
+        def log = 'GNOMISH-EGRESS-DENY {"kind":"http","host":"evil.example.com","port":80,' +
+                '"method":"GET","path":"/upload?token=s3cret&body=stolen"}\n'
+
+        when:
+        def findings = GuardDenialLog.findings(log)
+
+        then: 'the operator still sees where the gnome went, never what it tried to send'
+        findings[0].location() == 'evil.example.com:80/upload'
+    }
+
+    def "NFR-S1: a path that is nothing but a query string degrades to the destination alone"() {
+        given:
+        def log = 'GNOMISH-EGRESS-DENY {"kind":"http","host":"evil.example.com","port":80,' +
+                '"method":"GET","path":"?token=s3cret"}\n'
+
+        expect: 'stripping leaves an empty path, which reports as the bare destination'
+        GuardDenialLog.findings(log)*.location() == ['evil.example.com:80']
     }
 
     def "NFR-O1: a denial forwarded through mitmproxy's event log keeps its prefix and still parses"() {
@@ -90,6 +114,7 @@ class GuardDenialLogSpec extends Specification {
     def "NFR-C1: oversized string fields are length-capped, not carried whole"() {
         given: 'a denial with a path far beyond the field cap'
         def hugePath = '/' + ('x' * 5000)
+        // No '?' in it: the field cap, not the query strip, is what has to bound this one
         def log = "GNOMISH-EGRESS-DENY {\"kind\":\"http\",\"host\":\"evil.example.com\",\"port\":80," +
                 "\"method\":\"GET\",\"path\":\"${hugePath}\"}"
 

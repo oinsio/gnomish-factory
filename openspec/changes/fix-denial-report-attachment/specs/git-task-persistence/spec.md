@@ -33,3 +33,19 @@ Each attempt record in `state.json` SHALL carry a denials list — structured fi
 #### Scenario: Denials never feed retries
 - **WHEN** an attempt with denials fails on a check and the stage retries
 - **THEN** the feedback context of the retry contains only the check findings, not the denials
+
+### Requirement: Denial cursor in the state file
+`state.json` SHALL carry the environment's denial read position at commit time — the opaque position paired with the identity of the denial source it was read from — so an instance resuming the task continues the denial delta where the committed attempt left it, instead of re-reading everything the source still holds. The field is environment bookkeeping, not task state: it SHALL NOT affect the position, attempts, or usage a reader reconstructs. It is additive under contract v1: an absent field means "no cursor to resume from", and a writer with no denial source records none.
+<!-- implements FR5 of fix-denial-report-attachment -->
+
+#### Scenario: The cursor is committed with the attempt it delimits
+- **WHEN** a sandboxed round is committed to the task branch
+- **THEN** `state.json` records the environment's denial read position and the identity of the source it was read from
+
+#### Scenario: Resume continues the delta instead of replaying it
+- **WHEN** an instance resumes a task whose recorded cursor names the denial source it reattaches to
+- **THEN** the first round after resume reports only its own denials, and earlier rounds' denials — already recorded in their own attempts — are not attached to it again
+
+#### Scenario: A state file written before the cursor existed stays readable
+- **WHEN** a state file with no cursor field is read
+- **THEN** it parses under contract v1 and the run reads its denial source from the beginning

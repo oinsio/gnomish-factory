@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
+import com.github.oinsio.gnomish.domain.engine.Finding;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -86,6 +87,22 @@ public final class StatusTextRenderer {
         out.append("Attempts:\n");
         for (AttemptRecord attempt : report.attempts()) {
             out.append("  ").append(renderAttemptSummary(attempt)).append('\n');
+            appendDenials(out, attempt);
+        }
+    }
+
+    /**
+     * Lists the round's egress denials under its summary line, in the same shape a
+     * finding is read in (UX1 of fix-denial-report-attachment): the reviewer needs
+     * to know nothing about guard logs or container internals to see that the gnome
+     * tried to reach somewhere it may not. A quiet round renders nothing at all — no
+     * empty heading, no "0 denials" noise (UX2).
+     */
+    private void appendDenials(StringBuilder out, AttemptRecord attempt) {
+        for (Finding denial : attempt.denials()) {
+            out.append("    egress denial: ")
+                    .append(StatusLineFormatter.findingLine(denial))
+                    .append('\n');
         }
     }
 

@@ -31,7 +31,7 @@ class OptionalUsageSpec extends Specification {
         def second = new ExecutorUsage(Duration.ofSeconds(93), [], [:])
 
         when: "folded the way TaskState.totals accumulates round usage"
-        def totals = first.plus(second)
+        def totals = first + second
 
         then: "both operands report no tokens -> the merged map stays empty (unreported, not zero)"
         totals.tokensByModel().isEmpty()
@@ -52,14 +52,14 @@ class OptionalUsageSpec extends Specification {
                 Instant.parse("2026-07-16T14:35:10Z"),
                 [],
                 humanRound,
-                JudgeUsage.none())
+                JudgeUsage.none(), [])
 
         and: "task totals fold from human-only rounds alone, per TaskState.recordUnburnedRound"
         def state = new TaskState(
                 new Position.AtStage("implement"),
                 0,
                 [attempt],
-                ExecutorUsage.none().plus(humanRound))
+                ExecutorUsage.none() + humanRound)
         def context = new TaskContext("manual-task-1", "Human-only task", "body", [])
 
         and: "a realistic StatusReport, mirroring StatusReportJsonMapperSpec's construction pattern"

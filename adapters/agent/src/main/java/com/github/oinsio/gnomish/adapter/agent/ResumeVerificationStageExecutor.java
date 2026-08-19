@@ -65,8 +65,10 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
                     p.attemptCommit());
             AttemptKey key =
                     new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
+            // No denials either, for the same reason the telemetry is empty: this round's
+            // environment is long gone, and its guard log died with the unrecorded state commit.
             return new ExecutionResult.Completed(
-                    new ExecutorUsage(Duration.ZERO, List.of(), Map.of()), new ToolTrace(key, List.of()));
+                    new ExecutorUsage(Duration.ZERO, List.of(), Map.of()), new ToolTrace(key, List.of()), List.of());
         }
         return delegate.execute(request);
     }

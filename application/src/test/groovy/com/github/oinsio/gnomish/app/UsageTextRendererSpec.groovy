@@ -22,7 +22,7 @@ class UsageTextRendererSpec extends Specification {
 
     private static AttemptRecord attempt(int round, String result, Long wall, Map<String, TokenUsage> tokens) {
         new AttemptRecord(round, AttemptRecord.Result.valueOf(RESULTS[result]), Instant.parse('2026-07-18T09:00:00Z'), [],
-        new ExecutorUsage(wall == null ? null : Duration.ofMillis(wall), [], tokens), JudgeUsage.none())
+        new ExecutorUsage(wall == null ? null : Duration.ofMillis(wall), [], tokens), JudgeUsage.none(), [])
     }
 
     private static final Map<String, String> RESULTS = [

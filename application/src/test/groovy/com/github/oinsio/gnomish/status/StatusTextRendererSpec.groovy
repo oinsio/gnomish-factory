@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -30,14 +31,14 @@ class StatusTextRendererSpec extends Specification {
 
     private static AttemptRecord passedRound(int round = 0) {
         def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
-        new AttemptRecord(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none())
+        new AttemptRecord(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
     }
 
     private static AttemptRecord failedRound(int round = 0) {
         def check = new CheckResult(new CheckRef(0, 'command:./gradlew test'),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
         new AttemptRecord(round, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check],
-        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none())
+        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [])
     }
 
     // FR10, UX2: renderAttemptSummary is genuinely one line and mentions the round and result
@@ -211,5 +212,64 @@ class StatusTextRendererSpec extends Specification {
         then:
         text.contains('executing (since')
         !text.contains('tool')
+    }
+
+    // UX1 of fix-denial-report-attachment: the reviewer reads the denial in the same block as the
+    //     attempt, needing to know nothing about guard logs or container internals
+    def "renderFull lists a passing attempt's egress denials under its summary line"() {
+        given: 'a passing round that recorded one denial'
+        def denial = new Finding(
+                'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
+        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
+        ExecutorUsage.none(), JudgeUsage.none(), [denial])
+        def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
+
+        when:
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+
+        then: 'the denied destination and path are readable right under the round that caused them'
+        text.contains('Round 0: passed')
+        text.contains('egress denial: egress denied: paste.example.com:443 (paste.example.com:443/upload)')
+    }
+
+    // FR15 of add-sandbox-core, UX1 of fix-denial-report-attachment: a denial's host/path are gnome-chosen text, so the
+    //     console sink strips ANSI/control sequences and keeps one denial on one line — a crafted
+    //     path can neither rewrite the operator's terminal nor forge extra report lines
+    def "renderFull neutralizes escape sequences and line breaks in a denial's text"() {
+        given: 'a denial whose path carries a terminal-clearing escape and a forged report line'
+        def esc = '\u001B'
+        def denial = new Finding(
+                "egress denied: evil.example.com:443${esc}[31m",
+                "evil.example.com:443/x${esc}[2K\nRound 9:\tpassed\rHIDDEN",
+                'kind=http method=POST')
+        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
+        ExecutorUsage.none(), JudgeUsage.none(), [denial])
+        def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
+
+        when:
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+
+        then: 'no control character survives, and the denial occupies exactly one line'
+        !text.contains(esc)
+        !text.contains('\r')
+        !text.contains('\t')
+        text.readLines().count { it.contains('egress denial:') } == 1
+        text.contains('egress denial: egress denied: evil.example.com:443 '
+                + '(evil.example.com:443/x Round 9: passedHIDDEN)')
+    }
+
+    // UX2: zero denials render nothing at all — no heading, no empty list
+    def "renderFull renders nothing for a round with no denials"() {
+        given:
+        def state = new TaskState(new Position.AtStage('implement'), 1, [passedRound(0)], ExecutorUsage.none())
+
+        when:
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+
+        then:
+        text.contains('Round 0: passed')
+        !text.contains('denial')
     }
 }

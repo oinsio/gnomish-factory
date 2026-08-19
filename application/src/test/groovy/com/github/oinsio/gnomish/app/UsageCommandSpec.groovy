@@ -1,17 +1,12 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
-import com.github.oinsio.gnomish.domain.engine.CheckResult
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Path
@@ -26,37 +21,21 @@ import spock.lang.TempDir
  * [--json]} wires {@link UsageArgumentsParser}, {@link
  * com.github.oinsio.gnomish.adapter.git.UsageHistoryWalker}, {@link UsageTextRenderer}, and {@link
  * com.github.oinsio.gnomish.usage.json.UsageReportJsonMapper} together end to end against real
- * git fixtures (matching {@code StatusCommandSpec}'s adapter-layer convention).
+ * git fixtures (matching {@code StatusCommandSpec}'s adapter-layer convention). The seeded-clone
+ * setup and round builder come from {@link SeededCloneFixture} (test-fixtures, shared with the
+ * git adapter's own usage-walker specs).
  */
-class UsageCommandSpec extends Specification implements BareGitRepoFixture {
+class UsageCommandSpec extends Specification implements SeededCloneFixture, StdoutCaptureFixture {
 
     @TempDir
     Path tempDir
 
-    def runner = new GitProcessRunner()
-    Path cloneDir
-    Path worktreesRoot
-
     def setup() {
-        cloneDir = initWorkingRepo(tempDir, 'clone')
-        new File(cloneDir.toFile(), 'a.txt').text = 'first'
-        runner.run(cloneDir, 'add', 'a.txt')
-        runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
+        setupSeededClone()
     }
 
-    private UsageCommand newCommand() {
+    private static UsageCommand newCommand() {
         new UsageCommand(TaskGitFixture.real())
-    }
-
-    private static AttemptRecord round(int round, AttemptRecord.Result result, long wallMillis, long inputTokens) {
-        new AttemptRecord(
-                round,
-                result,
-                Instant.parse('2026-07-18T09:00:00Z').plusSeconds(round * 60),
-                [] as List<CheckResult>,
-                new ExecutorUsage(Duration.ofMillis(wallMillis), [], ['claude-x': new TokenUsage(inputTokens, 10, 0, 0)]),
-                JudgeUsage.none())
     }
 
     private void persistRound(String taskId, TaskState state, String stage, int round) {
@@ -68,41 +47,6 @@ class UsageCommandSpec extends Specification implements BareGitRepoFixture {
         new GitAttemptPersistence(runner, worktree, taskId).persist(taskId, state, trace)
     }
 
-    private static String captureStdout(Closure action) {
-        def originalOut = System.out
-        def out = new ByteArrayOutputStream()
-        System.out = new PrintStream(out, true, 'UTF-8')
-        try {
-            action.call()
-        } finally {
-            System.out = originalOut
-        }
-        return out.toString('UTF-8')
-    }
-
-    /**
-     * Like {@link #captureStdout}, but for actions expected to throw: runs {@code action} with
-     * stdout captured, swallows exactly {@code thrownType} (asserting it was thrown) and returns
-     * whatever reached stdout before the throw, so callers can assert on both in one block.
-     */
-    private static String captureStdoutExpectingThrow(Class<? extends Throwable> thrownType, Closure action) {
-        def originalOut = System.out
-        def out = new ByteArrayOutputStream()
-        System.out = new PrintStream(out, true, 'UTF-8')
-        try {
-            action.call()
-            throw new AssertionError("expected ${thrownType.simpleName} to be thrown, but action completed normally")
-        } catch (AssertionError rethrow) {
-            throw rethrow
-        } catch (Throwable t) {
-            if (!thrownType.isInstance(t)) {
-                throw t
-            }
-        } finally {
-            System.out = originalOut
-        }
-        return out.toString('UTF-8')
-    }
 
     def "FR14: text render prints the stage/round table and a totals line"() {
         given:

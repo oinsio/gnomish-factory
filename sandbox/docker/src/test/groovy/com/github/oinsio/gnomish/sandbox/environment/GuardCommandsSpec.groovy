@@ -62,12 +62,38 @@ class GuardCommandsSpec extends Specification {
         ]
     }
 
-    def "NFR-O1/NFR-C1: guardLogs reads a bounded tail of the guard container log"() {
-        expect:
-        GuardCommands.guardLogs('k1', 1000) == [
+    def "NFR-O1/NFR-C1: guardLogs reads a bounded, timestamped tail of the guard container log"() {
+        expect: 'the first read of a guard has no cursor — the whole log from container start (D3)'
+        GuardCommands.guardLogs('k1', 1000, null) == [
             'logs',
             '--tail',
             '1000',
+            '--timestamps',
+            'gnomish-guard-k1'
+        ]
+    }
+
+    // D3 of fix-denial-report-attachment: a cursored read is the per-round delta
+    def "guardLogs reads from the daemon-side cursor when one is held"() {
+        expect:
+        GuardCommands.guardLogs('k1', 1000, '2026-08-19T10:00:00.000000001Z') == [
+            'logs',
+            '--tail',
+            '1000',
+            '--timestamps',
+            '--since',
+            '2026-08-19T10:00:00.000000001Z',
+            'gnomish-guard-k1'
+        ]
+    }
+
+    // FR5 of fix-denial-report-attachment: the identity a durable cursor is matched against
+    def "FR5: inspectGuardId asks for the guard container's runtime id"() {
+        expect:
+        GuardCommands.inspectGuardId('k1') == [
+            'inspect',
+            '-f',
+            '{{.Id}}',
             'gnomish-guard-k1'
         ]
     }

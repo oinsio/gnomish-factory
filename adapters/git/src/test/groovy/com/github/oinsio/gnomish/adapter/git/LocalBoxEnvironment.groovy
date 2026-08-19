@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -29,6 +30,8 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment {
     private final Path boxRoot
 
     Path workingCopy
+    /** The denial cursor this box reports, if a spec scripted one. */
+    DenialCursor denialCursor
     private Path scratch
     private String branch
 
@@ -108,5 +111,11 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment {
     @Override
     CapabilityPassport passport() {
         CapabilityPassport.container()
+    }
+
+    /** Whatever a spec scripted as this box's denial read position (FR5 of fix-denial-report-attachment). */
+    @Override
+    Optional<DenialCursor> denialCursor() {
+        Optional.ofNullable(denialCursor)
     }
 }

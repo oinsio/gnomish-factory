@@ -63,11 +63,11 @@ class AdvancementSpec extends Specification {
     }
 
     static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static ExecutionResult.Completed completed(ExecutorUsage usage) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static ExecutorUsage usage(long wallSecs, long tokensIn, long tokensOut) {

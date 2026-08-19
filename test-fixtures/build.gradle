@@ -54,11 +54,13 @@ dependencies {
     api project(':adapters')
     // The git seam pass 2 cut out of that block (task 10.2): `BareGitRepoFixture`
     // and `TaskGitFixture` build git-adapter collaborators, but hand back only
-    // paths and port types — `implementation`, per the dependency-analysis gate.
+    // paths and port types. `SeededCloneFixture` (fix-uncommitted dedup) types
+    // its `runner` field as `GitProcessRunner`, which is part of a consuming
+    // spec's compile surface — so `api`, not `implementation`.
     // No `:adapters:agent` edge: `FakeAgentBinary` and `FakeAgentSupport` name
     // the agent adapter in prose and in the scripts they lay down, never in
     // bytecode.
-    implementation project(':adapters:git')
+    api project(':adapters:git')
     // `ScriptedSandboxDocker` builds the docker environments over a scripted CLI
     // and hands back `:sandbox:core` port types.
     api project(':sandbox:core')

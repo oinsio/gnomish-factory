@@ -55,7 +55,7 @@ abstract class BrokenListenerSpecBase extends Specification {
     }
 
     static ExecutionResult.Completed completed(int round) {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', round), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', round), []), [])
     }
 
     static Verdict.Fail fail(String message) {

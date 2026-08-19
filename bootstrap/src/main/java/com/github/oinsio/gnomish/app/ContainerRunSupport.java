@@ -226,6 +226,12 @@ final class ContainerRunSupport implements SandboxRunSupport {
         return ContainerRunTermination.readTaskJson(this);
     }
 
+    /** Restores the branch tip's denial cursor (FR5). Delegated to {@link ContainerRunTermination}. */
+    @Override
+    public void restoreDenialCursor() {
+        ContainerRunTermination.restoreDenialCursor(this);
+    }
+
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */
     @Override
     public void disposeExistingEnvironment() {

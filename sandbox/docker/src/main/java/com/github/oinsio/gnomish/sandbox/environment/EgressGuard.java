@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,13 +34,12 @@ public final class EgressGuard {
 
     private static final Logger log = LoggerFactory.getLogger(EgressGuard.class);
 
-    private static final int LOG_TAIL_LINES = 1000;
-
     private final DockerCli docker;
     private final String key;
     private final String guardImage;
     private final List<String> allowlist;
     private final Path configDir;
+    private final GuardDenialReads reads;
 
     /**
      * @param docker the docker subprocess seam; never null
@@ -55,6 +56,7 @@ public final class EgressGuard {
         this.guardImage = guardImage;
         this.allowlist = List.copyOf(allowlist);
         this.configDir = configDir;
+        this.reads = new GuardDenialReads(docker, key);
     }
 
     /**
@@ -118,27 +120,59 @@ public final class EgressGuard {
     }
 
     /**
-     * The structured denial findings currently in the guard's log tail —
-     * metadata only, best-effort: an unreadable log yields no findings (and a
+     * The structured denial findings recorded since the previous call — metadata
+     * only, best-effort: an unreadable log — a failed {@code docker logs}, or a
+     * daemon that is unreachable altogether — yields no findings (and a
      * warning), never a failure, since denial observability must not take a
-     * healthy check down (NFR-O1).
+     * healthy check or an already-finished round down (NFR-O1, NFR-R1).
      *
-     * @return the parsed denial findings, capped; never null
+     * <p>Consecutive calls return disjoint slices (D3 of
+     * fix-denial-report-attachment): the read carries a daemon-side {@code
+     * --since} cursor that advances past the last line it saw, so a round asking
+     * at its close is told its own denials and never an earlier round's again.
+     * A failed read leaves the cursor where it was, so nothing is lost to a
+     * transient docker outage. A read that fills its tail window is warned about
+     * rather than passed off as complete: the daemon dropped the window's older
+     * lines and the cursor moves past them regardless (NFR-O1).
+     *
+     * <p>Across processes the cursor is durable (FR5): the guard container
+     * outlives a lease, so a resumed lease that reattached to a surviving
+     * container would otherwise replay every round still in its log. See {@link
+     * #restoreDenialCursor} and {@link #denialCursor()}.
+     *
+     * @return the denial findings recorded since the previous call, capped; never null
      */
     public List<Finding> denialFindings() {
-        DockerResult logs = docker.run(GuardCommands.guardLogs(key, LOG_TAIL_LINES));
-        if (!logs.ok()) {
-            log.warn(
-                    "could not read egress guard log for {}: {}",
-                    key,
-                    logs.stderr().strip());
-            return List.of();
-        }
-        return GuardDenialLog.findings(logs.stdout());
+        return reads.findings();
+    }
+
+    /**
+     * The read position to commit with the attempt these denials belong to,
+     * paired with the guard container it was read from (FR5). Empty until a read
+     * has advanced the cursor, or when the container's id cannot be read.
+     *
+     * @return the current denial cursor; never null, possibly empty
+     */
+    public Optional<DenialCursor> denialCursor() {
+        return reads.cursor();
+    }
+
+    /**
+     * Offers the cursor an earlier lease committed, applied at the first read and
+     * only if it names this guard's live container (FR5) — a position stamped by
+     * another machine's daemon, or by a container since recreated, is dropped
+     * rather than used to filter a log it does not describe.
+     *
+     * @param cursor the committed cursor; never null
+     */
+    public void restoreDenialCursor(DenialCursor cursor) {
+        reads.restore(cursor);
     }
 
     /** The fresh-create path: run the guard on the task network, then give it its bridge leg. */
     private void create() {
+        // A new container is a new denial source: its id, and any cursor matched against it, differ.
+        reads.sourceRecreated();
         DockerResult run = docker.run(GuardCommands.runGuard(
                 key, guardImage, configDir.toAbsolutePath().toString()));
         if (!run.ok()) {

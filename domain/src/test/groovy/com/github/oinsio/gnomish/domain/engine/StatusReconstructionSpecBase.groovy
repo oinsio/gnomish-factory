@@ -66,7 +66,7 @@ abstract class StatusReconstructionSpecBase extends Specification {
     }
 
     static ExecutionResult.Completed completed(String stageName, int round, ExecutorUsage usage) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', stageName, round), []))
+        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', stageName, round), []), [])
     }
 
     static Verdict.Fail fail(String message) {
