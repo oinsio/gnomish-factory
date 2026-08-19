@@ -26,6 +26,8 @@ import com.github.oinsio.gnomish.gitobjects.CommitRequest
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.gitobjects.TreeEdit
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
@@ -86,7 +88,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
 
     protected List<Segment> segments() {
         [
-            new Segment(AdapterBinding.CONTAINER, [stage()])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
     }
 
@@ -131,16 +133,6 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     protected void commitStateAtPipelineEnd(String taskId) {
         def bytes = TaskStateJson.mapper()
                 .writeValueAsString(StateJsonMapper.toDto(pipelineEndState())).getBytes('UTF-8')
-        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, 'state')
-    }
-
-    /**
-     * Commits a state.json positioned at {@code stage} as an ordinary (non-snapshot) commit, so
-     * resume finds {@code Position.AtStage} with no pending interrupted verification.
-     */
-    protected void commitStateAtStage(String taskId, String stage) {
-        def bytes = TaskStateJson.mapper()
-                .writeValueAsString(StateJsonMapper.toDto(TaskState.atStageStart(stage))).getBytes('UTF-8')
         commitOnBranch(taskId, '.gnomish-task/state.json', bytes, 'state')
     }
 

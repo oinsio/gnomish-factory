@@ -64,6 +64,37 @@ weakening, is yours alone: a repo can never request host mode. When a stage's
 needs exceed the bound adapter's passport, the stage refuses fail-closed with
 one error naming the unmet need (UX2).
 
+### Which bindings exist
+
+The binding names you can write are **discovered**, not fixed in the factory
+core: each sandbox backend module ships its own binding and capability
+passport, and the set that is available is the set the distribution's classpath
+carries. At startup the factory reports every discovered binding — its config
+name, the artifact it came from, and its full passport — before any stage runs,
+so `host` and `container` (and anything else installed) are visible up front
+rather than inferred from a stage's behaviour. Naming a binding nothing
+contributes fails at startup, listing what *was* discovered.
+
+Discovery is **first-party only**, and gated: the factory core owns a trust
+table mapping each trusted binding id to the passport it is expected to
+declare. A provider whose id is not in that table, or whose declared passport
+differs from the expected one, is refused at startup rather than registered —
+a backend proposes a passport, the core decides it. That matters because the
+passport is precisely what needs-reconciliation trusts. There is no plugin path
+for third-party sandbox backends; the sandbox is a trust boundary, and the
+classpath your build assembles is the trust domain. Closing the remaining gap —
+a jar impersonating a trusted id — is a build-time concern, handled by pinning
+the classpath (dependency verification), not something the running factory can
+detect.
+
+One consequence worth knowing: `container` is contributed by the Docker backend
+module. In a distribution built without it, the default binding is
+unsatisfiable, and startup says so — naming the bindings that *are* available
+and your two ways out (restore the module, or set
+`factory.bindings.default=host` deliberately). It never quietly falls back to
+host: silently weakening isolation is the one thing binding resolution will not
+do.
+
 Two current boundaries, stated honestly: mixed host/container bindings within
 one pipeline are refused (the round protocol is mode-wide; bind every stage
 alike), and binding resolution currently governs the `gnomish run` git modes —

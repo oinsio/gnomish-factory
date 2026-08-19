@@ -2,92 +2,33 @@ package com.github.oinsio.gnomish.sandbox;
 
 /**
  * Which execution-environment adapter the operator binds a stage to (design D8,
- * D13): the two adapters this change ships. A binding is an operator-only choice
- * — the repo may only tighten needs, never name a binding (FR14) — configured by
- * name in {@code factory.bindings.*} and resolved to this enum by {@code
- * BindingResolver}. Each binding carries the fixed {@link CapabilityPassport} the
- * factory reconciles a stage's declared needs against before the stage runs
- * (task 3.2), so reconciliation and segment planning need no live adapter
- * instance.
+ * D13 of add-sandbox-core; D3 of open-adapter-binding-registry): a config name
+ * paired with the fixed {@link CapabilityPassport} the factory reconciles a
+ * stage's declared needs against before the stage runs. A binding is an
+ * operator-only choice — the repo may only tighten needs, never name a binding
+ * (FR14) — configured by name in {@code factory.bindings.*} and resolved through
+ * {@link AdapterBindingRegistry} by {@link BindingResolver}.
  *
- * <p>The set grows without a contract change: Colima-VM, k8s, and microVM
- * adapters (later changes) add their own constants and passports behind the same
- * port. This change ships {@link #HOST} and {@link #CONTAINER}.
+ * <p>This was a sealed enum whose constants lived in core; it is now a plain
+ * value, minted by the registry from a discovered {@link SandboxBindingProvider}
+ * and the passport the core trust table ratifies for it (FR1). A new backend
+ * therefore contributes a binding from its own module, with no core enum edit.
+ * The passport is still available with no live adapter instance (FR2), so
+ * reconciliation and segment planning stay daemon-free.
  *
- * <p>Implements FR14 of add-sandbox-core.
+ * <p>Bindings are compared <em>by value</em>, not by reference: the registry
+ * guarantees one instance per config name, but every caller — including
+ * {@link SegmentPlanner}'s segment-boundary test, once a reference {@code !=} —
+ * compares {@link #configName()}, so a binding minted anywhere equal to another
+ * behaves identically (D3).
+ *
+ * <p>Implements FR14 of add-sandbox-core; FR1, FR2, FR9 of
+ * open-adapter-binding-registry.
+ *
+ * @param configName the lower-case name this binding is spelled with in {@code
+ *     factory.bindings.*}; also its trust-table id
+ * @param passport the fixed capability passport reconciliation checks against —
+ *     the value the core trust table holds for this id, never the provider's own
+ *     unverified declaration
  */
-public enum AdapterBinding {
-
-    /**
-     * The host adapter (FR2): worktree working copy, local subprocesses, no
-     * isolation. Available only as an explicit operator opt-in — never a silent
-     * fallback (D13).
-     */
-    HOST("host") {
-        @Override
-        public CapabilityPassport passport() {
-            return CapabilityPassport.hostNoIsolation();
-        }
-    },
-
-    /**
-     * The container adapter (FR3): one per-task container that sees only the task
-     * working copy, an allowlisted environment, and the guarded network route.
-     * The default binding when the operator configures none (D13).
-     */
-    CONTAINER("container") {
-        @Override
-        public CapabilityPassport passport() {
-            return CapabilityPassport.container();
-        }
-    };
-
-    private final String configName;
-
-    AdapterBinding(String configName) {
-        this.configName = configName;
-    }
-
-    /**
-     * The lower-case name this binding is spelled with in {@code
-     * factory.bindings.*} configuration.
-     *
-     * @return the config spelling; never null
-     */
-    public String configName() {
-        return configName;
-    }
-
-    /**
-     * This binding's fixed capability passport, reconciled fail-closed against a
-     * stage's declared needs before the stage runs (FR14). Returned by value from
-     * the single {@link CapabilityPassport} factory method for this binding, so
-     * the container adapter's own {@code passport()} and this method never drift
-     * (and the enum holds no mutable capability state).
-     *
-     * @return the passport; never null
-     */
-    public abstract CapabilityPassport passport();
-
-    /**
-     * Resolves a {@code factory.bindings.*} binding name to its enum constant,
-     * failing fast with the valid options named when the name is unknown — an
-     * operator configuration mistake, surfaced at startup rather than mid-task
-     * (UX2). The match is exact and case-sensitive: the config grammar is fixed
-     * lower-case, so a near-miss like {@code Host} is a real typo worth
-     * reporting, not silently coerced.
-     *
-     * @param name the configured binding name; never null
-     * @return the matching binding; never null
-     * @throws IllegalArgumentException if no binding has that config name
-     */
-    public static AdapterBinding parse(String name) {
-        for (AdapterBinding binding : values()) {
-            if (binding.configName.equals(name)) {
-                return binding;
-            }
-        }
-        throw new IllegalArgumentException("unknown adapter binding '" + name + "'; valid bindings are "
-                + HOST.configName + ", " + CONTAINER.configName);
-    }
-}
+public record AdapterBinding(String configName, CapabilityPassport passport) {}

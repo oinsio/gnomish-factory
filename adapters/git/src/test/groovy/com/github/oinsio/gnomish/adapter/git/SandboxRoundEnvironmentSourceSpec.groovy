@@ -12,6 +12,8 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
 import java.nio.file.Files
@@ -54,7 +56,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         },
         BRANCH,
         [
-            new Segment(AdapterBinding.CONTAINER, [stage])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage])
         ])
     }
 

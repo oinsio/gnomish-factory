@@ -4,6 +4,7 @@ import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +53,24 @@ public final class ProviderDiscoveryReport {
      * @return the same registry instance
      */
     public static <T> Map<String, T> reported(String port, Map<String, T> registry) {
-        render(port, registry).forEach(LOG::info);
+        return reported(port, registry, ProviderDiscoveryReport::noDetail);
+    }
+
+    /**
+     * The detail-carrying form, for a port whose entries hold a fact an operator needs at startup
+     * beyond "this class, from this jar" — the sandbox bindings report their capability passport
+     * this way (NFR-O1 of open-adapter-binding-registry), since for a trust boundary with no
+     * runtime enforcement the declared capabilities are the point of the report.
+     *
+     * @param port the port name the registry belongs to, as an operator reads it; never null
+     * @param registry the discovered providers keyed by discriminator; never null
+     * @param detail renders one entry's extra fact, appended to its line; never null
+     * @param <T> the registry's entry type
+     * @return the same registry instance
+     */
+    public static <T> Map<String, T> reported(
+            String port, Map<String, T> registry, Function<? super T, String> detail) {
+        render(port, registry, detail).forEach(LOG::info);
         return registry;
     }
 
@@ -64,15 +82,40 @@ public final class ProviderDiscoveryReport {
      * @param registry the discovered providers keyed by discriminator; never null
      * @return the report lines, one header plus one line per provider; never null
      */
-    static List<String> render(String port, Map<String, ?> registry) {
+    public static List<String> render(String port, Map<String, ?> registry) {
+        return render(port, registry, ProviderDiscoveryReport::noDetail);
+    }
+
+    /**
+     * The detail-carrying render, so what an operator sees for a passport-bearing port is asserted
+     * directly rather than through a logger.
+     *
+     * @param port the port name the registry belongs to; never null
+     * @param registry the discovered providers keyed by discriminator; never null
+     * @param detail renders one entry's extra fact; an empty result appends nothing
+     * @param <T> the registry's entry type
+     * @return the report lines, one header plus one line per provider; never null
+     */
+    public static <T> List<String> render(String port, Map<String, T> registry, Function<? super T, String> detail) {
         if (registry.isEmpty()) {
             return List.of("no " + port + " providers discovered");
         }
         List<String> lines = new ArrayList<>();
         lines.add("discovered " + registry.size() + " " + port + " provider(s):");
         registry.forEach((discriminator, provider) -> lines.add("  " + discriminator + " <- "
-                + artifactOf(provider.getClass()) + " (" + provider.getClass().getName() + ")"));
+                + artifactOf(provider.getClass()) + " (" + provider.getClass().getName() + ")"
+                + suffixed(detail.apply(provider))));
         return List.copyOf(lines);
+    }
+
+    /** The detail renderer for a port whose entries carry nothing beyond their class and artifact. */
+    private static String noDetail(Object provider) {
+        return "";
+    }
+
+    /** Appends a detail in brackets, or nothing at all when the port renders none. */
+    private static String suffixed(String detail) {
+        return detail.isEmpty() ? "" : " [" + detail + "]";
     }
 
     /**

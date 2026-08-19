@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox
 
+import static com.github.oinsio.gnomish.sandbox.BindingFixtures.*
+
 import spock.lang.Specification
 
 /**
@@ -20,10 +22,10 @@ class SegmentSpec extends Specification implements StageFixture {
         ]
 
         when: 'a segment is built'
-        def segment = new Segment(AdapterBinding.CONTAINER, stages)
+        def segment = new Segment(containerBinding(), stages)
 
         then: 'it exposes the binding and exactly those stages'
-        segment.binding() == AdapterBinding.CONTAINER
+        segment.binding() == containerBinding()
         segment.stages() == stages
     }
 
@@ -33,7 +35,7 @@ class SegmentSpec extends Specification implements StageFixture {
         def source = [stage('plan')]
 
         when: 'the segment is built and the source grows afterwards'
-        def segment = new Segment(AdapterBinding.HOST, source)
+        def segment = new Segment(hostBinding(), source)
         source << stage('later-noise')
 
         then: 'the segment still holds only the original stage'
@@ -43,7 +45,7 @@ class SegmentSpec extends Specification implements StageFixture {
     // FR12: the exposed stage list itself cannot be mutated
     def "the exposed stage list is immutable"() {
         given: 'a segment with one stage'
-        def segment = new Segment(AdapterBinding.CONTAINER, [stage('plan')])
+        def segment = new Segment(containerBinding(), [stage('plan')])
 
         when: 'a caller tries to add into the exposed list'
         segment.stages() << stage('intruder')
@@ -55,7 +57,7 @@ class SegmentSpec extends Specification implements StageFixture {
     // FR12: an empty segment is meaningless — an environment with no stage to run
     def "an empty stage list is rejected naming the field"() {
         when: 'a segment is built with no stages'
-        new Segment(AdapterBinding.CONTAINER, [])
+        new Segment(containerBinding(), [])
 
         then: 'construction fails and the message names Segment.stages'
         def failure = thrown(IllegalArgumentException)
@@ -68,6 +70,6 @@ class SegmentSpec extends Specification implements StageFixture {
         def stage = stage('plan')
 
         expect: 'the segments are equal'
-        new Segment(AdapterBinding.CONTAINER, [stage]) == new Segment(AdapterBinding.CONTAINER, [stage])
+        new Segment(containerBinding(), [stage]) == new Segment(containerBinding(), [stage])
     }
 }

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox
 
+import static com.github.oinsio.gnomish.sandbox.BindingFixtures.*
+
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -13,6 +15,11 @@ import spock.lang.Specification
  *
  * FR12/FR13/NFR-P1: segment boundaries fall exactly on binding changes and
  * forced-freshness stages; same-binding neighbours reuse one environment.
+ *
+ * FR9/M2 of open-adapter-binding-registry: the segment-boundary test migrated
+ * from a reference {@code !=} on enum constants to config-name identity, and
+ * this suite is the behaviour gate for that — every assertion below is the
+ * pre-registry one, unchanged.
  */
 class SegmentPlannerSpec extends Specification implements StageFixture {
 
@@ -21,7 +28,7 @@ class SegmentPlannerSpec extends Specification implements StageFixture {
     }
 
     private static SegmentPlanner planner(String defaultBinding = null, Map<String, String> bindings = [:]) {
-        new SegmentPlanner(new BindingResolver(new BindingProperties(defaultBinding, bindings)))
+        new SegmentPlanner(new BindingResolver(new BindingProperties(defaultBinding, bindings), hostAndContainer()))
     }
 
     // FR12: a pipeline with no stages produces no segments
@@ -37,7 +44,7 @@ class SegmentPlannerSpec extends Specification implements StageFixture {
 
         then: 'there is exactly one container segment holding that stage'
         segments.size() == 1
-        segments[0].binding() == AdapterBinding.CONTAINER
+        segments[0].binding() == containerBinding()
         segments[0].stages()*.name() == ['build']
     }
 
@@ -52,7 +59,7 @@ class SegmentPlannerSpec extends Specification implements StageFixture {
 
         then: 'they collapse into a single reused-environment segment'
         segments.size() == 1
-        segments[0].binding() == AdapterBinding.CONTAINER
+        segments[0].binding() == containerBinding()
         segments[0].stages()*.name() == ['plan', 'implement', 'review']
     }
 
@@ -68,9 +75,9 @@ class SegmentPlannerSpec extends Specification implements StageFixture {
 
         expect: 'three segments split on each binding change'
         segments*.binding() == [
-            AdapterBinding.CONTAINER,
-            AdapterBinding.HOST,
-            AdapterBinding.CONTAINER
+            containerBinding(),
+            hostBinding(),
+            containerBinding()
         ]
         segments.collect { it.stages()*.name() } == [
             ['plan'],
@@ -92,8 +99,8 @@ class SegmentPlannerSpec extends Specification implements StageFixture {
         expect: 'the fresh stage opens a new segment that the following stage then reuses'
         segments.size() == 2
         segments*.binding() == [
-            AdapterBinding.CONTAINER,
-            AdapterBinding.CONTAINER
+            containerBinding(),
+            containerBinding()
         ]
         segments.collect { it.stages()*.name() } == [
             ['plan'],

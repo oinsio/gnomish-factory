@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
+import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
@@ -105,6 +106,9 @@ public final class ManualRunRunner implements ApplicationRunner {
     final ContainerResumeRunner containerResumeRunner;
     final BindingProperties bindingProperties;
     final SandboxProperties sandboxProperties;
+    /** The bindings the classpath contributed, discovered once at context refresh (D6). */
+    final AdapterBindingRegistry bindingRegistry;
+
     private final SubcommandDispatch subcommandDispatch;
 
     /**
@@ -129,6 +133,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties,
             BindingProperties bindingProperties,
+            AdapterBindingRegistry bindingRegistry,
             TaskGit git,
             Path worktreesRoot,
             Path homeDir,
@@ -182,6 +187,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                 assembly, git, sandboxProperties, factoryProperties, TASK_ID_KEY, containerSupport);
         this.bindingProperties = bindingProperties;
         this.sandboxProperties = sandboxProperties;
+        this.bindingRegistry = bindingRegistry;
         this.subcommandDispatch = SubcommandDispatchFactory.of(
                 assembly,
                 git,

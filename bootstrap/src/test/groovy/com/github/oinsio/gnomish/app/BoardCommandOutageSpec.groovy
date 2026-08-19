@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -100,6 +101,7 @@ tracker:
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 new SandboxProperties(null, null, null, null, null, null, false),
                 new BindingProperties('host', [:]),
+                DiscoveredBindings.real(),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 homeDir,
@@ -173,7 +175,7 @@ class OutageTracker implements Tracker {
 
     @Override
     List<OpenTask> listOpen() {
-        throw new AssertionError('BoardCommand must not call listOpen after listReady fails')
+        throw new AssertionError('BoardCommand must not call listOpen after listReady fails' as Object)
     }
 
     @Override
