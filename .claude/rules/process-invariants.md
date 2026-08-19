@@ -47,6 +47,28 @@ Keep the recommended message short: a Conventional Commits subject line (≤ ~72
 
 All project documentation, specs, rules, code comments, and commit messages are written in English.
 
+## No jargon; domain terminology is welcome
+
+Documentation and discussions use plain, precise language — no slang, no
+insider jargon, no cutesy shorthand that a newcomer (human or AI) would have to
+decode. Established **domain terminology** is not jargon and is actively
+encouraged: project terms (**factory**, **gnome**, **box**, **guard**, ...) and
+industry terms (egress, allowlist, fail-closed) are precise names for real
+things. The distinction: a domain term has a written definition the reader can
+follow; jargon relies on tribal knowledge.
+
+The project's terms and abbreviations are defined in `docs/glossary.md` — the
+normative ubiquitous-language dictionary, grouped by bounded context:
+
+- A change that introduces a new domain term adds its glossary entry in the
+  same change; a change that shifts a term's meaning updates the entry.
+- Domain code, ports, and fields are named by glossary terms; renaming the
+  concept means renaming the code.
+- Banned synonyms listed in glossary entries (*Never:* ...) must not appear
+  anywhere — code, docs, or discussions.
+- A term used only within one document may instead be defined where it is
+  introduced; promote it to the glossary once a second document needs it.
+
 ## No references to temporary files
 
 `openspec/**` artifacts (proposals, designs, specs, tasks) may only reference project files that live under `docs/` — never scratch/explore locations, which are not part of the durable record and may be deleted at any time. When an idea needs to be cited from an ephemeral note: either inline the relevant meaning directly into the OpenSpec artifact, or propose creating a durable `docs/` file (an ADR, an operator guide, a scope note) and reference that instead.

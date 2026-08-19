@@ -55,6 +55,13 @@ Jira is declared as planned in the README; only GitHub (plus the
 in-memory reference) exists. Not a blocker, but part of the stated
 picture.
 
+### 8. Ограничители на запуск стадии/задачи и аналитика
+
+1. В токенах
+2. В деньгах
+3. В попытках
+4. Может ещё как-то (надо продумать)
+
 ## Work outside the factory's code
 
 ### 7. Reference pipelines — the largest item

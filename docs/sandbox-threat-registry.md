@@ -5,8 +5,8 @@ explore sessions. Sandbox-related OpenSpec changes reference these threats by
 number (`threat #21`); the numbering is stable and must never be reused. A new
 threat takes the next free number and is filed under the section that fits it
 topically, so numbers inside a section are not contiguous. Terms (**factory**,
-**gnome**, **box**, **guard**, ...) are defined in [Terminology](#terminology);
-acronyms in [Abbreviations](#abbreviations).
+**gnome**, **box**, **guard**, ...) and abbreviations are defined in the
+project [glossary](glossary.md).
 
 ## Contents
 
@@ -21,8 +21,6 @@ acronyms in [Abbreviations](#abbreviations).
 - [Tool trust](#tool-trust)
 - [Verdicts, findings and data sinks](#verdicts-findings-and-data-sinks)
 - [Cross-cutting principles](#cross-cutting-principles)
-- [Terminology](#terminology)
-- [Abbreviations](#abbreviations)
 
 ## Legend
 
@@ -153,45 +151,3 @@ acronyms in [Abbreviations](#abbreviations).
 - **Ownership asymmetry**: the repo declares needs and may only
   tighten; adapter bindings and any loosening are operator-only decisions; the
   factory reconciles fail-closed.
-
-## Terminology
-
-- **Factory** — the orchestrator process that takes tasks, runs pipeline
-  stages, and pushes results; **gnome** — the AI agent working on one task.
-- **Box** — the disposable isolated execution environment (container or VM)
-  a gnome runs in; destroyed after the task.
-- **Guard** — the egress proxy on the host (mitmproxy-based); the only network
-  exit the box has, enforcing a default-deny allowlist and logging denials.
-- **The law (`.gnomish/`)** — the pipeline definition and rules taken from the
-  factory's trusted clone; the gnome cannot edit its own acceptance criteria.
-- **Docker-strategy ladder** — the ordered escalation of ways to give a task
-  Docker without handing over the host: from CI-hosted checks (step 0) up to a
-  real Docker daemon inside a per-task VM with its own kernel (step 3).
-- **Artifact depot** — a host-side proxy for package registries; the box talks
-  only to it, and it alone talks to the upstream registries.
-- **Findings** — structured results of a failed or noteworthy check, fed back
-  to the gnome on retry and reported to the tracker.
-
-## Abbreviations
-
-| Abbreviation | Meaning                                                                    |
-|--------------|----------------------------------------------------------------------------|
-| AI           | artificial intelligence                                                    |
-| API          | application programming interface                                          |
-| cgroups      | Linux control groups — kernel mechanism for resource limits                |
-| CI           | continuous integration                                                     |
-| CRI          | Container Runtime Interface (how Kubernetes drives containers on a node)   |
-| CVE          | Common Vulnerabilities and Exposures — public vulnerability identifier     |
-| DinD         | Docker-in-Docker                                                           |
-| DNS          | Domain Name System                                                         |
-| GHA          | GitHub Actions                                                             |
-| k8s          | Kubernetes                                                                 |
-| L7           | network layer 7, the application layer (HTTP methods, paths)               |
-| MITM         | man-in-the-middle — an intermediary that decrypts and re-encrypts traffic  |
-| OSS          | open-source software                                                       |
-| QEMU         | Quick Emulator — software virtualization backend, weaker isolation than vz |
-| RCE          | remote code execution                                                      |
-| SSRF         | server-side request forgery                                                |
-| TLS          | Transport Layer Security                                                   |
-| VM           | virtual machine                                                            |
-| vz           | Apple Virtualization.framework backend — hardware virtualization on macOS  |
