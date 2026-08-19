@@ -17,10 +17,6 @@ import spock.lang.Specification
  */
 class AdapterBindingRegistrySpec extends Specification {
 
-    private static AdapterBindingRegistry registryOf(List<SandboxBindingProvider> providers) {
-        AdapterBindingRegistry.ratified(providers, BindingTrustTable.firstParty())
-    }
-
     // FR1/FR3: each discovered provider contributes its binding, carrying the ratified passport
     def "discovered providers become bindings keyed by their config name"() {
         when: 'the host and container providers are indexed'
@@ -83,6 +79,20 @@ class AdapterBindingRegistrySpec extends Specification {
 
         where:
         blank << ['', '   ']
+    }
+
+    // UX1/NFR-O1: the options an operator reads follow discovery order, not a per-JVM hash order
+    def "discovery order is preserved whichever order the providers arrive in"() {
+        given: 'the same two providers, contributed in the reverse order'
+        def reversed = registryOf([
+            provider(BindingNames.CONTAINER, CapabilityPassport.container()),
+            new HostBindingProvider()
+        ])
+
+        expect: 'each registry enumerates its own encounter order, both ways round'
+        hostAndContainer().names() as List == ['host', 'container']
+        reversed.names() as List == ['container', 'host']
+        reversed.bindings().keySet() as List == ['container', 'host']
     }
 
     // FR1: an empty classpath contribution is an empty registry, not a hidden default

@@ -21,19 +21,22 @@ final class BindingFixtures {
         new StubBindingProvider(name, passport)
     }
 
+    /** {@code providers} ratified against the production first-party trust table. */
+    static AdapterBindingRegistry registryOf(List<SandboxBindingProvider> providers) {
+        AdapterBindingRegistry.ratified(providers, BindingTrustTable.firstParty())
+    }
+
     /** The production pair — host from core, a stand-in for the docker module's container. */
     static AdapterBindingRegistry hostAndContainer() {
-        AdapterBindingRegistry.ratified(
-                [
-                    new HostBindingProvider(),
-                    provider(BindingNames.CONTAINER, CapabilityPassport.container())
-                ],
-                BindingTrustTable.firstParty())
+        registryOf([
+            new HostBindingProvider(),
+            provider(BindingNames.CONTAINER, CapabilityPassport.container())
+        ])
     }
 
     /** A registry with the container backend module absent, as a stripped distribution has (M3). */
     static AdapterBindingRegistry hostOnly() {
-        AdapterBindingRegistry.ratified([new HostBindingProvider()], BindingTrustTable.firstParty())
+        registryOf([new HostBindingProvider()])
     }
 
     static AdapterBinding containerBinding() {

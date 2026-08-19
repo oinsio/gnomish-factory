@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -35,13 +37,16 @@ public final class BindingTrustTable {
      * with the passport it is expected to declare. Sourced from the same {@link
      * CapabilityPassport} factory methods the providers themselves use, so the
      * ratification compares two independently-read copies of one truth rather than
-     * a copy against itself.
+     * a copy against itself. Insertion-ordered, so the ids an untrusted-binding
+     * refusal lists do not reshuffle between runs.
      *
-     * @return trusted binding id → expected passport; never null, immutable
+     * @return trusted binding id → expected passport, in registration order; never
+     *     null, immutable
      */
     public static Map<String, CapabilityPassport> firstParty() {
-        return Map.of(
-                BindingNames.HOST, CapabilityPassport.hostNoIsolation(),
-                BindingNames.CONTAINER, CapabilityPassport.container());
+        Map<String, CapabilityPassport> trusted = new LinkedHashMap<>();
+        trusted.put(BindingNames.HOST, CapabilityPassport.hostNoIsolation());
+        trusted.put(BindingNames.CONTAINER, CapabilityPassport.container());
+        return Collections.unmodifiableMap(trusted);
     }
 }

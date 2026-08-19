@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -38,7 +39,10 @@ public final class AdapterBindingRegistry {
 
     /**
      * Indexes {@code providers} by config name and ratifies each against {@code
-     * trustTable}, in encounter order. Pure over its two arguments — it loads no
+     * trustTable}, in encounter order. The index preserves that order — a
+     * {@code LinkedHashMap} rather than a JDK immutable map, whose iteration order
+     * is salted per JVM — so refusal messages and the startup report read the same
+     * on every run. Pure over its two arguments — it loads no
      * class, touches no classpath and instantiates no backend adapter (FR2).
      *
      * @param providers the providers a discovery pass produced, in encounter order;
@@ -63,7 +67,7 @@ public final class AdapterBindingRegistry {
             }
             indexed.put(name, new AdapterBinding(name, ratify(name, provider, trustTable)));
         }
-        return new AdapterBindingRegistry(Map.copyOf(indexed));
+        return new AdapterBindingRegistry(Collections.unmodifiableMap(indexed));
     }
 
     /**
@@ -100,17 +104,17 @@ public final class AdapterBindingRegistry {
      * The discovered binding names in discovery order, as an operator sees them in
      * every refusal message.
      *
-     * @return the config names; never null, immutable
+     * @return the config names in provider encounter order; never null, immutable
      */
     public Set<String> names() {
         return bindings.keySet();
     }
 
     /**
-     * The discovered bindings keyed by config name, for the startup discovery report
-     * (NFR-O1).
+     * The discovered bindings keyed by config name, in discovery order, for the
+     * startup discovery report (NFR-O1).
      *
-     * @return the bindings; never null, immutable
+     * @return the bindings in provider encounter order; never null, immutable
      */
     public Map<String, AdapterBinding> bindings() {
         return bindings;
@@ -118,7 +122,7 @@ public final class AdapterBindingRegistry {
 
     private static String requireConfigName(SandboxBindingProvider provider) {
         String name = provider.configName();
-        if (name == null || name.isBlank()) {
+        if (name.isBlank()) {
             throw new IllegalStateException(
                     "discovered sandbox binding provider " + provider.getClass().getName()
                             + " declares no configName() — a binding must name itself to be configurable");
