@@ -356,7 +356,23 @@ Narrowing further is possible within a module via `-PpitScope=<comma-separated c
 
 Formatting is applied automatically: a Claude Code hook formats files as the agent edits them, and a git pre-commit hook (installed into `.git/hooks/` by any `./gradlew check` run) formats staged files as a safety net. Manual fallback: `./gradlew spotlessApply`.
 
-Dependency locking is active — after changing dependencies, run `./gradlew check --write-locks` and commit the updated lockfiles (they keep builds reproducible and feed OSV-Scanner).
+<!-- implements FR1-FR5, NFR-R1, NFR-O1, NFR-S1, UX1, UX2 of add-dependency-verification -->
+
+Dependency locking and verification are both active — after changing dependencies, run the combined regeneration command and commit the updated lockfiles and metadata together:
+
+```bash
+./gradlew check --write-locks --write-verification-metadata sha256
+```
+
+Locking (lockfiles, feeds OSV-Scanner below) pins *which versions* resolve; verification (`gradle/verification-metadata.xml`) pins *which bytes* those versions are — every artifact on every resolvable configuration, including Gradle plugins and `build-logic`, is checked by sha256. A build resolving an artifact that is missing from, or mismatches, the metadata fails naming the artifact and points at the command above; nothing from it executes. Running the command twice with no dependency change produces no diff, so a routine bump costs one command plus a diff review. `sources`/`javadoc` classifier artifacts are trusted by regex — they never execute, so IDE sync stays friction-free — and nothing else is exempted. There is no verification bypass anywhere in CI.
+
+`build-logic` is a separate included build with its own lockfile (`build-logic/gradle.lockfile`). On a machine with a warm local Gradle cache, a version-catalog-only bump can leave that lockfile stale — the outer `check` sees `build-logic`'s compile classpath as up-to-date and skips re-resolving it, so `--write-locks` never touches it, and a subsequent build fails naming the unlocked version. If the combined command above reports a lock mismatch inside `:build-logic`, run `./gradlew -p build-logic dependencies --write-locks` once, then repeat the combined command to fold the new checksums into the verification metadata. A fresh clone (CI, a first-time reviewer checkout) has no warm cache and is not affected.
+
+**Dependabot flow**: Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) bumps versions only — it updates neither lockfiles nor verification metadata. On a Dependabot PR: check out its branch, run the combined command above, and push the lockfile + metadata commit; this is the existing reviewer-run step, not a second procedure, and the PR merges green.
+
+**Threat model**: `gradle/verification-metadata.xml` is the build's trust anchor — changes to it are reviewed in PRs like any code change. It closes the residual documented in [`open-adapter-binding-registry`](openspec/changes/archive/2026/08/2026-08-19-open-adapter-binding-registry) (NFR-S1): post-[JEP 486](https://openjdk.org/jeps/486) there is no runtime boundary between classpath jars, so a malicious jar shipped under a trusted binding id with the expected sandbox passport could not be stopped at runtime — verification stops it at build time instead, before the jar ever reaches the JVM. It also covers compromised mirrors and Maven-hijack-class packaging attacks. It does not cover the Gradle wrapper jar (validated separately by `setup-gradle`'s `validate-wrappers: true` in CI, already active) and it checks bytes only, not publisher identity — PGP trusted keys are a deferred upgrade, not required while checksums close the tampered-bytes threat completely.
+
+**Tamper test** (confirms the gate is fail-closed): corrupt a pinned artifact's checksum in `gradle/verification-metadata.xml` (or add an unlisted dependency), then run any task that resolves it — the build fails naming the artifact before any code from it executes, with a link to a detailed report; restore the metadata (or drop the dependency) afterward.
 
 <!-- implements FR9, UX4 of fix-osv-dependency-gate -->
 
