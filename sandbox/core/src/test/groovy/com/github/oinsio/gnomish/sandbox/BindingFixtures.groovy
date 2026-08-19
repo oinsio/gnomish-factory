@@ -21,6 +21,14 @@ final class BindingFixtures {
         new StubBindingProvider(name, passport)
     }
 
+    /**
+     * A second provider class declaring the same shape, so a refusal that must name <em>both</em>
+     * declaring classes is falsifiable — two instances of one stub class would name one class twice.
+     */
+    static SandboxBindingProvider rivalProvider(String name, CapabilityPassport passport) {
+        new RivalBindingProvider(name, passport)
+    }
+
     /** {@code providers} ratified against the production first-party trust table. */
     static AdapterBindingRegistry registryOf(List<SandboxBindingProvider> providers) {
         AdapterBindingRegistry.ratified(providers, BindingTrustTable.firstParty())
@@ -66,6 +74,14 @@ final class BindingFixtures {
         @Override
         CapabilityPassport passport() {
             passport
+        }
+    }
+
+    /** A rival module's provider — same declaration, different class, as a name clash really is. */
+    private static class RivalBindingProvider extends StubBindingProvider {
+
+        RivalBindingProvider(String name, CapabilityPassport passport) {
+            super(name, passport)
         }
     }
 }

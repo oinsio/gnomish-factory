@@ -38,44 +38,67 @@ class AdapterBindingRegistrySpec extends Specification {
         hostOnly().names() as List == ['host']
     }
 
-    // FR5/UX1: an unknown name is refused with the discovered options and the fix named
-    def "an unknown binding name is refused naming the discovered options and the fix"() {
+    // FR5/UX1: an unknown name is refused with the discovered options and the fix named.
+    // The table is the one the superseded AdapterBindingSpec carried: config names are matched
+    // exactly, so a differently-cased name is unknown rather than helpfully coerced, and an
+    // empty name is a name nobody contributed rather than a silent default.
+    def "an unknown binding name #name is refused naming the discovered options and the fix"() {
         when: 'a name no provider contributes is required'
-        hostAndContainer().require('vm')
+        hostAndContainer().require(name)
 
         then: 'the refusal names the value, both discovered options, and how to fix it'
         def failure = thrown(IllegalArgumentException)
-        failure.message.contains("'vm'")
+        failure.message.contains("'" + name + "'")
         failure.message.contains('host')
         failure.message.contains('container')
         failure.message.contains('factory.bindings')
         failure.message.contains('classpath')
+
+        where:
+        name << ['vm', 'Host', 'CONTAINER', '']
+    }
+
+    // FR1/FR5: the exact-match rule has a positive half too — the documented spellings resolve
+    def "the documented config names resolve exactly as spelled"() {
+        expect: 'each shipped name resolves to its binding'
+        hostAndContainer().require('host') == hostBinding()
+        hostAndContainer().require('container') == containerBinding()
     }
 
     // FR8/NFR-R1: two providers claiming one name is a refusal, never an arbitrary pick
     def "two providers claiming one config name fail fast naming both"() {
-        when: 'two providers both declare the container binding'
-        registryOf([
-            provider(BindingNames.CONTAINER, CapabilityPassport.container()),
-            provider(BindingNames.CONTAINER, CapabilityPassport.container())
-        ])
+        given: 'two providers of different classes, as two modules colliding really are'
+        def first = provider(BindingNames.CONTAINER, CapabilityPassport.container())
+        def second = rivalProvider(BindingNames.CONTAINER, CapabilityPassport.container())
+
+        when: 'both declare the container binding'
+        registryOf([first, second])
 
         then: 'the build refuses, naming the conflicting binding and both declaring classes'
         def failure = thrown(IllegalStateException)
         failure.message.contains("duplicate sandbox binding 'container'")
-        failure.message.contains('classpath')
+        failure.message.contains(first.class.name)
+        failure.message.contains(second.class.name)
+
+        and: 'and the fix — one of the two modules has to go'
+        failure.message.contains('remove one of the two modules from the classpath')
     }
 
     // NFR-R1: a provider that names nothing cannot be configured, so it is refused at build time
     def "a provider declaring a blank config name is refused naming the provider class"() {
-        when: 'a provider declares a blank name'
-        registryOf([
-            provider(blank, CapabilityPassport.container())
-        ])
+        given: 'a provider that names itself nothing'
+        def offender = provider(blank, CapabilityPassport.container())
 
-        then: 'the build refuses naming the offending provider class'
+        when: 'it is indexed'
+        registryOf([offender])
+
+        then: 'the build refuses naming the offending provider class and what it failed to do'
         def failure = thrown(IllegalStateException)
+        failure.message.contains(offender.class.name)
         failure.message.contains('configName()')
+
+        and: 'and the fix — a binding has to name itself to be configurable'
+        failure.message.contains('must name itself to be configurable')
 
         where:
         blank << ['', '   ']
@@ -93,6 +116,27 @@ class AdapterBindingRegistrySpec extends Specification {
         hostAndContainer().names() as List == ['host', 'container']
         reversed.names() as List == ['container', 'host']
         reversed.bindings().keySet() as List == ['container', 'host']
+    }
+
+    // NFR-O1: the registry remembers which provider declared each binding — the origin half of the
+    // startup report, which for a trust boundary with no runtime enforcement is what an operator
+    // reads instead of an enforcement guarantee
+    def "each binding records the provider class that declared it, in discovery order"() {
+        given: 'the two providers this distribution ships, stood in for'
+        def container = provider(BindingNames.CONTAINER, CapabilityPassport.container())
+
+        when: 'they are indexed'
+        def registry = registryOf([
+            new HostBindingProvider(),
+            container
+        ])
+
+        then: 'each config name maps to its own declaring class, in encounter order'
+        registry.providerTypes() == [
+            (BindingNames.HOST): HostBindingProvider,
+            (BindingNames.CONTAINER): container.class
+        ]
+        registry.providerTypes().keySet() as List == ['host', 'container']
     }
 
     // FR1: an empty classpath contribution is an empty registry, not a hidden default

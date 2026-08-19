@@ -19,7 +19,9 @@ import org.springframework.context.annotation.Bean;
  * resolution — both before a stage runs, which is what "startup" means throughout this change.
  *
  * <p>Reported through the same {@link ProviderDiscoveryReport} as the tracker and check ports
- * (NFR-O1, UX3), with the passport summary as the per-entry detail: for the sandbox the passport is
+ * (NFR-O1, UX3) — in its origin-explicit form, since a binding is a value the trust table minted and
+ * the class an operator must see is the provider that declared it — with the passport summary as the
+ * per-entry detail: for the sandbox the passport is
  * the security-relevant fact, and observability is the compensating control for a trust boundary
  * with no runtime enforcement behind it.
  *
@@ -44,7 +46,8 @@ public class SandboxBindingConfiguration {
     @Bean
     public AdapterBindingRegistry adapterBindingRegistry() {
         AdapterBindingRegistry registry = SandboxBindingDiscovery.discover();
-        ProviderDiscoveryReport.reported(PORT, registry.bindings(), SandboxBindingConfiguration::summarize);
+        ProviderDiscoveryReport.reportOrigins(
+                PORT, registry.providerTypes(), name -> summarize(registry.require(name)));
         return registry;
     }
 

@@ -38,47 +38,59 @@ class BindingRatificationSpec extends Specification {
 
     // FR7/NFR-S1: an id the core does not vouch for never reaches the registry
     def "an id absent from the trust table is rejected fail-fast and not registered"() {
-        when: 'a provider declares a binding the trust table does not name'
-        AdapterBindingRegistry.ratified(
-                [
-                    provider('rogue', CapabilityPassport.hostNoIsolation())
-                ], BindingTrustTable.firstParty())
+        given: 'a provider claiming an id the core vouches for nothing about'
+        def rogue = provider('rogue', CapabilityPassport.hostNoIsolation())
 
-        then: 'the build refuses, naming the untrusted id, the trusted ids, and both fixes'
+        when: 'it is ratified against the production table'
+        AdapterBindingRegistry.ratified([rogue], BindingTrustTable.firstParty())
+
+        then: 'the build refuses, naming the untrusted id, its declaring class, and the trusted ids'
         def failure = thrown(IllegalStateException)
         failure.message.contains("untrusted sandbox binding 'rogue'")
+        failure.message.contains(rogue.class.name)
         failure.message.contains('host')
         failure.message.contains('container')
-        failure.message.contains('trust table')
+
+        and: 'and both ways out — drop the module, or vouch for the binding in core'
+        failure.message.contains('remove the module from the classpath')
+        failure.message.contains('register the binding and its expected passport in the core trust table')
     }
 
     // FR10/NFR-S1: the declaration is a tripwire — a passport that differs is a refusal
     def "a declared passport differing from the expected one is rejected fail-fast"() {
-        when: 'a provider claims the container binding but declares the weaker host passport'
-        AdapterBindingRegistry.ratified(
-                [
-                    provider(BindingNames.CONTAINER, CapabilityPassport.hostNoIsolation())
-                ],
-                BindingTrustTable.firstParty())
+        given: 'a provider claiming the container binding but declaring the weaker host passport'
+        def liar = provider(BindingNames.CONTAINER, CapabilityPassport.hostNoIsolation())
 
-        then: 'the build refuses, naming the binding, both passports, and the fix'
+        when: 'it is ratified against the production table'
+        AdapterBindingRegistry.ratified([liar], BindingTrustTable.firstParty())
+
+        then: 'the build refuses, naming the binding, its declaring class, and both passports'
         def failure = thrown(IllegalStateException)
         failure.message.contains("sandbox binding 'container'")
-        failure.message.contains('NONE')
-        failure.message.contains('trust table')
+        failure.message.contains(liar.class.name)
+        failure.message.contains(CapabilityPassport.hostNoIsolation().toString())
+        failure.message.contains(BindingTrustTable.firstParty()[BindingNames.CONTAINER].toString())
+
+        and: 'and the fix — the classpath carries a build core does not vouch for'
+        failure.message.contains('restore the trusted module')
+        failure.message.contains('update the core trust table if the change is intended')
     }
 
     // FR10: the table is the authority — a registered binding carries the table's passport
     def "a registered binding carries the trust table's passport, not the provider's copy"() {
-        given: 'a provider whose passport is an equal but distinct instance'
+        given: 'a trust table instance of the spec\'s own, and an equal but distinct declaration'
+        def trusted = new CapabilityPassport(IsolationLevel.CONTAINER, true, true, false)
         def declared = new CapabilityPassport(IsolationLevel.CONTAINER, true, true, false)
+
+        when: 'the provider is ratified against that table'
         def registry = AdapterBindingRegistry.ratified(
                 [
                     provider(BindingNames.CONTAINER, declared)
-                ], BindingTrustTable.firstParty())
+                ], [(BindingNames.CONTAINER): trusted])
 
-        expect: 'the registered passport equals the trusted one'
-        registry.require('container').passport() == BindingTrustTable.firstParty()[BindingNames.CONTAINER]
+        then: 'the stored passport is the table\'s very instance — value equality cannot tell the two apart'
+        registry.require('container').passport().is(trusted)
+        !registry.require('container').passport().is(declared)
     }
 
     // NFR-S1/D2: the production table vouches for exactly the two first-party bindings this

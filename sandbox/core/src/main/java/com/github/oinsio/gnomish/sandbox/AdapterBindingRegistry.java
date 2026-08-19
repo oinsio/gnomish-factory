@@ -33,8 +33,11 @@ public final class AdapterBindingRegistry {
 
     private final Map<String, AdapterBinding> bindings;
 
-    private AdapterBindingRegistry(Map<String, AdapterBinding> bindings) {
+    private final Map<String, Class<?>> providerTypes;
+
+    private AdapterBindingRegistry(Map<String, AdapterBinding> bindings, Map<String, Class<?>> providerTypes) {
         this.bindings = bindings;
+        this.providerTypes = providerTypes;
     }
 
     /**
@@ -56,18 +59,19 @@ public final class AdapterBindingRegistry {
     public static AdapterBindingRegistry ratified(
             Iterable<SandboxBindingProvider> providers, Map<String, CapabilityPassport> trustTable) {
         Map<String, AdapterBinding> indexed = new LinkedHashMap<>();
-        Map<String, String> declaredBy = new LinkedHashMap<>();
+        Map<String, Class<?>> declaredBy = new LinkedHashMap<>();
         for (SandboxBindingProvider provider : providers) {
             String name = requireConfigName(provider);
-            String previous = declaredBy.put(name, provider.getClass().getName());
+            Class<?> previous = declaredBy.put(name, provider.getClass());
             if (previous != null) {
-                throw new IllegalStateException("duplicate sandbox binding '" + name + "' declared by " + previous
-                        + " and " + provider.getClass().getName()
+                throw new IllegalStateException("duplicate sandbox binding '" + name + "' declared by "
+                        + previous.getName() + " and " + provider.getClass().getName()
                         + " — remove one of the two modules from the classpath");
             }
             indexed.put(name, new AdapterBinding(name, ratify(name, provider, trustTable)));
         }
-        return new AdapterBindingRegistry(Collections.unmodifiableMap(indexed));
+        return new AdapterBindingRegistry(
+                Collections.unmodifiableMap(indexed), Collections.unmodifiableMap(declaredBy));
     }
 
     /**
@@ -118,6 +122,19 @@ public final class AdapterBindingRegistry {
      */
     public Map<String, AdapterBinding> bindings() {
         return bindings;
+    }
+
+    /**
+     * The class of the provider that declared each binding, in discovery order — the origin half of
+     * the startup report, which for a trust boundary with no runtime enforcement is the
+     * compensating control (NFR-O1). Kept beside the bindings rather than inside {@link
+     * AdapterBinding}, whose value equality is the segment-boundary test (D3).
+     *
+     * @return config name → declaring provider class, in provider encounter order; never null,
+     *     immutable
+     */
+    public Map<String, Class<?>> providerTypes() {
+        return providerTypes;
     }
 
     private static String requireConfigName(SandboxBindingProvider provider) {

@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.sandbox
 import com.github.oinsio.gnomish.adapter.plugin.LogCaptureSupport
 import com.github.oinsio.gnomish.adapter.plugin.ProviderDiscoveryReport
 import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.HostBindingProvider
+import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import java.util.function.Function
 import spock.lang.Specification
 
@@ -26,26 +28,37 @@ class SandboxBindingReportSpec extends Specification {
         def registry = SandboxBindingDiscovery.discover()
 
         when:
-        def lines = ProviderDiscoveryReport.render(
+        def lines = ProviderDiscoveryReport.renderOrigins(
                 'sandbox binding',
-                registry.bindings(),
-                { SandboxBindingConfiguration.summarize(it) } as Function)
+                registry.providerTypes(), {
+                    SandboxBindingConfiguration.summarize(registry.require(it))
+                } as Function)
 
         then: 'a counted header naming the port'
         lines[0] == 'discovered ' + registry.bindings().size() + ' sandbox binding provider(s):'
 
-        and: 'one line per binding, carrying its artifact and its full passport'
-        def host = lines.find { it.contains(' ' + BindingNames.HOST + ' <- ') }
-        def container = lines.find {
-            it.contains(' ' + BindingNames.CONTAINER + ' <- ')
+        and: 'one line per binding: the config name, the artifact behind it, the declaring provider'
+        def host = lines.find {
+            it.startsWith('  ' + BindingNames.HOST + ' <- ')
         }
+        def container = lines.find {
+            it.startsWith('  ' + BindingNames.CONTAINER + ' <- ')
+        }
+        host.startsWith('  ' + BindingNames.HOST + ' <- '
+                + ProviderDiscoveryReport.artifactOf(HostBindingProvider)
+                + ' (' + HostBindingProvider.name + ')')
+        container.startsWith('  ' + BindingNames.CONTAINER + ' <- '
+                + ProviderDiscoveryReport.artifactOf(ContainerBindingProvider)
+                + ' (' + ContainerBindingProvider.name + ')')
+
+        and: 'each line ends with the full passport that binding was ratified with'
         host.endsWith(' [isolation=NONE egress-controlled=false task-to-task-boundary=false docker-inside=true]')
         container.endsWith(
                 ' [isolation=CONTAINER egress-controlled=true task-to-task-boundary=true docker-inside=false]')
 
-        and: 'the artifact each provider was loaded from is named'
-        host.contains(' <- ')
-        container.contains(' <- ')
+        and: 'the container binding is reported from the docker module, not from core'
+        ProviderDiscoveryReport.artifactOf(ContainerBindingProvider) !=
+                ProviderDiscoveryReport.artifactOf(HostBindingProvider)
     }
 
     // NFR-O1: the report reaches the operator through the log, and the registry the bean returns is
@@ -70,6 +83,7 @@ class SandboxBindingReportSpec extends Specification {
         }
         logged.any {
             it.contains(BindingNames.CONTAINER) && it.contains('isolation=CONTAINER')
+            && it.contains(ContainerBindingProvider.name)
         }
 
         cleanup:
