@@ -93,7 +93,7 @@ dependencies {
     japicmpWorkerRuntime 'com.sun.xml.bind:jaxb-core:4.0.3'
     japicmpWorkerRuntime 'com.sun.xml.bind:jaxb-impl:4.0.3'
     japicmpWorkerRuntime 'javax.activation:activation:1.1.1'
-    japicmpWorkerRuntime 'com.google.guava:guava:30.1.1-jre'
+    japicmpWorkerRuntime 'com.google.guava:guava:33.6.0-jre'
 }
 
 tasks.named('functionalTest') {
