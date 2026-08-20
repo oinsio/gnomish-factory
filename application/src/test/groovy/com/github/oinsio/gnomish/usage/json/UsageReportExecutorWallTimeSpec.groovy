@@ -30,7 +30,7 @@ class UsageReportExecutorWallTimeSpec extends Specification {
     private static UsageRow row(Duration wallTime) {
         def executorUsage = new ExecutorUsage(wallTime, [], ['claude-x': new TokenUsage(1, 1, 0, 0)])
         def attempt = new AttemptRecord(0, AttemptRecord.Result.PASSED,
-                Instant.parse('2026-07-18T09:00:00Z'), [], executorUsage, new JudgeUsage([]))
+                Instant.parse('2026-07-18T09:00:00Z'), [], executorUsage, new JudgeUsage([]), [])
         new UsageRow('implement', attempt)
     }
 

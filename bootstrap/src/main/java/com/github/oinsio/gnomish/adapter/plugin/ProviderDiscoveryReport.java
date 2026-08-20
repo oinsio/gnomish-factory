@@ -4,6 +4,7 @@ import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +53,24 @@ public final class ProviderDiscoveryReport {
      * @return the same registry instance
      */
     public static <T> Map<String, T> reported(String port, Map<String, T> registry) {
-        render(port, registry).forEach(LOG::info);
+        return reported(port, registry, ProviderDiscoveryReport::noDetail);
+    }
+
+    /**
+     * The detail-carrying form, for a port whose entries hold a fact an operator needs at startup
+     * beyond "this class, from this jar" — the sandbox bindings report their capability passport
+     * this way (NFR-O1 of open-adapter-binding-registry), since for a trust boundary with no
+     * runtime enforcement the declared capabilities are the point of the report.
+     *
+     * @param port the port name the registry belongs to, as an operator reads it; never null
+     * @param registry the discovered providers keyed by discriminator; never null
+     * @param detail renders one entry's extra fact, appended to its line; never null
+     * @param <T> the registry's entry type
+     * @return the same registry instance
+     */
+    public static <T> Map<String, T> reported(
+            String port, Map<String, T> registry, Function<? super T, String> detail) {
+        render(port, registry, detail).forEach(LOG::info);
         return registry;
     }
 
@@ -64,15 +82,80 @@ public final class ProviderDiscoveryReport {
      * @param registry the discovered providers keyed by discriminator; never null
      * @return the report lines, one header plus one line per provider; never null
      */
-    static List<String> render(String port, Map<String, ?> registry) {
-        if (registry.isEmpty()) {
+    public static List<String> render(String port, Map<String, ?> registry) {
+        return render(port, registry, ProviderDiscoveryReport::noDetail);
+    }
+
+    /**
+     * The detail-carrying render, so what an operator sees for a passport-bearing port is asserted
+     * directly rather than through a logger.
+     *
+     * @param port the port name the registry belongs to; never null
+     * @param registry the discovered providers keyed by discriminator; never null
+     * @param detail renders one entry's extra fact; an empty result appends nothing
+     * @param <T> the registry's entry type
+     * @return the report lines, one header plus one line per provider; never null
+     */
+    public static <T> List<String> render(String port, Map<String, T> registry, Function<? super T, String> detail) {
+        List<Entry> entries = new ArrayList<>();
+        registry.forEach((discriminator, provider) ->
+                entries.add(new Entry(discriminator, provider.getClass(), detail.apply(provider))));
+        return rendered(port, entries);
+    }
+
+    /**
+     * Logs the origin-explicit report, for a port whose registry entries are values rather than the
+     * providers that contributed them — the sandbox bindings, which the trust table mints from a
+     * discovered provider, so the class an operator must see is the provider's and not the value's
+     * (NFR-O1 of open-adapter-binding-registry).
+     *
+     * @param port the port name the registry belongs to; never null
+     * @param origins discriminator → the class of the provider that contributed it; never null
+     * @param detail renders one discriminator's extra fact; an empty result appends nothing
+     */
+    public static void reportOrigins(String port, Map<String, Class<?>> origins, Function<String, String> detail) {
+        renderOrigins(port, origins, detail).forEach(LOG::info);
+    }
+
+    /**
+     * The origin-explicit render, so what an operator sees is asserted directly rather than through
+     * a logger.
+     *
+     * @param port the port name the registry belongs to; never null
+     * @param origins discriminator → the class of the provider that contributed it; never null
+     * @param detail renders one discriminator's extra fact; an empty result appends nothing
+     * @return the report lines, one header plus one line per provider; never null
+     */
+    public static List<String> renderOrigins(
+            String port, Map<String, Class<?>> origins, Function<String, String> detail) {
+        List<Entry> entries = new ArrayList<>();
+        origins.forEach((discriminator, providerType) ->
+                entries.add(new Entry(discriminator, providerType, detail.apply(discriminator))));
+        return rendered(port, entries);
+    }
+
+    /** One reported provider: what an operator configures, where it came from, what it declares. */
+    private record Entry(String discriminator, Class<?> providerType, String detail) {}
+
+    private static List<String> rendered(String port, List<Entry> entries) {
+        if (entries.isEmpty()) {
             return List.of("no " + port + " providers discovered");
         }
         List<String> lines = new ArrayList<>();
-        lines.add("discovered " + registry.size() + " " + port + " provider(s):");
-        registry.forEach((discriminator, provider) -> lines.add("  " + discriminator + " <- "
-                + artifactOf(provider.getClass()) + " (" + provider.getClass().getName() + ")"));
+        lines.add("discovered " + entries.size() + " " + port + " provider(s):");
+        entries.forEach(entry -> lines.add("  " + entry.discriminator() + " <- " + artifactOf(entry.providerType())
+                + " (" + entry.providerType().getName() + ")" + suffixed(entry.detail())));
         return List.copyOf(lines);
+    }
+
+    /** The detail renderer for a port whose entries carry nothing beyond their class and artifact. */
+    private static String noDetail(Object provider) {
+        return "";
+    }
+
+    /** Appends a detail in brackets, or nothing at all when the port renders none. */
+    private static String suffixed(String detail) {
+        return detail.isEmpty() ? "" : " [" + detail + "]";
     }
 
     /**
@@ -81,7 +164,7 @@ public final class ProviderDiscoveryReport {
      * @param providerType the discovered provider's own class; never null
      * @return the jar file name, the classes directory, or {@link #UNKNOWN_ARTIFACT}; never null
      */
-    static String artifactOf(Class<?> providerType) {
+    public static String artifactOf(Class<?> providerType) {
         return artifactOfSource(providerType.getProtectionDomain().getCodeSource());
     }
 

@@ -2,9 +2,9 @@
 
 ## Context
 
-Driven by FR1–FR11, NFR-S1/S2, NFR-R2 of the proposal. The
-`colima-agent-sandbox.md` exploration (2026-07) settled the hard
-questions empirically; this design fixes its findings into decisions.
+Driven by FR1–FR11, NFR-S1/S2, NFR-R2 of the proposal. A hands-on
+Colima exploration settled the hard questions empirically;
+this design fixes its findings into decisions.
 Change A provides the opaque port (materialize / exec / harvest /
 dispose, transport-agnostic), the mitmdump guard, the self-check
 framework, and git-transport resume/salvage — the VM adapter is a third

@@ -46,7 +46,7 @@ abstract class ResumeMatrixSpecBase extends Specification {
     }
 
     static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static Verdict.Fail fail(String message) {

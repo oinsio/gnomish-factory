@@ -436,7 +436,7 @@ class RunnerOutcomeLoopSpec extends Specification {
     }
 
     private static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('task-1', 'build', 0), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('task-1', 'build', 0), []), [])
     }
 
     def "run reports to stderr and stops after a breaking persistence fake aborts the engine"() {

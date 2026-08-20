@@ -32,7 +32,7 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
         given: 'a stage whose executor asks a human instead of completing'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         executor.scripted << new ExecutionResult.DecisionNeeded(
-                'which?', ['a', 'b'], ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+                'which?', ['a', 'b'], ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
 
         when: 'the run is driven'
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())

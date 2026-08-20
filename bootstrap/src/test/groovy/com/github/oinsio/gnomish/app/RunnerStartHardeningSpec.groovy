@@ -20,6 +20,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import java.nio.file.Files
@@ -108,7 +110,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         def runner = new ContainerGitModeRunner(
                 newAssembly(), TaskGitFixture.real(), sandboxProperties(), testProperties(), ContainerSupportFixture.real())
         def segments = [
-            new Segment(AdapterBinding.CONTAINER, [stage()])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
 
         when:
@@ -127,7 +129,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         def runner = new ContainerResumeRunner(newAssembly(), TaskGitFixture.real(), sandboxProperties(), testProperties(), 'taskId',
                 ContainerSupportFixture.real())
         def segments = [
-            new Segment(AdapterBinding.CONTAINER, [stage()])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
 
         when:

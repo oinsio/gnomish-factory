@@ -68,7 +68,7 @@ abstract class AttemptPersistenceContract extends Specification implements PortC
         def key = { int round -> new AttemptKey('TASK-1', 'build', round) }
         def record = { int round ->
             new AttemptRecord(round, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH,
-            [], ExecutorUsage.none(), JudgeUsage.none())
+            [], ExecutorUsage.none(), JudgeUsage.none(), [])
         }
         def s0 = TaskState.atStageStart('build')
         def s1 = s0.recordQualityFailure(record(0))

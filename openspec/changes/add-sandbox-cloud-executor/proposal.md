@@ -7,12 +7,12 @@ machine's hardware, and the Д7 trigger — task sources the operator does
 not trust — calls for VM-grade isolation at a scale a laptop cannot
 provide. Change A fixed the port contract as host-agnostic (git
 transport and streams, no shared filesystem) precisely so that a cloud
-adapter would be an adapter, not a redesign; the operator decision of
-2026-07-23 requires the factory and its gnomes to run both locally and
+adapter would be an adapter, not a redesign; the standing operator
+decision requires the factory and its gnomes to run both locally and
 in k8s. This change is ladder step D: a k8s-first cloud executor —
 pod-per-environment under default-deny NetworkPolicy, with the cloud's
 own hazards closed: the metadata endpoint as an SSRF credential leak
-(threat #27), a durable volume quietly becoming a second source of truth
+(threat #27 of `docs/sandbox-threat-registry.md`), a durable volume quietly becoming a second source of truth
 (#28), data residency as a new trust point (#29), and image pulls done
 by the node outside pod network policy (#30). Static secrets disappear
 from remote infrastructure via a Vault-class secrets adapter with OIDC

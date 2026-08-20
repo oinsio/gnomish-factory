@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -60,6 +59,22 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
         1 * support.completeAndDispose(_ as TaskState)
         0 * support.keepStopped()
         0 * support.recordAborted(_)
+        executor.requests.size() == 1
+    }
+
+    // FR5 of fix-denial-report-attachment: the denial source outlives the process that created it,
+    // so the run hands its environments the position its last committed attempt recorded — BEFORE
+    // any environment materializes, since the first read of the first round is what it delimits.
+    // Without it that read replays every denial the surviving source still holds onto this round.
+    def "restores the committed denial cursor before the run materializes anything"() {
+        when:
+        drive()
+
+        then:
+        1 * support.restoreDenialCursor()
+
+        then: 'only afterwards does the run assemble and drive the engine'
+        1 * support.completeAndDispose(_ as TaskState)
         executor.requests.size() == 1
     }
 

@@ -5,7 +5,7 @@
 Driven by FR1–FR11, NFR-S1/S2, NFR-R2 of the proposal. Change A left
 the seam deliberately: registry endpoints in baked configs are
 parameters, the guard allowlist is operator config, and the explore
-sessions (2026-07-31) settled the depot's role — the gnome talks only
+sessions settled the depot's role — the gnome talks only
 to the depot, upstream traffic is the depot's own, enforcement belongs
 to the guard, and the "repo asks, operator allows" ownership asymmetry
 applies to upstreams exactly as it does to allowlist entries.

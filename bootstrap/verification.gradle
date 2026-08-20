@@ -33,7 +33,8 @@ tasks.named('test') {
     // leaves `test` up to date and the gates simply do not run.
     systemProperty 'repoRoot', rootProject.projectDir.absolutePath
     inputs.files(rootProject.fileTree(rootProject.projectDir) {
-        include '**/*.gradle', '**/*.lockfile', '**/gradle.properties', 'gradle/libs.versions.toml'
+        include '**/*.gradle', '**/*.lockfile', '**/gradle.properties', 'gradle/libs.versions.toml',
+                'gradle/verification-metadata.xml'
         exclude '**/build/**', '**/.git/**', '**/.gradle/**'
     }).withPropertyName('buildMetadata')
 

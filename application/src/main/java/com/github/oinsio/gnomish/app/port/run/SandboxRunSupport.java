@@ -65,6 +65,17 @@ public interface SandboxRunSupport {
     /** Prunes objects a dead instance left labelled, keeping this task's own (FR11, NFR-R2). */
     void sweepOrphans();
 
+    /**
+     * Hands the run's environments the denial read position recorded at the task branch tip, so a
+     * resume that reattaches to a surviving egress guard reports its own rounds' denials instead of
+     * replaying every denial the guard still holds (FR5 of fix-denial-report-attachment).
+     *
+     * <p>Best-effort and always safe to call: a branch with no recorded cursor — a fresh run, a
+     * task whose rounds ran host-side — is a no-op, and a cursor that does not name the live denial
+     * source is dropped by the environment rather than applied.
+     */
+    void restoreDenialCursor();
+
     /** Completed terminal boundary (D19): dispose, then record the outcome and cleanup commits. */
     void completeAndDispose(TaskState finalState);
 

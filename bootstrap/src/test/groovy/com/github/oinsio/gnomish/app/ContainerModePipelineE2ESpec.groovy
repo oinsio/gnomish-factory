@@ -13,6 +13,8 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
@@ -103,7 +105,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         def runner = new ContainerGitModeRunner(
                 newAssembly(factoryProps), TaskGitFixture.real(), sandbox, factoryProps, ContainerSupportFixture.real())
         def segments = [
-            new Segment(AdapterBinding.CONTAINER, [stage()])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
 
         when:

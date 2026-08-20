@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
 
@@ -72,9 +73,9 @@ class AttemptBoundaryEquivalenceSpec extends Specification {
 
         and: 'the check result and round that AttemptFinished will carry'
         def checkRef = new CheckRef(0, 'command:./gradlew test')
-        def checkResult = new CheckResult(checkRef, new Verdict.Pass(), java.time.Duration.ofMillis(41250))
+        def checkResult = new CheckResult(checkRef, new Verdict.Pass(), Duration.ofMillis(41250))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [checkResult],
-        ExecutorUsage.none(), JudgeUsage.none())
+        ExecutorUsage.none(), JudgeUsage.none(), [])
         def newState = initialState.recordUnburnedRound(round)
 
         when: 'a full round runs, stopping exactly at the attempt boundary: right after AttemptFinished'

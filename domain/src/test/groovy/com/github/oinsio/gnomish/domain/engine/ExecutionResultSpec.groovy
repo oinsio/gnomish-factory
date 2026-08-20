@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -12,9 +14,13 @@ import spock.lang.Specification
  */
 class ExecutionResultSpec extends Specification {
 
+    private static Finding denial() {
+        new Finding('egress denied: evil.example.com:443', 'evil.example.com:443', 'kind=connect')
+    }
+
     private static ToolTrace sampleTrace() {
         new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [
-            new ToolCall(0, 'read', java.time.Instant.EPOCH, java.time.Duration.ZERO)
+            new ToolCall(0, 'read', Instant.EPOCH, Duration.ZERO)
         ])
     }
 
@@ -25,7 +31,7 @@ class ExecutionResultSpec extends Specification {
         def trace = sampleTrace()
 
         when: 'a Completed result is created'
-        def result = new ExecutionResult.Completed(usage, trace)
+        def result = new ExecutionResult.Completed(usage, trace, [])
 
         then: 'both telemetry components are exposed exactly as constructed'
         result.usage() == usage
@@ -37,7 +43,7 @@ class ExecutionResultSpec extends Specification {
         given: 'a Completed result typed as the sealed interface'
         def usage = ExecutorUsage.none()
         def trace = sampleTrace()
-        ExecutionResult result = new ExecutionResult.Completed(usage, trace)
+        ExecutionResult result = new ExecutionResult.Completed(usage, trace, [])
 
         expect: 'the interface accessors return the same telemetry'
         result.usage() == usage
@@ -52,7 +58,7 @@ class ExecutionResultSpec extends Specification {
 
         when: 'a DecisionNeeded result is created'
         def result = new ExecutionResult.DecisionNeeded(
-                'Which database?', ['postgres', 'sqlite'], usage, trace)
+                'Which database?', ['postgres', 'sqlite'], usage, trace, [])
 
         then: 'each component is exposed exactly as constructed'
         result.question() == 'Which database?'
@@ -67,7 +73,7 @@ class ExecutionResultSpec extends Specification {
         def usage = ExecutorUsage.none()
         def trace = sampleTrace()
         ExecutionResult result = new ExecutionResult.DecisionNeeded(
-                'Proceed?', [], usage, trace)
+                'Proceed?', [], usage, trace, [])
 
         expect: 'the interface accessors return the same telemetry'
         result.usage() == usage
@@ -77,7 +83,7 @@ class ExecutionResultSpec extends Specification {
     // FR6: the question is required — a blank question asks the human nothing
     def "DecisionNeeded rejects a blank question with the component named"() {
         when: 'a DecisionNeeded is created with a blank question'
-        new ExecutionResult.DecisionNeeded(question, [], ExecutorUsage.none(), sampleTrace())
+        new ExecutionResult.DecisionNeeded(question, [], ExecutorUsage.none(), sampleTrace(), [])
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
@@ -91,7 +97,7 @@ class ExecutionResultSpec extends Specification {
     def "DecisionNeeded accepts an empty options list"() {
         when: 'a DecisionNeeded is created with no options'
         def result = new ExecutionResult.DecisionNeeded(
-                'Open question?', [], ExecutorUsage.none(), sampleTrace())
+                'Open question?', [], ExecutorUsage.none(), sampleTrace(), [])
 
         then: 'the options list is empty'
         result.options().isEmpty()
@@ -104,7 +110,7 @@ class ExecutionResultSpec extends Specification {
 
         when: 'a DecisionNeeded is created and the source is then mutated'
         def result = new ExecutionResult.DecisionNeeded(
-                'Pick one?', source, ExecutorUsage.none(), sampleTrace())
+                'Pick one?', source, ExecutorUsage.none(), sampleTrace(), [])
         source.add('sneaked in')
 
         then: 'the result keeps its original single option'
@@ -115,13 +121,61 @@ class ExecutionResultSpec extends Specification {
     def "the exposed options list is unmodifiable"() {
         given: 'a DecisionNeeded result'
         def result = new ExecutionResult.DecisionNeeded(
-                'Pick one?', ['a'], ExecutorUsage.none(), sampleTrace())
+                'Pick one?', ['a'], ExecutorUsage.none(), sampleTrace(), [])
 
         when: 'a caller tries to add an option'
         result.options().add('b')
 
         then: 'the modification is rejected'
         thrown(UnsupportedOperationException)
+    }
+
+    // FR3 of fix-denial-report-attachment: both variants copy their denials defensively — the
+    //     list comes from the environment's guard read, and a later mutation of it must not
+    //     rewrite the round's reported denials. PIT's record filter emits no mutant for a compact
+    //     constructor, so this invariant is only held by a spec.
+    def "the denials list is defensively copied from the source"() {
+        given: 'a mutable source list'
+        def source = [denial()]
+
+        when: 'a result is created and the source is then mutated'
+        def result = build(source)
+        source.add(denial())
+
+        then: 'the result keeps its original single denial'
+        result.denials().size() == 1
+
+        where:
+        build << [
+            { List<Finding> d ->
+                new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), d)
+            },
+            { List<Finding> d ->
+                new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), sampleTrace(), d)
+            }
+        ]
+    }
+
+    // FR3 of fix-denial-report-attachment: the exposed denials list is unmodifiable
+    def "the exposed denials list is unmodifiable"() {
+        given: 'a result carrying one denial'
+        def result = build([denial()])
+
+        when: 'a caller tries to add a denial'
+        result.denials().add(denial())
+
+        then: 'the modification is rejected'
+        thrown(UnsupportedOperationException)
+
+        where:
+        build << [
+            { List<Finding> d ->
+                new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), d)
+            },
+            { List<Finding> d ->
+                new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), sampleTrace(), d)
+            }
+        ]
     }
 
     // FR6: ExecutionResult is sealed — an exhaustive switch handles both variants
@@ -131,26 +185,26 @@ class ExecutionResultSpec extends Specification {
 
         where:
         result | expected
-        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace()) | 'completed'
-        new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), sampleTrace()) | 'decision: Q?'
+        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), []) | 'completed'
+        new ExecutionResult.DecisionNeeded('Q?', [], ExecutorUsage.none(), sampleTrace(), []) | 'decision: Q?'
     }
 
     // FR6: Completed results are values — equal content means equal results
     def "Completed results with the same components are equal values"() {
         expect: 'two independently constructed Completed results with equal content are equal'
-        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace()) ==
-                new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace())
+        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), []) ==
+        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), [])
     }
 
     // FR6: DecisionNeeded results are values — equal content means equal results
     def "DecisionNeeded results with the same components are equal values"() {
         expect: 'two independently constructed DecisionNeeded results with equal content are equal'
-        new ExecutionResult.DecisionNeeded('Q?', ['a'], ExecutorUsage.none(), sampleTrace()) ==
-        new ExecutionResult.DecisionNeeded('Q?', ['a'], ExecutorUsage.none(), sampleTrace())
+        new ExecutionResult.DecisionNeeded('Q?', ['a'], ExecutorUsage.none(), sampleTrace(), []) ==
+        new ExecutionResult.DecisionNeeded('Q?', ['a'], ExecutorUsage.none(), sampleTrace(), [])
 
         and: 'a differing question makes them unequal'
-        new ExecutionResult.DecisionNeeded('Q1?', [], ExecutorUsage.none(), sampleTrace()) !=
-        new ExecutionResult.DecisionNeeded('Q2?', [], ExecutorUsage.none(), sampleTrace())
+        new ExecutionResult.DecisionNeeded('Q1?', [], ExecutorUsage.none(), sampleTrace(), []) !=
+        new ExecutionResult.DecisionNeeded('Q2?', [], ExecutorUsage.none(), sampleTrace(), [])
     }
 
     private static String describe(ExecutionResult result) {

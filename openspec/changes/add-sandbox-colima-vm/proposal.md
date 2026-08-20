@@ -15,10 +15,11 @@ security boundary moves to the VM: hardware isolation per task, a real
 Docker daemon legally inside (its own kernel — ladder step 3), egress
 enforced by a host-side packet filter in front of the same guard. The
 trigger is "the operator needs a hardware boundary locally" — in-box
-Docker is the frequent special case, not the only reason. The
-`colima-agent-sandbox.md` exploration (2026-07) closed the research
-questions; threat-registry items addressed: #21 (hardware task↔task
-boundary), #24/#25 (Docker inside without socket passthrough or
+Docker is the frequent special case, not the only reason. A hands-on
+Colima exploration closed the research questions empirically;
+its findings are fixed as decisions in this change's `design.md`.
+Threat-registry items addressed (`docs/sandbox-threat-registry.md`):
+#21 (hardware task↔task boundary), #24/#25 (Docker inside without socket passthrough or
 privileged), #43 (silent isolation degradation, the vz→QEMU class).
 
 ## What Changes
@@ -48,6 +49,15 @@ privileged), #43 (silent isolation degradation, the vz→QEMU class).
 - **MODIFIED**: sandbox egress self-check gains VM-adapter probes: host
   filesystem invisible, mount table empty, backend matches, direct DNS to
   an external resolver fails.
+- **MODIFIED**: run-path generalization (deferred here from
+  `open-adapter-binding-registry`): the engine's host/container mode dispatch
+  (the `Plan.Mode` switch and the per-mode runner families wired in the
+  composition root) generalizes to per-binding execution, and the
+  binding-contribution SPI gains its lazy environment factory
+  (`create(...)`) with this adapter as the first consumer. The registry
+  change deliberately opens only binding + passport contribution; the first
+  non-docker backend — this change — pays for generalizing the execution
+  path.
 - **REMOVED**: nothing; container and host adapters are unchanged, the
   VM adapter is one more operator-bindable option.
 
@@ -80,8 +90,10 @@ privileged), #43 (silent isolation degradation, the vz→QEMU class).
 - G3: the egress guarantee is enforced outside the guest: nothing running
   inside the VM — root included — can widen its own network reach.
 - G4: the adapter is a pure port implementation: no change to the port
-  contract, the engine, or the other adapters; binding is the same
-  operator mechanism as change A.
+  contract or the existing adapters; the one engine-side change is the
+  planned run-path generalization (per-binding dispatch replacing the
+  host/container mode switch — see What Changes), after which binding
+  stays the same operator mechanism as change A.
 - G5: isolation degradation is loud: every invariant the design relies on
   (mounts, backend, DNS, filter) is probed at startup and refuses the
   task fail-closed on mismatch.
@@ -242,13 +254,21 @@ privileged), #43 (silent isolation degradation, the vz→QEMU class).
 - Q4: Linux host parity — Colima on Linux vs plain Lima/QEMU and the
   nftables rule shape; verify at implementation start.
 - Q5: re-verify the tool landscape at implementation start (Colima/Lima
-  state, Apple container + socktainer maturity, DiskImageKit, vmnet) —
-  the deferred list carries revisit triggers.
+  project state first). Deferred alternatives and their revisit triggers:
+  Apple `container` + socktainer (revisit around 2027-01 — partial Docker
+  API compatibility, socktainer releases lag behind `container`);
+  DiskImageKit golden image + copy-on-write session overlay (when the
+  fleet reaches macOS 27 — removes the VM cold-start cost); vmnet per-VM
+  NAT (same milestone — replaces the hand-rolled packet-filter anchor);
+  Tart (only if macOS guests are ever needed, e.g. iOS builds — the core
+  team departed, not foundation material).
 
 ## Impact
 
 - New adapter package alongside the container adapter; the environment
-  port, engine, and existing adapters are untouched (G4).
+  port and existing adapters are untouched; the engine's mode dispatch is
+  generalized to per-binding execution (G4) — the one obligation this
+  change inherits from `open-adapter-binding-registry`.
 - New host prerequisites for VM mode: Colima (+ hardware virtualization),
   a one-time packet-filter setup, disk headroom per VM.
 - Guard (mitmproxy) is reused as-is on the host; one new lightweight
@@ -258,3 +278,7 @@ privileged), #43 (silent isolation degradation, the vz→QEMU class).
 - Depends on change A (port, guard, self-check framework, git-transport
   resume/salvage); composes with change B (gateway/virtual keys and
   interception apply unchanged — the guard sits on the host either way).
+- Depends on `open-adapter-binding-registry`: the `colima-vm` binding and
+  its passport are contributed through the first-party registry SPI (plus
+  its trust-ratification entry in core), and the run-path generalization
+  deferred there lands here.

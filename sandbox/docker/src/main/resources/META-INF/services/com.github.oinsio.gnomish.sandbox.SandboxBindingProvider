@@ -1,0 +1,3 @@
+# The container binding (FR3 of open-adapter-binding-registry): contributed by the
+# backend module that implements it, so stripping this module drops the binding.
+com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider

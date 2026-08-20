@@ -13,6 +13,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
@@ -59,7 +61,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
 
     private static List<Segment> segments() {
         [
-            new Segment(AdapterBinding.CONTAINER, [stage()])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
     }
 

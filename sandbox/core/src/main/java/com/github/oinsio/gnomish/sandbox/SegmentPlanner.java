@@ -57,12 +57,19 @@ public record SegmentPlanner(BindingResolver bindingResolver) {
      * A new segment opens on a binding change or on a {@code requires-fresh} stage
      * (which forces a fresh environment even mid-binding, FR13). The pipeline's
      * first stage is covered by the binding-change clause alone: {@code
-     * currentBinding} starts null, so the first non-null binding always differs —
-     * no separate first-stage guard is needed.
+     * currentBinding} starts null, so the first binding always differs — no
+     * separate first-stage guard is needed.
+     *
+     * <p>The comparison is by {@code configName()}, not by reference: bindings are
+     * values minted by the registry, so identity is their name (D3 of
+     * open-adapter-binding-registry). Behavior is unchanged — the registry issues
+     * one instance per name — but the planner no longer depends on that being so.
      */
     private static boolean opensNewSegment(
             @Nullable AdapterBinding currentBinding, AdapterBinding binding, StageDefinition stage) {
-        return currentBinding != binding || stage.executor().sandbox().requiresFresh();
+        return currentBinding == null
+                || !currentBinding.configName().equals(binding.configName())
+                || stage.executor().sandbox().requiresFresh();
     }
 
     /**

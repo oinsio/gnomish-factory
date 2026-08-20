@@ -5,7 +5,8 @@
 With changes A/B the box's allowlist still contains public package
 registries — and each of them is an open door with two known failure
 modes. First, an allowlisted registry is an exfiltration channel: data
-can be encoded into the request paths the gnome sends (threat #40), and
+can be encoded into the request paths the gnome sends (threat #40 of
+`docs/sandbox-threat-registry.md`), and
 the guard cannot tell a legitimate dependency lookup from a covert
 upload of secrets one path segment at a time. Second, upstream packages
 arrive with zero delay: a freshly-poisoned version (the Nx

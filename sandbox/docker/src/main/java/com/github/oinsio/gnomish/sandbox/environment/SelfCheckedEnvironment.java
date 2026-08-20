@@ -1,10 +1,13 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
+import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -24,15 +27,33 @@ import org.jspecify.annotations.Nullable;
  * same values, but processes must see them even under a stripped-down image.
  * Explicit caller-set variables win over the proxy fragment.
  *
- * <p>Implements FR8, FR9 of add-sandbox-core.
+ * <p>The guard is also this environment's denial source: {@link #denialFindings()}
+ * delegates to it, so a consumer holding the port type reaches the round's
+ * denials through the contract and never by downcasting to this class. The guard
+ * itself is deliberately NOT exposed as a public accessor (FR1 of
+ * fix-denial-report-attachment) — the contract is the whole surface.
  *
- * @param delegate the raw container environment; never null
- * @param selfCheck the probes run after every successful materialize; never null
- * @param guard the environment's egress guard, source of the proxy env fragment; never null
+ * <p>Implements FR8, FR9 of add-sandbox-core; FR1, NFR-R1 of
+ * fix-denial-report-attachment.
  */
-public record SelfCheckedEnvironment(
-        TaskExecutionEnvironment delegate, EnvironmentSelfCheck selfCheck, EgressGuard guard)
-        implements TaskExecutionEnvironment {
+public final class SelfCheckedEnvironment implements TaskExecutionEnvironment {
+
+    private final TaskExecutionEnvironment delegate;
+    private final EnvironmentSelfCheck selfCheck;
+    private final EgressGuard guard;
+
+    /**
+     * @param delegate the raw container environment; never null
+     * @param selfCheck the probes run after every successful materialize; never null
+     * @param guard the environment's egress guard — source of the proxy env fragment and of the
+     *     denial findings; never null
+     */
+    public SelfCheckedEnvironment(
+            TaskExecutionEnvironment delegate, EnvironmentSelfCheck selfCheck, EgressGuard guard) {
+        this.delegate = delegate;
+        this.selfCheck = selfCheck;
+        this.guard = guard;
+    }
 
     @Override
     public void materialize(String branch, @Nullable String commitPin) {
@@ -77,9 +98,31 @@ public record SelfCheckedEnvironment(
         return delegate.passport();
     }
 
-    /** The decorated environment's egress guard, for denial-findings read-back (NFR-O1). */
+    /**
+     * The guard's denials since the previous call — the per-round delta the guard's
+     * own cursor maintains, best-effort (an unreadable log reads as empty, never a
+     * failure; NFR-R1 of fix-denial-report-attachment).
+     */
     @Override
-    public EgressGuard guard() {
-        return guard;
+    public List<Finding> denialFindings() {
+        return guard.denialFindings();
+    }
+
+    /**
+     * The guard's read position, for the factory to commit with the attempt it
+     * delimits (FR5 of fix-denial-report-attachment).
+     */
+    @Override
+    public Optional<DenialCursor> denialCursor() {
+        return guard.denialCursor();
+    }
+
+    /**
+     * Offers a committed cursor to the guard, which applies it only if it names
+     * the guard's live container (FR5 of fix-denial-report-attachment).
+     */
+    @Override
+    public void restoreDenialCursor(DenialCursor cursor) {
+        guard.restoreDenialCursor(cursor);
     }
 }

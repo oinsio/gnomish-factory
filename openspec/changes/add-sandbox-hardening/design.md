@@ -7,7 +7,7 @@ seams for this change: the factory CA baked into images, mitmdump as the
 guard (interception is a mode switch), the `ANTHROPIC_BASE_URL`/
 `ANTHROPIC_AUTH_TOKEN` env seam, the `SecretsProvider` port, and the
 snapshot-free environment port. Threat registry items to close: #11, #15
-(L7), #16, #17, #31, #45. Explore sessions (2026-07-20…31) already
+(L7), #16, #17, #31, #45. Explore sessions already
 resolved the tool landscape; decisions below fix the remaining structure.
 
 ## Goals / Non-Goals

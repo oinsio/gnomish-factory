@@ -28,13 +28,20 @@ import org.slf4j.LoggerFactory;
  * EngineEvent.ExecutionFinished} through the shared {@link Events#emit} helper BEFORE the verify
  * chain, the per-round "gnome done, verifying" signal (FR12, the choreography diagram's
  * AttemptStarted → ExecutionFinished → checks order); a throw is caught first, so a {@link
- * Outcome.CannotExecute} round emits none. Package-private and reentrant: it holds only its
+ * RoundOutcome.CannotExecute} round emits none. Package-private and reentrant: it holds only its
  * immutable injected collaborators (plus a static logger) and no mutable state, so one instance
  * drives concurrent rounds safely (NFR-R1). The {@code startedAt} instant the loop captured when
  * the round began is threaded onto every {@link AttemptRecord} this builds (FR15 of add-manual-run,
  * design D11).
  *
- * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run.
+ * <p>The round's egress denials ride the {@link ExecutionResult} the same way its usage does and
+ * land on the {@link AttemptRecord} of both shapes of executed round — verified and
+ * {@code DecisionNeeded} alike. They are carried, never consulted: {@link #overallVerdict} and
+ * {@link #priorFailures} read {@code checkResults} only, so a denial changes no stage outcome and
+ * never enters a retry's feedback (FR2, FR3 of fix-denial-report-attachment).
+ *
+ * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
+ * FR2, FR3 of fix-denial-report-attachment.
  */
 final class RoundExecution {
 
@@ -60,14 +67,14 @@ final class RoundExecution {
 
     /**
      * Executes one round of {@code stage} from {@code state} and shapes the result into a
-     * sealed {@link Outcome}. The round number is the current attempt history size (0-based)
+     * sealed {@link RoundOutcome}. The round number is the current attempt history size (0-based)
      * and forms the {@link AttemptKey} the request and any verify chain share; the feedback is
      * the failed check results of all prior attempts (FR4). The executor runs the round, then
      * an exhaustive switch (no {@code default}) builds the variant: {@link
-     * ExecutionResult.Completed} verifies to {@link Outcome.Verified}, {@link
-     * ExecutionResult.DecisionNeeded} skips verification to {@link Outcome.NeedsDecision}. A
+     * ExecutionResult.Completed} verifies to {@link RoundOutcome.Verified}, {@link
+     * ExecutionResult.DecisionNeeded} skips verification to {@link RoundOutcome.NeedsDecision}. A
      * {@link RuntimeException} the executor throws is caught, logged at ERROR naming the round
-     * key, and shaped into {@link Outcome.CannotExecute} (FR10, NFR-O1). A successful return
+     * key, and shaped into {@link RoundOutcome.CannotExecute} (FR10, NFR-O1). A successful return
      * emits {@link EngineEvent.ExecutionFinished} before the switch, so only executed rounds
      * signal "execution done" (FR12).
      *
@@ -106,7 +113,7 @@ final class RoundExecution {
      * {@link Verdict} from the chain (design D4), and captures it as an {@link AttemptRecord} with
      * the executor + judge usage and an explicit {@link AttemptRecord.Result} classification of that
      * verdict (FR13, design D5). The verdict is computed once and reused for both the record's
-     * result and the returned {@link Outcome.Verified}.
+     * result and the returned {@link RoundOutcome.Verified}.
      */
     private RoundOutcome.Verified verified(
             TaskContext context,
@@ -124,7 +131,8 @@ final class RoundExecution {
                 startedAt,
                 verification.results(),
                 completed.usage(),
-                verification.judgeUsage());
+                verification.judgeUsage(),
+                completed.denials());
         return new RoundOutcome.Verified(key, record, verdict, completed.trace());
     }
 
@@ -141,7 +149,8 @@ final class RoundExecution {
                 startedAt,
                 List.of(),
                 decision.usage(),
-                JudgeUsage.none());
+                JudgeUsage.none(),
+                decision.denials());
         return new RoundOutcome.NeedsDecision(key, record, decision.trace(), decision.question(), decision.options());
     }
 

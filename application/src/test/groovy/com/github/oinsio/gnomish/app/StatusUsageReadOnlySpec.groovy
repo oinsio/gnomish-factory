@@ -32,7 +32,7 @@ import spock.lang.TempDir
  * local branch list, and the worktree list. The only permitted mutation is the appearance of the
  * {@code refs/remotes/origin/gnomish/<task>} tracking ref.
  */
-class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixture {
+class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixture, StdoutCaptureFixture {
 
     @TempDir
     Path tempDir
@@ -78,7 +78,7 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
                 0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-18T09:00:00Z'),
                 [] as List<CheckResult>,
                 new ExecutorUsage(Duration.ofMillis(500), [], ['claude-x': new TokenUsage(100, 10, 0, 0)]),
-                JudgeUsage.none())
+                JudgeUsage.none(), [])
         def state = TaskState.atStageStart('implement').recordUnburnedRound(passed)
         new GitAttemptPersistence(runner, worktree, taskId).persist(taskId, state, trace)
     }
@@ -95,18 +95,6 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
 
     private boolean trackingRefExists() {
         runner.run(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1').exitCode() == 0
-    }
-
-    private static String captureStdout(Closure action) {
-        def originalOut = System.out
-        def out = new ByteArrayOutputStream()
-        System.out = new PrintStream(out, true, 'UTF-8')
-        try {
-            action.call()
-        } finally {
-            System.out = originalOut
-        }
-        return out.toString('UTF-8')
     }
 
     // FR13, M3: status against a branch not yet fetched locally exercises the narrow-fetch path

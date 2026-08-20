@@ -21,21 +21,13 @@ import java.util.Map;
  *
  * <p>Implements FR3 of add-manual-run.
  */
-public final class InteractiveStageExecutor implements StageExecutor {
+public record InteractiveStageExecutor(DialogConsole console, StageBriefing briefing) implements StageExecutor {
 
     private static final String COMPLETE_ANSWER = "";
     private static final String ASK_ANSWER = "ask";
     private static final String ROUND_PROMPT = "Press Enter when done, or type 'ask' to ask a question: ";
     private static final String QUESTION_PROMPT = "Question: ";
     private static final String OPTION_PROMPT = "Option (empty line to finish): ";
-
-    private final DialogConsole console;
-    private final StageBriefing briefing;
-
-    public InteractiveStageExecutor(DialogConsole console, StageBriefing briefing) {
-        this.console = console;
-        this.briefing = briefing;
-    }
 
     /**
      * Runs one interactive round: prints the briefing, then prompts until the
@@ -55,9 +47,11 @@ public final class InteractiveStageExecutor implements StageExecutor {
         if (ASK_ANSWER.equals(answer)) {
             String question = console.prompt(QUESTION_PROMPT);
             List<String> options = collectOptions();
-            return new ExecutionResult.DecisionNeeded(question, options, usage(startNanos), trace(request));
+            // No denials: the operator drives this round on the host, with no sandboxed
+            // environment and therefore no egress guard to have blocked anything.
+            return new ExecutionResult.DecisionNeeded(question, options, usage(startNanos), trace(request), List.of());
         }
-        return new ExecutionResult.Completed(usage(startNanos), trace(request));
+        return new ExecutionResult.Completed(usage(startNanos), trace(request), List.of());
     }
 
     private List<String> collectOptions() {

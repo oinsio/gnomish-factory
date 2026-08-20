@@ -11,6 +11,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
@@ -59,7 +61,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         given: 'a fresh container task whose round runs interactively (scripted console)'
         def definition = new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
         def segments = [
-            new Segment(AdapterBinding.CONTAINER, [stage()])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
         def environments = docker.environments(KEY, cloneDir, sandbox, tempDir.resolve('guard'))
         def support = new ContainerRunSupport(new GitProcessRunner(), cloneDir, 'T-ABORT', environments, segments)

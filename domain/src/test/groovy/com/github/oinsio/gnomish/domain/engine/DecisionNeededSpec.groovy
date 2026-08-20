@@ -64,12 +64,12 @@ class DecisionNeededSpec extends Specification {
     }
 
     static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static ExecutionResult.DecisionNeeded decisionNeeded(String question, List<String> options) {
         new ExecutionResult.DecisionNeeded(
-                question, options, ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []))
+                question, options, ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static Verdict.Fail fail(String message) {
@@ -86,7 +86,7 @@ class DecisionNeededSpec extends Specification {
         def stageDef = stage('build', 5, [builtin('files_exist')])
         def usage = ExecutorUsage.none()
         def trace = new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
-        executor.scripted << new ExecutionResult.DecisionNeeded('which db?', ['postgres', 'mysql'], usage, trace)
+        executor.scripted << new ExecutionResult.DecisionNeeded('which db?', ['postgres', 'mysql'], usage, trace, [])
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())

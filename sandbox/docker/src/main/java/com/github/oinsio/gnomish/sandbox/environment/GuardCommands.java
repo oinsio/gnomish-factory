@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Pure builders for the {@code docker} argument vectors of the egress guard
@@ -79,13 +81,36 @@ final class GuardCommands {
     }
 
     /**
-     * {@code logs --tail} of the guard container — the bounded read behind
-     * denial findings (NFR-O1, NFR-C1): the addon prints one marked JSON line
-     * per denial to stdout, and the tail cap bounds what a denial storm can make
-     * the factory read.
+     * {@code logs --tail --timestamps} of the guard container — the bounded read
+     * behind denial findings (NFR-O1, NFR-C1): the addon prints one marked JSON
+     * line per denial to stdout, and the tail cap bounds what a denial storm can
+     * make the factory read.
+     *
+     * <p>{@code --timestamps} and the optional {@code --since} are the per-round
+     * delta (D3 of fix-denial-report-attachment): the guard container outlives
+     * the rounds of a lease, so a read from the previous read's daemon-side
+     * timestamp is what keeps a round's report free of an earlier round's
+     * denials. {@code since} is null on the first read of a guard — the whole log
+     * from container start.
      */
-    static List<String> guardLogs(String key, int tailLines) {
-        return List.of("logs", "--tail", Integer.toString(tailLines), FactoryDockerLabels.guardName(key));
+    static List<String> guardLogs(String key, int tailLines, @Nullable String since) {
+        var argv = new ArrayList<String>(List.of("logs", "--tail", Integer.toString(tailLines), "--timestamps"));
+        if (since != null) {
+            argv.add("--since");
+            argv.add(since);
+        }
+        argv.add(FactoryDockerLabels.guardName(key));
+        return List.copyOf(argv);
+    }
+
+    /**
+     * {@code inspect} the guard container's runtime id — the identity a durable
+     * denial cursor is matched against (FR5 of fix-denial-report-attachment): a
+     * position read from one container means nothing in another, and applying it
+     * to a foreign log could filter real denials out of the report.
+     */
+    static List<String> inspectGuardId(String key) {
+        return List.of("inspect", "-f", "{{.Id}}", FactoryDockerLabels.guardName(key));
     }
 
     /** {@code inspect} the guard container's running state — the outage probe (NFR-R1). */

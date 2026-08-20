@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
@@ -73,6 +74,7 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
                 // Host binding, explicitly: container is the default (D13 of add-sandbox-core),
                 // and these specs prove the host git-mode path.
                 new BindingProperties('host', [:]),
+                DiscoveredBindings.real(),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 homeDir,

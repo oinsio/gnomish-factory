@@ -57,10 +57,6 @@ dependencies {
     // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and
     // the scenario library the round specs drive instead of a real CLI.
     testImplementation project(':test-fixtures')
-    // One spec resumes a round interrupted mid-verification and asserts against
-    // the git adapter's `SnapshotTipCheck`. Test scope only: no production class
-    // here names a sibling adapter, which is what the layering gate below pins.
-    testImplementation project(':adapters:git')
     // Logback's ListAppender backs the specs asserting on log output.
     testImplementation libs.logback.classic
     // The sibling-reach gate (task 10.2, D5/M4): ArchUnit holds this module's

@@ -149,7 +149,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
 
     /** One round the executor reports as completed. */
     ExecutionResult.Completed completedRound(String taskId = 'PROJ-1') {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
     }
 
     /** The task as the tracker reports it mid-run: {@code Working}, held by THIS instance — not revoked. */

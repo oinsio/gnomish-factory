@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.status;
 
+import com.github.oinsio.gnomish.app.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
+import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import java.time.Duration;
 
@@ -60,6 +62,34 @@ final class StatusLineFormatter {
             line.append(" [stage: ").append(decision.stage()).append(']');
         }
         return line.toString();
+    }
+
+    /**
+     * One finding as an English line — the message, and the locator when the finding
+     * carries one. Used for an attempt's egress denials, whose location is the denied
+     * destination and path; details (the request kind and method) stay out of the line
+     * to keep the block scannable, and are carried in full by the JSON contract.
+     *
+     * <p>Implements UX1 of fix-denial-report-attachment.
+     */
+    static String findingLine(Finding finding) {
+        String message = oneLine(finding.message());
+        if (finding.location() == null) {
+            return message;
+        }
+        return message + " (" + oneLine(finding.location()) + ")";
+    }
+
+    /**
+     * Neutralizes finding text for the console sink (FR15 of add-sandbox-core): a denial's
+     * host and path are chosen by the gnome, so the funnel's {@link FindingsSanitizer#strip}
+     * removes ANSI/control sequences here exactly as it does before a log line, and the
+     * line-structure characters strip deliberately keeps ({@code \n}, {@code \t}) collapse to
+     * spaces — one finding must stay one line, or a crafted path forges report rows of its own.
+     * Findings as data are untouched: {@code state.json} still carries them verbatim.
+     */
+    private static String oneLine(String text) {
+        return FindingsSanitizer.strip(text).replace('\n', ' ').replace('\t', ' ');
     }
 
     static String resultLabel(AttemptRecord.Result result) {

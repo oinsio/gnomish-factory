@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox;
 
+import com.github.oinsio.gnomish.domain.engine.Finding;
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -114,4 +116,62 @@ public interface TaskExecutionEnvironment {
      * @return the passport; never null
      */
     CapabilityPassport passport();
+
+    /**
+     * The egress denials this environment recorded since the previous call —
+     * the per-round delta, so a consumer asking at round close receives exactly
+     * that round's denials and never an earlier round's again.
+     *
+     * <p>Host-agnostic by construction: an environment without an egress guard
+     * has nothing to report and answers with an empty list, which is a truthful
+     * answer rather than a missing capability. Read-back is best-effort — an
+     * unreadable or missing denial source yields an empty list and SHALL never
+     * fail the round, the attempt, or the report (NFR-R1); denial observability
+     * must not take a healthy round down.
+     *
+     * <p>Implements FR1, NFR-R1 of fix-denial-report-attachment.
+     *
+     * @return the denials recorded since the previous call; never null, possibly
+     *     empty
+     */
+    default List<Finding> denialFindings() {
+        return List.of();
+    }
+
+    /**
+     * The environment's current denial read position, for the factory to commit
+     * alongside the attempt whose denials it delimits and to hand back on resume
+     * ({@link #restoreDenialCursor}).
+     *
+     * <p>Empty when the environment has no denial source, or has not read one yet
+     * — there is then no position a later lease could resume from, and reading
+     * from the source's beginning is the correct start.
+     *
+     * <p>Implements FR5 of fix-denial-report-attachment.
+     *
+     * @return the current cursor; never null, possibly empty
+     */
+    default Optional<DenialCursor> denialCursor() {
+        return Optional.empty();
+    }
+
+    /**
+     * Offers a cursor committed by an earlier lease, so the first read of this one
+     * reports the round's own denials instead of replaying every denial the source
+     * still holds. Valid only before the first {@link #denialFindings()} call of
+     * this environment.
+     *
+     * <p>An offer is not an instruction: the environment SHALL apply the position
+     * only if {@link DenialCursor#source()} identifies its own live denial source,
+     * and SHALL ignore it otherwise (a resume on another machine, or onto a
+     * recreated source) — a foreign position could silently filter out real
+     * denials. An environment without a denial source ignores the offer entirely.
+     *
+     * <p>Implements FR5 of fix-denial-report-attachment.
+     *
+     * @param cursor the cursor an earlier lease committed; never null
+     */
+    default void restoreDenialCursor(DenialCursor cursor) {
+        // No denial source: nothing to position. Overridden by guarded environments.
+    }
 }

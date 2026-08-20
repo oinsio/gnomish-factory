@@ -68,3 +68,79 @@ reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock ser
 id = "GHSA-r4gv-qr8j-p3pg"
 ignoreUntil = 2026-11-01
 reason = "Test-scope only (WireMock 3.13.2 templating, localhost, never shipped, developer-authored templates). Fix 4.5.2 removes NumberHelper and breaks WireMock 3.13.2 at startup; WireMock 4.x still beta. Re-review 2026-11-01."
+
+# --- Accepted risk: Spotless-internal jackson-databind, resolved by the
+# Spotless Gradle plugin's own formatter tool classpath ---
+# `spotlessJava`/`spotlessGroovy` resolve the Spotless formatter engine's own
+# dependency graph (google-java-format / dev.equo.ide:solstice and friends) at
+# execution time, the same way japicmp resolves its hardcoded JAXB/Guava worker
+# runtime (see build-logic/build.gradle) — outside this build's own dependency
+# graph and its jackson-bom security override (gradle/libs.versions.toml),
+# which only reaches modules that declare `platform(libs.jackson.bom)`.
+# Verified (2026-08-20): every module's compileClasspath/testRuntimeClasspath
+# resolves jackson-databind to 2.22.1 (`./gradlew <module>:dependencyInsight
+# --configuration <cfg> --dependency com.fasterxml.jackson.core:jackson-databind`);
+# deleting the cached 2.21.4 jar and re-running `spotlessJava`/`spotlessGroovy`
+# alone re-downloads it, isolating the Spotless formatter classpath as the sole
+# source. Never on any production or test classpath, never shipped. No
+# adoptable fix: the version is pinned inside Spotless's own tool resolution,
+# not a dependency this build declares. Re-review 2026-11-01.
+[[IgnoredVulns]]
+id = "GHSA-5gvw-p9qm-jgwh"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (spotlessJava/spotlessGroovy), never on any production or test classpath (verified via dependencyInsight, resolves to 2.22.1 everywhere the project declares it). No adoptable fix: version is pinned inside Spotless's own resolution, not a project dependency. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-5jmj-h7xm-6q6v"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (spotlessJava/spotlessGroovy), never on any production or test classpath (verified via dependencyInsight, resolves to 2.22.1 everywhere the project declares it). No adoptable fix: version is pinned inside Spotless's own resolution, not a project dependency. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-mhm7-754m-9p8w"
+ignoreUntil = 2026-11-01
+reason = "jackson-databind 2.21.4, resolved only by the Spotless plugin's own internal formatter tool classpath (spotlessJava/spotlessGroovy), never on any production or test classpath (verified via dependencyInsight, resolves to 2.22.1 everywhere the project declares it). No adoptable fix: version is pinned inside Spotless's own resolution, not a project dependency. Re-review 2026-11-01."
+
+# --- Accepted risk: httpclient5/httpcore5(-h2) superseded conflict candidates,
+# metadata-only ---
+# `gradle/verification-metadata.xml` records the POM (not the JAR) of every
+# version Gradle's conflict resolution considered while picking a winner —
+# fetching a losing candidate's POM is how Gradle learns its dependencies well
+# enough to reject it. The forced fix versions (httpclient5 5.6.3, httpcore5(-h2)
+# 5.4.3 — see gradle/libs.versions.toml) win on every real classpath; these
+# entries carry `.pom` artifacts only, no `.jar`, confirming they were never
+# actually resolved as a dependency. This is inherent to how Gradle dependency
+# verification records a resolution graph, not a fixable version pin.
+# Re-review 2026-11-01.
+[[IgnoredVulns]]
+id = "GHSA-hjcp-jmpx-g3qm"
+ignoreUntil = 2026-11-01
+reason = "httpclient5 5.5.1/5.6.1 appear in gradle/verification-metadata.xml as POM-only superseded conflict candidates (no .jar entry) — never actually resolved; the forced 5.6.3 (gradle/libs.versions.toml) wins on every real classpath. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-hf6x-8p5f-cgmf"
+ignoreUntil = 2026-11-01
+reason = "httpcore5 5.4.2 appears in gradle/verification-metadata.xml as a POM-only superseded conflict candidate (no .jar entry) — never actually resolved; the forced 5.4.3 (gradle/libs.versions.toml) wins on every real classpath. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-v3jc-474w-2wm6"
+ignoreUntil = 2026-11-01
+reason = "httpcore5-h2 5.4.2 appears in gradle/verification-metadata.xml as a POM-only superseded conflict candidate (no .jar entry) — never actually resolved; the forced 5.4.3 (gradle/libs.versions.toml) wins on every real classpath. Re-review 2026-11-01."
+
+# --- Accepted risk: guava 30.1.1-jre, hardcoded inside the japicmp Gradle
+# plugin's own worker resolution ---
+# `japicmpApiGate` (the API-compatibility report/gate, FR5 of split-into-modules)
+# uses `me.champeau.gradle.japicmp-gradle-plugin:0.4.6`, whose `JapicmpTask`
+# resolves its own JAXB/Guava worker classpath from coordinates HARDCODED in the
+# plugin's compiled code (`resolveJaxb`/`resolveGuava`), on a detached
+# configuration, every run — not from this project's version catalog or any
+# force/constraint we declare (see build-logic/build.gradle's own comment on the
+# same mechanism). Verified (2026-08-20): a `--refresh-dependencies` run reports
+# `:gnomish-plugin-api:detachedConfiguration...` needing exactly guava-30.1.1-jre.
+# 0.4.6 is the latest release on the Gradle Plugin Portal (checked 2026-08-20) —
+# no newer version exists to pick up a fix. Build-tool-only: this classpath
+# powers a bytecode-diffing report, never shipped in any factory artifact.
+# Re-review 2026-11-01 (check for a japicmp-plugin release past 0.4.6).
+[[IgnoredVulns]]
+id = "GHSA-5mg8-w23w-74h3"
+ignoreUntil = 2026-11-01
+reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces) for the japicmpApiGate report task. 0.4.6 is the latest release on the Gradle Plugin Portal; build-tool-only, never shipped. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-7g45-4rm6-3mm3"
+ignoreUntil = 2026-11-01
+reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces) for the japicmpApiGate report task. 0.4.6 is the latest release on the Gradle Plugin Portal; build-tool-only, never shipped. Re-review 2026-11-01."

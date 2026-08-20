@@ -49,16 +49,37 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
     ToolTrace trace();
 
     /**
+     * The egress denials the round's execution environment recorded, shared by
+     * both variants — a decision round had a live round too, so it can have
+     * denied just as much as a completed one. Observability only: the engine
+     * carries this list onto the round's {@code AttemptRecord} and never lets it
+     * touch a verdict (FR2 of fix-denial-report-attachment).
+     *
+     * <p>Implements FR3 of fix-denial-report-attachment.
+     *
+     * @return the round's denial findings; never null, possibly empty
+     */
+    List<Finding> denials();
+
+    /**
      * The executor finished the stage's work normally; the engine proceeds to
      * verify. Carries the round's telemetry — nothing more, since the outcome is
      * simply "done" (FR13).
      *
-     * <p>Implements FR6 and carries the FR13 telemetry of add-stage-engine.
+     * <p>Implements FR6 and carries the FR13 telemetry of add-stage-engine;
+     * FR3 of fix-denial-report-attachment.
      *
      * @param usage the round's executor usage; never null
      * @param trace the round's raw tool trace; never null
+     * @param denials the round's egress denials; defensively copied,
+     *     unmodifiable, possibly empty
      */
-    record Completed(ExecutorUsage usage, ToolTrace trace) implements ExecutionResult {}
+    record Completed(ExecutorUsage usage, ToolTrace trace, List<Finding> denials) implements ExecutionResult {
+
+        public Completed {
+            denials = List.copyOf(denials);
+        }
+    }
 
     /**
      * The executor cannot proceed and asks a human — a gnome-initiated escalation
@@ -77,13 +98,17 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
      *     unmodifiable, possibly empty
      * @param usage the round's executor usage; never null
      * @param trace the round's raw tool trace; never null
+     * @param denials the round's egress denials; defensively copied,
+     *     unmodifiable, possibly empty
      */
-    record DecisionNeeded(String question, List<String> options, ExecutorUsage usage, ToolTrace trace)
+    record DecisionNeeded(
+            String question, List<String> options, ExecutorUsage usage, ToolTrace trace, List<Finding> denials)
             implements ExecutionResult {
 
         public DecisionNeeded {
             question = requireNonBlank(question, "question");
             options = List.copyOf(options);
+            denials = List.copyOf(denials);
         }
 
         /**

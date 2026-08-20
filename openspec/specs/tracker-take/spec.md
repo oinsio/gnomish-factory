@@ -368,7 +368,7 @@ abort protocol and exits 12 or 13, never a bare 1.
 - **THEN** the process exits 15 naming the holder
 
 ### Requirement: Operator guide
-The change SHALL ship an operator guide (`docs/operator-guide.md`) covering: quick
+The change SHALL ship an operator guide (`docs/guides/operator-guide.md`) covering: quick
 start (tracker config section, token env variable, factory config layers), handing
 off a task via the ready label and automatic label provisioning, the label
 dictionary with who moves what, the escalation/decision/ack flow (reply, return

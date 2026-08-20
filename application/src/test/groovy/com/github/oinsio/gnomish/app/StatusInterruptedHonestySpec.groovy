@@ -31,7 +31,7 @@ import spock.lang.TempDir
  * BranchStateReaderSpec}/{@code StatusCommandSpec}'s adapter-layer convention — no stubbing of the
  * branch reader.
  */
-class StatusInterruptedHonestySpec extends Specification implements BareGitRepoFixture {
+class StatusInterruptedHonestySpec extends Specification implements BareGitRepoFixture, StdoutCaptureFixture {
 
     @TempDir
     Path tempDir
@@ -63,21 +63,9 @@ class StatusInterruptedHonestySpec extends Specification implements BareGitRepoF
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
         def attempt = new AttemptRecord(round, AttemptRecord.Result.PASSED,
-                Instant.parse('2026-07-18T09:00:00Z'), [], ExecutorUsage.none(), JudgeUsage.none())
+                Instant.parse('2026-07-18T09:00:00Z'), [], ExecutorUsage.none(), JudgeUsage.none(), [])
         def state = TaskState.atStageStart(stage).recordUnburnedRound(attempt)
         persistence.persist(taskId, state, trace)
-    }
-
-    private static String captureStdout(Closure action) {
-        def originalOut = System.out
-        def out = new ByteArrayOutputStream()
-        System.out = new PrintStream(out, true, 'UTF-8')
-        try {
-            action.call()
-        } finally {
-            System.out = originalOut
-        }
-        return out.toString('UTF-8')
     }
 
     def "NFR-R2: text status of an interrupted task shows the recorded round and no completion claim"() {

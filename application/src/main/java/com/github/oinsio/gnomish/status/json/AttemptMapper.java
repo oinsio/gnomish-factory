@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.status.json;
 
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
+import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import java.util.List;
 
@@ -26,6 +27,7 @@ final class AttemptMapper {
                 toResult(record.result()),
                 record.startedAt().toString(),
                 toChecks(record.checkResults()),
+                toFindings(record.denials()),
                 UsageMapper.toUsage(record.executorUsage()),
                 UsageMapper.toJudgeUsage(record.judgeUsage()));
     }
@@ -63,7 +65,17 @@ final class AttemptMapper {
     }
 
     private static List<FindingDto> toFindings(Verdict.Fail fail) {
-        return fail.findings().stream()
+        return toFindings(fail.findings());
+    }
+
+    /**
+     * The one finding shape the contract uses, shared by a failed check's findings and
+     * an attempt's denials — a denial reads exactly like any other finding, so a
+     * reviewer needs to know nothing about guard logs to read one (FR4, UX1 of
+     * fix-denial-report-attachment).
+     */
+    private static List<FindingDto> toFindings(List<Finding> findings) {
+        return findings.stream()
                 .map(finding -> new FindingDto(finding.message(), finding.location(), finding.details()))
                 .toList();
     }

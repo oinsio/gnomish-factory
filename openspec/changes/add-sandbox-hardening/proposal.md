@@ -6,7 +6,7 @@ Change A (`add-sandbox-core`) builds the sandbox core: container, egress
 guard with a default-deny allowlist, env allowlist, harvest. It deliberately
 left four gaps (its NG1/NG2/NG6): an allowed host is still an open door —
 data can leave through the AI provider on a *foreign* account (documented
-Anthropic incident, threat #16) or via domain fronting (#17); the real AI
+Anthropic incident, threat #16 of `docs/sandbox-threat-registry.md`) or via domain fronting (#17); the real AI
 key still enters the box; the provider's server-side web tools let the model
 fetch arbitrary URLs with the provider's infrastructure, bypassing the guard
 entirely (#45); and every project sandbox needs a hand-built operator image

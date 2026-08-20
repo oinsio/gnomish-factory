@@ -2,7 +2,8 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
-import com.github.oinsio.gnomish.sandbox.AdapterBinding;
+import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry;
+import com.github.oinsio.gnomish.sandbox.BindingNames;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.BindingResolver;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
@@ -50,6 +51,11 @@ final class SandboxModeSelector {
      * the docker backend from a use case is exactly the adapter dependency the layering forbids,
      * and the probe was already a seam.
      *
+     * <p>{@code registry} carries the bindings the classpath contributed (D6 of
+     * open-adapter-binding-registry). The selector is a static utility, so "inject the registry"
+     * concretely means this parameter: the composition root passes the discovered registry, specs
+     * pass one built from providers of their own.
+     *
      * @throws UsageException on an unmet stage need, a mixed-binding pipeline, or a container
      *     run without its prerequisites (image + Docker)
      */
@@ -57,13 +63,14 @@ final class SandboxModeSelector {
             PipelineDefinition definition,
             BindingProperties bindings,
             SandboxProperties sandbox,
+            AdapterBindingRegistry registry,
             BooleanSupplier dockerAvailable) {
-        BindingResolver resolver = resolver(bindings);
+        BindingResolver resolver = resolver(bindings, registry);
         List<Segment> segments = new SegmentPlanner(resolver).plan(definition);
         reconcile(segments);
 
-        boolean container = segments.stream().anyMatch(s -> s.binding() == AdapterBinding.CONTAINER);
-        boolean host = segments.stream().anyMatch(s -> s.binding() == AdapterBinding.HOST);
+        boolean container = boundTo(segments, BindingNames.CONTAINER);
+        boolean host = boundTo(segments, BindingNames.HOST);
         if (container && host) {
             throw new UsageException(
                     "mixed host/container stage bindings within one pipeline are not supported: bind every stage"
@@ -77,9 +84,19 @@ final class SandboxModeSelector {
         return new Plan(Plan.Mode.HOST, segments);
     }
 
-    private static BindingResolver resolver(BindingProperties bindings) {
+    /**
+     * Host-vs-container branching by config-name identity, not by enum constant (D3 of
+     * open-adapter-binding-registry). The docker-prerequisite gate below stays keyed to the actual
+     * {@code container} binding rather than to "any isolated binding": a future VM backend is
+     * isolated but is not Docker, and keying on isolation would misapply the prerequisite to it.
+     */
+    private static boolean boundTo(List<Segment> segments, String configName) {
+        return segments.stream().anyMatch(s -> s.binding().configName().equals(configName));
+    }
+
+    private static BindingResolver resolver(BindingProperties bindings, AdapterBindingRegistry registry) {
         try {
-            return new BindingResolver(bindings);
+            return new BindingResolver(bindings, registry);
         } catch (IllegalArgumentException e) {
             throw new UsageException("invalid factory.bindings configuration: " + e.getMessage());
         }

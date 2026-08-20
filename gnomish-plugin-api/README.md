@@ -12,7 +12,7 @@ One declared dependency — that is the contract (UX3):
 
 ```groovy
 dependencies {
-    implementation 'com.github.oinsio:gnomish-plugin-api:0.1.0'
+    implementation 'com.github.oinsio:gnomish-plugin-api:0.2.0'
 }
 ```
 
@@ -77,6 +77,12 @@ Semver, versioned independently of the rest of the build (FR5). The promise
 covers this module **plus the `:domain` types it exposes transitively** — an
 incompatible change to either is an api-level break. `application` internals and
 `domain` types the api does not expose may change without a version bump.
+
+Breaking releases so far — pre-1.0, a break is a MINOR bump:
+
+| Version | Break |
+|---|---|
+| 0.2.0 | `AttemptRecord` and both `ExecutionResult` variants gained a `denials` component, replacing their old canonical constructors (fix-denial-report-attachment). |
 
 `japicmp` guards the surface as a **failing gate**, wired into `check`: a
 binary-incompatible change to this module — or to a `:domain` type it re-exposes

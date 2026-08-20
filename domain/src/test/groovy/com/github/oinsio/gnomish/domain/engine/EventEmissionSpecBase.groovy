@@ -61,7 +61,7 @@ abstract class EventEmissionSpecBase extends Specification {
     }
 
     static ExecutionResult.Completed completed(int round = 0, ExecutorUsage usage = ExecutorUsage.none()) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', round), []))
+        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', round), []), [])
     }
 
     static ExecutorUsage usage(long inTokens, long outTokens) {

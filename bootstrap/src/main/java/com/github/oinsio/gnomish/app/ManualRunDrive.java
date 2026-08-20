@@ -51,7 +51,11 @@ final class ManualRunDrive {
     private static void driveResume(
             ManualRunRunner runner, RunArguments runArguments, PipelineDefinition definition, String resume) {
         var plan = SandboxModeSelector.plan(
-                definition, runner.bindingProperties, runner.sandboxProperties, runner.dockerProbe);
+                definition,
+                runner.bindingProperties,
+                runner.sandboxProperties,
+                runner.bindingRegistry,
+                runner.dockerProbe);
         switch (plan.mode()) {
             case HOST ->
                 runner.gitResumeRunner.run(
@@ -81,7 +85,11 @@ final class ManualRunDrive {
             AdHocTaskSynthesizer.SynthesizedTask synthesized,
             RunArguments runArguments) {
         var plan = SandboxModeSelector.plan(
-                definition, runner.bindingProperties, runner.sandboxProperties, runner.dockerProbe);
+                definition,
+                runner.bindingProperties,
+                runner.sandboxProperties,
+                runner.bindingRegistry,
+                runner.dockerProbe);
         switch (plan.mode()) {
             case HOST ->
                 runner.gitModeRunner.run(

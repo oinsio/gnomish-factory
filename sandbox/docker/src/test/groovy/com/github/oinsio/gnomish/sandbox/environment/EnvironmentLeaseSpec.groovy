@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import spock.lang.Specification
@@ -40,7 +42,7 @@ class EnvironmentLeaseSpec extends Specification {
         given:
         def env = fake(1)
         def lease = new EnvironmentLease({ env }, 'gnomish/t', [
-            new Segment(AdapterBinding.CONTAINER, [stage('a'), stage('b')])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage('a'), stage('b')])
         ])
 
         when:
@@ -56,8 +58,8 @@ class EnvironmentLeaseSpec extends Specification {
         given:
         def envs = [fake(1), fake(2)].iterator()
         def lease = new EnvironmentLease({ envs.next() }, 'gnomish/t', [
-            new Segment(AdapterBinding.CONTAINER, [stage('a')]),
-            new Segment(AdapterBinding.CONTAINER, [stage('b')]),
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage('a')]),
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage('b')]),
         ])
 
         when:
@@ -76,7 +78,7 @@ class EnvironmentLeaseSpec extends Specification {
     def "materialization is lazy and current() refuses before the first lease"() {
         given:
         def lease = new EnvironmentLease({ fake(1) }, 'gnomish/t', [
-            new Segment(AdapterBinding.CONTAINER, [stage('a')])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage('a')])
         ])
 
         when:
@@ -93,7 +95,7 @@ class EnvironmentLeaseSpec extends Specification {
         given:
         def env = fake(1)
         def lease = new EnvironmentLease({ env }, 'gnomish/t', [
-            new Segment(AdapterBinding.CONTAINER, [stage('a')])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage('a')])
         ])
         lease.environmentFor('a')
 
@@ -104,7 +106,7 @@ class EnvironmentLeaseSpec extends Specification {
     def "a stage outside the plan is refused"() {
         given:
         def lease = new EnvironmentLease({ fake(1) }, 'gnomish/t', [
-            new Segment(AdapterBinding.CONTAINER, [stage('a')])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage('a')])
         ])
 
         when:
@@ -118,7 +120,7 @@ class EnvironmentLeaseSpec extends Specification {
         given:
         def env = fake(1)
         def lease = new EnvironmentLease({ env }, 'gnomish/t', [
-            new Segment(AdapterBinding.CONTAINER, [stage('a')])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage('a')])
         ])
         lease.environmentFor('a')
 

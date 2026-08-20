@@ -9,7 +9,9 @@
 # OSV-Scanner reads Gradle lockfiles, not `gradle/libs.versions.toml`, which
 # is why dependency locking is enabled in build.gradle (also serves NFR-R1
 # reproducibility). After a dependency change, regenerate the lock state with
-# `./gradlew check --write-locks`, or this gate scans stale versions.
+# `./gradlew check --write-locks --write-verification-metadata sha256` (the
+# combined command dependency verification requires; see README), or this
+# gate scans stale versions.
 #
 # Suppressions: OSV-Scanner resolves `osv-scanner.toml` PER SCANNED PACKAGE
 # SOURCE — next to each lockfile — so a repo-root file stops being found the

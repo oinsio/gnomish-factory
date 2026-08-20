@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import java.time.Duration
@@ -62,7 +63,7 @@ class StatusLineFormatterSpec extends Specification {
             new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(120)),
             new CheckResult(new CheckRef(1, 'command:./gradlew test'), new Verdict.Pass(), Duration.ofMillis(380))
         ]
-        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, checks, ExecutorUsage.none(), JudgeUsage.none())
+        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, checks, ExecutorUsage.none(), JudgeUsage.none(), [])
 
         expect:
         StatusLineFormatter.checkHighlight(record) == '2 checks passed, 500ms'
@@ -70,9 +71,23 @@ class StatusLineFormatterSpec extends Specification {
 
     def "checkHighlight reports exactly 'no checks' when the round ran no checks at all"() {
         given:
-        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, STARTED, [], ExecutorUsage.none(), JudgeUsage.none())
+        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, STARTED, [], ExecutorUsage.none(), JudgeUsage.none(), [])
 
         expect:
         StatusLineFormatter.checkHighlight(record) == 'no checks'
+    }
+
+    // UX1 of fix-denial-report-attachment: a denial reads as a line naming the destination it
+    //     was refused, with the locator appended only when the finding actually carries one
+    def "findingLine appends the locator only when the finding has one"() {
+        expect:
+        StatusLineFormatter.findingLine(new Finding(message, location, 'kind=http method=POST')) == line
+
+        where:
+        message | location | line
+        'egress denied: paste.example.com' | 'paste.example.com:443/upload' |
+                'egress denied: paste.example.com (paste.example.com:443/upload)'
+        'egress denied: paste.example.com' | null |
+                'egress denied: paste.example.com'
     }
 }

@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
@@ -51,7 +53,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
                 'i.md', [], new AutonomyLimits(3), AdvancementMode.AUTO)
         def lease = new EnvironmentLease({ env }, 'gnomish/t', [
-            new Segment(AdapterBinding.CONTAINER, [stage])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage])
         ])
         lease.environmentFor('work')
         lease

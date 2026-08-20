@@ -42,7 +42,7 @@ class UsageReportJsonMapperSpec extends Specification {
             ['claude-z': new TokenUsage(20, 2, 0, 0)]
         ])
         def attempt = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE,
-                Instant.parse('2026-07-18T09:00:00Z'), checks, executorUsage, judgeUsage)
+                Instant.parse('2026-07-18T09:00:00Z'), checks, executorUsage, judgeUsage, [])
         def row = new UsageRow('implement', attempt)
         def totals = UsageTotals.of([row])
 

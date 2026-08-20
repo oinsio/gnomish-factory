@@ -21,11 +21,12 @@ import org.slf4j.LoggerFactory;
  * <p>Guard output is environment-adjacent data and is treated as inert
  * (NFR-S3): unmarked lines are skipped, a malformed marked line is dropped with
  * a warning (never a failure — losing one event must not fail a check), string
- * fields are length-capped, and the number of parsed events is capped (NFR-C1);
- * the findings funnel (task 8.1) applies the publication-side sanitization on
- * top.
+ * fields are length-capped, the path is cut at its query string, and the number
+ * of parsed events is capped (NFR-C1); the findings funnel (task 8.1) applies
+ * the publication-side sanitization on top.
  *
- * <p>Implements NFR-O1, NFR-C1, NFR-S3, UX3 of add-sandbox-core.
+ * <p>Implements NFR-O1, NFR-C1, NFR-S3, UX3 of add-sandbox-core; NFR-S1 of
+ * fix-denial-report-attachment.
  */
 final class GuardDenialLog {
 
@@ -73,6 +74,11 @@ final class GuardDenialLog {
      * location carries host:port plus the path when one exists (UX3), details
      * carry the request kind and method. Returns null (dropped, warned) for a
      * line that is not the well-formed metadata object the addon emits.
+     *
+     * <p>The path is cut at its query string first (NFR-S1 of
+     * fix-denial-report-attachment): a denied {@code GET /upload?token=…} is the
+     * gnome's own exfiltration payload, and the finding is committed to the task
+     * branch, so only the destination-side part of the path travels.
      */
     private static @Nullable Finding parse(String json) {
         JsonNode event;
@@ -88,13 +94,22 @@ final class GuardDenialLog {
             return null;
         }
         String destination = host + portSuffix(event);
-        String path = capped(event.path("path").asText(""));
+        String path = capped(withoutQuery(event.path("path").asText("")));
         String method = capped(event.path("method").asText(""));
         String kind = capped(event.path("kind").asText("connect"));
         return new Finding(
                 "egress denied: " + destination,
                 path.isEmpty() ? destination : destination + path,
                 method.isEmpty() ? "kind=" + kind : "kind=" + kind + " method=" + method);
+    }
+
+    /**
+     * The path up to its query string (NFR-S1): the query is request payload the
+     * gnome chose, not metadata about the destination it was denied.
+     */
+    private static String withoutQuery(String path) {
+        int query = path.indexOf('?');
+        return query < 0 ? path : path.substring(0, query);
     }
 
     private static String portSuffix(JsonNode event) {

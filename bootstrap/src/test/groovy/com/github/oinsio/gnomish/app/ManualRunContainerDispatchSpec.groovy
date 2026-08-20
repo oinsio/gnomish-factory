@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
+import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -57,6 +57,7 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 new SandboxProperties('gnomish/img', null, null, null, [], [], false),
                 // Container by default (D13): no explicit binding, image configured.
                 new BindingProperties(null, [:]),
+                DiscoveredBindings.real(),
                 TaskGitFixture.real(),
                 worktreesRoot,
                 homeDir,

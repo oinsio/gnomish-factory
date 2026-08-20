@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -62,7 +63,7 @@ class ReentrancySpec extends Specification {
     }
 
     static ExecutionResult.Completed completed(String taskId) {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []))
+        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
     }
 
     /** One run's independent set of fakes plus its recorded outcome. */
@@ -129,10 +130,10 @@ class ReentrancySpec extends Specification {
         try (def pool = Executors.newVirtualThreadPerTaskExecutor()) {
             def futureA = pool.submit({
                 engine.run(pipeline(), new TaskContext('TASK-A', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runA))
-            } as java.util.concurrent.Callable)
+            } as Callable<TaskOutcome>)
             def futureB = pool.submit({
                 engine.run(pipeline(), new TaskContext('TASK-B', 't', 'b', []), TaskState.atStageStart('build'), WORKSPACE, portsOf(runB))
-            } as java.util.concurrent.Callable)
+            } as Callable<TaskOutcome>)
             runA.outcome = futureA.get(10, TimeUnit.SECONDS)
             runB.outcome = futureB.get(10, TimeUnit.SECONDS)
         }

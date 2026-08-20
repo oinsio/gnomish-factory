@@ -1,2 +1,3 @@
 com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration
 com.github.oinsio.gnomish.adapter.check.CheckClientConfiguration
+com.github.oinsio.gnomish.adapter.sandbox.SandboxBindingConfiguration

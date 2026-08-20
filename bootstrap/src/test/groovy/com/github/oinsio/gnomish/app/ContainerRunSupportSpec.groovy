@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
@@ -19,6 +20,8 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
+import com.github.oinsio.gnomish.sandbox.BindingNames
+import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
@@ -67,7 +70,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         new ContainerRunSupport(
                 new GitProcessRunner(), cloneDir, taskId,
                 environments, [
-                    new Segment(AdapterBinding.CONTAINER, [stage()])
+                    new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
                 ])
     }
 
@@ -153,7 +156,76 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         given: 'a task branch carrying a committed state.json alongside task.json'
         def support = support()
         createTask(support)
-        def dto = StateJsonMapper.toDto(TaskState.atStageStart('build'))
+        commitState(StateJsonMapper.toDto(TaskState.atStageStart('build')))
+
+        when:
+        def state = support.readFinalState()
+
+        then:
+        (state.position() as Position.AtStage).name() == 'build'
+    }
+
+    // FR5 of fix-denial-report-attachment: the guard container outlives the process that made it,
+    // so a resume reads the cursor its last attempt committed and hands it to the environments —
+    // without it the first read after resume replays the container's whole surviving log
+    def "FR5: restoreDenialCursor hands the branch tip's committed cursor to the environments"() {
+        given: 'a task branch whose state.json records a cursor naming the live guard container'
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new StateEgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
+
+        when:
+        support.restoreDenialCursor()
+        support.environments.roundEnvironment().denialFindings()
+
+        then: 'the round box reads its guard log from the committed position, not from the start'
+        docker.runs.last() == guardLogsArgv('2026-08-19T10:00:00.000000001Z')
+    }
+
+    def "FR5: a branch with no committed cursor leaves the environments reading from the start"() {
+        given: 'a task branch whose state.json predates the cursor field'
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(TaskState.atStageStart('build')))
+
+        when:
+        support.restoreDenialCursor()
+        support.environments.roundEnvironment().denialFindings()
+
+        then:
+        docker.runs.last() == guardLogsArgv(null)
+    }
+
+    /** The guard log read argv, spelled out here: {@code GuardCommands} is package-private to its adapter. */
+    private static List<String> guardLogsArgv(String since) {
+        def argv = [
+            'logs',
+            '--tail',
+            '1000',
+            '--timestamps'
+        ]
+        if (since != null) {
+            argv += ['--since', since]
+        }
+        argv + ['gnomish-guard-' + KEY]
+    }
+
+    def "FR5: a branch with no state.json at all is a no-op, never a failure"() {
+        given: 'a task branch that never persisted a round'
+        def support = support()
+        createTask(support)
+
+        when:
+        support.restoreDenialCursor()
+
+        then:
+        noExceptionThrown()
+    }
+
+    /** Commits {@code state.json} on the task branch, as a finished round would have. */
+    private void commitState(dto) {
         def json = TaskStateJson.mapper().writeValueAsString(dto)
         def originalBranch = gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()
         gitOutput(cloneDir, 'checkout', 'gnomish/T-1')
@@ -161,12 +233,6 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(cloneDir, 'add', '.gnomish-task/state.json')
         gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '-m', 'state')
         gitOutput(cloneDir, 'checkout', originalBranch)
-
-        when:
-        def state = support.readFinalState()
-
-        then:
-        (state.position() as Position.AtStage).name() == 'build'
     }
 
     // NFR-R1: a branch that disappeared mid-run is an honest IllegalStateException naming it,
@@ -247,7 +313,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     def "create scrubs exactly the check credential names the composition root resolved"() {
         given:
         def segments = [
-            new Segment(AdapterBinding.CONTAINER, [stage()])
+            new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
 
         when:

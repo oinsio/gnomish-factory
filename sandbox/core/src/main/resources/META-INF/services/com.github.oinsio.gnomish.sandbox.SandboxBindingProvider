@@ -1,0 +1,3 @@
+# The host binding (FR3 of open-adapter-binding-registry): contributed through the
+# same discovery mechanism as any backend module's binding, with no core enum edit.
+com.github.oinsio.gnomish.sandbox.HostBindingProvider

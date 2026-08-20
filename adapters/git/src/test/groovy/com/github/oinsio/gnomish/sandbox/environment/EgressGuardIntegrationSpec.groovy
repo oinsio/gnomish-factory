@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
 import java.time.Instant
 import spock.lang.IgnoreIf
@@ -73,13 +74,22 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
         then:
         noExceptionThrown()
 
-        when: 'the denials the denied-host probe provoked are read back'
-        def findings = guard.denialFindings()
+        when: 'the denials the denied-host probe provoked are read back through the PORT type'
+        // FR1 of fix-denial-report-attachment: the consumer at the round boundary holds
+        // TaskExecutionEnvironment, never this adapter — the denials must arrive that way.
+        TaskExecutionEnvironment port = new SelfCheckedEnvironment(env, selfCheck, guard)
+        def findings = port.denialFindings()
 
         then: 'the blocked destination is a visible structured finding (NFR-O1, UX3)'
         findings.any {
             it.message().contains(EnvironmentSelfCheck.DENIED_PROBE_HOST)
         }
+
+        when: 'a second round closes with no new denial in between'
+        def secondRound = port.denialFindings()
+
+        then: 'the delta cursor kept the first round\'s denial off the second attempt (D3, UX2)'
+        secondRound == []
     }
 
     def "FR7: a direct DNS query to an external resolver gets no answer"() {

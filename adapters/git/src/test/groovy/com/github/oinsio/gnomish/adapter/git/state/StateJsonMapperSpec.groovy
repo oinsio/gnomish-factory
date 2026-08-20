@@ -56,7 +56,7 @@ class StateJsonMapperSpec extends Specification {
 
     def "toDto maps every AttemptRecord.Result to its lowerCamel discriminator"() {
         given:
-        def record = new AttemptRecord(0, result, startedAt, [], ExecutorUsage.none(), JudgeUsage.none())
+        def record = new AttemptRecord(0, result, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -76,7 +76,7 @@ class StateJsonMapperSpec extends Specification {
     def "toDto flattens every Verdict kind onto StateCheckDto"() {
         given:
         def check = new CheckResult(new CheckRef(0, "command:./gradlew test"), verdict, Duration.ofMillis(500))
-        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none())
+        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -118,9 +118,9 @@ class StateJsonMapperSpec extends Specification {
                     new Finding("missing case", "Foo.java:10", null)
                 ]),
                 Duration.ofMillis(300))
-        def attempt0 = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, startedAt, [check2], usage, JudgeUsage.none())
-        def attempt1 = new AttemptRecord(1, AttemptRecord.Result.PASSED, startedAt.plusSeconds(60), [check1], usage, judgeUsage)
-        def state = new TaskState(new Position.AtStage("implement"), 1, [attempt0, attempt1], usage.plus(usage))
+        def attempt0 = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, startedAt, [check2], usage, JudgeUsage.none(), [])
+        def attempt1 = new AttemptRecord(1, AttemptRecord.Result.PASSED, startedAt.plusSeconds(60), [check1], usage, judgeUsage, [])
+        def state = new TaskState(new Position.AtStage("implement"), 1, [attempt0, attempt1], usage + usage)
 
         when:
         def dto = StateJsonMapper.toDto(state)
@@ -155,7 +155,7 @@ class StateJsonMapperSpec extends Specification {
     def "round-trip: CannotVerify verdict survives with reason and details"() {
         given:
         def check = new CheckResult(new CheckRef(0, "external:ci"), new Verdict.CannotVerify("timeout", "poll exceeded"), Duration.ofMillis(1000))
-        def record = new AttemptRecord(0, AttemptRecord.Result.CANNOT_VERIFY, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none())
+        def record = new AttemptRecord(0, AttemptRecord.Result.CANNOT_VERIFY, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [])
         def state = new TaskState(new Position.AtStage("verify"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -167,7 +167,7 @@ class StateJsonMapperSpec extends Specification {
 
     def "round-trip: DecisionNeeded round with no checks survives"() {
         given:
-        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, startedAt, [], ExecutorUsage.none(), JudgeUsage.none())
+        def record = new AttemptRecord(0, AttemptRecord.Result.DECISION_NEEDED, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], ExecutorUsage.none())
 
         when:
@@ -196,7 +196,7 @@ class StateJsonMapperSpec extends Specification {
                             new ExecutorUsage(Duration.ofSeconds(5), [], ["model-a": new TokenUsage(10, 20, 0, 0)]),
                             new JudgeUsage([
                                 ["model-a": new TokenUsage(1, 2, 0, 0)]
-                            ]))
+                            ]), [])
                 ],
                 new ExecutorUsage(Duration.ofSeconds(5), [], ["model-a": new TokenUsage(10, 20, 0, 0)]))
         def dto = StateJsonMapper.toDto(state)
@@ -213,7 +213,7 @@ class StateJsonMapperSpec extends Specification {
     def "round-trip via JSON: null wallMillis survives serialize/deserialize"() {
         given:
         def mapper = TaskStateJson.mapper()
-        def dto = new StateJsonDto(1, new StatePositionDto.AtStage("atStage", "implement"), 0, [], new StateUsageDto(null, [:], []))
+        def dto = new StateJsonDto(1, new StatePositionDto.AtStage("atStage", "implement"), 0, [], new StateUsageDto(null, [:], []), null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -267,6 +267,42 @@ class StateJsonMapperSpec extends Specification {
         dto.attemptsUsed() == 0
     }
 
+    // FR5 of fix-denial-report-attachment: the cursor delimiting an attempt's denials is committed
+    //     with that attempt, so a resuming instance continues the delta instead of replaying the
+    //     guard container's whole surviving log onto its first round
+    def "FR5: toDto carries the environment's denial cursor into the document"() {
+        given:
+        def state = TaskState.atStageStart("implement")
+        def cursor = new StateEgressCursorDto("sha256:guard-container", "2026-08-19T10:00:00.000000001Z")
+
+        when:
+        def json = TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state, cursor))
+
+        then:
+        StateJsonMapper.readDto(json).egressCursor() == cursor
+    }
+
+    def "FR5: a writer with no denial source records no cursor"() {
+        expect:
+        StateJsonMapper.toDto(TaskState.atStageStart("implement")).egressCursor() == null
+    }
+
+    def "FR5: a state file written before the cursor existed still parses, with no cursor"() {
+        given: 'a pre-cursor document — the field is additive under contract v1'
+        def json = '''
+        {
+          "version": 1,
+          "position": {"type": "atStage", "stage": "implement"},
+          "attemptsUsed": 0,
+          "attempts": [],
+          "totals": {"wallMillis": null, "tokensByModel": {}, "byTool": []}
+        }
+        '''
+
+        expect:
+        StateJsonMapper.readDto(json).egressCursor() == null
+    }
+
     def "readDto refuses an unsupported version before attempting to bind the DTO shape"() {
         given:
         // shape is incompatible with StateJsonDto (no position/attempts/totals) to
@@ -301,7 +337,7 @@ class StateJsonMapperSpec extends Specification {
         given:
         def roundUsage = new ExecutorUsage(Duration.ofSeconds(1), [], [:])
         def totals = new ExecutorUsage(Duration.ofSeconds(99), [], ["model-a": new TokenUsage(1, 1, 0, 0)])
-        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [], roundUsage, JudgeUsage.none())
+        def record = new AttemptRecord(0, AttemptRecord.Result.PASSED, startedAt, [], roundUsage, JudgeUsage.none(), [])
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], totals)
 
         when:
@@ -310,5 +346,63 @@ class StateJsonMapperSpec extends Specification {
         then:
         dto.totals().wallMillis() == 99000
         dto.attempts()[0].executorUsage().wallMillis() == 1000
+    }
+
+    // FR4, M1 of fix-denial-report-attachment: the scenario the pre-change contract could not
+    //     hold — a PASSING attempt carrying a denial, separate from its (all-pass) checks
+    def "FR4: a passing attempt's denials survive the round-trip and serialize with the finding shape"() {
+        given: 'a passing round whose environment denied one egress attempt'
+        def denial = new Finding(
+                "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
+        def check = new CheckResult(new CheckRef(0, "command:./gradlew test"), new Verdict.Pass(), Duration.ofMillis(9))
+        def record = new AttemptRecord(
+                0, AttemptRecord.Result.PASSED, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+        def state = new TaskState(new Position.AtStage("implement"), 1, [record], ExecutorUsage.none())
+
+        when:
+        def dto = StateJsonMapper.toDto(state)
+        def json = TaskStateJson.mapper().writeValueAsString(dto)
+
+        then: 'the denial rides its own field, in the same shape a check finding uses (NFR-S1: no body)'
+        dto.attempts()[0].denials() == [
+            new StateFindingDto(
+            "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
+        ]
+        json.contains('"denials":[{"message":"egress denied: paste.example.com:443"')
+
+        and: 'the attempt stayed passed, with its check untouched (FR2)'
+        dto.attempts()[0].result() == "passed"
+        dto.attempts()[0].checks()*.verdict() == ["pass"]
+
+        and: 'the whole state rebuilds equal, denial included'
+        StateJsonMapper.fromDto(TaskStateJson.mapper().readValue(json, StateJsonDto)) == state
+    }
+
+    // FR4, D5: additive under contract v1 — a state file written before the field existed
+    //     must keep parsing, with denials read as empty rather than null
+    def "FR4: a state file written before denials existed still parses, with denials empty"() {
+        given: 'a v1 attempt document with no denials field at all'
+        def json = '''
+        {
+          "version": 1,
+          "position": {"type": "atStage", "stage": "implement"},
+          "attemptsUsed": 1,
+          "attempts": [{
+            "round": 0,
+            "result": "passed",
+            "startedAt": "2026-07-18T09:00:00Z",
+            "checks": [],
+            "executorUsage": {"wallMillis": null, "tokensByModel": {}, "byTool": []},
+            "judgeUsage": {"perVote": []}
+          }],
+          "totals": {"wallMillis": null, "tokensByModel": {}, "byTool": []}
+        }
+        '''
+
+        when:
+        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(json))
+
+        then: 'the document is readable and the absent field is an empty list, never null'
+        state.attempts()[0].denials() == []
     }
 }

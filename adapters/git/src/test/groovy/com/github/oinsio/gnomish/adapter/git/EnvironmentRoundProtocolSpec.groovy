@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -7,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.sandbox.DenialCursor
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -94,6 +96,34 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         gitOutput(cloneDir, 'show', tip + ':.gnomish-task/state.json').contains('implement')
         gitOutput(cloneDir, 'show', tip + ':.gnomish-task/attempts/implement/1/trace.jsonl').contains('bash')
         runner.run(cloneDir, 'rev-parse', attempt + ':.gnomish-task/state.json').exitCode() != 0
+    }
+
+    // FR5 of fix-denial-report-attachment: the position delimiting this round's denials is
+    //     committed with the round itself, so a resuming instance continues the delta from it
+    //     instead of replaying the guard container's whole surviving log onto its first round
+    def "FR5: the state commit carries the environment's denial cursor"() {
+        given: 'a box whose denial source is at a known position'
+        box.denialCursor = new DenialCursor('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')
+
+        when:
+        snapshotStep.snapshot(TASK, 'implement', 1)
+        persistence.persist(TASK, sampleState(), sampleTrace(1))
+
+        then: 'state.json records both the position and the source it belongs to'
+        def committed = StateJsonMapper.readDto(
+                gitOutput(cloneDir, 'show', factoryTip() + ':.gnomish-task/state.json'))
+        committed.egressCursor().source() == 'sha256:guard-container'
+        committed.egressCursor().position() == '2026-08-19T10:00:00.000000001Z'
+    }
+
+    def "FR5: a round whose environment has no denial source records no cursor"() {
+        when:
+        snapshotStep.snapshot(TASK, 'implement', 1)
+        persistence.persist(TASK, sampleState(), sampleTrace(1))
+
+        then:
+        StateJsonMapper.readDto(gitOutput(cloneDir, 'show', factoryTip() + ':.gnomish-task/state.json'))
+                .egressCursor() == null
     }
 
     def "FR21: a round that changed nothing still closes with a distinct attempt commit"() {

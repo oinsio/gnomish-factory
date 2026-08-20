@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
@@ -167,10 +168,21 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         }
     }
 
+    /**
+     * Renders {@code state.json} for this round, carrying the environment's denial
+     * cursor (FR5 of fix-denial-report-attachment): the round's denials are already
+     * on the state being written, so committing the position that delimits them in
+     * the same commit is what lets a resuming instance continue the delta instead of
+     * replaying the guard container's whole surviving log onto its first round.
+     */
     private byte[] renderState(String taskId, AttemptKey key, TaskState state) {
+        StateEgressCursorDto cursor = environment
+                .denialCursor()
+                .map(c -> new StateEgressCursorDto(c.source(), c.position()))
+                .orElse(null);
         try {
             return TaskStateJson.mapper()
-                    .writeValueAsString(StateJsonMapper.toDto(state))
+                    .writeValueAsString(StateJsonMapper.toDto(state, cursor))
                     .getBytes(StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "serializing state.json", e);
