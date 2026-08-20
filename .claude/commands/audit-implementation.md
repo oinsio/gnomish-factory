@@ -1,9 +1,9 @@
 ---
-description: Read-only audit of an OpenSpec change — per-item completeness, code/test quality and security report with recommendations; changes nothing
+description: Read-only audit of an OpenSpec change's implementation — per-item completeness, code/test quality and security report with recommendations; changes nothing
 argument-hint: "[change-name] [quick]"
 ---
 
-# Change Audit (read-only)
+# Implementation Audit (read-only)
 
 Audit how completely and how well an OpenSpec change is implemented. Produce a report with a
 verdict and a recommendation **for every item** — every task in `tasks.md`, every requirement,
@@ -127,7 +127,7 @@ Findings here use the same severity scale; anything exploitable or fail-open is 
 ### 9. Report
 
 ```
-## Change Audit: <name>
+## Implementation Audit: <name>
 
 ### Summary
 | Dimension        | Result                          |

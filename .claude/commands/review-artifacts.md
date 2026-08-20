@@ -3,7 +3,7 @@ description: Read-only review of an OpenSpec change's artifacts — freshness ag
 argument-hint: "[change-name]"
 ---
 
-# Change Review (read-only)
+# Artifacts Review (read-only)
 
 Review the **artifacts** of an OpenSpec change — `proposal.md`, `design.md`, delta specs,
 `tasks.md` — for three properties:
@@ -15,7 +15,7 @@ Review the **artifacts** of an OpenSpec change — `proposal.md`, `design.md`, d
 3. **Consistency** — the artifacts do not contradict each other, the stable specs, the
    already-implemented functionality, other active changes, or the project rules.
 
-Differs from `/change-audit` and `/opsx:verify`: those judge the *implementation* against the
+Differs from `/audit-implementation` and `/opsx:verify`: those judge the *implementation* against the
 change; this command judges the *change itself* — typically before or during implementation.
 **Strictly read-only**: no file edits, no git state changes. The only artifact is the report.
 
@@ -99,7 +99,7 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 ### 6. Report
 
 ```
-## Change Review: <name>
+## Artifacts Review: <name>
 
 ### Summary
 | Dimension            | Result                           |
@@ -118,7 +118,7 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 ### Verdict              — ready to implement / needs revision (blockers listed)
 ```
 
-Each Recommendations item must be self-contained, with the same format as `/change-audit`:
+Each Recommendations item must be self-contained, with the same format as `/audit-implementation`:
 
 ```
 N. **SEVERITY — <short title>** (`artifact-or-file:line`)
