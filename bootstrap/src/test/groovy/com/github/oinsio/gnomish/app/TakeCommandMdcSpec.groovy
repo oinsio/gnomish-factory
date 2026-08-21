@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import java.nio.file.Files
 import java.nio.file.Path
@@ -97,7 +98,7 @@ tracker:
                 TrackerValidatorStub.acceptingGithubSource(),
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(new ThreadSleeper())
-                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE))
+                .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     // FR9, UX2, NFR-O1: every explicit-mode refusal disposition (Working/AwaitingHuman/Finished/

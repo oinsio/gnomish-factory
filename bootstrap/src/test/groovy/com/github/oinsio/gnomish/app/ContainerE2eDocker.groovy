@@ -77,6 +77,21 @@ class ContainerE2eDocker {
         ])
     }
 
+    /** Force-removes one container by name, leaving its volume and network behind as remnants. */
+    static void removeContainer(String containerName) {
+        run(['rm', '-f', containerName])
+    }
+
+    /** Removes one volume by name, leaving the rest of its environment behind. */
+    static void removeVolume(String volumeName) {
+        run([
+            'volume',
+            'rm',
+            '-f',
+            volumeName
+        ])
+    }
+
     /** Runs {@code docker start} on a container. */
     static void start(String containerName) {
         run(['start', containerName])

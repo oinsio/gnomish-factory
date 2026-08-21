@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -36,7 +37,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
 
     def gitRunner = new GitProcessRunner()
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     Path cloneDir
 
     def setup() {
@@ -64,7 +65,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
         def environments = docker.environments(KEY, cloneDir, sandbox, tempDir.resolve('guard'))
-        def support = new ContainerRunSupport(new GitProcessRunner(), cloneDir, 'T-ABORT', environments, segments)
+        def support = new ContainerRunSupport(new GitProcessRunner(), cloneDir, 'T-ABORT', environments, segments, SandboxLifecyclePass.NONE)
         def context = new TaskContext('T-ABORT', 'title', 'body', List.<Decision> of())
         support.taskRepository().createTask(context, 'HEAD')
         def assembly = newAssembly()
@@ -90,11 +91,6 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
             '-f',
             'gnomish-box-' + KEY
         ])
-
-        and: 'the runner-start orphan sweep ran (FR11): the factory-labelled container listing fired'
-        docker.runs.any {
-            it.first() == 'ps' && it.contains('label=com.github.oinsio.gnomish.factory')
-        }
 
         cleanup:
         System.err = originalErr

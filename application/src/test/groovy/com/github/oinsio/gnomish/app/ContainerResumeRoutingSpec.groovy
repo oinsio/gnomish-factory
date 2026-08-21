@@ -60,7 +60,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     private String resume(boolean discardWork = false) {
         def runner = new ContainerResumeRunner(assemblyRunningLoop(executor, console),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
-                new SandboxProperties(null, null, null, null, null, null, false),
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new FactoryProperties(null, null, null, null, null), 'taskId', { _c, _t, _s, _sp, _fp, _def, _cred ->
                     support
                 } as ContainerSupportFactory)

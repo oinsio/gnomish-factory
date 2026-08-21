@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecycleTick;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
@@ -21,4 +22,5 @@ record ServeRuntime(
         ServeShutdown shutdown,
         WorktreeJanitor worktreeJanitor,
         StandingReaper standingReaper,
-        ObservabilityWiring observability) {}
+        ObservabilityWiring observability,
+        SandboxLifecycleTick sandboxLifecycleTick) {}

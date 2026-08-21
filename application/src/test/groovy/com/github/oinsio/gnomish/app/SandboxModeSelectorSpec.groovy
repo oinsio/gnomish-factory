@@ -37,7 +37,7 @@ class SandboxModeSelectorSpec extends Specification {
     }
 
     private static SandboxProperties sandbox(String image) {
-        new SandboxProperties(image, null, null, null, [], [], false)
+        new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
     }
 
     /**

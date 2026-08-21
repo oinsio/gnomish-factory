@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -163,7 +164,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 registry,
                 MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource())
+                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     // NFR-S1, D17: a fresh claim actually spawns the agent-cli stage executor's subprocess

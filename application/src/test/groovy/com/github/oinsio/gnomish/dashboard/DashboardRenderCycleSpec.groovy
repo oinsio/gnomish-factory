@@ -40,5 +40,36 @@ class DashboardRenderCycleSpec extends Specification {
         then:
         html.contains('no history data')
         !html.toLowerCase().contains('exception')
+
+        and: 'NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section degrades on the same file'
+        html.contains('no sweep data yet')
+    }
+
+    // NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section reads the ledger's sweep actions
+    //     even when no snapshot exists at all, and the daemon section still degrades on its own.
+    def "sweep actions from the ledger reach the hygiene section without any snapshot"() {
+        given:
+        def file = ObservabilityPaths.ledgerFile(
+                homeDir, INSTANCE_NAME, NOW.atZone(java.time.ZoneOffset.UTC).toLocalDate())
+        Files.createDirectories(file.parent)
+        Files.writeString(
+                file,
+                '{"version":1,"type":"sweepAction","at":"2026-08-06T08:00:00Z","objectName":"zombie-box",' +
+                '"role":"main-box","mode":"tracked","taskKey":"task-9","category":"stoppedOrphan",' +
+                '"reason":"unowned running main-box","ageSeconds":900}\n',
+                StandardCharsets.UTF_8)
+
+        when:
+        def html = renderCycle.render(homeDir, INSTANCE_NAME, new BoardSectionView(null, null, null), NOW, null)
+
+        then: 'the action is in the table and raises the dead-instance incident (UX2)'
+        html.contains('<td>zombie-box</td>')
+        html.contains('an instance died or hung: stopped zombie-box of task task-9')
+
+        and: 'the breakdown honestly says the snapshot carried no vital'
+        html.contains('last tick: no snapshot vital')
+
+        and: 'the daemon section still degrades on its own'
+        html.contains('daemon has not run here')
     }
 }

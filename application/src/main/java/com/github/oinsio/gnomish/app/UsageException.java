@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import java.io.Serial;
 
 /**
@@ -23,5 +24,21 @@ public final class UsageException extends RuntimeException {
      */
     public UsageException(String message) {
         super(message);
+    }
+
+    /**
+     * The shared "no branch found" message both resume bootstraps ({@link
+     * com.github.oinsio.gnomish.app.TakeResumeBootstrap} and {@link
+     * com.github.oinsio.gnomish.app.TakeContainerResumeBootstrap}) raise once branch lookup for a
+     * resumed {@code taskId} comes back empty, after hardening and (for host mode) a fetch
+     * attempt.
+     *
+     * @param taskId the tracker's original taskId, as supplied to {@code take <ref>}
+     * @return the exception, ready to throw
+     */
+    static UsageException branchNotFound(String taskId) {
+        return new UsageException("could not resume task \"" + taskId + "\": no branch \""
+                + TaskIdSanitizer.branchName(taskId)
+                + "\" found locally, as a remote-tracking ref, or on origin (even after a fetch attempt)");
     }
 }

@@ -1,11 +1,15 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.PinCheckedExternalCheckClient
 import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient
+import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
+import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.CheckClientFactory
+import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -13,12 +17,15 @@ import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener
+import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import java.nio.file.Path
 import spock.lang.Specification
 
 /**
@@ -67,7 +74,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 new InMemoryAttemptPersistence(),
                 [],
                 // No round runs in this spec, so the law source is never read; any path suffices.
-                java.nio.file.Path.of('.'))
+                Path.of('.'))
     }
 
     // FR10, D6: the holder is seeded with the STARTING stage's own attempt limit when the position
@@ -137,7 +144,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
         def console = assembly.dialogConsole(context(), TaskState.atStageStart('build'))
 
         when:
-        def client = assembly.externalCheckClient(console, java.nio.file.Path.of('.'), githubRegistry())
+        def client = assembly.externalCheckClient(console, Path.of('.'), githubRegistry())
 
         then:
         client instanceof PinCheckedExternalCheckClient
@@ -152,17 +159,17 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
         given:
         def resolved = []
         def assembly = new ManualRunAssembly(
-                new com.github.oinsio.gnomish.app.console.SystemConsoleIO(
+                new SystemConsoleIO(
                         new ByteArrayInputStream(new byte[0]), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
+                new FilesExistCheckRunner(),
+                new ShellCommandCheckRunner(),
                 githubRegistry(), { name ->
                     resolved << name; Optional.of('tok')
                 } as SecretsProvider,
-                new com.github.oinsio.gnomish.domain.engine.time.SystemClock(),
-                new com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper(),
+                new SystemClock(),
+                new ThreadSleeper(),
                 githubCheckProperties(),
-                new SandboxProperties(null, null, null, null, null, null, false))
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null))
 
         when:
         assembly.assemble(
@@ -172,7 +179,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
-                java.nio.file.Path.of('.'))
+                Path.of('.'))
 
         then:
         resolved.isEmpty()
@@ -184,18 +191,18 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
     def "a discovered provider's declared credential cannot be allowlisted as passthrough"() {
         given: 'an assembly whose operator passthrough lists the check provider\'s credential name'
         def assembly = new ManualRunAssembly(
-                new com.github.oinsio.gnomish.app.console.SystemConsoleIO(
+                new SystemConsoleIO(
                         new ByteArrayInputStream(new byte[0]), System.out),
-                new com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner(),
-                new com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner(),
+                new FilesExistCheckRunner(),
+                new ShellCommandCheckRunner(),
                 githubRegistry(),
-                new com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider(),
-                new com.github.oinsio.gnomish.domain.engine.time.SystemClock(),
-                new com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper(),
+                new EnvFileSecretsProvider(),
+                new SystemClock(),
+                new ThreadSleeper(),
                 githubCheckProperties(),
                 new SandboxProperties(null, null, null, null, null, [
                     GithubCheckClientFactory.TOKEN_ENV_VAR
-                ], false))
+                ], false, null, null, null, null))
 
         when:
         assembly.assemble(
@@ -205,7 +212,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
-                java.nio.file.Path.of('.'))
+                Path.of('.'))
 
         then:
         def e = thrown(IllegalArgumentException)

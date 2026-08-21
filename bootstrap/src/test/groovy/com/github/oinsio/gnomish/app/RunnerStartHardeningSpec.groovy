@@ -83,7 +83,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     }
 
     private static SandboxProperties sandboxProperties() {
-        new SandboxProperties('gnomish/img', null, null, null, [], [], false)
+        new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     }
 
     // FR17: the fresh host git run hardens the clone before creating branch and worktree.

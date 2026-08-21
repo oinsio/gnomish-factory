@@ -27,7 +27,7 @@ it SHALL rebuild on fingerprint mismatch, TTL expiry
 rebuild via `gnomish env rebuild` or the `--rebuild-env` run flag.
 Provisioning failure SHALL be an infrastructure failure, never
 a silent fallback to an image without the project toolchain.
-<!-- implements FR13 of add-sandbox-hardening -->
+<!-- implements FR13, NFR-P1 of add-sandbox-hardening -->
 
 #### Scenario: Second task starts from the snapshot
 - **WHEN** a task starts for a project whose fingerprint matches an unexpired snapshot
@@ -48,12 +48,16 @@ gnome has touched can never be persisted as an image.
 - **THEN** no code path can commit that environment's state into the snapshot cache
 
 ### Requirement: Snapshot lifecycle is labeled, cleaned, and crash-safe
-Snapshots SHALL carry factory-owned labels. After a successful build,
-superseded snapshots of the project SHALL be removed; startup cleanup
-SHALL reclaim orphaned provisioning containers and images. Interrupted
-provisioning SHALL leave only labeled garbage; concurrent provisioning
-of one fingerprint SHALL be serialized so losers reuse the winner's
-image.
+Snapshots and provisioning containers SHALL carry factory-owned labels
+identifying them as provisioning objects with their project identity.
+Snapshot images are project-scoped, not task-scoped, and are explicitly
+outside the task-keyed `sandbox-lifecycle` ownership scheme (its stated
+non-goal); this capability owns their cleanup: after a successful
+build, superseded snapshots of the project SHALL be removed, and the
+provisioning flow SHALL reclaim orphaned provisioning containers and
+partial images by label. Interrupted provisioning SHALL leave only
+labeled garbage; concurrent provisioning of one fingerprint SHALL be
+serialized so losers reuse the winner's image.
 <!-- implements FR15, NFR-R2 of add-sandbox-hardening -->
 
 #### Scenario: Crash mid-provisioning leaves nothing permanent

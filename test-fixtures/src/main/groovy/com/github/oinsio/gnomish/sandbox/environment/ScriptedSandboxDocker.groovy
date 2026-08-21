@@ -53,7 +53,13 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
      * the daemon-free stand-in for {@code ContainerEnvironments.forTask}, exposed
      * here because the seam constructor and {@code DockerCli} are package-private.
      */
-    ContainerEnvironments environments(String key, Path sourceClone, SandboxProperties sandbox, Path guardRoot) {
+    ContainerEnvironments environments(
+            String key,
+            Path sourceClone,
+            SandboxProperties sandbox,
+            Path guardRoot,
+            OwnershipMode mode = OwnershipMode.MANUAL,
+            String projectId = 'test-project') {
         new ContainerEnvironments(
                 this, key, sourceClone,
                 { String container, String branch -> } as ContainerHarvest,
@@ -61,11 +67,13 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                 { -> Instant.now() } as Clock,
                 ChildEnvAllowlist.none(),
                 { d -> } as Sleeper,
-                guardRoot)
+                guardRoot,
+                mode,
+                projectId)
     }
 
     /** A finished child process with canned merged output — the exec seam's daemon-free stand-in. */
-    private static final class FakeExecProcess extends Process {
+    private static final class FakeExecProcess extends FakeProcess {
 
         private final int exitCode
         private final byte[] output
@@ -86,11 +94,6 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
         }
 
         @Override
-        InputStream getErrorStream() {
-            new ByteArrayInputStream(new byte[0])
-        }
-
-        @Override
         int waitFor() {
             exitCode
         }
@@ -98,10 +101,6 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
         @Override
         int exitValue() {
             exitCode
-        }
-
-        @Override
-        void destroy() {
         }
     }
 }

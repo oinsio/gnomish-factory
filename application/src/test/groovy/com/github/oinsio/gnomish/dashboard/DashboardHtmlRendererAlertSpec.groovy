@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.dashboard
 
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.neverFetchedBoard
+import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
@@ -42,7 +43,7 @@ class DashboardHtmlRendererAlertSpec extends Specification {
     @Unroll
     def "#label alert renders the daemon-alert highlight and its label"() {
         when:
-        def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), NOW, null)
+        def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
 
         then:
         html.contains('class="daemon-alert"')
@@ -68,7 +69,7 @@ class DashboardHtmlRendererAlertSpec extends Specification {
                 base.lifecycle(), base.feed(), base.slots(), vitals, tracker)
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Fresh(snapshot), emptyHistory(), neverFetchedBoard(), NOW, null)
+        def html = renderer.render(new DaemonSnapshotView.Fresh(snapshot), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
 
         then: 'the two labels are joined by exactly one comma, with no leading comma before the first'
         html.contains('daemon alert: '
@@ -79,7 +80,7 @@ class DashboardHtmlRendererAlertSpec extends Specification {
     def "a healthy fresh snapshot renders no daemon-alert highlight or label"() {
         when:
         def html = renderer.render(
-                new DaemonSnapshotView.Fresh(healthySnapshot()), emptyHistory(), neverFetchedBoard(), NOW, null)
+                new DaemonSnapshotView.Fresh(healthySnapshot()), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
 
         then: 'the static CSS rule is always baked in, but it is never applied and no alert text appears'
         !html.contains('class="daemon-alert"')
@@ -92,7 +93,7 @@ class DashboardHtmlRendererAlertSpec extends Specification {
 
         when: 'a stale-daemon view is rendered in watch mode, triggering both layers'
         def html = renderer.render(
-                new DaemonSnapshotView.DeadDaemon(healthySnapshot()), emptyHistory(), neverFetchedBoard(), NOW, cadence)
+                new DaemonSnapshotView.DeadDaemon(healthySnapshot()), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, cadence)
 
         then: 'both layers are present, using different CSS classes and different wording'
         html.contains('class="daemon-alert"')

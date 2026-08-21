@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -63,6 +64,8 @@ final class TakeCommand {
     private final MonotonicTime heartbeatMonotonicTime;
     private final TakeoverConfirmation takeoverConfirmation;
     private final ServeProperties serveProperties;
+    private final SandboxLifecyclePass sandboxLifecyclePass;
+    private final ContainerTakeSupport containerTakeSupport;
 
     /**
      * The canonical construction; {@link TakeCommandFactory} supplies the {@code heartbeatSleeper}
@@ -107,7 +110,11 @@ final class TakeCommand {
             Sleeper reaperSleeper,
             MonotonicTime heartbeatMonotonicTime,
             TakeoverConfirmation takeoverConfirmation,
-            ServeProperties serveProperties) {
+            ServeProperties serveProperties,
+            SandboxLifecyclePass sandboxLifecyclePass,
+            ContainerTakeSupport containerTakeSupport) {
+        this.sandboxLifecyclePass = sandboxLifecyclePass;
+        this.containerTakeSupport = containerTakeSupport;
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
@@ -157,6 +164,16 @@ final class TakeCommand {
             // (normal completion, TakeExitCodeException, or any other exception).
             heartbeat.standingReaper().start();
             try {
+                // FR6, NFR-O4 of add-serve-sandbox-lifecycle: one startup sweep pass before
+                // dispatch, sharing the heartbeat's own liveness oracle (no second tracker
+                // listing, NFR-C2). Inside the try: the reaper is already running, so a pass that
+                // throws (a Docker outage aborts it, NFR-R1) must still stop the reaper thread —
+                // and must never fail the take, since the sweep is hygiene, not the task.
+                TakeCommandSupport.sweepSandboxLifecycle(
+                        sandboxLifecyclePass,
+                        takeArguments.dir(),
+                        heartbeat.livenessOracle().evaluate(),
+                        log);
                 RunAssembly takeAssembly = assembly.withExtraListener(heartbeat.progress());
                 var dispatcher = new TakeDispatcher(
                         git,
@@ -166,7 +183,8 @@ final class TakeCommand {
                         clock,
                         trackerAdapterRegistry,
                         secretsProvider,
-                        takeoverConfirmation);
+                        takeoverConfirmation,
+                        containerTakeSupport);
                 TakeRefDispatch.run(
                         dispatcher,
                         takeArguments,

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -41,7 +42,9 @@ final class SubcommandDispatchFactory {
             StatusCommand statusCommand,
             UsageCommand usageCommand,
             BoardCommand boardCommand,
-            DashboardCommand dashboardCommand) {
+            DashboardCommand dashboardCommand,
+            SandboxLifecyclePass sandboxLifecyclePass,
+            ContainerTakeSupport containerTakeSupport) {
         var takeCommand = TakeCommandFactory.of(
                 assembly,
                 git,
@@ -52,7 +55,9 @@ final class SubcommandDispatchFactory {
                 trackerAdapterRegistry,
                 secretsProvider,
                 pipelineSource,
-                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties));
+                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties),
+                sandboxLifecyclePass,
+                containerTakeSupport);
         var serveCommand = new ServeCommand(
                 assembly,
                 git,
@@ -66,7 +71,9 @@ final class SubcommandDispatchFactory {
                 trackerAdapterRegistry,
                 secretsProvider,
                 pipelineSource,
-                FeedAutomaton::run);
+                FeedAutomaton::run,
+                sandboxLifecyclePass,
+                containerTakeSupport);
         return new SubcommandDispatch(
                 statusCommand, usageCommand, takeCommand, serveCommand, boardCommand, dashboardCommand);
     }

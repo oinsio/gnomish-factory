@@ -309,6 +309,56 @@ class StalenessMemorySpec extends Specification {
         memory.observe([working('T-1', v)]) == [stale('T-1', v)]
     }
 
+    // FR3 of add-serve-sandbox-lifecycle: staleRefs reflects the current latch state, not just
+    //     this call's newly-emitted claims — a claim already latched stale on an earlier tick
+    //     stays in staleRefs until its version changes or it disappears from listOpen.
+    def "staleRefs reflects every currently-latched-stale claim, not only the newest emission"() {
+        given:
+        def v1 = version()
+        memory.observe([working('T-1', v1)])
+
+        expect: 'nothing latched yet'
+        memory.staleRefs() == [] as Set
+
+        when: 'T-1 crosses TTL and is emitted'
+        time.advance(TTL)
+        memory.observe([working('T-1', v1)])
+
+        then:
+        memory.staleRefs() == [new TaskRef('T-1')] as Set
+
+        when: 'a later tick still sees the same stale version (no re-emission) plus a fresh T-2'
+        def v2 = version()
+        time.advance(Duration.ofMinutes(1))
+        memory.observe([
+            working('T-1', v1),
+            working('T-2', v2)
+        ])
+
+        then: 'T-1 stays in staleRefs even though it was not re-emitted this tick; T-2 is not stale yet'
+        memory.staleRefs() == [new TaskRef('T-1')] as Set
+    }
+
+    // FR3 of add-serve-sandbox-lifecycle: a version change (a beat) clears the latch — staleRefs
+    //     no longer reports the ref once it has been superseded.
+    def "staleRefs drops a ref once its stale version is superseded by a fresh beat"() {
+        given:
+        def v1 = version()
+        memory.observe([working('T-1', v1)])
+        time.advance(TTL)
+        memory.observe([working('T-1', v1)])
+
+        expect:
+        memory.staleRefs() == [new TaskRef('T-1')] as Set
+
+        when: 'a fresh beat lands with a new version'
+        def v2 = new ClaimVersion('marker-1', ANCIENT.plusSeconds(1))
+        memory.observe([working('T-1', v2)])
+
+        then:
+        memory.staleRefs() == [] as Set
+    }
+
     // FR4, D14: retryEmission is guarded by the observed version — it re-arms only when the
     //     current observation is still the version that failed to remove. A stale-but-superseded
     //     version (a live beat moved the timer on) can never resurrect the current one.

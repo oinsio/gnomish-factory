@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import java.time.Duration;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -50,6 +51,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     factory.sandbox.enforce-disk-quota}, FR10); opt-in — the flag needs a
  *     quota-capable storage driver (overlay2 on xfs with {@code pquota}) most
  *     daemons lack, so defaulting it on would fail every container start
+ * @param projectId the explicit project-identity override ({@code
+ *     factory.sandbox.project-id}, design D5 of add-serve-sandbox-lifecycle);
+ *     {@code null} when unset — {@code ProjectIdentity} then derives it from
+ *     the clone's {@code origin} remote URL instead; rejected if blank
+ * @param minimumAge the sweep-lifecycle minimum object age ({@code
+ *     factory.sandbox.minimum-age}, `sandbox-lifecycle` "Minimum object age protection" of
+ *     add-serve-sandbox-lifecycle); defaults to {@code 2m} when unset; rejected if non-positive
+ * @param keptReapAge the aged-reaper threshold for kept environments ({@code
+ *     factory.sandbox.kept-reap-age}, FR5 of add-serve-sandbox-lifecycle); defaults to {@code 7d}
+ *     when unset; rejected if non-positive
+ * @param manualRunningStopAge the manual-mode running-stop threshold ({@code
+ *     factory.sandbox.manual-running-stop-age}, FR7 of add-serve-sandbox-lifecycle); defaults to
+ *     {@code 24h} when unset; rejected if non-positive
  */
 @ConfigurationProperties("factory.sandbox")
 public record SandboxProperties(
@@ -59,9 +73,16 @@ public record SandboxProperties(
         ResourceLimits limits,
         List<String> egressAllowlist,
         List<String> envPassthrough,
-        boolean enforceDiskQuota) {
+        boolean enforceDiskQuota,
+        @Nullable String projectId,
+        Duration minimumAge,
+        Duration keptReapAge,
+        Duration manualRunningStopAge) {
 
     private static final String DEFAULT_RUNTIME = "runc";
+    private static final Duration DEFAULT_MINIMUM_AGE = Duration.ofMinutes(2);
+    private static final Duration DEFAULT_KEPT_REAP_AGE = Duration.ofDays(7);
+    private static final Duration DEFAULT_MANUAL_RUNNING_STOP_AGE = Duration.ofHours(24);
 
     /**
      * The official mitmproxy image pinned to its current major, so change B's TLS
@@ -81,7 +102,11 @@ public record SandboxProperties(
             @Nullable ResourceLimits limits,
             @Nullable List<String> egressAllowlist,
             @Nullable List<String> envPassthrough,
-            boolean enforceDiskQuota) {
+            boolean enforceDiskQuota,
+            @Nullable String projectId,
+            @Nullable Duration minimumAge,
+            @Nullable Duration keptReapAge,
+            @Nullable Duration manualRunningStopAge) {
         this.image = image;
         this.runtime = defaulted(runtime, DEFAULT_RUNTIME, "factory.sandbox.runtime");
         this.guardImage = defaulted(guardImage, DEFAULT_GUARD_IMAGE, "factory.sandbox.guard-image");
@@ -89,6 +114,30 @@ public record SandboxProperties(
         this.egressAllowlist = egressAllowlist == null ? List.of() : List.copyOf(egressAllowlist);
         this.envPassthrough = envPassthrough == null ? List.of() : List.copyOf(envPassthrough);
         this.enforceDiskQuota = enforceDiskQuota;
+        if (projectId != null && projectId.isBlank()) {
+            throw new IllegalArgumentException("factory.sandbox.project-id must not be blank");
+        }
+        this.projectId = projectId;
+        this.minimumAge = defaultedDuration(minimumAge, DEFAULT_MINIMUM_AGE, "factory.sandbox.minimum-age");
+        this.keptReapAge = defaultedDuration(keptReapAge, DEFAULT_KEPT_REAP_AGE, "factory.sandbox.kept-reap-age");
+        this.manualRunningStopAge = defaultedDuration(
+                manualRunningStopAge, DEFAULT_MANUAL_RUNNING_STOP_AGE, "factory.sandbox.manual-running-stop-age");
+    }
+
+    /**
+     * Resolves the unset case to {@code fallback}; an explicit non-positive duration is a
+     * configuration mistake and is rejected naming the property. Same PIT record-constructor
+     * rationale and {@code @DoNotMutate} exception as {@link #defaulted}.
+     */
+    @DoNotMutate
+    private static Duration defaultedDuration(@Nullable Duration value, Duration fallback, String property) {
+        if (value == null) {
+            return fallback;
+        }
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(property + " must be positive");
+        }
+        return value;
     }
 
     /**

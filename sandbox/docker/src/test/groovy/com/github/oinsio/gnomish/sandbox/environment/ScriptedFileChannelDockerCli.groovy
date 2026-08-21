@@ -37,7 +37,7 @@ class ScriptedFileChannelDockerCli extends DockerCli {
  * scripting an interrupt that lands on the stdin pump join that follows inside
  * {@code ContainerFileChannel#putFile}.
  */
-class ScriptedFileChannelProcess extends Process {
+class ScriptedFileChannelProcess extends FakeProcess {
 
     final SlowCloseStdin stdin = new SlowCloseStdin()
     byte[] stdout = new byte[0]
@@ -55,11 +55,6 @@ class ScriptedFileChannelProcess extends Process {
     }
 
     @Override
-    InputStream getErrorStream() {
-        new ByteArrayInputStream(new byte[0])
-    }
-
-    @Override
     int waitFor() throws InterruptedException {
         if (interruptOnWaitFor) {
             Thread.currentThread().interrupt()
@@ -74,10 +69,6 @@ class ScriptedFileChannelProcess extends Process {
     @Override
     int exitValue() {
         exit
-    }
-
-    @Override
-    void destroy() {
     }
 }
 

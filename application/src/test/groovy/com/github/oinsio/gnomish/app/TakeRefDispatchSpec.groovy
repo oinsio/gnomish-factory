@@ -45,7 +45,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(TakeRefDispatchSpec)
     private static final TrackerConfig TRACKER_CONFIG = new TrackerConfig('github', 3)
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14)
+    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null)
 
     Tracker tracker = Mock(Tracker)
     TrackerAdapterFactory factory = Stub(TrackerAdapterFactory)
@@ -65,7 +65,8 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
             locate(_, _) >> new BranchLocation.NotFound()
         }, Stub(TaskWorktreeGit))
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
-                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE)
+                ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
+                ContainerTakeSupport.hostOnly())
     }
 
     private void dispatch(List<String> refs) {

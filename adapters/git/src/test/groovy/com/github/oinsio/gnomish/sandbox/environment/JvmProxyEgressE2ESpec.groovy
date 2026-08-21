@@ -54,7 +54,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
         key = 'jvmproxy-' + System.nanoTime()
         and_startAllowedTargetOnBridge()
         and_materializeBoxOnInternalNetwork()
-        guard = new EgressGuard(docker, key, GuardImageAvailability.IMAGE, [targetIp], tempDir.resolve('guard-cfg'))
+        guard = new EgressGuard(docker, key, GuardImageAvailability.IMAGE, [targetIp], tempDir.resolve('guard-cfg'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         guard.ensureRunning()
     }
 
@@ -153,7 +153,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
                 LIMITS,
                 false,
                 clock,
-                ChildEnvAllowlist.none())
+                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         env.materialize('task/jvm-proxy', null)
     }
 }

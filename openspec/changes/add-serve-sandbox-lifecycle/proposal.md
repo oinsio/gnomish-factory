@@ -9,7 +9,7 @@ Container mode currently reaches only `gnomish run`: `take` and `serve` still ex
 - **ADDED**: a `sandbox-lifecycle` capability — ownership labels stamped atomically at object creation (task key, ownership mode, project identity), a claim-heartbeat liveness oracle, a sweep decision policy (ownership × role × state), an aged-environment reaper with keep semantics, and a unified sweep verdict vocabulary shared by all entry points.
 - **MODIFIED**: `execution-environment` — the snapshot-based "orphan cleanup at startup" requirement is replaced by the ownership-based policy; the label set grows.
 - **MODIFIED**: `tracker-take` and `factory-serve` — container-bound stages run through `take` and `serve` slots, reusing the already-built container run assembly; the daemon schedules the periodic sweep/reap tick and stops kept environments at task end.
-- **MODIFIED**: `manual-run` — manual-mode ownership labels, oracle-free age policy, sweep summary in the finish report.
+- **MODIFIED**: `manual-run` — manual-mode ownership labels, oracle-free age policy, a startup sweep pass that degrades without a tracker.
 - **MODIFIED**: `serve-observability` and `dashboard-page` — sweep vitals with a kept-environment inventory, sweep action ledger lines, a sandbox hygiene dashboard section with alerts.
 - **REMOVED**: the name-snapshot orphan sweep contract (`sweep(liveKeys)` semantics, "empty set removes every factory object").
 
@@ -62,7 +62,7 @@ Container mode currently reaches only `gnomish run`: `take` and `serve` still ex
 - NFR-O1: the serve snapshot SHALL carry a sweeper vitals entry: last tick time, per-category counts of the last tick, and an inventory of kept environments (task, age, time until reap).
 - NFR-O2: every stop and dispose action SHALL be a ledger line (object, role, task key, reason, age); each tick SHALL add one summary line with per-category counts; untouched objects are never itemized in the ledger.
 - NFR-O3: the dashboard SHALL render a sandbox hygiene section (last tick breakdown, kept inventory, recent actions) and SHALL alert on: sweep not run for longer than a threshold, consecutive skipped-no-verdict ticks, and any stopped-orphan event.
-- NFR-O4: `run`/`take` SHALL log the same verdict vocabulary via SLF4J; `take`'s finish report SHALL include a one-line sweep summary.
+- NFR-O4: `run`/`take` SHALL log the same verdict vocabulary via SLF4J, closing each startup pass with a one-line summary of the per-category counts. The summary belongs to the invocation's log, not to the task's finish report: a finish report describes ONE task, while the sweep is project-wide and mostly concerns objects of other tasks.
 
 ### Non-Functional — Security
 
@@ -108,7 +108,7 @@ Container mode currently reaches only `gnomish run`: `take` and `serve` still ex
 ### Modified Capabilities
 
 - `execution-environment`: "Orphan cleanup at startup" is replaced — cleanup is ownership-based per `sandbox-lifecycle`; the label contract grows mode and project identity.
-- `tracker-take`: container-bound stages run through take; sweep summary in the finish report.
+- `tracker-take`: container-bound stages run through take; a startup sweep pass whose summary is logged by the invocation.
 - `factory-serve`: container-bound stages run in slots; the daemon schedules the sweep/reap tick and stop-keeps environments at task end.
 - `manual-run`: manual ownership mode and its oracle-free age policy.
 - `serve-observability`: sweeper vitals with kept inventory; sweep ledger lines.
@@ -116,7 +116,7 @@ Container mode currently reaches only `gnomish run`: `take` and `serve` still ex
 
 ## Impact
 
-- Modules: `sandbox/docker` (labels, sweeper rewrite, reaper), `application` (`app.serve` scheduling, take/serve container wiring, `serveobservability` vitals + ledger lines, `dashboard` section + alerts), `bootstrap` (assembly of the shared sweep component per entry point).
+- Modules: `sandbox/docker` (labels, sweeper rewrite, reaper), `application` (`app.serve` scheduling, take/serve container wiring, the take resume routing table unified across host and container per design D8, `serveobservability` vitals + ledger lines, `dashboard` section + alerts), `bootstrap` (assembly of the shared sweep component per entry point).
 - Removed behavior: `ContainerOrphanSweeper.sweep(liveKeys)` name-snapshot semantics, including "empty live set removes everything".
 - New configuration keys: minimum object age, kept reap age (default 7 d), manual running-stop age (default 24 h), sweep tick cadence.
 - Depends on existing capabilities unchanged: `claim-heartbeat` (oracle, including its staleness observation memory), `git-task-persistence` (keep/salvage semantics), `serve-observability` writer machinery.

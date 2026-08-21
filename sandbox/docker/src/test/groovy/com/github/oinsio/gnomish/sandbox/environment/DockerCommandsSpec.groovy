@@ -14,10 +14,11 @@ class DockerCommandsSpec extends Specification {
 
     static final String KEY = 'org-repo-42'
     static final ResourceLimits LIMITS = new ResourceLimits('4', '3g', 256L, '20g')
+    static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
 
-    def "FR3: createNetwork is internal-only and carries both factory labels"() {
+    def "FR3: createNetwork is internal-only and carries all four ownership labels"() {
         when:
-        def argv = DockerCommands.createNetwork(KEY)
+        def argv = DockerCommands.createNetwork(KEY, OWNERSHIP)
 
         then:
         argv == [
@@ -28,13 +29,17 @@ class DockerCommandsSpec extends Specification {
             'com.github.oinsio.gnomish.factory=true',
             '--label',
             'com.github.oinsio.gnomish.task=' + KEY,
+            '--label',
+            'com.github.oinsio.gnomish.mode=tracked',
+            '--label',
+            'com.github.oinsio.gnomish.project=proj-1',
             'gnomish-net-' + KEY
         ]
     }
 
-    def "FR3: createVolume carries both factory labels"() {
+    def "FR3: createVolume carries all four ownership labels"() {
         when:
-        def argv = DockerCommands.createVolume(KEY)
+        def argv = DockerCommands.createVolume(KEY, OWNERSHIP)
 
         then:
         argv == [
@@ -44,6 +49,10 @@ class DockerCommandsSpec extends Specification {
             'com.github.oinsio.gnomish.factory=true',
             '--label',
             'com.github.oinsio.gnomish.task=' + KEY,
+            '--label',
+            'com.github.oinsio.gnomish.mode=tracked',
+            '--label',
+            'com.github.oinsio.gnomish.project=proj-1',
             'gnomish-vol-' + KEY
         ]
     }
@@ -55,10 +64,10 @@ class DockerCommandsSpec extends Specification {
 
     def "FR10: runContainer applies runtime, cpu/memory/pid limits, the labelled mount and workdir"() {
         when:
-        def argv = DockerCommands.runContainer(KEY, 'gnomish/img:1', 'sysbox-runc', LIMITS, false, '/gnomish/work')
+        def argv = DockerCommands.runContainer(KEY, 'gnomish/img:1', 'sysbox-runc', LIMITS, false, '/gnomish/work', OWNERSHIP)
 
         then: 'the run is detached, named, labelled, on the internal network'
-        argv.subList(0, 12) == [
+        argv.subList(0, 16) == [
             'run',
             '-d',
             '--name',
@@ -67,6 +76,10 @@ class DockerCommandsSpec extends Specification {
             'com.github.oinsio.gnomish.factory=true',
             '--label',
             'com.github.oinsio.gnomish.task=' + KEY,
+            '--label',
+            'com.github.oinsio.gnomish.mode=tracked',
+            '--label',
+            'com.github.oinsio.gnomish.project=proj-1',
             '--network',
             'gnomish-net-' + KEY,
             '--runtime',
@@ -100,7 +113,7 @@ class DockerCommandsSpec extends Specification {
 
     def "FR10: the disk quota is added only when opted in"() {
         when:
-        def argv = DockerCommands.runContainer(KEY, 'img', 'runc', LIMITS, true, '/gnomish/work')
+        def argv = DockerCommands.runContainer(KEY, 'img', 'runc', LIMITS, true, '/gnomish/work', OWNERSHIP)
 
         then:
         def i = argv.indexOf('--storage-opt')
@@ -145,34 +158,10 @@ class DockerCommandsSpec extends Specification {
         ]
     }
 
-    def "FR11: remove and list commands use the derived names and the factory filter"() {
+    def "FR11: remove commands use the derived names"() {
         expect:
         DockerCommands.removeContainer('n') == ['rm', '-f', 'n']
         DockerCommands.removeVolume('n') == ['volume', 'rm', 'n']
         DockerCommands.removeNetwork('n') == ['network', 'rm', 'n']
-        DockerCommands.listContainerNames() == [
-            'ps',
-            '-a',
-            '--filter',
-            'label=com.github.oinsio.gnomish.factory',
-            '--format',
-            '{{.Names}}'
-        ]
-        DockerCommands.listVolumeNames() == [
-            'volume',
-            'ls',
-            '--filter',
-            'label=com.github.oinsio.gnomish.factory',
-            '--format',
-            '{{.Name}}'
-        ]
-        DockerCommands.listNetworkNames() == [
-            'network',
-            'ls',
-            '--filter',
-            'label=com.github.oinsio.gnomish.factory',
-            '--format',
-            '{{.Name}}'
-        ]
     }
 }

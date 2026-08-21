@@ -1,6 +1,7 @@
 # Operator Guide: The Sandbox
 
 <!-- implements UX1, UX2, UX3, UX4, UX5, UX6, NG5, NG7 of add-sandbox-core -->
+<!-- implements UX3, UX4 of add-serve-sandbox-lifecycle -->
 
 This guide is for the operator configuring where gnome processes actually run.
 Since add-sandbox-core, every gnome-product process — agent rounds, judge
@@ -95,12 +96,12 @@ and your two ways out (restore the module, or set
 host: silently weakening isolation is the one thing binding resolution will not
 do.
 
-Two current boundaries, stated honestly: mixed host/container bindings within
+One current boundary, stated honestly: mixed host/container bindings within
 one pipeline are refused (the round protocol is mode-wide; bind every stage
-alike), and binding resolution currently governs the `gnomish run` git modes —
-the tracker-driven `take`/`serve` paths still run their existing host worktree
-shape until the serve/lifecycle integration pass adopts the container adapter
-there.
+alike). Container mode is supported across all three entry points — `gnomish
+run`, `gnomish take` (single and batch), and `gnomish serve` slots — reusing
+the same container assembly and the same ownership-based cleanup described
+below (UX3).
 
 ## Host mode honestly
 
@@ -231,7 +232,85 @@ this honestly open until the gateway lands.
 
 Escalated/paused tasks keep their environment: the container is stopped,
 volume and network retained, so any instance can salvage and resume from the
-branch alone. Completed tasks dispose everything. Crashes leave only labeled
-Docker objects, which the startup orphan sweep reclaims; the serve daemon
-additionally disposes aged kept environments by runtime metadata. Nothing in a
-box is precious: the branch is the durable state.
+branch alone. Completed tasks dispose everything. Nothing in a box is
+precious: the branch is the durable state.
+
+Every factory-created Docker object is labelled, atomically at creation, with
+the task's environment key, its **ownership mode** (`tracked` — claimed
+through the tracker, the `take`/`serve` path — or `manual` — `gnomish run`,
+which has no tracker), and the **project identity** (a stable digest of the
+clone's `origin` remote URL, or your explicit override below). `run`, `take`,
+and `serve` all run one shared sweep-and-reap pass through this labelling
+(`sandbox-lifecycle`, `add-serve-sandbox-lifecycle`): `run` and `take` run it
+once at startup, `serve` runs it on a recurring tick for the daemon's whole
+lifetime.
+
+- A `tracked` object is alive iff its task's tracker claim has a fresh
+  heartbeat. A crashed or hung instance's stale claim makes its objects
+  unowned: a running main box is **stopped** (never disposed outright — volume
+  and network stay, so a sibling instance's resume still salvages the
+  un-harvested work), while guard/judge/verification/seed-helper objects are
+  disposed immediately — they hold no durable work and are trivially
+  reconstructed on the next attempt.
+- `manual`-mode objects (`gnomish run`) have no tracker to ask, so they are
+  governed by age alone: a running manual box is stopped only after
+  `factory.sandbox.manual-running-stop-age` (default 24h) since it started.
+- Any stopped or container-less object — kept deliberately or left behind by a
+  crash — is disposed once its age exceeds `factory.sandbox.kept-reap-age`
+  (default 7 days). Escalation is one-way: running → stopped → disposed, never
+  a shortcut.
+- An object younger than `factory.sandbox.minimum-age` (default 2 minutes) is
+  never touched, however it classifies — the grace window for a slot that is
+  still mid-launch.
+- The sweep is scoped to its own project identity (`factory.sandbox.project-id`,
+  or the derived default): a second project sharing the same Docker host never
+  sees, and never touches, this one's objects. The derived default is a digest of
+  the clone's `origin` remote URL, or — for a clone with no `origin` — a digest of
+  the clone's own absolute path, so two origin-less checkouts on one host stay in
+  separate scopes rather than sweeping each other. Set the override explicitly
+  when several clones of the *same* project must share one scope. The override
+  must match `[A-Za-z0-9._-]+`: it is stamped verbatim into a Docker label whose
+  read-back format is comma- and equals-delimited, so any other character is
+  rejected at startup rather than corrupting the label machinery.
+
+```properties
+factory.serve.sandbox-sweep-interval=5m     # default 5m — serve's tick cadence
+factory.sandbox.minimum-age=2m              # default 2m
+factory.sandbox.kept-reap-age=7d            # default 7d
+factory.sandbox.manual-running-stop-age=24h # default 24h
+factory.sandbox.project-id=my-project       # [A-Za-z0-9._-]+; default: derived (see above)
+```
+
+**Label compatibility.** An object carrying the project label but no ownership
+mode (a build older than the mode label) is treated as `tracked`, age-protected
+the same as any other object, and never insta-disposed — a mixed-version host
+degrades safely on the first post-upgrade sweep.
+
+An object older than the **project** label is a different case: the sweep lists
+by factory label AND project label, so such an object appears in no listing and
+is never swept — not now, not later. This is deliberate. A label-less object
+says nothing about which project owns it, and sweeping it anyway would break the
+guarantee above for everyone sharing the daemon. Clean them up once, by hand,
+after upgrading:
+
+```bash
+docker ps -a  --filter label=com.github.oinsio.gnomish.factory
+docker volume ls --filter label=com.github.oinsio.gnomish.factory
+docker network ls --filter label=com.github.oinsio.gnomish.factory
+```
+
+Anything in that listing without a `com.github.oinsio.gnomish.project` label is
+a pre-upgrade leftover; check it holds no work you still want, then remove it
+with the ordinary `docker rm` / `docker volume rm` / `docker network rm`.
+
+The daemon reports the last tick's breakdown, the kept-environment inventory,
+and recent sweep actions on `gnomish dashboard`; a `tracked` stopped-orphan
+event there reads as an incident (an instance died or hung), never as routine
+cleanup — routine manual age-stops are counted separately.
+
+This ownership-labelled, claim-heartbeat-derived cleanup covers the Docker
+container/volume/network/guard namespace only (`sandbox-lifecycle` of
+add-serve-sandbox-lifecycle). Non-Docker execution surfaces — Colima VMs, GHA
+runs, provisioning snapshot images — are not covered here; their own changes
+adopt this same ownership precedent (labelled ownership, age-scoped fallback,
+no reverse liveness lookups) rather than reinventing cleanup from scratch.

@@ -26,9 +26,10 @@ class EgressGuardSpec extends Specification {
     Path tempDir
 
     def docker = new RecordingDockerCli()
+    static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
 
     private EgressGuard guard(List<String> allowlist = ['registry.example.com']) {
-        new EgressGuard(docker, 'k1', 'mitmproxy/mitmproxy:12', allowlist, tempDir.resolve('guard-cfg'))
+        new EgressGuard(docker, 'k1', 'mitmproxy/mitmproxy:12', allowlist, tempDir.resolve('guard-cfg'), OWNERSHIP)
     }
 
     private static DockerResult ok(String stdout = '') {
@@ -43,7 +44,7 @@ class EgressGuardSpec extends Specification {
         given: 'no guard container exists, and every create step succeeds'
         docker.onRun = { List<String> args ->
             args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.contains(GuardCommands.runGuard(
-                    'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString()))
+                    'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString(), OWNERSHIP))
             ? failed('No such object')
             : ok('true\n')
         }
@@ -53,7 +54,7 @@ class EgressGuardSpec extends Specification {
 
         then: 'the guard is run with the rendered config and given its bridge leg'
         docker.runs.contains(GuardCommands.runGuard(
-                        'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString()))
+                        'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString(), OWNERSHIP))
         docker.runs.contains(GuardCommands.connectBridge('k1'))
 
         and: 'the first create sufficed — the recreate repair path never ran'

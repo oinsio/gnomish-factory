@@ -1,12 +1,15 @@
 # Operator Guide: The Dashboard Page
 
 <!-- implements UX1, UX2, UX3, UX4, U1, U2 of add-dashboard-page -->
+<!-- implements NFR-O3, UX1, UX2 of add-serve-sandbox-lifecycle -->
 
 This is the reference for `gnomish dashboard` — a single self-contained HTML
-page composing the three surfaces documented elsewhere in this guide: the
+page composing four surfaces documented elsewhere in this guide: the
 daemon snapshot ([`operator-guide-observability.md`](operator-guide-observability.md)),
-the ledger history (same document), and the tracker board
-(["The `board` Command"](operator-guide.md#the-board-command-tracker-as-a-kanban-view)).
+the ledger history (same document), the tracker board
+(["The `board` Command"](operator-guide.md#the-board-command-tracker-as-a-kanban-view)),
+and the sandbox hygiene section
+(["Keep, resume, cleanup"](operator-guide-sandbox.md#keep-resume-cleanup)).
 It assumes those documents for what each section's data means; this page is
 about the composition, not the sources.
 
@@ -21,6 +24,31 @@ flowchart LR
     B["tracker board<br/>(same composition as gnomish board)"] --> R
     R --> H["dashboard.html<br/>(self-contained, zero requests)"]
 ```
+
+## The sandbox hygiene section
+
+The fourth section answers "is container cleanup running, and what is it
+holding?" It reads two sources the page already has — the snapshot's
+`vitals.sweep` (last tick time, per-category counts, the kept-environment
+inventory with each environment's age and time-to-reap) and the ledger's sweep
+lines (the recent stop/dispose actions) — and degrades on its own: a daemon
+that predates the sweep contract, or one that has not finished its first tick,
+renders "no sweep data yet" while every other section keeps reporting.
+
+The section carries its own **`sandbox alert:`** highlight, separate from the
+daemon section's `daemon alert:`, because its conditions are facts about the
+host's Docker objects rather than about the daemon's own liveness:
+
+| Condition                  | Fires when                                                                 |
+|-----------------------------|------------------------------------------------------------------------------|
+| `sandbox sweep not running` | no tick has completed for longer than `k` × the sweep's own cadence            |
+| `sandbox cleanup stalled`   | `n` consecutive ticks in a row reached no claim verdict — ticking, deciding nothing |
+| `an instance died or hung`  | a **`tracked`** running box was stopped as an orphan, named with its task      |
+
+The third one is a symptom, not a statistic: a routine `manual` age-policy stop
+raises no alert at all — it appears in the section's category breakdown and
+nowhere else — so the alert only ever means an instance holding a claim stopped
+beating.
 
 ## Wall-display recipe (`--watch`)
 
@@ -96,9 +124,15 @@ instance name) exactly as `gnomish board` and `gnomish take` do.
 | Board refresh cadence     | 60 s  | how often the tracker board section re-fetches                 |
 | Page-staleness multiplier | k = 3 | banner threshold: no re-render for `k ×` cadence (~30 s)       |
 | History window            | 7 days | ledger days aggregated into the history section               |
+| Sweep-staleness multiplier | k = 3 | `sandbox sweep not running` threshold: no tick for `k ×` the sweep's own cadence, which travels in the snapshot as `vitals.sweep.intervalSeconds` |
+| Consecutive-skipped threshold | n = 3 | `sandbox cleanup stalled` threshold: ticks in a row reaching no claim verdict |
+| Kept-inventory bound      | 20 rows | kept environments listed, **oldest first**; `keptTotal` states how many the tick actually saw |
+| Sweep-action bound        | 20 rows | recent stop/dispose actions listed, newest first                |
 
 These are constants of the command, not configuration — there is no flag to
-change them (design D4/D5).
+change them (design D4/D5). The two sandbox thresholds deliberately need no
+daemon configuration: the sweep's own cadence travels *in* the snapshot, so the
+page judges staleness without reading the daemon's properties.
 
 ## What the page does not do
 

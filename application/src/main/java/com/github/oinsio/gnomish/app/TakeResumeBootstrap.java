@@ -45,9 +45,7 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
         git.branches().harden(cloneDir);
         BranchLocation location = git.branches().locate(cloneDir, taskId);
         if (location instanceof BranchLocation.NotFound) {
-            throw new UsageException("could not resume task \"" + taskId + "\": no branch \""
-                    + TaskIdSanitizer.branchName(taskId)
-                    + "\" found locally, as a remote-tracking ref, or on origin (even after a fetch attempt)");
+            throw UsageException.branchNotFound(taskId);
         }
 
         String branchName = TaskIdSanitizer.branchName(taskId);

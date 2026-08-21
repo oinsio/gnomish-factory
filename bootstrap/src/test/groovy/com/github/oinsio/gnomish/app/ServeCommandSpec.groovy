@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
@@ -13,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -22,6 +22,7 @@ import java.nio.file.attribute.FileTime
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -149,13 +150,13 @@ tracker:
                 homeDir,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(0, null, null, null, null, null),
+                new ServeProperties(0, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 registry,
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                starter)
+                starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     // Non-termination guard: run() assembles a REAL FeedAutomaton whose outage retry (NFR-R3)
@@ -365,12 +366,11 @@ tracker:
     // add`/`git worktree remove --force` round trip and polls for the directory's disappearance.
     def "the worktree janitor is actually started and disposes an aged unheld worktree on startup"() {
         given: 'projectDir is a real git repo with one commit, and a registered, aged worktree'
-        def gitRunner = new GitProcessRunner()
-        assert gitRunner.run(projectDir, 'init').exitCode() == 0
+        initWorkingRepo(tempDir, 'project')
         commitAll(projectDir, 'init')
         def worktreePath = worktreesRoot.resolve('project').resolve('aged-task')
         Files.createDirectories(worktreePath.parent)
-        assert gitRunner.run(projectDir, 'worktree', 'add', worktreePath.toString(), '-b', 'task/aged-task').exitCode() == 0
+        addWorktree(projectDir, worktreePath, 'task/aged-task')
         def aged = FileTime.from(Instant.now() - Duration.ofDays(1))
         Files.walk(worktreePath).filter {
             Files.isRegularFile(it)
@@ -389,13 +389,13 @@ tracker:
                 homeDir,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(0, null, null, Duration.ofMillis(1), null, null),
+                new ServeProperties(0, null, null, Duration.ofMillis(1), null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: factory],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new CapturingStarter())
+                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
 
         when:
         runsToCompletion { command.run(args('serve', "--dir=$projectDir")) }
@@ -423,7 +423,7 @@ tracker:
     repo: acme/widgets
   heartbeat-interval: 20ms
 ''')
-        def listOpenCalls = new java.util.concurrent.atomic.AtomicInteger()
+        def listOpenCalls = new AtomicInteger()
         Tracker fakeTracker = [
             listOpen: { listOpenCalls.incrementAndGet(); [] },
         ] as Tracker

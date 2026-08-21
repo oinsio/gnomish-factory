@@ -2,11 +2,13 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
+import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.RunSummaryLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
+import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
 import java.time.Clock;
 import java.time.Instant;
@@ -34,6 +36,7 @@ final class ObservabilityWiring {
     private final SnapshotWriter snapshotWriter;
     private final LifecycleLedgerWriter lifecycleLedgerWriter;
     private final TaskOutcomeLedgerWriter taskOutcomeLedgerWriter;
+    private final SweepLedgerWriter sweepLedgerWriter;
     private final RotatingLedgerAppender ledgerAppender;
     private final InstanceInfo instance;
     private final Clock clock;
@@ -44,6 +47,7 @@ final class ObservabilityWiring {
             SnapshotWriter snapshotWriter,
             LifecycleLedgerWriter lifecycleLedgerWriter,
             TaskOutcomeLedgerWriter taskOutcomeLedgerWriter,
+            SweepLedgerWriter sweepLedgerWriter,
             RotatingLedgerAppender ledgerAppender,
             InstanceInfo instance,
             Clock clock) {
@@ -51,6 +55,7 @@ final class ObservabilityWiring {
         this.snapshotWriter = snapshotWriter;
         this.lifecycleLedgerWriter = lifecycleLedgerWriter;
         this.taskOutcomeLedgerWriter = taskOutcomeLedgerWriter;
+        this.sweepLedgerWriter = sweepLedgerWriter;
         this.ledgerAppender = ledgerAppender;
         this.instance = instance;
         this.clock = clock;
@@ -59,6 +64,11 @@ final class ObservabilityWiring {
     /** The {@code taskOutcome} write point every slot attaches to (FR11); never null. */
     TaskOutcomeLedgerWriter taskOutcomeLedgerWriter() {
         return taskOutcomeLedgerWriter;
+    }
+
+    /** The sweep's ledger write point, both its verdict and its tick sink (NFR-O2); never null. */
+    SweepLedgerWriter sweepLedgerWriter() {
+        return sweepLedgerWriter;
     }
 
     /** Starts the snapshot writer thread and records the {@code started} ledger line (FR1, FR12). */

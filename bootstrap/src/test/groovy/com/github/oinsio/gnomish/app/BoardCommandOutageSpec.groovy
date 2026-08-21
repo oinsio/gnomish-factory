@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
-import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
@@ -99,7 +98,7 @@ tracker:
                 new SystemClock(),
                 new ThreadSleeper(),
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
-                new SandboxProperties(null, null, null, null, null, null, false),
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]),
                 DiscoveredBindings.real(),
                 TaskGitFixture.real(),
@@ -116,7 +115,7 @@ tracker:
                 [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null))
+                new ServeProperties(0, null, null, null, null, null, null))
     }
 
     // NFR-R1: the tracker outage message ("gnomish run failed: <adapter message>") reaches stderr

@@ -51,8 +51,20 @@ for the exact shape:
 | `lifecycle` | "is the daemon up?" | `state` (`running\|draining\|stopping\|stopped`), `reason` |
 | `feed` | "is it claiming work?" | `state` (`filling\|idleEmpty\|idleBlocked\|full`), `since`, `lastPollAt`, `openFronts`, `wipLimit` |
 | `slots` | "what is it working right now?" | `capacity`, `entries[]` (`taskId`, `stage`, `attempt`, `since`) |
-| `vitals` | "are the daemon's own threads alive?" | `heartbeat` (`state`, `lastTickAt`, `heldClaims`), `reaper` (`lastRunAt`, `restartCount`, `intervalSeconds`), `janitor` (`lastRunAt`) |
+| `vitals` | "are the daemon's own threads alive?" | `heartbeat` (`state`, `lastTickAt`, `heldClaims`), `reaper` (`lastRunAt`, `restartCount`, `intervalSeconds`), `janitor` (`lastRunAt`), `sweep` (see below, or `null`) |
 | `tracker` | "is the tracker reachable?" | `lastSuccessAt`, `consecutiveFailures` |
+
+`vitals.sweep` is the sandbox-lifecycle sweep's entry: `lastTickAt`,
+`intervalSeconds` (the sweep's own cadence, the staleness yardstick for
+`lastTickAt` — not the top-level one), `counts` (the LAST tick's verdicts, per
+category: `checkedAlive`, `keptUnderThreshold`, `stoppedOrphan`, `disposedAged`,
+`disposedReconstructible`, `skippedNoVerdict`), `kept[]` (each kept environment's
+`taskKey`, `ageSeconds`, `untilReapSeconds`) with `keptTotal` stating any
+truncation, and `consecutiveSkippedTicks`. It is `null` until the daemon's first
+sweep tick completes, and absent from snapshots written before the sweep landed —
+both mean "no sweep data yet", never "a tick that counted zero". The ledger's
+`sweepAction` and `sweepTick` lines carry the per-action history the snapshot
+deliberately does not.
 
 Everything else stays with its own canon on purpose: ready-queue depth (the
 feed does not poll while `full` — the field would lie), per-task detail
@@ -101,6 +113,12 @@ the same `instance` block as the snapshot.
 | `taskOutcome` | a slot reaches a terminal result (`delivered\|awaitingHuman\|aborted\|revoked`) | `taskId`, `outcome`, `parkReason` (awaitingHuman only), `stage`, `attemptsUsed`, `startedAt`, `finishedAt`, `wallMillis`, `tokensByModel` |
 | `lifecycle` | daemon start/stop | `event` (`started\|stopped`), `reason` |
 | `runSummary` | drain-run completion only | `counts` per outcome, summed `tokensByModel`, `wallMillis` |
+| `sweepAction` | the sandbox-lifecycle sweep stops or disposes one object | `objectName`, `role`, `mode` (`tracked\|manual`), `taskKey`, `category` (`stoppedOrphan\|disposedAged\|disposedReconstructible`), `reason`, `ageSeconds` |
+| `sweepTick` | every completed sweep tick | `counts` per verdict category, including the untouched ones |
+
+Objects the sweep left untouched are never itemized — they are counted on the
+tick's `sweepTick` line only, so a day of quiet ticks costs one line per tick
+rather than one per container on the host.
 
 `EmptyQueue`/`Skipped` results write no `taskOutcome` line — an engine run
 happened if and only if spend happened, and spend is what the ledger

@@ -1,0 +1,140 @@
+package com.github.oinsio.gnomish.app;
+
+import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
+import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
+import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import java.nio.file.Path;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * The routing half of {@link TakeClaimAndWork}: with the claim already held and the heartbeat
+ * already beating, decide WHERE the work runs — fresh claim or resume by whether the task branch
+ * exists, then host or container by the sandbox mode the operator's bindings resolve to. Extracted
+ * from {@link TakeClaimAndWork}, which keeps the claim/crash-abort/heartbeat lifecycle, so neither
+ * file carries both concerns (file-size target, {@code process-invariants.md}); the behavior is
+ * unchanged and {@link TakeClaimAndWork} is passed whole as the parameter object, the same shape
+ * {@code ContainerRunTermination} uses for {@code ContainerRunSupport}.
+ *
+ * <p>Implements FR9, FR10, D3 of add-tracker-port; FR1, FR14 of add-serve-sandbox-lifecycle.
+ */
+final class TakeWorkRouter {
+
+    private TakeWorkRouter() {}
+
+    static TakeResult locateAndWork(
+            TakeClaimAndWork w,
+            Path cloneDir,
+            @Nullable String base,
+            PipelineDefinition definition,
+            RunArguments.InteractiveMode interactiveMode,
+            boolean discardWork,
+            TrackerTask trackerTask,
+            Tracker tracker,
+            InstanceId instanceId) {
+        TaskRef ref = trackerTask.ref();
+        String taskId = trackerTask.snapshot().id();
+        BranchLocation location = w.git.branches().locate(cloneDir, taskId);
+        if (location instanceof BranchLocation.NotFound) {
+            return freshClaim(w, cloneDir, base, definition, interactiveMode, trackerTask, tracker, instanceId);
+        }
+        return resume(w, cloneDir, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+    }
+
+    /**
+     * FR1, FR14 of add-serve-sandbox-lifecycle/add-sandbox-core: the same fail-closed,
+     * container-by-default selector {@code ManualRunDrive#driveGit} uses for {@code run} — a fresh
+     * claim is refused, not silently routed to host, when the operator's bindings resolve to
+     * container without its prerequisites (image + reachable Docker).
+     */
+    private static TakeResult freshClaim(
+            TakeClaimAndWork w,
+            Path cloneDir,
+            @Nullable String base,
+            PipelineDefinition definition,
+            RunArguments.InteractiveMode interactiveMode,
+            TrackerTask trackerTask,
+            Tracker tracker,
+            InstanceId instanceId) {
+        var plan = plan(w, definition);
+        return switch (plan.mode()) {
+            case HOST ->
+                TakeFreshClaim.claim(
+                        w.assembly,
+                        w.git,
+                        w.worktreesRoot,
+                        w.abortHandler,
+                        w.abortThreshold,
+                        w.credentialEnvVarsToScrub,
+                        cloneDir,
+                        base,
+                        definition,
+                        interactiveMode,
+                        trackerTask,
+                        tracker,
+                        instanceId,
+                        w.claimLossFlag);
+            case CONTAINER ->
+                TakeContainerFreshClaim.claim(
+                        w.assembly,
+                        w.git,
+                        w.containerTakeSupport,
+                        plan.segments(),
+                        w.abortHandler,
+                        w.abortThreshold,
+                        w.credentialEnvVarsToScrub,
+                        cloneDir,
+                        base,
+                        definition,
+                        interactiveMode,
+                        trackerTask,
+                        tracker,
+                        instanceId,
+                        w.claimLossFlag);
+        };
+    }
+
+    /**
+     * FR1 of add-serve-sandbox-lifecycle, design D8: the mode choice ends here. Both arms hand the
+     * SAME routing table ({@link TakeDispositionResume}) the mechanics for their mode, so a resumed
+     * branch is dispatched identically either way and no routing branch can exist in one mode only.
+     */
+    private static TakeResult resume(
+            TakeClaimAndWork w,
+            Path cloneDir,
+            PipelineDefinition definition,
+            RunArguments.InteractiveMode interactiveMode,
+            boolean discardWork,
+            String taskId,
+            Tracker tracker,
+            TaskRef ref,
+            InstanceId instanceId) {
+        var plan = plan(w, definition);
+        ResumeMechanics<? extends ResumedBranch> mechanics =
+                switch (plan.mode()) {
+                    case HOST -> new HostResumeMechanics(w.resumeRunner, w.git, w.worktreesRoot, definition);
+                    case CONTAINER ->
+                        new ContainerResumeMechanics(w.containerResumeRunner, plan.segments(), definition);
+                };
+        return routingTable(mechanics, w.git)
+                .resumeExisting(cloneDir, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+    }
+
+    private static <B extends ResumedBranch> TakeDispositionResume<B> routingTable(
+            ResumeMechanics<B> mechanics, TaskGit git) {
+        return new TakeDispositionResume<>(mechanics, new TakeDecisionResume<>(mechanics), git);
+    }
+
+    private static SandboxModeSelector.Plan plan(TakeClaimAndWork w, PipelineDefinition definition) {
+        return SandboxModeSelector.plan(
+                definition,
+                w.containerTakeSupport.bindingProperties(),
+                w.containerTakeSupport.sandboxProperties(),
+                w.containerTakeSupport.bindingRegistry(),
+                w.containerTakeSupport.dockerProbe());
+    }
+}

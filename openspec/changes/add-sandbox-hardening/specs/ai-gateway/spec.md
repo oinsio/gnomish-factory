@@ -23,7 +23,7 @@ virtual key restricted to the segment's stage-declared models, with an
 expiry and a budget ceiling equal to the task budget remaining at
 issuance. The key SHALL be revoked at segment end, task completion, and
 escalation.
-<!-- implements FR2 of add-sandbox-hardening -->
+<!-- implements FR2, NFR-C1 of add-sandbox-hardening -->
 
 #### Scenario: Key matches the segment
 - **WHEN** a segment whose stages declare model X starts
@@ -102,3 +102,15 @@ proceeds with a real provider key as a fallback.
 #### Scenario: Gateway down means no weaker fallback
 - **WHEN** the gateway is unreachable at segment start
 - **THEN** the segment does not start, the failure is infrastructure-class, and no environment receives a real provider credential
+
+### Requirement: Gateway and guard internals are unreachable from the box
+The gateway and the guard SHALL be local, factory-owned services.
+Gateway and guard configuration, the gateway master key, real provider
+keys, and TLS private keys SHALL be unreachable from inside the box:
+not present in the box filesystem or env, not served by any endpoint
+the box allowlist can reach, and not mounted into any task container.
+<!-- implements NFR-S1 of add-sandbox-hardening -->
+
+#### Scenario: Box cannot read the control plane
+- **WHEN** a process inside the box attempts to reach the gateway admin surface or read guard/gateway config, keys, or TLS private key material
+- **THEN** no such surface is reachable through the allowlist and no such material exists inside the box

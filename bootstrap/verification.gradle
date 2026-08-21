@@ -84,6 +84,19 @@ pitest {
         'com.github.oinsio.gnomish.app.ContainerModePipelineE2ESpec',
         'com.github.oinsio.gnomish.app.ContainerModeIsolationE2ESpec',
         'com.github.oinsio.gnomish.app.ContainerModeResumeE2ESpec',
+        // Same family, added for add-serve-sandbox-lifecycle (task 8.3): each drives a real Docker
+        // daemon (and, where noted, a real Gitea remote) per scenario/mutant, which is minutes of
+        // real container lifecycle per mutant rather than milliseconds — the "hangs on real I/O"
+        // failure mode `.claude/rules/testing.md` describes. The two production lines that had no
+        // other coverage (`ContainerRunSupport.revocationSalvageAndPush`, `ManualRunRunner`'s
+        // container-support factory) are `@DoNotMutate` for the identical reason, so excluding
+        // these specs removes no line from the mutation gate.
+        'com.github.oinsio.gnomish.app.TakeContainerLifecycleE2ESpec',
+        'com.github.oinsio.gnomish.app.SandboxLifecycleZombieE2ESpec',
+        'com.github.oinsio.gnomish.app.SandboxLifecycleLaunchRaceE2ESpec',
+        'com.github.oinsio.gnomish.app.SandboxLifecycleProjectScopingE2ESpec',
+        'com.github.oinsio.gnomish.app.ContainerLifecycleCoverageGapsE2ESpec',
+        'com.github.oinsio.gnomish.app.serve.TakeSlotRunnerContainerConcurrencySpec',
     ]
 }
 

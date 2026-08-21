@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry;
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe;
+import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -104,6 +105,14 @@ public final class ManualRunRunner implements ApplicationRunner {
     final GitResumeRunner gitResumeRunner;
     final ContainerGitModeRunner containerGitModeRunner;
     final ContainerResumeRunner containerResumeRunner;
+    /**
+     * The take/serve container bundle this root built (FR1, FR2 of add-serve-sandbox-lifecycle).
+     * Package-private, not a local: {@code ManualRunRunnerContainerOwnershipSpec} asserts the
+     * ownership label this bundle's factory actually stamps, beside {@link #containerGitModeRunner}'s
+     * {@code manual} one — the two differ only in that label, so nothing but the built pair proves it.
+     */
+    final ContainerTakeSupport containerTakeSupport;
+
     final BindingProperties bindingProperties;
     final SandboxProperties sandboxProperties;
     /** The bindings the classpath contributed, discovered once at context refresh (D6). */
@@ -176,11 +185,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                 CheckProviderSeam.resolve(
                         factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections())),
                 checkClientRegistry);
-        ContainerSupportFactory containerSupport = (clone, id, segments, sandboxProps, _, definition, creds) -> {
-            var credentials = new ArrayList<>(checkCredentials);
-            credentials.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));
-            return ContainerRunSupport.create(clone, id, segments, sandboxProps, credentials, creds);
-        };
+        ContainerSupportFactory containerSupport =
+                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.MANUAL);
         this.containerGitModeRunner =
                 new ContainerGitModeRunner(assembly, git, sandboxProperties, factoryProperties, containerSupport);
         this.containerResumeRunner = new ContainerResumeRunner(
@@ -188,6 +194,18 @@ public final class ManualRunRunner implements ApplicationRunner {
         this.bindingProperties = bindingProperties;
         this.sandboxProperties = sandboxProperties;
         this.bindingRegistry = bindingRegistry;
+        // FR1, FR2 of add-serve-sandbox-lifecycle: take/serve's own container support lambda,
+        // identical to run's above except for the ownership label it closes over (`tracked`, not
+        // `manual` — take/serve claim tasks through the tracker, run never does).
+        ContainerSupportFactory takeContainerSupport =
+                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.TRACKED);
+        this.containerTakeSupport = new ContainerTakeSupport(
+                factoryProperties,
+                bindingProperties,
+                sandboxProperties,
+                bindingRegistry,
+                dockerProbe,
+                takeContainerSupport);
         this.subcommandDispatch = SubcommandDispatchFactory.of(
                 assembly,
                 git,
@@ -204,7 +222,30 @@ public final class ManualRunRunner implements ApplicationRunner {
                 statusCommand,
                 usageCommand,
                 boardCommand,
-                dashboardCommand);
+                dashboardCommand,
+                SandboxLifecyclePassFactory.create(sandboxProperties, javaTimeClock),
+                containerTakeSupport);
+    }
+
+    /**
+     * Builds one {@link ContainerSupportFactory} closing over {@code mode} — {@code run}'s own
+     * ({@code MANUAL}) and take/serve's ({@code TRACKED}, FR1, FR2 of add-serve-sandbox-
+     * lifecycle) differ only in this label. Extracted to a named method (rather than two separate
+     * inline lambdas) so the two wirings are visibly the same construction with one differing
+     * argument. Both labels are asserted directly off the built pair by {@code
+     * ManualRunRunnerContainerOwnershipSpec}, which invokes each factory over a real temp clone
+     * and reads the ownership mode the resulting environments carry — no daemon needed, since
+     * building the bundle runs no Docker command. End to end they are exercised by {@code
+     * ContainerLifecycleCoverageGapsE2ESpec} ({@code MANUAL}, task 4.4) and the {@code
+     * TakeContainer*} fresh-claim specs ({@code TRACKED}, task 5.1).
+     */
+    static ContainerSupportFactory containerSupportFactory(
+            List<String> checkCredentials, Map<String, CheckClientFactory> checkClientRegistry, OwnershipMode mode) {
+        return (clone, id, segments, sandboxProps, _, definition, creds) -> {
+            var credentials = new ArrayList<>(checkCredentials);
+            credentials.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));
+            return ContainerRunSupport.create(clone, id, segments, sandboxProps, credentials, creds, mode);
+        };
     }
 
     /** No relevant flag present → no-op (FR12); otherwise drives the run (see class javadoc). */

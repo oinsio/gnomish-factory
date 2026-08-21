@@ -9,8 +9,9 @@ import java.util.List;
 
 /**
  * Builds a ready-to-use {@link TakeClaimAndWork} from the ingredients every take entry point already
- * holds, wiring the {@link TakeResumeRunner}/{@link TakeDispositionResume}/{@link TakeDecisionResume}
- * resume chain in one place. Extracted so that identical wiring is not triplicated across {@link
+ * holds, wiring the host and container resume runners in one place. The routing table above them is
+ * assembled per resume by {@link TakeWorkRouter}, once the run's execution mode is known (design D8
+ * of add-serve-sandbox-lifecycle). Extracted so that identical wiring is not triplicated across {@link
  * TakeBareAuto}, {@link TakeDisposition}, and {@code app.serve.TakeSlotRunner} — the sole crossing
  * point through which a caller (including one outside this package, task 4.3 of add-factory-serve)
  * gets a working instance without the three package-private resume-machinery classes being widened.
@@ -35,7 +36,8 @@ public final class TakeClaimAndWorkFactory {
             int abortThreshold,
             List<String> credentialEnvVarsToScrub,
             ClaimBeat heartbeat,
-            ClaimLossFlag claimLossFlag) {
+            ClaimLossFlag claimLossFlag,
+            ContainerTakeSupport containerTakeSupport) {
         var resumeRunner = new TakeResumeRunner(
                 assembly,
                 git,
@@ -45,8 +47,15 @@ public final class TakeClaimAndWorkFactory {
                 abortThreshold,
                 credentialEnvVarsToScrub,
                 claimLossFlag);
-        var dispositionResume =
-                new TakeDispositionResume(resumeRunner, new TakeDecisionResume(resumeRunner), git, worktreesRoot);
+        var containerResumeRunner = new TakeContainerResumeRunner(
+                assembly,
+                git,
+                containerTakeSupport,
+                abortHandler,
+                abortThreshold,
+                credentialEnvVarsToScrub,
+                claimLossFlag,
+                taskIdMdcKey);
         return new TakeClaimAndWork(
                 assembly,
                 git,
@@ -54,8 +63,10 @@ public final class TakeClaimAndWorkFactory {
                 abortHandler,
                 abortThreshold,
                 credentialEnvVarsToScrub,
-                dispositionResume,
+                resumeRunner,
                 heartbeat,
-                claimLossFlag);
+                claimLossFlag,
+                containerTakeSupport,
+                containerResumeRunner);
     }
 }

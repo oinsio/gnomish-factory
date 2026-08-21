@@ -122,6 +122,52 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Ownership asymmetry** — the repo may only tighten its sandbox; adapter
   bindings and any loosening are operator-only; reconciliation is fail-closed.
 
+## Sandbox lifecycle
+
+- **Sweep** — the periodic evaluation that decides, per Docker object, whether
+  it is alive, kept, or orphaned, and acts accordingly (stop, dispose, or
+  leave untouched). `run`/`take` run one sweep pass at startup; `serve` runs
+  it on a recurring tick.
+- **Sweep verdict** — the one classification a sweep emits per evaluated
+  object: `checked-alive`, `kept-under-threshold`, `stopped-orphan`,
+  `disposed-aged`, `disposed-reconstructible`, or `skipped-no-verdict`.
+- **Environment reaper** — the sweep's aged-disposal step: it disposes kept
+  environments (stopped boxes, container-less remnants) past the configured
+  reap age. *Not:* the **reaper** of Task coordination above, which reaps
+  stale tracker claims, not Docker objects. The two govern disjoint
+  populations and neither can act on the other's, but they are not fully
+  independent: on `serve` the sweep's **liveness oracle** reads the claim
+  reaper's most recent open-task listing and its staleness memory rather than
+  issuing a tracker call of its own, so a claim reaper that cannot list leaves
+  the sweep with no verdict (fail-closed) until it lists again.
+- **Kept environment** — a task's stopped box with its volume and network
+  retained, deliberately or after a sweep-initiated stop, so a later resume
+  can salvage it. *Not:* a running environment (that is simply "alive"), and
+  not a disposed one.
+- **Salvage** — recovering un-harvested work from a kept environment's volume
+  on resume, rather than starting over from the branch's last commit.
+- **Ownership mode** — the `tracked` (claimed through the tracker — `take`,
+  `serve`) or `manual` (`gnomish run`, no tracker) label stamped on every
+  object at creation, deciding whether the sweep judges it by claim liveness
+  or by age alone. *Not:* **Ownership asymmetry** of Sandbox above, which is
+  about who may bind or loosen a sandbox adapter, not about Docker object
+  cleanup.
+- **Project identity** — the label scoping a sweep to its own project: a
+  stable digest of the clone's `origin` remote URL, or an explicit operator
+  override. Objects labelled with a different project identity are invisible
+  to listing and never touched.
+- **Remnant** — a container-less Docker object (a volume or network whose
+  container is gone) left by a partial materialize or dispose; governed by
+  the same aged-reap policy as a kept environment, never disposed on sight.
+- **Minimum age** — the grace period after creation during which an object is
+  never touched by a sweep regardless of verdict, protecting a still-launching
+  slot from a concurrent tick.
+- **Liveness oracle** — the sweep's source of truth for whether a `tracked`
+  object's task is alive: the claim-heartbeat lease (fresh heartbeat = alive,
+  stale = dead), the same mechanism the claim reaper already uses. *Never:* an
+  instance registry or lock file — the sweep has no liveness source beyond
+  the tracker's own claim heartbeat.
+
 ## Abbreviations
 
 | Abbreviation | Meaning                                                                    |

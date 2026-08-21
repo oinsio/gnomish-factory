@@ -206,7 +206,17 @@ where one exists:
 | `factory.serve.slots`                 | `--slots`    | `2`     | N — concurrent claim/work slots for this instance                    |
 | `factory.serve.idle-poll-interval`     | —            | `30s`   | shared Idle-empty/Idle-blocked poll interval                         |
 | `factory.serve.sigterm-grace`         | —            | `30s`   | how long SIGTERM handling waits for in-flight slots before moving on |
-| `factory.serve.worktree-age-threshold` | —            | `14d`   | minimum worktree inactivity before the janitor disposes of it        |
+| `factory.serve.worktree-age-threshold` | —            | `14d`   | minimum **host worktree** inactivity before the janitor disposes of it |
+| `factory.serve.sandbox-sweep-interval` | —            | `5m`    | cadence of the sandbox sweep+reap tick (one immediate tick at startup, then this) |
+
+The last two govern **two disjoint populations with two disjoint cleaners**, and
+neither ever touches the other's objects: the janitor disposes of instance-local
+host worktrees by inactivity alone, while the sandbox sweep governs host-global
+Docker objects by ownership and age. The sweep's own thresholds (`factory.sandbox.minimum-age`, `kept-reap-age`,
+`manual-running-stop-age`, `project-id`) live with the rest of the sandbox
+configuration — see
+["Keep, resume, cleanup"](operator-guide-sandbox.md#keep-resume-cleanup) in the
+sandbox guide.
 
 **Protocol constants** — live only in the target project's own
 `.gnomish/config.yaml` `tracker:` section, shared by every instance (the same

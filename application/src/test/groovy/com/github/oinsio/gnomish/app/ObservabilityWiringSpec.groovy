@@ -2,28 +2,9 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
-import com.github.oinsio.gnomish.app.serve.SlotLedger
-import com.github.oinsio.gnomish.serveobservability.FeedPhase
-import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
-import com.github.oinsio.gnomish.serveobservability.HeartbeatState
-import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
-import com.github.oinsio.gnomish.serveobservability.JanitorVital
-import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
-import com.github.oinsio.gnomish.serveobservability.ReaperVital
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator
-import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
-import com.github.oinsio.gnomish.serveobservability.Snapshot
-import com.github.oinsio.gnomish.serveobservability.TrackerHealth
-import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
-import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
-import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
-import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
-import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
-import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
-import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
-import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -62,32 +43,8 @@ class ObservabilityWiringSpec extends Specification {
     }
 
     private ObservabilityWiring newWiring(Clock clock, LifecycleStateTracker lifecycleTracker) {
-        def snapshotFile = homeDir.resolve('snapshot.json')
-        def snapshotWriter = new SnapshotWriter(
-                snapshotFile,
-                { -> fixtureSnapshot(lifecycleTracker) },
-                new SnapshotJsonMapper(),
-                Duration.ofSeconds(30),
-                clock,
-                0)
-        def appender = new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()), homeDir, INSTANCE_NAME, clock)
-        def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, INSTANCE, clock)
-        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, INSTANCE, clock)
-        snapshotWriter.start()
-        return new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, INSTANCE, clock)
-    }
-
-    private static Snapshot fixtureSnapshot(LifecycleStateTracker tracker) {
-        def instance = INSTANCE
-        def feed = new FeedSnapshot(FeedPhase.IDLE_EMPTY, Instant.EPOCH, Instant.EPOCH, 0, 2)
-        def slots = new SlotsSnapshot(2, [])
-        def vitals = new VitalsSnapshot(
-                new HeartbeatVital(HeartbeatState.RUNNING, Instant.EPOCH, 0),
-                new ReaperVital(Instant.EPOCH, 0, 300L),
-                new JanitorVital(Instant.EPOCH))
-        def health = new TrackerHealth(null, 0)
-        return new Snapshot(1, Instant.EPOCH, 0L, instance, LifecycleSnapshotAssembler.assemble(tracker), feed, slots, vitals, health)
+        ObservabilityWiringTestFixtures.build(
+                homeDir, INSTANCE_NAME, INSTANCE, clock, lifecycleTracker, Duration.ofSeconds(30), true).wiring
     }
 
     def "finalizeStopped() transitions to stopped, writes the ledger line, and stops the writer — exactly once"() {
@@ -152,6 +109,23 @@ class ObservabilityWiringSpec extends Specification {
 
         expect:
         wiring.now() == now
+    }
+
+    // NFR-O2 of add-serve-sandbox-lifecycle: the sweep's write point is the one the wiring holds,
+    //     and it writes through this instance's own rotating appender — the same file every other
+    //     ledger line rotates into.
+    def "sweepLedgerWriter() returns a functional writer over the shared appender"() {
+        given:
+        def now = Instant.parse('2026-08-03T10:00:00Z')
+        def clock = Clock.fixed(now, ZoneOffset.UTC)
+        def wiring = newWiring(clock, new LifecycleStateTracker(now))
+
+        when:
+        wiring.sweepLedgerWriter().onTickCompleted(
+                new com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickRecord(now, [:], [], 0, 0))
+
+        then:
+        Files.readString(ledgerFile(now)).contains('"type":"sweepTick"')
     }
 
     def "newRunSummaryLedgerWriter() returns a functional writer over the shared appender"() {

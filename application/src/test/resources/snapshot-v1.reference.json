@@ -45,6 +45,29 @@
     },
     "janitor" : {
       "lastRunAt" : "2026-08-02T08:00:00Z"
+    },
+    "sweep" : {
+      "lastTickAt" : "2026-08-02T08:58:00Z",
+      "intervalSeconds" : 300,
+      "counts" : {
+        "checkedAlive" : 4,
+        "keptUnderThreshold" : 2,
+        "stoppedOrphan" : 1,
+        "disposedAged" : 1,
+        "disposedReconstructible" : 3,
+        "skippedNoVerdict" : 0
+      },
+      "kept" : [ {
+        "taskKey" : "task-40",
+        "ageSeconds" : 172800,
+        "untilReapSeconds" : 432000
+      }, {
+        "taskKey" : "task-41",
+        "ageSeconds" : 518400,
+        "untilReapSeconds" : 86400
+      } ],
+      "keptTotal" : 2,
+      "consecutiveSkippedTicks" : 0
     }
   },
   "tracker" : {

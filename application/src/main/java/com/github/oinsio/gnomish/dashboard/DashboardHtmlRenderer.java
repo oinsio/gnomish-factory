@@ -7,9 +7,10 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Renders the dashboard page as one self-contained HTML string (task 3.1):
- * three independently degrading sections — daemon, history, board — each
+ * four independently degrading sections — daemon, history, board, sandbox
+ * hygiene (the last added by add-serve-sandbox-lifecycle, NFR-O3) — each
  * carrying its own data timestamp, plus the page's own {@code generatedAt}
- * (FR2, FR3, FR10, NFR-O1). A string-template sibling of {@link
+ * (FR2, FR3, FR10, NFR-O1). A string-template sibling of {@code
  * com.github.oinsio.gnomish.app.BoardTextRenderer} / {@code
  * StatusTextRenderer}: plain Java text-building with escaped interpolation,
  * no template engine (ADR 0001, design D6). Static CSS lives as a constant
@@ -28,7 +29,8 @@ import org.jspecify.annotations.Nullable;
  * independent staleness layers, distinct from this class's own layer-2 page
  * banner.
  *
- * <p>Implements FR2, FR3, FR4, FR7, FR8, FR10, UX3, NFR-O1 of add-dashboard-page (design D3, D6).
+ * <p>Implements FR2, FR3, FR4, FR7, FR8, FR10, UX3, NFR-O1 of add-dashboard-page (design D3, D6);
+ * NFR-O3, UX1 of add-serve-sandbox-lifecycle.
  */
 public final class DashboardHtmlRenderer {
 
@@ -46,11 +48,14 @@ public final class DashboardHtmlRenderer {
             #staleness-banner.stale { display: flex; }
             .daemon-alert { background: #fff3e0; border: 2px solid #e65100; padding: 0.5rem; }
             .daemon-alert-text { color: #e65100; font-weight: bold; }
+            .sandbox-alert { background: #fff3e0; border: 2px solid #e65100; padding: 0.5rem; }
+            .sandbox-alert-text { color: #e65100; font-weight: bold; }
             """;
 
     private final DashboardDaemonSectionRenderer daemonSection = new DashboardDaemonSectionRenderer();
     private final DashboardHistorySectionRenderer historySection = new DashboardHistorySectionRenderer();
     private final DashboardBoardSectionRenderer boardSection = new DashboardBoardSectionRenderer();
+    private final DashboardSandboxHygieneSectionRenderer hygieneSection = new DashboardSandboxHygieneSectionRenderer();
 
     /**
      * Renders the full page from the three section view models, the page's
@@ -59,6 +64,8 @@ public final class DashboardHtmlRenderer {
      * @param daemonView the daemon section's data; never null
      * @param historyView the history section's data; never null
      * @param boardView the board section's data; never null
+     * @param hygieneView the sandbox hygiene section's data, {@link SandboxHygieneView#absent()}
+     *     when neither the snapshot nor the ledger carries sweep data; never null
      * @param generatedAt the page's own observation instant; never null
      * @param renderCadence the {@code --watch} render cadence, or {@code
      *     null} for a one-shot render — presence is what selects watch mode
@@ -69,11 +76,13 @@ public final class DashboardHtmlRenderer {
             DaemonSnapshotView daemonView,
             LedgerHistoryView historyView,
             BoardSectionView boardView,
+            SandboxHygieneView hygieneView,
             Instant generatedAt,
             @Nullable Duration renderCadence) {
         Objects.requireNonNull(daemonView, "daemonView");
         Objects.requireNonNull(historyView, "historyView");
         Objects.requireNonNull(boardView, "boardView");
+        Objects.requireNonNull(hygieneView, "hygieneView");
         Objects.requireNonNull(generatedAt, "generatedAt");
 
         StringBuilder out = new StringBuilder();
@@ -93,6 +102,7 @@ public final class DashboardHtmlRenderer {
         daemonSection.append(out, daemonView, generatedAt);
         historySection.append(out, historyView);
         boardSection.append(out, boardView);
+        hygieneSection.append(out, hygieneView, generatedAt);
         out.append("</body></html>\n");
         return out.toString();
     }

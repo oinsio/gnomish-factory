@@ -30,6 +30,7 @@ public final class DashboardRenderCycle {
 
     private final SnapshotReader snapshotReader = new SnapshotReader();
     private final LedgerAggregator ledgerAggregator = new LedgerAggregator();
+    private final SweepActionAggregator sweepActionAggregator = new SweepActionAggregator();
     private final DashboardHtmlRenderer htmlRenderer = new DashboardHtmlRenderer();
 
     /**
@@ -52,7 +53,30 @@ public final class DashboardRenderCycle {
             @Nullable Duration renderCadence) {
         var daemonView = snapshotReader.read(ObservabilityPaths.snapshotFile(homeDir, instanceName), now);
         var historyView = readHistory(homeDir, instanceName, now);
-        return htmlRenderer.render(daemonView, historyView, boardView, now, renderCadence);
+        var hygieneView = readHygiene(daemonView, homeDir, instanceName, now);
+        return htmlRenderer.render(daemonView, historyView, boardView, hygieneView, now, renderCadence);
+    }
+
+    /**
+     * NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section composes the snapshot's sweep
+     * vital with the ledger's sweep actions, and degrades on each half independently — an
+     * unreadable ledger leaves the vital's breakdown intact, and a snapshot from a build without
+     * the vital still shows the ledger's actions.
+     */
+    private SandboxHygieneView readHygiene(
+            DaemonSnapshotView daemonView, Path homeDir, String instanceName, Instant now) {
+        var sweep = SweepVitalReader.read(daemonView);
+        SweepActionWindow actions;
+        try {
+            actions = sweepActionAggregator.aggregate(
+                    homeDir,
+                    instanceName,
+                    LocalDate.ofInstant(now, ZoneOffset.UTC),
+                    LedgerAggregator.DEFAULT_WINDOW_DAYS);
+        } catch (IOException malformedLedger) {
+            actions = SweepActionWindow.EMPTY;
+        }
+        return new SandboxHygieneView(sweep, actions.rows(), actions.total());
     }
 
     private LedgerHistoryView readHistory(Path homeDir, String instanceName, Instant now) {

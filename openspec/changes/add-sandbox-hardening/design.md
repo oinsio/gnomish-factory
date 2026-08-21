@@ -3,12 +3,16 @@
 ## Context
 
 Driven by FR1–FR16, NFR-S1–S3 of the proposal. Change A left deliberate
-seams for this change: the factory CA baked into images, mitmdump as the
-guard (interception is a mode switch), the `ANTHROPIC_BASE_URL`/
-`ANTHROPIC_AUTH_TOKEN` env seam, the `SecretsProvider` port, and the
-snapshot-free environment port. Threat registry items to close: #11, #15
-(L7), #16, #17, #31, #45. Explore sessions already
-resolved the tool landscape; decisions below fix the remaining structure.
+seams: the CA import seam in the reference image (`ca/` may have been
+empty until now), mitmdump as the guard (interception is a mode switch),
+the `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env seam, the
+`SecretsProvider` port, and the snapshot-free environment port.
+`fix-denial-report-attachment` (archived) already delivered the
+verdict-independent denials slot NFR-O1 presumes;
+`add-serve-sandbox-lifecycle` (active, lands first) replaces startup
+orphan cleanup with the `sandbox-lifecycle` ownership scheme. Threat
+registry items to close: #11, #15 (L7), #16, #17, #31, #45. Explore
+sessions resolved the tool landscape; decisions below fix the rest.
 
 ## Goals / Non-Goals
 
@@ -63,7 +67,9 @@ restriction, and a leaked key stays valid for the whole task.
 
 ### D4. TLS interception is a guard mode switch with narrow scope
 mitmproxy flips from SNI/CONNECT passthrough to interception using the
-CA already baked by change A — no image rebuild, no tool swap.
+CA import seam change A baked into the reference image — no tool swap.
+Images built with a populated `ca/` need no rebuild; those built while
+`ca/` was validly empty need one rebuild with the CA present (UX3).
 Interception applies to allowlisted non-gateway hosts; per-host
 passthrough exceptions cover certificate-pinned tools (documented, UX3).
 In interception mode the guard enforces L7 rules (path prefixes +
@@ -113,11 +119,15 @@ guards against unpinned-version drift; the manual path is
 of the labeled snapshot as the factory-less emergency fallback.
 `docker commit` exists *only* in the provisioning flow; the environment
 port stays snapshot-free (change A invariant), so a gnome-touched box
-can never persist. Snapshots carry factory labels; after a successful
-build, superseded snapshots of the project are removed and startup prune
-reclaims orphans (mirrors change A cleanup). Concurrent provisioning of
-one fingerprint is serialized by a factory-side lock; losers reuse the
-winner's image.
+can never persist. Snapshots and provisioning containers carry
+provisioning-scoped factory labels with project identity; snapshot
+images are project-scoped and sit outside the task-keyed
+`sandbox-lifecycle` ownership scheme (its explicit non-goal), so this
+change owns their cleanup: after a successful build, superseded
+snapshots of the project are removed, and the provisioning flow
+reclaims orphaned provisioning containers and partial images by label.
+Concurrent provisioning of one fingerprint is serialized by a
+factory-side lock; losers reuse the winner's image.
 <!-- implements FR13, FR14, FR15, NFR-R2 of add-sandbox-hardening -->
 
 ### D8. Image resolution order: snapshot, else operator image
@@ -158,7 +168,7 @@ account pinning is the real defense).
 - [Virtual key is still a secret while alive] → per-segment lifetime,
   budget ceiling, revocation; header-injection variant removes even that.
 - [Certificate pinning breaks under interception] → per-host passthrough
-  exceptions, documented list, self-check catches surprises.
+  exceptions; self-check catches surprises.
 - [Protocol translation quality for cross-provider judges unknown] →
   spike (Q3); transport works, grading quality gated before recommending.
 - [Provisioning adds a first-task latency spike per project] → paid once

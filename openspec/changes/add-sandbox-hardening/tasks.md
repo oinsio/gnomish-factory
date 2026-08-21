@@ -3,7 +3,10 @@
 Order follows the migration plan (design): gateway first (no TLS
 complexity), provisioning second (independent), interception third, E2E
 and docs last. Every layer lands behind its own default-off switch.
-Requires change A (`add-sandbox-core`) implemented.
+Requires change A (`add-sandbox-core`) implemented. Coordination:
+`fix-denial-attribution-durability` and `add-serve-sandbox-lifecycle`
+land first; the findings slot already exists (task 2.7) and container
+labels follow the `sandbox-lifecycle` scheme (task 4.4/4.5).
 
 ## 1. Spikes and tool re-verification
 
@@ -18,10 +21,11 @@ Requires change A (`add-sandbox-core`) implemented.
 - [ ] 2.4 Budget-failure classification: distinct "budget exceeded: spent X of Y" escalation, no stage attempt burned (FR3, UX2)
 - [ ] 2.5 Per-key rate limit configuration on the gateway (FR4)
 - [ ] 2.6 Environment wiring: box env gets gateway base URL + virtual key through the existing seam; AI-provider hosts leave the box allowlist when the gateway is on (FR1, D1)
-- [ ] 2.7 Verdict-independent findings slot in the report model: a denial/observability findings field carried into state.json/status.json independently of any check `Verdict`, so a passing round can still surface findings without flipping its outcome (parallel to core task 8.4a's `PollStatus.Pass` change); wire change A's captured base allowlist denials (`EgressGuard.denialFindings()`) through the `TaskExecutionEnvironment` port into this slot, discharging add-sandbox-core Q6; the prerequisite for every findings-attachment task below (2.8, 3.2, 5.2, 5.3) (NFR-O1)
+- [ ] 2.7 Route the new denial sources through the existing verdict-independent findings slot: the slot, the port accessor (`TaskExecutionEnvironment.denialFindings()` → `AttemptRecord.denials` → state.json/status.json), and base-allowlist-denial attachment were delivered by the archived `fix-denial-report-attachment` — do NOT rebuild them; this task extends the guard/gateway recording so L7 denials, stripped headers, stripped tools, and budget events flow through the same channel; the prerequisite for 2.8, 3.2, 5.2, 5.3 (NFR-O1)
 - [ ] 2.8 Cost ledger: read per-segment spend, attach to task report via the findings slot (2.7), flag anomalies via config multiplier baseline (FR6, NFR-O1, D10)
 - [ ] 2.9 Fail-closed paths: gateway unreachable / issuance failure = infrastructure failure, never a real-key fallback (NFR-R1)
-- [ ] 2.10 Specs (WireMock as gateway): issuance/revocation, budget failure surfacing, ledger read, base-denial finding reaches the report on a passing round, "no real provider key in box env" assertion (M2)
+- [ ] 2.10 Control-plane isolation: gateway/guard config, master key, provider keys, and TLS private keys unreachable from the box — no admin surface on the box allowlist, no key material mounted or in env; spec asserts it (NFR-S1)
+- [ ] 2.11 Specs (WireMock as gateway): issuance/revocation, budget failure surfacing, ledger read, hardening-denial finding reaches the report on a passing round, "no real provider key in box env" assertion (M2)
 
 ## 3. Tool policy and multi-provider
 
@@ -35,13 +39,13 @@ Requires change A (`add-sandbox-core`) implemented.
 - [ ] 4.1 Recognize `.gnomish/setup.sh` as law surface: read from the factory law clone, loading executes nothing (FR12)
 - [ ] 4.2 Provisioning flow: one-shot container from the base image with working copy materialized from the law clone, egress through the guard, gnome never enters (FR12, D6)
 - [ ] 4.3 Snapshot commit: fingerprint naming (`sha256(setup.sh)+base digest`), working copy and secret material removed before commit (FR13, FR16, D7)
-- [ ] 4.4 Image resolution in the container adapter: valid snapshot first (name + TTL `factory.sandbox.snapshot-max-age`), else operator image; rebuild triggers (fingerprint, TTL, `gnomish env rebuild` / `--rebuild-env`); provisioning failure = infrastructure failure (FR13, D8)
-- [ ] 4.5 Snapshot lifecycle: factory labels, superseded-image cleanup after successful build, startup orphan sweep, per-fingerprint provisioning lock (FR15, NFR-R2)
+- [ ] 4.4 Image resolution in the container adapter: valid snapshot first (name + TTL `factory.sandbox.snapshot-max-age`), else operator image; rebuild triggers (fingerprint, TTL, `gnomish env rebuild` / `--rebuild-env`); provisioning failure = infrastructure failure (FR13, NFR-P1, D8)
+- [ ] 4.5 Snapshot lifecycle: provisioning-scoped factory labels (project identity; snapshot images are outside the task-keyed `sandbox-lifecycle` scheme per its non-goal — this change owns their cleanup), superseded-image cleanup after successful build, label-based reclaim of orphaned provisioning containers/partial images, per-fingerprint provisioning lock (FR15, NFR-R2)
 - [ ] 4.6 Specs (Docker-gated): snapshot reuse, rebuild-exactly-once on content change, crash-safe cleanup, setup-secret hygiene incl. image history (M3, M6)
 
 ## 5. Interception, credential policy, L7
 
-- [ ] 5.1 Guard interception mode switch on the baked CA; per-host passthrough exceptions; unbuffered streaming settings (FR8)
+- [ ] 5.1 Guard interception mode switch on the image CA seam (a factory CA must be generated and present in the image's `ca/`; images built with an empty `ca/` need one rebuild); per-host passthrough exceptions; unbuffered streaming settings (FR8, NFR-P1)
 - [ ] 5.2 Credential policy at the guard: strip non-factory auth headers on policy hosts, optional injection with in-box sentinel; stripped headers → findings; credentials never logged (FR9, NFR-S2)
 - [ ] 5.3 Per-host L7 rules (paths, methods) from operator config; violations recorded like denials (FR10)
 - [ ] 5.4 Extended self-check probes per enabled layer: gateway/key valid, interception active, foreign header does not survive, disallowed tool stripped; failure = infrastructure failure (FR11, D5)
@@ -54,4 +58,5 @@ Requires change A (`add-sandbox-core`) implemented.
 - [ ] 6.3 E2E: second task starts from snapshot without setup.sh re-run; changed script rebuilds once (M3)
 - [ ] 6.4 E2E: with stripping artificially disabled, extended self-check refuses task start (M5)
 - [ ] 6.5 E2E: provisioning secret unobservable in gnome phase (env, filesystem, image layers) (M6)
-- [ ] 6.6 Docs: gateway compose recipe, certificate-pinning passthrough list, setup.sh pinning discipline, switch matrix and safe-enable order (UX1, UX3, UX4)
+- [ ] 6.6 Docs: gateway compose recipe, certificate-pinning passthrough list, CA generation and the one-time rebuild for images built with an empty `ca/`, setup.sh pinning discipline, switch matrix and safe-enable order (UX1, UX3, UX4)
+- [ ] 6.7 Glossary: entries for AI gateway, virtual key, sentinel, provisioning (container/phase), snapshot image (disambiguated from the git "snapshot commit"), and the inherited "segment" (`docs/glossary.md`)

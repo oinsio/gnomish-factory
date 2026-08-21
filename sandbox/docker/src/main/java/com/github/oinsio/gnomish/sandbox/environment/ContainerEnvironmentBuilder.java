@@ -28,7 +28,8 @@ final class ContainerEnvironmentBuilder {
             Clock clock,
             ChildEnvAllowlist allowlist,
             Sleeper sleeper,
-            Path guardConfigRoot) {
+            Path guardConfigRoot,
+            ObjectOwnership ownership) {
         var environment = new ContainerTaskExecutionEnvironment(
                 docker,
                 key,
@@ -39,9 +40,10 @@ final class ContainerEnvironmentBuilder {
                 sandbox.limits(),
                 sandbox.enforceDiskQuota(),
                 clock,
-                allowlist);
+                allowlist,
+                ownership);
         var guard = new EgressGuard(
-                docker, key, sandbox.guardImage(), sandbox.egressAllowlist(), guardConfigRoot.resolve(key));
+                docker, key, sandbox.guardImage(), sandbox.egressAllowlist(), guardConfigRoot.resolve(key), ownership);
         var selfCheck = new EnvironmentSelfCheck(
                 environment, guard, docker, key, sandbox.runtime(), sandbox.egressAllowlist(), sleeper);
         return new SelfCheckedEnvironment(environment, selfCheck, guard);

@@ -23,6 +23,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     static final String KEY = 'org-repo-7'
     static final ResourceLimits LIMITS = new ResourceLimits('2', '2g', 512L, '10g')
     static final Path SOURCE_CLONE = Path.of('/factory/project-clone')
+    static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
 
     def docker = new RecordingDockerCli()
     def clock = { -> Instant.now() } as Clock
@@ -33,7 +34,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
     private ContainerTaskExecutionEnvironment env(String image = 'gnomish/img') {
         new ContainerTaskExecutionEnvironment(
-                docker, KEY, SOURCE_CLONE, harvester, image, 'runc', LIMITS, false, clock, ChildEnvAllowlist.none())
+                docker, KEY, SOURCE_CLONE, harvester, image, 'runc', LIMITS, false, clock, ChildEnvAllowlist.none(), OWNERSHIP)
     }
 
     def setup() {
@@ -53,10 +54,10 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         then:
         docker.runs == [
             INSPECT,
-            DockerCommands.createNetwork(KEY),
-            DockerCommands.createVolume(KEY),
-            DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', null),
-            DockerCommands.runContainer(KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work'),
+            DockerCommands.createNetwork(KEY, OWNERSHIP),
+            DockerCommands.createVolume(KEY, OWNERSHIP),
+            DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', null, OWNERSHIP),
+            DockerCommands.runContainer(KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP),
             DockerCommands.exec(KEY, '/gnomish/work', [:], false, [
                 'mkdir',
                 '-p',
@@ -108,7 +109,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         then:
         docker.runs == [
             INSPECT,
-            DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', 'pin99'),
+            DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', 'pin99', OWNERSHIP),
         ]
     }
 
@@ -128,7 +129,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
         then:
         noExceptionThrown()
-        docker.runs.contains(DockerCommands.createVolume(KEY))
+        docker.runs.contains(DockerCommands.createVolume(KEY, OWNERSHIP))
     }
 
     def "FR3: the seed helper mounts the factory clone read-only and the task container never mounts it"() {
@@ -175,7 +176,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
         then:
         def seed = docker.runs[3]
-        seed == DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', 'abc123')
+        seed == DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', 'abc123', OWNERSHIP)
         seed.last() == 'abc123'
         seed[seed.size() - 2] == 'gnomish/task-x'
         seed[seed.indexOf('-c') + 1].contains('git reset --hard "$2"')
@@ -359,7 +360,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
             -> factoryEnv
         })
         def e = new ContainerTaskExecutionEnvironment(
-                docker, KEY, SOURCE_CLONE, harvester, 'gnomish/img', 'runc', LIMITS, false, clock, allowlist)
+                docker, KEY, SOURCE_CLONE, harvester, 'gnomish/img', 'runc', LIMITS, false, clock, allowlist, OWNERSHIP)
         e.materialize('task/x', null)
 
         when: 'an exec with a factory-set fragment starts (the recording fake then stops it)'

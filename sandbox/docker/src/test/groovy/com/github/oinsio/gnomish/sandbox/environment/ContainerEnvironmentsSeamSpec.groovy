@@ -25,7 +25,7 @@ class ContainerEnvironmentsSeamSpec extends Specification {
     static final String KEY = 'org-repo-9'
 
     def docker = new RecordingDockerCli()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, null, null, false)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, null, null, false, null, null, null, null)
     def clock = { -> Instant.now() } as Clock
     def harvester = { String container, String branch -> } as ContainerHarvest
     def sleeper = { Duration d -> } as Sleeper
@@ -33,7 +33,8 @@ class ContainerEnvironmentsSeamSpec extends Specification {
     private ContainerEnvironments environments(ChildEnvAllowlist allowlist) {
         new ContainerEnvironments(
                 docker, KEY, Path.of('/factory/clone'), harvester, sandbox,
-                clock, allowlist, sleeper, Path.of('/factory/guard-config'))
+                clock, allowlist, sleeper, Path.of('/factory/guard-config'),
+                OwnershipMode.TRACKED, 'proj-1')
     }
 
     // The app-layer assemblies construct through forTask because DockerCli is package-private
@@ -41,10 +42,25 @@ class ContainerEnvironmentsSeamSpec extends Specification {
         when: 'the production construction path runs'
         def seam = ContainerEnvironments.forTask(
                 KEY, Path.of('/factory/clone'), harvester, sandbox,
-                clock, ChildEnvAllowlist.none(), sleeper, Path.of('/factory/guard-config'))
+                clock, ChildEnvAllowlist.none(), sleeper, Path.of('/factory/guard-config'),
+                OwnershipMode.TRACKED, 'proj-1')
 
         then: 'the seam is real and carries the round key it was built for'
         seam.baseKey() == KEY
+    }
+
+    // FR2 of add-serve-sandbox-lifecycle: the seam reports the mode it was built with, not a
+    // default — this is what lets a composition root's wiring be asserted without a live daemon
+    // (`ManualRunRunnerContainerOwnershipSpec` in bootstrap reads exactly this).
+    def "ownershipMode reports the mode the seam was constructed with"() {
+        expect:
+        environments(ChildEnvAllowlist.none()).ownershipMode() == OwnershipMode.TRACKED
+
+        and:
+        new ContainerEnvironments(
+                docker, KEY, Path.of('/factory/clone'), harvester, sandbox,
+                clock, ChildEnvAllowlist.none(), sleeper, Path.of('/factory/guard-config'),
+                OwnershipMode.MANUAL, 'proj-1').ownershipMode() == OwnershipMode.MANUAL
     }
 
     // FR9: the probe answers what the composed allowlist actually does, never a hardwired boolean

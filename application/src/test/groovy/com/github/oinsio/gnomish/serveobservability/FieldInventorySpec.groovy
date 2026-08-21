@@ -38,7 +38,7 @@ class FieldInventorySpec extends Specification {
 
     /** The closed set of field meanings NFR-S1 permits. */
     enum FieldCategory {
-        IDENTIFIER, STATE, COUNTER, TIMESTAMP, TOKEN_COUNT
+        IDENTIFIER, STATE, COUNTER, TIMESTAMP, TOKEN_COUNT, SHORT_PHRASE
     }
 
     /**
@@ -60,8 +60,24 @@ class FieldInventorySpec extends Specification {
         state : FieldCategory.STATE,
         outcome : FieldCategory.STATE,
         event : FieldCategory.STATE,
-        reason : FieldCategory.STATE,
+        reason : FieldCategory.SHORT_PHRASE,
         parkReason : FieldCategory.STATE,
+        // sweep vitals and sweep ledger lines (add-serve-sandbox-lifecycle)
+        objectName : FieldCategory.IDENTIFIER,
+        taskKey : FieldCategory.IDENTIFIER,
+        role : FieldCategory.STATE,
+        mode : FieldCategory.STATE,
+        category : FieldCategory.STATE,
+        ageSeconds : FieldCategory.COUNTER,
+        untilReapSeconds : FieldCategory.COUNTER,
+        keptTotal : FieldCategory.COUNTER,
+        consecutiveSkippedTicks: FieldCategory.COUNTER,
+        checkedAlive : FieldCategory.COUNTER,
+        keptUnderThreshold : FieldCategory.COUNTER,
+        stoppedOrphan : FieldCategory.COUNTER,
+        disposedAged : FieldCategory.COUNTER,
+        disposedReconstructible: FieldCategory.COUNTER,
+        skippedNoVerdict : FieldCategory.COUNTER,
         // counters
         intervalSeconds : FieldCategory.COUNTER,
         openFronts : FieldCategory.COUNTER,
@@ -109,6 +125,8 @@ class FieldInventorySpec extends Specification {
         'heartbeat',
         'reaper',
         'janitor',
+        'sweep',
+        'kept',
         'tracker',
         'counts',
         'tokensByModel',
@@ -119,8 +137,9 @@ class FieldInventorySpec extends Specification {
 
     static final ISO_INSTANT = ~/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
     static final SHORT_TOKEN = ~/^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}$/
+    static final SHORT_PHRASE = ~/^[A-Za-z0-9][A-Za-z0-9._\-, ]{0,79}$/
 
-    def "snapshot reference document: every field is an identifier, state, counter, timestamp, or token count"() {
+    def "snapshot reference document: every field is an identifier, state, counter, timestamp, token count, or short phrase"() {
         given:
         def root = SnapshotJson.mapper().readTree(resourceStream('snapshot-v1.reference.json'))
 
@@ -128,7 +147,7 @@ class FieldInventorySpec extends Specification {
         assertSubtree('$', root, false)
     }
 
-    def "ledger reference document: every field of every line is an identifier, state, counter, timestamp, or token count"() {
+    def "ledger reference document: every field of every line is an identifier, state, counter, timestamp, token count, or short phrase"() {
         given:
         def lines = resourceText('ledger-v1.reference.jsonl').readLines().findAll {
             !it.isBlank()
@@ -139,7 +158,7 @@ class FieldInventorySpec extends Specification {
             def root = LedgerJson.mapper().readTree(line)
             assertSubtree('$', root, false)
         }
-        lines.size() == 5
+        lines.size() == 7
     }
 
     /**
@@ -165,7 +184,7 @@ class FieldInventorySpec extends Specification {
                 }
                 if (underTokensByModel) {
                     // model entry's own children: input/output/cacheCreation/cacheRead
-                    assertLeaf(childPath, key, entry.value, FieldCategory.TOKEN_COUNT)
+                    assertLeaf(childPath, entry.value, FieldCategory.TOKEN_COUNT)
                     return
                 }
                 if (CONTAINER_KEYS.contains(key) || entry.value.isObject() || entry.value.isArray()) {
@@ -186,14 +205,14 @@ class FieldInventorySpec extends Specification {
         def category = ALLOWED_FIELDS[key]
         assert category != null: "Field '${path}' (key '${key}') is not on the NFR-S1 allow-list — " +
         "possible task-content/prompt/credential leak, or a new field needs an explicit category"
-        assertLeaf(path, key, value, category)
+        assertLeaf(path, value, category)
     }
 
     private static void assertIdentifier(String path, String value) {
         assert value ==~ SHORT_TOKEN: "Field '${path}': dynamic model-id key '${value}' does not look like a short identifier"
     }
 
-    private static void assertLeaf(String path, String key, JsonNode value, FieldCategory category) {
+    private static void assertLeaf(String path, JsonNode value, FieldCategory category) {
         if (value.isNull()) {
             // Nullable fields (reason, stage, parkReason, tracker.lastSuccessAt, ...) are
             // legitimately absent-valued; null itself carries no content to leak.
@@ -204,6 +223,11 @@ class FieldInventorySpec extends Specification {
                 assert value.isTextual(): "Field '${path}' (identifier) must be a string, was: ${value.nodeType}"
                 assert value.textValue() ==~ SHORT_TOKEN:
                 "Field '${path}' (identifier) value '${value.textValue()}' is not a short token — possible free text"
+                break
+            case FieldCategory.SHORT_PHRASE:
+                assert value.isTextual(): "Field '${path}' (short phrase) must be a string, was: ${value.nodeType}"
+                assert value.textValue() ==~ SHORT_PHRASE:
+                "Field '${path}' (short phrase) value '${value.textValue()}' is not a short phrase — possible free text"
                 break
             case FieldCategory.STATE:
                 assert value.isTextual(): "Field '${path}' (state) must be a string, was: ${value.nodeType}"

@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
+import com.github.oinsio.gnomish.adapter.git.OriginRemoteUrl;
+import com.github.oinsio.gnomish.app.git.ProjectIdentity;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
@@ -9,7 +11,9 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
+import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -38,6 +42,10 @@ final class ContainerRunSupportFactory {
      *     composition root — no vendor constant is named here
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential names;
      *     empty for plain {@code gnomish run}
+     * @param ownershipMode the ownership label to stamp on every object this run creates (FR2 of
+     *     add-serve-sandbox-lifecycle): {@code MANUAL} for {@code gnomish run}, {@code TRACKED}
+     *     for {@code take}/{@code serve} — the caller's lambda closes over its own constant, this
+     *     factory never decides it
      */
     static ContainerRunSupport create(
             Path cloneDir,
@@ -45,11 +53,14 @@ final class ContainerRunSupportFactory {
             List<Segment> segments,
             SandboxProperties sandboxProperties,
             List<String> checkCredentialEnvVars,
-            List<String> credentialEnvVarsToScrub) {
+            List<String> credentialEnvVarsToScrub,
+            OwnershipMode ownershipMode) {
         var runner = new GitProcessRunner();
         List<String> credentials = new ArrayList<>(credentialEnvVarsToScrub);
         credentials.addAll(checkCredentialEnvVars);
         var allowlist = ChildEnvAllowlist.of(sandboxProperties.envPassthrough(), credentials);
+        String projectId = ProjectIdentity.resolve(
+                sandboxProperties.projectId(), OriginRemoteUrl.read(runner, cloneDir), cloneDir);
         var environments = ContainerEnvironments.forTask(
                 TaskIdSanitizer.sanitize(taskId),
                 cloneDir,
@@ -58,7 +69,10 @@ final class ContainerRunSupportFactory {
                 new SystemClock(),
                 allowlist,
                 new ThreadSleeper(),
-                Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir")), "gnomish-guard"));
-        return new ContainerRunSupport(runner, cloneDir, taskId, environments, segments);
+                Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir")), "gnomish-guard"),
+                ownershipMode,
+                projectId);
+        var sandboxLifecyclePass = SandboxLifecyclePassFactory.create(sandboxProperties, Clock.systemUTC());
+        return new ContainerRunSupport(runner, cloneDir, taskId, environments, segments, sandboxLifecyclePass);
     }
 }

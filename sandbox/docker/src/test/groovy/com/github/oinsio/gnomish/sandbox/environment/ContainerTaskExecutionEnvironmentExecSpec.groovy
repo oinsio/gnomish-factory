@@ -4,14 +4,9 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
-import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 import java.time.Instant
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 
@@ -34,7 +29,7 @@ class ContainerTaskExecutionEnvironmentExecSpec extends Specification {
     private ContainerTaskExecutionEnvironment env(DockerCli docker) {
         new ContainerTaskExecutionEnvironment(
                 docker, 'k1', Path.of('/factory/clone'), harvester, 'gnomish/img', 'runc', LIMITS, false, clock,
-                ChildEnvAllowlist.none())
+                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
     }
 
     def "FR24: exec passes -i and ChildProcessStdin.feed really delivers the stdin bytes to the child"() {
@@ -85,70 +80,5 @@ class ContainerTaskExecutionEnvironmentExecSpec extends Specification {
         then:
         result.isPresent()
         new String(result.get(), StandardCharsets.UTF_8) == 'file-body'
-    }
-
-    /** Management calls (inspect/create/…) all succeed; every {@code start} returns the one scripted process. */
-    private static final class ScriptedDockerCli extends DockerCli {
-        final List<List<String>> starts = []
-        private final Process process
-
-        ScriptedDockerCli(Process process) {
-            super('docker')
-            this.process = process
-        }
-
-        @Override
-        DockerResult run(List<String> args) {
-            args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
-        }
-
-        @Override
-        Process start(List<String> args, boolean mergeStderr) {
-            starts << args
-            process
-        }
-    }
-
-    private static final class LatchedStdin extends ByteArrayOutputStream {
-        final CountDownLatch closed = new CountDownLatch(1)
-
-        @Override
-        void close() {
-            closed.countDown()
-        }
-    }
-
-    private static final class ScriptedProcess extends Process {
-        final LatchedStdin stdin = new LatchedStdin()
-        byte[] stdout = new byte[0]
-        int exit = 0
-
-        @Override
-        OutputStream getOutputStream() {
-            stdin
-        }
-
-        @Override
-        InputStream getInputStream() {
-            new ByteArrayInputStream(stdout)
-        }
-
-        @Override
-        InputStream getErrorStream() {
-            new ByteArrayInputStream(new byte[0])
-        }
-
-        @Override
-        int waitFor() {
-            exit
-        }
-
-        @Override
-        int exitValue() {
-            exit
-        }
-
-        @Override
-        void destroy() {}
     }
 }

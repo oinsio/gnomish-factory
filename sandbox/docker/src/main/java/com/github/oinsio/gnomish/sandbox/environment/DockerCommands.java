@@ -38,34 +38,31 @@ final class DockerCommands {
 
     private DockerCommands() {}
 
-    /** {@code network create --internal} (no route out but the guard) with factory labels. */
-    static List<String> createNetwork(String key) {
-        return List.of(
-                "network",
-                "create",
-                "--internal",
-                "--label",
-                FactoryDockerLabels.factoryLabelAssignment(),
-                "--label",
-                FactoryDockerLabels.taskLabelAssignment(key),
-                FactoryDockerLabels.networkName(key));
+    /** {@code network create --internal} (no route out but the guard) with the ownership labels. */
+    static List<String> createNetwork(String key, ObjectOwnership ownership) {
+        List<String> argv = new ArrayList<>(List.of("network", "create", "--internal"));
+        argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
+        argv.add(FactoryDockerLabels.networkName(key));
+        return List.copyOf(argv);
     }
 
-    /** {@code volume create} for the working copy, with factory labels. */
-    static List<String> createVolume(String key) {
-        return List.of(
-                "volume",
-                "create",
-                "--label",
-                FactoryDockerLabels.factoryLabelAssignment(),
-                "--label",
-                FactoryDockerLabels.taskLabelAssignment(key),
-                FactoryDockerLabels.volumeName(key));
+    /** {@code volume create} for the working copy, with the ownership labels. */
+    static List<String> createVolume(String key, ObjectOwnership ownership) {
+        List<String> argv = new ArrayList<>(List.of("volume", "create"));
+        argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
+        argv.add(FactoryDockerLabels.volumeName(key));
+        return List.copyOf(argv);
     }
 
     /** The one-shot seed clone (design D3, FR3). Delegated to {@link DockerSeedCloneCommand} for file size. */
-    static List<String> seedClone(String key, String image, String sourceClone, String branch, @Nullable String pin) {
-        return DockerSeedCloneCommand.seedClone(key, image, sourceClone, branch, pin);
+    static List<String> seedClone(
+            String key,
+            String image,
+            String sourceClone,
+            String branch,
+            @Nullable String pin,
+            ObjectOwnership ownership) {
+        return DockerSeedCloneCommand.seedClone(key, image, sourceClone, branch, pin, ownership);
     }
 
     /** {@code start} a stopped task container by name — the reattach half of keep semantics (FR6). */
@@ -89,16 +86,11 @@ final class DockerCommands {
             String runtime,
             ResourceLimits limits,
             boolean enforceDiskQuota,
-            String workingCopy) {
-        List<String> argv = new ArrayList<>(List.of(
-                "run",
-                "-d",
-                "--name",
-                FactoryDockerLabels.containerName(key),
-                "--label",
-                FactoryDockerLabels.factoryLabelAssignment(),
-                "--label",
-                FactoryDockerLabels.taskLabelAssignment(key),
+            String workingCopy,
+            ObjectOwnership ownership) {
+        List<String> argv = new ArrayList<>(List.of("run", "-d", "--name", FactoryDockerLabels.containerName(key)));
+        argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
+        argv.addAll(List.of(
                 "--network",
                 FactoryDockerLabels.networkName(key),
                 "--runtime",
@@ -176,20 +168,5 @@ final class DockerCommands {
     /** {@code network rm} the network by name. */
     static List<String> removeNetwork(String name) {
         return List.of("network", "rm", name);
-    }
-
-    /** {@code ps -a} names of every factory container (running or stopped) — the orphan-sweep input. */
-    static List<String> listContainerNames() {
-        return List.of("ps", "-a", "--filter", FactoryDockerLabels.factoryLabelFilter(), "--format", "{{.Names}}");
-    }
-
-    /** {@code volume ls} names of every factory volume. */
-    static List<String> listVolumeNames() {
-        return List.of("volume", "ls", "--filter", FactoryDockerLabels.factoryLabelFilter(), "--format", "{{.Name}}");
-    }
-
-    /** {@code network ls} names of every factory network. */
-    static List<String> listNetworkNames() {
-        return List.of("network", "ls", "--filter", FactoryDockerLabels.factoryLabelFilter(), "--format", "{{.Name}}");
     }
 }

@@ -9,13 +9,11 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -100,11 +98,7 @@ tracker:
                 registry,
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties))
-    }
-
-    private static TrackerTask trackerTask(TaskRef ref, TrackerTaskState state, String taskId) {
-        new TrackerTask(ref, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
+                TakeCommandSeams.DEFAULTS.withServeProperties(serveProperties), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     // FR2, FR3: 2+ refs reach batch mode, and the run's aggregate exit code is 0 when every ref
@@ -136,7 +130,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired()
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -164,7 +158,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired()
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -214,7 +208,7 @@ tracker:
         // fixture) — a short ref like '42' reaches it, so the ref fails for a reason outside this
         // fixture's control, exactly the "tool could not operate" shape.
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
         def appender = attachAppender()
 
         when:
@@ -255,7 +249,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired()
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
         def appender = attachAppender()
 
         when:

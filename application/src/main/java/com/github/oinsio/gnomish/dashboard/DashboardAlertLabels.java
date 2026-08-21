@@ -9,7 +9,12 @@ package com.github.oinsio.gnomish.dashboard;
  * default} arm, so a new {@link AlertCondition} variant fails to compile
  * here instead of silently rendering unlabeled.
  *
- * <p>Implements FR4, UX3 of add-dashboard-page (design D3).
+ * <p>The three sandbox-hygiene labels (add-serve-sandbox-lifecycle) read as
+ * symptoms, not as cleanup statistics: UX2 asks for "an instance died or
+ * hung", naming the box and task, so that a routine manual age-stop — which
+ * raises no condition at all — can never be mistaken for it.
+ *
+ * <p>Implements FR4, UX3 of add-dashboard-page; NFR-O3, UX2 of add-serve-sandbox-lifecycle.
  */
 final class DashboardAlertLabels {
 
@@ -28,6 +33,13 @@ final class DashboardAlertLabels {
             case AlertCondition.LongIdleBlocked ignored -> "idle-blocked too long";
             case AlertCondition.TrackerFailuresPresent ignored -> "tracker failures";
             case AlertCondition.ReaperDegraded ignored -> "reaper degraded";
+            case AlertCondition.SweepTickOverdue ignored -> "sandbox sweep not running";
+            case AlertCondition.SweepTicksSkipped skipped ->
+                "sandbox cleanup stalled: " + skipped.consecutiveTicks()
+                        + " consecutive ticks reached no claim verdict";
+            case AlertCondition.StoppedOrphanIncident incident ->
+                "an instance died or hung: stopped " + incident.objectName() + " of task " + incident.taskKey() + " ("
+                        + incident.reason() + ")";
         };
     }
 }

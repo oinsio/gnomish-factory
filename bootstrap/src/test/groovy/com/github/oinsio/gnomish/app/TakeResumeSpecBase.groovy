@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import java.time.Clock
 
 /**
@@ -65,5 +66,14 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeResumeRunner(
                 assembly, TaskGitFixture.real(), worktreesRoot, 'taskId', abortHandler, ABORT_THRESHOLD, credentialEnvVarsToScrub, claimLossFlag)
+    }
+
+    /**
+     * The escalation dialog bound to HOST resume mechanics — the seam {@link TakeDecisionResume}
+     * dispatches through in either execution mode (design D8 of add-serve-sandbox-lifecycle).
+     */
+    protected TakeDecisionResume<ResumeBootstrap> newDecisionResume(
+            TakeResumeRunner runner, PipelineDefinition definition) {
+        new TakeDecisionResume<>(new HostResumeMechanics(runner, TaskGitFixture.real(), worktreesRoot, definition))
     }
 }

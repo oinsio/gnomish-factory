@@ -43,16 +43,10 @@ final class GuardCommands {
      * to the guard's filesystem (NFR-S2). {@code connection_strategy=lazy} keeps
      * the guard from dialing upstream before the addon's allowlist decision.
      */
-    static List<String> runGuard(String key, String guardImage, String configDirHostPath) {
-        return List.of(
-                "run",
-                "-d",
-                "--name",
-                FactoryDockerLabels.guardName(key),
-                "--label",
-                FactoryDockerLabels.factoryLabelAssignment(),
-                "--label",
-                FactoryDockerLabels.taskLabelAssignment(key),
+    static List<String> runGuard(String key, String guardImage, String configDirHostPath, ObjectOwnership ownership) {
+        List<String> argv = new ArrayList<>(List.of("run", "-d", "--name", FactoryDockerLabels.guardName(key)));
+        argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
+        argv.addAll(List.of(
                 "--network",
                 FactoryDockerLabels.networkName(key),
                 "--network-alias",
@@ -68,7 +62,8 @@ final class GuardCommands {
                 "--set",
                 "connection_strategy=lazy",
                 "-s",
-                CONFIG_MOUNT + "/" + EgressGuardConfig.SCRIPT_FILE);
+                CONFIG_MOUNT + "/" + EgressGuardConfig.SCRIPT_FILE));
+        return List.copyOf(argv);
     }
 
     /**

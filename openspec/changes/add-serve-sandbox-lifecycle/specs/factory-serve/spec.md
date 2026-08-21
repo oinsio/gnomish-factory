@@ -37,6 +37,10 @@ The daemon SHALL dispose of host worktree environments whose last file activity 
 - **WHEN** an escalated task's worktree exceeds the age threshold
 - **THEN** the cleaner removes it, and a later resume rematerializes the worktree from the branch
 
+#### Scenario: Aged container environment removed by runtime age
+- **WHEN** an escalated task's stopped container exceeds the age threshold per its runtime metadata
+- **THEN** this cleaner leaves it untouched — it is not a host worktree — and the `sandbox-lifecycle` aged reaper disposes container, volume, and network by the same runtime-metadata age, so a later resume still materializes a fresh environment from the branch
+
 #### Scenario: Working task untouched
 - **WHEN** the cleaner runs while a task is `Working` in a slot of this instance
 - **THEN** that task's environment is not considered for disposal

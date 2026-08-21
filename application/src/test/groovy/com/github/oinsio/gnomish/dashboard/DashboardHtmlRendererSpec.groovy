@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.dashboard
 import static com.github.oinsio.gnomish.testsupport.DaemonSnapshotFixtures.snapshot
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.neverFetchedBoard
+import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -37,9 +38,46 @@ class DashboardHtmlRendererSpec extends Specification {
     private static final Instant GENERATED_AT = Instant.parse('2026-08-06T09:00:00Z')
     private static final Instant WRITTEN_AT = Instant.parse('2026-08-06T08:59:00Z')
 
+    // NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section is a fourth independently
+    //     degrading section — present on every page, honest when it has no data.
+    def "sandbox hygiene section: renders its data, and its empty state when there is none"() {
+        given:
+        def sweep = new com.github.oinsio.gnomish.serveobservability.SweepVital(
+                GENERATED_AT, 300L, new com.github.oinsio.gnomish.serveobservability.SweepCounts(1, 0, 0, 2, 0, 0),
+                [], 0, 0)
+
+        when: 'a page with no sweep data at all'
+        def degraded = renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
+                GENERATED_AT, null)
+
+        then:
+        degraded.contains('<section id="sandbox-hygiene"')
+        degraded.contains('no sweep data yet')
+
+        when: 'a page whose snapshot carries a completed tick'
+        def populated = renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(),
+                new SandboxHygieneView(sweep, [], 0), GENERATED_AT, null)
+
+        then: 'the four-group breakdown replaces the empty state'
+        populated.contains('<td>2</td><td>0</td><td>1</td><td>0</td>')
+        !populated.contains('no sweep data yet')
+    }
+
+    def "a null hygiene view is refused rather than rendered as a broken page"() {
+        when:
+        renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), null, GENERATED_AT, null)
+
+        then:
+        def error = thrown(NullPointerException)
+        error.message == 'hygieneView'
+    }
+
     def "the page shows its own generatedAt"() {
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains(GENERATED_AT.toString())
@@ -48,7 +86,7 @@ class DashboardHtmlRendererSpec extends Specification {
     @Unroll
     def "daemon section: #description"() {
         when:
-        def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), GENERATED_AT, null)
+        def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains(expectedText)
@@ -63,7 +101,7 @@ class DashboardHtmlRendererSpec extends Specification {
 
     def "history section: empty ledger renders no placeholder error, just an empty section"() {
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains('History')
@@ -79,7 +117,7 @@ class DashboardHtmlRendererSpec extends Specification {
                 [claude: new LedgerTokenUsage(10, 5, 0, 0)])
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), history, neverFetchedBoard(), GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), history, neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains('2026-08-05')
@@ -101,7 +139,7 @@ class DashboardHtmlRendererSpec extends Specification {
                 [claude: new LedgerTokenUsage(10, 5, 7, 3)])
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), history, neverFetchedBoard(), GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), history, neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
 
         then: 'the cache columns the ledger writes for cost accounting are rendered, not dropped'
         html.contains('<th>cacheCreation</th>')
@@ -116,7 +154,7 @@ class DashboardHtmlRendererSpec extends Specification {
         def board = new BoardSectionView(null, null, 'tracker unreachable: connection refused')
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains('unavailable')
@@ -129,7 +167,7 @@ class DashboardHtmlRendererSpec extends Specification {
         def board = new BoardSectionView(boardModel(), fetchedAt, 'tracker unreachable: timeout')
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains(fetchedAt.toString())
@@ -147,7 +185,7 @@ class DashboardHtmlRendererSpec extends Specification {
         def board = new BoardSectionView(model, GENERATED_AT, null)
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains('in backoff until ' + deadline)
@@ -159,7 +197,7 @@ class DashboardHtmlRendererSpec extends Specification {
         def board = new BoardSectionView(boardModel(), fetchedAt, null)
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains(fetchedAt.toString())
@@ -186,7 +224,7 @@ class DashboardHtmlRendererSpec extends Specification {
         def board = new BoardSectionView(model, GENERATED_AT, null)
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains('holder=gnome-1, updated 3m ago')
@@ -202,7 +240,7 @@ class DashboardHtmlRendererSpec extends Specification {
         def board = new BoardSectionView(model, GENERATED_AT, null)
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
 
         then:
         html.contains('truncated: showing first 1 only')

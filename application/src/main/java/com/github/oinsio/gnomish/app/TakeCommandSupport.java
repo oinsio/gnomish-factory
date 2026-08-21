@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -12,6 +14,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
 
 /**
  * The pipeline-load and tracker-resolution helpers {@link TakeCommand} needs before it can
@@ -47,6 +50,32 @@ final class TakeCommandSupport {
                 throw new PipelineLoadFailedException(
                         errors.stream().map(ConfigError::render).toList());
         };
+    }
+
+    /**
+     * Runs the startup sweep-lifecycle pass and logs its one-line summary (FR6, NFR-O4 of
+     * add-serve-sandbox-lifecycle). The summary is logged rather than carried into the task's
+     * finish report: a {@code take} finish report describes ONE task, while the sweep is
+     * project-wide and mostly concerns objects of other tasks.
+     *
+     * <p>Every failure is swallowed with a log line — a Docker outage aborts the pass (NFR-R1),
+     * and neither that nor any other sweep fault is a reason to fail a take that has not even
+     * claimed a task yet.
+     *
+     * @param pass the sweep-lifecycle evaluation seam; never null
+     * @param dir the target project directory the project identity is resolved from; never null
+     * @param liveness the tracked-object liveness verdict of this invocation; never null
+     * @param log the caller's logger, so the line reads as {@code take}'s own; never null
+     */
+    static void sweepSandboxLifecycle(SandboxLifecyclePass pass, Path dir, LivenessVerdict liveness, Logger log) {
+        try {
+            String summary = pass.run(dir, liveness);
+            if (!summary.isBlank()) {
+                log.info("gnomish take: {}", summary);
+            }
+        } catch (RuntimeException e) {
+            log.info("gnomish take: sandbox lifecycle sweep skipped: {}", e.toString());
+        }
     }
 
     /**

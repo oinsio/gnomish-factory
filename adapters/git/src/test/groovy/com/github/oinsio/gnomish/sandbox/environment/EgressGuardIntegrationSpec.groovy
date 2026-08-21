@@ -54,7 +54,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
 
         and_startAllowedTargetOnBridge()
         and_materializeBoxOnInternalNetwork()
-        guard = new EgressGuard(docker, key, GuardImageAvailability.IMAGE, [targetIp], tempDir.resolve('guard-cfg'))
+        guard = new EgressGuard(docker, key, GuardImageAvailability.IMAGE, [targetIp], tempDir.resolve('guard-cfg'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
     }
 
     def cleanup() {
@@ -178,7 +178,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
                 LIMITS,
                 false,
                 clock,
-                ChildEnvAllowlist.none())
+                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         env.materialize('task/egress', null)
     }
 }

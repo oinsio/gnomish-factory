@@ -75,14 +75,16 @@ final class DockerSeedCloneCommand {
      * <p>The script is a constant; branch and pin reach it as positional
      * parameters, never interpolated, so neither can alter the script.
      */
-    static List<String> seedClone(String key, String image, String sourceClone, String branch, @Nullable String pin) {
-        List<String> argv = new ArrayList<>(List.of(
-                "run",
-                "--rm",
-                "--label",
-                FactoryDockerLabels.factoryLabelAssignment(),
-                "--label",
-                FactoryDockerLabels.taskLabelAssignment(key),
+    static List<String> seedClone(
+            String key,
+            String image,
+            String sourceClone,
+            String branch,
+            @Nullable String pin,
+            ObjectOwnership ownership) {
+        List<String> argv = new ArrayList<>(List.of("run", "--rm"));
+        argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
+        argv.addAll(List.of(
                 "--network",
                 "none",
                 "-v",

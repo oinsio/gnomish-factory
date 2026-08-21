@@ -6,13 +6,13 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
-import org.springframework.boot.DefaultApplicationArguments
 
 /**
  * Shared project/pipeline fixture and {@link TakeCommand} factory for {@link
@@ -102,10 +102,6 @@ tracker:
                 Clock.fixed(now, ZoneOffset.UTC),
                 [github: trackerFactory],
                 MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource())
-    }
-
-    static DefaultApplicationArguments takeArgs(String... raw) {
-        new DefaultApplicationArguments(raw)
+                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 }

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -133,7 +132,12 @@ record TakeEngineExecution(
             RevocationDetectedException revoked = revocation.get();
             var handler = new RevocationHandler(tracker, git.worktrees().salvage(worktree), git.branches());
             return handler.handle(
-                    ref, taskId, outcome.finalState(), worktree, bootstrap.branchName(), reasonFor(revoked));
+                    ref,
+                    taskId,
+                    outcome.finalState(),
+                    worktree,
+                    bootstrap.branchName(),
+                    RevocationDetectedException.reasonFor(revoked));
         }
 
         GitOutcomeRecorder.recordAndCleanUp(git.worktrees(), taskRepository, cloneDir, worktree, taskId, outcome);
@@ -143,32 +147,16 @@ record TakeEngineExecution(
         // the marker set for reconcile-on-resume; a finish uses no marker (cleanup-detection reconcile).
         var retry = TerminalWriteRetry.system();
         Runnable clearMarker = () -> taskRepository.confirmTerminalWrite(taskId);
-        return switch (outcome) {
-            case TaskOutcome.Aborted aborted -> {
-                var facts = tracker.fetchTask(ref).abortFacts();
-                yield abortHandler.handle(
-                        ref, aborted.finalState(), aborted.cause(), facts, abortThreshold, instanceId);
-            }
-            case TaskOutcome.Escalated escalated ->
-                TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker);
-            case TaskOutcome.Completed completed ->
-                TakeFinishReport.finish(completed, context, bootstrap.branchName(), tracker, ref, instanceId, retry);
-            case TaskOutcome.Paused paused ->
-                TakePauseExit.finish(
-                        paused, context, bootstrap.branchName(), tracker, ref, instanceId, retry, clearMarker);
-        };
-    }
-
-    // PIT M4 documented exception (build.gradle has the full rationale style): @DoNotMutate — the
-    // null branch is provably unreachable: RevocationDetectedException's sole constructor always
-    // calls super(String) with a non-null, non-blank message built from its taskId/reason
-    // parameters (see its class body), so getMessage() can never be null here. Isolated to its own
-    // method so this defensive-but-dead branch has nowhere for a mutant to hide as a false
-    // SURVIVED against the rest of this class's revocation-handling logic, which
-    // TakeResumeRunnerRevocationSpec already covers.
-    @DoNotMutate
-    private static String reasonFor(RevocationDetectedException revoked) {
-        String message = revoked.getMessage();
-        return message == null ? "revocation detected" : message;
+        return TakeOutcomeDispatch.dispatch(
+                outcome,
+                context,
+                bootstrap.branchName(),
+                tracker,
+                ref,
+                instanceId,
+                retry,
+                clearMarker,
+                abortHandler,
+                abortThreshold);
     }
 }

@@ -4,9 +4,6 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
-import java.io.ByteArrayInputStream
-import java.io.InputStream
-import java.io.OutputStream
 import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
@@ -33,10 +30,10 @@ class ContainerExecHandleSpec extends Specification {
     // FR3: the caller waits on exactly the process exec started
     def "exec returns the live handle over the started process"() {
         given: 'a materialized container environment over a scripted docker seam'
-        def docker = new StubProcessDockerCli(new StubProcess())
+        def docker = new ScriptedDockerCli(new ScriptedProcess())
         def e = new ContainerTaskExecutionEnvironment(
                 docker, 'k1', Path.of('/factory/clone'), harvester, 'gnomish/img', 'runc', LIMITS, false, clock,
-                ChildEnvAllowlist.none())
+                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         e.materialize('task/x', null)
 
         when:
@@ -45,56 +42,5 @@ class ContainerExecHandleSpec extends Specification {
         then: 'the handle is wired to the scripted process and this exec\'s start instant'
         handle.waitForExit() == 0
         handle.startedAt() == STARTED
-    }
-
-    private static final class StubProcessDockerCli extends DockerCli {
-
-        final Process process
-
-        StubProcessDockerCli(Process process) {
-            super('docker')
-            this.process = process
-        }
-
-        @Override
-        DockerResult run(List<String> args) {
-            args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
-        }
-
-        @Override
-        Process start(List<String> args, boolean mergeStderr) {
-            process
-        }
-    }
-
-    private static final class StubProcess extends Process {
-
-        @Override
-        OutputStream getOutputStream() {
-            OutputStream.nullOutputStream()
-        }
-
-        @Override
-        InputStream getInputStream() {
-            new ByteArrayInputStream(new byte[0])
-        }
-
-        @Override
-        InputStream getErrorStream() {
-            new ByteArrayInputStream(new byte[0])
-        }
-
-        @Override
-        int waitFor() {
-            0
-        }
-
-        @Override
-        int exitValue() {
-            0
-        }
-
-        @Override
-        void destroy() {}
     }
 }

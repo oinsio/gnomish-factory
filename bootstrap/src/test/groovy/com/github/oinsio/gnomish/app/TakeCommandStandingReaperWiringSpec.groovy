@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -150,7 +151,7 @@ tracker:
                 TakeCommandSeams.DEFAULTS
                 .withServeProperties(serveProperties)
                 .withHeartbeatSleeper(budgetedRealSleeper(600))
-                .withReaperSleeper(budgetedRealSleeper(600)))
+                .withReaperSleeper(budgetedRealSleeper(600)), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     /**
@@ -183,7 +184,7 @@ tracker:
         def z = new TaskRef('PROJ-Z')
         harness.seedWorkingWithClaim(tracker, z, 'other-instance')
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null))
 
         when: 'take runs X on another thread, in flight for ~2s'
         Future<?> run = executor.submit({
@@ -228,7 +229,7 @@ tracker:
         harness.seed(x1, new TaskSnapshot(x1.id(), 'Add widgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         harness.seed(x2, new TaskSnapshot(x2.id(), 'Add gadgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null))
 
         when: 'the batch runs both refs sequentially, on another thread'
         Future<?> run = executor.submit({

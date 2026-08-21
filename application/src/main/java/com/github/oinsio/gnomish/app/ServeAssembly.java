@@ -3,12 +3,19 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.lease.LivenessOracle;
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.ObservedSandboxLifecyclePass;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecycleTick;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
@@ -20,6 +27,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.Objects;
 import java.util.Random;
 
 /**
@@ -46,7 +54,8 @@ final class ServeAssembly {
             RunAssembly serveAssembly,
             TaskGit git,
             TakeHeartbeat heartbeat,
-            Clock clock) {
+            Clock clock,
+            ContainerTakeSupport containerTakeSupport) {
         AbortHandler abortHandler = new AbortHandler(tracker, clock);
         return new TakeSlotRunner(
                 serveAssembly,
@@ -61,7 +70,8 @@ final class ServeAssembly {
                 heartbeat.instance(),
                 heartbeat.flag(),
                 tracker,
-                instanceId);
+                instanceId,
+                containerTakeSupport);
     }
 
     static FeedAutomaton feedAutomaton(
@@ -125,5 +135,39 @@ final class ServeAssembly {
                 new SystemClock(),
                 new ThreadSleeper(),
                 slotLedger::occupiedRefs);
+    }
+
+    /**
+     * FR6, NFR-P1, design D7 of add-serve-sandbox-lifecycle: the sweep-lifecycle tick, its own
+     * virtual thread beside the worktree janitor's — disjoint object populations, disjoint
+     * cleaners. {@code sandboxLifecyclePass} is {@link SandboxLifecyclePass#NONE} on a host-only
+     * install (no {@code factory.sandbox.image} configured), so the tick still runs but is a no-op
+     * every cadence.
+     *
+     * <p>NFR-O1, NFR-O2 of add-serve-sandbox-lifecycle: the daemon — and only the daemon — brackets
+     * each pass as an observed tick, so the snapshot's {@code vitals.sweep} and the ledger's sweep
+     * lines both come from the same evaluation the scheduler already runs. A host-only install is
+     * deliberately left UNobserved: its tick has no sandbox to sweep, so an all-zero vital and a
+     * ledger line every cadence would report on a subsystem that does not exist on that host —
+     * "no sweep data yet" is the honest reading there.
+     */
+    static SandboxLifecycleTick sandboxLifecycleTick(
+            ServeArguments serveArguments,
+            ServeProperties serveProperties,
+            SandboxLifecyclePass sandboxLifecyclePass,
+            LivenessOracle livenessOracle,
+            SweepTickLog sweepTickLog,
+            SweepVerdictListener sweepVerdictSink,
+            SweepTickListener sweepTickSink) {
+        SandboxLifecyclePass observed = Objects.equals(sandboxLifecyclePass, SandboxLifecyclePass.NONE)
+                ? sandboxLifecyclePass
+                : new ObservedSandboxLifecyclePass(sandboxLifecyclePass, sweepTickLog, sweepVerdictSink, sweepTickSink);
+        return new SandboxLifecycleTick(
+                observed,
+                livenessOracle,
+                serveArguments.dir(),
+                serveProperties.sandboxSweepInterval(),
+                new ThreadSleeper(),
+                new SystemClock());
     }
 }

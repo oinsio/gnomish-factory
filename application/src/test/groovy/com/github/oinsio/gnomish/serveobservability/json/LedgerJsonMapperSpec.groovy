@@ -1,14 +1,19 @@
 package com.github.oinsio.gnomish.serveobservability.json
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.LedgerLifecycleEvent
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage
 import com.github.oinsio.gnomish.serveobservability.LifecycleLine
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLine
+import com.github.oinsio.gnomish.serveobservability.SweepActionLine
+import com.github.oinsio.gnomish.serveobservability.SweepCounts
+import com.github.oinsio.gnomish.serveobservability.SweepTickLine
 import com.github.oinsio.gnomish.serveobservability.TaskOutcome
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine
+import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
 
@@ -24,7 +29,7 @@ class LedgerJsonMapperSpec extends Specification {
 
     def mapper = new LedgerJsonMapper()
 
-    def "reference anchor: serializing the three deterministic samples is byte-identical to ledger-v1.reference.jsonl"() {
+    def "reference anchor: serializing the deterministic samples is byte-identical to ledger-v1.reference.jsonl"() {
         given:
         def referenceLines = getClass().getResourceAsStream('/ledger-v1.reference.jsonl').getText('UTF-8').split('\n')
 
@@ -34,6 +39,60 @@ class LedgerJsonMapperSpec extends Specification {
         mapper.serialize(startedLine()) == referenceLines[2]
         mapper.serialize(stoppedLine()) == referenceLines[3]
         mapper.serialize(runSummaryLine()) == referenceLines[4]
+        mapper.serialize(sweepActionLine()) == referenceLines[5]
+        mapper.serialize(sweepTickLine()) == referenceLines[6]
+    }
+
+    // NFR-O2 of add-serve-sandbox-lifecycle.
+    def "sweepAction carries version 1, the type discriminator, and every verdict field"() {
+        given:
+        def dto = mapper.toDto(sweepActionLine())
+
+        expect:
+        dto.version() == 1
+        dto.type() == "sweepAction"
+        dto.instance() == instanceDto()
+        dto.at() == "2026-08-02T21:00:00Z"
+        dto.objectName() == "gnomish-task-99-box"
+        dto.role() == "main-box"
+        dto.mode() == "tracked"
+        dto.taskKey() == "task-99"
+        dto.category() == "stoppedOrphan"
+        dto.reason() == "unowned running main-box"
+        dto.ageSeconds() == 900L
+    }
+
+    // NFR-O2: the verdict category vocabulary is the SAME wire vocabulary the snapshot's
+    //     vitals.sweep.counts keys use, so no reader has to reconcile near-synonyms (FR9).
+    def "sweepAction category serializes each acting variant to its lowerCamel wire value"() {
+        expect:
+        mapper.toDto(sweepActionWith(category)).category() == wireValue
+
+        where:
+        category | wireValue
+        SweepVerdictCategory.STOPPED_ORPHAN | "stoppedOrphan"
+        SweepVerdictCategory.DISPOSED_AGED | "disposedAged"
+        SweepVerdictCategory.DISPOSED_RECONSTRUCTIBLE | "disposedReconstructible"
+    }
+
+    // NFR-O2: a verdict that measured no age renders ageSeconds as explicit null, never omitted.
+    def "sweepAction ageSeconds is null when the verdict measured no age"() {
+        expect:
+        mapper.toDto(sweepActionLineWithoutAge()).ageSeconds() == null
+        mapper.serialize(sweepActionLineWithoutAge()).contains('"ageSeconds":null')
+    }
+
+    // NFR-O2: the per-tick summary carries all six counts, including the untouched categories that
+    //     are never itemized as their own lines.
+    def "sweepTick carries version 1, the type discriminator, and all six counts"() {
+        given:
+        def dto = mapper.toDto(sweepTickLine())
+
+        expect:
+        dto.version() == 1
+        dto.type() == "sweepTick"
+        dto.at() == "2026-08-02T21:05:00Z"
+        dto.counts() == new SweepCountsDto(4, 2, 1, 1, 3, 0)
     }
 
     def "taskOutcome carries version 1 and type discriminator"() {
@@ -152,6 +211,27 @@ class LedgerJsonMapperSpec extends Specification {
     static LifecycleLine stoppedLine() {
         new LifecycleLine(
                 instance(), Instant.parse("2026-08-02T23:00:00Z"), new LedgerLifecycleEvent.Stopped("sigterm"))
+    }
+
+    static SweepActionLine sweepActionLine() {
+        sweepActionWith(SweepVerdictCategory.STOPPED_ORPHAN)
+    }
+
+    static SweepActionLine sweepActionWith(SweepVerdictCategory category) {
+        new SweepActionLine(
+                instance(), Instant.parse("2026-08-02T21:00:00Z"), "gnomish-task-99-box", "main-box", "tracked",
+                "task-99", category, "unowned running main-box", Duration.ofMinutes(15))
+    }
+
+    static SweepActionLine sweepActionLineWithoutAge() {
+        new SweepActionLine(
+                instance(), Instant.parse("2026-08-02T21:00:00Z"), "gnomish-task-99-box", "main-box", "tracked",
+                "task-99", SweepVerdictCategory.STOPPED_ORPHAN, "unowned running main-box", null)
+    }
+
+    static SweepTickLine sweepTickLine() {
+        new SweepTickLine(
+                instance(), Instant.parse("2026-08-02T21:05:00Z"), new SweepCounts(4, 2, 1, 1, 3, 0))
     }
 
     static RunSummaryLine runSummaryLine() {

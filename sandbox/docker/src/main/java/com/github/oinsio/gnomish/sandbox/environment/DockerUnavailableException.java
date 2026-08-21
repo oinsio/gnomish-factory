@@ -8,7 +8,10 @@ import org.jspecify.annotations.Nullable;
  * binary cannot be launched (missing from {@code PATH}, not executable) or the
  * daemon is unreachable ("Cannot connect to the Docker daemon"). Distinct from a
  * docker command that ran and exited non-zero, which {@link DockerCli#run}
- * reports via {@link DockerResult#exitCode()} instead of throwing.
+ * reports via {@link DockerResult#exitCode()} instead of throwing. One caller raises it for a
+ * command that did run: a lifecycle-sweep object listing that exited non-zero, whose empty output
+ * cannot be told apart from "no such objects" and therefore must not be acted on (NFR-R1 of
+ * add-serve-sandbox-lifecycle).
  *
  * <p>This is the runtime-outage signal of design D2/NFR-R1: the factory
  * classifies it as an <em>infrastructure</em> failure — no stage attempt is

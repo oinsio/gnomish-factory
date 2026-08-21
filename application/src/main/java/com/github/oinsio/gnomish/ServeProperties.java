@@ -10,7 +10,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * FactoryProperties} (design D4). Kept as an independent top-level {@code @ConfigurationProperties}
  * record rather than nested inside {@link FactoryProperties} so that neither file needs to grow
  * past the {@code process-invariants.md} file-size target; Spring's
- * {@code @ConfigurationPropertiesScan} on {@link FactoryApplication} picks it up automatically —
+ * {@code @ConfigurationPropertiesScan} on {@code FactoryApplication} (in the {@code bootstrap}
+ * module) picks it up automatically —
  * no extra wiring needed.
  *
  * <p>These knobs are deliberately few and all instance-level with CLI override (design D3, D10):
@@ -43,6 +44,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param ledgerRetentionDays number of days a completed-task ledger entry is retained before
  *     pruning ({@code factory.serve.ledger-retention-days}); defaults to {@code 30} when unset;
  *     {@code 0} means keep forever (design D10); rejected if negative
+ * @param sandboxSweepInterval the sweep-lifecycle tick cadence ({@code
+ *     factory.serve.sandbox-sweep-interval}, FR6 of add-serve-sandbox-lifecycle); defaults to
+ *     {@code 5m} when unset; rejected if non-positive
  */
 @ConfigurationProperties("factory.serve")
 public record ServeProperties(
@@ -51,7 +55,8 @@ public record ServeProperties(
         Duration sigtermGrace,
         Duration worktreeAgeThreshold,
         Duration snapshotInterval,
-        Integer ledgerRetentionDays) {
+        Integer ledgerRetentionDays,
+        Duration sandboxSweepInterval) {
 
     private static final int DEFAULT_SLOTS = 2;
     private static final Duration DEFAULT_IDLE_POLL_INTERVAL = Duration.ofSeconds(30);
@@ -59,6 +64,7 @@ public record ServeProperties(
     private static final Duration DEFAULT_WORKTREE_AGE_THRESHOLD = Duration.ofDays(14);
     private static final Duration DEFAULT_SNAPSHOT_INTERVAL = Duration.ofSeconds(30);
     private static final int DEFAULT_LEDGER_RETENTION_DAYS = 30;
+    private static final Duration DEFAULT_SANDBOX_SWEEP_INTERVAL = Duration.ofMinutes(5);
 
     // slots is a primitive int, so it must match the record component type exactly to remain the
     // canonical constructor (unlike the Duration components, it cannot be @Nullable); Spring's
@@ -70,13 +76,15 @@ public record ServeProperties(
             @Nullable Duration sigtermGrace,
             @Nullable Duration worktreeAgeThreshold,
             @Nullable Duration snapshotInterval,
-            @Nullable Integer ledgerRetentionDays) {
+            @Nullable Integer ledgerRetentionDays,
+            @Nullable Duration sandboxSweepInterval) {
         this.slots = defaultSlots(slots);
         this.idlePollInterval = defaultIdlePollInterval(idlePollInterval);
         this.sigtermGrace = defaultSigtermGrace(sigtermGrace);
         this.worktreeAgeThreshold = defaultWorktreeAgeThreshold(worktreeAgeThreshold);
         this.snapshotInterval = defaultSnapshotInterval(snapshotInterval);
         this.ledgerRetentionDays = defaultLedgerRetentionDays(ledgerRetentionDays);
+        this.sandboxSweepInterval = defaultSandboxSweepInterval(sandboxSweepInterval);
     }
 
     /**
@@ -165,5 +173,20 @@ public record ServeProperties(
             throw new IllegalArgumentException("factory.serve.ledger-retention-days must not be negative");
         }
         return ledgerRetentionDays;
+    }
+
+    /**
+     * Resolves the unset case to the design D7 default of 5 minutes (FR6 of
+     * add-serve-sandbox-lifecycle). Kept as an explicit method for the same PIT record-constructor
+     * reason as {@link #defaultSlots}.
+     */
+    private static Duration defaultSandboxSweepInterval(@Nullable Duration sandboxSweepInterval) {
+        if (sandboxSweepInterval == null) {
+            return DEFAULT_SANDBOX_SWEEP_INTERVAL;
+        }
+        if (sandboxSweepInterval.isZero() || sandboxSweepInterval.isNegative()) {
+            throw new IllegalArgumentException("factory.serve.sandbox-sweep-interval must be positive");
+        }
+        return sandboxSweepInterval;
     }
 }

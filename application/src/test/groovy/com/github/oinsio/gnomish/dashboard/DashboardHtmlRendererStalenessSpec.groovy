@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.dashboard
 
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.neverFetchedBoard
+import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
 import java.time.Duration
 import java.time.Instant
@@ -32,7 +33,7 @@ class DashboardHtmlRendererStalenessSpec extends Specification {
 
         when:
         def html = renderer.render(
-                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), GENERATED_AT, cadence)
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, cadence)
 
         then: 'the baked generatedAt instant, in epoch millis'
         html.contains(String.valueOf(GENERATED_AT.toEpochMilli()))
@@ -60,6 +61,7 @@ class DashboardHtmlRendererStalenessSpec extends Specification {
                 new DaemonSnapshotView.Absent(),
                 emptyHistory(),
                 neverFetchedBoard(),
+                noSweepData(),
                 GENERATED_AT,
                 Duration.ofSeconds(cadenceSeconds))
 
@@ -76,7 +78,7 @@ class DashboardHtmlRendererStalenessSpec extends Specification {
     def "one-shot page (no render cadence) shows generatedAt but includes no staleness script or banner"() {
         when:
         def html = renderer.render(
-                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), GENERATED_AT, null)
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
 
         then: 'the generatedAt is still shown, as plain information'
         html.contains(GENERATED_AT.toString())

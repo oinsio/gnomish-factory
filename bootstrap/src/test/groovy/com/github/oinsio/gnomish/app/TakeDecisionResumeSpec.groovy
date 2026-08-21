@@ -1,11 +1,18 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import java.time.Instant
 
 /**
@@ -35,12 +42,11 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
-        def decisionResume = new TakeDecisionResume(runner)
         tracker.collectDecisions(REF) >> []
 
         when:
-        def result = decisionResume.resume(
-                cloneDir, bootstrap, pipeline(), escalatedState,
+        def result = newDecisionResume(runner, pipeline()).resume(
+                cloneDir, bootstrap, escalatedState,
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then: 'the question was restated in the park report'
@@ -69,7 +75,6 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
-        def decisionResume = new TakeDecisionResume(runner)
         tracker.collectDecisions(REF) >> [
             reply('go ahead', '2026-07-18T09:00:00Z')
         ]
@@ -79,15 +84,15 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         // so its first invocation after resume() starts is a reliable "engine has begun" marker.
         tracker.fetchTask(_) >> {
             callOrder << 'engine-started'
-            new com.github.oinsio.gnomish.app.port.tracker.TrackerTask(
-                    REF, new com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot('PROJ-2', 'title', 'body'),
-                    new com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState.Working(INSTANCE.value()),
-                    com.github.oinsio.gnomish.app.port.tracker.AbortFacts.none())
+            new TrackerTask(
+                    REF, new TaskSnapshot('PROJ-2', 'title', 'body'),
+                    new TrackerTaskState.Working(INSTANCE.value()),
+                    AbortFacts.none(), false)
         }
 
         when:
-        def result = decisionResume.resume(
-                cloneDir, bootstrap, pipeline(), escalatedState,
+        def result = newDecisionResume(runner, pipeline()).resume(
+                cloneDir, bootstrap, escalatedState,
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then: 'ack happens before the engine resumes (no fetchTask call preceded it)'
@@ -111,7 +116,6 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
-        def decisionResume = new TakeDecisionResume(runner)
         tracker.collectDecisions(REF) >> [
             reply('first reply', '2026-07-18T09:00:00Z'),
             reply('second reply', '2026-07-18T09:05:00Z'),
@@ -119,8 +123,8 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         ]
 
         when:
-        decisionResume.resume(
-                cloneDir, bootstrap, pipeline(), escalatedState,
+        newDecisionResume(runner, pipeline()).resume(
+                cloneDir, bootstrap, escalatedState,
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:
@@ -143,14 +147,13 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
-        def decisionResume = new TakeDecisionResume(runner)
-        def limitOnePipeline = new com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition(
-                '1', new com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits(1), [stage()])
+        def limitOnePipeline = new PipelineDefinition(
+                '1', new AutonomyLimits(1), [stage()])
         tracker.collectDecisions(REF) >> []
 
         when:
-        def result = decisionResume.resume(
-                cloneDir, bootstrap, limitOnePipeline, exhaustedState,
+        def result = newDecisionResume(runner, limitOnePipeline).resume(
+                cloneDir, bootstrap, exhaustedState,
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:
@@ -173,16 +176,15 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
-        def decisionResume = new TakeDecisionResume(runner)
-        def limitOnePipeline = new com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition(
-                '1', new com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits(1), [stage()])
+        def limitOnePipeline = new PipelineDefinition(
+                '1', new AutonomyLimits(1), [stage()])
         tracker.collectDecisions(REF) >> [
             reply('try again', '2026-07-18T09:00:00Z')
         ]
 
         when:
-        def result = decisionResume.resume(
-                cloneDir, bootstrap, limitOnePipeline, exhaustedState,
+        def result = newDecisionResume(runner, limitOnePipeline).resume(
+                cloneDir, bootstrap, exhaustedState,
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:
@@ -209,17 +211,16 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         persistOneRound(taskId, afterRound)
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         def report = new EscalationReport.CannotVerify(
-                new com.github.oinsio.gnomish.domain.engine.CheckRef(0, 'tests'), 'boom', '')
+                new CheckRef(0, 'tests'), 'boom', '')
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
 
         def runner = newTakeResumeRunner()
         def bootstrap = runner.bootstrap(cloneDir, taskId)
-        def decisionResume = new TakeDecisionResume(runner)
         tracker.collectDecisions(REF) >> []
 
         when:
-        decisionResume.resume(
-                cloneDir, bootstrap, pipeline(), escalatedState,
+        newDecisionResume(runner, pipeline()).resume(
+                cloneDir, bootstrap, escalatedState,
                 RunArguments.InteractiveMode.ALL, tracker, REF, INSTANCE)
 
         then:

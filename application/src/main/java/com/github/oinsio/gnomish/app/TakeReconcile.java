@@ -28,8 +28,8 @@ import org.jspecify.annotations.Nullable;
  * has no legitimate resume, so a branch that recorded {@code Completed} while the tracker is still
  * open (anything but {@code Finished}) always means "the finish write is pending", never "re-run".
  * The {@code Completed} cleanup commit (FR15 of add-git-workflow) removed {@code .gnomish-task/}
- * from the branch tip, so {@link TakeResumeRunner#bootstrap} cannot read a live {@code task.json}
- * (it throws {@link java.nio.file.NoSuchFileException}); the delivered state is recovered from
+ * from the branch tip, so {@link ResumeMechanics#loadBranch} finds no live {@code task.json} and
+ * reports the branch as delivered-and-cleaned; the delivered state is recovered from
  * branch history via the {@link TaskBranchGit} port and posted through the very same {@link
  * TakeFinishReport#finish} a fresh completion uses — identical report text, identical {@link
  * TakeResult.Delivered}, identical {@link com.github.oinsio.gnomish.app.take.ClaimGuard} "claim
@@ -94,43 +94,39 @@ final class TakeReconcile {
      *
      * <p>Implements FR10, D10, NFR-C1 of add-claim-heartbeat.
      *
-     * @param git the task-git capability set the task repository comes from; never null
-     * @param cloneDir the project clone; never mutated
-     * @param worktreesRoot the worktrees root the task's repository is rooted under
-     * @param bootstrap the resumed branch bundle: recorded park outcome, worktree, escalation report
+     * <p>Mode-independent (design D8 of add-serve-sandbox-lifecycle): the park is rebuilt from the
+     * branch's own facts and the tracker write is the whole action, so host and container mode
+     * differ only in the two values passed in — where {@code finalState} was read from, and whether
+     * clearing the pending marker does anything (container mode has no marker write yet, so its
+     * {@code clearMarker} is a no-op and every future resume re-delivers the park; idempotent by the
+     * {@code ClaimGuard} pre-write check).
+     *
+     * @param branch the resumed branch: recorded park outcome, escalation report, branch name
+     * @param finalState the branch's last durably recorded state, read by the caller's mechanics
+     * @param clearMarker clears the durable "tracker-write pending" marker once the write confirms
      * @param tracker the tracker port the deferred park is made through; never null
      * @param ref the task's tracker identity; never null
      * @param instanceId this factory instance's identity, for the pre-write claim check; never null
      * @return the {@link TakeResult.AwaitingHuman} the deferred park produced; never null
      */
     static TakeResult deliverPark(
-            TaskGit git,
-            Path cloneDir,
-            Path worktreesRoot,
-            ResumeBootstrap bootstrap,
+            ResumedBranch branch,
+            TaskState finalState,
+            Runnable clearMarker,
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
         var retry = TerminalWriteRetry.system();
-        Runnable clearMarker = () -> taskRepository.confirmTerminalWrite(bootstrap.taskId());
-        TaskState finalState = git.store().readRecordedState(bootstrap.worktreePath());
-        if (bootstrap.outcome() instanceof RecordedOutcome.Paused paused) {
-            var pausedOutcome = new TaskOutcome.Paused(finalState, paused.passedStage());
+        if (branch.outcome() instanceof RecordedOutcome.Paused(var passedStage)) {
+            var pausedOutcome = new TaskOutcome.Paused(finalState, passedStage);
             return TakePauseExit.finish(
-                    pausedOutcome,
-                    bootstrap.context(),
-                    bootstrap.branchName(),
-                    tracker,
-                    ref,
-                    instanceId,
-                    retry,
-                    clearMarker);
+                    pausedOutcome, branch.context(), branch.branchName(), tracker, ref, instanceId, retry, clearMarker);
         }
         // The only remaining park kind is Escalated: resumeExisting calls deliverPark solely for an
         // Escalated/Paused branch, and recordOutcome always records lastEscalation alongside an
-        // Escalated outcome — so the report is present.
-        var escalated = new TaskOutcome.Escalated(finalState, requireEscalationReport(bootstrap.lastEscalation()));
+        // Escalated outcome — so the report is present. The instanceof pattern above already handles
+        // a null outcome (it simply doesn't match), so no explicit null case is needed here.
+        var escalated = new TaskOutcome.Escalated(finalState, requireEscalationReport(branch.lastEscalation()));
         return TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker);
     }
 

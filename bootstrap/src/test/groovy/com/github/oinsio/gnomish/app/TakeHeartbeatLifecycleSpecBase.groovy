@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -118,7 +119,7 @@ tracker:
                 TrackerValidatorStub.acceptingGithubSource(),
                 TakeCommandSeams.DEFAULTS
                 .withHeartbeatSleeper(sleeper)
-                .withReaperSleeper(reaperSleeper))
+                .withReaperSleeper(reaperSleeper), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     def "FR1: the held claim is beaten during a long round and beating stops at the terminal result"() {

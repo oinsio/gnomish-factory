@@ -100,7 +100,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
     def "a container-mode run completes: rounds in the box, harvest, outside push, disposed environment"() {
         given: 'a container-mode runner over the fake-agent sandbox image'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false)
+        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def runner = new ContainerGitModeRunner(
                 newAssembly(factoryProps), TaskGitFixture.real(), sandbox, factoryProps, ContainerSupportFixture.real())
