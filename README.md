@@ -2,7 +2,9 @@
 
 ![Gnomish Factory](docs/assets/gnomish-factory.png)
 
-An external orchestrator where AI agents — the gnomes — pick tasks from a task tracker and drive them through a development pipeline autonomously. Humans are exception handlers, not participants: they step in only when a task is blocked or the gnomes cannot choose between alternatives.
+Gnomish Factory is an external, stateless **AI agent orchestrator** designed for **autonomous software development**. AI coding agents — the gnomes — autonomously pick tasks from a tracker (GitHub, Jira) and drive them through a multi-stage development pipeline. Humans function strictly as exception handlers, not active participants: they step in only when a task is blocked or the agents hit an undecidable choice.
+
+Built on a pure ports-and-adapters architecture (Java 25), the factory provides a framework for **multi-agent engineering**. It combines declarative pipeline stages, self-correcting quality control loops (**LLM-as-a-judge**), and deterministic verification gates inside an isolated container sandbox, making **autonomous agentic workflows** safe, verifiable, and fully resumable.
 
 > **Status: runs end to end and feeds itself from the tracker, but is not feature-complete yet.** Requirements and architecture are shaped through [OpenSpec](openspec); the build, quality gates, and a minimal bootable application exist (see [Building](#building)). What works today:
 >
