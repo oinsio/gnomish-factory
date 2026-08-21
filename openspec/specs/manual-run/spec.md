@@ -244,6 +244,22 @@ All prompts, renders, and summaries SHALL be English; unrecognized input SHALL r
 - **WHEN** an in-place run starts
 - **THEN** the dialog states that state is in memory only and the task dies with the process
 
+### Requirement: Manual ownership mode
+Container environments created by `gnomish run` SHALL be labelled with ownership mode `manual`. Manual objects are governed by the age-only policy of `sandbox-lifecycle` — no claim oracle — so a live manual session is never disturbed by a coexisting daemon, and a forgotten manual zombie is still reclaimed after the configured thresholds.
+<!-- implements FR2, FR7 of add-serve-sandbox-lifecycle -->
+
+#### Scenario: Manual session beside a daemon
+- **WHEN** a container `gnomish run` session works on a host where `gnomish serve` also runs
+- **THEN** the daemon's sweep classifies the manual objects by their mode label and applies only the age policy — the running manual box under the threshold is untouched
+
+### Requirement: Run startup sweep degrades without a tracker
+The `run` startup sweep pass SHALL evaluate the shared `sandbox-lifecycle` policy. When no tracker is configured, tracked objects of other tasks SHALL receive skipped-no-verdict (untouched, logged); manual objects follow the age policy, which needs no tracker; the run's own task key keeps its existing `--discard-work` and reattach semantics. Verdicts SHALL be logged in the uniform vocabulary.
+<!-- implements FR6, FR9, NFR-O4, NFR-R1 of add-serve-sandbox-lifecycle -->
+
+#### Scenario: Trackerless run touches no tracked object
+- **WHEN** a `gnomish run` without tracker configuration starts on a host holding another task's tracked objects
+- **THEN** those objects are reported skipped-no-verdict and untouched, and the run proceeds normally
+
 ### Requirement: Resume invocation
 `gnomish run --dir <dir> --resume <task>` SHALL resume the named task from its branch; `--resume` is mutually exclusive with `--task`, `--task-file`, `--task-id`, and `--from-stage` (usage error). The resume dialogs SHALL mirror the in-process escalation dialogs: escalated → the report render and decision prompt; paused → the checkpoint confirmation; outcome null → continue silently from the recorded position; completed → report the task is done and exit with the success code.
 <!-- implements FR8, UX2 of add-git-workflow -->
