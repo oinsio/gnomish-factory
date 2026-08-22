@@ -18,7 +18,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     def delegate = Mock(TaskExecutionEnvironment)
     def docker = new RecordingDockerCli()
-    def guard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'))
+    def guard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
 
     def "FR8: materialize delegates and then self-checks — a failing probe propagates and no process ran"() {
         given: 'a self-check that fails at its first probe (guard cannot come up)'
@@ -127,7 +127,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
                 == new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z')
 
         when: 'a resumed lease — a fresh guard wrapper — is handed the cursor of THIS container'
-        def continuingGuard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'))
+        def continuingGuard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         TaskExecutionEnvironment continuing = new SelfCheckedEnvironment(
                 delegate,
                 new EnvironmentSelfCheck(delegate, continuingGuard, docker, 'k1', 'runc', [], { d -> }),
@@ -147,7 +147,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
         ]
 
         when: 'a resumed lease is instead handed a cursor from another container'
-        def resumedGuard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'))
+        def resumedGuard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         TaskExecutionEnvironment resumed = new SelfCheckedEnvironment(
                 delegate,
                 new EnvironmentSelfCheck(delegate, resumedGuard, docker, 'k1', 'runc', [], { d -> }),

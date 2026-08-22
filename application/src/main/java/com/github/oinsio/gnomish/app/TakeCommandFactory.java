@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Map;
@@ -29,7 +30,9 @@ final class TakeCommandFactory {
             Clock clock,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             SecretsProvider secretsProvider,
-            PipelineSource pipelineSource) {
+            PipelineSource pipelineSource,
+            SandboxLifecyclePass sandboxLifecyclePass,
+            ContainerTakeSupport containerTakeSupport) {
         return of(
                 assembly,
                 git,
@@ -40,7 +43,9 @@ final class TakeCommandFactory {
                 trackerAdapterRegistry,
                 secretsProvider,
                 pipelineSource,
-                TakeCommandSeams.DEFAULTS);
+                TakeCommandSeams.DEFAULTS,
+                sandboxLifecyclePass,
+                containerTakeSupport);
     }
 
     /** Explicit seams (task 6.1, task 6.2, task 6.6, fix-reaper-idle-liveness FR5): lets a spec
@@ -55,7 +60,9 @@ final class TakeCommandFactory {
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
-            TakeCommandSeams seams) {
+            TakeCommandSeams seams,
+            SandboxLifecyclePass sandboxLifecyclePass,
+            ContainerTakeSupport containerTakeSupport) {
         return new TakeCommand(
                 assembly,
                 git,
@@ -70,6 +77,8 @@ final class TakeCommandFactory {
                 seams.reaperSleeper(),
                 seams.heartbeatMonotonicTime(),
                 seams.takeoverConfirmation(),
-                seams.serveProperties());
+                seams.serveProperties(),
+                sandboxLifecyclePass,
+                containerTakeSupport);
     }
 }

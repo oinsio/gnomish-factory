@@ -40,6 +40,7 @@ public final class EgressGuard {
     private final List<String> allowlist;
     private final Path configDir;
     private final GuardDenialReads reads;
+    private final ObjectOwnership ownership;
 
     /**
      * @param docker the docker subprocess seam; never null
@@ -49,14 +50,23 @@ public final class EgressGuard {
      *     never null, may be empty (default-deny with nothing allowed)
      * @param configDir the factory-private directory the guard config renders into and the guard
      *     container mounts read-only; never inside a working copy or scratch area
+     * @param ownership the mode and project identity stamped on the guard container at creation
+     *     (FR2 of add-serve-sandbox-lifecycle); never null
      */
-    EgressGuard(DockerCli docker, String key, String guardImage, List<String> allowlist, Path configDir) {
+    EgressGuard(
+            DockerCli docker,
+            String key,
+            String guardImage,
+            List<String> allowlist,
+            Path configDir,
+            ObjectOwnership ownership) {
         this.docker = docker;
         this.key = key;
         this.guardImage = guardImage;
         this.allowlist = List.copyOf(allowlist);
         this.configDir = configDir;
         this.reads = new GuardDenialReads(docker, key);
+        this.ownership = ownership;
     }
 
     /**
@@ -174,7 +184,7 @@ public final class EgressGuard {
         // A new container is a new denial source: its id, and any cursor matched against it, differ.
         reads.sourceRecreated();
         DockerResult run = docker.run(GuardCommands.runGuard(
-                key, guardImage, configDir.toAbsolutePath().toString()));
+                key, guardImage, configDir.toAbsolutePath().toString(), ownership));
         if (!run.ok()) {
             throw new GuardUnavailableException("docker run of the egress guard for " + key + " failed: "
                     + run.stderr().strip());

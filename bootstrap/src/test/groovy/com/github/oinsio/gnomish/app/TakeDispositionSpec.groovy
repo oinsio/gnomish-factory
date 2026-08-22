@@ -38,7 +38,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
     private TakeDisposition newDisposition() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
-        new TakeDisposition(newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [])
+        new TakeDisposition(newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
+        ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
+        ContainerTakeSupport.hostOnly())
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
@@ -47,7 +49,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeDisposition(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
-                ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag())
+                ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag(),
+                ContainerTakeSupport.hostOnly())
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
@@ -169,7 +172,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = new TakeDisposition(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
                 beat, false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC),
-                new ClaimLossFlag())
+                new ClaimLossFlag(), ContainerTakeSupport.hostOnly())
 
         when:
         disposition.dispose(

@@ -167,6 +167,6 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             Path root = WORKTREES_ROOT) {
         TakeClaimAndWorkFactory.forSlot(
                 assembly, git, root, 'taskId',
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], beat, claimLossFlag)
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [], beat, claimLossFlag, ContainerTakeSupport.hostOnly())
     }
 }

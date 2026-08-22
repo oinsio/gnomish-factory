@@ -43,6 +43,7 @@ import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
+import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import java.nio.file.Files
 import java.nio.file.Path
@@ -110,7 +111,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeSlotRunner(
                 newAssembly(), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, 3, 'taskId',
-                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE)
+                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly())
     }
 
     /** A real, quick-to-drain automaton: the mocked tracker reports nothing eligible. */
@@ -148,7 +149,15 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
         def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
         snapshotWriter.start()
-        new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, instance, clock)
+        new ObservabilityWiring(
+                lifecycleTracker,
+                snapshotWriter,
+                lifecycleLedgerWriter,
+                taskOutcomeLedgerWriter,
+                new SweepLedgerWriter(appender, instance, clock),
+                appender,
+                instance,
+                clock)
     }
 
     // Task 6.3: same as newObservability(), but the lifecycleTracker's DirtyNotifier records every
@@ -174,7 +183,15 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
         def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
         snapshotWriter.start()
-        new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, instance, clock)
+        new ObservabilityWiring(
+                lifecycleTracker,
+                snapshotWriter,
+                lifecycleLedgerWriter,
+                taskOutcomeLedgerWriter,
+                new SweepLedgerWriter(appender, instance, clock),
+                appender,
+                instance,
+                clock)
     }
 
     // Task 6.3, FR12/FR13: an observability whose lifecycleTracker fires the captured shutdown hook
@@ -206,7 +223,15 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
         def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
         snapshotWriter.start()
-        new ObservabilityWiring(lifecycleTracker, snapshotWriter, lifecycleLedgerWriter, taskOutcomeLedgerWriter, appender, instance, clock)
+        new ObservabilityWiring(
+                lifecycleTracker,
+                snapshotWriter,
+                lifecycleLedgerWriter,
+                taskOutcomeLedgerWriter,
+                new SweepLedgerWriter(appender, instance, clock),
+                appender,
+                instance,
+                clock)
     }
 
     private static Snapshot fixtureSnapshot(LifecycleStateTracker tracker) {

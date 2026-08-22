@@ -2,26 +2,8 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
-import com.github.oinsio.gnomish.app.serve.SlotLedger
-import com.github.oinsio.gnomish.serveobservability.FeedPhase
-import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
-import com.github.oinsio.gnomish.serveobservability.HeartbeatState
-import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
-import com.github.oinsio.gnomish.serveobservability.JanitorVital
-import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
-import com.github.oinsio.gnomish.serveobservability.ReaperVital
-import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
-import com.github.oinsio.gnomish.serveobservability.Snapshot
-import com.github.oinsio.gnomish.serveobservability.TrackerHealth
-import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
-import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
-import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
-import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
-import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
-import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
-import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import java.nio.file.Files
 import java.nio.file.Path
@@ -75,35 +57,11 @@ class ObservabilityWiringStartStopSpec extends Specification {
      * lifecycle call, never by a background tick that happened to land.
      */
     private ObservabilityWiring newUnstartedWiring(LifecycleStateTracker lifecycleTracker) {
-        snapshotFile = homeDir.resolve('snapshot.json')
-        def snapshotWriter = new SnapshotWriter(
-                snapshotFile,
-                { -> fixtureSnapshot(lifecycleTracker) },
-                new SnapshotJsonMapper(),
-                Duration.ofHours(1),
-                CLOCK,
-                0)
-        def appender = new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()), homeDir, INSTANCE_NAME, CLOCK)
-        taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, INSTANCE, CLOCK)
-        return new ObservabilityWiring(
-                lifecycleTracker,
-                snapshotWriter,
-                new LifecycleLedgerWriter(appender, INSTANCE, CLOCK),
-                taskOutcomeLedgerWriter,
-                appender,
-                INSTANCE,
-                CLOCK)
-    }
-
-    private static Snapshot fixtureSnapshot(LifecycleStateTracker tracker) {
-        def feed = new FeedSnapshot(FeedPhase.IDLE_EMPTY, Instant.EPOCH, Instant.EPOCH, 0, 2)
-        def vitals = new VitalsSnapshot(
-                new HeartbeatVital(HeartbeatState.RUNNING, Instant.EPOCH, 0),
-                new ReaperVital(Instant.EPOCH, 0, 300L),
-                new JanitorVital(Instant.EPOCH))
-        return new Snapshot(1, Instant.EPOCH, 0L, INSTANCE, LifecycleSnapshotAssembler.assemble(tracker), feed,
-                new SlotsSnapshot(2, []), vitals, new TrackerHealth(null, 0))
+        def built = ObservabilityWiringTestFixtures.build(
+                homeDir, INSTANCE_NAME, INSTANCE, CLOCK, lifecycleTracker, Duration.ofHours(1), false)
+        snapshotFile = built.snapshotFile
+        taskOutcomeLedgerWriter = built.taskOutcomeLedgerWriter
+        return built.wiring
     }
 
     // FR1, FR12: start() has two effects, and both matter to an operator watching a fresh daemon —

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -38,7 +39,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
     Path tempDir
 
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     Path cloneDir
 
     def setup() {
@@ -73,7 +74,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
      */
     private ContainerRunSupport readBack(String taskId) {
         def environments = docker.environments(KEY, cloneDir, sandbox, tempDir.resolve('guard'))
-        new ContainerRunSupport(new GitProcessRunner(), cloneDir, taskId, environments, segments())
+        new ContainerRunSupport(new GitProcessRunner(), cloneDir, taskId, environments, segments(), SandboxLifecyclePass.NONE)
     }
 
     /**
@@ -87,7 +88,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
     private void run(String taskId, String base, PrintStream output, InputStream input = lines()) {
         def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
             def environments = docker.environments(TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
-            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s)
+            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE)
         } as ContainerSupportFactory
         def runner = new ContainerGitModeRunner(
                 newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), factory)

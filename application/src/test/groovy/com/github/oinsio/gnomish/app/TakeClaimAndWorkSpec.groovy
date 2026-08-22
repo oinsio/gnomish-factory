@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -216,6 +217,73 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         and: 'and the beat still stopped'
         beat.events.last() == "unregister:${REF.id()}"
+    }
+
+    // FR9, D16: a deliberate, dedicated-exit-code failure of a CLAIMED run keeps its exit code —
+    // but the claim must not survive it. Nothing else in this process will ever write the tracker
+    // for this ref again (the exception exits the invocation), so without a release the task sits
+    // Working behind a dead runner until its lease expires — the very outcome the crash-abort arm
+    // exists to prevent. Reachable in practice: the sandbox mode selector refuses a container-bound
+    // pipeline whose prerequisites are unmet with a UsageException, after the claim is held.
+    def "releases the claim when a deliberate #kind aborts a claimed run"() {
+        given:
+        def tracker = Mock(Tracker)
+        def branches = Stub(TaskBranchGit) {
+            locate(_, _) >> { throw failure() }
+        }
+
+        when:
+        claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
+                tracker, Stub(RunAssembly)), tracker)
+
+        then:
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.release(REF)
+
+        and: 'and the exception still propagates unchanged, keeping its own exit code'
+        thrown(expected)
+
+        and: 'the claim is dropped, not aborted or parked — this is not an infrastructure failure'
+        0 * tracker.recordAbort(_, _)
+        0 * tracker.park(_, _, _)
+
+        where:
+        kind | failure | expected
+        'usage error' | {
+            new UsageException('unmet container prerequisite')
+        } | UsageException
+        'diverged-branch refusal' | {
+            new DivergedBranchException('PROJ-1', 'gnomish/PROJ-1', 'aaa', 'bbb')
+        } | DivergedBranchException
+    }
+
+    // NFR-R2 in spirit: the release is best-effort. A tracker that is itself the reason the run is
+    // bailing out must not replace the operator-facing usage error with a tracker stack trace.
+    def "keeps the original failure when the best-effort release itself throws"() {
+        given:
+        def tracker = Mock(Tracker)
+        def branches = Stub(TaskBranchGit) {
+            locate(_, _) >> {
+                throw new UsageException('unmet container prerequisite')
+            }
+        }
+
+        when:
+        claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
+                tracker, Stub(RunAssembly)), tracker)
+
+        then:
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.release(REF) >> {
+            throw new IllegalStateException('tracker is down')
+        }
+
+        and:
+        def ex = thrown(UsageException)
+        ex.message == 'unmet container prerequisite'
+
+        and: 'the failed release is not lost either — it rides along as suppressed'
+        ex.suppressed*.message == ['tracker is down']
     }
 
     // FR9, D3: the fresh route, followed all the way to its terminal result — the claim choke point

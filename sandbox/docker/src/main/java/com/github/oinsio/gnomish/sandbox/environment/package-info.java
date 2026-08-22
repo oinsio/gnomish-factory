@@ -34,13 +34,13 @@
  * com.github.oinsio.gnomish.sandbox.environment.GuardCommands}, labelled by
  * {@link com.github.oinsio.gnomish.sandbox.environment.FactoryDockerLabels} for
  * disposal and the {@link
- * com.github.oinsio.gnomish.sandbox.environment.ContainerOrphanSweeper}; {@link
+ * com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleSweep}; {@link
  * com.github.oinsio.gnomish.sandbox.environment.ContainerFileChannel} and {@link
  * com.github.oinsio.gnomish.sandbox.environment.ContainerHarvest} are its file
  * and harvest seams; {@link
  * com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentDisposal}
  * and {@link
- * com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentReaper}
+ * com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentKeeper}
  * (factory-serve delta) realize keep-then-dispose end-of-life; {@link
  * com.github.oinsio.gnomish.sandbox.environment.DockerOutput} and {@link
  * com.github.oinsio.gnomish.sandbox.environment.DockerResult} parse subprocess

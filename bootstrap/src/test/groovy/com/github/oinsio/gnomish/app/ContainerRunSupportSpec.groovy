@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -24,6 +25,7 @@ import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import java.nio.file.Files
 import java.nio.file.Path
@@ -45,7 +47,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     Path tempDir
 
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     Path cloneDir
     Path origin
 
@@ -71,7 +73,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
                 new GitProcessRunner(), cloneDir, taskId,
                 environments, [
                     new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
-                ])
+                ], SandboxLifecyclePass.NONE)
     }
 
     private static void createTask(ContainerRunSupport support, String taskId = 'T-1') {
@@ -320,9 +322,10 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         def configuredSupport = ContainerRunSupport.create(
                 cloneDir, 'T-CFG', segments, sandbox, [
                     GithubCheckClientFactory.TOKEN_ENV_VAR
-                ], [])
+                ], [], OwnershipMode.MANUAL)
         def unconfiguredSupport =
-                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, [], [])
+                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, [], [],
+                OwnershipMode.MANUAL)
 
         then:
         configuredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)

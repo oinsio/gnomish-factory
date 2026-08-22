@@ -44,7 +44,7 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
                 new AbortHandler(tracker, FIXED_CLOCK), 3, 'taskId', [], ClaimBeat.NONE, false, { _ref, _holder, _age ->
                     TakeoverConfirmation.Decision.DECLINED
                 } as TakeoverConfirmation,
-                FIXED_CLOCK, new ClaimLossFlag())
+                FIXED_CLOCK, new ClaimLossFlag(), ContainerTakeSupport.hostOnly())
     }
 
     private TakeResult dispose(TrackerTask task) {

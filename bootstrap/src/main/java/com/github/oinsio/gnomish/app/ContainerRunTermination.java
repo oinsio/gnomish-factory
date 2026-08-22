@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
+import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -29,12 +30,21 @@ final class ContainerRunTermination {
     private ContainerRunTermination() {}
 
     /**
-     * Runs the startup orphan sweep (FR11, NFR-R2): objects a dead instance left labelled but no
-     * live task owns are removed, this task's own environments preserved. Delegates to the
-     * environments seam; a missing Docker runtime is a logged no-op, never a failure.
+     * Runs the startup sweep-lifecycle pass (FR6, FR7 of add-serve-sandbox-lifecycle): {@code run}
+     * holds no project-wide claim listing, so tracked objects of OTHER tasks degrade to
+     * skipped-no-verdict (never touched) while this run's own {@code mode=manual} objects are
+     * governed by age alone. A missing Docker runtime — or any other failure of the pass — is
+     * logged and swallowed here, never a failed run: the sweep is hygiene, not the task.
      */
     static void sweepOrphans(ContainerRunSupport support) {
-        support.environments.sweepOrphans();
+        try {
+            String summary = support.sandboxLifecyclePass.run(support.cloneDir, new LivenessVerdict.NoVerdict());
+            if (!summary.isBlank()) {
+                log.info("gnomish run: {}", summary);
+            }
+        } catch (RuntimeException e) {
+            log.info("gnomish run: sandbox lifecycle sweep skipped: {}", e.toString());
+        }
     }
 
     /**

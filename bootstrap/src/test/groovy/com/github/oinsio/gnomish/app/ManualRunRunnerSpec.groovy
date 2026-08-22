@@ -1,33 +1,18 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
-import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
-import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
-import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
-import com.github.oinsio.gnomish.sandbox.BindingProperties
-import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import org.springframework.boot.DefaultApplicationArguments
@@ -57,38 +42,11 @@ class ManualRunRunnerSpec extends Specification implements BareGitRepoFixture, A
     @TempDir
     Path homeDir
 
+    // FR1, FR2, UX3 of refactor-app-spec-fixtures: delegates to the shared 21-collaborator
+    // factory on AppAssemblyFixture (also used by ManualRunRunnerContainerOwnershipSpec),
+    // taking every default so this reads exactly like the pre-extraction host git-mode wiring.
     private ManualRunRunner newRunner() {
-        new ManualRunRunner(
-                new RunArgumentsParser(),
-                new PipelineStartup(TrackerValidatorStub.plainSource()),
-                new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
-                new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                testProperties(),
-                new SandboxProperties(null, null, null, null, null, null, false),
-                // Host binding, explicitly: container is the default (D13 of add-sandbox-core),
-                // and these specs prove the host git-mode path.
-                new BindingProperties('host', [:]),
-                DiscoveredBindings.real(),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
-                new StatusCommand(TaskGitFixture.real(), worktreesRoot),
-                new UsageCommand(TaskGitFixture.real()),
-                new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource()),
-                Clock.systemUTC(),
-                [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null))
+        newManualRunRunner(worktreesRoot, homeDir)
     }
 
     private void write(String relative, String text) {

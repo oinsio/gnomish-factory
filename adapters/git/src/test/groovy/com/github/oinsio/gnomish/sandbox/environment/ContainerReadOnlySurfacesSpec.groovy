@@ -79,7 +79,7 @@ class ContainerReadOnlySurfacesSpec extends Specification implements BareGitRepo
                 LIMITS,
                 false,
                 clock,
-                ChildEnvAllowlist.none())
+                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         env.materialize('task/readonly', null)
     }
 

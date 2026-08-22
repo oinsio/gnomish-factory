@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve;
 
+import com.github.oinsio.gnomish.app.ContainerTakeSupport;
 import com.github.oinsio.gnomish.app.RunArguments;
 import com.github.oinsio.gnomish.app.RunAssembly;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
@@ -90,7 +91,8 @@ public final class TakeSlotRunner implements SlotRunner {
             ClaimBeat heartbeat,
             ClaimLossFlag claimLossFlag,
             Tracker tracker,
-            InstanceId instanceId) {
+            InstanceId instanceId,
+            ContainerTakeSupport containerTakeSupport) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -100,7 +102,8 @@ public final class TakeSlotRunner implements SlotRunner {
                 abortThreshold,
                 credentialEnvVarsToScrub,
                 heartbeat,
-                claimLossFlag);
+                claimLossFlag,
+                containerTakeSupport);
         this.cloneDir = cloneDir;
         this.definition = definition;
         this.tracker = tracker;

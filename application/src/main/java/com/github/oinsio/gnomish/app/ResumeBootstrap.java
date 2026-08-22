@@ -43,4 +43,5 @@ public record ResumeBootstrap(
         Path worktreePath,
         String branchName,
         String baseCommit,
-        boolean trackerWritePending) {}
+        boolean trackerWritePending)
+        implements ResumedBranch {}

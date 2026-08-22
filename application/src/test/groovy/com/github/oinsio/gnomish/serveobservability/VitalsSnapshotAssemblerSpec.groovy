@@ -8,10 +8,13 @@ import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.nio.file.Path
+import java.time.Clock
 import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -39,7 +42,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
         new InstanceHeartbeat(
                 tracker,
                 new HeartbeatProgress(),
-                { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper,
+                { Duration d -> } as Sleeper,
                 clock,
                 INTERVAL,
                 ClaimLostSink.IGNORE)
@@ -47,7 +50,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
 
     private StandingReaper newReaper() {
         new StandingReaper(
-                ReaperDuty.NONE, { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper, INTERVAL,
+                ReaperDuty.NONE, { Duration d -> } as Sleeper, INTERVAL,
                 { -> [] }, clock)
     }
 
@@ -58,7 +61,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
                 clock,
-                { Duration d -> } as com.github.oinsio.gnomish.domain.engine.port.Sleeper,
+                { Duration d -> } as Sleeper,
                 { -> Set.of() })
     }
 
@@ -72,7 +75,12 @@ class VitalsSnapshotAssemblerSpec extends Specification {
         def janitor = newJanitor()
 
         when:
-        def vitals = VitalsSnapshotAssembler.assemble(heartbeat, reaper, janitor)
+        def vitals = VitalsSnapshotAssembler.assemble(
+                heartbeat,
+                reaper,
+                janitor,
+                new SweepTickLog(Duration.ofDays(7), Clock.systemUTC(), 20),
+                Duration.ofMinutes(5))
 
         then:
         vitals.heartbeat().state() == HeartbeatState.RUNNING
@@ -82,6 +90,9 @@ class VitalsSnapshotAssemblerSpec extends Specification {
         vitals.reaper().restartCount() == reaper.restartCount()
         vitals.reaper().intervalSeconds() == reaper.interval().toSeconds()
         vitals.janitor().lastRunAt() == janitor.lastRunAt()
+
+        and: 'NFR-O1 of add-serve-sandbox-lifecycle: no tick has completed, so the sweep entry is absent'
+        vitals.sweep() == null
 
         cleanup:
         heartbeat.unregister(ref)

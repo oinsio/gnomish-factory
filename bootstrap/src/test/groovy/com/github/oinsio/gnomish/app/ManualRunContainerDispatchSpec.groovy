@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
@@ -30,7 +30,7 @@ import spock.lang.TempDir
  * package-private test seam, and each dispatched runner is stopped by its own early usage
  * refusal right after its observable start (banner / branch lookup).
  */
-class ManualRunContainerDispatchSpec extends Specification implements AppAssemblyFixture {
+class ManualRunContainerDispatchSpec extends Specification implements AppAssemblyFixture, BareGitRepoFixture {
 
     @TempDir
     Path projectRoot
@@ -54,7 +54,7 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 new SystemClock(),
                 new ThreadSleeper(),
                 testProperties(),
-                new SandboxProperties('gnomish/img', null, null, null, [], [], false),
+                new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null),
                 // Container by default (D13): no explicit binding, image configured.
                 new BindingProperties(null, [:]),
                 DiscoveredBindings.real(),
@@ -71,7 +71,7 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null))
+                new ServeProperties(0, null, null, null, null, null, null))
         // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.
         runner.@dockerProbe = { true } as BooleanSupplier
         runner
@@ -103,12 +103,9 @@ advancement: auto
     }
 
     private void makeProjectRootAGitClone() {
-        def runner = new GitProcessRunner()
-        assert runner.run(projectRoot, 'init').exitCode() == 0
+        gitOutput(projectRoot, 'init')
         Files.writeString(projectRoot.resolve('README.md'), 'seed\n')
-        runner.run(projectRoot, 'add', '-A')
-        assert runner.run(projectRoot, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        .exitCode() == 0
+        commitAll(projectRoot)
     }
 
     // D13, FR14: a fresh git-mode run under container bindings dispatches to
@@ -117,8 +114,7 @@ advancement: auto
         given: 'the task branch already exists, so the container runner refuses after its banner'
         makeProjectRootAGitClone()
         writeOneStagePipeline()
-        def gitRunner = new GitProcessRunner()
-        assert gitRunner.run(projectRoot, 'branch', 'gnomish/ct-dup', 'HEAD').exitCode() == 0
+        gitOutput(projectRoot, 'branch', 'gnomish/ct-dup', 'HEAD')
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')

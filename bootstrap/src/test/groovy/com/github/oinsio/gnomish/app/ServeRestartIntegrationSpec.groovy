@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import java.nio.file.Files
 import java.nio.file.Path
@@ -103,14 +104,14 @@ tracker:
                 homeDir,
                 'taskId',
                 testProperties(instanceName: 'gnomish-factory'),
-                new ServeProperties(2, Duration.ofMillis(20), null, null, null, null),
+                new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                     automaton.run()
-                } as FeedAutomatonStarter)
+                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
         def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-restart-integration-under-test').start {
             try {

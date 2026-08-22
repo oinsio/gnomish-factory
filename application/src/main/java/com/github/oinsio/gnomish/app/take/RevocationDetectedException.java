@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import java.io.Serial;
 
 /**
@@ -40,5 +41,21 @@ public final class RevocationDetectedException extends RuntimeException {
      */
     public RevocationDetectedException(String taskId, String reason) {
         super("revocation detected for taskId \"" + taskId + "\": " + reason);
+    }
+
+    /**
+     * The human-readable reason to surface for a detected revocation, falling back to a generic
+     * message when none was captured. Shared by {@code TakeEngineExecution} and {@code
+     * TakeContainerEngineExecution}, whose revocation-note construction is otherwise identical.
+     */
+    // PIT M4 documented exception: the null branch is provably unreachable — this exception's sole
+    // constructor always calls super(String) with a non-null, non-blank message built from its
+    // taskId/reason parameters, so getMessage() can never be null here. Isolated to its own method
+    // so this defensive-but-dead branch has nowhere for a mutant to hide as a false SURVIVED
+    // against callers' revocation-handling logic, which TakeResumeRunnerRevocationSpec covers.
+    @DoNotMutate
+    public static String reasonFor(RevocationDetectedException revoked) {
+        String message = revoked.getMessage();
+        return message == null ? "revocation detected" : message;
     }
 }

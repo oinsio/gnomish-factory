@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments;
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.BranchPush;
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -62,6 +64,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final GitObjectsTaskRepository taskRepository;
     final FreshJudgeEnvironments judgeEnvironments;
     final BranchPush push;
+    final SandboxLifecyclePass sandboxLifecyclePass;
 
     /**
      * Canonical wiring over an already-built environments seam. Package-private (not {@code
@@ -74,7 +77,8 @@ final class ContainerRunSupport implements SandboxRunSupport {
             Path cloneDir,
             String taskId,
             ContainerEnvironments environments,
-            List<Segment> segments) {
+            List<Segment> segments,
+            SandboxLifecyclePass sandboxLifecyclePass) {
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.taskId = taskId;
@@ -86,6 +90,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
         this.taskRepository = new GitObjectsTaskRepository(gitObjects);
         this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BranchPush(runner);
+        this.sandboxLifecyclePass = sandboxLifecyclePass;
     }
 
     /**
@@ -100,9 +105,16 @@ final class ContainerRunSupport implements SandboxRunSupport {
             List<Segment> segments,
             SandboxProperties sandboxProperties,
             List<String> checkCredentialEnvVars,
-            List<String> credentialEnvVarsToScrub) {
+            List<String> credentialEnvVarsToScrub,
+            com.github.oinsio.gnomish.sandbox.environment.OwnershipMode ownershipMode) {
         return ContainerRunSupportFactory.create(
-                cloneDir, taskId, segments, sandboxProperties, checkCredentialEnvVars, credentialEnvVarsToScrub);
+                cloneDir,
+                taskId,
+                segments,
+                sandboxProperties,
+                checkCredentialEnvVars,
+                credentialEnvVarsToScrub,
+                ownershipMode);
     }
 
     /** The strict sandboxed persistence with the best-effort post-round push (FR5, FR21, FR22). */
@@ -236,5 +248,25 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @Override
     public void disposeExistingEnvironment() {
         ContainerRunTermination.disposeExistingEnvironment(this);
+    }
+
+    /**
+     * The tracker-take revocation salvage protocol (FR15 of add-tracker-port).
+     *
+     * <p>{@code @DoNotMutate} for the "out-of-process delegation" reason of
+     * `.claude/rules/testing.md`: both calls are real Docker/git subprocess delegations whose
+     * observable effect in a daemon-free unit test is indistinguishable from a no-op — salvage
+     * over a real environment and a best-effort push both need a live box and a real remote to
+     * observe. {@code ContainerLifecycleCoverageGapsE2ESpec} — the Docker+Gitea-gated spec written
+     * for task 5.2's revocation path, which {@code TakeContainerEngineExecutionSpec} covers only
+     * as far as the CALLER's hand-off over a stub — is where this method is genuinely exercised
+     * end to end, mirroring {@link SandboxLifecyclePassFactory}'s own exemption for the same
+     * reason.
+     */
+    @Override
+    @DoNotMutate
+    public void revocationSalvageAndPush(String taskId) {
+        salvage().salvage(taskId);
+        push.pushBestEffort(cloneDir, branch);
     }
 }

@@ -85,7 +85,8 @@ final class TakeDisposition {
             boolean takeoverFlag,
             TakeoverConfirmation confirmation,
             Clock clock,
-            ClaimLossFlag claimLossFlag) {
+            ClaimLossFlag claimLossFlag,
+            ContainerTakeSupport containerTakeSupport) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -95,7 +96,8 @@ final class TakeDisposition {
                 abortThreshold,
                 credentialEnvVarsToScrub,
                 heartbeat,
-                claimLossFlag);
+                claimLossFlag,
+                containerTakeSupport);
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
     }
 
@@ -126,7 +128,8 @@ final class TakeDisposition {
                 false,
                 TakeoverConfirmation.UNAVAILABLE,
                 Clock.systemUTC(),
-                new ClaimLossFlag());
+                new ClaimLossFlag(),
+                ContainerTakeSupport.hostOnly());
     }
 
     /**

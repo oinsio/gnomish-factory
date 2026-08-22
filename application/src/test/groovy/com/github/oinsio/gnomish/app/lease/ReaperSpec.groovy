@@ -363,4 +363,54 @@ class ReaperSpec extends Specification {
         1 * tracker.listOpen() >> open
         1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> new RemoveStaleClaimResult.Removed()
     }
+
+    // FR3, NFR-C2 of add-serve-sandbox-lifecycle: a successful listOpen is published to the
+    //     sink verbatim, INCLUDING the instance's own claims — the exclusion below is only for
+    //     staleness observation, not for what the sink sees (the liveness oracle needs the own
+    //     task's key in the live set too).
+    def "publishes a successful listing to the sink, own claims included"() {
+        given:
+        def sink = Mock(OpenTaskListingSink)
+        def reaperWithSink = new Reaper(tracker, memory, sink)
+        def ownRef = new TaskRef('T-own')
+        def open = [
+            working('T-own', version('m1')),
+            working('T-foreign', version('m2'))
+        ]
+
+        when:
+        reaperWithSink.reapOnce([ownRef])
+
+        then:
+        1 * tracker.listOpen() >> open
+        1 * sink.onListed(open)
+        0 * sink.onListingFailed()
+    }
+
+    // FR3, NFR-R1 of add-serve-sandbox-lifecycle: a listOpen outage notifies the sink's failure
+    //     path, never onListed — so a consumer never mistakes stale cached data for a fresh
+    //     empty listing.
+    def "notifies the sink of a listOpen outage instead of publishing a listing"() {
+        given:
+        def sink = Mock(OpenTaskListingSink)
+        def reaperWithSink = new Reaper(tracker, memory, sink)
+
+        when:
+        reaperWithSink.reapOnce([])
+
+        then:
+        1 * tracker.listOpen() >> { throw new RuntimeException('tracker down') }
+        1 * sink.onListingFailed()
+        0 * sink.onListed(_)
+    }
+
+    // The 2-arg constructor keeps every pre-existing call site working unchanged (NONE sink).
+    def "the 2-arg constructor uses the no-op sink"() {
+        when:
+        reaper.reapOnce([])
+
+        then:
+        1 * tracker.listOpen() >> [working('T-1', version())]
+        noExceptionThrown()
+    }
 }

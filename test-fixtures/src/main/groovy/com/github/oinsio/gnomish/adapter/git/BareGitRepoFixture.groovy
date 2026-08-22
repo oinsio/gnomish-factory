@@ -63,4 +63,15 @@ trait BareGitRepoFixture {
         assert result.exitCode() == 0: "git ${args.join(' ')} failed: ${result.stderr()}"
         result.stdout().trim()
     }
+
+    /**
+     * Runs {@code git worktree add <worktreePath> -b <branch>} against {@code repo} and returns
+     * {@code worktreePath} — the cross-module-safe entry point for specs that need a real
+     * registered worktree, since {@link GitProcessRunner#run} is package-private.
+     */
+    Path addWorktree(Path repo, Path worktreePath, String branch) {
+        def result = new GitProcessRunner().run(repo, 'worktree', 'add', worktreePath.toString(), '-b', branch)
+        assert result.exitCode() == 0: "git worktree add failed: ${result.stderr()}"
+        worktreePath
+    }
 }

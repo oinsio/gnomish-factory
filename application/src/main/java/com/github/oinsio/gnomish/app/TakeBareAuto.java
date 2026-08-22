@@ -83,7 +83,8 @@ public final class TakeBareAuto {
             ClaimBeat heartbeat,
             ClaimLossFlag claimLossFlag,
             int wipLimit,
-            Random random) {
+            Random random,
+            ContainerTakeSupport containerTakeSupport) {
         var claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -93,7 +94,8 @@ public final class TakeBareAuto {
                 abortThreshold,
                 credentialEnvVarsToScrub,
                 heartbeat,
-                claimLossFlag);
+                claimLossFlag,
+                containerTakeSupport);
         this.walk = new BareTakeClaimWalk(claimAndWork, taskIdMdcKey, backoffBase, backoffCap, clock, wipLimit, random);
     }
 
@@ -129,7 +131,8 @@ public final class TakeBareAuto {
                 ClaimBeat.NONE,
                 new ClaimLossFlag(),
                 wipLimit,
-                random);
+                random,
+                ContainerTakeSupport.hostOnly());
     }
 
     /**

@@ -62,6 +62,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     private final boolean enforceDiskQuota;
     private final Clock clock;
     private final ChildEnvAllowlist allowlist;
+    private final ObjectOwnership ownership;
 
     private @Nullable ContainerFileChannel channel;
     private @Nullable String branch;
@@ -88,7 +89,8 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
             ResourceLimits limits,
             boolean enforceDiskQuota,
             Clock clock,
-            ChildEnvAllowlist allowlist) {
+            ChildEnvAllowlist allowlist,
+            ObjectOwnership ownership) {
         this.docker = docker;
         this.key = key;
         this.sourceClone = sourceClone;
@@ -99,6 +101,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         this.enforceDiskQuota = enforceDiskQuota;
         this.clock = clock;
         this.allowlist = allowlist;
+        this.ownership = ownership;
     }
 
     @Override
@@ -107,7 +110,8 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         String name = FactoryDockerLabels.containerName(key);
         DockerResult inspect = docker.run(DockerCommands.inspectContainerState(name));
         if (inspect.ok()) {
-            ContainerMaterializer.reattach(docker, key, image, sourceClone, name, inspect, branch, commitPin);
+            ContainerMaterializer.reattach(
+                    docker, key, image, sourceClone, name, inspect, branch, commitPin, ownership);
         } else {
             ContainerMaterializer.create(
                     docker,
@@ -120,7 +124,8 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
                     WORKING_COPY,
                     SCRATCH,
                     branch,
-                    commitPin);
+                    commitPin,
+                    ownership);
         }
         channel = new ContainerFileChannel(docker, key, WORKING_COPY, SCRATCH);
         this.branch = branch;

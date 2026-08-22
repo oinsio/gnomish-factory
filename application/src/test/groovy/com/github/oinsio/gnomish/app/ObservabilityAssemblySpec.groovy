@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
@@ -114,7 +115,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
             -> clock.instant()
         } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
-        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0)
+        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0, null)
         def engineClock = {
             -> clock.instant()
         } as com.github.oinsio.gnomish.domain.engine.port.Clock
@@ -134,6 +135,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 newHeartbeat(tracker, engineClock),
                 newStandingReaper(engineClock),
                 newWorktreeJanitor(engineClock),
+                new SweepTickLog(Duration.ofDays(7), clock, 20),
                 clock)
 
         then: 'a genuine, non-null wiring is returned'
@@ -184,7 +186,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         slotLedger.acquire()
         slotLedger.assign(ref)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
-        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0)
+        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0, null)
         def engineClock = {
             -> clock.instant()
         } as com.github.oinsio.gnomish.domain.engine.port.Clock
@@ -204,6 +206,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 newHeartbeat(tracker, engineClock),
                 newStandingReaper(engineClock),
                 newWorktreeJanitor(engineClock),
+                new SweepTickLog(Duration.ofDays(7), clock, 20),
                 clock)
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))

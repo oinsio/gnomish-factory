@@ -4,8 +4,10 @@ import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
 import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
+import com.github.oinsio.gnomish.serveobservability.KeptEnvironmentEntry
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.Snapshot
+import com.github.oinsio.gnomish.serveobservability.SweepCounts
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
 import java.time.Instant
@@ -79,6 +81,17 @@ class SnapshotJsonReaderSpec extends Specification {
         and: 'vitals janitor — fromJanitor'
         parsed.vitals().janitor().lastRunAt() == Instant.parse('2026-08-02T08:00:00Z')
 
+        and: 'vitals sweep — fromSweep, fromSweepCounts, and the kept inventory (NFR-O1)'
+        parsed.vitals().sweep().lastTickAt() == Instant.parse('2026-08-02T08:58:00Z')
+        parsed.vitals().sweep().intervalSeconds() == 300L
+        parsed.vitals().sweep().counts() == new SweepCounts(4, 2, 1, 1, 3, 0)
+        parsed.vitals().sweep().kept() == [
+            new KeptEnvironmentEntry('task-40', 172800L, 432000L),
+            new KeptEnvironmentEntry('task-41', 518400L, 86400L)
+        ]
+        parsed.vitals().sweep().keptTotal() == 2
+        parsed.vitals().sweep().consecutiveSkippedTicks() == 0
+
         and: 'tracker — fromTracker and fromInstant present-branch'
         parsed.tracker().lastSuccessAt() == Instant.parse('2026-08-02T08:59:55Z')
         parsed.tracker().consecutiveFailures() == 0
@@ -104,6 +117,39 @@ class SnapshotJsonReaderSpec extends Specification {
         then:
         parsed.tracker().lastSuccessAt() == null
         parsed.tracker().consecutiveFailures() == 7
+    }
+
+    // NFR-O1 of add-serve-sandbox-lifecycle: a document written before the first tick renders
+    //     vitals.sweep as null and must read back as absent, never as a tick that counted zero.
+    def "a null vitals sweep is parsed as absent"() {
+        given:
+        def base = SnapshotJsonMapperSpec.referenceSnapshot()
+        def vitals = base.vitals()
+        def preSweep = new Snapshot(
+                base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
+                base.lifecycle(), base.feed(), base.slots(),
+                new VitalsSnapshot(vitals.heartbeat(), vitals.reaper(), vitals.janitor()), base.tracker())
+
+        when:
+        def parsed = reader.read(mapper.serialize(preSweep))
+
+        then:
+        parsed.vitals().sweep() == null
+    }
+
+    // NFR-O1: a document from a build that predates this contract omits the field ENTIRELY, which
+    //     must read back the same way — the dashboard's "no sweep data yet" state, not a crash.
+    def "a document with no vitals sweep field at all is parsed as absent"() {
+        given:
+        def json = mapper.serialize(SnapshotJsonMapperSpec.referenceSnapshot())
+        def withoutSweep = json.replaceAll(/(?s),\s*"sweep" : \{.*?\n {4}}/, '')
+
+        when:
+        def parsed = reader.read(withoutSweep)
+
+        then:
+        parsed.vitals().sweep() == null
+        parsed.vitals().janitor().lastRunAt() == Instant.parse('2026-08-02T08:00:00Z')
     }
 
     // FR3: fromFeedState maps every wire value to its FeedPhase — each switch arm.

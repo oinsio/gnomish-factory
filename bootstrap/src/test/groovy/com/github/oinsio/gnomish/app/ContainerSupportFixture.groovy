@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import java.nio.file.Path
 
 /**
@@ -21,7 +22,8 @@ final class ContainerSupportFixture {
             // The check providers' credential declarations are resolved by the composition root and
             // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
             // provider, so the declared set is empty.
-            ContainerRunSupport.create(cloneDir, taskId, segments, sandbox, List.<String> of(), credentialEnvVarsToScrub)
+            ContainerRunSupport.create(
+            cloneDir, taskId, segments, sandbox, List.<String> of(), credentialEnvVarsToScrub, OwnershipMode.MANUAL)
         } as ContainerSupportFactory
     }
 }

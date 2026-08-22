@@ -85,11 +85,17 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     private TakeDispositionResume resumeChain(ScriptedExecutor executor = new ScriptedExecutor([completedRound()])) {
         def runner = new TakeResumeRunner(assemblyRunning(executor), git(), worktreesRoot, 'taskId',
                 new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
-        new TakeDispositionResume(runner, new TakeDecisionResume(runner), git(), worktreesRoot)
+        chainOver(runner, git())
+    }
+
+    /** The shared routing table (TakeDispositionResume) over HOST mechanics — design D8. */
+    private TakeDispositionResume chainOver(TakeResumeRunner runner, TaskGit git) {
+        def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
+        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
     }
 
     private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false) {
-        chain.resumeExisting(CLONE_DIR, completingPipeline(), RunArguments.InteractiveMode.NONE,
+        chain.resumeExisting(CLONE_DIR, RunArguments.InteractiveMode.NONE,
                 discardWork, 'PROJ-1', tracker, REF, INSTANCE)
     }
 
@@ -250,8 +256,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
         new TaskGit(store, branches, ownWorktrees), worktreesRoot, 'taskId',
         new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
-        def chain = new TakeDispositionResume(runner, new TakeDecisionResume(runner),
-                new TaskGit(store, branches, ownWorktrees), worktreesRoot)
+        def chain = chainOver(runner, new TaskGit(store, branches, ownWorktrees))
 
         when:
         resume(chain, discardWork)
@@ -325,7 +330,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         git(), worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], lostFlag)
 
         when:
-        def result = resume(new TakeDispositionResume(runner, new TakeDecisionResume(runner), git(), worktreesRoot))
+        def result = resume(chainOver(runner, git()))
 
         then: 'the task is never finished on a claim we lost'
         0 * tracker.finish(_, _)
@@ -347,7 +352,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
                 git(), worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
 
         when:
-        def result = resume(new TakeDispositionResume(runner, new TakeDecisionResume(runner), git(), worktreesRoot))
+        def result = resume(chainOver(runner, git()))
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, _)

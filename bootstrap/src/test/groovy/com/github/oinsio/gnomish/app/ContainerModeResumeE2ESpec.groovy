@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
+import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -107,7 +108,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
     }
 
     private static SandboxProperties sandbox(String scenario) {
-        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], [], false)
+        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], [], false, null, null, null, null)
     }
 
     // M4 + FR23: instance one dies mid-escalation (EOF console) — the pending decision request
@@ -182,7 +183,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         // No check provider is configured in this spec, so the SPI-declared check-credential set
         // the composition root resolves (FR17, D11 of add-plugin-architecture) is empty.
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                List.<String> of(), [])
+                List.<String> of(), [], OwnershipMode.MANUAL)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
 
         and: 'the interrupted round: work written and snapshot-committed in-box, then the factory died'

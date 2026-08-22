@@ -65,7 +65,9 @@ class EnvironmentSelfCheckSpec extends Specification {
             new DockerResult(0, '', '')
         }
         environment.onExec = probes
-        def guard = new EgressGuard(docker, 'k1', 'mitmproxy/mitmproxy:12', allowlist, tempDir.resolve('cfg'))
+        def guard = new EgressGuard(
+                docker, 'k1', 'mitmproxy/mitmproxy:12', allowlist, tempDir.resolve('cfg'),
+                new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         new EnvironmentSelfCheck(environment, guard, docker, 'k1', 'runc', allowlist, { Duration d ->
             sleeps++
         } as Sleeper)

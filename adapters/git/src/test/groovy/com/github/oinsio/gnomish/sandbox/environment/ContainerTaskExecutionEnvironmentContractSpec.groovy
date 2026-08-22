@@ -55,7 +55,7 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
         def harvester = new ContainerHarvestFetch(new GitProcessRunner(), source)
         def env = new ContainerTaskExecutionEnvironment(
                 new DockerCli(), key, source, harvester, GitSandboxImage.IMAGE, 'runc', LIMITS, false, clock,
-                ChildEnvAllowlist.none())
+                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         env.materialize(BRANCH, null)
         Optional.of(env)
     }

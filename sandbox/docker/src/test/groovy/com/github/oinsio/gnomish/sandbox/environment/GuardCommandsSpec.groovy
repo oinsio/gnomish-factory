@@ -10,9 +10,11 @@ import spock.lang.Specification
  */
 class GuardCommandsSpec extends Specification {
 
+    static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
+
     def "FR7: runGuard runs mitmdump on the task network with the config mounted read-only"() {
         when:
-        def argv = GuardCommands.runGuard('k1', 'mitmproxy/mitmproxy:12', '/tmp/guard-cfg')
+        def argv = GuardCommands.runGuard('k1', 'mitmproxy/mitmproxy:12', '/tmp/guard-cfg', OWNERSHIP)
 
         then: 'the guard container is named, labelled, and joined to the task network'
         argv.containsAll(['--name', 'gnomish-guard-k1'])
@@ -30,6 +32,14 @@ class GuardCommandsSpec extends Specification {
         argv.containsAll([
             '--label',
             'com.github.oinsio.gnomish.task=k1'
+        ])
+        argv.containsAll([
+            '--label',
+            'com.github.oinsio.gnomish.mode=tracked'
+        ])
+        argv.containsAll([
+            '--label',
+            'com.github.oinsio.gnomish.project=proj-1'
         ])
 
         and: 'the factory-rendered config is mounted read-only (NFR-S2)'

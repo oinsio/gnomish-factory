@@ -3,20 +3,21 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
+import com.github.oinsio.gnomish.app.lease.LivenessOracle
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
+import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.StandingReaper
+import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -95,7 +96,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
     }
 
     private TakeDispatcher newDispatcher(TakeoverConfirmation confirmation = TakeoverConfirmation.UNAVAILABLE) {
-        new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation)
+        new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation, ContainerTakeSupport.hostOnly())
     }
 
     private static TakeHeartbeat noopHeartbeat() {
@@ -103,7 +104,8 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
                 new StandingReaper(ReaperDuty.NONE, { Duration d -> }, Duration.ofMinutes(1), {
                     []
                 }, new SystemClock())
-        new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag(), standingReaper)
+        new TakeHeartbeat(ClaimBeat.NONE, new HeartbeatProgress(), new ClaimLossFlag(), standingReaper,
+                new LivenessOracle(new CachedOpenTaskListing(), new StalenessMemory(new SystemMonotonicTime(), Duration.ofMinutes(1))))
     }
 
     private static TrackerAdapterFactory passthroughFactory() {
@@ -120,10 +122,6 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
                         throw new UnsupportedOperationException('not used by this fixture')
                     }
                 }
-    }
-
-    private static TrackerTask trackerTask(TaskRef ref, TrackerTaskState state, String taskId) {
-        new TrackerTask(ref, new TaskSnapshot(taskId, 'title', 'body'), state, AbortFacts.none(), false)
     }
 
     private TakeArguments batchArgs(List<String> refs, boolean takeover = false) {

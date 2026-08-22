@@ -69,12 +69,12 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
                 LIMITS,
                 false,
                 clock,
-                ChildEnvAllowlist.none())
+                ChildEnvAllowlist.none(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
         envs << e
         e
     }
 
-    private String inBox(ContainerTaskExecutionEnvironment e, String script) {
+    private static String inBox(ContainerTaskExecutionEnvironment e, String script) {
         def handle = e.exec(new ExecCommand(['sh', '-c', script], [:], null, true))
         def out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
         def code = handle.waitForExit()
@@ -82,7 +82,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         out.trim()
     }
 
-    private String gnomeCommit(ContainerTaskExecutionEnvironment e, String file = 'work.txt', String content = 'gnome work') {
+    private static String gnomeCommit(ContainerTaskExecutionEnvironment e, String file = 'work.txt', String content = 'gnome work') {
         inBox(e, "echo '${content}' > ${file} && git add -A && git commit -m 'gnome commit'")
         inBox(e, 'git rev-parse HEAD')
     }

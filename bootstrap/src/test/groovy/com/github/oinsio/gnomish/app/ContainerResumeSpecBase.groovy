@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -50,7 +51,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
 
     def gitRunner = new GitProcessRunner()
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     Path cloneDir
     GitObjects gitObjects
     GitObjectsTaskRepository repository
@@ -97,7 +98,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
             def environments = docker.environments(
             TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
-            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s)
+            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE)
         } as ContainerSupportFactory
         new ContainerResumeRunner(
                 newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), 'taskId', factory)

@@ -7,11 +7,14 @@ import com.github.oinsio.gnomish.serveobservability.FeedSnapshot;
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState;
 import com.github.oinsio.gnomish.serveobservability.HeartbeatVital;
 import com.github.oinsio.gnomish.serveobservability.JanitorVital;
+import com.github.oinsio.gnomish.serveobservability.KeptEnvironmentEntry;
 import com.github.oinsio.gnomish.serveobservability.LifecycleState;
 import com.github.oinsio.gnomish.serveobservability.ReaperVital;
 import com.github.oinsio.gnomish.serveobservability.SlotEntry;
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
+import com.github.oinsio.gnomish.serveobservability.SweepCounts;
+import com.github.oinsio.gnomish.serveobservability.SweepVital;
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot;
 import java.time.Instant;
@@ -115,7 +118,39 @@ public final class SnapshotJsonMapper {
     }
 
     private static VitalsDto toVitals(VitalsSnapshot vitals) {
-        return new VitalsDto(toHeartbeat(vitals.heartbeat()), toReaper(vitals.reaper()), toJanitor(vitals.janitor()));
+        return new VitalsDto(
+                toHeartbeat(vitals.heartbeat()),
+                toReaper(vitals.reaper()),
+                toJanitor(vitals.janitor()),
+                toSweep(vitals.sweep()));
+    }
+
+    /** NFR-O1 of add-serve-sandbox-lifecycle: absent until the first sweep tick completes. */
+    private static @Nullable SweepDto toSweep(@Nullable SweepVital sweep) {
+        if (sweep == null) {
+            return null;
+        }
+        return new SweepDto(
+                sweep.lastTickAt().toString(),
+                sweep.intervalSeconds(),
+                toSweepCounts(sweep.counts()),
+                sweep.kept().stream().map(SnapshotJsonMapper::toKept).toList(),
+                sweep.keptTotal(),
+                sweep.consecutiveSkippedTicks());
+    }
+
+    private static KeptEnvironmentDto toKept(KeptEnvironmentEntry entry) {
+        return new KeptEnvironmentDto(entry.taskKey(), entry.ageSeconds(), entry.untilReapSeconds());
+    }
+
+    static SweepCountsDto toSweepCounts(SweepCounts counts) {
+        return new SweepCountsDto(
+                counts.checkedAlive(),
+                counts.keptUnderThreshold(),
+                counts.stoppedOrphan(),
+                counts.disposedAged(),
+                counts.disposedReconstructible(),
+                counts.skippedNoVerdict());
     }
 
     private static HeartbeatDto toHeartbeat(HeartbeatVital heartbeat) {

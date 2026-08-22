@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
@@ -71,9 +72,13 @@ final class ServeCommand {
     private final SecretsProvider secretsProvider;
     private final PipelineSource pipelineSource;
     private final FeedAutomatonStarter starter;
+    private final SandboxLifecyclePass sandboxLifecyclePass;
+    private final ContainerTakeSupport containerTakeSupport;
     /**
      * @param starter drives the assembled {@link FeedAutomaton} (task 5.1's test seam — see its
      *     Javadoc); production wiring passes {@link FeedAutomaton#run} itself
+     * @param sandboxLifecyclePass the sweep-lifecycle evaluation seam (task 4.1 of
+     *     add-serve-sandbox-lifecycle); {@link SandboxLifecyclePass#NONE} on a host-only install
      */
     ServeCommand(
             RunAssembly assembly,
@@ -88,7 +93,10 @@ final class ServeCommand {
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
-            FeedAutomatonStarter starter) {
+            FeedAutomatonStarter starter,
+            SandboxLifecyclePass sandboxLifecyclePass,
+            ContainerTakeSupport containerTakeSupport) {
+        this.containerTakeSupport = containerTakeSupport;
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
@@ -102,6 +110,7 @@ final class ServeCommand {
         this.secretsProvider = secretsProvider;
         this.pipelineSource = pipelineSource;
         this.starter = starter;
+        this.sandboxLifecyclePass = sandboxLifecyclePass;
     }
 
     /**
@@ -143,13 +152,18 @@ final class ServeCommand {
                 factoryProperties,
                 serveProperties,
                 clock,
-                feedClock);
+                feedClock,
+                sandboxLifecyclePass,
+                containerTakeSupport);
 
         runtime.worktreeJanitor().start();
         // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs for the daemon's whole
         // lifetime, exactly like WorktreeJanitor above — ServeShutdown.shutdown() stops it (FR4).
         runtime.standingReaper().start();
         runtime.observability().start(); // FR1, FR12: started beside the worktree janitor
+        // FR6, NFR-P1, design D7 of add-serve-sandbox-lifecycle: its own thread, beside the
+        // worktree janitor — disjoint object populations, disjoint cleaners.
+        runtime.sandboxLifecycleTick().start();
 
         if (serveArguments.drain()) {
             ServeShutdownWiring.runDrain(

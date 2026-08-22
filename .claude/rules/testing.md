@@ -26,10 +26,15 @@ A method that cannot be mutated meaningfully carries the project's own `@com.git
 
 Why not `excludedMethods`: it is a plain glob over bare method names — no class-qualified syntax exists (hcoles/pitest#301, unresolved) — so excluding one `requireNonBlank` would silently exempt every same-named validator in the build from the 100% gate.
 
-Two accepted reasons to apply it, and no others:
+Three accepted reasons to apply it, and no others:
 
 - **JVMTI redefinition limit.** PIT's Gregor engine hot-swaps bytecode into an already-loaded class; the JVM rejects redefinition that changes a class's `NestHost` / `NestMembers` / `Record` / `PermittedSubclasses` attributes, which some (not all) mutations of `record` accessors trigger (hcoles/pitest#1285, open on JDK 17+). PIT reports RUN_ERROR — its minion crashed before observing any test — not SURVIVED, and sibling mutations of the same method are killed normally. No PIT config or JVM flag works around it
 - **Provably equivalent mutant.** The mutation has no externally observable effect (e.g. `<` vs `<=` on a running minimum that is reassigned to the value it already holds), so no covering test can kill it. The method's own comment must carry the trace
+- **Out-of-process delegation.** The method's whole body is one hand-off into a real Docker daemon, git subprocess, or remote, whose observable effect in a fast, daemon-free unit test is *identical to the call never happening* — an unreachable listing and an empty one yield the same value, so no in-process assertion can kill a "call removed" mutant without either mocking a deliberately unmockable adapter type or depending on a live daemon's actual state. This is the per-method twin of the `excludedTestClasses` category below, which excludes the out-of-process *suite*; use this one when the offending line sits in an otherwise ordinary class. The bar:
+  - The body holds **no decision** — no conditional, no loop, no computed value. A single `if` disqualifies it; extract the decision and unit-test it instead
+  - The collaborator really is out-of-process and really is unmockable in-module (a package-private `DockerCli`, a `ProcessBuilder` seam) — "it would be awkward to fake" is not the same claim
+  - The suite that genuinely exercises the line end to end is **named** in the method's own comment, so the exemption removes the mutation gate, not the coverage
+  - `excludedClasses` is preferred when the *whole class* qualifies (see below); reach for `@DoNotMutate` only when the class also holds assertable methods that must stay in the mutation scope
 
 Every annotated method still needs full unit-spec coverage — the marker stops PIT from *mutating* it, so it emits no mutation entry at all. A RUN_ERROR from anywhere else is a broken run, not an accepted exception, and `pitestVerifyAllKilled` fails the build on it.
 

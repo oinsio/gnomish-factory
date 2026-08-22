@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -26,7 +25,12 @@ import org.jspecify.annotations.Nullable;
  * from the key, and each role gets its own network, volume, container, and
  * guard. All carry the task label of the base key's task.
  *
- * <p>Implements FR3, FR8, FR13, D5, D9 of add-sandbox-core.
+ * <p>Every object every role creates carries the ownership mode and project identity this seam
+ * was built with (FR2, FR8 of add-serve-sandbox-lifecycle) — the caller decides them once, at
+ * construction, never per creation call.
+ *
+ * <p>Implements FR3, FR8, FR13, D5, D9 of add-sandbox-core; FR2, FR8 of
+ * add-serve-sandbox-lifecycle.
  */
 public final class ContainerEnvironments {
 
@@ -39,6 +43,8 @@ public final class ContainerEnvironments {
     private final ChildEnvAllowlist allowlist;
     private final Sleeper sleeper;
     private final Path guardConfigRoot;
+    private final OwnershipMode mode;
+    private final String projectId;
 
     /** The cursor a previous lease committed, offered to every environment built here; see {@link #restoreDenialCursor}. */
     private @Nullable DenialCursor restoredCursor;
@@ -58,9 +64,21 @@ public final class ContainerEnvironments {
             Clock clock,
             ChildEnvAllowlist allowlist,
             Sleeper sleeper,
-            Path guardConfigRoot) {
+            Path guardConfigRoot,
+            OwnershipMode mode,
+            String projectId) {
         return new ContainerEnvironments(
-                new DockerCli(), baseKey, sourceClone, harvester, sandbox, clock, allowlist, sleeper, guardConfigRoot);
+                new DockerCli(),
+                baseKey,
+                sourceClone,
+                harvester,
+                sandbox,
+                clock,
+                allowlist,
+                sleeper,
+                guardConfigRoot,
+                mode,
+                projectId);
     }
 
     /**
@@ -74,6 +92,10 @@ public final class ContainerEnvironments {
      * @param sleeper the guard-readiness pause seam of the self-check; never null
      * @param guardConfigRoot the factory-private directory guard configs render under (per
      *     environment key), never inside a working copy or scratch area; never null
+     * @param mode the ownership mode stamped on every object this task creates (FR2 of
+     *     add-serve-sandbox-lifecycle); never null
+     * @param projectId the project identity stamped on every object this task creates (FR8 of
+     *     add-serve-sandbox-lifecycle); never blank
      */
     ContainerEnvironments(
             DockerCli docker,
@@ -84,7 +106,9 @@ public final class ContainerEnvironments {
             Clock clock,
             ChildEnvAllowlist allowlist,
             Sleeper sleeper,
-            Path guardConfigRoot) {
+            Path guardConfigRoot,
+            OwnershipMode mode,
+            String projectId) {
         this.docker = docker;
         this.baseKey = baseKey;
         this.sourceClone = sourceClone;
@@ -94,6 +118,21 @@ public final class ContainerEnvironments {
         this.allowlist = allowlist;
         this.sleeper = sleeper;
         this.guardConfigRoot = guardConfigRoot;
+        this.mode = mode;
+        this.projectId = projectId;
+    }
+
+    /**
+     * The ownership mode stamped on every Docker object this seam creates (FR2 of
+     * add-serve-sandbox-lifecycle) — {@code TRACKED} for the claim-backed entry points ({@code
+     * take}, {@code serve}), {@code MANUAL} for {@code gnomish run}. Exposed so a daemon-free spec
+     * can assert which label a composition root's wiring actually carries, without materializing
+     * an object to read it back off a live daemon.
+     *
+     * @return the ownership mode every object of this task is labelled with; never null
+     */
+    public OwnershipMode ownershipMode() {
+        return mode;
     }
 
     /** The round-box environment for this task's key; self-checked on every materialize (FR8). */
@@ -132,7 +171,7 @@ public final class ContainerEnvironments {
      * executing, while volume and network remain for salvage and resume.
      */
     public void stopKeeping() {
-        new ContainerEnvironmentReaper(docker, new ContainerEnvironmentDisposal(docker)).stopKeeping(baseKey);
+        new ContainerEnvironmentKeeper(docker).stopKeeping(baseKey);
     }
 
     /**
@@ -144,19 +183,6 @@ public final class ContainerEnvironments {
      */
     public void disposeExisting() {
         new ContainerEnvironmentDisposal(docker).dispose(baseKey);
-    }
-
-    /**
-     * The startup orphan sweep (FR11, NFR-R2): removes every factory-labelled
-     * container, volume, and network left by a dead instance, preserving only
-     * this task's three role environments — the round box, the fresh judge box
-     * ({@code -j}), and the fresh verification box ({@code -v}) — so a resume that
-     * reattaches to a kept environment is never swept out from under itself. A
-     * missing Docker runtime is not an error: the sweep logs and does nothing,
-     * never blocking startup. Mirrors {@code git worktree prune} at runner start.
-     */
-    public void sweepOrphans() {
-        new ContainerOrphanSweeper(docker).sweep(Set.of(baseKey, baseKey + "-j", baseKey + "-v"));
     }
 
     /**
@@ -174,7 +200,16 @@ public final class ContainerEnvironments {
 
     private SelfCheckedEnvironment environment(String key) {
         var built = ContainerEnvironmentBuilder.build(
-                docker, key, sourceClone, harvester, sandbox, clock, allowlist, sleeper, guardConfigRoot);
+                docker,
+                key,
+                sourceClone,
+                harvester,
+                sandbox,
+                clock,
+                allowlist,
+                sleeper,
+                guardConfigRoot,
+                new ObjectOwnership(mode, projectId));
         if (restoredCursor != null) {
             built.restoreDenialCursor(restoredCursor);
         }

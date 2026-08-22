@@ -62,7 +62,18 @@ public interface SandboxRunSupport {
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */
     void disposeExistingEnvironment();
 
-    /** Prunes objects a dead instance left labelled, keeping this task's own (FR11, NFR-R2). */
+    /**
+     * Runs one startup pass of the ownership-based sweep-lifecycle policy over this project's
+     * labelled objects (FR6, FR7 of add-serve-sandbox-lifecycle) — no longer the name-snapshot
+     * pruning this method carried before (FR11, NFR-R2 of add-sandbox-core, removed with the
+     * {@code sweep(liveKeys)} contract).
+     *
+     * <p>A one-shot run holds no project-wide claim listing, so the pass evaluates with no
+     * liveness verdict: {@code tracked} objects of other tasks degrade to skipped-no-verdict and
+     * are never touched, while this run's own {@code mode=manual} objects are governed by age
+     * alone. Hygiene, not the task — a missing Docker runtime or any other failure of the pass is
+     * logged and swallowed, never a failed run.
+     */
     void sweepOrphans();
 
     /**
@@ -95,6 +106,27 @@ public interface SandboxRunSupport {
      */
     TaskState readStateOrInitial(String firstStage);
 
-    /** The task record at the branch tip — context, outcome, escalation (FR17). */
+    /**
+     * The task record at the branch tip — context, outcome, escalation (FR17).
+     *
+     * @throws com.github.oinsio.gnomish.gitobjects.MissingObjectException when the tip carries no
+     *     {@code .gnomish-task/task.json} at all: the shape a {@code Completed} cleanup commit
+     *     leaves behind (FR15 of add-git-workflow), which a resume reads as delivered-and-cleaned
+     *     rather than as a fault (design D8 of add-serve-sandbox-lifecycle)
+     */
     TaskRecord readTaskJson();
+
+    /**
+     * Runs the tracker-take revocation salvage protocol (FR15 of add-tracker-port; FR1 of
+     * add-serve-sandbox-lifecycle): commits any uncommitted round leftovers in-box, then
+     * best-effort pushes the task branch — the sandboxed equivalent of {@code
+     * TaskSalvage#salvage} followed by {@code TaskBranchGit#pushBestEffort}, folded into one
+     * method because a sandboxed run has no worktree path for those host-shaped ports to push
+     * from. The box itself is left exactly as the claim loss found it — running or not — so the
+     * next sweep tick classifies it unowned and stops it (design D3); this method disposes
+     * nothing.
+     *
+     * @param taskId the task being salvaged, for error context; never blank
+     */
+    void revocationSalvageAndPush(String taskId);
 }

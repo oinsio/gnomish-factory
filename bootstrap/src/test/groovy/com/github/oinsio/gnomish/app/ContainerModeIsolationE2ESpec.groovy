@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
+import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -71,11 +72,13 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
                 taskKey,
                 cloneDir,
                 new ContainerHarvestFetch(gitRunner, cloneDir),
-                new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false),
+                new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false, null, null, null, null),
                 new SystemClock(),
                 ChildEnvAllowlist.none(),
                 new ThreadSleeper(),
-                tempDir.resolve('guard-config'))
+                tempDir.resolve('guard-config'),
+                OwnershipMode.MANUAL,
+                'test-project')
     }
 
     // M2: the self-check catches broken isolation fail-closed — no gnome process may run in a

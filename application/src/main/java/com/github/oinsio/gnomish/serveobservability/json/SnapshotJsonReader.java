@@ -8,11 +8,14 @@ import com.github.oinsio.gnomish.serveobservability.HeartbeatState;
 import com.github.oinsio.gnomish.serveobservability.HeartbeatVital;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.JanitorVital;
+import com.github.oinsio.gnomish.serveobservability.KeptEnvironmentEntry;
 import com.github.oinsio.gnomish.serveobservability.LifecycleState;
 import com.github.oinsio.gnomish.serveobservability.ReaperVital;
 import com.github.oinsio.gnomish.serveobservability.SlotEntry;
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
+import com.github.oinsio.gnomish.serveobservability.SweepCounts;
+import com.github.oinsio.gnomish.serveobservability.SweepVital;
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot;
 import java.time.Instant;
@@ -105,7 +108,42 @@ public final class SnapshotJsonReader {
     }
 
     private static VitalsSnapshot fromVitals(VitalsDto dto) {
-        return new VitalsSnapshot(fromHeartbeat(dto.heartbeat()), fromReaper(dto.reaper()), fromJanitor(dto.janitor()));
+        return new VitalsSnapshot(
+                fromHeartbeat(dto.heartbeat()),
+                fromReaper(dto.reaper()),
+                fromJanitor(dto.janitor()),
+                fromSweep(dto.sweep()));
+    }
+
+    /**
+     * NFR-O1 of add-serve-sandbox-lifecycle: a document written before this contract carries no
+     * {@code vitals.sweep} at all, and one written before the daemon's first tick carries it as
+     * {@code null} — both read back as "no sweep data yet", never as a tick that counted zero.
+     */
+    private static @Nullable SweepVital fromSweep(@Nullable SweepDto dto) {
+        if (dto == null) {
+            return null;
+        }
+        return new SweepVital(
+                Instant.parse(dto.lastTickAt()),
+                dto.intervalSeconds(),
+                fromSweepCounts(dto.counts()),
+                dto.kept().stream()
+                        .map(kept ->
+                                new KeptEnvironmentEntry(kept.taskKey(), kept.ageSeconds(), kept.untilReapSeconds()))
+                        .toList(),
+                dto.keptTotal(),
+                dto.consecutiveSkippedTicks());
+    }
+
+    private static SweepCounts fromSweepCounts(SweepCountsDto dto) {
+        return new SweepCounts(
+                dto.checkedAlive(),
+                dto.keptUnderThreshold(),
+                dto.stoppedOrphan(),
+                dto.disposedAged(),
+                dto.disposedReconstructible(),
+                dto.skippedNoVerdict());
     }
 
     private static HeartbeatVital fromHeartbeat(HeartbeatDto dto) {

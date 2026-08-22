@@ -35,7 +35,8 @@ record TakeDispatcher(
         Clock clock,
         Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
         SecretsProvider secretsProvider,
-        TakeoverConfirmation takeoverConfirmation) {
+        TakeoverConfirmation takeoverConfirmation,
+        ContainerTakeSupport containerTakeSupport) {
 
     TakeResult runExplicit(
             TakeArguments takeArguments,
@@ -107,7 +108,8 @@ record TakeDispatcher(
                 takeArguments.takeover(),
                 confirmation,
                 clock,
-                heartbeat.flag());
+                heartbeat.flag(),
+                containerTakeSupport);
         return disposition.dispose(
                 takeArguments.dir(),
                 takeArguments.base(),
@@ -143,7 +145,8 @@ record TakeDispatcher(
                 heartbeat.instance(),
                 heartbeat.flag(),
                 trackerConfig.wipLimit(),
-                new Random());
+                new Random(),
+                containerTakeSupport);
         return bareAuto.run(takeArguments.dir(), definition, takeArguments.interactiveMode(), tracker, instanceId);
     }
 

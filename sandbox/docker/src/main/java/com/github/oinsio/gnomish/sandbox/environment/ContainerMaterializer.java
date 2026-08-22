@@ -34,7 +34,8 @@ final class ContainerMaterializer {
             String name,
             DockerResult inspect,
             String branch,
-            @Nullable String commitPin) {
+            @Nullable String commitPin,
+            ObjectOwnership ownership) {
         log.debug("container environment reattaching to {} for branch {}", name, branch);
         boolean running = inspect.stdout().strip().startsWith("true");
         if (!running) {
@@ -45,7 +46,7 @@ final class ContainerMaterializer {
                     docker,
                     key,
                     DockerCommands.seedClone(
-                            key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin),
+                            key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin, ownership),
                     "pin working copy");
         }
     }
@@ -62,27 +63,28 @@ final class ContainerMaterializer {
             String workingCopy,
             String scratch,
             String branch,
-            @Nullable String commitPin) {
+            @Nullable String commitPin,
+            ObjectOwnership ownership) {
         // A surviving network (e.g. a container removed by hand, network left behind) is reused;
         // any other network-create failure is real. Volume create is idempotent by docker itself.
-        DockerResult network = docker.run(DockerCommands.createNetwork(key));
+        DockerResult network = docker.run(DockerCommands.createNetwork(key, ownership));
         if (!network.ok() && !network.stderr().contains("already exists")) {
             throw new IllegalStateException("docker create network for " + key + " failed: "
                     + network.stderr().strip());
         }
-        management(docker, key, DockerCommands.createVolume(key), "create volume");
+        management(docker, key, DockerCommands.createVolume(key, ownership), "create volume");
         // Seed the volume before the task container exists: the clone runs in a one-shot helper
         // that mounts the factory clone read-only, so the task container never sees it (D3, FR3).
         management(
                 docker,
                 key,
                 DockerCommands.seedClone(
-                        key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin),
+                        key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin, ownership),
                 "seed clone");
         management(
                 docker,
                 key,
-                DockerCommands.runContainer(key, image, runtime, limits, enforceDiskQuota, workingCopy),
+                DockerCommands.runContainer(key, image, runtime, limits, enforceDiskQuota, workingCopy, ownership),
                 "run container");
         management(
                 docker,

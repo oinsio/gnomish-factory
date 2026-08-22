@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.lease.HeartbeatStateListener;
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
+import com.github.oinsio.gnomish.app.lease.LivenessOracle;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.lease.Reaper;
 import com.github.oinsio.gnomish.app.lease.StalenessMemory;
@@ -43,9 +45,15 @@ import java.time.Duration;
  *     each round boundary (task 6.3, FR8); the SAME instance wired as the beat's sink; never null
  * @param standingReaper the standing reaper thread ticking on the same beat interval, independent
  *     of held-claim count (task 3.1, fix-reaper-idle-liveness FR5, design D2); never null
+ * @param livenessOracle the tracked-object liveness oracle sharing the reaper's own listing and
+ *     staleness memory (task 2.1 of add-serve-sandbox-lifecycle, NFR-C2); never null
  */
 record TakeHeartbeat(
-        ClaimBeat instance, HeartbeatProgress progress, ClaimLossFlag flag, StandingReaper standingReaper) {
+        ClaimBeat instance,
+        HeartbeatProgress progress,
+        ClaimLossFlag flag,
+        StandingReaper standingReaper,
+        LivenessOracle livenessOracle) {
 
     /**
      * Builds the heartbeat machinery for one {@code take} run against {@code tracker}, reading the
@@ -168,11 +176,13 @@ record TakeHeartbeat(
         var progress = new HeartbeatProgress();
         var flag = new ClaimLossFlag();
         var staleness = new StalenessMemory(monotonicTime, ttl);
-        var reaper = new Reaper(tracker, staleness);
+        var listing = new CachedOpenTaskListing();
+        var reaper = new Reaper(tracker, staleness, listing);
         var heartbeat =
                 new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), interval, flag, stateListener);
         var standingReaper =
                 new StandingReaper(reaper, reaperSleeper, interval, heartbeat::liveClaimsSnapshot, new SystemClock());
-        return new TakeHeartbeat(heartbeat, progress, flag, standingReaper);
+        var livenessOracle = new LivenessOracle(listing, staleness);
+        return new TakeHeartbeat(heartbeat, progress, flag, standingReaper, livenessOracle);
     }
 }

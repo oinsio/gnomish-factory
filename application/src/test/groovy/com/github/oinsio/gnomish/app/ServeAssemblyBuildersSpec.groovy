@@ -31,7 +31,7 @@ import spock.lang.Specification
 class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
 
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14)
+    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null)
 
     // FR13: the slot runner is built over the caller's tracker, so a slot it runs consults THAT
     // tracker. Driven here through the fetch that opens every slot — the runner swallows its
@@ -46,7 +46,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def slotRunner = ServeAssembly.slotRunner(
                 new ServeArguments(CLONE_DIR, null, false), WORKTREES_ROOT, 'taskId', pipeline(),
                 new TrackerConfig('github', 3), Stub(TrackerAdapterFactory), tracker, INSTANCE,
-                assemblyRunning(null), git, heartbeat, FIXED_CLOCK)
+                assemblyRunning(null), git, heartbeat, FIXED_CLOCK, ContainerTakeSupport.hostOnly())
 
         then:
         slotRunner != null
@@ -93,5 +93,70 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         then:
         1 * worktrees.environmentDisposal(CLONE_DIR, WORKTREES_ROOT) >> Stub(TaskEnvironmentDisposal)
         janitor != null
+    }
+
+    // NFR-O1, NFR-O2 of add-serve-sandbox-lifecycle: a host-only install has no sandbox to sweep,
+    //     so its tick stays unobserved — no all-zero vital, no ledger line every cadence.
+    def "a host-only install's tick is not observed"() {
+        given:
+        def tickLog = new com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog(
+                Duration.ofDays(7), java.time.Clock.systemUTC(), 20)
+        def ticks = []
+        def livenessOracle = new com.github.oinsio.gnomish.app.lease.LivenessOracle(
+                new com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing(),
+                new com.github.oinsio.gnomish.app.lease.StalenessMemory(
+                        new com.github.oinsio.gnomish.app.lease.SystemMonotonicTime(), Duration.ofMinutes(1)))
+
+        when:
+        def tick = ServeAssembly.sandboxLifecycleTick(
+                new ServeArguments(CLONE_DIR, null, false),
+                SERVE_PROPERTIES,
+                com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass.NONE,
+                livenessOracle,
+                tickLog,
+                com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener.IGNORE, { r ->
+                    ticks << r
+                } as com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener)
+        tick.tick()
+
+        then:
+        tickLog.lastTick() == null
+        ticks.isEmpty()
+    }
+
+    // FR6, design D7 of add-serve-sandbox-lifecycle: the sweep-lifecycle tick is built over the
+    // caller's own pass and liveness oracle, at the configured cadence.
+    def "builds a sandbox lifecycle tick wired over the caller's own pass and liveness oracle"() {
+        given:
+        def calls = []
+        com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass pass = { dir, liveness ->
+            calls << dir
+            ''
+        }
+        def livenessOracle = new com.github.oinsio.gnomish.app.lease.LivenessOracle(
+                new com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing(),
+                new com.github.oinsio.gnomish.app.lease.StalenessMemory(
+                        new com.github.oinsio.gnomish.app.lease.SystemMonotonicTime(), Duration.ofMinutes(1)))
+
+        def realTickLog = new com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog(
+                Duration.ofDays(7), java.time.Clock.systemUTC(), 20)
+
+        when:
+        def tick = ServeAssembly.sandboxLifecycleTick(
+                new ServeArguments(CLONE_DIR, null, false),
+                SERVE_PROPERTIES,
+                pass,
+                livenessOracle,
+                realTickLog,
+                com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener.IGNORE,
+                com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener.IGNORE)
+        tick.tick()
+
+        then:
+        tick != null
+        calls == [CLONE_DIR]
+
+        and: 'NFR-O1 of add-serve-sandbox-lifecycle: a real pass IS observed, so the tick is recorded'
+        realTickLog.lastTick() != null
     }
 }

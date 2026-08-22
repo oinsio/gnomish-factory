@@ -75,14 +75,12 @@ pitest {
     // asProvider(): 'pitest' is a prefix of other catalog version aliases.
     pitestVersion = libs.findVersion('pitest-tool').get().requiredVersion
     junit5PluginVersion = libs.findVersion('pitest-junit5-plugin').get().requiredVersion
-    // Concurrent PIT minion JVMs for the mutation phase (PIT's default is 1), sized
-    // to the machine's cores (FR5/D4 of adapt-build-load-to-hardware): under
-    // `MutationEngineLock` the single mutating module is entitled to the box. Read
-    // from the processor count rather than `maxWorkerCount`, which no longer encodes
-    // anything about memory now that the global worker cap is gone. The -2 keeps
-    // headroom for the daemon and concurrent tasks; without it, CPU oversubscription
-    // pushes covering tests past PIT's per-mutation timeout and pitestVerifyAllKilled
-    // fails on the TIMED_OUT.
+    // Concurrent PIT minion JVMs for the mutation phase (PIT's default is 1). The -2
+    // keeps headroom for the daemon and concurrent tasks; without it, CPU
+    // oversubscription pushes covering tests past PIT's per-mutation timeout and
+    // pitestVerifyAllKilled fails on the TIMED_OUT. This is the CPU ceiling only —
+    // the memory ceiling is applied in `afterEvaluate` below, once the heavy-JVM
+    // budget's own slot count is readable.
     threads = Math.max(1, Runtime.runtime.availableProcessors() - 2)
     // Java production code only — never Groovy test bytecode (mutating Groovy
     // produces noisy false-positive survivors; see .claude/rules/testing.md).
@@ -125,7 +123,30 @@ pitest {
 // found". The subtraction waits for afterEvaluate, since `excludedClasses` is set
 // by the module's build file after this plugin applies; unscoped runs are
 // untouched, PIT applies the exclusions itself.
+// The mutation phase's memory ceiling (FR1/D1 of adapt-build-load-to-hardware, whose
+// stated invariant is "a memory budget, not a worker count"). Sizing the minion pool
+// by cores alone contradicted it: on a 14-core/36 GB host PIT forked 12 unbounded
+// minions while the heavy-JVM budget rated the same machine at 9 concurrent JVMs, and
+// `:module:check` — where the daemon is hot from the module's own `test` and JaCoCo
+// run — then hit "Minion did not start or died during analysis ... insufficient
+// memory". PIT records that dead minion as RUN_ERROR with numberOfTestsRun=0 on
+// whichever mutation it held, so the offender moved between unrelated classes from run
+// to run and `pitestVerifyAllKilled` failed on a gate that had nothing to do with the
+// code under test. Measured on that host: the pool peaked at ~9.3 GB with under 10 GB
+// free, and `:module:pitest` alone (cold daemon) never reproduced it in 6 runs while
+// `:module:check` reproduced it in 3 of 3.
+//
+// Clamping to the budget's slot count rather than bounding the minion heap: `-Xmx` is
+// the fix that looks obvious and is already rejected above for a reproducible reason.
+// Read from the registration's parameters, not from the service instance, so the
+// budget is not instantiated at configuration time — that would move its decision line
+// out of the execution phase where NFR-O1 wants it.
 afterEvaluate {
+    def budget = gradle.sharedServices.registrations.findByName('heavyJvmBudget')
+    if (budget != null) {
+        pitest.threads = Math.max(1, Math.min(pitest.threads.get(), budget.parameters.slots.get()))
+    }
+
     if (!pitScopeSet) {
         return
     }

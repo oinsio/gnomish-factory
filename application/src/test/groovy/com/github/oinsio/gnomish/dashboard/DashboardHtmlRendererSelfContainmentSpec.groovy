@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.dashboard
 
 import static com.github.oinsio.gnomish.testsupport.DaemonSnapshotFixtures.snapshot
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
+import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -42,7 +43,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
 
     def "no external references anywhere in a fully-composed page"() {
         given:
-        def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), GENERATED_AT, null)
+        def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), noSweepData(), GENERATED_AT, null)
 
         expect:
         !html.contains('http://')
@@ -52,7 +53,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
 
     def "no <script src=...> or <link href=...> tags — all styling and scripting stays inline"() {
         given:
-        def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), GENERATED_AT, null)
+        def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), noSweepData(), GENERATED_AT, null)
 
         expect:
         !(html.toLowerCase() =~ /<script[^>]+src\s*=/)
@@ -63,7 +64,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
 
     def "no credential- or secret-looking substrings leak into the page"() {
         given:
-        def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), GENERATED_AT, null)
+        def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), noSweepData(), GENERATED_AT, null)
         def lower = html.toLowerCase()
 
         expect:
@@ -86,7 +87,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
                 null)
 
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, GENERATED_AT, null)
+        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
 
         then: 'the composed-surface string appears, but only in its escaped form and exactly once'
         !html.contains(canary)

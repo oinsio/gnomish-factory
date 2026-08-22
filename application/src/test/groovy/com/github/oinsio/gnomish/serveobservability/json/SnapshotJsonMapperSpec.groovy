@@ -6,11 +6,14 @@ import com.github.oinsio.gnomish.serveobservability.HeartbeatState
 import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.JanitorVital
+import com.github.oinsio.gnomish.serveobservability.KeptEnvironmentEntry
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
 import com.github.oinsio.gnomish.serveobservability.SlotEntry
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
 import com.github.oinsio.gnomish.serveobservability.Snapshot
+import com.github.oinsio.gnomish.serveobservability.SweepCounts
+import com.github.oinsio.gnomish.serveobservability.SweepVital
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
 import java.time.Instant
@@ -142,6 +145,36 @@ class SnapshotJsonMapperSpec extends Specification {
         mapper.toDto(referenceSnapshot()).vitals().janitor() == new JanitorDto("2026-08-02T08:00:00Z")
     }
 
+    // NFR-O1 of add-serve-sandbox-lifecycle.
+    def "vitals sweep renders the last tick's time, cadence, counts, and bounded kept inventory"() {
+        given:
+        def sweep = mapper.toDto(referenceSnapshot()).vitals().sweep()
+
+        expect:
+        sweep.lastTickAt() == "2026-08-02T08:58:00Z"
+        sweep.intervalSeconds() == 300L
+        sweep.counts() == new SweepCountsDto(4, 2, 1, 1, 3, 0)
+        sweep.kept() == [
+            new KeptEnvironmentDto("task-40", 172800L, 432000L),
+            new KeptEnvironmentDto("task-41", 518400L, 86400L)
+        ]
+        sweep.keptTotal() == 2
+        sweep.consecutiveSkippedTicks() == 0
+    }
+
+    // NFR-O1: a snapshot assembled before the first sweep tick renders the section as JSON null,
+    //     never as a tick that counted zero.
+    def "vitals sweep renders null when no tick has completed"() {
+        given:
+        def snapshot = referenceSnapshot()
+        def vitals = snapshot.vitals()
+        def preSweep = new VitalsSnapshot(vitals.heartbeat(), vitals.reaper(), vitals.janitor())
+
+        expect:
+        mapper.toDto(withVitals(snapshot, preSweep)).vitals().sweep() == null
+        mapper.serialize(withVitals(snapshot, preSweep)).contains('"sweep" : null')
+    }
+
     def "vitals has no feed or writer entries beyond heartbeat, reaper, and janitor"() {
         given:
         def json = mapper.serialize(referenceSnapshot())
@@ -190,10 +223,14 @@ class SnapshotJsonMapperSpec extends Specification {
         def vitals = snapshot.vitals()
         def heartbeat = vitals.heartbeat()
         def replacement = new HeartbeatVital(state, heartbeat.lastTickAt(), heartbeat.heldClaims())
-        def replacementVitals = new VitalsSnapshot(replacement, vitals.reaper(), vitals.janitor())
+        def replacementVitals = new VitalsSnapshot(replacement, vitals.reaper(), vitals.janitor(), vitals.sweep())
+        return withVitals(snapshot, replacementVitals)
+    }
+
+    private static Snapshot withVitals(Snapshot snapshot, VitalsSnapshot vitals) {
         return new Snapshot(
                 snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
-                snapshot.lifecycle(), snapshot.feed(), snapshot.slots(), replacementVitals, snapshot.tracker())
+                snapshot.lifecycle(), snapshot.feed(), snapshot.slots(), vitals, snapshot.tracker())
     }
 
     /**
@@ -217,7 +254,17 @@ class SnapshotJsonMapperSpec extends Specification {
         def vitals = new VitalsSnapshot(
                 new HeartbeatVital(HeartbeatState.RUNNING, Instant.parse("2026-08-02T08:59:58Z"), 2),
                 new ReaperVital(Instant.parse("2026-08-02T08:55:00Z"), 0, 300L),
-                new JanitorVital(Instant.parse("2026-08-02T08:00:00Z")))
+                new JanitorVital(Instant.parse("2026-08-02T08:00:00Z")),
+                new SweepVital(
+                        Instant.parse("2026-08-02T08:58:00Z"),
+                        300L,
+                        new SweepCounts(4, 2, 1, 1, 3, 0),
+                        [
+                            new KeptEnvironmentEntry("task-40", 172800L, 432000L),
+                            new KeptEnvironmentEntry("task-41", 518400L, 86400L)
+                        ],
+                        2,
+                        0))
         def tracker = new TrackerHealth(Instant.parse("2026-08-02T08:59:55Z"), 0)
 
         return new Snapshot(

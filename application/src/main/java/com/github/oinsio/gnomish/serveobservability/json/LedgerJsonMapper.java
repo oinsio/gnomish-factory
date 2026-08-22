@@ -3,12 +3,15 @@ package com.github.oinsio.gnomish.serveobservability.json;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory;
 import com.github.oinsio.gnomish.serveobservability.LedgerLifecycleEvent;
 import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage;
 import com.github.oinsio.gnomish.serveobservability.LifecycleLine;
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLine;
+import com.github.oinsio.gnomish.serveobservability.SweepActionLine;
+import com.github.oinsio.gnomish.serveobservability.SweepTickLine;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcome;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine;
 import java.util.LinkedHashMap;
@@ -48,6 +51,8 @@ public final class LedgerJsonMapper {
                     case TaskOutcomeLine taskOutcome -> toDto(taskOutcome);
                     case LifecycleLine lifecycle -> toDto(lifecycle);
                     case RunSummaryLine runSummary -> toDto(runSummary);
+                    case SweepActionLine sweepAction -> toDto(sweepAction);
+                    case SweepTickLine sweepTick -> toDto(sweepTick);
                 };
         try {
             return mapper.writeValueAsString(dto);
@@ -124,6 +129,60 @@ public final class LedgerJsonMapper {
                 line.wallMillis(),
                 toCounts(line.counts()),
                 toTokensByModel(line.tokensByModel()));
+    }
+
+    /**
+     * Builds the JSON-contract DTO for a {@code sweepAction} line (NFR-O2 of
+     * add-serve-sandbox-lifecycle).
+     *
+     * @param line the line to map; never null
+     * @return the equivalent DTO
+     */
+    public SweepActionLineDto toDto(SweepActionLine line) {
+        return new SweepActionLineDto(
+                1,
+                "sweepAction",
+                InstanceDto.from(line.instance()),
+                line.at().toString(),
+                line.objectName(),
+                line.role(),
+                line.mode(),
+                line.taskKey(),
+                toCategory(line.category()),
+                line.reason(),
+                line.age() == null ? null : line.age().toSeconds());
+    }
+
+    /**
+     * Builds the JSON-contract DTO for a {@code sweepTick} line (NFR-O2 of
+     * add-serve-sandbox-lifecycle).
+     *
+     * @param line the line to map; never null
+     * @return the equivalent DTO
+     */
+    public SweepTickLineDto toDto(SweepTickLine line) {
+        return new SweepTickLineDto(
+                1,
+                "sweepTick",
+                InstanceDto.from(line.instance()),
+                line.at().toString(),
+                SnapshotJsonMapper.toSweepCounts(line.counts()));
+    }
+
+    /**
+     * The one place the verdict vocabulary reaches the wire, so the ledger and the snapshot's
+     * {@code vitals.sweep.counts} keys stay the same words (FR9's "no near-synonyms across
+     * sinks").
+     */
+    static String toCategory(SweepVerdictCategory category) {
+        return switch (category) {
+            case CHECKED_ALIVE -> "checkedAlive";
+            case KEPT_UNDER_THRESHOLD -> "keptUnderThreshold";
+            case STOPPED_ORPHAN -> "stoppedOrphan";
+            case DISPOSED_AGED -> "disposedAged";
+            case DISPOSED_RECONSTRUCTIBLE -> "disposedReconstructible";
+            case SKIPPED_NO_VERDICT -> "skippedNoVerdict";
+        };
     }
 
     private static String toOutcome(TaskOutcome outcome) {

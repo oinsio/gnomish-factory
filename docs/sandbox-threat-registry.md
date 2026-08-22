@@ -21,6 +21,7 @@ project [glossary](glossary.md).
 - [Tool trust](#tool-trust)
 - [Verdicts, findings and data sinks](#verdicts-findings-and-data-sinks)
 - [Cross-cutting principles](#cross-cutting-principles)
+- [References](#references)
 
 ## Legend
 
@@ -151,3 +152,69 @@ project [glossary](glossary.md).
 - **Ownership asymmetry**: the repo declares needs and may only
   tighten; adapter bindings and any loosening are operator-only decisions; the
   factory reconciles fail-closed.
+
+## References
+
+Key sources behind this threat model, collected during the sandbox explore
+sessions. Incidents referenced by name in the tables above are listed under
+[Incidents](#incidents).
+
+### Agent sandbox designs (prior art)
+
+- Anthropic:
+  [sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime),
+  [Claude Code sandboxing docs](https://code.claude.com/docs/en/sandboxing),
+  [engineering: Claude Code sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing),
+  [engineering: how we contain Claude](https://www.anthropic.com/engineering/how-we-contain-claude)
+  (incident write-ups: allowlist-as-capability, pre-trust config execution),
+  [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)
+  (two proxies: a security proxy plus a git proxy with semantic policy).
+- OpenAI Codex:
+  [cloud internet access](https://developers.openai.com/codex/cloud/internet-access)
+  (two phases, GET-only option); the codex-universal image with setup scripts;
+  the CLI sandbox: Seatbelt on macOS, bubblewrap + Landlock + seccomp on Linux,
+  network off by default.
+- GitHub Copilot coding agent: egress firewall with an allowlist and denials
+  reported in the PR; `copilot-setup-steps.yml`; pushes only to `copilot/*`
+  branches, draft PRs, human gate before CI.
+
+### Harvest precedents
+
+- [Docker Sandboxes workflows](https://docs.docker.com/ai/sandboxes/workflows/)
+  (clone mode plus a git daemon).
+- [dagger/container-use](https://github.com/dagger/container-use).
+
+### Credentials
+
+- [Docker Sandboxes credential handling](https://docs.docker.com/ai/sandboxes/security/credentials)
+  (proxy-injected sentinel values).
+- GitHub App installation tokens (1-hour lifetime, per-repository, permission
+  subset).
+- [LiteLLM virtual keys](https://docs.litellm.ai/docs/proxy/virtual_keys)
+  (per-key budgets).
+
+### Isolation technologies
+
+- [gVisor docs](https://gvisor.dev/docs/) (performance profile, syscall-storm
+  workloads).
+- Northflank comparisons of Kata / Firecracker / gVisor.
+- [Docker: why microVMs — the architecture behind Docker Sandboxes](https://www.docker.com/blog/why-microvms-the-architecture-behind-docker-sandboxes/).
+- paolomainardi.com on bind-mount performance on macOS (VirtioFS).
+
+### Egress mechanics
+
+- [innoq: dev sandbox network](https://www.innoq.com/en/blog/2026/03/dev-sandbox-network/)
+  (nftables backstop behind a proxy).
+- [Gradle networking guide](https://docs.gradle.org/current/userguide/networking.html)
+  and [gradle/gradle#11065](https://github.com/gradle/gradle/issues/11065)
+  (the JVM ignores proxy environment variables).
+- mattolson/agent-sandbox.
+
+### Incidents
+
+- Nx "s1ngularity" — supply-chain compromise weaponizing an AI CLI
+  (threats #3, #41).
+- CamoLeak — exfiltration through trusted infrastructure.
+- Amazon Q wiper — agent configuration as an attack surface (threat #23 class).
+- Devin environment leak — any secret present in the agent's environment will
+  eventually be requested by injection (threat #9).

@@ -31,21 +31,14 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR9, NFR-S1 of add-sandbox-core.
  */
-public final class ChildEnvAllowlist {
+public record ChildEnvAllowlist(
+        List<String> passthroughNames, Set<String> credentialNames, Supplier<Map<String, String>> factoryEnvironment) {
 
     private static final Logger log = LoggerFactory.getLogger(ChildEnvAllowlist.class);
 
-    private final List<String> passthroughNames;
-    private final Set<String> credentialNames;
-    private final Supplier<Map<String, String>> factoryEnvironment;
-
-    private ChildEnvAllowlist(
-            List<String> passthroughNames,
-            Collection<String> credentialNames,
-            Supplier<Map<String, String>> factoryEnvironment) {
-        this.passthroughNames = List.copyOf(passthroughNames);
-        this.credentialNames = Set.copyOf(credentialNames);
-        this.factoryEnvironment = factoryEnvironment;
+    public ChildEnvAllowlist {
+        passthroughNames = List.copyOf(passthroughNames);
+        credentialNames = Set.copyOf(credentialNames);
     }
 
     /**
@@ -60,7 +53,7 @@ public final class ChildEnvAllowlist {
      *     credential — a startup configuration error naming the variable (FR9)
      */
     public static ChildEnvAllowlist of(List<String> passthroughNames, Collection<String> credentialNames) {
-        return validated(new ChildEnvAllowlist(passthroughNames, credentialNames, System::getenv));
+        return validated(new ChildEnvAllowlist(passthroughNames, Set.copyOf(credentialNames), System::getenv));
     }
 
     /** The empty allowlist: no passthrough, no declared credentials (plain {@code gnomish run}). */
@@ -73,17 +66,17 @@ public final class ChildEnvAllowlist {
      * source, so specs can plant and change variables without touching the JVM's
      * real environment.
      */
-    static ChildEnvAllowlist over(
+    public static ChildEnvAllowlist over(
             List<String> passthroughNames,
             Collection<String> credentialNames,
             Supplier<Map<String, String>> factoryEnvironment) {
-        return validated(new ChildEnvAllowlist(passthroughNames, credentialNames, factoryEnvironment));
+        return validated(new ChildEnvAllowlist(passthroughNames, Set.copyOf(credentialNames), factoryEnvironment));
     }
 
     private static ChildEnvAllowlist validated(ChildEnvAllowlist allowlist) {
         List<String> refused = new ArrayList<>();
-        for (String name : allowlist.passthroughNames) {
-            if (allowlist.credentialNames.contains(name)) {
+        for (String name : allowlist.passthroughNames()) {
+            if (allowlist.credentialNames().contains(name)) {
                 refused.add(name);
             }
         }
@@ -108,12 +101,12 @@ public final class ChildEnvAllowlist {
      * @return the composed child environment; never null
      */
     public Map<String, String> compose(Collection<String> baseNames, Map<String, String> factorySet) {
-        Map<String, String> factoryEnv = factoryEnvironment.get();
+        Map<String, String> factoryEnv = factoryEnvironment().get();
         Map<String, String> composed = new LinkedHashMap<>();
         putPresent(composed, baseNames, factoryEnv);
-        putPresent(composed, passthroughNames, factoryEnv);
+        putPresent(composed, passthroughNames(), factoryEnv);
         composed.putAll(factorySet);
-        composed.keySet().removeAll(credentialNames);
+        composed.keySet().removeAll(credentialNames());
         log.debug("child environment allowlist applied (names only): {}", composed.keySet());
         return composed;
     }

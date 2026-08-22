@@ -43,16 +43,25 @@ A host adapter SHALL implement the port over worktree and `ProcessBuilder` mecha
 - **THEN** the working copy is a git worktree of the factory clone, processes run as local subprocesses, rounds close with the single round commit, and harvest performs no fetch
 
 ### Requirement: Container adapter
-The container adapter SHALL create per environment: an internal-only task network, a task volume holding the working copy, and one container from the operator-configured image (`factory.sandbox.image`), honoring the `factory.sandbox.runtime` knob. `exec` SHALL run inside that container; `dispose()` SHALL remove container, volume, and network as one idempotent operation. All factory-created Docker objects SHALL carry factory-owned labels.
+The container adapter SHALL create per environment: an internal-only task network, a task volume holding the working copy, and one container from the operator-configured image (`factory.sandbox.image`), honoring the `factory.sandbox.runtime` knob. `exec` SHALL run inside that container; `dispose()` SHALL remove container, volume, and network as one idempotent operation. All factory-created Docker objects SHALL carry, atomically from creation, the ownership labels defined by `sandbox-lifecycle`: factory ownership, the sanitized task environment key, the ownership mode (`tracked` | `manual`), and the project identity.
 <!-- implements FR3, NFR-R2 of add-sandbox-core -->
+<!-- implements FR2 of add-serve-sandbox-lifecycle -->
 
 #### Scenario: One task, one box
 - **WHEN** an environment is materialized for a task in container mode
-- **THEN** a labeled container, volume, and internal network exist for it, and dispose removes all three
+- **THEN** a labeled container, volume, and internal network exist for it — each carrying key, mode, and project labels from birth — and dispose removes all three
 
 #### Scenario: Dispose is idempotent
 - **WHEN** dispose is called twice, or after a partial teardown
 - **THEN** the second call succeeds and no task objects remain
+
+### Requirement: Container realization of lifecycle roles
+The container adapter SHALL realize the lifecycle roles of the `sandbox-lifecycle` decision matrix through its object naming: environments are keyed `<key>` (main), `<key>-j` (fresh judge box), `<key>-v` (fresh verification box), and object names carry the adapter's factory name prefixes (box, volume, network, and the per-environment-key egress guard). The one-shot seed-clone helper runs as an anonymous container carrying the factory and task labels but no factory-named identity; a factory-labelled container matching no factory name pattern SHALL classify as the seed-helper role. Sweep classification SHALL derive an object's role and task key from its labels and this naming — a `-j`/`-v`-suffixed environment key resolves to its base task key, so a live task's judge and verification objects classify alive — never by recomputing expected names from a live-task snapshot.
+<!-- implements FR4 of add-serve-sandbox-lifecycle -->
+
+#### Scenario: Role recovered from the object itself
+- **WHEN** the sweep classifies a listed factory-labelled container it did not create
+- **THEN** the object's role (main box, judge, verification, guard, seed helper) and task key are derived from its own labels and name, with no reference to any in-memory key set
 
 ### Requirement: All gnome-product processes go through the port
 Agent-CLI rounds, CLI judge votes, and command checks SHALL execute exclusively via `exec()` of the bound task environment; no factory code path may spawn a process over a working copy directly.
@@ -97,14 +106,6 @@ The container adapter SHALL apply operator-configured CPU, memory, and PID-count
 #### Scenario: Disk quota is enforced only when opted in
 - **WHEN** the operator sets `factory.sandbox.enforce-disk-quota` on a daemon whose storage driver supports quotas
 - **THEN** the container is created with `--storage-opt size=` at the configured working-volume size; left at its default, no disk cap is applied and container creation does not depend on a quota-capable driver
-
-### Requirement: Orphan cleanup at startup
-Factory startup SHALL find Docker objects carrying factory labels that belong to no live task and remove them, mirroring worktree pruning.
-<!-- implements FR11, NFR-R2 of add-sandbox-core -->
-
-#### Scenario: Crash leaves nothing permanent
-- **WHEN** a factory dies mid-task and another instance starts
-- **THEN** the dead task's container, volume, and network are detected by label and removed
 
 ### Requirement: Runtime outage is an infrastructure failure
 When the container runtime is unavailable — the daemon is down at materialize, or dies mid-task — the affected operation SHALL classify as an infrastructure failure: retried per existing policy, no stage attempt burned; if the runtime stays down, the task escalates with a "cannot execute" report, consistent with the existing failure classes.

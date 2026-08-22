@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The core staleness policy (design D2): a per-claim observation memory that, fed a
@@ -53,8 +55,16 @@ import java.util.Map;
  * {@code Ready}, or lost its claim marker drops out of memory, and if it reappears its
  * timer restarts from that later first sighting.
  *
- * <p>Stateful and not thread-safe: one memory belongs to one reaper loop on the
- * heartbeat thread (task 4.3), which calls {@link #observe} sequentially.
+ * <p><b>Threading.</b> Stateful, and mutated by exactly one writer: the standing reaper's
+ * own thread, which calls {@link #observe}, {@link #forgetAll} and {@link #retryEmission}
+ * sequentially. It is nonetheless read from a SECOND thread — the daemon's sandbox-lifecycle
+ * tick reads {@link #staleRefs()} through {@link LivenessOracle} on its own virtual thread
+ * (design D7 of add-serve-sandbox-lifecycle) — so every method that touches the observation
+ * map is {@code synchronized} on this instance. Without that, the reader iterates a {@code
+ * HashMap} the reaper is restructuring: a {@code ConcurrentModificationException} kills the
+ * sweep tick, and a torn read feeds the destructive {@code unowned} verdict. All four methods
+ * are pure in-memory work — no I/O runs under the lock, so the reaper never blocks the sweep
+ * for longer than a map walk.
  *
  * <p>The TTL ({@code multiplier × beat interval}, design D8) is taken as a
  * constructor {@link Duration} — the config wiring that derives it from {@code
@@ -94,7 +104,7 @@ public final class StalenessMemory {
      * @return the claims newly judged stale on this tick, in {@code openTasks} order;
      *     never null, empty when none crossed the threshold
      */
-    public List<StaleClaim> observe(List<OpenTask> openTasks) {
+    public synchronized List<StaleClaim> observe(List<OpenTask> openTasks) {
         long now = time.nanoTime();
         Map<TaskRef, ClaimVersion> eligible = eligibleClaims(openTasks);
         observations.keySet().retainAll(eligible.keySet());
@@ -130,7 +140,7 @@ public final class StalenessMemory {
      *
      * <p>Implements FR9 of add-claim-heartbeat.
      */
-    public void forgetAll() {
+    public synchronized void forgetAll() {
         observations.clear();
     }
 
@@ -150,11 +160,30 @@ public final class StalenessMemory {
      * @param claim the claim (ref + the exact version that failed to remove) to re-arm; never
      *     null
      */
-    public void retryEmission(StaleClaim claim) {
+    public synchronized void retryEmission(StaleClaim claim) {
         Observation observation = observations.get(claim.ref());
         if (observation != null && observation.version.equals(claim.version())) {
             observation.emitted = false;
         }
+    }
+
+    /**
+     * The refs currently latched stale — every remembered claim whose once-per-version emission
+     * has fired and has not since been superseded by a version change or forgotten (design D2 of
+     * add-serve-sandbox-lifecycle: the liveness oracle's "unowned" verdict reuses this exact
+     * latch, so a claim already emitted stale on an earlier tick but not yet removed — a pending
+     * {@code removeStaleClaim} retry — still classifies unowned, not merely the claims newly
+     * emitted this call). A pure read of the current observation state; never mutates.
+     *
+     * <p>Implements FR3 of add-serve-sandbox-lifecycle.
+     *
+     * @return the currently-stale refs; never null, empty when none are latched stale
+     */
+    public synchronized Set<TaskRef> staleRefs() {
+        return observations.entrySet().stream()
+                .filter(entry -> entry.getValue().emitted)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /** The eligible claims in {@code listOpen} order: {@code Working} with a non-null version. */

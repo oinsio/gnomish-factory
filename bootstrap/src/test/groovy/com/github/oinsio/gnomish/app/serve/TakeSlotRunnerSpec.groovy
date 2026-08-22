@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
+import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
@@ -36,6 +37,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.LocalDate
+import java.time.ZoneOffset
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import spock.lang.Specification
@@ -82,7 +84,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         MDC.remove(MDC_KEY)
     }
 
-    private static TrackerTask trackerTask(String taskId) {
+    private static TrackerTask workingTask(String taskId) {
         new TrackerTask(
                 new TaskRef(taskId), new TaskSnapshot(taskId, 'title', 'body'),
                 new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none(), false)
@@ -109,7 +111,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
                 agentCliBinary: FakeAgentSupport.propertiesFor('plain-round').agentCliBinary())
         new TakeSlotRunner(
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, ABORT_THRESHOLD, MDC_KEY,
-                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE)
+                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly())
     }
 
     // Scenario: slot body unchanged — a pre-claimed fresh task dispatches through
@@ -117,7 +119,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     // created and the engine runs to a terminal Delivered result.
     def "runs a pre-claimed fresh task through the same take cycle as an explicit take"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-1')) >> trackerTask('PROJ-1')
+        tracker.fetchTask(new TaskRef('PROJ-1')) >> workingTask('PROJ-1')
         def slotRunner = newSlotRunner()
 
         when:
@@ -136,7 +138,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         String observedDuringRun = null
         tracker.fetchTask(_) >> {
             observedDuringRun = MDC.get(MDC_KEY)
-            trackerTask('PROJ-2')
+            workingTask('PROJ-2')
         }
 
         when:
@@ -152,7 +154,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     //     uses to build its closing report.
     def "records its outcome into an attached DrainReport"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-4')) >> trackerTask('PROJ-4')
+        tracker.fetchTask(new TaskRef('PROJ-4')) >> workingTask('PROJ-4')
         def slotRunner = newSlotRunner()
         def report = new DrainReport()
         slotRunner.attachDrainReport(report)
@@ -171,7 +173,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     //     run's runSummary ledger line is built from once it completes.
     def "accumulates its outcome into an attached RunSummaryAccumulator"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-8')) >> trackerTask('PROJ-8')
+        tracker.fetchTask(new TaskRef('PROJ-8')) >> workingTask('PROJ-8')
         def slotRunner = newSlotRunner()
         def accumulator = new RunSummaryAccumulator()
         slotRunner.attachRunSummaryAccumulator(accumulator)
@@ -187,7 +189,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     //     exactly as before — no accumulation side effect to worry about.
     def "does not require a RunSummaryAccumulator to be attached"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-9')) >> trackerTask('PROJ-9')
+        tracker.fetchTask(new TaskRef('PROJ-9')) >> workingTask('PROJ-9')
         def slotRunner = newSlotRunner()
 
         when:
@@ -203,7 +205,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     //     (assign, then start the slot thread, release only after it returns).
     def "appends a taskOutcome ledger line via an attached TaskOutcomeLedgerWriter"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-7')) >> trackerTask('PROJ-7')
+        tracker.fetchTask(new TaskRef('PROJ-7')) >> workingTask('PROJ-7')
         def slotRunner = newSlotRunner()
         def slotLedger = new SlotLedger(1)
         def ref = new TaskRef('PROJ-7')
@@ -218,7 +220,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         slotRunner.run(ref)
 
         then:
-        def ledgerFile = ObservabilityPaths.ledgerFile(tempDir, 'gnomish', LocalDate.now(java.time.ZoneOffset.UTC))
+        def ledgerFile = ObservabilityPaths.ledgerFile(tempDir, 'gnomish', LocalDate.now(ZoneOffset.UTC))
         def lines = Files.readString(ledgerFile).split('\n').findAll {
             !it.isBlank()
         }
@@ -231,7 +233,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     //     before — no report side effect to worry about.
     def "does not require a DrainReport to be attached"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-5')) >> trackerTask('PROJ-5')
+        tracker.fetchTask(new TaskRef('PROJ-5')) >> workingTask('PROJ-5')
         def slotRunner = newSlotRunner()
 
         when:
@@ -248,7 +250,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     // call to logOutcome from run().
     def "logs the delivered outcome via logOutcome after a successful run"() {
         given:
-        tracker.fetchTask(new TaskRef('PROJ-6')) >> trackerTask('PROJ-6')
+        tracker.fetchTask(new TaskRef('PROJ-6')) >> workingTask('PROJ-6')
         def slotRunner = newSlotRunner()
 
         when:

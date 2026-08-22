@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
@@ -27,11 +28,13 @@ import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
+import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -86,6 +89,8 @@ final class ObservabilityAssembly {
      *     null
      * @param standingReaper the standing reaper feeding {@code vitals.reaper} (FR7); never null
      * @param worktreeJanitor the worktree janitor feeding {@code vitals.janitor} (FR7); never null
+     * @param sweepTickLog the sandbox-lifecycle sweep's per-tick record feeding {@code
+     *     vitals.sweep} (NFR-O1 of add-serve-sandbox-lifecycle); never null
      * @param clock the wall-clock time source for every write point; never null
      * @return the daemon-lifetime observability handle; never null
      */
@@ -103,6 +108,7 @@ final class ObservabilityAssembly {
             InstanceHeartbeat heartbeat,
             StandingReaper standingReaper,
             WorktreeJanitor worktreeJanitor,
+            SweepTickLog sweepTickLog,
             Clock clock) {
         String instanceName = factoryProperties.instanceName();
         InstanceInfo instance = new InstanceInfo(instanceId.value(), resolveHost(), resolveFactoryVersion());
@@ -122,6 +128,8 @@ final class ObservabilityAssembly {
                         heartbeat,
                         standingReaper,
                         worktreeJanitor,
+                        sweepTickLog,
+                        serveProperties.sandboxSweepInterval(),
                         startedAt),
                 new SnapshotJsonMapper(),
                 serveProperties.snapshotInterval(),
@@ -138,12 +146,16 @@ final class ObservabilityAssembly {
         LifecycleLedgerWriter lifecycleLedgerWriter = new LifecycleLedgerWriter(ledgerAppender, instance, clock);
         TaskOutcomeLedgerWriter taskOutcomeLedgerWriter =
                 new TaskOutcomeLedgerWriter(slotLedger, ledgerAppender, instance, clock);
+        // NFR-O2 of add-serve-sandbox-lifecycle: the sweep's own lines share this instance's
+        // appender, so they rotate and are retained exactly like every other ledger line.
+        SweepLedgerWriter sweepLedgerWriter = new SweepLedgerWriter(ledgerAppender, instance, clock);
 
         return new ObservabilityWiring(
                 lifecycleTracker,
                 writer,
                 lifecycleLedgerWriter,
                 taskOutcomeLedgerWriter,
+                sweepLedgerWriter,
                 ledgerAppender,
                 instance,
                 clock);
@@ -160,6 +172,8 @@ final class ObservabilityAssembly {
             InstanceHeartbeat heartbeat,
             StandingReaper standingReaper,
             WorktreeJanitor worktreeJanitor,
+            SweepTickLog sweepTickLog,
+            Duration sweepInterval,
             Instant startedAt) {
         return new Snapshot(
                 1,
@@ -169,7 +183,8 @@ final class ObservabilityAssembly {
                 LifecycleSnapshotAssembler.assemble(lifecycleTracker),
                 FeedSnapshotAssembler.assemble(automaton),
                 new SlotsSnapshot(slotCapacity, SlotEntryAssembler.assemble(slotLedger, progress)),
-                VitalsSnapshotAssembler.assemble(heartbeat, standingReaper, worktreeJanitor),
+                VitalsSnapshotAssembler.assemble(
+                        heartbeat, standingReaper, worktreeJanitor, sweepTickLog, sweepInterval),
                 TrackerHealthAssembler.assemble(trackerHealth));
     }
 

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import java.nio.file.Files
@@ -65,13 +66,13 @@ implements AppAssemblyFixture, ServeObservabilityFixture {
                 homeDir,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(1, null, null, null, null, null),
+                new ServeProperties(1, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new RefusingStarter())
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     @Timeout(10)

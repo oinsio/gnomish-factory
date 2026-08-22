@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
-import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
@@ -23,7 +22,8 @@ import org.jspecify.annotations.Nullable;
  * (FR9, FR10, D3): {@code tracker.claim(ref, instanceId)}, and on {@link ClaimResult.Acquired}
  * checks via the {@link com.github.oinsio.gnomish.app.port.git.TaskBranchGit} port whether a branch already exists for the task — if not,
  * delegates to {@link TakeFreshClaim#claim} (first-ever claim); if one exists, delegates to {@link
- * TakeDispositionResume#resumeExisting} (resume from the recorded outcome). On {@link
+ * TakeDispositionResume#resumeExisting} (resume from the recorded outcome, in whichever execution
+ * mode the run resolves to). On {@link
  * ClaimResult.Held} returns {@link #refuseHeld}, naming the current holder.
  *
  * <p>Extracted out of {@link TakeDisposition} (task 5.9) so bare auto mode (task 5.10) can reuse
@@ -39,20 +39,27 @@ import org.jspecify.annotations.Nullable;
  * its established {@code app.serve} package. {@link #claimAndWork} stays package-private: no
  * caller outside {@code app} claims fresh itself.
  *
+ * <p>This class owns the claim, heartbeat and crash-abort lifecycle only; WHERE the work runs —
+ * fresh claim or resume, host or container — is {@link TakeWorkRouter}'s job, which reads the
+ * collaborators below directly (hence package-private rather than private fields, the same shape
+ * {@code ContainerRunSupport} uses for {@code ContainerRunTermination}).
+ *
  * <p>Implements FR9, FR10, D3 of add-tracker-port. Implements FR1, M2 of add-factory-serve.
  */
 public final class TakeClaimAndWork {
 
-    private final RunAssembly assembly;
-    private final TaskGit git;
-    private final Path worktreesRoot;
-    private final AbortHandler abortHandler;
-    private final int abortThreshold;
-    private final List<String> credentialEnvVarsToScrub;
-    private final TakeDispositionResume dispositionResume;
+    final RunAssembly assembly;
+    final TaskGit git;
+    final Path worktreesRoot;
+    final AbortHandler abortHandler;
+    final int abortThreshold;
+    final List<String> credentialEnvVarsToScrub;
+    final TakeResumeRunner resumeRunner;
     private final ClaimBeat heartbeat;
-    private final ClaimLossFlag claimLossFlag;
+    final ClaimLossFlag claimLossFlag;
     private final TakeCrashAbort crashAbort;
+    final ContainerTakeSupport containerTakeSupport;
+    final TakeContainerResumeRunner containerResumeRunner;
 
     TakeClaimAndWork(
             RunAssembly assembly,
@@ -61,19 +68,23 @@ public final class TakeClaimAndWork {
             AbortHandler abortHandler,
             int abortThreshold,
             List<String> credentialEnvVarsToScrub,
-            TakeDispositionResume dispositionResume,
+            TakeResumeRunner resumeRunner,
             ClaimBeat heartbeat,
-            ClaimLossFlag claimLossFlag) {
+            ClaimLossFlag claimLossFlag,
+            ContainerTakeSupport containerTakeSupport,
+            TakeContainerResumeRunner containerResumeRunner) {
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
         this.abortHandler = abortHandler;
         this.abortThreshold = abortThreshold;
         this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
-        this.dispositionResume = dispositionResume;
+        this.resumeRunner = resumeRunner;
         this.heartbeat = heartbeat;
         this.claimLossFlag = claimLossFlag;
         this.crashAbort = new TakeCrashAbort(abortHandler, abortThreshold);
+        this.containerTakeSupport = containerTakeSupport;
+        this.containerResumeRunner = containerResumeRunner;
     }
 
     /**
@@ -116,8 +127,10 @@ public final class TakeClaimAndWork {
      * abort", D16 "an uncaught exception runs the abort protocol and exits 12 or 13, never a bare
      * 1"). Deliberate, dedicated-exit-code control flow is exempt and rethrown unchanged: {@link
      * UsageException} keeps exit 2 and {@link DivergedBranchException} keeps exit 5 (D16: codes
-     * shared with {@code run} keep their meaning). A claim that never succeeds is a pre-claim
-     * failure handled one layer up (exit 1) and never reaches this method.
+     * shared with {@code run} keep their meaning) — but the claim is still dropped first (see
+     * {@link #releaseBestEffort}), so a refusal never leaves the task hanging {@code Working}. A
+     * claim that never succeeds is a pre-claim failure handled one layer up (exit 1) and never
+     * reaches this method.
      *
      * <p>The instance heartbeat lifecycle is anchored here (task 6.1 of add-claim-heartbeat, FR1):
      * this is the single choke point every claim-holding path reaches — explicit {@code Ready} via
@@ -142,9 +155,10 @@ public final class TakeClaimAndWork {
         TaskRef ref = trackerTask.ref();
         heartbeat.register(ref);
         try {
-            return locateAndWork(
-                    cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
+            return TakeWorkRouter.locateAndWork(
+                    this, cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
         } catch (UsageException | DivergedBranchException deliberate) {
+            releaseBestEffort(tracker, ref, deliberate);
             throw deliberate;
         } catch (RuntimeException crash) {
             return crashAbort.onCrash(definition, trackerTask, tracker, instanceId, crash);
@@ -153,37 +167,27 @@ public final class TakeClaimAndWork {
         }
     }
 
-    private TakeResult locateAndWork(
-            Path cloneDir,
-            @Nullable String base,
-            PipelineDefinition definition,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            TrackerTask trackerTask,
-            Tracker tracker,
-            InstanceId instanceId) {
-        var ref = trackerTask.ref();
-        String taskId = trackerTask.snapshot().id();
-        BranchLocation location = git.branches().locate(cloneDir, taskId);
-        if (location instanceof BranchLocation.NotFound) {
-            return TakeFreshClaim.claim(
-                    assembly,
-                    git,
-                    worktreesRoot,
-                    abortHandler,
-                    abortThreshold,
-                    credentialEnvVarsToScrub,
-                    cloneDir,
-                    base,
-                    definition,
-                    interactiveMode,
-                    trackerTask,
-                    tracker,
-                    instanceId,
-                    claimLossFlag);
+    /**
+     * Drops this instance's claim on {@code ref} before a deliberate, dedicated-exit-code failure
+     * ends the invocation. The exit code is the whole point of rethrowing those two unchanged — but
+     * the process is leaving with no further tracker write for this ref, so without this the task
+     * sits {@code Working} behind a runner that is already gone until its lease expires, exactly
+     * the hanging claim the crash arm ({@link TakeCrashAbort}) exists to prevent. {@link
+     * Tracker#release} is the right verb rather than {@code recordAbort} or {@code park}: nothing
+     * infrastructural failed, so the task's logical state is left untouched and it returns to
+     * circulation immediately.
+     *
+     * <p>Best-effort, in the same shape as {@link com.github.oinsio.gnomish.app.take.AbortHandler}'s
+     * tracker writes (NFR-R2): an unreachable tracker is itself a plausible reason a run is bailing
+     * out, and it must not replace the operator-facing usage error with a tracker stack trace — the
+     * failed release is logged as suppressed on the original exception instead.
+     */
+    private static void releaseBestEffort(Tracker tracker, TaskRef ref, RuntimeException deliberate) {
+        try {
+            tracker.release(ref);
+        } catch (RuntimeException unreleased) {
+            deliberate.addSuppressed(unreleased);
         }
-        return dispositionResume.resumeExisting(
-                cloneDir, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
     }
 
     /**

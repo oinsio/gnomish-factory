@@ -36,7 +36,7 @@ class ServeAssemblySpec extends Specification {
         slotLedger.assign(REF)
         def claimLossFlag = new ClaimLossFlag()
         def serveProperties = new ServeProperties(
-                1, Duration.ofSeconds(30), Duration.ofMillis(50), Duration.ofDays(14), null, null)
+                1, Duration.ofSeconds(30), Duration.ofMillis(50), Duration.ofDays(14), null, null, null)
         def standingReaper = new StandingReaper(
                 ReaperDuty.NONE, { Duration d -> } as Sleeper, Duration.ofSeconds(30), {
                     []

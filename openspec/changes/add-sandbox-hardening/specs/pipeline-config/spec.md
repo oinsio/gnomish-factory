@@ -17,9 +17,10 @@ declaration, the operator-configured default model applies.
 ### Requirement: Server-side tool allowance is explicit
 The stage model SHALL accept an optional explicit allowance for
 provider server-side tools in `Mechanism`; absent the allowance, the
-gateway strips such tools. The allowance is a repo-side declaration and
-does not require operator action; it widens only the model's tool
-surface, never the sandbox or egress policy.
+gateway strips such tools. The allowance is a repo-side declaration,
+effective only when the operator has enabled the tool-policy layer; it
+widens only the model's tool surface, never the sandbox or egress
+policy (see the tighten-only carve-out below).
 <!-- implements FR5 of add-sandbox-hardening -->
 
 #### Scenario: Allowance loads into the typed model
@@ -36,3 +37,31 @@ NOT execute it; it runs only in provisioning.
 #### Scenario: Loading stays read-only
 - **WHEN** a pipeline with a setup.sh loads
 - **THEN** the file is registered for provisioning by content, and nothing executes during loading
+
+## MODIFIED Requirements
+
+### Requirement: Repo declarations can only tighten
+Validation SHALL reject any repo-side declaration that weakens
+isolation: requesting host execution, naming a concrete adapter
+binding, or relaxing freshness/limits. Adapter binding and any
+weakening SHALL exist only in factory installation config. Violations
+SHALL surface as located `ConfigError`s. One explicit carve-out exists:
+the server-side tool allowance in `Mechanism` is a valid repo-side
+declaration even though it widens the model's provider-side tool
+surface — it takes effect only when the operator has enabled the
+tool-policy layer, and it never alters the sandbox boundary or the
+egress allowlist.
+<!-- implements FR14 of add-sandbox-core -->
+<!-- implements FR5 of add-sandbox-hardening -->
+
+#### Scenario: Host request from the repo is rejected
+- **WHEN** a stage manifest asks for host execution or a named adapter
+- **THEN** loading reports a located `ConfigError` and no pipeline runs
+
+#### Scenario: Tightening is accepted
+- **WHEN** a stage manifest declares `requires-fresh` on top of the operator's container binding
+- **THEN** validation passes and the stricter setting takes effect
+
+#### Scenario: Tool allowance passes validation as the carved-out widening
+- **WHEN** a stage manifest declares the server-side tool allowance
+- **THEN** validation accepts it, and the allowance has effect only under the operator-enabled tool-policy layer

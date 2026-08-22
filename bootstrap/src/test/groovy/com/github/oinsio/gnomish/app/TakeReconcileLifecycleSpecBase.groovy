@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -108,7 +109,7 @@ tracker:
                 Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
                 [github: trackerFactory],
                 MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource())
+                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     private static int runExitCode(TakeCommand command, DefaultApplicationArguments appArgs) {

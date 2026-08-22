@@ -36,9 +36,10 @@ import org.slf4j.LoggerFactory;
  *
  * <p>A genuinely unexpected exception would propagate to the heartbeat thread's per-tick
  * guard (task 4.2), which keeps the thread alive; the two handled cases above are the only
- * expected failures. Not thread-safe: one reaper and its {@link StalenessMemory} belong to
- * one heartbeat thread that calls {@link #reapOnce(Collection)} sequentially. Task 6.1 constructs it
- * with the take run's {@link Tracker} and a per-run {@link StalenessMemory}.
+ * expected failures. Not thread-safe: one reaper belongs to one reaper thread that calls {@link
+ * #reapOnce(Collection)} sequentially, and is the sole WRITER of its {@link StalenessMemory} — that
+ * memory is additionally read by the sandbox-lifecycle tick thread and synchronizes for it. Task 6.1
+ * constructs the reaper with the take run's {@link Tracker} and a per-run {@link StalenessMemory}.
  *
  * <p>Implements FR4, FR9, NFR-R2 of add-claim-heartbeat.
  */
@@ -52,6 +53,7 @@ public final class Reaper implements ReaperDuty {
 
     private final Tracker tracker;
     private final StalenessMemory memory;
+    private final OpenTaskListingSink listingSink;
 
     /**
      * @param tracker the port the reaper lists open tasks through and removes stale claims
@@ -59,8 +61,21 @@ public final class Reaper implements ReaperDuty {
      * @param memory the per-run staleness policy fed each successful observation; never null
      */
     public Reaper(Tracker tracker, StalenessMemory memory) {
+        this(tracker, memory, OpenTaskListingSink.NONE);
+    }
+
+    /**
+     * @param tracker the port the reaper lists open tasks through and removes stale claims
+     *     with; never null
+     * @param memory the per-run staleness policy fed each successful observation; never null
+     * @param listingSink taps this tick's {@code listOpen} result (or failure) so a consumer —
+     *     the liveness oracle (task 2.1 of add-serve-sandbox-lifecycle) — can reuse it without a
+     *     second tracker call; never null, {@link OpenTaskListingSink#NONE} if unused
+     */
+    public Reaper(Tracker tracker, StalenessMemory memory, OpenTaskListingSink listingSink) {
         this.tracker = tracker;
         this.memory = memory;
+        this.listingSink = listingSink;
     }
 
     /**
@@ -87,8 +102,13 @@ public final class Reaper implements ReaperDuty {
             // falsely reap a live holder that also lost tracker access and has not re-beaten.
             log.warn("listOpen failed; forgetting observation windows, recovery restarts them", e);
             memory.forgetAll();
+            listingSink.onListingFailed();
             return;
         }
+        // Publish the full listing (own claims still included) BEFORE the exclusion below, so a
+        // consumer of the sink sees the same tick's listOpen result the reaper itself acted on —
+        // no second tracker call (design D1, NFR-C2 of add-serve-sandbox-lifecycle).
+        listingSink.onListed(openTasks);
         // Exclude the instance's own held claims BEFORE observation (design D13): a run whose
         // beats are failing while its listOpen still succeeds would otherwise watch its own
         // unchanged version cross the TTL and reap its own live claim. Only a foreign observer

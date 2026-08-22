@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
@@ -45,15 +46,15 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, 'taskId',
                 testProperties(), Clock.systemUTC(), [:],
                 MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource())
+                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     private ServeCommand newServeCommand() {
         new ServeCommand(
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
-                testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
+                testProperties(), new ServeProperties(0, null, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(),
-                { FeedAutomaton automaton -> } as FeedAutomatonStarter)
+                { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     private BoardCommand newBoardCommand() {
@@ -113,8 +114,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def cloneDir = initWorkingRepo(worktreesRoot, 'clone')
         def runner = new GitProcessRunner()
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
-        runner.run(cloneDir, 'add', 'a.txt')
-        runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir)
         new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'))
                 .createTask(new TaskContext('PROJ-1', 'T', 'B', []), null)
 
@@ -209,12 +209,12 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 new ServeCommand(
                         newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
-                        testProperties(), new ServeProperties(0, null, null, null, null, null), Clock.systemUTC(),
+                        testProperties(), new ServeProperties(0, null, null, null, null, null, null), Clock.systemUTC(),
                         new SystemClock(), [github: factoryReturning(Stub(Tracker))],
                         MapSecretsProvider.NONE,
                         TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                             starterInvoked.set(true)
-                        } as FeedAutomatonStarter),
+                        } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly()),
                 dispatch.boardCommand(), dispatch.dashboardCommand())
         def args = new DefaultApplicationArguments('serve', "--dir=${worktreesRoot}".toString())
 
