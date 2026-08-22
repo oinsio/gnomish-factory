@@ -20,11 +20,18 @@ import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
  * {@link Activity.Verifying}, not {@code Executing}, so every method here is a
  * no-op for it, and likewise if no activity is currently held at all.
  *
- * <p>Implements FR7, UX1, D10, D12 of add-agent-executor.
+ * <p>Since fix-round-stdout-drain these callbacks arrive on the round's stdout
+ * drain thread while the process still runs (D4), concurrently with the round
+ * thread's own writes to the same {@link StatusSnapshotHolder}. That is already
+ * safe: the holder synchronizes every accessor, and this enricher keeps no state
+ * of its own — the read-then-replace pairs below are the only cross-thread
+ * interaction, and a lost race between two of them costs at most one tool-call
+ * increment on a live status display.
+ *
+ * <p>Implements FR7, UX1, D10, D12 of add-agent-executor; D4 of
+ * fix-round-stdout-drain.
  */
-public final class AgentActivityEnricher implements AgentProgressListener {
-
-    private final StatusSnapshotHolder holder;
+public record AgentActivityEnricher(StatusSnapshotHolder holder) implements AgentProgressListener {
 
     /**
      * Wraps {@code holder}, the snapshot this enricher reads the current activity
@@ -32,9 +39,7 @@ public final class AgentActivityEnricher implements AgentProgressListener {
      *
      * @param holder the snapshot holder to enrich; never null
      */
-    public AgentActivityEnricher(StatusSnapshotHolder holder) {
-        this.holder = holder;
-    }
+    public AgentActivityEnricher {}
 
     /**
      * Refines the held {@link Activity.Executing}, if any, per the event kind — a

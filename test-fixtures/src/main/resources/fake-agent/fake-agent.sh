@@ -50,10 +50,9 @@ fi
 
 # Optional argv capture, opt-in only — a no-op when unset (every existing
 # caller leaves this unset, so behaviour there is unchanged). Args are joined
-# with NUL, not newline: a real prompt argument routinely contains embedded
-# newlines, so a newline-delimited log would misrepresent invocation
-# boundaries. Each invocation's block ends with a line containing only
-# "---" so a reader can split invocations without parsing NUL bytes.
+# with newline, one arg per line: each invocation's block ends with a line
+# containing only "---" so a reader can split invocations even though a real
+# prompt argument may itself contain embedded newlines.
 if [ -n "${GNOMISH_FAKE_CAPTURE_ARGV:-}" ]; then
     printf '%s\n' "$@" >> "$GNOMISH_FAKE_CAPTURE_ARGV"
     printf -- '---\n' >> "$GNOMISH_FAKE_CAPTURE_ARGV"
@@ -90,7 +89,25 @@ if [ -f "$SCENARIO_DIR/next-scenario" ]; then
     fi
 fi
 
-# 1. Scripted stream-json to stdout, verbatim, one event per line.
+# 1a. Optional generated noise, emitted BEFORE the scripted stream so the
+# scripted result event stays last (fix-round-stdout-drain task 4.1): the
+# scenario names one stream-json line in noise-line and a repeat count in
+# noise-repeat, and the fake prints that line that many times. A generator
+# rather than a checked-in fixture — the point is a stream far larger than the
+# ~64 KB OS pipe buffer, and a megabyte of committed JSON is not something a
+# repository should carry. Writes are synchronous, so a scenario that exceeds
+# the pipe buffer also stands in for a writer that would block on a full pipe.
+if [ -f "$SCENARIO_DIR/noise-line" ] && [ -f "$SCENARIO_DIR/noise-repeat" ]; then
+    NOISE_LINE=$(cat "$SCENARIO_DIR/noise-line")
+    NOISE_REPEAT=$(cat "$SCENARIO_DIR/noise-repeat")
+    i=0
+    while [ "$i" -lt "$NOISE_REPEAT" ]; do
+        printf '%s\n' "$NOISE_LINE"
+        i=$((i + 1))
+    done
+fi
+
+# 1b. Scripted stream-json to stdout, verbatim, one event per line.
 if [ -f "$SCENARIO_DIR/stdout.jsonl" ]; then
     cat "$SCENARIO_DIR/stdout.jsonl"
 fi

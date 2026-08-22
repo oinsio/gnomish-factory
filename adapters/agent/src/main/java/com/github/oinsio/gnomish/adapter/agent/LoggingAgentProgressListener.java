@@ -19,7 +19,10 @@ import org.slf4j.LoggerFactory;
  * on the calling thread by the time this listener runs (task 8.2, {@link
  * com.github.oinsio.gnomish.status.MdcEventListener}) — an attempt's executor
  * round always runs inside that MDC scope — so this listener does not set MDC
- * itself; it only logs.
+ * itself; it only logs. Since fix-round-stdout-drain the calling thread is the
+ * round's stdout drain rather than the round thread, and MDC is thread-local:
+ * {@link StreamDrain} is what re-establishes the round's keys there, captured at
+ * launch, so these lines keep landing in the attempt's scope (D4).
  *
  * <p>One instance is shared by both the executor and judge CLI adapters (app
  * assembly, task 9.4, out of scope here): a judge round's rounds flow through

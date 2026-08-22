@@ -117,6 +117,27 @@ public final class StreamJsonParser {
      */
     public List<TimestampedEvent> parse(BufferedReader reader) {
         List<TimestampedEvent> events = new ArrayList<>();
+        parseInto(reader, events);
+        return events;
+    }
+
+    /**
+     * The same loop as {@link #parse}, appending each recognized event to
+     * {@code sink} as its line is read rather than returning a list at the end
+     * (FR1 of fix-round-stdout-drain). {@link StreamDrain} runs this on its own
+     * thread with a thread-safe {@code sink}, so the events parsed so far are
+     * published as they arrive instead of only on a clean end-of-stream — which
+     * is also what leaves a partially-read stream's events in place when the
+     * read fails midway.
+     *
+     * @param reader the round's stdout, line-buffered; never null; not closed by
+     *     this method — the caller owns its lifecycle
+     * @param sink the collection each recognized event is appended to, in wire
+     *     order; never null, must tolerate the calling thread
+     * @throws UncheckedIOException if the underlying reader fails (a genuine
+     *     I/O error, not a parse error — those are swallowed per FR4)
+     */
+    public void parseInto(BufferedReader reader, List<TimestampedEvent> sink) {
         AgentEvent.InitEvent[] initEvent = new AgentEvent.InitEvent[1];
         String line;
         try {
@@ -124,7 +145,7 @@ public final class StreamJsonParser {
                 var readAt = clock.now();
                 parseLine(line).ifPresent(event -> {
                     log.debug("raw agent event: {}", event);
-                    events.add(new TimestampedEvent(event, readAt));
+                    sink.add(new TimestampedEvent(event, readAt));
                     if (event instanceof AgentEvent.InitEvent init) {
                         initEvent[0] = init;
                     }
@@ -134,7 +155,6 @@ public final class StreamJsonParser {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return events;
     }
 
     private java.util.Optional<AgentEvent> parseLine(String line) {

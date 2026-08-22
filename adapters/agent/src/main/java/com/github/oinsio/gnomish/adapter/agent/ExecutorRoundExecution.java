@@ -13,11 +13,6 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -28,9 +23,11 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Runs one CLI executor round to an {@link ExecutionResult} (FR1, FR3, FR4, FR13, D1, D2, D3, D9
- * of add-agent-executor): launches the process, waits for exit within {@code roundTimeout},
- * parses its stream-json stdout, closes the round, and reads the decision file. Extracted from
- * {@link CliStageExecutor} for file size; the behavior is unchanged.
+ * of add-agent-executor): launches the process, drains and parses its stream-json stdout
+ * concurrently through a {@link StreamDrain}, waits for exit within {@code roundTimeout}, closes
+ * the round, and reads the decision file. Extracted from {@link CliStageExecutor} for file size.
+ *
+ * <p>Implements FR1, FR2, FR3, FR6, NFR-R1, NFR-R2 of fix-round-stdout-drain.
  */
 final class ExecutorRoundExecution {
 
@@ -65,21 +62,25 @@ final class ExecutorRoundExecution {
         Map<String, String> env = new java.util.LinkedHashMap<>(AgentAiSeam.fromFactoryEnvironment());
         env.putAll(round.decisionEnvFragment());
         ExecHandle launched = launch(factoryProperties, round, command, prompt, env);
-        try {
+        // The stdout drain starts here, before the wait, and runs concurrently with the
+        // process (FR1, D1 of fix-round-stdout-drain): deferring the read until after exit
+        // let a stream larger than the ~64 KB OS pipe buffer either block the child on a
+        // full pipe until the roundTimeout kill or lose its tail — and the tail is where
+        // the essential result event lives. try-with-resources is what guarantees no drain
+        // thread and no open stream outlives the round on any exit path (NFR-R1).
+        try (StreamDrain drain = StreamDrain.start(launched.output(), clock, listenerFor(progressListener, round))) {
             Duration roundTimeout = RoundTimeout.resolve(executor.settings());
             var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
             if (wait instanceof ExecHandle.Wait.TimedOut) {
+                // Classified before the drain's events are consulted (FR3): the kill closed
+                // the pipe mid-read, and that secondary symptom must not mask the timeout.
                 throw new RoundTimeoutException(roundTimeout);
             }
             var wallTime = ((ExecHandle.Wait.Exited) wait).wallTime();
 
-            // The process has already exited (or been killed) by this point, so its
-            // stdout pipe is fully drained and reading it here cannot block the round
-            // indefinitely — reading before waitForExitOrTimeout would risk hanging on
-            // a still-open pipe from a process that never exits (design D3, FR13).
-            List<TimestampedEvent> events = parseStdout(launched, clock, progressListener, round.roundListener());
+            List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
             Instant roundEnd = clock.now();
-            AgentRoundResult roundResult = resultExtractor.extract(events, roundEnd);
+            AgentRoundResult roundResult = resultExtractor.extract(events, roundEnd, drain.bytesRead());
             ExecutorUsage usage = withWallTime(roundResult.usage(), wallTime);
             ToolTrace trace = trace(request, events, roundEnd);
 
@@ -156,18 +157,16 @@ final class ExecutorRoundExecution {
         }
     }
 
-    private static List<TimestampedEvent> parseStdout(
-            ExecHandle launched,
-            Clock clock,
-            AgentProgressListener progressListener,
-            AgentProgressListener roundListener) {
-        var listener = new CompositeAgentProgressListener(List.of(progressListener, roundListener));
-        try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(launched.output(), StandardCharsets.UTF_8))) {
-            return new StreamJsonParser(clock, listener).parse(reader);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read agent process stdout", e);
-        }
+    /**
+     * The round's live-progress fan-out — the executor's own subscriber plus whatever
+     * per-round listener the environment added (the sandboxed mid-round harvest poll).
+     * Since fix-round-stdout-drain it is invoked from the drain thread, per line, while
+     * the process still runs (FR4, D4); the composite's per-listener swallowing is
+     * unchanged.
+     */
+    private static AgentProgressListener listenerFor(
+            AgentProgressListener progressListener, RoundEnvironmentSource.Round round) {
+        return new CompositeAgentProgressListener(List.of(progressListener, round.roundListener()));
     }
 
     private static ExecutorUsage withWallTime(ExecutorUsage usage, Duration wallTime) {
