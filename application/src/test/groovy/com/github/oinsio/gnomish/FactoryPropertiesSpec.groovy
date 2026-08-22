@@ -54,6 +54,40 @@ class FactoryPropertiesSpec extends Specification {
         '\t\n' | 'other whitespace'
     }
 
+    // FR7/D2 of fix-round-stdout-drain: the tail-drain grace defaults to 5 seconds
+    def "agent-cli-tail-drain-grace defaults to five seconds when unset"() {
+        when: 'a properties record is created through a constructor that predates the grace'
+        def properties = new FactoryProperties('factory-01', 'claude', [], null, null)
+
+        then: 'the accessor returns the safe default'
+        properties.agentCliTailDrainGrace() == Duration.ofSeconds(5)
+    }
+
+    // FR7: an explicit grace overrides the default
+    def "agent-cli-tail-drain-grace of an explicit value is exposed unchanged"() {
+        when:
+        def properties = new FactoryProperties(
+                'factory-01', 'claude', Duration.ofSeconds(30), [], null, null, null)
+
+        then:
+        properties.agentCliTailDrainGrace() == Duration.ofSeconds(30)
+    }
+
+    // FR7/D2: a non-positive grace is a startup error, before any dialog
+    def "agent-cli-tail-drain-grace of #description is rejected with the property name"() {
+        when:
+        new FactoryProperties('factory-01', 'claude', grace, [], null, null, null)
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('factory.agent-cli-tail-drain-grace')
+
+        where:
+        grace | description
+        Duration.ZERO | 'zero'
+        Duration.ofSeconds(-1) | 'a negative duration'
+    }
+
     // FR11/D7: CLI binary path defaults to "claude" from PATH when unset
     def "agent-cli-binary defaults to claude when null"() {
         when: 'a properties record is created without an explicit agent-cli-binary'

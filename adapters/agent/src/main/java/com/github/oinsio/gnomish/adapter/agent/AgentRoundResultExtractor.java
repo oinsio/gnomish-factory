@@ -11,9 +11,9 @@ import java.util.List;
  * AgentEvent.ResultEvent} is essential — none present in the list throws
  * {@link MissingResultEventException}, an infrastructure failure the caller
  * (the eventual {@code CliStageExecutor}, task 6.5) is expected to let
- * propagate uncaught, mirroring how {@link
+ * propagate uncaught, mirroring how {@code
  * com.github.oinsio.gnomish.domain.engine.RoundExecution#execute} treats a
- * {@link StageExecutor} throw (NFR-R1). Telemetry is best-effort: {@code
+ * {@link com.github.oinsio.gnomish.domain.engine.port.StageExecutor} throw (NFR-R1). Telemetry is best-effort: {@code
  * tokensByModel} is derived from the result event's {@code modelUsage} (or
  * the flat {@code usage} fallback keyed by the init event's model) via {@link
  * TokenUsageMapper} (task 3.3); {@code tools} is derived from the top-level
@@ -56,6 +56,19 @@ public final class AgentRoundResultExtractor {
      *     (FR4, NFR-R1)
      */
     public AgentRoundResult extract(List<TimestampedEvent> events, Instant roundEnd) {
+        return extract(events, roundEnd, MissingResultEventException.UNKNOWN_VOLUME);
+    }
+
+    /**
+     * As {@link #extract(List, Instant)}, additionally reporting the round's read
+     * volume in the missing-result failure (FR5, D5 of fix-round-stdout-drain).
+     * The round executions pass their {@link StreamDrain}'s byte count here; the
+     * two-argument overload above keeps the callers that have none.
+     *
+     * @param bytesRead the raw stdout bytes the round consumed, or {@code -1} when
+     *     unknown
+     */
+    public AgentRoundResult extract(List<TimestampedEvent> events, Instant roundEnd, long bytesRead) {
         AgentEvent.ResultEvent resultEvent = null;
         AgentEvent.InitEvent initEvent = null;
         for (TimestampedEvent timestamped : events) {
@@ -69,7 +82,8 @@ public final class AgentRoundResultExtractor {
         }
         if (resultEvent == null) {
             String initSessionId = initEvent == null ? null : initEvent.sessionId();
-            throw new MissingResultEventException(initSessionId == null ? "unknown" : initSessionId);
+            throw new MissingResultEventException(
+                    initSessionId == null ? "unknown" : initSessionId, bytesRead, events.size());
         }
         var tokensByModel = tokenUsageMapper.toTokensByModel(resultEvent, initEvent);
         var trace = toolTraceBuilder.buildTrace(events, roundEnd);

@@ -29,6 +29,12 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  *     defaults to {@code "gnomish-factory"} when unset; rejected if explicitly set to blank
  * @param agentCliBinary path or name of the agent CLI binary ({@code factory.agent-cli-binary});
  *     defaults to {@code "claude"} (resolved from {@code PATH}) when unset
+ * @param agentCliTailDrainGrace how long a round waits after the agent process exits for its
+ *     stdout drain to deliver the already-piped tail ({@code factory.agent-cli-tail-drain-grace});
+ *     defaults to 5 seconds when unset, rejected when non-positive — installation-level like
+ *     {@code agentCliBinary}, since it characterizes the host rather than the repo's pipeline
+ *     (FR7, design D2 of fix-round-stdout-drain); documented in the installation-properties table
+ *     of {@code docs/guides/operator-guide-run.md} (UX3 of fix-round-stdout-drain)
  * @param agentCliEnvPassthrough superseded and ignored: the operator passthrough of the layered
  *     child-environment allowlist is {@code factory.sandbox.env-passthrough} (D6, FR9 of
  *     add-sandbox-core). This knob was documentation-only under the replaced
@@ -48,6 +54,7 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
 public record FactoryProperties(
         String instanceName,
         String agentCliBinary,
+        Duration agentCliTailDrainGrace,
         List<String> agentCliEnvPassthrough,
         Tracker tracker,
         Map<String, Map<String, Object>> check,
@@ -55,6 +62,7 @@ public record FactoryProperties(
 
     private static final String DEFAULT_INSTANCE_NAME = "gnomish-factory";
     private static final String DEFAULT_AGENT_CLI_BINARY = "claude";
+    private static final Duration DEFAULT_AGENT_CLI_TAIL_DRAIN_GRACE = Duration.ofSeconds(5);
 
     // The tracker/agentCliEnvPassthrough null-checks below are real, not IDE dead-code noise:
     // Spring's reflective constructor binding can pass null for these record components despite
@@ -67,12 +75,14 @@ public record FactoryProperties(
     public FactoryProperties(
             @Nullable String instanceName,
             @Nullable String agentCliBinary,
+            @Nullable Duration agentCliTailDrainGrace,
             @Nullable List<String> agentCliEnvPassthrough,
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections) {
         this.instanceName = defaultInstanceName(instanceName);
         this.agentCliBinary = defaultAgentCliBinary(agentCliBinary);
+        this.agentCliTailDrainGrace = defaultTailDrainGrace(agentCliTailDrainGrace);
         this.agentCliEnvPassthrough = defaultEnvPassthrough(agentCliEnvPassthrough);
         this.tracker = defaultTracker(tracker);
         this.check = defaultSubsections(check);
@@ -93,6 +103,21 @@ public record FactoryProperties(
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check) {
         this(instanceName, agentCliBinary, agentCliEnvPassthrough, tracker, check, null);
+    }
+
+    /**
+     * Convenience for the callers predating the tail-drain grace (FR7 of fix-round-stdout-drain):
+     * the grace keeps its 5-second default. Property binding ignores this one too — see the note
+     * on {@code @ConstructorBinding} above.
+     */
+    public FactoryProperties(
+            @Nullable String instanceName,
+            @Nullable String agentCliBinary,
+            @Nullable List<String> agentCliEnvPassthrough,
+            @Nullable Tracker tracker,
+            @Nullable Map<String, Map<String, Object>> check,
+            @Nullable Map<String, Map<String, Object>> connections) {
+        this(instanceName, agentCliBinary, null, agentCliEnvPassthrough, tracker, check, connections);
     }
 
     /**
@@ -121,6 +146,24 @@ public record FactoryProperties(
      */
     private static String defaultAgentCliBinary(@Nullable String agentCliBinary) {
         return agentCliBinary == null ? DEFAULT_AGENT_CLI_BINARY : agentCliBinary;
+    }
+
+    /**
+     * Resolves the unset case to the 5-second default and rejects a non-positive value — a grace
+     * of zero or less could never absorb a piped tail, so it is a configuration mistake caught at
+     * startup, before any dialog (FR7, design D2 of fix-round-stdout-drain). A malformed value
+     * ({@code "banana"}) never reaches here: Spring's Duration conversion fails the bind first,
+     * which is the same startup error one layer up. Kept as an explicit method for the same PIT
+     * record-constructor reason as {@link #defaultInstanceName}.
+     */
+    private static Duration defaultTailDrainGrace(@Nullable Duration agentCliTailDrainGrace) {
+        if (agentCliTailDrainGrace == null) {
+            return DEFAULT_AGENT_CLI_TAIL_DRAIN_GRACE;
+        }
+        if (agentCliTailDrainGrace.isZero() || agentCliTailDrainGrace.isNegative()) {
+            throw new IllegalArgumentException("factory.agent-cli-tail-drain-grace must be positive");
+        }
+        return agentCliTailDrainGrace;
     }
 
     /**
