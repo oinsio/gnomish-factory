@@ -22,7 +22,6 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -157,15 +156,6 @@ tracker:
                 .withReaperSleeper(reaperSleeper)
                 .withHeartbeatMonotonicTime(monotonic)
                 .withTakeoverConfirmation(TakeoverConfirmation.UNAVAILABLE), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
-    }
-
-    private static int runExitCode(TakeCommand command, DefaultApplicationArguments appArgs) {
-        try {
-            command.run(appArgs)
-            throw new IllegalStateException('take did not exit with a TakeExitCodeException')
-        } catch (TakeExitCodeException e) {
-            e.exitCode()
-        }
     }
 
     def "M2: a dead instance's Working claim is reaped by another run and later resumed from its branch"() {

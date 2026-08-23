@@ -79,6 +79,10 @@ final class ContainerResumeRunner {
             throw new UsageException("no task branch found for \"" + taskId
                     + "\" — locally, as a remote-tracking ref, or on origin; nothing to resume");
         }
+        // Resume-start touchpoint (FR3 of fix-lifecycle-push): the reconcile above brings local up
+        // to what origin holds; this pushes origin up to what local holds, delivering a commit an
+        // earlier instance recorded but never got pushed. Best-effort, never blocking.
+        git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
 
         var support = supportFactory.create(
                 cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());

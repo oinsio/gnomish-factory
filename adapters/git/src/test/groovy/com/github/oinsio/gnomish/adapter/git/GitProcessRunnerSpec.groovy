@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
@@ -101,6 +102,35 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
         then:
         def e = thrown(GitBinaryNotFoundException)
         e.message.contains('definitely-not-a-real-git-binary-xyz')
+    }
+
+    // NFR-S2 of fix-lifecycle-push: the runner is the single choke point where git's stderr enters
+    // the factory, so the credential scrub lives here rather than at each of the ~10 call sites
+    // that log stderr or put it in a report. Driven through a stand-in git binary (the runner's own
+    // constructor seam) that emits the exact message real git produces when an origin URL carries a
+    // PAT as its username and the subprocess has no terminal to read the password from — real git
+    // cannot be made to emit it without a live HTTP server issuing a 401, and, on a machine that
+    // does have a controlling terminal, would block on the prompt instead of failing.
+    def "NFR-S2: git stderr carrying a remote URL's userinfo is scrubbed before any caller sees it"() {
+        given: 'a git stand-in whose stderr echoes a PAT-in-URL exactly as git 2.55 does'
+        def fakeGit = tempDir.resolve('fake-git')
+        fakeGit.toFile().text = '''#!/bin/sh
+echo "https://ghp_FAKETOKEN1234567890@github.com/acme/widgets.git"
+echo "fatal: could not read Password for 'https://ghp_FAKETOKEN1234567890@github.com': Device not configured" >&2
+exit 128
+'''
+        fakeGit.toFile().executable = true
+
+        when:
+        def result = new GitProcessRunner(fakeGit.toString()).run(tempDir, 'ls-remote', 'origin')
+
+        then: 'the secret is gone from stderr, and the rest of the diagnosis survives'
+        result.exitCode() == 128
+        !result.stderr().contains('ghp_FAKETOKEN1234567890')
+        result.stderr().contains("could not read Password for 'https://***@github.com'")
+
+        and: 'stdout is untouched — OriginRemote#url reads the real origin URL from it'
+        result.stdout().contains('ghp_FAKETOKEN1234567890@github.com')
     }
 
     // Design D8/NFR-R2 of add-factory-serve: isRepoLevelMutating classifies which subcommands must
@@ -283,7 +313,31 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
         and: 'the thread\'s interrupt status was restored before waitFor returned'
         interruptedFlagRef.get()
 
+        and: 'NFR-R2: the child was killed rather than left running unattended past its caller'
+        process.waitFor(10, TimeUnit.SECONDS)
+        !process.isAlive()
+
         cleanup:
         process.destroyForcibly()
+    }
+
+    // NFR-R2 of fix-lifecycle-push: a git command must never block on an interactive credential
+    // prompt. `gnomish take`/`serve` run with no controlling terminal, but `gnomish run` inherits
+    // the operator's, and there an expired token on origin would leave a push waiting forever for a
+    // password. Driven through the runner's own git-binary seam because the property under test is
+    // what the child process's environment holds, which only the child can report.
+    def "NFR-R2: git runs with interactive credential prompting switched off"() {
+        given: 'a git stand-in that reports the prompting-related variables it was handed'
+        def fakeGit = tempDir.resolve('env-reporting-git')
+        fakeGit.toFile().text = '''#!/bin/sh
+echo "prompt=[${GIT_TERMINAL_PROMPT-unset}] askpass=[${GIT_ASKPASS-unset}] ssh=[${SSH_ASKPASS-unset}]"
+'''
+        fakeGit.toFile().executable = true
+
+        when:
+        def result = new GitProcessRunner(fakeGit.toString()).run(tempDir, 'ls-remote', 'origin')
+
+        then:
+        result.stdout().trim() == 'prompt=[0] askpass=[] ssh=[]'
     }
 }

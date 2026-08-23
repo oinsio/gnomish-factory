@@ -93,6 +93,19 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         0 * support._
     }
 
+    // FR3 of fix-lifecycle-push: resume start is a touchpoint — after the branch is reconciled
+    // INTO the clone, origin is reconciled up to it, delivering a push an earlier instance lost.
+    def "reconciles the remote at resume start, right after the local branch is ensured"() {
+        when:
+        resume()
+
+        then:
+        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> true
+
+        then:
+        1 * branches.reconcileRemote(CLONE_DIR, 'PROJ-1', 'resume-start')
+    }
+
     // FR8, FR21: the ordinary interrupted visit. The environment is reattached for the recorded
     // stage — a live box is needed both for the salvage and for verifying a pending snapshot — and
     // the leftovers are salvaged in-box before the run continues.

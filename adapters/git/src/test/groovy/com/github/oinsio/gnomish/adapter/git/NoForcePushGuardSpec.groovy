@@ -30,7 +30,8 @@ class NoForcePushGuardSpec extends Specification {
         assert Files.isDirectory(ADAPTER_GIT_SOURCES):
         "adapter.git source directory not found at ${ADAPTER_GIT_SOURCES.toAbsolutePath()} — is the test running from the project root?"
         def calls = []
-        Files.list(ADAPTER_GIT_SOURCES).withCloseable { stream ->
+        // Walk, not list: a push added under a subpackage (today adapter.git.state) must be seen.
+        Files.walk(ADAPTER_GIT_SOURCES).withCloseable { stream ->
             stream.filter { it.toString().endsWith('.java') }.forEach { file ->
                 def text = Files.readString(file)
                 extractRunCalls(text).each { call ->
@@ -71,15 +72,16 @@ class NoForcePushGuardSpec extends Specification {
 
     private record PushCall(String file, String call) {}
 
-    // FR7, D6: the scan must actually find the task-branch pushes, else the guard is vacuous.
-    def "the two task-branch push sites are found by the scan"() {
-        when:
-        def files = pushInvocations().collect { it.file() } as Set
-
-        then:
-        !pushInvocations().isEmpty()
-        files.contains('BranchPush.java')
-        files.contains('BestEffortPush.java')
+    /**
+     * FR7, D6 of add-claim-heartbeat: the scan must actually find the task-branch push, else the
+     * guard is vacuous. M3 of fix-lifecycle-push sharpens it to a single site: design D2 collapsed
+     * the three inline copies into the shared {@link RefspecPush}, so the push command now has
+     * exactly one construction site in production — a second one appearing here is the duplication
+     * this change removed growing back.
+     */
+    def "M3: the push command has exactly one construction site, and the scan finds it"() {
+        expect:
+        pushInvocations().collect { it.file() } == ['RefspecPush.java']
     }
 
     // FR7, D6: no git push in adapter.git may ever force — the non-fast-forward fence must stand.

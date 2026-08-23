@@ -169,6 +169,21 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
     }
 
     /**
+     * Runs a {@link TakeCommand}, asserting it exits via {@link TakeExitCodeException} (the
+     * command's only normal-exit path) and returning that exception's code — shared by the
+     * two-instance lifecycle specs that assert on {@code take}'s exit code rather than its thrown
+     * type.
+     */
+    static int runExitCode(TakeCommand command, DefaultApplicationArguments appArgs) {
+        try {
+            command.run(appArgs)
+            throw new IllegalStateException('take did not exit with a TakeExitCodeException')
+        } catch (TakeExitCodeException e) {
+            e.exitCode()
+        }
+    }
+
+    /**
      * A {@link TrackerTask} in the given {@code state}, wrapping a plain
      * {@code title}/{@code body} {@link TaskSnapshot} and no abort history —
      * the dominant shape {@code fetchTask} stubs return across the batch and

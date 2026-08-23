@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
@@ -107,6 +108,13 @@ final class TakeReconcile {
      * @param tracker the tracker port the deferred park is made through; never null
      * @param ref the task's tracker identity; never null
      * @param instanceId this factory instance's identity, for the pre-write claim check; never null
+     * @param parkDelivery the caller's delivery-fence verdict for this branch (FR4, FR5 of
+     *     fix-lifecycle-push). The resume-start touchpoint has already tried to bring origin up to
+     *     the tip on the way in, but that catch-up is best-effort and swallows its failure — so the
+     *     fence still runs before this write, and an {@code Undelivered} verdict puts the
+     *     origin-behind line in the re-posted park report exactly as a fresh park does. A caller
+     *     with no fence to run (container mode, which records no park lifecycle commit) passes
+     *     {@link ParkDeliveryVerdict.Delivered}
      * @return the {@link TakeResult.AwaitingHuman} the deferred park produced; never null
      */
     static TakeResult deliverPark(
@@ -115,19 +123,29 @@ final class TakeReconcile {
             Runnable clearMarker,
             Tracker tracker,
             TaskRef ref,
-            InstanceId instanceId) {
+            InstanceId instanceId,
+            ParkDeliveryVerdict parkDelivery) {
         var retry = TerminalWriteRetry.system();
+        String replicationNote = parkDelivery.reportNote();
         if (branch.outcome() instanceof RecordedOutcome.Paused(var passedStage)) {
             var pausedOutcome = new TaskOutcome.Paused(finalState, passedStage);
             return TakePauseExit.finish(
-                    pausedOutcome, branch.context(), branch.branchName(), tracker, ref, instanceId, retry, clearMarker);
+                    pausedOutcome,
+                    branch.context(),
+                    branch.branchName(),
+                    tracker,
+                    ref,
+                    instanceId,
+                    retry,
+                    clearMarker,
+                    replicationNote);
         }
         // The only remaining park kind is Escalated: resumeExisting calls deliverPark solely for an
         // Escalated/Paused branch, and recordOutcome always records lastEscalation alongside an
         // Escalated outcome — so the report is present. The instanceof pattern above already handles
         // a null outcome (it simply doesn't match), so no explicit null case is needed here.
         var escalated = new TaskOutcome.Escalated(finalState, requireEscalationReport(branch.lastEscalation()));
-        return TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker);
+        return TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker, replicationNote);
     }
 
     // PIT M4 documented exception: @DoNotMutate — the null branch is provably unreachable on the

@@ -12,7 +12,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import java.nio.file.Files
 import java.nio.file.Path
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -162,15 +161,6 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
                 new IllegalStateException("no task.json for ${taskId} under ${worktreesRoot}")
             }
             TaskJsonMapper.readDto(Files.readString(taskJson)).trackerWritePending()
-        }
-    }
-
-    private static int runExitCode(TakeCommand command, DefaultApplicationArguments appArgs) {
-        try {
-            command.run(appArgs)
-            throw new IllegalStateException('take did not exit with a TakeExitCodeException')
-        } catch (TakeExitCodeException e) {
-            e.exitCode()
         }
     }
 }

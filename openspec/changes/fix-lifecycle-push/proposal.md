@@ -49,7 +49,7 @@ The factory never pushes the commits that `TaskLifecycleStore` writes — task s
 
 - FR1: After every lifecycle commit a mode records — task started, resume decision, every terminal outcome, the `Completed` cleanup commit, and, in host mode only, the tracker-write-confirmed commit — the adapter SHALL push the task branch to origin best-effort, in both host mode (`GitTaskRepository`) and sandboxed mode (`GitObjectsTaskRepository`), with the same never-throw, never-force, exact-refspec discipline as the round push. Sandboxed mode has no `confirmTerminalWrite` and records no tracker-write-confirmed commit (the same scope note NG1 stands on). One push after `recordOutcome(Completed)` covers both the outcome and cleanup commits.
 - FR2: The lifecycle push SHALL complete (succeed, fail with WARN, or no-op without origin) before the lifecycle call returns, so a caller that proceeds to a tracker write does so after the replication attempt — never before it.
-- FR3: At resume start and at the terminal boundary of a run, the factory SHALL compare the local task-branch tip with the origin tip and push best-effort when origin is behind. The local tip is supplied by the caller from its mode-native reader; the comparison costs one `ls-remote` and never blocks the run on failure.
+- FR3: At resume start and at the terminal boundary of a run, the factory SHALL compare the local task-branch tip with the origin tip and push best-effort when origin is behind — except at a terminal boundary that parks the task, where the FR4 fence supersedes the comparison over the same unchanged tip. The local tip is supplied by the caller from its mode-native reader; the comparison costs one `ls-remote` and never blocks the run on failure.
 - FR4: Before the terminal tracker write of a park (Escalated/Paused) in host mode, the factory SHALL verify the branch tip is delivered to origin — remote-tip ancestry check, then push with one bounded re-attempt — reusing the same delivery protocol external checks use for attempt commits. With no origin configured the fence is a silent no-op.
 - FR5: A fence that exhausts its re-attempts SHALL NOT block or fail the park: the tracker write proceeds, the park report carries a note that origin is behind, and the `pendingTrackerWrite` marker stays governed by the existing confirm protocol.
 - FR6: The two caller-side lifecycle pushes in container termination SHALL be removed in the same change that introduces tier 1, so exactly one code path owns the push-after-lifecycle-commit rule.
@@ -66,6 +66,7 @@ The factory never pushes the commits that `TaskLifecycleStore` writes — task s
 ### Non-Functional Security
 
 - NFR-S1: Push stays the factory-side adapter's monopoly: no push machinery, credentials, or remote address enters a task environment or the gnome's instructions; `gitobjects` gains no network operation. The existing push safety rules (exact refspec, never force) apply to every new push point.
+- NFR-S2: No credential embedded in the `origin` URL ever leaves the git seam. Git's captured stderr — the text every new push point logs on failure and the delivery paths put in the detail a tracker publishes — SHALL be stripped of URL userinfo before any caller receives it, so a clone configured with `https://<token>@host/...` cannot leak that token into an operator log or a tracker comment.
 
 ### Non-Functional Cost
 

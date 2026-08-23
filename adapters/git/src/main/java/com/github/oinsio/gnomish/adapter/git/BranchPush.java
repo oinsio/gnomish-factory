@@ -27,16 +27,16 @@ import org.slf4j.LoggerFactory;
  */
 // Not a record: this is a behavior-bearing push service (a collaborator, not immutable data),
 // kept as a plain final class for parity with its documented sibling BestEffortPush.
-@SuppressWarnings("ClassCanBeRecord")
 public final class BranchPush {
 
     private static final Logger log = LoggerFactory.getLogger(BranchPush.class);
-    private static final String REMOTE = "origin";
 
-    private final GitProcessRunner runner;
+    private final OriginRemote origin;
+    private final RefspecPush push;
 
     public BranchPush(GitProcessRunner runner) {
-        this.runner = runner;
+        this.origin = new OriginRemote(runner);
+        this.push = new RefspecPush(runner);
     }
 
     /**
@@ -49,21 +49,16 @@ public final class BranchPush {
      * @param branch the task branch name to push, e.g. {@link TaskIdSanitizer#branchName}
      */
     public void pushBestEffort(Path worktreeRoot, String branch) {
-        if (!originConfigured(worktreeRoot)) {
+        if (!origin.isConfigured(worktreeRoot)) {
             return;
         }
 
-        GitCommandResult push = runner.run(worktreeRoot, "push", REMOTE, branch + ":" + branch);
-        if (push.exitCode() != 0) {
+        GitCommandResult result = push.push(worktreeRoot, branch);
+        if (result.exitCode() != 0) {
             log.warn(
                     "revocation push failed: branch={}, stderr={}",
                     branch,
-                    push.stderr().trim());
+                    result.stderr().trim());
         }
-    }
-
-    private boolean originConfigured(Path worktreeRoot) {
-        GitCommandResult result = runner.run(worktreeRoot, "remote", "get-url", REMOTE);
-        return result.exitCode() == 0;
     }
 }

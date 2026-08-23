@@ -97,6 +97,71 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
     }
 
+    /**
+     * Installs a pre-receive hook on the bare origin that rejects the FIRST push it sees and
+     * accepts every one after it — so a terminal boundary's own recording push fails and only the
+     * touchpoint reconciliation behind it can deliver the tip.
+     */
+    private void rejectFirstPush() {
+        def hook = origin.resolve('hooks').resolve('pre-receive').toFile()
+        hook.parentFile.mkdirs()
+        hook.text = '''#!/bin/sh
+marker="$(git rev-parse --git-dir)/first-push-seen"
+if [ ! -f "$marker" ]; then touch "$marker"; echo "transient" >&2; exit 1; fi
+exit 0
+'''
+        hook.setExecutable(true)
+    }
+
+    // FR3 of fix-lifecycle-push: the terminal boundary closes with the touchpoint reconciliation,
+    // the level safety net behind the outcome's own recording push. With that push rejected, the
+    // reconciliation is the only thing that can still get the aborted tip onto origin.
+    def "the aborted terminal boundary reconciles origin when the recording push failed"() {
+        given:
+        def support = support()
+        createTask(support)
+        rejectFirstPush()
+
+        when: 'the whole boundary runs, as both drives run it: record, then keep the box stopped'
+        support.recordAborted(new TaskOutcome.Aborted(
+                        TaskState.atStageStart('build'), new AttemptKey('T-1', 'build', 0), 'durability broke'))
+        support.keepStopped()
+
+        then: 'origin still ends at the local tip — delivered by the reconciliation, not the push'
+        gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
+    }
+
+    // FR3 of fix-lifecycle-push: a container park (Escalated/Paused) records no lifecycle commit of
+    // its own, so it has NO recording push behind it — the keep boundary's reconciliation is the
+    // only thing that can still deliver the tip the human is about to be pointed at.
+    def "the park terminal boundary reconciles origin with no recording push of its own behind it"() {
+        given: 'a task branch whose creation push was rejected, so origin has never seen the branch'
+        rejectFirstPush()
+        def support = support()
+        createTask(support)
+        assert gitOutput(cloneDir, 'ls-remote', 'origin', 'refs/heads/gnomish/T-1').isEmpty()
+
+        when: 'the run parks: no outcome is recorded in container mode, the box is just kept stopped'
+        support.keepStopped()
+
+        then: 'the branch tip reached origin through the terminal-boundary reconciliation'
+        gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
+    }
+
+    // FR3 of fix-lifecycle-push: the same safety net on the Completed boundary.
+    def "completeAndDispose's terminal boundary reconciles origin when the recording push failed"() {
+        given:
+        def support = support()
+        createTask(support)
+        rejectFirstPush()
+
+        when:
+        support.completeAndDispose(TaskState.atStageStart('build'))
+
+        then: 'the cleanup tip reached origin through the reconciliation'
+        gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
+    }
+
     // FR6, D9: keep semantics — the fresh judge box holds nothing durable and is disposed; the
     // round box is stopped (never removed), keeping volume and network for salvage and resume.
     def "keepStopped disposes the materialized judge box and stops the round box"() {

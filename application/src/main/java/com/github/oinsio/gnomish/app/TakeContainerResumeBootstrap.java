@@ -49,6 +49,10 @@ record TakeContainerResumeBootstrap(TaskGit git, ContainerTakeSupport containerT
         if (!git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
             throw UsageException.branchNotFound(taskId);
         }
+        // Resume-start touchpoint (FR3 of fix-lifecycle-push): ensureLocalTaskBranch above brings
+        // local up to what origin holds; this pushes origin up to what local holds, delivering a
+        // commit an earlier instance recorded but never got pushed. Best-effort, never blocking.
+        git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
 
         var support = containerTakeSupport
                 .containerSupportFactory()

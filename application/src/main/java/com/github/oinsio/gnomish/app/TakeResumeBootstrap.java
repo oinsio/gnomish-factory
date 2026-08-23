@@ -51,6 +51,10 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
         String branchName = TaskIdSanitizer.branchName(taskId);
         Path worktree = git.worktrees().ensureWorktree(cloneDir, worktreesRoot, taskId, branchName);
         git.worktrees().reconcile(worktree, taskId, branchName);
+        // Resume-start touchpoint (FR3 of fix-lifecycle-push): the divergence check above pulls
+        // local up to what origin holds; this pushes origin up to what local holds, delivering a
+        // commit an earlier instance recorded but never got pushed. Best-effort, never blocking.
+        git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
 
         TaskRecord content = git.store().readTaskRecord(worktree);
         MDC.put(taskIdMdcKey, content.context().taskId());

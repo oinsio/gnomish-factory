@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -34,6 +35,32 @@ class TakePauseExitSpec extends Specification {
 
     private static TrackerTask taskWith(TrackerTaskState state) {
         new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
+    }
+
+    // FR5, UX2 of fix-lifecycle-push: an exhausted delivery fence hands the exit a one-line note,
+    // which the checkpoint report the human reads must carry — and nothing must be appended when the
+    // fence reported the park delivered.
+    def "the delivery fence's note is appended to the checkpoint report, and only when there is one"() {
+        given:
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        def paused = new TaskOutcome.Paused(STATE, 'build')
+
+        when:
+        def result = TakePauseExit.finish(
+                paused, CONTEXT, BRANCH, tracker, REF, INSTANCE, TerminalWriteRetry.system(), {}, replicationNote)
+
+        then:
+        1 * tracker.park(REF, ParkReason.CHECKPOINT, { String report ->
+            report.endsWith(expectedTail)
+        })
+        (result as TakeResult.AwaitingHuman).report().endsWith(expectedTail)
+
+        where:
+        replicationNote | expectedTail
+        'Note: origin is behind this park — branch gnomish/PROJ-1 could not be pushed.' |
+                'Note: origin is behind this park — branch gnomish/PROJ-1 could not be pushed.'
+        '' |
+                'Review the work, then move the task back to ready to continue.'
     }
 
     // FR13, FR18, D12: the checkpoint park is written for real when the claim is still ours.

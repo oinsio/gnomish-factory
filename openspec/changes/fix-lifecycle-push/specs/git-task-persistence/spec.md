@@ -41,7 +41,7 @@ The same best-effort push SHALL follow every task lifecycle commit a mode record
 ## ADDED Requirements
 
 ### Requirement: Origin reconciliation at task touchpoints
-At resume start and at a run's terminal boundary, the factory SHALL compare the local task-branch tip with the origin branch tip (one remote-refs read) and, when origin is missing the branch or holds a strict ancestor of the local tip, push best-effort — so a push missed by an earlier crash or outage is delivered by the next instance that touches the task, whichever machine it runs on. The local tip is supplied by the touchpoint from its own execution mode's reader; the reconciliation SHALL never block or fail the run: an unreachable origin or a failed catch-up push degrades to one WARN. A catch-up push that does run logs that origin was behind. With no origin remote the touchpoint check is a silent no-op. No periodic or background reconciliation is introduced.
+At resume start and at a run's terminal boundary — except a terminal boundary that parks the task, where the delivery fence below supersedes this check over the same unchanged tip — the factory SHALL compare the local task-branch tip with the origin branch tip (one remote-refs read) and, when origin is missing the branch or holds a strict ancestor of the local tip, push best-effort — so a push missed by an earlier crash or outage is delivered by the next instance that touches the task, whichever machine it runs on. The local tip is supplied by the touchpoint from its own execution mode's reader; the reconciliation SHALL never block or fail the run: an unreachable origin or a failed catch-up push degrades to one WARN. A catch-up push that does run logs that origin was behind. With no origin remote the touchpoint check is a silent no-op. No periodic or background reconciliation is introduced.
 <!-- implements FR3, NFR-R1, NFR-O1, NFR-C1 of fix-lifecycle-push -->
 
 #### Scenario: A missed terminal push is healed on resume
@@ -55,6 +55,22 @@ At resume start and at a run's terminal boundary, the factory SHALL compare the 
 #### Scenario: Up-to-date origin costs one read
 - **WHEN** a touchpoint check runs and origin already holds the local tip
 - **THEN** no push is attempted and the check's only remote interaction was the single refs read
+
+#### Scenario: A parking terminal boundary spends no second read
+- **WHEN** a run's terminal outcome is a park (Escalated or Paused), so the delivery fence runs over the same branch tip immediately afterwards
+- **THEN** the terminal-boundary reconciliation is skipped and the fence's refs read is the boundary's only one; a `Completed` or `Aborted` boundary, which runs no fence, still reconciles
+
+### Requirement: Remote credentials are scrubbed from git's captured output
+Every git command's captured stderr SHALL have URL userinfo — the `user:password@` or bare `token@` prefix a remote URL may carry — replaced by a fixed mask at the subprocess seam, before any caller can log it, attach it to an exception, or place it in a report detail the tracker publishes. The scrub SHALL be structural (any `scheme://userinfo@host` occurrence, any credential format), not a guess at particular token shapes, and SHALL leave the rest of git's diagnosis intact so failures stay diagnosable. Captured stdout is not scrubbed: it is how the adapter reads the configured origin URL itself.
+<!-- implements NFR-S2 of fix-lifecycle-push -->
+
+#### Scenario: A token-in-URL origin cannot leak through a push failure
+- **WHEN** a push, fetch, or refs read fails in a clone whose origin URL embeds a credential, and git's stderr echoes that credential
+- **THEN** the stderr the caller receives carries the mask in its place, and no WARN or report detail contains the credential
+
+#### Scenario: Scrubbing keeps the failure diagnosable
+- **WHEN** a failed git command's stderr is scrubbed
+- **THEN** everything but the userinfo survives — the host, the path, and git's own message — and a URL without credentials is passed through unchanged
 
 ### Requirement: Delivery fence before a park's tracker write
 In host mode, before the terminal tracker write of a park (Escalated or Paused), the factory SHALL verify the task branch tip is delivered to origin using the same delivery protocol external checks apply to attempt commits: a remote-tip ancestry check first, then a push with one bounded re-attempt on failure. With no origin remote the fence is a silent no-op. A fence that exhausts its re-attempts SHALL NOT block, fail, or delay the park beyond the bounded attempts: the tracker write proceeds, the park report visible to the human carries a one-line note that origin is behind the recorded park, and the pending-write marker stays governed by the existing confirm protocol. The fence applies only to marker-bearing parks — `Completed` and `Aborted` outcomes stay purely best-effort.

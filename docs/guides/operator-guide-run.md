@@ -94,6 +94,26 @@ The process exit code reports the outcome — anything `>= 10` means the engine 
 [`operator-guide.md`](operator-guide.md) and
 [`operator-guide-serve.md`](operator-guide-serve.md).
 
+## What reaches `origin`, and when
+
+Pushing the task branch is the factory's job, never yours. Every commit the factory writes is followed by a best-effort push of `gnomish/<task>` to `origin`, under the exact refspec `gnomish/<task>:gnomish/<task>` and never with `--force`:
+
+- **round commits** — the state file and stage artifacts, after every attempt;
+- **lifecycle commits** — task started, a resume decision appended, the terminal outcome, the `Completed` cleanup commit, and the tracker-write-confirmed commit. The outcome and its cleanup commit travel together in one push, so a completed task's branch reaches the remote in its final form: cleanup at the tip, no `.gnomish-task/` files in the PR diff.
+
+Push is best-effort by design: durability is the recorded branch state, so a failed push logs one WARN and the run continues. Two mechanisms close the gap a lost push leaves:
+
+- **Touchpoint reconciliation.** At resume start and at a run's terminal boundary — unless that boundary parks the task, where the fence below does the same job more thoroughly — the factory compares `origin`'s tip for the branch with the local one. If `origin` is missing the branch or holds a strict ancestor of the local tip, it pushes. So a push lost to a crash or an outage is delivered by the next instance to touch the task, whichever machine that is. It costs one `ls-remote` when `origin` is already current, never blocks the run, and does nothing at all where the two histories diverged — repairing that is a human's call.
+- **Delivery fence before a park.** Before the tracker is told a task is escalated or paused, the factory verifies the park's commit — the recorded outcome and its pending-write marker — is on `origin`, pushing with one bounded re-attempt if it is not. This is what makes a park safe to pick up from another machine: the tracker never announces a park whose commit `origin` lacks. If the fence exhausts its attempts, the park still lands and its report on the tracker carries one extra line saying `origin` is behind the recorded park; that line names the branch and the `git push origin <branch>` that fixes it — until it is pushed, another instance resuming the task would read stale state.
+
+In a clone with **no `origin` remote**, all of this is silent: no push is attempted at any point, and no warnings are logged. A purely local run behaves exactly as it did before.
+
+> **Caveat: `push.default = matching` hides push failures.** With that setting, your own manual `git push` in the clone also pushes every same-named branch — including the factory's task branches. The remote then looks up to date whether or not the factory's own pushes ever worked, which is precisely how a missing push can go unnoticed for a long time. If you are verifying replication behavior, use `push.default = simple` (git's default since 2.0) or check `git ls-remote origin 'refs/heads/gnomish/*'` directly rather than trusting what your last manual push left behind.
+
+> **Git never prompts.** Every git command the factory runs has interactive credential prompting switched off, so an expired token or a missing helper makes a push or fetch FAIL immediately rather than hang waiting for a password. In `gnomish run`, which inherits your terminal, that is the difference between a run that reports a failed push and a run that sits there forever.
+
+> **Credentials in the `origin` URL are masked in what the factory writes.** If your clone's `origin` is `https://<token>@host/owner/repo.git` (or `https://user:<token>@…`), git's own failure output can echo that credential back — most visibly in `could not read Password for 'https://<token>@host'`, which is exactly what a factory subprocess with no terminal hits. Every git command's error output is stripped of that `userinfo@` prefix before the factory logs it or puts it in a report the tracker publishes, so a push WARN reads `https://***@host`. The mask is defence in depth, not a licence: prefer a git credential helper over a token in the remote URL, since a URL-embedded token is still readable in `.git/config` and in the process list of anything that echoes the remote.
+
 ## Merging a gnome's task branch
 
 On completion, the factory strips `.gnomish-task/` from the branch tip in a final cleanup commit, but every round leading up to it stays reachable in the branch history as an audit trail — that's what makes resume and escalation reviewable. That history is internal bookkeeping, not something a target project wants in its permanent log. **Squash-merge** gnome PRs into the target project's mainline so only the final clean diff lands there and the round-by-round journal stays behind on the (eventually discarded) task branch.

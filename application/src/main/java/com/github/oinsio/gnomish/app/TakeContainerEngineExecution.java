@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -118,10 +119,19 @@ record TakeContainerEngineExecution(
                 retry,
                 clearMarker,
                 abortHandler,
-                abortThreshold);
+                abortThreshold,
+                // No fence in container mode: a container park records no lifecycle commit at all
+                // (NG1, design D4 of fix-lifecycle-push), so there is nothing for it to deliver —
+                // the escalation report reaches origin with the round's own state-commit push.
+                new ParkDeliveryVerdict.Delivered());
     }
 
-    /** D19: {@code Completed} disposes; every other outcome keeps the box stopped for salvage/resume. */
+    /**
+     * D19: {@code Completed} disposes; every other outcome keeps the box stopped for salvage/resume.
+     * Both arms carry the terminal-boundary remote reconciliation (FR3 of fix-lifecycle-push) inside
+     * the support bundle's own dispose/keep methods, so a park's branch tip gets its last delivery
+     * attempt here without this switch naming git at all.
+     */
     private static void settleTerminalBoundary(SandboxRunSupport support, TaskOutcome outcome) {
         switch (outcome) {
             case TaskOutcome.Completed completed -> support.completeAndDispose(completed.finalState());
