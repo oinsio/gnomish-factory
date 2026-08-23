@@ -66,9 +66,9 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
     //     carrying the current identity — the no-orphan guarantee, at the unit level.
     def "FR3: a legacy-labelled object is listed, classified and acted on"() {
         given: 'the only factory volume on the host carries the pre-normalization label'
-        listings([
-            (DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY)): volumeLine('old')
-        ])
+        listings(Map.of(
+                        DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY), volumeLine('old')
+                        ))
 
         when:
         evaluate(SCOPE)
@@ -83,10 +83,10 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
     // FR3: the per-kind listing runs once per identity in the scope, and the results merge.
     def "FR3: each kind is listed once per identity and the results merge"() {
         given:
-        listings([
-            (DockerLifecycleCommands.listFactoryVolumesWithLabels(NORMALIZED)): volumeLine('new'),
-            (DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY)): volumeLine('old')
-        ])
+        listings(Map.of(
+                        DockerLifecycleCommands.listFactoryVolumesWithLabels(NORMALIZED), volumeLine('new'),
+                        DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY), volumeLine('old')
+                        ))
 
         when:
         evaluate(SCOPE)
@@ -112,10 +112,10 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
     // FR3: an object answering both listings is evaluated once, not twice — merging is by name.
     def "FR3: an object appearing under both identities yields exactly one verdict"() {
         given: 'both listings return the same object name'
-        listings([
-            (DockerLifecycleCommands.listFactoryVolumesWithLabels(NORMALIZED)): volumeLine('old'),
-            (DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY)): volumeLine('old')
-        ])
+        listings(Map.of(
+                        DockerLifecycleCommands.listFactoryVolumesWithLabels(NORMALIZED), volumeLine('old'),
+                        DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY), volumeLine('old')
+                        ))
 
         when:
         evaluate(SCOPE)
@@ -156,11 +156,11 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
     //     transition is visible in the log and its count can be watched draining to zero.
     def "NFR-O1: one INFO names the legacy-labelled objects the pass found"() {
         given:
-        listings([
-            (DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY)): volumeLine('old'),
-            (DockerLifecycleCommands.listFactoryNetworksWithLabels(LEGACY)):
-            "gnomish-net-old\tcom.github.oinsio.gnomish.task=old,com.github.oinsio.gnomish.mode=tracked\n"
-        ])
+        listings(Map.of(
+                        DockerLifecycleCommands.listFactoryVolumesWithLabels(LEGACY), volumeLine('old'),
+                        DockerLifecycleCommands.listFactoryNetworksWithLabels(LEGACY),
+                        "gnomish-net-old\tcom.github.oinsio.gnomish.task=old,com.github.oinsio.gnomish.mode=tracked\n"
+                        ))
 
         when:
         def events = evaluate(SCOPE)
