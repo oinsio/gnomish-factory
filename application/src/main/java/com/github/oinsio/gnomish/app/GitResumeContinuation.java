@@ -82,12 +82,12 @@ final class GitResumeContinuation {
      * finalState} and {@link ResumeBootstrap#lastEscalation()}, then routes it through {@link
      * EscalationResumeDialog#handle} — the same class {@link RunnerOutcomeLoop} calls in-process,
      * so question, resume prompt, and EOF handling are byte-for-byte identical (UX2). A non-blank
-     * answer is appended as a Decision via {@link GitTaskRepository#appendDecision} — also
+     * answer is appended as a Decision via {@link com.github.oinsio.gnomish.app.port.TaskRepository#appendDecision} — also
      * resetting {@code outcome} to null in the same commit (FR5) — before the engine loop resumes
      * from the dialog's reset state.
      *
      * @throws InternalErrorException if {@code task.json} recorded outcome {@code escalated} with
-     *     no {@code lastEscalation} — a state {@link GitTaskRepository#recordOutcome} never
+     *     no {@code lastEscalation} — a state {@link com.github.oinsio.gnomish.app.port.TaskRepository#recordOutcome} never
      *     produces (always populates both together, FR5), so this can only mean a corrupted branch
      *
      * <p>Implements FR5, FR8, UX2 of add-git-workflow.
@@ -149,7 +149,7 @@ final class GitResumeContinuation {
 
     /**
      * Shared tail for every path that re-runs the engine: assembles a fresh {@link
-     * GitAttemptPersistence} rooted at the worktree, runs {@link RunnerOutcomeLoop}, then records
+     * com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence} rooted at the worktree, runs {@link RunnerOutcomeLoop}, then records
      * the new terminal outcome — {@code Completed} (read back from {@code state.json}) or {@code
      * Aborted} (from the caught {@link AbortedException}) — through {@link GitOutcomeRecorder}.
      */
@@ -170,19 +170,18 @@ final class GitResumeContinuation {
             TaskOutcome.Aborted outcome = aborted.outcome();
             if (outcome != null) {
                 GitOutcomeRecorder.recordAndCleanUp(
-                        git.worktrees(), taskRepository, cloneDir, worktree, bootstrap.taskId(), outcome);
+                        git, taskRepository, cloneDir, worktree, bootstrap.taskId(), outcome);
             }
             throw aborted;
         }
 
         TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store().readRecordedState(worktree));
-        GitOutcomeRecorder.recordAndCleanUp(
-                git.worktrees(), taskRepository, cloneDir, worktree, bootstrap.taskId(), completed);
+        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, bootstrap.taskId(), completed);
     }
 
     /**
      * Appends a resume {@link com.github.oinsio.gnomish.domain.engine.Decision} through {@link
-     * GitTaskRepository#appendDecision} when the escalation dialog added one to {@code
+     * com.github.oinsio.gnomish.app.port.TaskRepository#appendDecision} when the escalation dialog added one to {@code
      * resumedContext} (also resets {@code outcome} to null in the same commit, FR5). A blank
      * answer resumes without a decision — detected by comparing decision-list sizes against the
      * bootstrap's original context, since the dialog only returns the possibly-appended {@link

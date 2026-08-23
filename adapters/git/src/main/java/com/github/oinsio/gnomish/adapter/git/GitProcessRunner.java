@@ -12,8 +12,9 @@ import java.nio.file.Path;
  * invoking each command as a direct argv (e.g. {@code ProcessBuilder("git", "status")}), never
  * via a shell, so taskIds and other user-controlled strings that later flow into git args (e.g.
  * branch names) carry no shell-quoting or injection risk. Every invocation runs with the current
- * process's inherited environment (no global git config assumptions) and a caller-supplied
- * working directory, which later tasks use to target the worktree root (design D11, D12, D3).
+ * process's inherited environment (no global git config assumptions) minus git's interactive
+ * credential prompting, which is switched off so no command can block on an unanswerable password
+ * question, and a caller-supplied working directory, which later tasks use to target the worktree root (design D11, D12, D3).
  *
  * <p>Public (rather than package-private) so the {@code app} layer's git-mode wiring
  * (design D8 of add-git-workflow, task 4.4 onward) can construct the one instance shared by a
@@ -32,7 +33,11 @@ import java.nio.file.Path;
  * commands and in-worktree working-tree operations (e.g. {@code reset}, {@code clean}, {@code
  * branch}, {@code rev-parse}, {@code worktree list}) run unlocked, in parallel.
  *
- * <p>Implements FR2 of add-git-workflow.
+ * <p>Every captured stderr passes through {@link CredentialScrub} before it is handed back, so a
+ * remote URL's embedded credentials cannot reach an operator log or a tracker-published report
+ * through any of this package's call sites (NFR-S2 of fix-lifecycle-push).
+ *
+ * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push.
  */
 public final class GitProcessRunner {
 
@@ -155,6 +160,16 @@ public final class GitProcessRunner {
         // stderr content (e.g. the harvest fetch's non-fast-forward refusal, FR5 of
         // add-sandbox-core), and a localized git would defeat that parsing.
         builder.environment().put("LC_ALL", "C");
+        // Never let a network command block on a credential prompt (NFR-R2): the factory runs git
+        // with no controlling terminal in `take`/`serve`, but a `gnomish run` inherits the
+        // operator's TTY, and there a push to an origin whose token expired would sit forever
+        // waiting for a password nobody is going to type — an unattended run hung, not failed.
+        // GIT_TERMINAL_PROMPT=0 turns that wait into an immediate failure the caller's exit-code
+        // handling already covers; the two askpass hooks are emptied because they are consulted
+        // BEFORE the terminal and would otherwise reopen the same indefinite wait through a helper.
+        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
+        builder.environment().put("GIT_ASKPASS", "");
+        builder.environment().put("SSH_ASKPASS", "");
 
         Process process;
         try {
@@ -164,7 +179,11 @@ public final class GitProcessRunner {
         }
 
         String stdout = readFully(process.getInputStream());
-        String stderr = readFully(process.getErrorStream());
+        // The single choke point for git's diagnostics (NFR-S2 of fix-lifecycle-push): stderr is
+        // scrubbed of any remote-URL credentials here, before a caller can log it or carry it into
+        // a report a tracker publishes. Stdout is deliberately left raw — `remote get-url origin`
+        // answers through it, and OriginRemote's caller needs the real URL.
+        String stderr = CredentialScrub.scrub(readFully(process.getErrorStream()));
         int exitCode = waitFor(process);
         return new GitCommandResult(exitCode, stdout, stderr);
     }
@@ -186,10 +205,17 @@ public final class GitProcessRunner {
         return buffer.toString(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Waits for {@code process}, and on interruption kills it before returning. Without the kill an
+     * interrupted caller (a shutdown, a revoked claim) leaves the git child running unattended with
+     * its pipes half-read — for a mutating command that means a push or fetch still writing into the
+     * clone after the run that owns it has gone.
+     */
     private static int waitFor(Process process) {
         try {
             return process.waitFor();
         } catch (InterruptedException e) {
+            process.destroy();
             Thread.currentThread().interrupt();
             return -1;
         }

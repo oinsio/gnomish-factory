@@ -41,6 +41,18 @@ terms) live in `.claude/rules/process-invariants.md`.
   not by asking it to stop.
 - **Fence** — the mechanism that stops a stale holder's writes: the task
   branch's non-fast-forward push. The task branch is never force-pushed.
+- **Delivery fence** — the check that the task branch tip is on `origin`
+  before a signal that depends on it is sent: verify the remote tip, push,
+  one bounded re-attempt, then a delivered/undelivered verdict. Used before a
+  park's tracker write and before an external check's poll loop. *Not:* the
+  **Fence** above — that one stops a zombie's writes, this one makes sure a
+  reader on another machine can see what a signal refers to. A delivery fence
+  never blocks the thing it guards: an undelivered verdict is surfaced, not
+  raised.
+- **Touchpoint** — a point where an instance already has a task in hand and
+  can therefore reconcile its replication for free: resume start and a run's
+  terminal boundary. Deliberately not a timer or a daemon — the next instance
+  to touch the task is the delivery vehicle for a push an earlier one lost.
 - **Park** — set the task to a waiting tracker status (escalation or a manual
   checkpoint); **release** — give the claim up so any instance may take over.
 - **Escalation** — handing a task to a human via tracker status, with the

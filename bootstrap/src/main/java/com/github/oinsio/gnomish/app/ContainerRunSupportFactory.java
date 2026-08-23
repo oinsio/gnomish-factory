@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
-import com.github.oinsio.gnomish.adapter.git.OriginRemoteUrl;
+import com.github.oinsio.gnomish.adapter.git.OriginRemote;
 import com.github.oinsio.gnomish.app.git.ProjectIdentity;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
@@ -60,7 +60,7 @@ final class ContainerRunSupportFactory {
         credentials.addAll(checkCredentialEnvVars);
         var allowlist = ChildEnvAllowlist.of(sandboxProperties.envPassthrough(), credentials);
         String projectId = ProjectIdentity.resolve(
-                sandboxProperties.projectId(), OriginRemoteUrl.read(runner, cloneDir), cloneDir);
+                sandboxProperties.projectId(), new OriginRemote(runner).url(cloneDir), cloneDir);
         var environments = ContainerEnvironments.forTask(
                 TaskIdSanitizer.sanitize(taskId),
                 cloneDir,

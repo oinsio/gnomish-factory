@@ -101,7 +101,7 @@ class TakeParkRetrySpec extends Specification {
         def result = TakeEscalationExit.exit(
                 escalated(), tracker, REF, INSTANCE, retry, {
                     confirmed.incrementAndGet()
-                })
+                }, '')
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, _ as String)
@@ -124,7 +124,7 @@ class TakeParkRetrySpec extends Specification {
         def result = TakeEscalationExit.exit(
                 escalated(), tracker, REF, INSTANCE, retry, {
                     confirmed.incrementAndGet()
-                })
+                }, '')
 
         then:
         attempts.get() == 3
@@ -150,7 +150,7 @@ class TakeParkRetrySpec extends Specification {
             result = TakeEscalationExit.exit(
             escalated(), tracker, REF, INSTANCE, givingUpRetry(), {
                 confirmed.incrementAndGet()
-            })
+            }, '')
         }
 
         then: 'the marker-clear callback never runs, so the branch keeps the pending marker'
@@ -176,7 +176,7 @@ class TakeParkRetrySpec extends Specification {
         def result = TakeEscalationExit.exit(
                 escalated(), tracker, REF, INSTANCE, retry, {
                     confirmed.incrementAndGet()
-                })
+                }, '')
 
         then:
         0 * tracker.park(*_)
@@ -194,7 +194,7 @@ class TakeParkRetrySpec extends Specification {
         def result = TakePauseExit.finish(
                 paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, retry, {
                     confirmed.incrementAndGet()
-                })
+                }, '')
 
         then:
         1 * tracker.park(REF, ParkReason.CHECKPOINT, _ as String)
@@ -219,7 +219,7 @@ class TakeParkRetrySpec extends Specification {
             result = TakePauseExit.finish(
             paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, givingUpRetry(), {
                 confirmed.incrementAndGet()
-            })
+            }, '')
         }
 
         then:

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
@@ -140,11 +141,21 @@ record TakeEngineExecution(
                     RevocationDetectedException.reasonFor(revoked));
         }
 
-        GitOutcomeRecorder.recordAndCleanUp(git.worktrees(), taskRepository, cloneDir, worktree, taskId, outcome);
+        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, outcome);
         // The durable "tracker-write pending" marker recordOutcome set for a park (Escalated/Paused)
         // is cleared only once its git-unfenced tracker write confirms — clearTerminalMarker is the
         // onConfirmed callback the park exits run (FR10, D10 of add-claim-heartbeat). A give-up leaves
         // the marker set for reconcile-on-resume; a finish uses no marker (cleanup-detection reconcile).
+        // The delivery fence (FR4, FR5 of fix-lifecycle-push): a park's outcome commit and its
+        // pending marker must be on origin BEFORE the tracker announces the park to every instance,
+        // or a reconcile-on-resume from another machine reads stale state. Verify, push, one bounded
+        // re-attempt — and if that still fails, the park proceeds carrying a note instead of blocking.
+        // Only marker-bearing parks are fenced; Completed/Aborted stay purely best-effort (NG6) and
+        // keep the terminal-boundary reconciliation GitOutcomeRecorder skips for a park (FR3).
+        ParkDeliveryVerdict parkDelivery = TerminalPark.isPark(outcome)
+                ? git.branches().fenceParkDelivery(cloneDir, taskId)
+                : new ParkDeliveryVerdict.Delivered();
+
         var retry = TerminalWriteRetry.system();
         Runnable clearMarker = () -> taskRepository.confirmTerminalWrite(taskId);
         return TakeOutcomeDispatch.dispatch(
@@ -157,6 +168,7 @@ record TakeEngineExecution(
                 retry,
                 clearMarker,
                 abortHandler,
-                abortThreshold);
+                abortThreshold,
+                parkDelivery);
     }
 }

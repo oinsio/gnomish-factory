@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -44,6 +45,10 @@ final class TakeOutcomeDispatch {
      *     is {@code Aborted}; never null
      * @param abortThreshold the configured abort-fuse threshold (K) passed to {@code abortHandler};
      *     positive
+     * @param parkDelivery the verdict of the pre-park delivery fence (FR4, FR5 of
+     *     fix-lifecycle-push): {@code Undelivered} appends its one-line note to the park report the
+     *     human reads, {@code Delivered} adds nothing. Container mode records no park lifecycle
+     *     commit, so it always passes {@code Delivered} (design D4, NG1)
      * @return the {@link TakeResult} the terminal outcome maps to
      */
     static TakeResult dispatch(
@@ -56,7 +61,9 @@ final class TakeOutcomeDispatch {
             TerminalWriteRetry retry,
             Runnable clearMarker,
             AbortHandler abortHandler,
-            int abortThreshold) {
+            int abortThreshold,
+            ParkDeliveryVerdict parkDelivery) {
+        String replicationNote = parkDelivery.reportNote();
         return switch (outcome) {
             case TaskOutcome.Aborted aborted -> {
                 var facts = tracker.fetchTask(ref).abortFacts();
@@ -64,11 +71,12 @@ final class TakeOutcomeDispatch {
                         ref, aborted.finalState(), aborted.cause(), facts, abortThreshold, instanceId);
             }
             case TaskOutcome.Escalated escalated ->
-                TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker);
+                TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker, replicationNote);
             case TaskOutcome.Completed completed ->
                 TakeFinishReport.finish(completed, context, branchName, tracker, ref, instanceId, retry);
             case TaskOutcome.Paused paused ->
-                TakePauseExit.finish(paused, context, branchName, tracker, ref, instanceId, retry, clearMarker);
+                TakePauseExit.finish(
+                        paused, context, branchName, tracker, ref, instanceId, retry, clearMarker, replicationNote);
         };
     }
 }

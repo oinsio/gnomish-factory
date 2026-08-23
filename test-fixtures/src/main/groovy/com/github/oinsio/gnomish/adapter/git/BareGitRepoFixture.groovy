@@ -65,6 +65,28 @@ trait BareGitRepoFixture {
     }
 
     /**
+     * Writes an executable {@code git} stand-in that appends every invocation's argv to {@code log}
+     * and then runs the real {@code git}, and returns its path — hand it to a
+     * {@code GitProcessRunner} to observe what a code path SPENDS rather than only what it leaves
+     * behind. How many remote round-trips a check costs is invisible in the repository's end state,
+     * so a cost claim ("one refs read", "one push") can only be asserted over the argv log.
+     */
+    Path recordingGit(Path log) {
+        Path script = log.resolveSibling("recording-git-${log.fileName}.sh")
+        script.toFile().text = "#!/bin/sh\necho \"\$@\" >> \"${log}\"\nexec git \"\$@\"\n"
+        script.toFile().executable = true
+        script
+    }
+
+    /**
+     * The leading subcommand of each invocation {@link #recordingGit} logged, in call order; empty
+     * when the stand-in was never invoked at all.
+     */
+    List<String> recordedSubcommands(Path log) {
+        log.toFile().exists() ? log.toFile().readLines()*.split(' ')*.first() : []
+    }
+
+    /**
      * Runs {@code git worktree add <worktreePath> -b <branch>} against {@code repo} and returns
      * {@code worktreePath} — the cross-module-safe entry point for specs that need a real
      * registered worktree, since {@link GitProcessRunner#run} is package-private.

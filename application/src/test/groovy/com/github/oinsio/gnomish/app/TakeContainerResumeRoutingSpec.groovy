@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -29,7 +31,9 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import java.time.Instant
 import spock.lang.Specification
+
 
 /**
  * FR1, NFR-R4 of add-serve-sandbox-lifecycle: the SHARED resume routing table ({@code
@@ -82,6 +86,31 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
     private TaskGit gitWith(TaskBranchGit branches) {
         new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit))
+    }
+
+    // FR3 of fix-lifecycle-push: resume start is a touchpoint — once the local branch is reconciled
+    // into the clone, origin is reconciled up to it, delivering a push an earlier instance lost.
+    def "reconciles the remote at resume start, right after the local branch is ensured"() {
+        given:
+        def branches = Mock(TaskBranchGit)
+        builtSupport = Mock(SandboxRunSupport) {
+            readTaskJson() >> {
+                throw new MissingObjectException('no blob at .gnomish-task/task.json')
+            }
+        }
+        tracker.fetchTask(_) >> heldByUs()
+        branches.readDelivered(CLONE_DIR, 'PROJ-1') >> new DeliveredBranchState(
+                taskContext(), TaskState.atStageStart('build'))
+
+        when:
+        disposition(gitWith(branches)).resumeExisting(
+                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+
+        then:
+        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> true
+
+        then:
+        1 * branches.reconcileRemote(CLONE_DIR, 'PROJ-1', 'resume-start')
     }
 
     // FR1 of add-serve-sandbox-lifecycle, FR10/D10/NFR-C1 of add-claim-heartbeat: the branch tip
@@ -146,7 +175,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             ensureLocalTaskBranch(_, _) >> true
         }
         builtSupport = Mock(SandboxRunSupport) {
-            readTaskJson() >> new TaskRecord(taskContext(), 'base', java.time.Instant.EPOCH, null, null, false)
+            readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> workspace()
@@ -174,7 +203,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             ensureLocalTaskBranch(_, _) >> true
         }
         builtSupport = Mock(SandboxRunSupport) {
-            readTaskJson() >> new TaskRecord(taskContext(), 'base', java.time.Instant.EPOCH, null, null, false)
+            readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> workspace()
@@ -199,11 +228,14 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         given:
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> true
+            // FR4 of fix-lifecycle-push: a deferred park runs the same delivery fence a fresh
+            // one does; a sealed verdict has no Spock dummy, so state the delivered case.
+            fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
         }
         def report = new EscalationReport.AttemptsExhausted(3)
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', java.time.Instant.EPOCH, new RecordedOutcome.Escalated(report), report, true)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, true)
             readFinalState() >> TaskState.atStageStart('build')
         }
         tracker.fetchTask(_) >> heldByUs()
@@ -226,10 +258,13 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         given:
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> true
+            // FR4 of fix-lifecycle-push: a deferred park runs the same delivery fence a fresh
+            // one does; a sealed verdict has no Spock dummy, so state the delivered case.
+            fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
         }
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', java.time.Instant.EPOCH, new RecordedOutcome.Paused('build'), null, true)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Paused('build'), null, true)
             readFinalState() >> TaskState.atStageStart('build')
         }
         tracker.fetchTask(_) >> heldByUs()
@@ -255,7 +290,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def report = new EscalationReport.AttemptsExhausted(3)
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', java.time.Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> workspace()
@@ -283,10 +318,10 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             ensureLocalTaskBranch(_, _) >> true
         }
         def report = new EscalationReport.DecisionNeeded('which way?', [])
-        def repository = Mock(com.github.oinsio.gnomish.app.port.TaskRepository)
+        def repository = Mock(TaskRepository)
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', java.time.Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> workspace()
@@ -294,7 +329,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             pendingVerification() >> Optional.empty()
             taskRepository() >> repository
         }
-        def reply = new HumanReply('go left', java.time.Instant.EPOCH)
+        def reply = new HumanReply('go left', Instant.EPOCH)
         tracker.collectDecisions(REF) >> [reply]
         tracker.fetchTask(_) >> heldByUs()
 
@@ -321,7 +356,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def report = new EscalationReport.DecisionNeeded('which way?', [])
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', java.time.Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false)
             readFinalState() >> TaskState.atStageStart('build')
         }
         tracker.collectDecisions(REF) >> []

@@ -64,6 +64,19 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
         runner.run(cloneDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/gnomish/PROJ-1').exitCode() == 0
     }
 
+    def "FR1 of fix-lifecycle-push: the lifecycle store it hands out pushes each commit best-effort"() {
+        given: 'the clone has an origin, so a lifecycle push is observable on the remote'
+        def origin = initBareRepo(tempDir, 'origin.git')
+        addRemote(cloneDir, 'origin', origin.toString())
+
+        when:
+        store.taskRepository(cloneDir, worktreesRoot).createTask(new TaskContext('PROJ-9', 'T', 'B', []), null)
+
+        then:
+        new RemoteBranchTip(runner).read(cloneDir, 'gnomish/PROJ-9')
+                == Optional.of(gitOutput(worktreeFor('PROJ-9'), 'rev-parse', 'HEAD'))
+    }
+
     def "attemptPersistence hands out persistence bound to this worktree and task"() {
         given:
         seedTask('PROJ-2')
@@ -105,7 +118,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
         store.readRecordedState(tempDir.resolve('no-such-worktree'))
 
         then:
-        def e = thrown(java.io.UncheckedIOException)
+        def e = thrown(UncheckedIOException)
         e.message.contains('state.json')
     }
 

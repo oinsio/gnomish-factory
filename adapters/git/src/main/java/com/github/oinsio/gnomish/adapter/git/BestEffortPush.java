@@ -19,7 +19,9 @@ import org.slf4j.LoggerFactory;
  *
  * <ul>
  *   <li>the push uses the exact refspec {@code origin gnomish/<task>:gnomish/<task>}, never a
- *       bare branch name that relies on git's implicit refspec inference;
+ *       bare branch name that relies on git's implicit refspec inference — the command itself
+ *       comes from the shared {@link RefspecPush}, and the no-origin precondition from {@link
+ *       OriginRemote} (design D2 of fix-lifecycle-push), so this class holds policy only;
  *   <li>{@code --force} / {@code --force-with-lease} are never used; a non-fast-forward rejection
  *       is just another failed push — one WARN, no retry;
  *   <li>the push only runs once the round-boundary preconditions it depends on are freshly
@@ -36,12 +38,13 @@ import org.slf4j.LoggerFactory;
 final class BestEffortPush {
 
     private static final Logger log = LoggerFactory.getLogger(BestEffortPush.class);
-    private static final String REMOTE = "origin";
 
-    private final GitProcessRunner runner;
+    private final OriginRemote origin;
+    private final RefspecPush push;
 
     BestEffortPush(GitProcessRunner runner) {
-        this.runner = runner;
+        this.origin = new OriginRemote(runner);
+        this.push = new RefspecPush(runner);
     }
 
     /**
@@ -67,7 +70,7 @@ final class BestEffortPush {
             String branch,
             RoundBoundaryCheck roundBoundaryCheck,
             String previousTip) {
-        if (!originConfigured(worktreeRoot)) {
+        if (!origin.isConfigured(worktreeRoot)) {
             return;
         }
 
@@ -93,20 +96,15 @@ final class BestEffortPush {
             return;
         }
 
-        GitCommandResult push = runner.run(worktreeRoot, "push", REMOTE, branch + ":" + branch);
-        if (push.exitCode() != 0) {
+        GitCommandResult result = push.push(worktreeRoot, branch);
+        if (result.exitCode() != 0) {
             log.warn(
                     "push failed: taskId={}, stage={}, round={}, branch={}, stderr={}",
                     taskId,
                     stage,
                     round,
                     branch,
-                    push.stderr().trim());
+                    result.stderr().trim());
         }
-    }
-
-    private boolean originConfigured(Path worktreeRoot) {
-        GitCommandResult result = runner.run(worktreeRoot, "remote", "get-url", REMOTE);
-        return result.exitCode() == 0;
     }
 }

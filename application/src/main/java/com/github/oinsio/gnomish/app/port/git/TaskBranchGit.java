@@ -85,4 +85,32 @@ public interface TaskBranchGit {
      * @param branch the task branch name; never null
      */
     void pushBestEffort(Path worktreeRoot, String branch);
+
+    /**
+     * Brings the remote up to {@code taskId}'s local branch tip when it is behind or does not
+     * carry the branch at all — the touchpoint check that delivers a push an earlier run lost to a
+     * crash or an outage, whichever instance next touches the task (FR3 of fix-lifecycle-push).
+     * Best-effort like {@link #pushBestEffort}: it never blocks, fails, or throws, and with no
+     * remote configured it does nothing at all.
+     *
+     * @param cloneDir the clone the branch and its recorded tip live in; never null
+     * @param taskId the tracker's original taskId; never blank
+     * @param touchpoint what triggered the check, for log context (e.g. {@code resume-start},
+     *     {@code terminal-boundary}); never blank
+     */
+    void reconcileRemote(Path cloneDir, String taskId, String touchpoint);
+
+    /**
+     * Verifies {@code taskId}'s branch tip is on the remote before a park's terminal tracker write,
+     * delivering it with one bounded re-attempt when it is not (FR4 of fix-lifecycle-push) — so the
+     * tracker never announces a park whose commit the remote lacks. Never blocks or fails the park:
+     * a failure comes back as {@link ParkDeliveryVerdict.Undelivered} carrying the line the human
+     * reading the park needs (FR5). With no remote configured the verdict is {@code Delivered} and
+     * no remote interaction happens at all.
+     *
+     * @param cloneDir the clone the branch lives in; never null
+     * @param taskId the parking task's tracker id; never blank
+     * @return the delivery verdict; never null
+     */
+    ParkDeliveryVerdict fenceParkDelivery(Path cloneDir, String taskId);
 }

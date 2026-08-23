@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
 import com.github.oinsio.gnomish.app.port.git.TaskListRow;
 import java.nio.file.Path;
@@ -30,6 +31,8 @@ public final class GitTaskBranches implements TaskBranchGit {
     private final BranchStateReader stateReader;
     private final DeliveredBranchReader deliveredReader;
     private final BranchPush push;
+    private final TaskBranchReconciliation reconciliation;
+    private final ParkDeliveryFence parkFence;
 
     /**
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
@@ -42,6 +45,8 @@ public final class GitTaskBranches implements TaskBranchGit {
         this.stateReader = new BranchStateReader(runner);
         this.deliveredReader = new DeliveredBranchReader(runner);
         this.push = new BranchPush(runner);
+        this.reconciliation = new TaskBranchReconciliation(runner);
+        this.parkFence = new ParkDeliveryFence(runner);
     }
 
     @Override
@@ -77,5 +82,15 @@ public final class GitTaskBranches implements TaskBranchGit {
     @Override
     public void pushBestEffort(Path worktreeRoot, String branch) {
         push.pushBestEffort(worktreeRoot, branch);
+    }
+
+    @Override
+    public void reconcileRemote(Path cloneDir, String taskId, String touchpoint) {
+        reconciliation.reconcile(cloneDir, taskId, touchpoint);
+    }
+
+    @Override
+    public ParkDeliveryVerdict fenceParkDelivery(Path cloneDir, String taskId) {
+        return parkFence.ensureDelivered(cloneDir, taskId);
     }
 }

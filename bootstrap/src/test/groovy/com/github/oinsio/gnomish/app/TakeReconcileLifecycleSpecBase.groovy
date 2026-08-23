@@ -14,7 +14,6 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
-import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -110,15 +109,6 @@ tracker:
                 [github: trackerFactory],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
-    }
-
-    private static int runExitCode(TakeCommand command, DefaultApplicationArguments appArgs) {
-        try {
-            command.run(appArgs)
-            throw new IllegalStateException('take did not exit with a TakeExitCodeException')
-        } catch (TakeExitCodeException e) {
-            e.exitCode()
-        }
     }
 
     def "M4: a delivered branch with a missing tracker finish reconciles without running any stage"() {

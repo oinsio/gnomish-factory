@@ -45,7 +45,9 @@ dependencies {
     // the observability projections are typed in `GitObjects`.
     api project(':gitobjects')
 
-    implementation libs.slf4j.api
+    // `api`: `GuardedPark.attempt` takes a caller-supplied `Logger` so callers' log lines are
+    // attributed to the calling class rather than the shared helper.
+    api libs.slf4j.api
 
     // Annotations only — never a running context, which is the composition
     // root's concern (design D3): `@Component` on the startup collaborators and

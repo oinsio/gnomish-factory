@@ -9,10 +9,12 @@ import com.github.oinsio.gnomish.adapter.git.EnvironmentSalvage;
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence;
+import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository;
 import com.github.oinsio.gnomish.adapter.git.RemoteAttemptDelivery;
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
@@ -61,7 +63,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final EnvironmentLease lease;
     final AttemptCommitRef attemptCommit = new AttemptCommitRef();
     final GitObjects gitObjects;
-    final GitObjectsTaskRepository taskRepository;
+    final TaskRepository taskRepository;
     final FreshJudgeEnvironments judgeEnvironments;
     final BranchPush push;
     final SandboxLifecyclePass sandboxLifecyclePass;
@@ -87,7 +89,11 @@ final class ContainerRunSupport implements SandboxRunSupport {
         this.lease = new EnvironmentLease(environments::roundEnvironment, branch, segments);
         this.gitObjects = GitObjects.open(
                 cloneDir.resolve(".git"), Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir"))));
-        this.taskRepository = new GitObjectsTaskRepository(gitObjects);
+        // The lifecycle push belongs to the adapter, not to this bundle's terminal boundaries
+        // (FR1, FR6, design D1 of fix-lifecycle-push): every write through this repository is
+        // replicated best-effort before it returns, so no caller here pushes by hand.
+        this.taskRepository =
+                new PushBestEffortTaskRepository(new GitObjectsTaskRepository(gitObjects), runner, cloneDir);
         this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BranchPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
@@ -144,9 +150,12 @@ final class ContainerRunSupport implements SandboxRunSupport {
         return new RecordedAttemptCommitWorkspace(attemptCommit);
     }
 
-    /** The factory-side lifecycle repository over bare git objects (FR25, D19). */
+    /**
+     * The factory-side lifecycle repository over bare git objects (FR25, D19), wrapped in the
+     * best-effort lifecycle push (FR1 of fix-lifecycle-push).
+     */
     @Override
-    public GitObjectsTaskRepository taskRepository() {
+    public TaskRepository taskRepository() {
         return taskRepository;
     }
 

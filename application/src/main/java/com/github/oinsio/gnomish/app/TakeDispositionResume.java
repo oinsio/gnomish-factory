@@ -80,13 +80,19 @@ record TakeDispositionResume<B extends ResumedBranch>(
         // through to the ordinary resume below. This is exactly the distinction the tracker alone
         // cannot make post-claim.
         if (isOrphanedPark(branch)) {
+            // The same fence a fresh park runs (FR4, FR5 of fix-lifecycle-push). The resume-start
+            // touchpoint already tried to bring origin up to this tip, but that catch-up is
+            // best-effort and swallows its own failure — so when origin is genuinely unreachable
+            // the re-posted park carries the origin-behind line instead of reading as replicated.
+            // An origin that does hold the tip costs one refs read and nothing else.
             return TakeReconcile.deliverPark(
                     branch,
                     finalState,
                     () -> mechanics.confirmTerminalWrite(cloneDir, branch),
                     tracker,
                     ref,
-                    instanceId);
+                    instanceId,
+                    git.branches().fenceParkDelivery(cloneDir, taskId));
         }
 
         // Route only a genuine ESCALATION-kind park through the decision dialog (design D3). The

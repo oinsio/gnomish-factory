@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
-import com.github.oinsio.gnomish.adapter.git.OriginRemoteUrl;
+import com.github.oinsio.gnomish.adapter.git.OriginRemote;
 import com.github.oinsio.gnomish.app.git.ProjectIdentity;
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.Slf4jSweepVerdictListener;
@@ -85,7 +85,7 @@ final class SandboxLifecyclePassFactory {
         @Override
         public String run(Path cloneDir, LivenessVerdict liveness, SweepVerdictListener extraSink) {
             String projectId = ProjectIdentity.resolve(
-                    sandboxProperties.projectId(), OriginRemoteUrl.read(runner, cloneDir), cloneDir);
+                    sandboxProperties.projectId(), new OriginRemote(runner).url(cloneDir), cloneDir);
             var summary = new SweepSummaryListener(
                     new SweepVerdictFanout(List.of(new Slf4jSweepVerdictListener(), extraSink)));
             return sweepAndSummarize(projectId, liveness, clock.instant(), summary);

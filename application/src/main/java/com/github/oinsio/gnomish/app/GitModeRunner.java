@@ -126,8 +126,7 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
             // a file the broken AttemptPersistence round never touches.
             TaskOutcome.Aborted outcome = aborted.outcome();
             if (outcome != null) {
-                GitOutcomeRecorder.recordAndCleanUp(
-                        git.worktrees(), taskRepository, cloneDir, worktree, taskId, outcome);
+                GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, outcome);
             }
             throw aborted;
         }
@@ -136,7 +135,7 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
         // engine's last persist() call already committed that terminal state.json durably, so
         // it is read back here rather than threaded through RunnerOutcomeLoop's void return.
         TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store().readRecordedState(worktree));
-        GitOutcomeRecorder.recordAndCleanUp(git.worktrees(), taskRepository, cloneDir, worktree, taskId, completed);
+        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, completed);
     }
 
     /** The deterministic task branch name (FR2): {@code gnomish/<sanitized taskId>}. */

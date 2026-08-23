@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -70,6 +71,9 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         worktree = worktreesRoot.resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        // FR4 of fix-lifecycle-push: the park path runs the delivery fence; a sealed verdict has no
+        // Spock dummy, so the routing specs state the delivered case explicitly.
+        branches.fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
         worktrees.ensureWorktree(_, _, _, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_, _) >> lifecycleStore

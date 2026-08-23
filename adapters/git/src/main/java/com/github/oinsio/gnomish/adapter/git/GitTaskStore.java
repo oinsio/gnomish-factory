@@ -39,9 +39,15 @@ public final class GitTaskStore implements TaskStoreGit {
         this.usageWalker = new UsageHistoryWalker(runner);
     }
 
+    /**
+     * The host-mode lifecycle store, wrapped in the best-effort push every lifecycle commit owes
+     * the remote (FR1 of fix-lifecycle-push): the strict {@link GitTaskRepository} records, the
+     * decorator replicates, and no caller above this ever sees — or has to remember — the push.
+     */
     @Override
     public TaskLifecycleStore taskRepository(Path cloneDir, Path worktreesRoot) {
-        return new GitTaskRepository(runner, cloneDir, worktreesRoot);
+        return new PushBestEffortTaskLifecycleStore(
+                new GitTaskRepository(runner, cloneDir, worktreesRoot), runner, cloneDir);
     }
 
     @Override

@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.take.ClaimGuard;
+import com.github.oinsio.gnomish.app.take.GuardedPark;
 import com.github.oinsio.gnomish.app.take.TakeOutcomeMapper;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
@@ -52,11 +52,12 @@ final class TakeEscalationExit {
      * description and a reason-appropriate return-path sentence, then returns the matching
      * {@link TakeResult.AwaitingHuman} (FR13, D12, UX3).
      *
-     * <p>The {@code tracker.park} write is git-unfenced, so it is preceded by {@link
-     * ClaimGuard#stillOurs} (FR7, design D6 of add-claim-heartbeat): when the claim was reaped or
-     * taken over mid-run, the park is skipped with a WARN rather than overwriting the new holder's
-     * tracker state — the run still returns the mapped {@link TakeResult.AwaitingHuman} (the branch
-     * carries the outcome; the residual TOCTOU costs at most a stray label).
+     * <p>The {@code tracker.park} write is git-unfenced, so it is guarded by {@link
+     * GuardedPark#attempt}, which precedes it with the claim-still-ours check (FR7, design D6 of
+     * add-claim-heartbeat): when the claim was reaped or taken over mid-run, the park is skipped
+     * with a WARN rather than overwriting the new holder's tracker state — the run still returns
+     * the mapped {@link TakeResult.AwaitingHuman} (the branch carries the outcome; the residual
+     * TOCTOU costs at most a stray label).
      *
      * <p>Implements FR13, D12, UX3 of add-tracker-port; FR7 of add-claim-heartbeat.
      *
@@ -67,25 +68,31 @@ final class TakeEscalationExit {
      * @return the {@link TakeResult.AwaitingHuman} the park call was made with; never null
      */
     static TakeResult exit(TaskOutcome.Escalated escalated, Tracker tracker, TaskRef ref, InstanceId instanceId) {
-        return exit(escalated, tracker, ref, instanceId, TerminalWriteRetry.system(), () -> {});
+        return exit(escalated, tracker, ref, instanceId, TerminalWriteRetry.system(), () -> {}, "");
     }
 
     /**
      * As {@link #exit(TaskOutcome.Escalated, Tracker, TaskRef, InstanceId)}, but wraps the
-     * git-unfenced {@code tracker.park} write in {@code retry} — a tracker outage at the park line is
-     * retried with backoff for the bounded hold-the-slot period (FR10, D10, NFR-R3 of
-     * add-claim-heartbeat) — and runs {@code onConfirmed} once (and only once) the park has landed,
-     * clearing the branch's durable "tracker-write pending" marker so a later resume reads the park
-     * as settled. On give-up the marker is left set and an ERROR names the unreconciled park; the run
-     * still returns {@link TakeResult.AwaitingHuman} (the branch carries the park), and
-     * reconcile-on-resume completes the deferred park later. When the pre-write {@link ClaimGuard}
-     * shows the claim moved, neither the park nor {@code onConfirmed} runs (the marker stays for the
-     * successor's reconcile, never clobbering its state).
+     * git-unfenced {@code tracker.park} write in {@code retry} via {@link GuardedPark#attempt} — a
+     * tracker outage at the park line is retried with backoff for the bounded hold-the-slot period
+     * (FR10, D10, NFR-R3 of add-claim-heartbeat) — running {@code onConfirmed} once (and only once)
+     * the park has landed, clearing the branch's durable "tracker-write pending" marker so a later
+     * resume reads the park as settled. On give-up the marker is left set and an ERROR names the
+     * unreconciled park; the run still returns {@link TakeResult.AwaitingHuman} (the branch carries
+     * the park), and reconcile-on-resume completes the deferred park later. When the pre-write
+     * claim-still-ours check shows the claim moved, neither the park nor {@code onConfirmed} runs
+     * (the marker stays for the successor's reconcile, never clobbering its state).
      *
      * <p>Implements FR13, D12, UX3 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat.
      *
+     * <p>The report gains one extra line when the pre-park delivery fence could not bring origin up
+     * to the recorded park (FR5, UX2 of fix-lifecycle-push): the park still lands, and the human
+     * reading it learns that the remote does not yet carry the branch they are being asked to look at.
+     *
      * @param retry the bounded terminal-write retry the park is made through; never null
      * @param onConfirmed cleared-marker action run once the park confirms landed; never null
+     * @param replicationNote the delivery fence's one-line note, or empty when origin carries the
+     *     park (or there is no origin at all); never null
      */
     static TakeResult exit(
             TaskOutcome.Escalated escalated,
@@ -93,26 +100,16 @@ final class TakeEscalationExit {
             TaskRef ref,
             InstanceId instanceId,
             TerminalWriteRetry retry,
-            Runnable onConfirmed) {
+            Runnable onConfirmed,
+            String replicationNote) {
         var mapped = (TakeResult.AwaitingHuman) TakeOutcomeMapper.map(escalated);
         ParkReason reason = mapped.reason();
 
         String rendered = EscalationResumeDialog.renderEscalation(escalated.report());
         String returnPath = reason == ParkReason.ESCALATION ? ESCALATION_RETURN_PATH : INFRA_RETURN_PATH;
-        String report = rendered + "\n\n" + returnPath;
+        String report = rendered + "\n\n" + returnPath + (replicationNote.isEmpty() ? "" : "\n" + replicationNote);
 
-        if (ClaimGuard.stillOurs(tracker, ref, instanceId)) {
-            if (retry.confirm(() -> tracker.park(ref, reason, report)) == TerminalWriteRetry.Result.CONFIRMED) {
-                onConfirmed.run();
-            } else {
-                log.error(
-                        "park of {} could not be written before the retry bound elapsed; the branch keeps the outcome "
-                                + "as tracker-write pending and a later resume will reconcile the deferred park",
-                        ref.id());
-            }
-        } else {
-            log.warn("skipping park of {}: claim is no longer held by this instance", ref.id());
-        }
+        GuardedPark.attempt(tracker, ref, instanceId, reason, report, retry, onConfirmed, log, "park");
         return new TakeResult.AwaitingHuman(escalated.finalState(), reason, report);
     }
 }
