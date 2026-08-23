@@ -1,0 +1,274 @@
+/* Implements NFR-O1 of redesign-dashboard: every colour is a token in this
+   block or its dark-scheme override below — no colour literal past them. */
+:root {
+  color-scheme: light dark;
+
+  --bg:            #f4f5f7;
+  --surface:       #ffffff;
+  --sunken:        #e8eaee;
+  --text:          #14171a;
+  --text-dim:      #5b6570;
+  --text-faint:    #8b95a1;
+  --border:        #dfe3e8;
+  --border-strong: #c3cad2;
+
+  --ok-fg:   #2f7d32;  --ok-bg:   #e7f4e7;  --ok-dot:  #3f9c42;
+  --warn-fg: #8a5300;  --warn-bg: #fdf0da;  --warn-dot: #d99a2b;
+  --bad-fg:  #b3261e;  --bad-bg:  #fce9e8;  --bad-dot: #d9534f;
+  --info-fg: #1f6feb;  --info-bg: #e8f0fd;
+
+  --seg-delivered: #4f9d3f;
+  --seg-waiting:   #d99a2b;
+  --seg-aborted:   #d9534f;
+  --seg-revoked:   #8892a0;
+
+  --seg-cache-read:  #74c3a8;
+  --seg-cache-write: #2f8f74;
+  --seg-in:          #8b7fd4;
+  --seg-out:         #574bb0;
+
+  --radius: 10px;
+  --hair:   1px solid var(--border);
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:            #0f1216;
+    --surface:       #171b21;
+    --sunken:        #22272e;
+    --text:          #e6eaee;
+    --text-dim:      #98a2ad;
+    --text-faint:    #6b7681;
+    --border:        #262c34;
+    --border-strong: #38414b;
+
+    --ok-fg:   #7fd18a;  --ok-bg:   #17301b;  --ok-dot:  #4caf50;
+    --warn-fg: #f0b458;  --warn-bg: #33260f;  --warn-dot: #d99a2b;
+    --bad-fg:  #f28b84;  --bad-bg:  #38191a;  --bad-dot: #e05a54;
+    --info-fg: #7fb0f0;  --info-bg: #12233a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 14px 16px 32px;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 880px; margin: 0 auto; }
+
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- freshness strip ------------------------------------------------ */
+
+.freshness {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.freshness[data-state="stale"] {
+  background: var(--bad-bg);
+  color: var(--bad-fg);
+  font-weight: 500;
+}
+.freshness svg { width: 16px; height: 16px; flex: none; }
+
+body.is-stale .card,
+body.is-stale .footnote { opacity: .45; }
+
+/* --- cards ---------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: var(--hair);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 12px;
+  transition: opacity .15s linear;
+}
+.card__title {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+.card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.card__meta { font-size: 12px; color: var(--text-faint); }
+
+/* --- status line ---------------------------------------------------- */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 1.25rem;
+}
+.status__dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ok-dot); flex: none;
+}
+.status--down .status__dot { background: var(--bad-dot); }
+.status__id { font-size: 12px; color: var(--text-faint); }
+.status__main { flex: 1; min-width: 0; }
+.status__state { font-size: 15px; font-weight: 500; }
+.status__alert { font-size: 12px; color: var(--bad-fg); margin-top: 2px; }
+
+.stat { text-align: right; padding-left: 14px; }
+.stat + .stat { border-left: var(--hair); }
+.stat__label {
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: .03em;
+  margin-bottom: 2px;
+}
+.stat__value { font-size: 17px; }
+.stat__value--bad { color: var(--bad-fg); }
+
+/* --- attention ------------------------------------------------------ */
+
+.card--attention {
+  border: 2px solid var(--warn-dot);
+  background: var(--warn-bg);
+}
+.card--attention .row { border-color: color-mix(in srgb, var(--warn-dot) 35%, transparent); }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: var(--hair);
+  font-size: 13px;
+}
+/* The block head is the first element of its type in the card, so the first row is
+   never :first-of-type — the hairline is dropped by adjacency to the head instead. */
+.card__head + .row { border-top: none; }
+.row__reason {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row__age { color: var(--text-faint); }
+.row__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--info-fg); flex: none;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 2px;
+  color: var(--text-dim);
+}
+.empty--ok { color: var(--ok-fg); }
+
+/* --- bars ----------------------------------------------------------- */
+
+.bar {
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--sunken);
+  display: flex;
+}
+.bar__seg { height: 100%; }
+.bar-group + .bar-group { margin-top: 14px; }
+.bar-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+.bar-head__total { color: var(--text-faint); }
+.bar-note { font-size: 12px; color: var(--text-dim); margin-top: 5px; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.legend__swatch {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+}
+
+/* --- footnote ------------------------------------------------------- */
+
+.footnote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 1.25rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+/* --- state-switched icons and row variants -------------------------- */
+
+.freshness__icon--stale { display: none; }
+.freshness[data-state="stale"] .freshness__icon--fresh { display: none; }
+.freshness[data-state="stale"] .freshness__icon--stale { display: block; }
+
+.status--stopped .status__dot { background: var(--warn-dot); }
+
+.row__icon { width: 14px; height: 14px; flex: none; color: var(--warn-fg); }
+.row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row__dot--ready { background: var(--text-faint); }
+/* a value at the end of a row (a count), as against .row__age's elapsed-time note */
+.row__count { color: var(--text-dim); }
+
+.empty svg, .footnote svg { width: 16px; height: 16px; flex: none; }
+
+/* Implements UX4 of redesign-dashboard: at 375 px nothing overflows horizontally — the two things that would,
+   a wrapped status line and a row's trailing note, get their own line here. */
+@media (max-width: 640px) {
+  body { padding: 10px 10px 24px; }
+  .card { padding: .875rem 1rem; }
+  .status { flex-wrap: wrap; }
+  .status__main { flex-basis: 100%; }
+  /* a row's trailing note takes its own line rather than squeezing the label to an ellipsis */
+  .row { flex-wrap: wrap; }
+  .row__age { width: 100%; text-align: right; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

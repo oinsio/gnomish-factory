@@ -11,9 +11,10 @@ import org.jspecify.annotations.Nullable;
  * {@link EligibilityReason} annotations, {@link ParkReason} labels, the
  * Working-row claim-freshness age, and the Ready-column truncation marker.
  * This is the single place both the board's text renderer ({@code
- * BoardTextRenderer}) and the dashboard's HTML renderer ({@code
- * DashboardBoardSectionRenderer}) get their row labels, so the two
- * presentation surfaces cannot drift on wording.
+ * BoardTextRenderer}) and the dashboard's board-fed blocks ({@code
+ * DashboardAttentionCardRenderer}, {@code DashboardInProgressCardRenderer})
+ * get their row labels, so the two presentation surfaces cannot drift on
+ * wording.
  *
  * <p>{@link #claimFreshness} / {@link #claimAge} render {@code now -
  * updatedAt} purely for display — no stale/healthy verdict, no coordination

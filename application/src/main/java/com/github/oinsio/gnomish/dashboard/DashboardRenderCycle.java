@@ -76,7 +76,7 @@ public final class DashboardRenderCycle {
         } catch (IOException malformedLedger) {
             actions = SweepActionWindow.EMPTY;
         }
-        return new SandboxHygieneView(sweep, actions.rows(), actions.total());
+        return new SandboxHygieneView(sweep, actions.rows());
     }
 
     private LedgerHistoryView readHistory(Path homeDir, String instanceName, Instant now) {

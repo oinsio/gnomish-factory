@@ -16,7 +16,9 @@ import spock.lang.TempDir
  * design D9) — the same "a degraded section never fails the others"
  * contract {@link SnapshotReader} already gives the daemon section.
  *
- * FR3, FR6, FR9, NFR-O1, NFR-R1 of add-dashboard-page.
+ * FR3, FR6, FR9, NFR-O1, NFR-R1 of add-dashboard-page; NFR-P1 of redesign-dashboard — the
+ * redesign is presentation-only, so the cycle still reads the same three on-disk sources and
+ * adds none.
  */
 class DashboardRenderCycleSpec extends Specification {
 
@@ -38,11 +40,11 @@ class DashboardRenderCycleSpec extends Specification {
         def html = renderCycle.render(homeDir, INSTANCE_NAME, new BoardSectionView(null, null, null), NOW, null)
 
         then:
-        html.contains('no history data')
+        html.contains('No finished tasks yet')
         !html.toLowerCase().contains('exception')
 
-        and: 'NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section degrades on the same file'
-        html.contains('no sweep data yet')
+        and: 'NFR-O3 of add-serve-sandbox-lifecycle: the hygiene block degrades on the same file'
+        html.contains('Sandbox sweep has not run yet')
     }
 
     // NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section reads the ledger's sweep actions
@@ -62,14 +64,17 @@ class DashboardRenderCycleSpec extends Specification {
         when:
         def html = renderCycle.render(homeDir, INSTANCE_NAME, new BoardSectionView(null, null, null), NOW, null)
 
-        then: 'the action is in the table and raises the dead-instance incident (UX2)'
-        html.contains('<td>zombie-box</td>')
+        then: 'the action raises the dead-instance incident, now as an alarm line in the status card (UX2)'
         html.contains('an instance died or hung: stopped zombie-box of task task-9')
+        html.contains('<div class="status__alert">an instance died or hung')
 
-        and: 'the breakdown honestly says the snapshot carried no vital'
-        html.contains('last tick: no snapshot vital')
+        and: 'the hygiene block itself stays the quiet footnote: no snapshot vital means no tick to show'
+        html.contains('Sandbox sweep has not run yet')
 
-        and: 'the daemon section still degrades on its own'
-        html.contains('daemon has not run here')
+        and: 'no per-object action row reaches the page — that depth stays with the ledger'
+        !html.contains('class="row"')
+
+        and: 'the status card still degrades on its own'
+        html.contains('Daemon has not run here')
     }
 }

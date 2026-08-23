@@ -6,71 +6,70 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Renders the dashboard page as one self-contained HTML string (task 3.1):
- * four independently degrading sections — daemon, history, board, sandbox
- * hygiene (the last added by add-serve-sandbox-lifecycle, NFR-O3) — each
- * carrying its own data timestamp, plus the page's own {@code generatedAt}
- * (FR2, FR3, FR10, NFR-O1). A string-template sibling of {@code
- * com.github.oinsio.gnomish.app.BoardTextRenderer} / {@code
- * StatusTextRenderer}: plain Java text-building with escaped interpolation,
- * no template engine (ADR 0001, design D6). Static CSS lives as a constant
- * so the page never issues an external request (FR2); each section's markup
- * is delegated to its own package-private renderer, and shared
- * escaping/label formatting to {@link DashboardHtmlFormatter}, to keep every
- * file within the project's file-size guidance. The watch-mode staleness
- * banner (task 3.3) is delegated to {@link DashboardStalenessBannerRenderer}
- * and only appended when a render cadence is supplied; the same cadence bakes
- * a matching {@code <meta http-equiv="refresh">} into the head so a {@code
- * file://} tab reloads itself (FR7), while driving the watch loop remains
- * {@link DashboardWatchLoop}'s job (task group 4).
- * The daemon section's alert-condition highlight (task 3.4) is delegated to
- * {@link DashboardDaemonSectionRenderer}, which is handed this same {@code
- * generatedAt} as its evaluation instant — layer 1 of design D3's two
- * independent staleness layers, distinct from this class's own layer-2 page
- * banner.
+ * Renders the dashboard page as one self-contained HTML string: four
+ * priority layers in fixed order — freshness strip, status line,
+ * waiting-for-a-human, in-progress — followed by the quieter reference
+ * blocks (outcomes by day, tokens, sandbox hygiene). The order is the
+ * page's whole argument: an operator answers "is anything waiting for me?"
+ * from the top two layers without scrolling, and no later layer is allowed
+ * to be visually louder than an earlier one (FR1). Blocks never appear or
+ * disappear with data — each one renders its own explicit empty-state
+ * sentence in place (FR2).
  *
- * <p>Implements FR2, FR3, FR4, FR7, FR8, FR10, UX3, NFR-O1 of add-dashboard-page (design D3, D6);
- * NFR-O3, UX1 of add-serve-sandbox-lifecycle.
+ * <p>The stylesheet and the client script are classpath resources read once
+ * at construction and inlined into every render, so the output stays a
+ * single file that renders fully styled over {@code file://} with no
+ * network (FR10, NFR-R1, design D1).
+ *
+ * <p>Staleness degrades the page and never covers it (FR3, design D3): the
+ * old full-viewport banner is gone, and in its place a persistent freshness
+ * strip sits above every block. Everything it needs travels as data
+ * attributes on {@code <body>} — {@code data-generated-at} and {@code
+ * data-mode} — so the script stays a static resource with nothing templated
+ * inside it, and the watch/one-shot split rides the same channel: a watch
+ * page degrades when it goes stale and carries a meta-refresh, a one-shot
+ * page shows its age as plain information and carries neither.
+ *
+ * <p>Implements FR1, FR2, FR3, FR8, FR9, FR10, NFR-R1, NFR-R2 of redesign-dashboard
+ * (design D1, D3, D4, D6).
  */
 public final class DashboardHtmlRenderer {
 
-    private static final String STYLE = """
-            body { font-family: system-ui, sans-serif; margin: 1rem; color: #111; }
-            section { margin-bottom: 1.5rem; }
-            h2 { margin-bottom: 0.25rem; }
-            .timestamp { color: #555; font-size: 0.85em; }
-            table { border-collapse: collapse; width: 100%; }
-            td, th { border: 1px solid #ccc; padding: 0.2rem 0.5rem; text-align: left; font-size: 0.9em; }
-            .bar { display: inline-block; height: 0.6em; background: #888; }
-            #staleness-banner { display: none; position: fixed; inset: 0; padding: 1rem;
-              background: #b00020; color: #fff; font-weight: bold; text-align: center; z-index: 1000;
-              align-items: center; justify-content: center; }
-            #staleness-banner.stale { display: flex; }
-            .daemon-alert { background: #fff3e0; border: 2px solid #e65100; padding: 0.5rem; }
-            .daemon-alert-text { color: #e65100; font-weight: bold; }
-            .sandbox-alert { background: #fff3e0; border: 2px solid #e65100; padding: 0.5rem; }
-            .sandbox-alert-text { color: #e65100; font-weight: bold; }
-            """;
+    private final DashboardResources resources;
 
-    private final DashboardDaemonSectionRenderer daemonSection = new DashboardDaemonSectionRenderer();
-    private final DashboardHistorySectionRenderer historySection = new DashboardHistorySectionRenderer();
-    private final DashboardBoardSectionRenderer boardSection = new DashboardBoardSectionRenderer();
-    private final DashboardSandboxHygieneSectionRenderer hygieneSection = new DashboardSandboxHygieneSectionRenderer();
+    private final DashboardStatusCardRenderer statusCard = new DashboardStatusCardRenderer();
+    private final DashboardAttentionCardRenderer attentionCard = new DashboardAttentionCardRenderer();
+    private final DashboardInProgressCardRenderer inProgressCard = new DashboardInProgressCardRenderer();
+    private final DashboardOutcomesCardRenderer outcomesCard = new DashboardOutcomesCardRenderer();
+    private final DashboardTokensCardRenderer tokensCard = new DashboardTokensCardRenderer();
+    private final DashboardHygieneBlockRenderer hygieneBlock = new DashboardHygieneBlockRenderer();
 
     /**
-     * Renders the full page from the three section view models, the page's
+     * Reads the page's stylesheet and client script from the classpath.
+     *
+     * @throws IllegalStateException when either resource is missing or would
+     *     terminate the inline {@code <script>} block early (NFR-R1)
+     */
+    public DashboardHtmlRenderer() {
+        this.resources = DashboardResources.load();
+    }
+
+    /**
+     * Renders the full page from the four block view models, the page's
      * observation instant, and its watch-mode render cadence, if any.
      *
-     * @param daemonView the daemon section's data; never null
-     * @param historyView the history section's data; never null
-     * @param boardView the board section's data; never null
-     * @param hygieneView the sandbox hygiene section's data, {@link SandboxHygieneView#absent()}
+     * @param daemonView the status line's data; never null
+     * @param historyView the outcomes and tokens blocks' data; never null
+     * @param boardView the waiting-for-a-human and in-progress blocks' data; never null
+     * @param hygieneView the sandbox hygiene block's data, {@link SandboxHygieneView#absent()}
      *     when neither the snapshot nor the ledger carries sweep data; never null
      * @param generatedAt the page's own observation instant; never null
-     * @param renderCadence the {@code --watch} render cadence, or {@code
-     *     null} for a one-shot render — presence is what selects watch mode
-     *     and bakes the layer-2 staleness banner script (FR7, FR8, design D4)
+     * @param renderCadence the {@code --watch} render cadence, or {@code null} for a one-shot
+     *     render — presence is what selects watch mode, baking the meta-refresh and arming the
+     *     script's stale degradation (FR3, FR10, design D3); at least one second, since a
+     *     shorter cadence truncates to {@code content="0"} in the meta-refresh
      * @return the self-contained HTML document
+     * @throws IllegalArgumentException when {@code renderCadence} is shorter than one second
      */
     public String render(
             DaemonSnapshotView daemonView,
@@ -84,26 +83,81 @@ public final class DashboardHtmlRenderer {
         Objects.requireNonNull(boardView, "boardView");
         Objects.requireNonNull(hygieneView, "hygieneView");
         Objects.requireNonNull(generatedAt, "generatedAt");
+        requireUsableCadence(renderCadence);
 
         StringBuilder out = new StringBuilder();
-        out.append("<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>gnomish dashboard</title>");
+        appendHead(out, renderCadence);
+        appendBodyOpen(out, generatedAt, renderCadence);
+        appendFreshnessStrip(out, generatedAt);
+        statusCard.append(out, daemonView, hygieneView, generatedAt);
+        attentionCard.append(out, boardView);
+        inProgressCard.append(out, boardView);
+        outcomesCard.append(out, historyView);
+        tokensCard.append(out, historyView);
+        hygieneBlock.append(out, hygieneView);
+        out.append("</div>\n<script>").append(resources.js()).append("</script>\n</body></html>\n");
+        return out.toString();
+    }
+
+    /**
+     * The meta-refresh interval is written in whole seconds, so any cadence
+     * under a second truncates to {@code content="0"} — a browser reload storm
+     * rather than a refresh. The page is never rendered with one; one second is
+     * the shortest usable value, and the shipped watch loop uses ten (FR10).
+     */
+    private static void requireUsableCadence(@Nullable Duration renderCadence) {
+        if (renderCadence != null && renderCadence.toSeconds() < 1L) {
+            throw new IllegalArgumentException("renderCadence must be at least one second, but was " + renderCadence);
+        }
+    }
+
+    private void appendHead(StringBuilder out, @Nullable Duration renderCadence) {
+        out.append("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
+                .append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
+                .append("<title>gnomish factory</title>\n");
         if (renderCadence != null) {
             out.append("<meta http-equiv=\"refresh\" content=\"")
                     .append(renderCadence.toSeconds())
-                    .append("\">");
+                    .append("\">\n");
         }
-        out.append("<style>").append(STYLE).append("</style></head><body>\n");
+        out.append("<style>").append(resources.css()).append("</style>\n</head>\n");
+    }
+
+    /**
+     * A watch page also bakes its stale threshold — three times the render
+     * cadence — as {@code data-stale-after}, so the script degrades at the
+     * cadence the page was actually rendered with instead of assuming the
+     * shipped ten seconds (FR3, design D3).
+     */
+    private static void appendBodyOpen(StringBuilder out, Instant generatedAt, @Nullable Duration renderCadence) {
+        out.append("<body data-mode=\"")
+                .append(renderCadence == null ? "oneshot" : "watch")
+                .append("\" data-generated-at=\"")
+                .append(generatedAt.toEpochMilli())
+                .append('"');
         if (renderCadence != null) {
-            DashboardStalenessBannerRenderer.append(out, generatedAt, renderCadence);
+            out.append(" data-stale-after=\"")
+                    .append(renderCadence.toMillis() * 3L)
+                    .append('"');
         }
-        out.append("<p class=\"timestamp\">generated at ")
-                .append(DashboardHtmlFormatter.escape(generatedAt.toString()))
-                .append("</p>\n");
-        daemonSection.append(out, daemonView, generatedAt);
-        historySection.append(out, historyView);
-        boardSection.append(out, boardView);
-        hygieneSection.append(out, hygieneView, generatedAt);
-        out.append("</body></html>\n");
-        return out.toString();
+        out.append(">\n<div class=\"wrap\">\n");
+    }
+
+    /**
+     * The strip is server-rendered fresh with the page's absolute
+     * {@code generatedAt}, written through {@link DashboardTime} like every
+     * other timestamp on the page (FR8): that {@code <time>} element is what a
+     * reader without scripting sees, and the script lifts its ISO text onto the
+     * strip's {@code title} before replacing the sentence with a ticking age
+     * once per second (NFR-R2, design D4).
+     */
+    private static void appendFreshnessStrip(StringBuilder out, Instant generatedAt) {
+        out.append("<div class=\"freshness\" id=\"freshness\" data-state=\"fresh\" role=\"status\" ")
+                .append("aria-live=\"polite\">")
+                .append(DashboardIcons.FRESHNESS_FRESH)
+                .append(DashboardIcons.FRESHNESS_STALE)
+                .append("<span id=\"freshness-text\">updated ");
+        DashboardTime.append(out, generatedAt, null);
+        out.append("</span></div>\n");
     }
 }

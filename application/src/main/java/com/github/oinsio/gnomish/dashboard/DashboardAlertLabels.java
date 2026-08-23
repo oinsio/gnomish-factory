@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.dashboard;
 
 /**
  * Human-readable labels for each {@link AlertCondition} variant, for the
- * daemon section's alert highlight (task 3.4). Split out of {@link
- * DashboardDaemonSectionRenderer} to keep both files within the project's
+ * status card's alert lines (FR9 of redesign-dashboard). Split out of {@link
+ * DashboardStatusCardRenderer} to keep both files within the project's
  * file-size guidance, mirroring how {@link DashboardHtmlFormatter} is split
  * from {@link DashboardHtmlRenderer}. The exhaustive switch has no {@code
  * default} arm, so a new {@link AlertCondition} variant fails to compile

@@ -30,7 +30,9 @@ import spock.lang.Specification
  * where the section renderers put them, with no unrelated
  * credential/secret-looking substrings appearing anywhere else.
  *
- * FR2, NFR-S1, M1 of add-dashboard-page.
+ * FR2, NFR-S1, M1 of add-dashboard-page; NFR-S1, M1 of redesign-dashboard — the redesigned page
+ * exposes no more than the composed surfaces did, and still renders fully styled over {@code
+ * file://} with the stylesheet and script inlined rather than linked.
  */
 class DashboardHtmlRendererSelfContainmentSpec extends Specification {
 
@@ -39,7 +41,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
     private static final Instant GENERATED_AT = Instant.parse('2026-08-06T09:00:00Z')
 
     private static final Pattern EXTERNAL_ATTR_REF =
-    Pattern.compile('(?i)(src|href)\\s*=\\s*["\\\']?\\s*((https?:)?//)')
+    Pattern.compile('(?i)(src|href)\\s*=\\s*["\']?\\s*((https?:)?//)')
 
     def "no external references anywhere in a fully-composed page"() {
         given:

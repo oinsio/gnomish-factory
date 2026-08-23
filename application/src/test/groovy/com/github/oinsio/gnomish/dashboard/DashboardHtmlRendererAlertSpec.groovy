@@ -1,54 +1,50 @@
 package com.github.oinsio.gnomish.dashboard
 
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.NOW
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.WRITTEN_AT
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.healthySnapshot
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithDegradedReaper
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithLongIdleBlocked
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithOccupiedSlotsDeadHeartbeat
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithTrackerFailures
+import static com.github.oinsio.gnomish.testsupport.DashboardPageMarkup.markup
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.neverFetchedBoard
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
-import com.github.oinsio.gnomish.serveobservability.FeedPhase
-import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
-import com.github.oinsio.gnomish.serveobservability.HeartbeatState
-import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
-import com.github.oinsio.gnomish.serveobservability.InstanceInfo
-import com.github.oinsio.gnomish.serveobservability.JanitorVital
-import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
-import com.github.oinsio.gnomish.serveobservability.SlotEntry
-import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
 import com.github.oinsio.gnomish.serveobservability.Snapshot
-import com.github.oinsio.gnomish.serveobservability.TrackerHealth
+import com.github.oinsio.gnomish.serveobservability.SweepCounts
+import com.github.oinsio.gnomish.serveobservability.SweepVital
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
-import java.time.Instant
+import java.time.Duration
 import spock.lang.Specification
 import spock.lang.Unroll
 
 /**
- * Verifies the daemon section visually flags every {@link AlertCondition}
- * rule 1-5 that {@link AlertConditionEvaluator} finds true of the rendered
- * snapshot (task 3.4): the {@code daemon-alert} highlight class and a
- * "daemon alert:" label naming the fired condition(s), evaluated against
- * the page's own {@code generatedAt}. Asserts the highlight is absent for a
- * clean/healthy snapshot, and that its class name and wording never overlap
- * with {@link DashboardHtmlRendererStalenessSpec}'s page-staleness banner
- * (UX3).
+ * Verifies the status card surfaces every {@link AlertCondition} rule 1-5
+ * that {@link AlertConditionEvaluator} finds true of the rendered snapshot,
+ * evaluated against the page's own {@code generatedAt}: each fires as its
+ * own short alarm-palette {@code status__alert} line inside the card.
  *
- * FR4, UX3 of add-dashboard-page (design D3).
+ * <p>redesign-dashboard changed where alerts live, not what fires them: the
+ * sandbox-hygiene conditions now surface here too, and the section-level
+ * highlight classes ({@code daemon-alert}, {@code sandbox-alert}) and the
+ * full-viewport staleness banner they had to stay distinct from are gone.
+ *
+ * FR4 of add-dashboard-page; FR1, FR2 of redesign-dashboard.
  */
 class DashboardHtmlRendererAlertSpec extends Specification {
 
     def renderer = new DashboardHtmlRenderer()
 
-    private static final Instant WRITTEN_AT = Instant.parse('2026-08-06T09:00:00Z')
-    private static final Instant NOW = WRITTEN_AT.plusSeconds(60)
-
     @Unroll
-    def "#label alert renders the daemon-alert highlight and its label"() {
+    def "#label alert renders as its own alarm line in the status card"() {
         when:
         def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
 
         then:
-        html.contains('class="daemon-alert"')
-        html.contains('daemon alert:')
-        html.contains(label)
+        html.contains('<div class="status__alert">' + label + '</div>')
 
         where:
         label | view
@@ -59,105 +55,70 @@ class DashboardHtmlRendererAlertSpec extends Specification {
         'reaper degraded' | new DaemonSnapshotView.Fresh(snapshotWithDegradedReaper())
     }
 
-    def "two simultaneous alerts are comma-separated, not just the first one shown"() {
+    def "two simultaneous alerts render as two lines, not just the first one shown"() {
         given: 'tracker failures and a degraded reaper both fire on the same snapshot'
         def base = snapshotWithTrackerFailures()
-        def tracker = base.tracker()
         def vitals = new VitalsSnapshot(
                 base.vitals().heartbeat(), new ReaperVital(WRITTEN_AT.minusSeconds(1000), 0, 300L), base.vitals().janitor())
         def snapshot = new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), base.slots(), vitals, tracker)
+                base.lifecycle(), base.feed(), base.slots(), vitals, base.tracker())
 
         when:
         def html = renderer.render(new DaemonSnapshotView.Fresh(snapshot), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
 
-        then: 'the two labels are joined by exactly one comma, with no leading comma before the first'
-        html.contains('daemon alert: '
+        then: 'each condition gets its own line, in rule order'
+        html.contains('<div class="status__alert">'
                 + DashboardAlertLabels.label(new AlertCondition.TrackerFailuresPresent())
-                + ', ' + DashboardAlertLabels.label(new AlertCondition.ReaperDegraded()) + '</p>')
+                + '</div>\n<div class="status__alert">'
+                + DashboardAlertLabels.label(new AlertCondition.ReaperDegraded()) + '</div>')
     }
 
-    def "a healthy fresh snapshot renders no daemon-alert highlight or label"() {
+    // FR1, FR2 of redesign-dashboard: hygiene alerts moved out of the hygiene block into this card.
+    def "a sandbox-hygiene alert surfaces in the status card, and the hygiene block stays unstyled"() {
+        given: 'a sweep whose last tick is far past three times its own cadence'
+        def sweep = new SweepVital(NOW.minusSeconds(3600), 300L, new SweepCounts(0, 0, 0, 0, 0, 0), [], 0, 0)
+
+        when:
+        def html = renderer.render(
+                new DaemonSnapshotView.Fresh(healthySnapshot()), emptyHistory(), neverFetchedBoard(),
+                new SandboxHygieneView(sweep, []), NOW, null)
+
+        then:
+        html.contains('<div class="status__alert">'
+                + DashboardAlertLabels.label(new AlertCondition.SweepTickOverdue()) + '</div>')
+
+        and: 'the hygiene block carries no alert class of its own — it is the quietest block on the page'
+        !html.contains('sandbox-alert')
+        html.contains('<section class="card" id="hygiene">')
+    }
+
+    def "a healthy fresh snapshot renders no alarm line at all"() {
         when:
         def html = renderer.render(
                 new DaemonSnapshotView.Fresh(healthySnapshot()), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
 
-        then: 'the static CSS rule is always baked in, but it is never applied and no alert text appears'
-        !html.contains('class="daemon-alert"')
-        !html.contains('daemon alert:')
+        then: 'the status card holds the state and the stats, and nothing in the alarm palette'
+        !markup(html).contains('status__alert')
+        html.contains('Daemon running')
     }
 
-    def "the daemon alert highlight and wording never overlap the page-staleness banner's"() {
-        given:
-        def cadence = java.time.Duration.ofSeconds(10)
-
-        when: 'a stale-daemon view is rendered in watch mode, triggering both layers'
+    // FR3 of redesign-dashboard: a dead daemon (layer 1) and a dead renderer (layer 2) stay distinct
+    //     surfaces — the alarm line lives in the card, the freshness strip above every card.
+    def "the daemon alarm line and the freshness strip stay separate surfaces"() {
+        when: 'a stale-daemon view is rendered in watch mode, engaging both layers'
         def html = renderer.render(
-                new DaemonSnapshotView.DeadDaemon(healthySnapshot()), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, cadence)
+                new DaemonSnapshotView.DeadDaemon(healthySnapshot()), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW,
+                Duration.ofSeconds(10))
 
-        then: 'both layers are present, using different CSS classes and different wording'
-        html.contains('class="daemon-alert"')
-        html.contains('id="staleness-banner"')
-        html.contains('daemon alert:')
-        html.contains('view is stale')
+        then: 'the daemon condition is a line in the card; the renderer\'s own freshness is the strip'
+        html.contains('<div class="status__alert">dead daemon</div>')
+        html.contains('<div class="freshness" id="freshness" data-state="fresh"')
 
-        and: 'the banner never borrows the daemon-alert class, and the section never borrows the banner id'
-        !html.contains('id="daemon-alert"')
-        !html.contains('class="staleness-banner"')
+        and: 'the strip never borrows the alert class, and the card never borrows the strip id'
+        !html.contains('class="freshness status__alert"')
+        !html.contains('id="freshness" class="status__alert"')
 
-        and: 'the banner keeps its own distinct wording, not the daemon alert\'s'
-        !html.contains('view is stale &mdash; daemon alert')
-    }
-
-    private static Snapshot healthySnapshot() {
-        new Snapshot(
-                1,
-                WRITTEN_AT,
-                30L,
-                new InstanceInfo('gnome-1-abcd', 'host1', '1.0.0'),
-                new LifecycleState.Running(),
-                new FeedSnapshot(FeedPhase.FILLING, WRITTEN_AT, WRITTEN_AT, 0, 3),
-                new SlotsSnapshot(3, []),
-                new VitalsSnapshot(
-                        new HeartbeatVital(HeartbeatState.RUNNING, WRITTEN_AT, 0),
-                        new ReaperVital(WRITTEN_AT, 0, 300L),
-                        new JanitorVital(WRITTEN_AT)),
-                new TrackerHealth(WRITTEN_AT, 0))
-    }
-
-    private static Snapshot snapshotWithOccupiedSlotsDeadHeartbeat() {
-        def base = healthySnapshot()
-        def slots = new SlotsSnapshot(3, [
-            new SlotEntry('task-1', 'implement', 1, WRITTEN_AT)
-        ])
-        def vitals = new VitalsSnapshot(
-                new HeartbeatVital(HeartbeatState.DIED, WRITTEN_AT, 0), base.vitals().reaper(), base.vitals().janitor())
-        return withSlotsAndVitals(base, slots, vitals)
-    }
-
-    private static Snapshot snapshotWithLongIdleBlocked() {
-        def base = healthySnapshot()
-        def feed = new FeedSnapshot(FeedPhase.IDLE_BLOCKED, NOW.minusSeconds(31 * 60), WRITTEN_AT, 0, 3)
-        return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), feed, base.slots(), base.vitals(), base.tracker())
-    }
-
-    private static Snapshot snapshotWithTrackerFailures() {
-        def base = healthySnapshot()
-        def tracker = new TrackerHealth(WRITTEN_AT, 3)
-        return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), base.slots(), base.vitals(), tracker)
-    }
-
-    private static Snapshot snapshotWithDegradedReaper() {
-        def base = healthySnapshot()
-        def vitals = new VitalsSnapshot(
-                base.vitals().heartbeat(), new ReaperVital(WRITTEN_AT.minusSeconds(1000), 0, 300L), base.vitals().janitor())
-        return withSlotsAndVitals(base, base.slots(), vitals)
-    }
-
-    private static Snapshot withSlotsAndVitals(Snapshot base, SlotsSnapshot slots, VitalsSnapshot vitals) {
-        return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), slots, vitals, base.tracker())
+        and: 'no full-viewport staleness banner exists anywhere on the page'
+        !html.contains('staleness-banner')
     }
 }
