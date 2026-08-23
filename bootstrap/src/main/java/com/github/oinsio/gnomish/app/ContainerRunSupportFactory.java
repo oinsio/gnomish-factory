@@ -59,6 +59,9 @@ final class ContainerRunSupportFactory {
         List<String> credentials = new ArrayList<>(credentialEnvVarsToScrub);
         credentials.addAll(checkCredentialEnvVars);
         var allowlist = ChildEnvAllowlist.of(sandboxProperties.envPassthrough(), credentials);
+        // The stamped identity alone, never the sweep's wider scope: the write side stays
+        // single-valued, so no object this run creates carries a legacy project label (FR3 of
+        // normalize-project-identity-url).
         String projectId = ProjectIdentity.resolve(
                 sandboxProperties.projectId(), new OriginRemote(runner).url(cloneDir), cloneDir);
         var environments = ContainerEnvironments.forTask(

@@ -28,7 +28,15 @@ import org.jspecify.annotations.Nullable;
  * live boxes" failure the project label exists to prevent (design D5). Per-clone scoping errs the
  * safe way — two checkouts of the same origin-less repo simply ignore each other's objects.
  *
- * <p>Implements FR8 of add-serve-sandbox-lifecycle.
+ * <p>The digested URL is the {@link OriginUrlNormalizer normalized} spelling, not the raw one
+ * (FR1 of normalize-project-identity-url): a digest of the verbatim string names the credential
+ * form of the URL rather than the project, so rotating an embedded token — or merely writing the
+ * same remote with a {@code .git} suffix — would re-partition every object the sweep is supposed
+ * to reclaim. {@link #resolveScope} carries the pre-normalization digest alongside as a read-side
+ * alias for exactly as long as the two differ (FR3).
+ *
+ * <p>Implements FR8 of add-serve-sandbox-lifecycle; FR1, FR3, FR4 of
+ * normalize-project-identity-url.
  */
 public final class ProjectIdentity {
 
@@ -50,7 +58,8 @@ public final class ProjectIdentity {
     private ProjectIdentity() {}
 
     /**
-     * Resolves the project identity: the override verbatim when set, otherwise a digest of {@code
+     * Resolves the identity every object this factory creates is stamped with: the override
+     * verbatim when set, otherwise a digest of the {@link OriginUrlNormalizer normalized} {@code
      * originUrl}, otherwise a digest of {@code cloneDir}.
      *
      * @param configuredProjectId the operator override ({@code factory.sandbox.project-id});
@@ -60,15 +69,41 @@ public final class ProjectIdentity {
      * @param cloneDir the target project's clone directory — the fallback identity source for a
      *     clone with no {@code origin}
      * @return the resolved project identity: the override verbatim when set, otherwise a
-     *     truncated digest of {@code originUrl}, otherwise a truncated digest of {@code cloneDir}
+     *     truncated digest of the normalized {@code originUrl}, otherwise a truncated digest of
+     *     {@code cloneDir}
      */
     public static String resolve(@Nullable String configuredProjectId, Optional<String> originUrl, Path cloneDir) {
+        return resolveScope(configuredProjectId, originUrl, cloneDir).identity();
+    }
+
+    /**
+     * Resolves the whole set of identities a sweep pass owns (FR3 of
+     * normalize-project-identity-url): the stamped identity above, plus the legacy digest of the
+     * raw, un-normalized URL whenever the two differ — so objects created before normalization
+     * stay in scope instead of being orphaned by the very change that fixes orphaning. An override
+     * or an origin-less clone yields no alias: neither path digests a remote URL, so neither has a
+     * pre-normalization spelling to be reconciled with.
+     *
+     * <p>This is the single site that turns a remote URL into an identity; {@link #resolve} is its
+     * stamped-identity projection, so no caller can digest a raw URL by accident (M3).
+     *
+     * @param configuredProjectId the operator override; {@code null} when unset
+     * @param originUrl the clone's {@code origin} remote URL, when configured
+     * @param cloneDir the target project's clone directory
+     * @return the stamped identity and, during the transition, the legacy alias; never null
+     */
+    public static ProjectScope resolveScope(
+            @Nullable String configuredProjectId, Optional<String> originUrl, Path cloneDir) {
         if (configuredProjectId != null) {
-            return validated(configuredProjectId);
+            return new ProjectScope(validated(configuredProjectId), Optional.empty());
         }
-        return originUrl
-                .map(ProjectIdentity::digest)
-                .orElseGet(() -> digest(cloneDir.toAbsolutePath().normalize().toString()));
+        if (originUrl.isEmpty()) {
+            return new ProjectScope(digest(cloneDir.toAbsolutePath().normalize().toString()), Optional.empty());
+        }
+        String raw = originUrl.get();
+        String identity = digest(OriginUrlNormalizer.normalize(raw));
+        String legacy = digest(raw);
+        return new ProjectScope(identity, identity.equals(legacy) ? Optional.empty() : Optional.of(legacy));
     }
 
     /**

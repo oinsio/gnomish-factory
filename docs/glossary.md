@@ -165,9 +165,20 @@ terms) live in `.claude/rules/process-invariants.md`.
   about who may bind or loosen a sandbox adapter, not about Docker object
   cleanup.
 - **Project identity** — the label scoping a sweep to its own project: a
-  stable digest of the clone's `origin` remote URL, or an explicit operator
-  override. Objects labelled with a different project identity are invisible
-  to listing and never touched.
+  stable digest of the clone's **normalized** `origin` remote URL, or an
+  explicit operator override. Normalization removes the URL's userinfo,
+  lower-cases scheme and host, drops the scheme's own default port, a trailing
+  `/` and a trailing `.git`, and renders the scp-style `[user@]host:path` form
+  as its `ssh://host/path` equivalent — so a credential rotation or a cosmetic
+  respelling of one remote does not re-partition the project. Objects labelled
+  with a different project identity are invisible to listing and never touched.
+- **Legacy identity** — the digest of the *raw*, un-normalized `origin` URL,
+  which objects created before normalization still carry. A sweep whose
+  identity derives from `origin` lists the legacy identity alongside its own
+  for as long as the two differ, so those objects stay in scope instead of
+  being orphaned; new objects are stamped with the project identity only, and
+  no object is ever relabelled. Absent when an override is set, when there is
+  no `origin`, and once the two digests agree.
 - **Remnant** — a container-less Docker object (a volume or network whose
   container is gone) left by a partial materialize or dispose; governed by
   the same aged-reap policy as a kept environment, never disposed on sight.

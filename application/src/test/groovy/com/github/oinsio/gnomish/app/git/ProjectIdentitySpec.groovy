@@ -135,4 +135,101 @@ class ProjectIdentitySpec extends Specification {
         ProjectIdentity.resolve(null, Optional.empty(), clone) ==
                 ProjectIdentity.resolve(null, Optional.empty(), Path.of('/srv/./beta/../alpha'))
     }
+
+    // FR1 of normalize-project-identity-url: the digest is of the normalized URL, so every
+    // cosmetic and credential variant of one remote resolves to one identity.
+    def "FR1: cosmetic and credential variants of one remote resolve to one identity: #variant"() {
+        expect:
+        ProjectIdentity.resolve(null, Optional.of(variant), CLONE) ==
+                ProjectIdentity.resolve(null, Optional.of('https://github.com/acme/widgets'), CLONE)
+
+        where:
+        variant << [
+            'https://github.com/acme/widgets.git',
+            'https://github.com/acme/widgets/',
+            'https://ghp_s3cr3tT0k3n@github.com/acme/widgets.git',
+            'https://alice:ghp_ROTATED@github.com/acme/widgets.git',
+            'https://GitHub.com/acme/widgets.git',
+            'https://github.com:443/acme/widgets.git'
+        ]
+    }
+
+    // FR2: normalization does not conflate remotes that genuinely differ.
+    def "FR2: remotes differing in #difference keep distinct identities"() {
+        expect:
+        ProjectIdentity.resolve(null, Optional.of(other), CLONE) !=
+                ProjectIdentity.resolve(null, Optional.of('https://github.com/acme/widgets'), CLONE)
+
+        where:
+        difference | other
+        'host' | 'https://gitlab.com/acme/widgets'
+        'path' | 'https://github.com/acme/gadgets'
+        'non-default port' | 'https://github.com:8443/acme/widgets'
+        'scheme' | 'http://github.com/acme/widgets'
+    }
+
+    // NFR-R1: an unrecognized remote shape still yields an identity, from the raw string.
+    def "NFR-R1: an unrecognized origin URL still resolves, from the raw string"() {
+        expect:
+        ProjectIdentity.resolve(null, Optional.of('ext::helper %S widgets'), CLONE) ==~ /[0-9a-f]{12}/
+    }
+
+    // FR4: the override's precedence and validation are untouched by normalization.
+    def "FR4: the override still wins over a normalizable origin URL"() {
+        expect:
+        ProjectIdentity.resolveScope('acme-widgets', Optional.of('https://ghp_T0K3N@github.com/acme/widgets.git'), CLONE)
+                .identity() == 'acme-widgets'
+    }
+
+    // FR3: the scope carries the legacy alias exactly while the raw digest differs.
+    def "FR3: a URL that normalization changes carries the legacy digest of the raw URL as an alias"() {
+        given:
+        def raw = 'https://ghp_s3cr3tT0k3n@github.com/acme/widgets.git'
+
+        when:
+        def scope = ProjectIdentity.resolveScope(null, Optional.of(raw), CLONE)
+
+        then: 'the stamped identity is the normalized one'
+        scope.identity() == ProjectIdentity.resolve(null, Optional.of('https://github.com/acme/widgets'), CLONE)
+
+        and: 'the alias is the digest the pre-normalization factory would have stamped'
+        scope.legacyIdentity().isPresent()
+        scope.legacyIdentity().get() != scope.identity()
+        scope.legacyIdentity().get() ==~ /[0-9a-f]{12}/
+
+        and: 'both are listed, stamped identity first'
+        scope.identities() == [
+            scope.identity(),
+            scope.legacyIdentity().get()
+        ]
+    }
+
+    // NFR-C1: no alias means no extra listing to pay for.
+    def "NFR-C1: no legacy alias exists when #situation"() {
+        when:
+        def scope = ProjectIdentity.resolveScope(override, originUrl, CLONE)
+
+        then:
+        scope.legacyIdentity().isEmpty()
+        scope.identities() == [scope.identity()]
+
+        where:
+        situation | override | originUrl
+        'the URL is already normal' | null | Optional.of('https://github.com/acme/widgets')
+        'an override is set' | 'acme-widgets' | Optional.of('https://github.com/acme/widgets.git')
+        'there is no origin' | null | Optional.empty()
+    }
+
+    // NFR-S1: the alias is a digest too, so the raw credential-bearing URL never travels.
+    def "NFR-S1: the legacy alias is a digest, never the raw credential-bearing URL"() {
+        when:
+        def scope = ProjectIdentity.resolveScope(
+                null, Optional.of('https://alice:ghp_s3cr3tT0k3n@github.com/acme/widgets.git'), CLONE)
+
+        then:
+        scope.identities().every { it ==~ /[0-9a-f]{12}/ }
+        scope.identities().every {
+            !it.contains('alice') && !it.contains('ghp_s3cr3tT0k3n')
+        }
+    }
 }

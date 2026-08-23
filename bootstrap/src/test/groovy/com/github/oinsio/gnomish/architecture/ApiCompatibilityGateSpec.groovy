@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.architecture
 
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.jar.JarFile
 import spock.lang.Specification
 
@@ -88,7 +88,7 @@ class ApiCompatibilityGateSpec extends Specification {
     }
 
     private static List<File> baselineJars() {
-        def dir = repoRoot().resolve('gnomish-plugin-api/compat-baseline')
+        def dir = RepoSourceTree.repoRoot().resolve('gnomish-plugin-api/compat-baseline')
         assert Files.isDirectory(dir): "no committed api baseline at ${dir} — the gate cannot be armed (FR14)"
         Files.list(dir).withCloseable { paths ->
             paths.filter {
@@ -100,14 +100,8 @@ class ApiCompatibilityGateSpec extends Specification {
     }
 
     private static File publishedApiBuildFile() {
-        def file = repoRoot().resolve('gnomish-plugin-api/build.gradle')
+        def file = RepoSourceTree.repoRoot().resolve('gnomish-plugin-api/build.gradle')
         assert Files.isRegularFile(file): "missing ${file}"
         file.toFile()
-    }
-
-    private static Path repoRoot() {
-        def root = Path.of(System.getProperty('repoRoot'))
-        assert Files.isDirectory(root): 'repoRoot system property is not set (see bootstrap/verification.gradle)'
-        root
     }
 }

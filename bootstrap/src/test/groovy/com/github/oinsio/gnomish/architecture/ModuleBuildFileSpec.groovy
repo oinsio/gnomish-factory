@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.architecture
 
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.function.Predicate
 import spock.lang.Specification
 
 /**
@@ -27,7 +29,9 @@ class ModuleBuildFileSpec extends Specification {
     def "every build file is within the project file-size cap"() {
         given: 'every Gradle script in the build, module build files and convention plugins alike'
         def oversized = gradleScripts()
-                .collectEntries { [(relative(it)): it.readLines().size()] }
+                .collectEntries {
+                    [(RepoSourceTree.relative(it)): it.readLines().size()]
+                }
                 .findAll { _, lines -> lines> LINE_CAP }
 
         expect: 'none exceeds the cap'
@@ -46,7 +50,7 @@ class ModuleBuildFileSpec extends Specification {
         def without = files.findAll {
             !(it.text =~ /id '[\w-]+-conventions'/)
         }.collect {
-            relative(it)
+            RepoSourceTree.relative(it)
         }
         without.isEmpty()
     }
@@ -54,7 +58,7 @@ class ModuleBuildFileSpec extends Specification {
     // M2: the former single root module holds no source at all — :bootstrap is the root remainder
     def "the root project is build-wide metadata only"() {
         given: 'the repository root'
-        def root = repoRoot()
+        def root = RepoSourceTree.repoRoot()
 
         expect: 'no production or test source tree remains beside the root build file'
         !Files.exists(root.resolve('src'))
@@ -63,12 +67,6 @@ class ModuleBuildFileSpec extends Specification {
         def rootBuildFile = root.resolve('build.gradle').toFile().text
         !(rootBuildFile =~ /id 'java(-library)?'/)
         !rootBuildFile.contains('dependencies {')
-    }
-
-    private static Path repoRoot() {
-        def root = Path.of(System.getProperty('repoRoot'))
-        assert Files.isDirectory(root): 'repoRoot system property is not set (see bootstrap/verification.gradle)'
-        root
     }
 
     /** Every Gradle script in the repository, skipping build outputs. */
@@ -83,8 +81,8 @@ class ModuleBuildFileSpec extends Specification {
         }
     }
 
-    private static List<File> walk(java.util.function.Predicate<Path> matching) {
-        Files.walk(repoRoot()).withCloseable { paths ->
+    private static List<File> walk(Predicate<Path> matching) {
+        Files.walk(RepoSourceTree.repoRoot()).withCloseable { paths ->
             paths.filter { Files.isRegularFile(it) }
             .filter(matching)
             .filter {
@@ -93,9 +91,5 @@ class ModuleBuildFileSpec extends Specification {
             .map { it.toFile() }
             .toList()
         }
-    }
-
-    private static String relative(File file) {
-        repoRoot().relativize(file.toPath()).toString()
     }
 }

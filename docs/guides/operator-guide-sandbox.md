@@ -239,7 +239,7 @@ Every factory-created Docker object is labelled, atomically at creation, with
 the task's environment key, its **ownership mode** (`tracked` — claimed
 through the tracker, the `take`/`serve` path — or `manual` — `gnomish run`,
 which has no tracker), and the **project identity** (a stable digest of the
-clone's `origin` remote URL, or your explicit override below). `run`, `take`,
+clone's *normalized* `origin` remote URL, or your explicit override below). `run`, `take`,
 and `serve` all run one shared sweep-and-reap pass through this labelling
 (`sandbox-lifecycle`, `add-serve-sandbox-lifecycle`): `run` and `take` run it
 once at startup, `serve` runs it on a recurring tick for the daemon's whole
@@ -265,9 +265,9 @@ lifetime.
 - The sweep is scoped to its own project identity (`factory.sandbox.project-id`,
   or the derived default): a second project sharing the same Docker host never
   sees, and never touches, this one's objects. The derived default is a digest of
-  the clone's `origin` remote URL, or — for a clone with no `origin` — a digest of
-  the clone's own absolute path, so two origin-less checkouts on one host stay in
-  separate scopes rather than sweeping each other. Set the override explicitly
+  the clone's `origin` remote URL after normalization (see below), or — for a clone
+  with no `origin` — a digest of the clone's own absolute path, so two origin-less
+  checkouts on one host stay in separate scopes rather than sweeping each other. Set the override explicitly
   when several clones of the *same* project must share one scope. The override
   must match `[A-Za-z0-9._-]+`: it is stamped verbatim into a Docker label whose
   read-back format is comma- and equals-delimited, so any other character is
@@ -280,6 +280,77 @@ factory.sandbox.kept-reap-age=7d            # default 7d
 factory.sandbox.manual-running-stop-age=24h # default 24h
 factory.sandbox.project-id=my-project       # [A-Za-z0-9._-]+; default: derived (see above)
 ```
+
+**Which `origin` URLs count as the same project.** The derived identity is a
+digest of the remote URL *after normalization*, not of the string in
+`.git/config` verbatim. Without that, rotating a token embedded in
+`https://<token>@host/owner/repo.git` would change the identity, and every box,
+volume, and network created before the rotation would drop out of the sweep's
+scope permanently — still holding disk, and still running.
+
+Normalized away — these all name one project and share one sweep scope:
+
+| Difference                    | Example                                              |
+|-------------------------------|------------------------------------------------------|
+| URL userinfo (user, token)    | `https://ghp_A@host/o/r` = `https://ghp_B@host/o/r`   |
+| Scheme and host letter case   | `https://GitHub.com/o/r` = `https://github.com/o/r`   |
+| The scheme's own default port | `https://host:443/o/r` = `https://host/o/r`           |
+| One trailing `/`              | `https://host/o/r/` = `https://host/o/r`              |
+| A trailing `.git`             | `https://host/o/r.git` = `https://host/o/r`           |
+| The scp-style form            | `git@host:o/r.git` = `ssh://host/o/r`                 |
+
+Kept distinct — these are different projects, each with its own scope:
+a different host, a different path, a **non-default** port (`https://host:8443/…`
+is not `https://host/…`), and a different scheme (`http://` is not `https://`).
+
+Two deliberate consequences:
+
+- Two checkouts of one repository cloned over different URL forms — one over
+  `https://…/repo.git`, one over `git@host:owner/repo` — now share one sweep
+  scope, and each sees the other's objects as its own project's. Set
+  `factory.sandbox.project-id` explicitly on one of them if you need them
+  isolated; the override still wins over everything.
+- The scp fold is lossy in git's terms: `host:path` names a path relative to the
+  remote login's home directory, while `ssh://host/path` names the absolute
+  `/path`. The factory treats them as one identity. The error direction is a
+  *wider shared scope*, never a lost object — but if you genuinely run two
+  distinct remotes that differ only that way, set the override.
+
+A remote URL in a shape neither form matches (a bare local path, an `ext::`
+transport, a bracketed IPv6-literal host such as `ssh://[::1]/repo`) is digested
+as written. It still gets a stable identity; it just
+loses the stability guarantees above.
+
+**Upgrading across normalization.** Objects created by an earlier build carry a
+digest of the un-normalized URL. A sweep whose identity derives from `origin`
+lists that **legacy identity** alongside its own for as long as the two differ,
+so nothing created before the upgrade is orphaned by the upgrade. The first
+sweep after it logs one INFO naming how many legacy-labelled objects it found;
+that count drains to zero on its own as those objects are reclaimed, because
+everything created after the upgrade carries the normalized identity only. No
+object is ever relabelled — a Docker label is immutable for a live object.
+
+This also defines the **rollback window**: reverting to a pre-normalization
+build is safe only while it can still find the objects the new build stamped —
+which it cannot, since the old build knows only the raw digest. Roll back
+promptly, or reclaim the normalized-identity objects by hand first (same
+`--filter label=` commands as below).
+
+Objects orphaned by a rotation that happened *before* the upgrade are not
+recovered: their label carries a digest of a URL nobody has any more. Clean them
+up once, by hand, with the factory-ownership label:
+
+```bash
+docker ps -a     --filter label=com.github.oinsio.gnomish.factory --format '{{.Names}}\t{{.Labels}}'
+docker volume ls --filter label=com.github.oinsio.gnomish.factory --format '{{.Name}}\t{{.Labels}}'
+docker network ls --filter label=com.github.oinsio.gnomish.factory --format '{{.Name}}\t{{.Labels}}'
+```
+
+Compare each object's `com.github.oinsio.gnomish.project` value against the two
+your factory currently owns (the sweep's INFO line names the legacy one; both
+appear in the `--filter label=com.github.oinsio.gnomish.project=<id>` listings).
+Anything matching neither, and holding no work you still want, is removed with
+the ordinary `docker rm` / `docker volume rm` / `docker network rm`.
 
 **Label compatibility.** An object carrying the project label but no ownership
 mode (a build older than the mode label) is treated as `tracked`, age-protected

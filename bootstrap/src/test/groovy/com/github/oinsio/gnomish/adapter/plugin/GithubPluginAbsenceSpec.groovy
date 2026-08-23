@@ -4,8 +4,7 @@ import com.github.oinsio.gnomish.adapter.check.CheckClientConfiguration
 import com.github.oinsio.gnomish.adapter.check.CheckClientDiscovery
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterDiscovery
-import java.nio.file.Files
-import java.nio.file.Path
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.util.regex.Pattern
 import spock.lang.Shared
 import spock.lang.Specification
@@ -34,9 +33,6 @@ class GithubPluginAbsenceSpec extends Specification {
 
     /** The bundle's own directory, the one place these references belong. */
     private static final String BUNDLE_DIR = 'adapters/github/'
-
-    /** A mis-resolved repoRoot would make the source gate pass over an empty file set. */
-    private static final int KNOWN_PRODUCTION_SOURCES = 100
 
     @Shared
     ClassLoader withoutGithub = GithubArtifact.hiddenFrom(getClass().classLoader)
@@ -81,51 +77,23 @@ class GithubPluginAbsenceSpec extends Specification {
     //     so removing the jar is a packaging decision — never an edit to core.
     def "no production source outside the bundle names a github type"() {
         given:
-        def sources = productionSources()
+        def sources = RepoSourceTree.productionSources {
+            !it.startsWith(BUNDLE_DIR)
+        }
 
         expect: 'the scan really reached the source tree'
-        sources.size() >= KNOWN_PRODUCTION_SOURCES
+        sources.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
 
         and: 'and found no code reference to the bundle (prose in comments is not a dependency)'
         def offenders = sources.collectMany { file ->
             file.readLines().indexed(1)
             .findAll { number, line ->
-                GITHUB_REFERENCE.matcher(code(line)).find()
+                GITHUB_REFERENCE.matcher(RepoSourceTree.codeOnly(line)).find()
             }
-            .collect { number, line -> relative(file) + ':' + number }
+            .collect { number, line ->
+                RepoSourceTree.relative(file) + ':' + number
+            }
         }
         offenders.isEmpty()
-    }
-
-    /** A line with its comment stripped: what the compiler actually sees. */
-    private static String code(String line) {
-        def trimmed = line.trim()
-        if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) {
-            return ''
-        }
-        line.replaceFirst('//.*', '')
-    }
-
-    /** Every production source of the build except the github bundle's own. */
-    private static List<File> productionSources() {
-        Files.walk(repoRoot()).withCloseable { paths ->
-            paths.filter { Files.isRegularFile(it) }
-            .map { repoRoot().relativize(it).toString() }
-            .filter { it.contains('/src/main/') }
-            .filter { it.endsWith('.java') || it.endsWith('.groovy') }
-            .filter { !it.startsWith(BUNDLE_DIR) }
-            .map { repoRoot().resolve(it).toFile() }
-            .toList()
-        }
-    }
-
-    private static Path repoRoot() {
-        def root = Path.of(System.getProperty('repoRoot'))
-        assert Files.isDirectory(root): 'repoRoot system property is not set (see bootstrap/verification.gradle)'
-        root
-    }
-
-    private static String relative(File file) {
-        repoRoot().relativize(file.toPath()).toString()
     }
 }

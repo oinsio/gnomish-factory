@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.app.git.ProjectScope;
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
@@ -26,7 +27,7 @@ import java.util.stream.Collectors;
  * manual} objects are governed by age alone and need no tracker at all (FR7).
  *
  * <p>Implements FR4, FR5, FR7, FR8, FR9, NFR-C1, NFR-R1, NFR-R2, NFR-S2 of
- * add-serve-sandbox-lifecycle.
+ * add-serve-sandbox-lifecycle; FR3 of normalize-project-identity-url.
  */
 public final class SandboxLifecycleSweep {
 
@@ -56,20 +57,24 @@ public final class SandboxLifecycleSweep {
     /**
      * Evaluates every factory-labelled object of this project and acts on it (`sandbox-lifecycle`).
      *
-     * @param projectId this factory's project identity — objects of any other project are
-     *     excluded at listing (FR8); never blank
+     * @param scope this factory's own project identities — objects of any other project are
+     *     excluded at listing (FR8); the stamped identity, plus the legacy alias while objects
+     *     created before URL normalization may still carry it (FR3 of
+     *     normalize-project-identity-url); never null
      * @param liveness the current tracked-object liveness verdict; never null
      * @param now the instant every object's age is measured against; never null
      * @param thresholds the minimum/reap/manual-running-stop durations; never null
      */
     public void evaluate(
-            String projectId, LivenessVerdict liveness, Instant now, SandboxLifecycleThresholds thresholds) {
+            ProjectScope scope, LivenessVerdict liveness, Instant now, SandboxLifecycleThresholds thresholds) {
+        var listing = new ScopedObjectListing(reader, scope);
         List<ListedDockerObject> containers =
-                reader.list(ObjectKind.CONTAINER, DockerLifecycleCommands.listFactoryContainersWithLabels(projectId));
+                listing.list(ObjectKind.CONTAINER, DockerLifecycleCommands::listFactoryContainersWithLabels);
         List<ListedDockerObject> volumes =
-                reader.list(ObjectKind.VOLUME, DockerLifecycleCommands.listFactoryVolumesWithLabels(projectId));
+                listing.list(ObjectKind.VOLUME, DockerLifecycleCommands::listFactoryVolumesWithLabels);
         List<ListedDockerObject> networks =
-                reader.list(ObjectKind.NETWORK, DockerLifecycleCommands.listFactoryNetworksWithLabels(projectId));
+                listing.list(ObjectKind.NETWORK, DockerLifecycleCommands::listFactoryNetworksWithLabels);
+        listing.reportLegacyObjects();
         Set<String> mainBoxKeysWithContainer = mainBoxKeys(containers);
 
         containers.forEach(o -> evaluateContainer(o, liveness, now, thresholds));
