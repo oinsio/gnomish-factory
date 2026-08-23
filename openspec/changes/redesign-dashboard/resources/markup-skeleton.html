@@ -2,7 +2,7 @@
      Placeholders in {{...}}; structure is fixed, repetition points are marked.
      See design.md D3–D6 and the delta spec for the governing requirements. -->
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,14 +15,14 @@
 
   <div class="freshness" id="freshness" data-state="fresh" role="status" aria-live="polite">
     {{inline svg: refresh icon + warning icon}}
-    <span id="freshness-text">обновлено {{absolute time}}</span>
+    <span id="freshness-text">updated {{absolute time}}</span>
   </div>
 
   <div class="card status">
     <span class="status__dot"></span>
     <div class="status__main">
-      <div class="status__state">{{Демон работает | Снимок не обновляется}}</div>
-      <div class="status__id num">{{instanceId}} · снимок:
+      <div class="status__state">{{Daemon running | Snapshot not updating}}</div>
+      <div class="status__id num">{{instanceId}} · snapshot:
         <time datetime="{{iso}}" data-epoch="{{millis}}">{{absolute writtenAt}}</time></div>
       <!-- repeat per triggered alert condition (daemon rules 1–5 and the
            sandbox-hygiene alerts: sweep tick overdue, consecutive
@@ -30,11 +30,11 @@
       <div class="status__alert">{{alert text}}</div>
     </div>
     <div class="stat">
-      <div class="stat__label">слоты</div>
+      <div class="stat__label">slots</div>
       <div class="stat__value num">{{occupied}} / {{total}}</div>
     </div>
     <div class="stat">
-      <div class="stat__label">сбои подряд</div>
+      <div class="stat__label">consecutive failures</div>
       <div class="stat__value num">{{consecutiveFailures}}</div>
     </div>
   </div>
@@ -45,9 +45,9 @@
        with the failure summary instead of rows -->
   <section class="card{{ card--attention if non-empty}}">
     <div class="card__head">
-      <h2 class="card__title">Ждут человека</h2>
-      <span class="card__meta">борд:
-        <time datetime="{{iso}}" data-epoch="{{millis}}">{{absolute fetchedAt}}</time>{{ · сбой обновления, показан кэш — if last refresh failed}}
+      <h2 class="card__title">Waiting for a human</h2>
+      <span class="card__meta">board:
+        <time datetime="{{iso}}" data-epoch="{{millis}}">{{absolute fetchedAt}}</time>{{ · refresh failed, showing cache — if last refresh failed}}
         <span class="num">{{count}}</span></span>
     </div>
     <!-- repeat per escalated task, or render the .empty block -->
@@ -61,9 +61,9 @@
 
   <section class="card">
     <div class="card__head">
-      <h2 class="card__title">В работе</h2>
-      <span class="card__meta">борд:
-        <time datetime="{{iso}}" data-epoch="{{millis}}">{{absolute fetchedAt}}</time>{{ · сбой обновления, показан кэш — if last refresh failed}}</span>
+      <h2 class="card__title">In progress</h2>
+      <span class="card__meta">board:
+        <time datetime="{{iso}}" data-epoch="{{millis}}">{{absolute fetchedAt}}</time>{{ · refresh failed, showing cache — if last refresh failed}}</span>
     </div>
     <!-- repeat per active task, or render the .empty block:
          working row — dot, id, holder, claim age; ready row — dot, id,
@@ -72,7 +72,7 @@
 
   <section class="card">
     <div class="card__head">
-      <h2 class="card__title">Исходы по дням</h2>
+      <h2 class="card__title">Outcomes by day</h2>
       <span class="card__meta num">{{ledger day range}}</span>
     </div>
     <!-- repeat per day -->
@@ -81,7 +81,7 @@
         <span class="num">{{date}}</span>
         <span class="num bar-head__total">{{total}}</span>
       </div>
-      <div class="bar" role="img" aria-label="{{delivered}} доставлено, {{awaiting}} ждут человека, {{aborted}} прервано, {{revoked}} отозвано">
+      <div class="bar" role="img" aria-label="{{delivered}} delivered, {{awaiting}} awaiting a human, {{aborted}} aborted, {{revoked}} revoked">
         <span class="bar__seg" style="width:{{pct}}%;background:var(--seg-delivered)"></span>
         <!-- ... waiting / aborted / revoked -->
       </div>
@@ -91,13 +91,13 @@
 
   <section class="card">
     <div class="card__head">
-      <h2 class="card__title">Токены</h2>
+      <h2 class="card__title">Tokens</h2>
       <span class="card__meta num">{{grandTotal}} · {{period}}</span>
     </div>
     <!-- repeat per model: bar-head, bar with four segments, bar-note -->
   </section>
 
-  <div class="footnote">{{sweep summary or "Уборка песочницы ещё не запускалась"}}</div>
+  <div class="footnote">{{sweep summary or "Sandbox sweep has not run yet"}}</div>
 
 </div>
 <script>{{INLINED dashboard.js}}</script>

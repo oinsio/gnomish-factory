@@ -35,8 +35,8 @@ re-derive them. Design decisions D1–D6 in `design.md` govern the wiring.
       tokens, sandbox-hygiene footnote; `<body data-generated-at
       data-mode="watch|oneshot">`; emit `<meta http-equiv="refresh"
       content="10">` in watch mode only (FR1, FR10, D3, D6)
-- [ ] 3.2 Status line card: state dot and text ("Демон работает" /
-      "Снимок не обновляется"), instance id, snapshot `writtenAt` as a
+- [ ] 3.2 Status line card: state dot and text ("Daemon running" /
+      "Snapshot not updating"), instance id, snapshot `writtenAt` as a
       `<time>`, right-aligned slots and consecutive-failures stats;
       failures in `--bad-fg` only when non-zero (existing daemon-section
       semantics, new presentation). Every triggered alert condition
@@ -51,27 +51,28 @@ re-derive them. Design decisions D1–D6 in `design.md` govern the wiring.
 - [ ] 3.3 Waiting-for-a-human block: `card--attention` treatment when
       non-empty with per-task rows (icon by park reason —
       escalation / checkpoint / infra, id, one-line reason with ellipsis,
-      escalation age); empty state "Очередь пуста — гномы справляются
-      сами" with check glyph; drop unavailable fields, no placeholders —
-      today that drops the reason text and escalation age (Q1); record
-      dropped fields for the PR description (FR2, FR4, UX1, Q1)
+      escalation age); empty state "The queue is empty — the gnomes are
+      managing on their own" with check glyph; drop unavailable fields, no
+      placeholders — today that drops the reason text and escalation age
+      (Q1); record dropped fields for the PR description
+      (FR2, FR4, UX1, Q1)
 - [ ] 3.4 In-progress block: single compact row list for Ready + Working
       from the board model's own fields (dot, id; working rows: holder and
       claim age from `claimVersion`; ready rows: short eligibility note —
       backoff deadline, `finished`, WIP-held), ready items marked, a
       truncation indicator when the ready window was capped, one empty
-      state "Слот свободен, готовых задач в трекере нет" (FR2, FR5)
+      state "A slot is free, no ready tasks in the tracker" (FR2, FR5)
 - [ ] 3.5 Outcomes by day: full-width stacked mix bar per day (delivered /
       awaitingHuman / aborted / revoked, proportional within the day), date
       and total as numbers, one shared legend, `role="img"` aria-label;
-      empty state "Пока нет завершённых задач" (FR2, FR6)
+      empty state "No finished tasks yet" (FR2, FR6)
 - [ ] 3.6 Tokens block: header with grand total and period; per model a
       stacked cacheRead / cacheCreation / input / output bar plus caption
-      leading with integer cache share (`90% из кэша · in 3.7K · out
-      28.8K`); zero cache renders "кэш не используется"; `--seg-*` palette
+      leading with integer cache share (`90% from cache · in 3.7K · out
+      28.8K`); zero cache renders "cache not in use"; `--seg-*` palette
       only, never the status palette (FR7)
-- [ ] 3.7 Sandbox hygiene: dashed-border footnote "Уборка песочницы ещё не
-      запускалась" when no sweep data; normal card when data exists.
+- [ ] 3.7 Sandbox hygiene: dashed-border footnote "Sandbox sweep has not run
+      yet" when no sweep data; normal card when data exists.
       Hygiene *alert* conditions do not render here — they surface as red
       lines in the status card (task 3.2); this block carries only the
       four-group breakdown of the last tick — the kept-environment
@@ -101,7 +102,7 @@ re-derive them. Design decisions D1–D6 in `design.md` govern the wiring.
       self-staleness banner" to the freshness strip (FR3, M1)
 - [ ] 4.3 Keep the one-shot page free of stale degradation: the
       `data-mode` guard in `dashboard.js` shows the snapshot age as plain
-      information ("разовый снимок · сделан N мин назад") instead of the
+      information ("one-shot snapshot · taken N min ago") instead of the
       stale strip and dimming, and no meta-refresh is emitted (task 3.1),
       per the modified staleness requirement
 

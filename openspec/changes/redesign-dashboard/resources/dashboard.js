@@ -7,19 +7,19 @@
 
   function relative(ms) {
     var s = Math.max(0, Math.round(ms / 1000));
-    if (s < 10) return "только что";
-    if (s < 60) return s + " с назад";
+    if (s < 10) return "just now";
+    if (s < 60) return s + " s ago";
     var m = Math.round(s / 60);
-    if (m < 60) return m + " мин назад";
+    if (m < 60) return m + " min ago";
     var h = Math.round(m / 60);
-    if (h < 24) return h + " ч назад";
-    return Math.round(h / 24) + " дн назад";
+    if (h < 24) return h + " h ago";
+    return Math.round(h / 24) + " d ago";
   }
 
   function duration(ms) {
     var s = Math.max(0, Math.round(ms / 1000));
-    if (s < 60) return s + "с";
-    return Math.floor(s / 60) + "м " + (s % 60) + "с";
+    if (s < 60) return s + "s";
+    return Math.floor(s / 60) + "m " + (s % 60) + "s";
   }
 
   var times = Array.prototype.slice.call(
@@ -45,11 +45,11 @@
       strip.dataset.state = stale ? "stale" : "fresh";
       document.body.classList.toggle("is-stale", stale);
       stripText.textContent = stale
-        ? "вид устарел — рендерер молчит " + duration(age)
-        : "данные свежие · обновлено " + relative(age);
+        ? "view is stale — renderer silent for " + duration(age)
+        : "data is fresh · updated " + relative(age);
     } else {
       /* one-shot: age is plain information, never a degradation */
-      stripText.textContent = "разовый снимок · сделан " + relative(age);
+      stripText.textContent = "one-shot snapshot · taken " + relative(age);
     }
   }
 
