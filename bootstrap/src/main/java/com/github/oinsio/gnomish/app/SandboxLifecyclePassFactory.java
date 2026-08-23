@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.OriginRemote;
 import com.github.oinsio.gnomish.app.git.ProjectIdentity;
+import com.github.oinsio.gnomish.app.git.ProjectScope;
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.Slf4jSweepVerdictListener;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepSummaryListener;
@@ -75,7 +76,9 @@ final class SandboxLifecyclePassFactory {
         }
 
         /**
-         * Resolves this project's identity, fans the verdicts out to the SLF4J sink and the
+         * Resolves this project's identity scope — the stamped identity plus, during the
+         * transition, the legacy alias objects created before URL normalization still carry (FR3
+         * of normalize-project-identity-url) — fans the verdicts out to the SLF4J sink and the
          * caller's extra sink (the daemon's vitals + ledger writers, tasks 6.1/6.2), and returns
          * the tallied summary line. Only the sweep hand-off itself is exempt from mutation (see
          * {@link #sweepAndSummarize}); everything around it, this method's own return value
@@ -84,11 +87,11 @@ final class SandboxLifecyclePassFactory {
          */
         @Override
         public String run(Path cloneDir, LivenessVerdict liveness, SweepVerdictListener extraSink) {
-            String projectId = ProjectIdentity.resolve(
+            ProjectScope scope = ProjectIdentity.resolveScope(
                     sandboxProperties.projectId(), new OriginRemote(runner).url(cloneDir), cloneDir);
             var summary = new SweepSummaryListener(
                     new SweepVerdictFanout(List.of(new Slf4jSweepVerdictListener(), extraSink)));
-            return sweepAndSummarize(projectId, liveness, clock.instant(), summary);
+            return sweepAndSummarize(scope, liveness, clock.instant(), summary);
         }
 
         /**
@@ -116,8 +119,8 @@ final class SandboxLifecyclePassFactory {
          */
         @DoNotMutate
         private String sweepAndSummarize(
-                String projectId, LivenessVerdict liveness, Instant now, SweepSummaryListener summary) {
-            SandboxLifecycleSweep.create(summary).evaluate(projectId, liveness, now, thresholds);
+                ProjectScope scope, LivenessVerdict liveness, Instant now, SweepSummaryListener summary) {
+            SandboxLifecycleSweep.create(summary).evaluate(scope, liveness, now, thresholds);
             return summary.summaryLine();
         }
     }

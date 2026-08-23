@@ -4,11 +4,10 @@ import com.github.oinsio.gnomish.adapter.check.CheckClientDiscovery
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterDiscovery
 import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
-import java.nio.file.Files
-import java.nio.file.Path
 import java.util.regex.Pattern
 import spock.lang.Shared
 import spock.lang.Specification
@@ -41,9 +40,6 @@ class DiscoveredRegistryOnlySpec extends Specification {
     /** The declaration shape of a hardwired registry: a map from discriminator to an SPI type. */
     private static final Pattern HARDWIRED_REGISTRY = ~/(?s)Map\s*<\s*String\s*,\s*(?:TrackerAdapterFactory|CheckClientFactory|TrackerSubsectionValidator|CheckSubsectionValidator|CheckParamsValidator)\s*>[^;]{0,300}?=\s*Map\s*\.\s*(?:of|ofEntries)\s*\(/
 
-    /** A mis-resolved repoRoot would make the source gate pass over an empty file set. */
-    private static final int KNOWN_PRODUCTION_SOURCES = 100
-
     @Shared
     JavaClasses productionClasses = new ClassFileImporter()
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
@@ -68,7 +64,7 @@ class DiscoveredRegistryOnlySpec extends Specification {
         offenders.isEmpty()
 
         and: 'the scan really imported production bytecode'
-        productionClasses.size() >= KNOWN_PRODUCTION_SOURCES
+        productionClasses.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
 
         where:
         spi << [
@@ -101,50 +97,16 @@ class DiscoveredRegistryOnlySpec extends Specification {
     //     no longer does, and prose is not a registry.
     def "no production source declares a Map.of provider registry"() {
         given:
-        def sources = productionSources()
+        def sources = RepoSourceTree.productionSources()
 
         expect: 'the scan really reached the source tree'
-        sources.size() >= KNOWN_PRODUCTION_SOURCES
+        sources.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
 
         and:
         def offenders = sources.findAll { file ->
-            HARDWIRED_REGISTRY.matcher(code(file)).find()
+            HARDWIRED_REGISTRY.matcher(RepoSourceTree.code(file)).find()
         }
-        .collect { relative(it) }
+        .collect { RepoSourceTree.relative(it) }
         offenders.isEmpty()
-    }
-
-    /** A file's source with every comment removed: what the compiler actually sees. */
-    private static String code(File file) {
-        file.readLines()
-                .collect { line ->
-                    def trimmed = line.trim()
-                    trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')
-                            ? ''
-                            : line.replaceFirst('//.*', '')
-                }
-                .join('\n')
-    }
-
-    /** Every production source of the build. */
-    private static List<File> productionSources() {
-        Files.walk(repoRoot()).withCloseable { paths ->
-            paths.filter { Files.isRegularFile(it) }
-            .map { repoRoot().relativize(it).toString() }
-            .filter { it.contains('/src/main/') }
-            .filter { it.endsWith('.java') || it.endsWith('.groovy') }
-            .map { repoRoot().resolve(it).toFile() }
-            .toList()
-        }
-    }
-
-    private static Path repoRoot() {
-        def root = Path.of(System.getProperty('repoRoot'))
-        assert Files.isDirectory(root): 'repoRoot system property is not set (see bootstrap/verification.gradle)'
-        root
-    }
-
-    private static String relative(File file) {
-        repoRoot().relativize(file.toPath()).toString()
     }
 }

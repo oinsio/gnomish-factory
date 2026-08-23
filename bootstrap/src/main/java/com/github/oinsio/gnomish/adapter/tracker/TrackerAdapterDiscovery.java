@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker;
 
+import com.github.oinsio.gnomish.adapter.plugin.ProviderIndex;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
 
@@ -20,7 +20,7 @@ import java.util.ServiceLoader;
  *
  * <p>Implements FR1, FR2 of add-plugin-architecture; NFR-R1 of add-plugin-architecture.
  */
-final class TrackerAdapterDiscovery {
+public final class TrackerAdapterDiscovery {
 
     /** The port name used in the fail-fast messages, so an operator sees which registry broke. */
     private static final String PORT = "tracker";
@@ -45,7 +45,7 @@ final class TrackerAdapterDiscovery {
      * @param loader the loader whose service entries are scanned; never null
      * @return the discovered providers keyed by discriminator; never null
      */
-    static Map<String, TrackerAdapterFactory> discover(ClassLoader loader) {
+    public static Map<String, TrackerAdapterFactory> discover(ClassLoader loader) {
         return index(ServiceLoader.load(TrackerAdapterFactory.class, loader));
     }
 
@@ -59,20 +59,6 @@ final class TrackerAdapterDiscovery {
      *     claim the same one
      */
     static Map<String, TrackerAdapterFactory> index(Iterable<TrackerAdapterFactory> discovered) {
-        Map<String, TrackerAdapterFactory> registry = new LinkedHashMap<>();
-        for (TrackerAdapterFactory factory : discovered) {
-            String type = factory.type();
-            if (type == null || type.isBlank()) {
-                throw new IllegalStateException("discovered " + PORT + " provider "
-                        + factory.getClass().getName() + " declares no type() discriminator");
-            }
-            TrackerAdapterFactory previous = registry.put(type, factory);
-            if (previous != null) {
-                throw new IllegalStateException("duplicate " + PORT + " provider '" + type + "' declared by "
-                        + previous.getClass().getName() + " and "
-                        + factory.getClass().getName());
-            }
-        }
-        return Map.copyOf(registry);
+        return ProviderIndex.index(PORT, "type", discovered, TrackerAdapterFactory::type);
     }
 }

@@ -1,13 +1,8 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.app.git.ProjectScope
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
-import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
-import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
-import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
-import java.time.Duration
-import java.time.Instant
-import spock.lang.Specification
 
 /**
  * `sandbox-lifecycle` end to end through {@link SandboxLifecycleSweep}: project-scoped listing,
@@ -16,31 +11,10 @@ import spock.lang.Specification
  *
  * FR4, FR8, NFR-R3 of add-serve-sandbox-lifecycle.
  */
-class SandboxLifecycleSweepSpec extends Specification {
+class SandboxLifecycleSweepSpec extends SandboxLifecycleSweepSpecBase {
 
-    static final Instant NOW = Instant.parse('2026-08-07T12:00:00Z')
-    static final def OLD = NOW - Duration.ofDays(30)
-    static final def THRESHOLDS = new SandboxLifecycleThresholds(Duration.ofMinutes(5), Duration.ofDays(7), Duration.ofHours(24))
     static final String PROJECT = 'proj-1'
-
-    def docker = new RecordingDockerCli()
-    def disposal = Mock(TaskEnvironmentDisposal)
-    def verdicts = []
-    SweepVerdictListener listener = { SweepVerdict v -> verdicts << v }
-    def sweep = new SandboxLifecycleSweep(docker, disposal, listener)
-
-    private static DockerResult ok(String stdout) {
-        new DockerResult(0, stdout, '')
-    }
-
-    /** The key-triple dispose reads its outcome back with an existence probe: non-zero means gone. */
-    private static boolean existenceProbe(List<String> args) {
-        args.any { it == '{{.Id}}' || it == '{{.Name}}' }
-    }
-
-    private static DockerResult gone() {
-        new DockerResult(1, '', 'Error: No such object')
-    }
+    static final def SCOPE = new ProjectScope(PROJECT, Optional.empty())
 
     def "create builds a real, usable sweep over the real docker binary"() {
         expect:
@@ -52,7 +26,7 @@ class SandboxLifecycleSweepSpec extends Specification {
         docker.onRun = { List<String> args -> ok('') }
 
         when:
-        sweep.evaluate(PROJECT, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
+        sweep.evaluate(SCOPE, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
 
         then:
         docker.runs.contains(DockerLifecycleCommands.listFactoryContainersWithLabels(PROJECT))
@@ -82,7 +56,7 @@ class SandboxLifecycleSweepSpec extends Specification {
         }
 
         when:
-        sweep.evaluate(PROJECT, new LivenessVerdict.Live(['alive'] as Set), NOW, THRESHOLDS)
+        sweep.evaluate(SCOPE, new LivenessVerdict.Live(['alive'] as Set), NOW, THRESHOLDS)
 
         then: 'only the container is evaluated — its volume is never independently inspected or touched'
         verdicts.size() == 1
@@ -112,7 +86,7 @@ class SandboxLifecycleSweepSpec extends Specification {
         }
 
         when:
-        sweep.evaluate(PROJECT, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
+        sweep.evaluate(SCOPE, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
 
         then:
         verdicts.size() == 1
@@ -142,7 +116,7 @@ class SandboxLifecycleSweepSpec extends Specification {
         }
 
         when:
-        sweep.evaluate(PROJECT, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
+        sweep.evaluate(SCOPE, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
 
         then:
         verdicts.size() == 1
@@ -175,7 +149,7 @@ class SandboxLifecycleSweepSpec extends Specification {
         }
 
         when:
-        sweep.evaluate(PROJECT, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
+        sweep.evaluate(SCOPE, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
 
         then: 'both the guard and the main-box volume are independently evaluated and emit a verdict'
         verdicts.size() == 2
@@ -207,7 +181,7 @@ class SandboxLifecycleSweepSpec extends Specification {
         }
 
         when:
-        sweep.evaluate(PROJECT, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
+        sweep.evaluate(SCOPE, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
 
         then: 'nothing is judged and nothing is removed; the pass is retried on the next tick'
         thrown(DockerUnavailableException)
@@ -223,10 +197,10 @@ class SandboxLifecycleSweepSpec extends Specification {
         given:
         docker.onRun = { List<String> args ->
             throw new DockerUnavailableException('down', null)
-        }
+        } as Closure<DockerResult>
 
         when:
-        sweep.evaluate(PROJECT, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
+        sweep.evaluate(SCOPE, new LivenessVerdict.Live([] as Set), NOW, THRESHOLDS)
 
         then:
         thrown(DockerUnavailableException)

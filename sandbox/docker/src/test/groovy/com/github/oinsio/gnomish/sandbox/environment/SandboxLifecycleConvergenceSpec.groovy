@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.app.git.ProjectScope
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
@@ -45,7 +46,7 @@ class SandboxLifecycleConvergenceSpec extends Specification {
     }
 
     private void evaluate() {
-        sweep.evaluate(FakeDockerHost.PROJECT, UNOWNED, NOW, THRESHOLDS)
+        sweep.evaluate(new ProjectScope(FakeDockerHost.PROJECT, Optional.empty()), UNOWNED, NOW, THRESHOLDS)
     }
 
     // NFR-R2: the first pass stops the unowned running box; the second pass sees a stopped box

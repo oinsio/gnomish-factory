@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check;
 
+import com.github.oinsio.gnomish.adapter.plugin.ProviderIndex;
 import com.github.oinsio.gnomish.app.CheckClientFactory;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
 
@@ -20,7 +20,7 @@ import java.util.ServiceLoader;
  *
  * <p>Implements FR2, FR5, NFR-R1 of add-plugin-architecture.
  */
-final class CheckClientDiscovery {
+public final class CheckClientDiscovery {
 
     /** The port name used in the fail-fast messages, so an operator sees which registry broke. */
     private static final String PORT = "check";
@@ -45,7 +45,7 @@ final class CheckClientDiscovery {
      * @param loader the loader whose service entries are scanned; never null
      * @return the discovered providers keyed by discriminator; never null
      */
-    static Map<String, CheckClientFactory> discover(ClassLoader loader) {
+    public static Map<String, CheckClientFactory> discover(ClassLoader loader) {
         return index(ServiceLoader.load(CheckClientFactory.class, loader));
     }
 
@@ -59,20 +59,6 @@ final class CheckClientDiscovery {
      *     claim the same one
      */
     static Map<String, CheckClientFactory> index(Iterable<CheckClientFactory> discovered) {
-        Map<String, CheckClientFactory> registry = new LinkedHashMap<>();
-        for (CheckClientFactory factory : discovered) {
-            String provider = factory.provider();
-            if (provider == null || provider.isBlank()) {
-                throw new IllegalStateException("discovered " + PORT + " provider "
-                        + factory.getClass().getName() + " declares no provider() discriminator");
-            }
-            CheckClientFactory previous = registry.put(provider, factory);
-            if (previous != null) {
-                throw new IllegalStateException("duplicate " + PORT + " provider '" + provider + "' declared by "
-                        + previous.getClass().getName() + " and "
-                        + factory.getClass().getName());
-            }
-        }
-        return Map.copyOf(registry);
+        return ProviderIndex.index(PORT, "provider", discovered, CheckClientFactory::provider);
     }
 }
