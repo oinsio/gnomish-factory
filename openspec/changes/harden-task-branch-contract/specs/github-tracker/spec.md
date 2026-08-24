@@ -34,6 +34,52 @@ authoritative in the race: the race-winning comment is the last claim write.
 - **THEN** the frozen state — working label, no claim footprint — is swept as
   `ClaimPending`, returns to `Ready` after grace, and wins no race meanwhile
 
+### Requirement: Stale-claim removal physics
+`removeStaleClaim` SHALL: post the structural "stale claim removed" boundary
+marker naming the dead (or last-known) holder and the removed claim's
+identity (the marker is a claim boundary — it anchors subsequent claim
+verify-reads exactly like release/park/abort/finish markers); delete the dead
+claim comment (all instances operate under one token, so deletion is
+physically possible); and flip the working label back to ready with point
+calls. Before acting it SHALL re-read the claim facts and compare them
+against the caller's observation: a live observed version compares as the
+(id, `updated_at`) pair today; an observed dead footprint (no live version —
+the `ClaimAbandoned` repair) compares by the footprint comment's identity and
+no-ops when a live claim comment has appeared since; when the footprint
+comment is already gone there is nothing to delete and the marker and label
+flip still proceed. Racing removals converge: a second remover finds the
+comment already gone and the label already flipped, both harmless. A 404 on
+the pre-action re-read (the issue itself is gone) SHALL be the same safe
+no-op reporting an absent version, never an infrastructure failure.
+<!-- implements FR4, FR5 of add-claim-heartbeat -->
+<!-- implements NFR-R2, NFR-O1 of add-claim-heartbeat -->
+<!-- implements FR19, FR12 of harden-task-branch-contract -->
+
+#### Scenario: Removal leaves an audit trail
+- **WHEN** a reaper removes a stale claim
+- **THEN** the thread shows the boundary marker naming the dead holder, the
+  claim comment is deleted, and the issue wears the ready label
+
+#### Scenario: Marker anchors the next lease round
+- **WHEN** two instances race to claim the task after a removal
+- **THEN** the claim verify-read considers only claim comments posted after
+  the removal marker, and earliest comment id wins as usual
+
+#### Scenario: Beaten claim is not removed
+- **WHEN** the holder's beat lands between observation and removal
+- **THEN** the version re-check fails and the adapter changes nothing
+
+#### Scenario: Gone issue is a converging no-op
+- **WHEN** the pre-action re-read returns 404 because the issue itself is gone
+- **THEN** the adapter changes nothing and reports an absent version, never an
+  infrastructure failure
+
+#### Scenario: Dead footprint removal guards on footprint identity
+- **WHEN** `removeStaleClaim` runs for an observed dead footprint while a new
+  live claim comment landed meanwhile
+- **THEN** the re-read finds the live claim, the adapter changes nothing, and
+  the result reports the live claim facts
+
 ### Requirement: Structural comments carry coordination facts
 Claim, abort, ack, note, park, finish, progress, and stale-claim-removal
 comments SHALL carry a machine-recognizable structural marker plus
@@ -92,6 +138,38 @@ below: same query and rate-limit economy, facts only; judgment moves to core.
 
 ## ADDED Requirements
 
+### Requirement: Index-repair physics
+`repairIndex` SHALL bring the issue's labels to the state its recorded truth
+implies with point calls: for an observed working label with no claim
+footprint (`ClaimPending`) it flips the working label back to ready; for an
+observed boundary marker newer than the labels it implies (`IndexLagging`) it
+flips the labels to the marker's implied pair — delivered for a finish
+marker, needs-human for a park marker, ready for an abort or stale-claim
+removal marker. It SHALL post the structural repair marker before the label
+flips, following the kill-safe ordering, so its own kill window freezes
+`IndexLagging` and stays swept. Before acting it SHALL re-read labels and
+comments and no-op, reporting the current facts, when they no longer match
+the caller's observation; racing repairs converge on the flipped labels.
+<!-- implements FR19, FR12 of harden-task-branch-contract -->
+
+#### Scenario: ClaimPending rolls back to ready
+- **WHEN** `repairIndex` runs for a working-labeled issue whose thread carries
+  no claim comment
+- **THEN** the issue ends with the ready label and a repair marker in the
+  thread, and a re-read finding a fresh claim comment instead changes nothing
+
+#### Scenario: Finish marker's flip is completed
+- **WHEN** `repairIndex` runs for an issue whose newest boundary marker is a
+  finish marker while the issue still wears the working label
+- **THEN** the issue ends with the delivered label, the finish marker and
+  report untouched — no work re-executes
+
+#### Scenario: Killed repair stays inside the sweep universe
+- **WHEN** the repairing instance dies after posting the repair marker but
+  before the label flips
+- **THEN** the frozen state classifies `IndexLagging` and a later tick
+  completes the same flip
+
 ### Requirement: Open-task listing reports facts via state labels
 `listOpen` SHALL query open issues carrying the working or needs-human labels
 (List Issues API, PR entries excluded), using conditional requests
@@ -136,8 +214,8 @@ issue still carrying a claim footprint instead of losing races to a ghost.
 Every factory-authored comment SHALL be written through one shared
 find-then-upsert behavior: locate an existing comment by its hidden
 content-identity marker and update it in place; post a new comment only when no
-match exists. The five existing marker kinds — claim, boundary
-(stale-claim removal), park report, decision acknowledge, and abort — SHALL be
+match exists. All eight existing marker kinds — claim, abort, decision acknowledge, note,
+park report, finish report, progress, and stale-claim removal — SHALL be
 written through this behavior; no factory write path posts blind.
 <!-- implements FR11, UX3 of harden-task-branch-contract -->
 

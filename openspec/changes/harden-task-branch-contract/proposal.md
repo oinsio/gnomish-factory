@@ -22,7 +22,8 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   yields a named shape, `Unknown` included), exactly one recovery owner per shape, a claim
   epoch stamped into every commit and tracker write, replica-pair reconciliation rules
   (origin wins on divergence, under the lease), and a recovery attempt budget with quarantine.
-- **MODIFIED** `git-task-persistence` — the STARTED commit carries an initial `state.json`;
+- **MODIFIED** `git-task-persistence` — the STARTED commit carries an initial `state.json`
+  (written once by `TaskRepository`, the one exception to `AttemptPersistence` ownership);
   every logical transition lands as one commit (decision + attempt-counter reset together;
   stage advancement persisted with the passing round); state files are written atomically;
   the first push of a new branch is load-bearing; cleanup follows a pending-cleanup marker
@@ -90,9 +91,10 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
 
 - `:domain` — branch-shape and tracker-shape value types, epoch types; engine resume fast-forward; recovery budget model.
 - `:adapters:git` — classifier tip-reading adapters (worktree, `git show`, bare objects);
-  atomic writes; initial-state commit; pending-cleanup marker; CAS push for discard; the
-  divergence reconciler consolidating the host and container twins.
-- `:adapters:github` — marked-comment upsert primitive and migration of the five existing
+  atomic writes; initial-state commit; pending-cleanup marker; CAS local-ref reset for discard; the
+  divergence reconciler consolidating the host and container twins and
+  `OriginReconciliation`'s touchpoint ancestry check.
+- `:adapters:github` — marked-comment upsert primitive and migration of the eight existing
   marker kinds onto it; sweep-universe write ordering for claim/reap/finish/park/ack/abort;
   facts-only listing surfaces; exception hierarchy.
 - `:application` — take routing through the classifier; recovery budget unified with the
@@ -100,11 +102,13 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   repair duty (claim guard and take consume shapes instead of throwing); shared salvage
   policy.
 - `:sandbox:docker` — container salvage policy consumption; kept-box disposal on decision.
-- `bootstrap` — wiring; kill-point test harness over the Gitea E2E layer.
+- `bootstrap` — wiring; the container-mode terminal paths (`ContainerRunSupport`,
+  `ContainerRunTermination`) the container park and kept-box disposal changes land in;
+  kill-point test harness over the Gitea E2E layer.
 - New durable docs in this change: `docs/adr/` crash-consistency ADR (reconciliation over a
   saga journal; media are the journal), a `.claude/rules/` crash-consistency checklist for
-  future multi-step transitions, and `docs/glossary.md` entries (branch shape, recovery
-  owner, claim epoch, intent/receipt).
+  future multi-step transitions, and `docs/glossary.md` entries (branch shape, tracker shape,
+  sweep universe, recovery owner, claim epoch, intent/receipt, quarantine, fence).
 - Sequencing: implementation starts after `bound-subprocess-commands` lands (its named
   command outcomes — exited / timed-out / interrupted — are inputs to fetch-failure
   classification and load-bearing push retries). `fix-denial-attribution-durability`
@@ -174,26 +178,34 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   branch: a human decision lands with the attempt-counter reset; a passing round lands with
   the advanced pipeline position; a container park lands as the outcome commit with the
   pending marker. No mutually-implied fields may split across commits.
-- FR5: state files SHALL be written atomically (temp file + atomic rename) by both the host
-  and container persisters; recovery SHALL restore factory-owned files under
+- FR5: state files SHALL be written atomically (temp file + atomic rename) by every
+  filesystem writer of `.gnomish-task/` files (the container persister writes blobs through
+  the bare-objects repository and is atomic at commit granularity by construction); recovery SHALL restore factory-owned files under
   `.gnomish-task/` from the branch tip and never salvage them from a dirty worktree, while
   gnome-owned work files remain salvageable; both salvage paths SHALL consume one shared
   factory-owned-paths policy.
 - FR6: fresh-vs-resume routing SHALL rely only on origin-confirmed state: a locate fetch that
   fails for any reason other than a confirmed missing remote ref SHALL classify as an
-  infrastructure failure (retry, then abort the take) and SHALL NOT route to a fresh claim.
+  infrastructure failure (retried under the infrastructure-retry policy — a budget separate
+  from the bounded re-attempts of bound-subprocess-commands — then abort the take) and
+  SHALL NOT route to a fresh claim.
 - FR7: the first push of a newly created task branch SHALL be load-bearing: bounded retries,
   and on exhaustion the take aborts without starting a round; all subsequent pushes stay
-  best-effort.
+  best-effort. A timed-out first push is an unknown remote outcome: before any re-push the
+  retry loop SHALL re-check the remote tip within its own bound and SHALL treat a confirmed
+  landed ref as success (per bound-subprocess-commands, a timed-out invocation never spends
+  a bounded re-attempt).
 - FR8: when the local branch and origin have diverged and the instance holds a live claim,
   recovery SHALL discard the local branch (reset to the origin tip, drop drafts) and
-  continue — automatically, without an operator flag; the reset push SHALL be an explicit
-  compare-and-swap against the tip the decision was made on. Local-ahead keeps local;
+  continue — automatically, without an operator flag; the reset SHALL be an explicit
+  local-ref compare-and-swap against the tip the decision was made on — no push is involved. Local-ahead keeps local;
   local-behind fast-forwards; only true divergence discards.
 - FR9: a tip whose recorded outcome is `Completed` but whose cleanup has not happened SHALL
   be finished — cleanup committed, pushed, tracker finish delivered — and SHALL NOT re-enter
   the engine; a resume at a recorded position whose last recorded round carries a passing
-  verdict SHALL fast-forward past that stage instead of re-executing it.
+  verdict SHALL fast-forward past that stage instead of re-executing it. FR9 is the
+  compatibility and recovery path of FR4: once FR4's single-commit transitions land, these
+  split states arise only from pre-contract history and kill windows.
 - FR10: every terminal transition with an external effect (host park, container park,
   completion finish, decision acknowledge, abort mark) SHALL follow one shared
   intent→effect→receipt protocol: durable intent before the effect, receipt after it, and
@@ -202,7 +214,7 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   SHALL come after all constructive receipts.
 - FR11: every factory-authored tracker comment SHALL carry a hidden content-identity marker
   (task and intent, never the bot account) and SHALL be written as find-then-upsert through
-  one shared primitive; the five existing marker kinds migrate onto it.
+  one shared primitive; the eight existing marker kinds migrate onto it.
 - FR12: tracker write sequences SHALL obey the sweep-universe rule: the label write that
   admits a task into the sweep universe comes first in its sequence, the label write that
   removes it from the universe comes last, and truth markers land in between — so every kill
@@ -240,6 +252,14 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   every non-steady shape — after a grace period rolling an incomplete claim back to ready,
   and completing the label flip a newer boundary marker implies.
 
+### Non-Functional — Performance
+
+- NFR-P1: the kill-point harness (M1) SHALL fit a measured runtime budget compatible with
+  the default `check` lane — target: no more than ~5 minutes added to `check`; exceeding
+  the budget routes the harness to a dedicated CI lane per Q4. No other
+  performance-sensitive path is introduced: the classifier adds one read of a tip already
+  being read and no extra subprocess calls.
+
 ### Non-Functional — Reliability
 
 - NFR-R1: recovery of every shape is idempotent: running it on an already-recovered state
@@ -255,7 +275,9 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
 
 - NFR-O1: every non-trivial repair (any classified shape other than the clean expected one)
   emits one structured log line naming the shape, task, epoch, and action taken; repeated
-  repair of the same task within a window is itself surfaced as a warning.
+  repair of the same task is itself surfaced as a warning — "repeated" is judged against
+  the task's persisted recovery-attempt accounting (FR14), not a separate clock: a repair
+  arriving while the counter already records a prior one raises the warning.
 - NFR-O2: a quarantine report names the shape, the diagnosis, and the recovery attempts
   consumed — readable without factory logs.
 
@@ -306,4 +328,4 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
 - Q3: recovery-budget threshold and backoff defaults — start with the existing crash-fuse K
   and tune from operator experience.
 - Q4: does the kill-point harness run in the default `check` or a nightly lane if wall-clock
-  cost proves high? Decide from measured runtime during implementation.
+  cost proves high? Decide from runtime measured against the NFR-P1 budget during implementation.
