@@ -33,7 +33,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
     // NFR-O3: the sweep's own cadence travels in the snapshot, so overdue is k=3 x that cadence.
     def "the tick-overdue condition fires strictly past three times the sweep cadence"() {
         given:
-        def view = new SandboxHygieneView(vital(), [], 0)
+        def view = new SandboxHygieneView(vital(), [])
 
         expect:
         SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT.plusSeconds(elapsed))
@@ -51,7 +51,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
     // NFR-O3: "three consecutive ticks report skipped-no-verdict" is the stall signal.
     def "the consecutive-skip condition fires at three ticks and names the run length"() {
         given:
-        def view = new SandboxHygieneView(vital(TICK_AT, consecutive), [], 0)
+        def view = new SandboxHygieneView(vital(TICK_AT, consecutive), [])
 
         when:
         def flagged = SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT)
@@ -79,7 +79,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
         given:
         def view = new SandboxHygieneView(vital(), [
             row(SweepVerdictCategory.STOPPED_ORPHAN, 'tracked', 'zombie-box')
-        ], 1)
+        ])
 
         expect:
         SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT) ==
@@ -92,7 +92,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
     //      it is a routine age-policy stop and stays in the breakdown and the actions table only.
     def "a manual age-stop and a disposal raise no incident"() {
         given:
-        def view = new SandboxHygieneView(vital(), [action], 1)
+        def view = new SandboxHygieneView(vital(), [action])
 
         expect:
         SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT).isEmpty()
@@ -114,8 +114,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
                     row(SweepVerdictCategory.STOPPED_ORPHAN, 'tracked', 'box-a'),
                     row(SweepVerdictCategory.STOPPED_ORPHAN, 'manual', 'box-b'),
                     row(SweepVerdictCategory.STOPPED_ORPHAN, 'tracked', 'box-c')
-                ],
-                3)
+                ])
 
         expect:
         SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT)*.objectName() == ['box-a', 'box-c']
@@ -127,7 +126,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
         given:
         def view = new SandboxHygieneView(null, [
             row(SweepVerdictCategory.STOPPED_ORPHAN, 'tracked')
-        ], 1)
+        ])
 
         expect:
         SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT).size() == 1
@@ -139,7 +138,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
         def view = new SandboxHygieneView(
                 vital(TICK_AT, 3), [
                     row(SweepVerdictCategory.STOPPED_ORPHAN, 'tracked')
-                ], 1)
+                ])
 
         when:
         def flagged = SandboxHygieneAlertEvaluator.evaluate(view, TICK_AT.plusSeconds(7200))

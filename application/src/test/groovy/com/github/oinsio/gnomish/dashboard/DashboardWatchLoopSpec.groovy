@@ -24,6 +24,11 @@ import spock.util.concurrent.PollingConditions
  * DashboardWatchLoop#renderOnce} directly — one cycle at a time, mirroring how {@code
  * FeedAutomatonSpec} drives {@code step()} — over a {@link StepClock} so cycle timing is
  * deterministic without a real sleep.
+ *
+ * <p>NFR-P1, M1 of redesign-dashboard: the redesign is presentation-only, so these cadence and
+ * board-fetch-budget assertions must hold unchanged across it — the same render cadence, the same
+ * board interval, no new data source — and the {@code #staleness-banner} element is gone from the
+ * page the loop writes.
  */
 class DashboardWatchLoopSpec extends Specification {
 
@@ -164,15 +169,21 @@ class DashboardWatchLoopSpec extends Specification {
         html.contains('</html>')
     }
 
-    def "a watch-mode cycle bakes the staleness-banner script since it always carries a render cadence"() {
+    def "a watch-mode cycle marks the page as watch mode and bakes its meta-refresh"() {
         given:
         def loop = newLoop([T0])
 
         when:
         loop.renderOnce(homeDir, INSTANCE_NAME, outputFile, { -> model })
 
-        then:
-        Files.readString(outputFile).contains('id="staleness-banner"')
+        then: 'the mode the static script reads to arm its stale degradation (FR3, FR10 of redesign-dashboard)'
+        def html = Files.readString(outputFile)
+        html.contains('data-mode="watch"')
+        html.contains('<meta http-equiv="refresh" content="10">')
+
+        and: 'the freshness strip replaced the full-viewport banner entirely'
+        !html.contains('staleness-banner')
+        html.contains('id="freshness"')
     }
 
     def "a board fetch failure degrades the board section but the cycle still writes a complete page"() {

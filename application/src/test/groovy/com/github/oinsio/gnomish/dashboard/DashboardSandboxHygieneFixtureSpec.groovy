@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
+import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -13,8 +14,12 @@ import spock.lang.TempDir
  * breakdown groups from a REAL snapshot file (the {@code snapshot-v1.reference.json} fixture,
  * whose {@code vitals.sweep.counts} already exercises every one of the six verdict categories)
  * plus a real ledger fixture — driven through the full {@link DashboardRenderCycle}, disk to
- * HTML, not through hand-built view objects the way {@code DashboardSandboxHygieneSectionRendererSpec}
- * unit-tests the renderer itself.
+ * HTML, not through hand-built view objects.
+ *
+ * <p>redesign-dashboard re-homed what this spec checks without changing what the data means: the
+ * four groups render as the hygiene block's quiet rows, the per-object depth (kept inventory,
+ * actions table) is gone from the page, and the ledger-derived dead-instance incident surfaces as
+ * an alarm line in the status card.
  *
  * <p>Implements M5 of add-serve-sandbox-lifecycle.
  */
@@ -44,7 +49,7 @@ class DashboardSandboxHygieneFixtureSpec extends Specification {
         Files.writeString(snapshotFile, readClasspathResource('snapshot-v1.reference.json'), StandardCharsets.UTF_8)
 
         and: 'a real ledger fixture carrying stop and dispose sweep-action lines plus the tick summary'
-        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, NOW.atZone(java.time.ZoneOffset.UTC).toLocalDate())
+        def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, NOW.atZone(ZoneOffset.UTC).toLocalDate())
         Files.createDirectories(ledgerFile.parent)
         Files.writeString(
                 ledgerFile,
@@ -64,18 +69,23 @@ class DashboardSandboxHygieneFixtureSpec extends Specification {
 
         then: 'cleaned = disposedAged(1) + disposedReconstructible(3) = 4, stopped = 1,'
         // 'checked and untouched = checkedAlive(4) + keptUnderThreshold(2) = 6, skipped = 0'
-        html.contains('<td>4</td><td>1</td><td>6</td><td>0</td>')
+        html.contains('<span class="row__label">cleaned</span><span class="row__count num" title="4">4</span>')
+        html.contains('<span class="row__label">stopped</span><span class="row__count num" title="1">1</span>')
+        html.contains(
+                '<span class="row__label">checked and untouched</span><span class="row__count num" title="6">6</span>')
+        html.contains(
+                '<span class="row__label">skipped without verdict</span><span class="row__count num" title="0">0</span>')
 
-        and: 'the kept inventory from the snapshot is present'
+        and: 'the per-object depth the redesign dropped is absent: no kept inventory, no actions table'
+        !html.contains('time to reap')
+        !html.contains('<table')
+        !html.contains('<td>')
+
+        and: 'a tracked stopped-orphan action still raises the dead-instance incident, now in the status card (UX2)'
+        html.contains('<div class="status__alert">an instance died or hung')
         html.contains('task-40')
-        html.contains('task-41')
 
-        and: 'the recent sweep actions from the ledger are present, most recent first'
-        html.contains('gnomish-task-40-box')
-        html.contains('gnomish-task-41-vol')
-
-        and: 'a tracked stopped-orphan action still raises the dead-instance incident (UX2)'
-        html.contains('an instance died or hung')
-        html.contains('task-40')
+        and: 'the hygiene block itself carries no alert styling at all'
+        !html.contains('sandbox-alert')
     }
 }

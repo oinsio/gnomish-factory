@@ -101,8 +101,9 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         html.startsWith('<!doctype html>')
         html.contains('</html>')
 
-        and: 'a one-shot page never bakes the watch-mode staleness banner'
-        !html.contains('id="staleness-banner"')
+        and: 'a one-shot page carries no meta-refresh and never arms the stale degradation'
+        html.contains('data-mode="oneshot"')
+        !html.contains('http-equiv="refresh"')
     }
 
     def "a fresh install with no snapshot and an empty tracker still renders the page normally"() {
@@ -115,7 +116,7 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
 
         then:
         noExceptionThrown()
-        Files.readString(out).contains('daemon has not run here')
+        Files.readString(out).contains('Daemon has not run here')
     }
 
     @Timeout(5)
@@ -138,8 +139,9 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
             DashboardWatchLoop.RENDER_CADENCE
         ]
 
-        and: 'a watch-mode page bakes the staleness banner that a one-shot page never does'
-        Files.readString(out).contains('id="staleness-banner"')
+        and: 'a watch-mode page carries the meta-refresh and the watch mode a one-shot page never does'
+        Files.readString(out).contains('data-mode="watch"')
+        Files.readString(out).contains('<meta http-equiv="refresh" content="10">')
     }
 
     def "a tracker outage degrades only the board section, exits zero, and never retries"() {

@@ -1,0 +1,283 @@
+# Harden task branch contract
+
+## Why
+
+A field trial of autonomous `serve` surfaced a class of defects with one shape: the factory
+performs a multi-step transition (git commit → tracker write → confirmation), a crash between
+steps freezes an intermediate state, and the next pickup misreads it. A systematic audit found
+seventeen instances. The worst are permanent: a task whose first round died infrastructurally
+crash-loops on every resume until it parks unreturnable (`state.json` is written only with the
+first completed round, yet resume demands it); a container-mode park records nothing on the
+branch, so the human's escalation answer is never read and every return re-parks; a claim whose
+label moved before its comment posted is a task no reaper will ever reclaim. Others burn money
+silently: a kill between "stage passed" and the next round's snapshot re-runs the whole green
+stage, judge votes included; a kill between the `Completed` commit and the cleanup commit
+re-runs the final stage. Each defect was found by the same question — "what does the next
+pickup see?" — which no invariant in the codebase forces anyone to ask.
+
+## What Changes
+
+- **ADDED** `task-branch-contract` — the branch-shape contract as a capability: a total
+  classifier over the task branch tip (every combination of files, versions, and claim epochs
+  yields a named shape, `Unknown` included), exactly one recovery owner per shape, a claim
+  epoch stamped into every commit and tracker write, replica-pair reconciliation rules
+  (origin wins on divergence, under the lease), and a recovery attempt budget with quarantine.
+- **MODIFIED** `git-task-persistence` — the STARTED commit carries an initial `state.json`;
+  every logical transition lands as one commit (decision + attempt-counter reset together;
+  stage advancement persisted with the passing round); state files are written atomically;
+  the first push of a new branch is load-bearing; cleanup follows a pending-cleanup marker
+  (destructive step last); durability point is the successful push, never the local commit.
+- **MODIFIED** `tracker-take` — fresh-vs-resume routing goes through the classifier against
+  origin-confirmed state: a fetch failure is an infrastructure error, never "branch absent";
+  divergence resolves automatically (origin wins) instead of a terminal exit; a
+  `Completed`-without-cleanup tip is finished, not re-executed; corrupt and unknown shapes
+  park with a diagnosis on first classification instead of burning the crash fuse.
+- **MODIFIED** `stage-engine` — a resume never re-executes a stage whose recorded last round
+  at the recorded position carries a passing verdict.
+- **MODIFIED** `github-tracker` — every factory comment is an upsert keyed by a hidden
+  content-identity marker (never a blind post); claim, reap, decision-acknowledge, and abort
+  sequences are reordered so every kill window lands in a reapable or idempotent state; label
+  transition failures and HTTP failures join the retryable tracker-unavailable hierarchy.
+- **MODIFIED** `claim-heartbeat` — the reaper owns the orphan shape "working label without a
+  live claim" (grace, then return to ready); a holder that cannot confirm its own heartbeat
+  freezes at the next boundary before the reaper can act; every (re)claim issues a
+  monotonically increasing epoch.
+- **MODIFIED** `execution-environment` — a container-mode park records its outcome on the
+  branch through the same pending-marker protocol as host mode; a factory-side commit while a
+  kept box survives is forbidden (the box cannot learn of it), so escalation decisions
+  dispose the kept box; host and container salvage share one factory-owned-paths policy that
+  restores factory files from the tip instead of trusting the dirty worktree.
+- **MODIFIED** `task-inspection` — `status` and `usage` tolerate every legal shape: a
+  delivered branch renders as delivered, a just-created branch as pending, an unreadable
+  historical commit is skipped with a warning; one bad branch never breaks the listing.
+
+## Capabilities
+
+### New Capabilities
+
+- `task-branch-contract`: the total branch-shape classification, shape→owner recovery
+  routing, claim-epoch fencing, replica-pair reconciliation rules, and the recovery budget.
+
+### Modified Capabilities
+
+- `git-task-persistence`: initial state in the STARTED commit; one transition = one commit;
+  atomic file writes; load-bearing first push; pending-cleanup marker; push as the durability
+  point.
+- `tracker-take`: classifier-driven routing on origin-confirmed state; fetch-failure
+  classification; automatic divergence resolution; deferred finishing of
+  `Completed`-without-cleanup tips; first-classification quarantine for corrupt shapes.
+- `stage-engine`: persisted stage advancement — resume fast-forwards over a recorded pass.
+- `github-tracker`: marker-keyed upsert comments; kill-safe operation ordering for claim,
+  reap, acknowledge, abort; widened retryable-failure hierarchy.
+- `claim-heartbeat`: orphaned working-label reap rule; holder self-fencing; claim epochs.
+- `execution-environment`: container park persistence; kept-box vs factory-side commit
+  exclusion; shared salvage policy for factory-owned paths.
+- `task-inspection`: shape-tolerant status listing and usage history.
+
+## Impact
+
+- `:domain` — shape and epoch value types; engine resume fast-forward; recovery budget model.
+- `:adapters:git` — classifier tip-reading adapters (worktree, `git show`, bare objects);
+  atomic writes; initial-state commit; pending-cleanup marker; CAS push for discard; the
+  divergence reconciler consolidating the host and container twins.
+- `:adapters:github` — marked-comment upsert primitive and migration of the five existing
+  marker kinds onto it; reordered claim/reap/ack/abort writes; exception hierarchy.
+- `:application` — take routing through the classifier; recovery budget unified with the
+  crash fuse; container park recording; reaper orphan rule; shared salvage policy.
+- `:sandbox:docker` — container salvage policy consumption; kept-box disposal on decision.
+- `bootstrap` — wiring; kill-point test harness over the Gitea E2E layer.
+- New durable docs in this change: `docs/adr/` crash-consistency ADR (reconciliation over a
+  saga journal; media are the journal), a `.claude/rules/` crash-consistency checklist for
+  future multi-step transitions, and `docs/glossary.md` entries (branch shape, recovery
+  owner, claim epoch, intent/receipt).
+- Sequencing: implementation starts after `bound-subprocess-commands` lands (its named
+  command outcomes — exited / timed-out / interrupted — are inputs to fetch-failure
+  classification and load-bearing push retries). `fix-denial-attribution-durability`
+  implements after this change and routes its resume restore through the classifier.
+
+## Goals
+
+- G1: no frozen intermediate state of any factory transition can make a task permanently
+  unclaimable, silently re-execute paid work, or lose a human's decision — every kill window
+  lands in a classified shape with exactly one recovery owner.
+- G2: recovery is idempotent and convergent: recovering an already-recovered state is a no-op,
+  and repeating any recovery twice equals running it once.
+- G3: a corrupt or unclassifiable state costs one classification, one diagnosis, and one
+  park — never a crash loop.
+- G4: divergence between local and origin resolves automatically under the lease; no exit
+  code demands manual git surgery.
+- G5: the discipline outlives this change: the invariants live in an ADR, a process-rule
+  checklist, and a kill-point test gate that future transitions must pass.
+
+## Non-Goals
+
+- NG1: making every round push load-bearing — the local-commit-then-best-effort-push
+  durability boundary stays; only the first push of a new branch becomes load-bearing.
+- NG2: true server-side fencing — git and GitHub cannot reject stale-epoch writes; epochs
+  make zombie writes detectable and classifiable, not impossible.
+- NG3: retry/backoff policy for subprocess invocations — owned by
+  `bound-subprocess-commands`.
+- NG4: narrowing the heartbeat partition window below one round — the epoch plus self-fencing
+  bounds its cost to one duplicate round, which is accepted.
+- NG5: multi-ref or cross-repository transactions — cross-repo movement stays reconciled,
+  never transactional; a WAL and block-allocated sequence refs are explicitly rejected
+  (recorded in the ADR).
+- NG6: tracker-side rendering changes beyond idempotency — report content is untouched.
+
+## Users & Scenarios
+
+- U1: an operator's host dies mid-first-round; the returned task resumes from the initial
+  state instead of crash-looping to an unreturnable park.
+- U2: a container-mode task parks with a question; the operator answers and returns it; the
+  factory reads the answer and continues — today's container tasks never do.
+- U3: a kill lands between "final stage passed" and delivery; the next pickup finishes
+  cleanup and delivers without re-running the stage or re-paying the judge.
+- U4: an instance dies after its work was superseded from another host; the next pickup on
+  the first host discards the stale local branch automatically and continues from origin.
+- U5: a network blip during claim no longer forks a duplicate branch: the take retries or
+  aborts instead of treating the failed fetch as "no branch exists".
+- U6: the operator lists `gnomish status` over a repository containing delivered, fresh, and
+  in-flight tasks; every row renders.
+- U7: a task with a genuinely corrupt branch parks once with a diagnosis naming the corrupt
+  file and the expected shape; the operator fixes or abandons it; the fleet never loops on it.
+
+## Requirements
+
+### Functional
+
+- FR1: a total classifier SHALL map any task branch tip — file set, envelope versions, claim
+  epoch — to exactly one named shape; unrecognized combinations map to `Unknown`, never to a
+  thrown exception or a closest match.
+- FR2: every reader of task-branch state (take routing, resume, reconcile, status, usage,
+  denial-cursor restore) SHALL obtain the shape only through the classifier; per-shape
+  handling SHALL be exhaustive by construction (sealed types, no default branch).
+- FR3: the STARTED commit SHALL carry both `task.json` and an initial `state.json`; a branch
+  whose tip predates this contract (task.json without state.json) SHALL classify as a legal
+  shape that resumes the first stage from scratch.
+- FR4: every logical transition SHALL become durable as exactly one commit on the task
+  branch: a human decision lands with the attempt-counter reset; a passing round lands with
+  the advanced pipeline position; a container park lands as the outcome commit with the
+  pending marker. No mutually-implied fields may split across commits.
+- FR5: state files SHALL be written atomically (temp file + atomic rename) by both the host
+  and container persisters; recovery SHALL restore factory-owned files under
+  `.gnomish-task/` from the branch tip and never salvage them from a dirty worktree, while
+  gnome-owned work files remain salvageable; both salvage paths SHALL consume one shared
+  factory-owned-paths policy.
+- FR6: fresh-vs-resume routing SHALL rely only on origin-confirmed state: a locate fetch that
+  fails for any reason other than a confirmed missing remote ref SHALL classify as an
+  infrastructure failure (retry, then abort the take) and SHALL NOT route to a fresh claim.
+- FR7: the first push of a newly created task branch SHALL be load-bearing: bounded retries,
+  and on exhaustion the take aborts without starting a round; all subsequent pushes stay
+  best-effort.
+- FR8: when the local branch and origin have diverged and the instance holds a live claim,
+  recovery SHALL discard the local branch (reset to the origin tip, drop drafts) and
+  continue — automatically, without an operator flag; the reset push SHALL be an explicit
+  compare-and-swap against the tip the decision was made on. Local-ahead keeps local;
+  local-behind fast-forwards; only true divergence discards.
+- FR9: a tip whose recorded outcome is `Completed` but whose cleanup has not happened SHALL
+  be finished — cleanup committed, pushed, tracker finish delivered — and SHALL NOT re-enter
+  the engine; a resume at a recorded position whose last recorded round carries a passing
+  verdict SHALL fast-forward past that stage instead of re-executing it.
+- FR10: every terminal transition with an external effect (host park, container park,
+  completion finish, decision acknowledge, abort mark) SHALL follow one shared
+  intent→effect→receipt protocol: durable intent before the effect, receipt after it, and
+  recovery of an intent-without-receipt SHALL verify the effect at the target before
+  re-driving it. The destructive step of any sequence (cleanup, label removal, box disposal)
+  SHALL come after all constructive receipts.
+- FR11: every factory-authored tracker comment SHALL carry a hidden content-identity marker
+  (task and intent, never the bot account) and SHALL be written as find-then-upsert through
+  one shared primitive; the five existing marker kinds migrate onto it.
+- FR12: tracker write sequences SHALL be ordered so each kill window lands in a recoverable
+  state: claim comment before label transition (or an equivalent reapable ordering); decision
+  appended to the branch before its acknowledge; abort marker before the ready flip; and the
+  reaper SHALL own the shape "working label without a live claim" — after a grace period it
+  returns the task to ready.
+- FR13: each (re)claim SHALL be issued a monotonically increasing epoch, recorded with the
+  claim, stamped into every commit and tracker write of that tenure; readers SHALL classify
+  artifacts carrying an older epoch than the current claim as a distinct stale-epoch shape;
+  a holder whose heartbeat cannot be confirmed SHALL stop writing at the next boundary until
+  it re-verifies its claim.
+- FR14: automatic recovery SHALL be budgeted: a persisted per-task counter of recovery
+  attempts with backoff, and quarantine to the needs-human status with the failure history
+  once exhausted; this budget and the existing crash fuse SHALL be one accounting (one
+  counter model, one quarantine outcome), and quality attempts remain separate.
+- FR15: `Corrupt` and `Unknown` shapes SHALL quarantine on first classification with a
+  diagnosis naming the offending file, the observed and expected shape — without burning
+  crash-fuse cycles; an unsupported envelope version SHALL be one of these shapes on every
+  reading path, including take and serve.
+- FR16: `status` (list and single-task) SHALL render every legal shape; `usage` SHALL skip an
+  unreadable historical commit with a warning instead of failing the walk.
+- FR17: while a kept box survives a park, the factory SHALL NOT commit to the task branch on
+  the factory side; resuming an escalated container task SHALL dispose the kept box before
+  the decision commit, so the next round's box sees the decision from its start.
+- FR18: label-operation failures and HTTP-transport failures of the tracker SHALL be
+  retryable under the same policy as tracker-unavailable failures wherever a bounded
+  terminal-write retry exists.
+
+### Non-Functional — Reliability
+
+- NFR-R1: recovery of every shape is idempotent: running it on an already-recovered state
+  changes nothing, and a kill during recovery lands in a shape whose recovery completes the
+  work.
+- NFR-R2: the classifier itself never throws on content: only environment unavailability
+  (git or daemon unreachable) may surface as an infrastructure error, and it retries under
+  existing policy without burning quality attempts.
+- NFR-R3: no automatic path force-pushes or rewrites origin history; the only non-fast-forward
+  write is the FR8 CAS reset of the local ref, and it never touches origin history.
+
+### Non-Functional — Observability
+
+- NFR-O1: every non-trivial repair (any classified shape other than the clean expected one)
+  emits one structured log line naming the shape, task, epoch, and action taken; repeated
+  repair of the same task within a window is itself surfaced as a warning.
+- NFR-O2: a quarantine report names the shape, the diagnosis, and the recovery attempts
+  consumed — readable without factory logs.
+
+### Non-Functional — Security
+
+- NFR-S1: comment markers and epoch stamps carry only task identity and counters — no paths,
+  no hostnames, no credential material; scrubbing rules of existing report funnels stay in
+  force.
+
+### Non-Functional — Cost
+
+- NFR-C1: no recovery path re-invokes a paid executor or judge for work whose passing verdict
+  is already recorded on the branch (the FR9 guarantee stated as cost).
+
+## Operator Experience Criteria
+
+- UX1: "return the task and it continues" is true after any single crash, in both execution
+  modes; no failure mode requires editing `.gnomish-task/` by hand or running git surgery.
+- UX2: a quarantined task's tracker report explains what was found and what to do next; the
+  operator never diagnoses a crash loop from repeated INFRA parks.
+- UX3: duplicate tracker comments do not appear after crashes; a re-delivered report updates
+  the existing comment in place.
+- UX4: `gnomish status` over any real repository shows one row per task, whatever state each
+  branch is in.
+
+## Success Metrics
+
+- M1: a kill-point harness enumerates every multi-step transition (host and container), kills
+  after each durable step, runs the pickup, and asserts convergence to the expected shape —
+  and runs each recovery twice asserting the second pass is a no-op; the matrix is a gate in
+  `check`.
+- M2: property-generated branch tips (arbitrary file subsets, versions, epochs) always
+  classify to exactly one shape; no generated input throws.
+- M3: the audit's concrete scenarios each have a green spec: first-round-killed resume (host
+  and container), container park decision round-trip, Completed-without-cleanup finish,
+  passed-stage fast-forward, diverged-branch automatic continuation, working-label-orphan
+  reap, decision-before-ack ordering, status over a delivered+fresh+in-flight repository.
+- M4: build green with mutation score per `.claude/rules/testing.md` in every touched module.
+- M5: the ADR, the process-rule checklist, and the glossary entries exist and are
+  cross-referenced from this change's design.
+
+## Open Questions
+
+- Q1: initial `state.json` content for FR3 — synthesized at the first stage of the frozen
+  law: settle the exact envelope in design (resolved in design D2).
+- Q2: epoch storage — claim comment id vs an explicit counter in the claim body: design
+  decision (resolved in design D6).
+- Q3: recovery-budget threshold and backoff defaults — start with the existing crash-fuse K
+  and tune from operator experience.
+- Q4: does the kill-point harness run in the default `check` or a nightly lane if wall-clock
+  cost proves high? Decide from measured runtime during implementation.

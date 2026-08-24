@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.board.json;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.board.AwaitingHumanRow;
+import com.github.oinsio.gnomish.board.BoardLabels;
 import com.github.oinsio.gnomish.board.BoardModel;
 import com.github.oinsio.gnomish.board.EligibilityReason;
 import com.github.oinsio.gnomish.board.ReadyRow;
@@ -122,14 +122,6 @@ public final class BoardJsonMapper {
     }
 
     private static AwaitingHumanRowDto toAwaitingHumanDto(AwaitingHumanRow row) {
-        return new AwaitingHumanRowDto(row.ref().id(), row.title(), parkReasonLabel(row.reason()));
-    }
-
-    private static String parkReasonLabel(ParkReason reason) {
-        return switch (reason) {
-            case ESCALATION -> "escalation";
-            case INFRA -> "infra";
-            case CHECKPOINT -> "checkpoint";
-        };
+        return new AwaitingHumanRowDto(row.ref().id(), row.title(), BoardLabels.parkReasonLabel(row.reason()));
     }
 }

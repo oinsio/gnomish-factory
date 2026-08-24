@@ -1,261 +1,169 @@
 package com.github.oinsio.gnomish.dashboard
 
-import static com.github.oinsio.gnomish.testsupport.DaemonSnapshotFixtures.snapshot
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.neverFetchedBoard
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.board.AwaitingHumanRow
-import com.github.oinsio.gnomish.board.BoardModel
-import com.github.oinsio.gnomish.board.EligibilityReason
-import com.github.oinsio.gnomish.board.ReadyRow
-import com.github.oinsio.gnomish.board.ReadySummary
-import com.github.oinsio.gnomish.board.WorkingRow
-import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage
-import com.github.oinsio.gnomish.serveobservability.LifecycleState
-import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
+import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
 import spock.lang.Specification
 import spock.lang.Unroll
 
 /**
- * Verifies {@link DashboardHtmlRenderer} composes the three dashboard
- * sections into one self-contained HTML page (task 3.1): each section
- * renders its happy-path data with its own timestamp, degrades
- * independently to the FR3-specified placeholder text, and the page shows
- * its own {@code generatedAt}.
+ * Verifies the page's skeleton and its priority ordering (tasks 3.1, 4.1,
+ * 4.3 of redesign-dashboard): the fixed block order, the mode / generated-at
+ * / stale-after data attributes the static script reads, the watch-only
+ * meta-refresh, and the freshness strip.
  *
- * FR2, FR3, FR10, NFR-O1 of add-dashboard-page (design D6).
+ * <p>Each block has its own spec ({@code DashboardStatusCardSpec},
+ * {@code DashboardAttentionBlockSpec}, {@code DashboardInProgressBlockSpec},
+ * {@code DashboardBoardBlockDegradationSpec}, {@code DashboardOutcomesBlockSpec},
+ * {@code DashboardTokensBlockSpec}, {@code DashboardHygieneBlockSpec}).
+ *
+ * FR1, FR2, FR3, FR10 of redesign-dashboard.
  */
 class DashboardHtmlRendererSpec extends Specification {
 
     def renderer = new DashboardHtmlRenderer()
 
     private static final Instant GENERATED_AT = Instant.parse('2026-08-06T09:00:00Z')
-    private static final Instant WRITTEN_AT = Instant.parse('2026-08-06T08:59:00Z')
 
-    // NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section is a fourth independently
-    //     degrading section — present on every page, honest when it has no data.
-    def "sandbox hygiene section: renders its data, and its empty state when there is none"() {
-        given:
-        def sweep = new com.github.oinsio.gnomish.serveobservability.SweepVital(
-                GENERATED_AT, 300L, new com.github.oinsio.gnomish.serveobservability.SweepCounts(1, 0, 0, 2, 0, 0),
-                [], 0, 0)
-
-        when: 'a page with no sweep data at all'
-        def degraded = renderer.render(
+    // FR1: the order IS the argument — "is anything waiting for me?" is answered by the top layers.
+    def "blocks render in the fixed priority order, quieter reference blocks last"() {
+        when:
+        def html = renderer.render(
                 new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
                 GENERATED_AT, null)
 
         then:
-        degraded.contains('<section id="sandbox-hygiene"')
-        degraded.contains('no sweep data yet')
-
-        when: 'a page whose snapshot carries a completed tick'
-        def populated = renderer.render(
-                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(),
-                new SandboxHygieneView(sweep, [], 0), GENERATED_AT, null)
-
-        then: 'the four-group breakdown replaces the empty state'
-        populated.contains('<td>2</td><td>0</td><td>1</td><td>0</td>')
-        !populated.contains('no sweep data yet')
+        def order = [
+            'id="freshness"',
+            'id="status"',
+            'id="attention"',
+            'id="in-progress"',
+            'id="outcomes"',
+            'id="tokens"',
+            'id="hygiene"'
+        ].collect {
+            html.indexOf(it)
+        }
+        order.every { it >= 0 }
+        order == order.toSorted()
     }
 
-    def "a null hygiene view is refused rather than rendered as a broken page"() {
+    // FR2: every block occupies its position regardless of data — nothing appears or disappears.
+    def "an entirely empty page still renders every block, each with its own empty-state sentence"() {
         when:
-        renderer.render(
-                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), null, GENERATED_AT, null)
+        def html = renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
+                GENERATED_AT, null)
 
         then:
-        def error = thrown(NullPointerException)
-        error.message == 'hygieneView'
-    }
+        html.contains('Board unavailable')
+        html.contains('No finished tasks yet')
+        html.contains('No token usage recorded yet')
+        html.contains('Sandbox sweep has not run yet')
 
-    def "the page shows its own generatedAt"() {
-        when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
-
-        then:
-        html.contains(GENERATED_AT.toString())
+        and: 'no bare empty list is left behind where a block had nothing to show'
+        !html.contains('<div class="row"></div>')
     }
 
     @Unroll
-    def "daemon section: #description"() {
+    def "watch mode bakes #expectedMode into the body and #refreshDescription"() {
         when:
-        def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
+        def html = renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
+                GENERATED_AT, cadence)
 
-        then:
-        html.contains(expectedText)
+        then: 'the static script reads its mode and the page age from the body, never from a templated literal'
+        html.contains('data-mode="' + expectedMode + '"')
+        html.contains('data-generated-at="' + GENERATED_AT.toEpochMilli() + '"')
+
+        and: 'a watch page also bakes its stale threshold — three times its own cadence (FR3)'
+        html.contains('data-stale-after="30000"') == metaRefresh
+        html.contains('data-stale-after') == metaRefresh
+
+        and:
+        html.contains('<meta http-equiv="refresh"') == metaRefresh
 
         where:
-        description | view | expectedText
-        'no snapshot ever written' | new DaemonSnapshotView.Absent() | 'daemon has not run here'
-        'fresh snapshot shows writtenAt' | new DaemonSnapshotView.Fresh(snapshot(new LifecycleState.Running())) | WRITTEN_AT.toString()
-        'dead-daemon snapshot still shows its instance data' | new DaemonSnapshotView.DeadDaemon(snapshot(new LifecycleState.Running())) | WRITTEN_AT.toString()
-        'stopped-stale shows the stop reason' | new DaemonSnapshotView.StoppedStale(snapshot(new LifecycleState.Stopped('sigterm'))) | 'sigterm'
+        cadence | expectedMode | metaRefresh | refreshDescription
+        Duration.ofSeconds(10) | 'watch' | true | 'carries a meta-refresh'
+        null | 'oneshot' | false | 'carries none'
     }
 
-    def "history section: empty ledger renders no placeholder error, just an empty section"() {
+    def "the meta-refresh interval and the stale threshold are both the render cadence's own"() {
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
+        def html = renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
+                GENERATED_AT, Duration.ofSeconds(30))
 
         then:
-        html.contains('History')
-        !html.toLowerCase().contains('error')
+        html.contains('<meta http-equiv="refresh" content="30">')
+        html.contains('data-stale-after="90000"')
     }
 
-    def "history section: happy path shows per-day counts and its own day range"() {
-        given:
-        def history = new LedgerHistoryView(
-                [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(3, 1, 0, 0))
-                ],
-                [claude: new LedgerTokenUsage(10, 5, 0, 0)])
-
+    // A cadence under a second truncates to content="0" — a reload storm, not a refresh.
+    @Unroll
+    def "a render cadence of #cadence is rejected rather than baked into the meta-refresh"() {
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), history, neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
+        renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
+                GENERATED_AT, cadence)
 
         then:
-        html.contains('2026-08-05')
-        html.contains('claude')
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('renderCadence')
 
-        and: 'the outcome table itself renders the per-day counts, not just the day-range summary'
-        html.contains('<td>3</td><td>1</td><td>0</td><td>0</td>')
-
-        and: 'each history row carries an inline CSS bar so volume reads at a glance (FR6)'
-        html.contains('class="bar"')
-    }
-
-    def "history section: the tokens-by-model table surfaces cache tokens, not just input/output (FR6)"() {
-        given: 'a model whose ledger records non-zero cache-creation and cache-read counts'
-        def history = new LedgerHistoryView(
-                [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0))
-                ],
-                [claude: new LedgerTokenUsage(10, 5, 7, 3)])
-
-        when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), history, neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
-
-        then: 'the cache columns the ledger writes for cost accounting are rendered, not dropped'
-        html.contains('<th>cacheCreation</th>')
-        html.contains('<th>cacheRead</th>')
-
-        and: 'the model row carries all four counts in order'
-        html.contains('<td>10</td><td>5</td><td>7</td><td>3</td>')
-    }
-
-    def "board section: unavailable when never fetched and the tracker failed"() {
-        given:
-        def board = new BoardSectionView(null, null, 'tracker unreachable: connection refused')
-
-        when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
-
-        then:
-        html.contains('unavailable')
-        html.contains('connection refused')
-    }
-
-    def "board section: cached model shown with its fetch time and a refresh-failure notice"() {
-        given:
-        def fetchedAt = Instant.parse('2026-08-06T08:00:00Z')
-        def board = new BoardSectionView(boardModel(), fetchedAt, 'tracker unreachable: timeout')
-
-        when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
-
-        then:
-        html.contains(fetchedAt.toString())
-        html.contains('timeout')
-        html.contains('task-1')
-    }
-
-    def "board section: an ineligible Ready row shows its eligibility annotation text"() {
-        given:
-        def deadline = Instant.parse('2026-08-06T10:00:00Z')
-        def readyRows = [
-            new ReadyRow(new TaskRef('task-4'), 'Backed-off title', false, new EligibilityReason.InBackoff(deadline))
+        where:
+        cadence << [
+            Duration.ofMillis(999),
+            Duration.ZERO,
+            Duration.ofSeconds(-1)
         ]
-        def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), false, GENERATED_AT)
-        def board = new BoardSectionView(model, GENERATED_AT, null)
-
-        when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
-
-        then:
-        html.contains('in backoff until ' + deadline)
     }
 
-    def "board section: happy path shows Ready, Working, and AwaitingHuman rows as pointers"() {
-        given:
-        def fetchedAt = Instant.parse('2026-08-06T08:59:30Z')
-        def board = new BoardSectionView(boardModel(), fetchedAt, null)
-
+    // The boundary the guard must let through: one second is the shortest usable cadence.
+    def "a one-second render cadence is accepted and baked verbatim"() {
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
+        def html = renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
+                GENERATED_AT, Duration.ofSeconds(1))
 
         then:
-        html.contains(fetchedAt.toString())
-        html.contains('task-1')
-        html.contains('Ready title')
-        html.contains('task-2')
-        html.contains('gnome-1')
-        html.contains('task-3')
-        html.contains('escalation')
-        !html.contains('refresh-failure')
-
-        and: 'the Working row carries its claim freshness, not just the holder (FR5)'
-        html.contains('freshness unknown')
+        html.contains('<meta http-equiv="refresh" content="1">')
     }
 
-    // FR5: a Working row shows the same claim-age label the CLI board renders, not just the holder.
-    def "board section: a Working row shows its claim age when the marker is present"() {
-        given:
-        def workingRows = [
-            new WorkingRow(new TaskRef('task-2'), 'Working title', 'gnome-1',
-            new ClaimVersion('m-1', GENERATED_AT.minusSeconds(180)))
-        ]
-        def model = new BoardModel([], workingRows, [], ReadySummary.tally([]), false, GENERATED_AT)
-        def board = new BoardSectionView(model, GENERATED_AT, null)
-
+    // FR3: the strip is server-rendered fresh with the absolute instant, so a no-JS reader sees it.
+    def "the freshness strip carries both icons and the page's absolute generated instant"() {
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
+        def html = renderer.render(
+                new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(), noSweepData(),
+                GENERATED_AT, Duration.ofSeconds(10))
 
         then:
-        html.contains('holder=gnome-1, updated 3m ago')
+        html.contains('<div class="freshness" id="freshness" data-state="fresh" role="status" aria-live="polite">')
+        html.contains('freshness__icon--fresh')
+        html.contains('freshness__icon--stale')
+        html.contains('<span id="freshness-text">updated <time datetime="' + GENERATED_AT + '" ' +
+                'data-epoch="' + GENERATED_AT.toEpochMilli() + '">' + GENERATED_AT + '</time></span>')
     }
 
-    // FR5: a capped Ready window carries the truncation marker, as the CLI board shows it.
-    def "board section: a truncated Ready window shows the truncation marker"() {
-        given:
-        def readyRows = [
-            new ReadyRow(new TaskRef('task-1'), 'Ready title', false, null)
-        ]
-        def model = new BoardModel(readyRows, [], [], ReadySummary.tally(readyRows), true, GENERATED_AT)
-        def board = new BoardSectionView(model, GENERATED_AT, null)
-
+    @Unroll
+    def "a null #param is refused rather than rendered as a broken page"() {
         when:
-        def html = renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), board, noSweepData(), GENERATED_AT, null)
+        renderer.render(daemon, history, board, hygiene, generated, null)
 
         then:
-        html.contains('truncated: showing first 1 only')
-    }
+        def error = thrown(NullPointerException)
+        error.message == param
 
-    private static BoardModel boardModel() {
-        def readyRows = [
-            new ReadyRow(new TaskRef('task-1'), 'Ready title', false, null)
-        ]
-        def workingRows = [
-            new WorkingRow(new TaskRef('task-2'), 'Working title', 'gnome-1', null)
-        ]
-        def awaitingRows = [
-            new AwaitingHumanRow(new TaskRef('task-3'), 'Parked title', ParkReason.ESCALATION)
-        ]
-        new BoardModel(readyRows, workingRows, awaitingRows, ReadySummary.tally(readyRows), false, GENERATED_AT)
+        where:
+        param | daemon | history | board | hygiene | generated
+        'daemonView' | null | emptyHistory() | neverFetchedBoard() | noSweepData() | GENERATED_AT
+        'historyView' | new DaemonSnapshotView.Absent() | null | neverFetchedBoard() | noSweepData() | GENERATED_AT
+        'boardView' | new DaemonSnapshotView.Absent() | emptyHistory() | null | noSweepData() | GENERATED_AT
+        'hygieneView' | new DaemonSnapshotView.Absent() | emptyHistory() | neverFetchedBoard() | null | GENERATED_AT
+        'generatedAt' | new DaemonSnapshotView.Absent() | emptyHistory() | neverFetchedBoard() | noSweepData() | null
     }
 }
