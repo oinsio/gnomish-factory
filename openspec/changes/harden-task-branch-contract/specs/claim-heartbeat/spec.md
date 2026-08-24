@@ -35,26 +35,108 @@ lost-claim path above (self-fencing).
 
 ## ADDED Requirements
 
-### Requirement: The reaper owns the orphaned working-label shape
-The shape "working label without a live claim comment" SHALL be owned by the
-reaper: after a grace period the task returns to `Ready` through the ordinary
-stale-claim removal. The factory can produce this shape itself — a killed
-claim sequence or a killed reap freezes exactly this state — so the shape
-SHALL never be attributed to human mislabeling and SHALL never require
-operator surgery to re-enter circulation.
-<!-- implements FR12 of harden-task-branch-contract -->
+### Requirement: Total tracker-shape classification with one recovery owner
+The tracker-side state of a task SHALL classify totally, in core, over
+adapter-reported facts — the state labels present, the claim footprint (a live
+claim, a dead footprint, or none), and the boundary markers — into this closed
+set of named shapes, each with exactly one recovery owner:
 
-#### Scenario: Killed reap leaves an orphan the next tick resolves
-- **WHEN** a reaper deletes a dead claim comment and dies before flipping the
-  working label back to ready
-- **THEN** a later reaper tick, after the grace period, returns the task to
-  `Ready` — the orphan costs one grace window, never a stuck task
+| Shape | Observation | Owner → recovery |
+|---|---|---|
+| `Ready` | ready label, no live claim | queue |
+| `Claimed` | working label, live claim | holder beats; reaper reaps on TTL |
+| `Parked` | needs-human label, park marker latest | human |
+| `Finished` | delivered label, finish marker present | terminal |
+| `Returned` | ready label with park/finish history | queue; a finished return routes to decline |
+| `Revoked` | issue closed | terminal |
+| `ClaimPending` | working label (ready may linger), no claim footprint | reaper: grace, then restore ready |
+| `ClaimAbandoned` | working label, claim footprint without a live version | reaper: grace, then stale-claim removal |
+| `IndexLagging` | a boundary marker newer than the labels it implies | reaper: complete the label flip toward the marker |
+| `Foreign` | any other combination | none — surfaced with a diagnosis, never auto-repaired |
 
-#### Scenario: Orphan is recovered, not blamed on a human
-- **WHEN** an issue wears the working label with no live claim comment for the
-  grace period
-- **THEN** the reaper returns it to `Ready` without any path that treats the
-  shape as a human mislabel to be ignored
+Markers are the truth; labels are the index the listing queries filter on. The
+three window shapes — `ClaimPending`, `ClaimAbandoned`, `IndexLagging` — are
+exactly the states the FR12 write order can freeze, and each keeps an
+open-state label on the issue, so the sweep enumerates it. An adapter SHALL
+NOT omit or reinterpret any combination — the classifier decides, and no
+factory-reachable shape is ever attributed to human mislabeling. Time
+judgments — the staleness TTL and the window grace — stay with core's
+observation memory, never re-derived by the classifier or an adapter. The
+shape set SHALL be a sealed hierarchy; readers switch without a default
+branch.
+
+The steady progression, driven by factory writes and human transitions:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ready
+    Ready --> Claimed: claim
+    Claimed --> Ready: abort / reap
+    Claimed --> Parked: park
+    Claimed --> Finished: finish
+    Parked --> Returned: human returns
+    Finished --> Returned: human reopens
+    Returned --> Claimed: claim
+    Returned --> Finished: decline
+```
+
+Any open shape may become `Revoked` (issue closed) by a human at any time.
+The window shapes and their repair, all inside the sweep universe:
+
+```mermaid
+flowchart LR
+    CP["ClaimPending<br/>(working, no claim)"] -->|grace| S["Reaper sweep<br/>(listReady + listOpen)"]
+    CA["ClaimAbandoned<br/>(working, dead claim)"] -->|grace / TTL| S
+    IL["IndexLagging<br/>(marker newer than labels)"] --> S
+    S -->|roll back| RD["Ready"]
+    S -->|complete the flip| TG["marker's target state"]
+```
+<!-- implements FR19, FR12 of harden-task-branch-contract -->
+
+#### Scenario: Every fact combination yields exactly one shape
+- **WHEN** tracker facts are generated over arbitrary label sets, claim
+  footprints, and marker histories
+- **THEN** each combination classifies to exactly one named shape — `Foreign`
+  included — and no combination throws or is silently dropped
+
+#### Scenario: Kill between claim label and claim comment is repaired
+- **WHEN** an instance dies after the working-label transition but before its
+  claim comment posts
+- **THEN** the sweep classifies the frozen state as `ClaimPending` and, after
+  the grace period, restores the task to `Ready` — never treating the shape
+  as a human mislabel
+
+#### Scenario: A boundary marker completes its own flip
+- **WHEN** an instance dies after posting the finish marker but before the
+  delivered-label flip
+- **THEN** the sweep classifies `IndexLagging`, completes the flip to
+  delivered, and no path re-executes the finished task
+
+### Requirement: The sweep universe is the union of both listings
+The reaper's standing duty SHALL generalize from stale-claim removal to
+tracker-shape repair, and its sweep SHALL enumerate the union of both
+listings — every open task carrying any state label, `listReady` plus
+`listOpen` — so no kill window's frozen state is filtered out by the very
+label its sequence had not written yet. A late claim comment that lands after
+its incomplete claim was rolled back to ready (a ready-labeled task with a
+live claim footprint) SHALL be enumerated by the same sweep and repaired,
+never left to win claim races as a ghost. A killed reap SHALL remain
+repairable by any later tick: an interrupted stale-claim removal freezes
+`ClaimAbandoned` or `IndexLagging`, both swept.
+<!-- implements FR19, FR12 of harden-task-branch-contract -->
+
+#### Scenario: Killed reap leaves a shape the next tick resolves
+- **WHEN** a reaper posts the removal boundary or deletes a dead claim comment
+  and dies before flipping the working label back to ready
+- **THEN** a later tick classifies the frozen state and returns the task to
+  `Ready` — the kill costs one grace window, never a stuck task
+
+#### Scenario: Suspension leftover is swept off a ready task
+- **WHEN** a delayed claim comment lands on a ready-labeled task after the
+  reaper rolled its incomplete claim back
+- **THEN** the sweep enumerates the task through the feed's claim facts,
+  classifies the mismatch, and repairs it — no permanently race-winning claim
+  survives on a ready task
 
 ### Requirement: Every (re)claim issues a monotonically increasing epoch
 Each successful claim or reclaim of a task SHALL be issued an epoch strictly

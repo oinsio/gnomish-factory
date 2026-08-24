@@ -53,6 +53,15 @@ exhaustion the take aborts without claiming; it SHALL NOT route to a fresh
 claim or create a new branch.
 <!-- implements FR6 of harden-task-branch-contract -->
 
+```mermaid
+flowchart TD
+    L["locate fetch of gnomish/&lt;task&gt;"]
+    L -->|ref found| S["classify tip, route by shape"]
+    L -->|origin confirms ref missing| F["fresh claim: create branch"]
+    L -->|any other failure<br/>timeout, network, auth| I["infrastructure: retry fetch"]
+    I -->|retries exhausted| A["abort take — no claim, no branch"]
+```
+
 #### Scenario: Fetch failure never forks a duplicate branch
 - **WHEN** the locate fetch of `gnomish/<task>` fails with a network timeout
   while the branch exists on origin
@@ -119,9 +128,10 @@ count and never burn recovery budget.
   attempt limit
 - **THEN** the recovery/crash counter is unchanged by those quality attempts
 
-### Requirement: Corrupt and Unknown shapes quarantine on first classification
-A branch tip classifying as `Corrupt` or `Unknown` — including an unsupported
-envelope version, on every reading path of take and serve — SHALL quarantine
+### Requirement: Non-recoverable shapes quarantine on first classification
+A branch tip classifying as one of the three non-recoverable shapes of the
+`task-branch-contract` closed set — `Corrupt`, `UnsupportedVersion`, or
+`Unknown`, on every reading path of take and serve — SHALL quarantine
 the task on its first classification with a diagnosis, without burning
 crash-fuse or recovery-budget cycles and without a crash loop. The quarantine
 report SHALL name the observed shape, the diagnosis (the offending file and
@@ -139,5 +149,6 @@ factory logs.
 #### Scenario: Unsupported version is a shape, not a crash
 - **WHEN** the branch's state envelope carries a version this factory does not
   support
-- **THEN** the take classifies it as a quarantining shape and parks with the
-  version named in the diagnosis, burning no crash-fuse cycle
+- **THEN** the take classifies it as `UnsupportedVersion` and parks with the
+  observed and supported versions named in the diagnosis, burning no crash-fuse
+  cycle

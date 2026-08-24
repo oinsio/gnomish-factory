@@ -53,14 +53,18 @@ tip, `git show`, bare objects). *Rationale:* three access paths must not become 
 classifiers (FR1, FR2). *Alternative rejected:* per-reader classification — the scatter that
 produced the audit findings.
 
-**D4 — The shape set, exhaustively:** `Bare` (branch exists, no STARTED commit),
-`Created`, `InProgress`, `Parked` (outcome recorded; pending-marker sub-state), `Decision`
-(escalated with outcome cleared), `CompletedUncleaned`, `Delivered` (cleanup found by
-searching history for the cleanup commit, tolerating post-cleanup commits), `StaleEpoch`,
-`UnsupportedVersion`, `Corrupt(reason)`, `Unknown`. Sealed hierarchy; readers switch without
-default. Each shape declares roll-forward or discard recovery in one table (the saga "pivot"
-idea without the journal). *Alternative rejected:* hard-coded `tip^` delivered detection —
-breaks on any post-cleanup human commit.
+**D4 — One canonical shape vocabulary, owned by the spec.** The closed set of eleven shapes
+and their meanings live in exactly one place — the "Total branch-shape classification"
+requirement of the `task-branch-contract` spec. This design and the task list refer to that
+table; neither restates it, because three copies of a "closed" set is how the sets drift
+apart. Two naming constraints the table encodes: a shape name must not collide with an
+existing domain type, so "awaiting a human" is `Parked` rather than `Escalated` (a
+`TaskOutcome` variant) and "decision landed" is `Answered` rather than `Decision` (the human's
+answer record); and an unsupported envelope version is its own shape rather than a flavour of
+`Corrupt`, so its diagnosis can name the version instead of a parse failure. Sealed hierarchy;
+readers switch without default. Each shape declares roll-forward or discard recovery in one
+table (the saga "pivot" idea without the journal). *Alternative rejected:* hard-coded `tip^`
+delivered detection — breaks on any post-cleanup human commit.
 
 **D5 — One intent→effect→receipt component for the five external-effect flows** (host park,
 container park, completion finish, decision acknowledge, abort mark; FR10). Flows supply the
@@ -97,8 +101,8 @@ the lease, and the flag re-introduces manual surgery.
 
 **D9 — One automatic-retry accounting** (FR14): the crash fuse and the recovery budget merge
 into a single persisted counter model with categorized causes (instance crash / recovery
-failure) and one quarantine outcome carrying the history. Corrupt/Unknown/UnsupportedVersion
-bypass the counter — first classification quarantines (FR15). *Rationale:* two near-identical
+failure) and one quarantine outcome carrying the history. The three non-recoverable shapes
+named in D4's table bypass the counter — first classification quarantines (FR15). *Rationale:* two near-identical
 counters with two thresholds invite the drift the audit already found in the abort marker.
 *Alternative rejected:* a separate recovery counter beside the fuse.
 
@@ -137,8 +141,28 @@ take). The same split applies to the remote-tip probe used by reconciliation.
 mechanisms plus rejected alternatives (saga journal, WAL, block counters, fsync); a new
 `.claude/rules/` crash-consistency rule carries the future-work checklist (every multi-step
 transition names its kill windows and recovery owner); `docs/glossary.md` gains the terms
-branch shape, recovery owner, claim epoch, intent/receipt. Design decisions here stay scoped
+branch shape, tracker shape, sweep universe, recovery owner, claim epoch,
+intent/receipt. Design decisions here stay scoped
 to this change; the durable principle lives in the ADR.
+
+**D16 — The tracker medium gets the same total classification as the branch medium** (FR19,
+FR12). One core classifier — the mirror of D3 — maps adapter-reported tracker facts (state
+labels, claim footprint, boundary markers) to the closed shape set owned by the
+`claim-heartbeat` delta; consumers switch exhaustively; adapters report facts and never
+judge (the audit found the staleness judgment split between the `listOpen` omission rule and
+the reaper's eligibility filter — two half-brains no sweep could reconcile). The reaper
+sweeps the union of both listings, because a sweeper filtering on the very label a kill
+window may not have written yet is structurally blind (precedents: Kubernetes
+ownerReference-at-creation, Prow sinker's complement query). Time judgments (staleness TTL,
+window grace) stay with the observation memory. Write order follows the sweep-universe
+rule: the label admitting the task into the universe first, the label removing it last,
+truth markers between — markers are the truth, labels the index. *Alternatives rejected:*
+claim comment before the label with a lease deadline in the comment body — reintroduces
+holder-written time the staleness model deliberately avoids, and its kill window freezes on
+a ready-labeled issue outside every sweep while still winning the earliest-id race; the
+task-branch ref as the claim CAS — collapses the two writes into one atomic primitive but
+moves mutual exclusion into a medium a non-git tracker adapter lacks (kept as an open ADR
+question for the future).
 
 ## Risks / Trade-offs
 

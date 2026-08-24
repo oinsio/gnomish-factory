@@ -3,38 +3,36 @@
 ## MODIFIED Requirements
 
 ### Requirement: Lease-pattern claim decided by earliest comment id
-Claim SHALL be implemented as a lease: post a structural claim comment first, then
-set the working label — the claim comment SHALL be durable before the label
-transition (or an equivalently ordered sequence whose every intermediate state is
-reapable) — then re-read claim comments posted since the newest boundary marker
-(release/park/abort/finish), and treat the earliest comment id (GitHub's
-server-side total order) as the winner. The loser SHALL delete its own claim
-comment, leave labels as they stand, and report `Held(winner)`. If the
-verify-read persistently fails after retries, the adapter SHALL best-effort
-delete its own marker and fail the claim as infrastructure, never proceeding
-unverified. A kill anywhere between the claim writes SHALL leave a state that is
-either idempotently re-drivable by a retry of the same claim or owned by the
-reaper — never a shape no reaper will reclaim.
+Claim SHALL be a lease ordered by the sweep-universe rule: set the working
+label first — the write admitting the task into the sweep universe — then post
+the structural claim comment, then re-read claim comments posted since the
+newest boundary marker and treat the earliest comment id (GitHub's server-side
+total order) as the winner. The loser SHALL delete its own claim comment,
+leave labels as they stand, and report `Held(winner)`. If the verify-read
+persistently fails after retries, the adapter SHALL best-effort delete its own
+marker and fail the claim as infrastructure, never proceeding unverified. A kill between the
+claim writes freezes a swept shape — `ClaimPending` before the comment, a
+dead-holder `Claimed` after — never a state outside the sweep universe or
+authoritative in the race: the race-winning comment is the last claim write.
 <!-- implements FR6 of add-tracker-port -->
 <!-- implements NFR-R1 of add-tracker-port -->
 <!-- implements FR12 of harden-task-branch-contract -->
 
 #### Scenario: Concurrent claim race
 - **WHEN** two instances post claim comments and both re-read (scripted
-  interleaving via WireMock)
-- **THEN** the instance with the earlier comment id proceeds and the other
-  reports `Held` naming the winner and deletes its marker
+  WireMock interleaving)
+- **THEN** the earlier comment id proceeds; the other reports `Held` naming
+  the winner and deletes its marker
 
 #### Scenario: Unverifiable claim backs out
-- **WHEN** the verify-read keeps failing after the claim comment was posted
-- **THEN** the claim fails as infrastructure and the instance does not start work
+- **WHEN** the verify-read keeps failing after the claim comment posted
+- **THEN** the claim fails as infrastructure; the instance does not start work
 
-#### Scenario: Kill between claim comment and label transition is recoverable
-- **WHEN** the instance dies after its claim comment posted but before the
-  working label transition
-- **THEN** the frozen state (claim comment present, ready label still on) is
-  claimable or reapable by ordinary means — no shape is left that neither a
-  retry nor the reaper will ever resolve
+#### Scenario: Kill between label transition and claim comment is swept
+- **WHEN** the instance dies between the working-label transition and its
+  claim comment
+- **THEN** the frozen state — working label, no claim footprint — is swept as
+  `ClaimPending`, returns to `Ready` after grace, and wins no race meanwhile
 
 ### Requirement: Structural comments carry coordination facts
 Claim, abort, ack, note, park, finish, progress, and stale-claim-removal
@@ -82,7 +80,57 @@ only after the last ack; the abort count reset by the latest progress marker.
   finish marker parses as kind `finish`, and neither is mistakable for the
   other by any field-presence inference
 
+## REMOVED Requirements
+
+### Requirement: Open-task listing via state labels with conditional requests
+**Reason**: The listing embedded adapter-side judgment — omitting a
+working-labeled issue with no claim footprint as a human mislabel — hiding
+the claim sequence's own kill window from every sweep (the ghost-claim
+defect).
+**Migration**: Replaced by "Open-task listing reports facts via state labels"
+below: same query and rate-limit economy, facts only; judgment moves to core.
+
 ## ADDED Requirements
+
+### Requirement: Open-task listing reports facts via state labels
+`listOpen` SHALL query open issues carrying the working or needs-human labels
+(List Issues API, PR entries excluded), using conditional requests
+(`If-None-Match`/ETag; `304` is "no change") so an unchanged poll costs no
+rate limit. For each task the adapter SHALL report facts only —
+the state labels present, the claim facts (live claim with holder and
+version, dead footprint with last-known holder, or none), and the latest
+boundary-marker kind — and SHALL NOT omit, reinterpret, or judge any
+combination; the core classification decides. The claim version remains the
+(comment id, `updated_at`) pair of the live claim.
+<!-- implements FR4, FR5 of add-claim-heartbeat -->
+<!-- implements NFR-P1 of add-claim-heartbeat -->
+<!-- implements FR19 of harden-task-branch-contract -->
+
+#### Scenario: Working label with no claim footprint is reported, not omitted
+- **WHEN** an issue wears the working label but its thread carries no claim
+  marker at all
+- **THEN** the listing reports the issue with its label facts and an absent
+  claim footprint — no adapter-side rule drops it as a human mislabel
+
+#### Scenario: Missing live claim keeps the last-known holder
+- **WHEN** a working issue's live claim comment is gone but the thread still
+  carries a prior claim marker
+- **THEN** the listing reports the dead footprint with that last-known holder
+  and an absent (null) version — core policy decides what it means
+
+
+### Requirement: Feed entries carry claim facts
+Each `listReady` entry SHALL carry the same claim facts as the open listing,
+resolved from the per-issue comments fetch the feed enrichment already
+performs (no additional API calls), so the sweep enumerates a ready-labeled
+issue still carrying a claim footprint instead of losing races to a ghost.
+<!-- implements FR19 of harden-task-branch-contract -->
+
+#### Scenario: Ready issue with a live claim is visible to the sweep
+- **WHEN** a delayed claim comment landed on a ready-labeled issue
+- **THEN** the feed entry reports the live claim fact with no extra API read,
+  and the issue routes to repair, never treated as cleanly claimable
+
 
 ### Requirement: Factory comments are written find-then-upsert
 Every factory-authored comment SHALL be written through one shared
@@ -105,29 +153,34 @@ written through this behavior; no factory write path posts blind.
 - **THEN** the upsert matches on content identity, not on the posting instance,
   and updates the existing comment
 
-### Requirement: Kill-safe ordering of acknowledge and abort writes
-A human decision SHALL be durably appended to the task branch before its
-acknowledge marker is posted to the tracker; the abort marker SHALL be posted
-before the ready label flip. Every kill window between two tracker writes of
-one sequence SHALL land in a state either idempotently re-drivable by the next
-pickup or owned by the reaper. The abort ordering trades a possible under-count
-for a possible over-count: a crash may leave an abort counted without its ready
-flip, which fails safe toward parking, never toward losing an abort and
-crash-looping.
+### Requirement: Kill-safe ordering of tracker write sequences
+A human decision SHALL be durable on the task branch before its acknowledge
+marker posts to the tracker. Tracker sequences SHALL write
+truth markers before the label flips that index them: the abort marker before
+the ready flip, the finish marker before the delivered flip, the park marker
+before the needs-human/working label pair — so a kill window freezes
+`IndexLagging`, a swept shape, and the recorded fact (abort count, finished
+fact, park report) is never lost with an unflipped label. Every kill window
+SHALL land in a named tracker shape either idempotently re-drivable by the
+next pickup or owned by the reaper. The abort ordering trades a possible
+under-count for an over-count toward parking, which fails safe.
 <!-- implements FR12 of harden-task-branch-contract -->
 
 #### Scenario: Kill between branch append and acknowledge
 - **WHEN** an instance appends a decision to the branch and dies before posting
   the acknowledge marker
-- **THEN** the next pickup finds the decision on the branch, re-drives only the
-  acknowledge (upsert, no duplicate), and never re-collects or loses the
-  decision
+- **THEN** the next pickup finds the decision on the branch and re-drives only
+  the acknowledge (upsert, no duplicate) — the decision is never lost
 
 #### Scenario: Kill between abort marker and ready flip
-- **WHEN** an instance posts the abort marker and dies before flipping the
-  label back to ready
-- **THEN** the abort is already counted (over-count, toward parking), and the
-  frozen working label without a live claim is returned to ready by the reaper
+- **WHEN** an instance posts the abort marker, then dies before the ready flip
+- **THEN** the abort is already counted (over-count, toward parking) and the
+  frozen `IndexLagging` state is returned to ready by the sweep
+
+#### Scenario: Kill between finish marker and delivered flip keeps terminality
+- **WHEN** an instance posts the finish marker, then dies before the flip
+- **THEN** the finished fact is already derivable, the sweep completes the
+  flip, and the delivered work is never re-executed
 
 ### Requirement: Label and transport failures join the retryable hierarchy
 Label-operation failures and HTTP-transport failures of the tracker SHALL be
