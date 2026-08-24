@@ -75,13 +75,21 @@ final class DashboardPercentage {
             shares[i] = values[i] <= 0L ? 0 : (int) Math.max(1.0, Math.floor(exact(values[i], total)));
             assigned += shares[i];
         }
-        while (assigned < 100) {
-            shares[understated(values, shares, total)]++;
-            assigned++;
-        }
-        while (assigned > 100) {
-            shares[overstated(values, shares, total)]--;
-            assigned--;
+        // One pass over the segments settles the bar: flooring leaves each segment
+        // under one point short, and the minimum width borrows at most one point
+        // each, so the drift never exceeds the number of segments. One step per
+        // segment rather than `while (assigned != 100)` on purpose — a negated
+        // self-terminating condition does not terminate, and PIT reports the hung
+        // minion as a timeout rather than a killed mutant. The loop counts segments
+        // and ignores them, because the count is all it needs from them.
+        for (long ignored : values) {
+            if (assigned < 100) {
+                shares[understated(values, shares, total)]++;
+                assigned++;
+            } else if (assigned > 100) {
+                shares[overstated(values, shares, total)]--;
+                assigned--;
+            }
         }
         return shares;
     }
