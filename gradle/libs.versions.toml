@@ -12,7 +12,7 @@ java = "25"
 groovy = { strictly = "4.0.32" }
 # Spock groovy-4 variant, aligned with the Groovy 4 line (design risk: Gradle 9 / Groovy 4 / Spock matrix)
 spock = "2.4-groovy-4.0"
-spring-boot = "4.1.0"
+spring-boot = "4.1.1"
 # JaCoCo tool version for the core 'jacoco' Gradle plugin; 0.8.14+ supports Java 25 bytecode.
 jacoco = "0.8.15"
 # PIT: latest pinned for Java 25 bytecode support (design risk: PIT vs Java 25).
@@ -64,12 +64,12 @@ resilience4j = "2.4.0"
 # @JsonIgnoreProperties deserialization bypass); 2.21.5 fixes the 2.19–2.21.4 line.
 # 2.22.1 is the latest stable jackson-bom release on Maven Central (2026-07-28)
 # and stays on the fixed line.
-jackson = "2.22.1"
+jackson = "2.22.2"
 # logback: GHSA-jhq6-gfmj-v8fx (logback-core HardenedObjectInputStream Proxy
 # injection, CVSS 2.9); fixed in 1.5.35. 1.6.1 is the latest stable release on
 # Maven Central (2026-08-13) and stays on the fixed line. classic is kept on
 # the same version.
-logback = "1.6.1"
+logback = "1.6.3"
 # httpcore5: GHSA-hf6x-8p5f-cgmf (CVSS 7.5) and GHSA-v3jc-474w-2wm6 on -h2;
 # a WireMock/Testcontainers transitive drags in 5.4/5.4.2, fixed in 5.4.3. h2 is
 # kept on the same version. Test-scope only (testCompileClasspath/testRuntimeClasspath).
@@ -82,7 +82,7 @@ httpcore5 = "5.4.3"
 # in gradle.properties, which cannot read this catalog. Applied by `force`, not
 # a constraint — a `strictly` requirement cannot be raised by one (design D2).
 # Drop once a Boot 4.1.x upgrade manages 5.6.3+.
-httpclient5 = "5.6.3"
+httpclient5 = "5.6.4"
 # log4j: GHSA-qv9r-c865-cp47 (CVSS 6.3) on log4j-api 2.25.4, fixed in 2.25.5.
 # The ONE production-scope override here: log4j-to-slf4j (Boot's logging bridge)
 # and its api sit on :bootstrap's runtimeClasspath/productionRuntimeClasspath,
@@ -90,7 +90,7 @@ httpclient5 = "5.6.3"
 # move together. Minimal patch on the line Boot 4.1.0 already manages rather
 # than the newer 2.26.x line (design D4). Drop once a Boot 4.1.x upgrade
 # manages 2.25.5+.
-log4j = "2.25.5"
+log4j = "2.26.1"
 
 [libraries]
 # Spring Boot BOM imported via platform() in build.gradle (design D3);
