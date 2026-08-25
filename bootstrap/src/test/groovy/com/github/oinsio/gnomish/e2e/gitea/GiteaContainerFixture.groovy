@@ -26,6 +26,12 @@ import org.testcontainers.containers.wait.strategy.Wait
  * {@link GiteaAvailability#dockerAvailable()} and skip (e.g. via Spock {@code @IgnoreIf}) rather
  * than construct this fixture when Docker is absent.
  *
+ * <p>The container is shared, the repositories in it are not, so: {@link #authenticatedCloneUrl()}
+ * names the one bootstrapped repo, for a remote wired ONCE from {@code setupSpec} and read by
+ * every feature after; {@link #createRepository(String)} is for a remote wired per feature (from
+ * {@code setup} or a feature body) — features that each push their own root commit into one repo
+ * turn the second feature's push into a non-fast-forward rejection.
+ *
  * <p>The {@code actionsEnabled} constructor (task 7.1, M1) additionally sets {@code
  * GITEA__actions__ENABLED=true} and attaches the container to a shared Testcontainers {@link
  * Network} under the fixed alias {@link #NETWORK_ALIAS}, so a sibling {@code act_runner} container
@@ -99,7 +105,7 @@ class GiteaContainerFixture {
         container.start()
         createAdminUser()
         token = createAccessToken()
-        createRepository()
+        createRepo(REPO_NAME)
     }
 
     /** Stops and removes the container. Safe to call even if {@link #start()} was never called. */
@@ -107,13 +113,19 @@ class GiteaContainerFixture {
         container.stop()
     }
 
-    /**
-     * @return the HTTP(S) clone URL with the bootstrapped admin token embedded, e.g. {@code
-     *     http://gnomish-e2e:<token>@localhost:<port>/gnomish-e2e/gnomish-e2e-repo.git} — ready to
-     *     use directly as a git {@code origin}
-     */
+    /** @return the shared repo's clone URL with the admin token embedded, usable as a git {@code origin}. */
     String authenticatedCloneUrl() {
-        "http://${ADMIN_USER}:${token}@${container.host}:${container.getMappedPort(HTTP_PORT)}/${ADMIN_USER}/${REPO_NAME}.git"
+        cloneUrlFor(REPO_NAME)
+    }
+
+    /**
+     * Creates one more empty repository and returns its authenticated clone URL — the per-feature
+     * remote of the sharing rule above. {@code name} must be unique per caller; suffix it with
+     * {@code System.nanoTime()} or the task id.
+     */
+    String createRepository(String name) {
+        createRepo(name)
+        cloneUrlFor(name)
     }
 
     /** @return the container's base API URL, e.g. {@code http://localhost:<port>/api/v1} */
@@ -166,8 +178,12 @@ class GiteaContainerFixture {
         (response.body() =~ /"sha1":"([a-f0-9]+)"/)[0][1]
     }
 
-    private void createRepository() {
-        String body = "{\"name\":\"${REPO_NAME}\",\"private\":false,\"auto_init\":false}"
+    private String cloneUrlFor(String repo) {
+        "http://${ADMIN_USER}:${token}@${container.host}:${container.getMappedPort(HTTP_PORT)}/${ADMIN_USER}/${repo}.git"
+    }
+
+    private void createRepo(String name) {
+        String body = "{\"name\":\"${name}\",\"private\":false,\"auto_init\":false}"
         HttpResponse<String> response = post("${apiBaseUrl()}/user/repos", body, "token ${token}")
         assert response.statusCode() == 201: "repo creation failed: ${response.body()}"
     }

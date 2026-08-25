@@ -9,7 +9,9 @@ import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -32,9 +34,9 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The findings channel follows FR1/NFR-S3 of add-sandbox-core: the path is allocated in the
  * environment's scratch area (outside the working copy, inside the environment boundary), handed
- * to the command as {@code GNOMISH_FINDINGS_FILE}, and read back through the environment's
- * size-capped {@code readFile} — bytes in memory, never a factory-side file; {@code dispose()}
- * removes the scratch area whatever the outcome. The child environment is the layered allowlist
+ * to the command as {@code GNOMISH_FINDINGS_FILE}, and — only for a run that chose its own exit
+ * code — read back through the environment's size-capped {@code readFile} — bytes in memory, never
+ * a factory-side file; {@code dispose()} removes the scratch area whatever the outcome. The child environment is the layered allowlist
  * carried by {@link #childEnv} (D6, FR9); {@link #withChildEnv} threads the run's allowlist —
  * passthrough plus the active tracker adapter's declared credential names — per run.
  *
@@ -90,6 +92,20 @@ public record ShellCommandCheckRunner(
     }
 
     /**
+     * Returns a copy of this runner bounding every {@code command} check by {@code checkTimeout} —
+     * the installation's {@code factory.check-command-timeout} (FR5, FR12 of
+     * bound-subprocess-commands). A check that has not exited when it expires is killed tree-wide
+     * and fails as a quality failure carrying the tail captured so far, rather than hanging the
+     * run.
+     *
+     * @param checkTimeout the hard bound on one check; never null, never negative
+     * @return a runner identical but for the bound; never null
+     */
+    public ShellCommandCheckRunner withCheckTimeout(Duration checkTimeout) {
+        return new ShellCommandCheckRunner(processRunner.withCheckTimeout(checkTimeout), clock, childEnv, environments);
+    }
+
+    /**
      * Returns a copy of this runner acquiring check environments from {@code environments} — the
      * sandboxed source serving same-box checks from the round lease and fresh-box checks from the
      * attempt commit (FR13, the integration pass of add-sandbox-core). Apply after {@link
@@ -118,10 +134,34 @@ public record ShellCommandCheckRunner(
                 return new Verdict.CannotVerify("failed to start command: " + check.command(), "");
             }
 
+            // The termination decides first (FR6, FR12 of bound-subprocess-commands): a run that
+            // never chose an exit code has no findings worth reading, and the read itself would
+            // fail on the interrupted path — an in-box read is a supervised docker exec, and the
+            // interrupt flag the wait restored makes it throw instead of answering.
+            if (!(outcome.termination() instanceof ExecHandle.Wait.Exited)) {
+                return unfinished(outcome);
+            }
             byte[] findings =
                     environment.readFile(findingsPath, FINDINGS_READ_CAP_BYTES).orElse(null);
             return classify(outcome, findings);
         }
+    }
+
+    /**
+     * Classifies a run that ended without ever choosing an exit code (FR12, FR6 of
+     * bound-subprocess-commands), from its termination alone — the findings channel is never
+     * consulted here. A check killed on the installation's timeout is a quality failure — the
+     * command ran and failed to finish, exactly as a red exit code would have failed it — carrying
+     * the tail captured so far as its one synthetic finding; any findings file it left behind is
+     * half-written by construction. An interrupted check is infrastructure: the factory was shut
+     * down mid-check, and nothing about the work is known.
+     */
+    private static Verdict unfinished(CommandProcessRunner.CommandOutcome outcome) {
+        if (outcome.termination() instanceof ExecHandle.Wait.TimedOut) {
+            return new Verdict.Fail(List.of(new Finding(
+                    "command timed out before it exited and its process tree was killed", null, outcome.outputTail())));
+        }
+        return new Verdict.CannotVerify("command run was interrupted before a verdict existed", outcome.outputTail());
     }
 
     /**

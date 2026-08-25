@@ -1,9 +1,13 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
+import com.github.oinsio.gnomish.subprocess.Supervision;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.io.IOException;
-import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +31,20 @@ import org.slf4j.LoggerFactory;
  * the box the gnome already controls, and reads run as the in-box task user, not
  * root (D16).
  *
- * <p>Implements FR1, NFR-S3 of add-sandbox-core.
+ * <p>Both exec pipes are drained on virtual threads of their own, concurrently
+ * with the wait ({@link ExecPipeDrain}, design D2): reading either to the end on
+ * the calling thread first would let a hung in-box command hold the channel
+ * forever, ahead of any supervision.
+ *
+ * <p>The exec's wait and kill go through the shared subprocess supervisor
+ * (design D11 of bound-subprocess-commands), so an interrupted channel operation
+ * ends as a named {@link Termination} — reported as an {@link
+ * InterruptedIOException} — with the {@code docker exec} tree killed and reaped,
+ * rather than as the exit code {@code -1} the old catch returned, which a caller
+ * could not tell from an in-box script that genuinely exited {@code -1}.
+ *
+ * <p>Implements FR1, NFR-S3 of add-sandbox-core; FR11 of
+ * bound-subprocess-commands.
  */
 final class ContainerFileChannel {
 
@@ -42,6 +59,8 @@ final class ContainerFileChannel {
     // read-then-kill truncation race on the exec pipe.
     private static final String READ_SCRIPT = "if [ -f \"$1\" ]; then head -c \"$2\" \"$1\"; else exit 42; fi";
     private static final int ABSENT_EXIT = 42;
+
+    private static final ProcessSupervisor SUPERVISOR = new ProcessSupervisor();
 
     private final DockerCli docker;
     private final String key;
@@ -60,11 +79,14 @@ final class ContainerFileChannel {
         List<String> argv = List.of("sh", "-c", WRITE_SCRIPT, "gnomish", resolved);
         Process process = docker.start(DockerCommands.exec(key, workingCopy.toString(), Map.of(), true, argv), false);
         Thread pump = Thread.ofVirtual().start(() -> pump(process, content));
-        drain(process.getInputStream());
-        int code = waitFor(process);
+        ExecPipeDrain stdout = ExecPipeDrain.start(process.getInputStream(), "channel-write-stdout");
+        ExecPipeDrain stderr = ExecPipeDrain.start(process.getErrorStream(), "channel-write-stderr");
+        int code = completed(process, "in-box write to " + path);
+        stdout.join();
+        byte[] errBytes = stderr.join();
         join(pump);
         if (code != 0) {
-            throw new UncheckedIOException(new IOException("in-box write to " + path + " failed with exit " + code));
+            throw new UncheckedIOException(failure("in-box write to " + path, code, errBytes));
         }
     }
 
@@ -76,13 +98,16 @@ final class ContainerFileChannel {
         long bound = sizeCap + 1;
         List<String> argv = List.of("sh", "-c", READ_SCRIPT, "gnomish", resolved, Long.toString(bound));
         Process process = docker.start(DockerCommands.exec(key, workingCopy.toString(), Map.of(), false, argv), false);
-        byte[] bytes = drain(process.getInputStream());
-        int code = waitFor(process);
+        ExecPipeDrain stdout = ExecPipeDrain.start(process.getInputStream(), "channel-read-stdout");
+        ExecPipeDrain stderr = ExecPipeDrain.start(process.getErrorStream(), "channel-read-stderr");
+        int code = completed(process, "in-box read of " + path);
+        byte[] bytes = stdout.join();
+        byte[] errBytes = stderr.join();
         if (code == ABSENT_EXIT) {
             return Optional.empty();
         }
         if (code != 0) {
-            throw new UncheckedIOException(new IOException("in-box read of " + path + " failed with exit " + code));
+            throw new UncheckedIOException(failure("in-box read of " + path, code, errBytes));
         }
         if (bytes.length > sizeCap) {
             log.warn("channel file {} exceeded read cap {} bytes; truncated", path, sizeCap);
@@ -115,19 +140,23 @@ final class ContainerFileChannel {
         return normalized.toString();
     }
 
+    /**
+     * The nonzero-exit failure, carrying whatever the in-box command wrote to
+     * stderr — without it, "failed with exit 1" left an operator to re-run the
+     * exec by hand to learn which of {@code mkdir}, {@code cat} or {@code head}
+     * refused, and why (NFR-O1 of bound-subprocess-commands).
+     */
+    private static IOException failure(String what, int code, byte[] stderr) {
+        String detail = new String(stderr, StandardCharsets.UTF_8).strip();
+        String suffix = detail.isEmpty() ? "" : "; stderr: " + detail;
+        return new IOException(what + " failed with exit " + code + suffix);
+    }
+
     private static void pump(Process process, byte[] bytes) {
         try (OutputStream os = process.getOutputStream()) {
             os.write(bytes);
         } catch (IOException e) {
             log.debug("in-box writer closed stdin early: {}", e.toString());
-        }
-    }
-
-    private static byte[] drain(InputStream in) {
-        try (in) {
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read docker exec output", e);
         }
     }
 
@@ -139,12 +168,19 @@ final class ContainerFileChannel {
         }
     }
 
-    private static int waitFor(Process process) {
-        try {
-            return process.waitFor();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return -1;
+    /**
+     * Waits for the exec to finish under the shared supervisor and returns the
+     * exit code it really chose. A wait cut short by an interrupt is not one of
+     * those: the tree is killed and reaped, the flag stays set for the caller
+     * above, and the operation is reported as an interruption by name rather than
+     * folded into an exit code (FR11).
+     */
+    private static int completed(Process process, String what) {
+        Supervision supervision = SUPERVISOR.await(process, null);
+        if (supervision.termination() != Termination.EXITED) {
+            throw new UncheckedIOException(new InterruptedIOException(
+                    what + " did not complete: the wait was interrupted and the exec was killed"));
         }
+        return supervision.exitCode();
     }
 }

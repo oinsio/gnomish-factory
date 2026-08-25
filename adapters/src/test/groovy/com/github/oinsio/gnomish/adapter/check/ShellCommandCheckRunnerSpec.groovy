@@ -1,17 +1,11 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -24,34 +18,12 @@ import spock.lang.TempDir
  * they were malformed. Process-spawning mechanics (cwd, environment, output tail bounding) are
  * covered by {@code CommandProcessRunnerSpec}.
  */
-class ShellCommandCheckRunnerSpec extends Specification {
+class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandCheckRunnerTestSupport {
 
     @TempDir
     Path tempDir
 
     def runner = new ShellCommandCheckRunner()
-
-    private DirectoryWorkspace workspace() {
-        new DirectoryWorkspace(tempDir)
-    }
-
-    private static VerifyCheck.Command command(String line) {
-        new VerifyCheck.Command(line)
-    }
-
-    private static List<ILoggingEvent> capture(Class<?> loggerOwner, Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(loggerOwner)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list
-    }
 
     def "run(...) maps exit 0 to a Pass verdict"() {
         given:
@@ -236,7 +208,7 @@ EOF
 exit 0''')
 
         when:
-        Verdict verdict
+        Verdict verdict = null
         def events = capture(FindingsFileReader) {
             verdict = runner.run(check, workspace())
         }
@@ -253,7 +225,7 @@ exit 0''')
         def check = command('exit 0')
 
         when:
-        Verdict verdict
+        Verdict verdict = null
         def events = capture(FindingsFileReader) {
             verdict = runner.run(check, workspace())
         }

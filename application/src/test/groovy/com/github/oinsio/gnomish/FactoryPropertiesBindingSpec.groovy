@@ -46,6 +46,22 @@ class FactoryPropertiesBindingSpec extends Specification {
         '5 seconds' | 'a spelled-out unit'
     }
 
+    // FR5/D8 of bound-subprocess-commands: the three deadlines bind under their kebab-case names
+    //     through the same annotated constructor — the property an operator writes reaches the record
+    def "#property binds to the record"() {
+        when:
+        def properties = bind([(property): '90s'])
+
+        then:
+        accessor(properties) == Duration.ofSeconds(90)
+
+        where:
+        property | accessor
+        'factory.git-network-timeout' | { it.gitNetworkTimeout() }
+        'factory.docker-command-timeout' | { it.dockerCommandTimeout() }
+        'factory.check-command-timeout' | { it.checkCommandTimeout() }
+    }
+
     private static FactoryProperties bind(Map<String, String> properties) {
         new Binder(
                 [

@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -55,7 +55,6 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     String taskId
 
     def cleanup() {
@@ -80,9 +79,8 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
     private Path cloneWithOrigin(String name) {
         def dir = initWorkingRepo(tempDir, name)
         Files.writeString(dir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(dir, 'add', 'instructions.md')
-        gitRunner.run(dir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(dir, 'remote', 'add', 'origin', "https://example.invalid/org/${name}.git")
+        commitAll(dir)
+        addRemote(dir, 'origin', "https://example.invalid/org/${name}.git")
         dir
     }
 
@@ -99,7 +97,7 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
         def project = cloneWithOrigin('cross-instance-project')
         taskId = "CTN-SIBLING-${System.nanoTime() % 100000}"
         def support = ContainerRunSupport.create(project, taskId, segments(), tinyAges,
-                List.<String> of(), [], OwnershipMode.TRACKED)
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}".toString()
@@ -107,7 +105,7 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
         // Docker timestamps have sub-second precision but the host clock may lag; a real sleep puts
         // the box reliably past the 1ms thresholds, so the age guard cannot be what spares it.
         Thread.sleep(1500)
-        def pass = SandboxLifecyclePassFactory.create(tinyAges, Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
 
         when: "instance A's tick runs with a verdict naming the sibling's claim as fresh"
         def spared = pass.run(project, new LivenessVerdict.Live(Set.of(taskId)))

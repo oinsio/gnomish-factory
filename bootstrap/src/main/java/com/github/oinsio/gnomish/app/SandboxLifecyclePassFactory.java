@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.OriginRemote;
 import com.github.oinsio.gnomish.app.git.ProjectIdentity;
@@ -16,6 +17,7 @@ import com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleSweep;
 import com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleThresholds;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.NullMarked;
@@ -45,10 +47,15 @@ final class SandboxLifecyclePassFactory {
      * @param sandboxProperties the operator sandbox config; {@link SandboxProperties#image()} null
      *     means a host-only install — no Docker objects exist, so {@link SandboxLifecyclePass#NONE}
      *     is returned
+     * @param factoryProperties the installation config; read here only for the two subprocess
+     *     deadlines the pass is bounded by — {@code factory.git-network-timeout} for the origin
+     *     read that resolves project identity and {@code factory.docker-command-timeout} for every
+     *     listing and disposal the sweep issues (FR5, design D8 of bound-subprocess-commands)
      * @param clock supplies the instant every object's age is measured against
      * @return the real pass, or {@link SandboxLifecyclePass#NONE} on a host-only install
      */
-    static SandboxLifecyclePass create(SandboxProperties sandboxProperties, Clock clock) {
+    static SandboxLifecyclePass create(
+            SandboxProperties sandboxProperties, FactoryProperties factoryProperties, Clock clock) {
         if (sandboxProperties.image() == null) {
             return SandboxLifecyclePass.NONE;
         }
@@ -56,7 +63,12 @@ final class SandboxLifecyclePassFactory {
                 sandboxProperties.minimumAge(),
                 sandboxProperties.keptReapAge(),
                 sandboxProperties.manualRunningStopAge());
-        return new RealPass(new GitProcessRunner(), sandboxProperties, thresholds, clock);
+        return new RealPass(
+                new GitProcessRunner(factoryProperties.gitNetworkTimeout()),
+                sandboxProperties,
+                thresholds,
+                factoryProperties.dockerCommandTimeout(),
+                clock);
     }
 
     /**
@@ -67,6 +79,7 @@ final class SandboxLifecyclePassFactory {
             GitProcessRunner runner,
             SandboxProperties sandboxProperties,
             SandboxLifecycleThresholds thresholds,
+            Duration dockerCommandTimeout,
             Clock clock)
             implements SandboxLifecyclePass {
 
@@ -120,7 +133,7 @@ final class SandboxLifecyclePassFactory {
         @DoNotMutate
         private String sweepAndSummarize(
                 ProjectScope scope, LivenessVerdict liveness, Instant now, SweepSummaryListener summary) {
-            SandboxLifecycleSweep.create(summary).evaluate(scope, liveness, now, thresholds);
+            SandboxLifecycleSweep.create(summary, dockerCommandTimeout).evaluate(scope, liveness, now, thresholds);
             return summary.summaryLine();
         }
     }

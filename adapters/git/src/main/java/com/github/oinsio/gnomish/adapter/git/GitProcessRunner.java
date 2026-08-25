@@ -1,11 +1,14 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.DoNotMutate;
-import java.io.ByteArrayOutputStream;
+import com.github.oinsio.gnomish.subprocess.CaptureRunner;
+import com.github.oinsio.gnomish.subprocess.Captured;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Shells out to the real {@code git} binary via {@code ProcessBuilder} — no JGit (ADR 0001) —
@@ -33,13 +36,38 @@ import java.nio.file.Path;
  * commands and in-worktree working-tree operations (e.g. {@code reset}, {@code clean}, {@code
  * branch}, {@code rev-parse}, {@code worktree list}) run unlocked, in parallel.
  *
+ * <p>Commands that reach a remote (see {@link GitNetworkCommands}) are the ones this runner bounds:
+ * they carry git's own stall detection and, as a backstop for a process that is wedged rather than
+ * merely slow, a hard deadline enforced by the shared subprocess supervisor — output drained
+ * concurrently, the whole process tree killed on expiry, and a named {@code TIMED_OUT} outcome
+ * instead of an exit code nobody can distinguish from git's own. Local commands stay unbounded
+ * (NG3): a {@code commit} or a {@code rev-parse} that hangs is a broken machine, not a broken
+ * remote. An interrupted wait is likewise a named outcome, not exit {@code -1} (design D1, D6).
+ *
  * <p>Every captured stderr passes through {@link CredentialScrub} before it is handed back, so a
  * remote URL's embedded credentials cannot reach an operator log or a tracker-published report
- * through any of this package's call sites (NFR-S2 of fix-lifecycle-push).
+ * through any of this package's call sites (NFR-S2 of fix-lifecycle-push) — including the partial
+ * stderr of a command killed on its deadline.
  *
- * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push.
+ * <p>A bound that fires says so once, here: the runner is the only place that knows both how long
+ * the command actually ran and what deadline it was given, so the WARN naming the command class,
+ * the elapsed time and the configured deadline belongs to it (NFR-O1). Callers add their own line
+ * about what the command was for.
+ *
+ * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push; FR1, FR2, FR4, FR5, FR6,
+ * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands.
  */
 public final class GitProcessRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(GitProcessRunner.class);
+
+    /**
+     * The documented default for a network command (FR5): long enough that a real clone of a real
+     * repository finishes under it, short enough that a dead remote does not hold a run for the
+     * rest of the night. Written as five minutes, which is the 300 s the proposal documents. An
+     * installation raises it through {@code factory.git-network-timeout}.
+     */
+    static final Duration DEFAULT_NETWORK_TIMEOUT = Duration.ofMinutes(5);
 
     // Shared across every GitProcessRunner instance in this process (not per-instance): call
     // sites throughout this package each construct their own GitProcessRunner, so the lock scope
@@ -48,27 +76,53 @@ public final class GitProcessRunner {
     private static final CloneMutationLock MUTATION_LOCK = new CloneMutationLock();
 
     private final String gitBinary;
+    private final Duration networkTimeout;
+    private final CaptureRunner captureRunner = new CaptureRunner();
 
     public GitProcessRunner() {
         this("git");
     }
 
     public GitProcessRunner(String gitBinary) {
+        this(gitBinary, DEFAULT_NETWORK_TIMEOUT);
+    }
+
+    /**
+     * The {@code git} on {@code PATH} under an explicit network deadline — what the composition
+     * root hands the installation's {@code factory.git-network-timeout} through (FR5, design D8 of
+     * bound-subprocess-commands).
+     *
+     * @param networkTimeout the hard bound on a command that reaches a remote
+     */
+    public GitProcessRunner(Duration networkTimeout) {
+        this("git", networkTimeout);
+    }
+
+    /**
+     * @param gitBinary the git executable to invoke
+     * @param networkTimeout the hard bound on a command that reaches a remote; the composition
+     *     root passes the installation's {@code factory.git-network-timeout}, and specs inject a
+     *     sub-second one
+     */
+    public GitProcessRunner(String gitBinary, Duration networkTimeout) {
         this.gitBinary = gitBinary;
+        this.networkTimeout = networkTimeout;
     }
 
     /**
      * Runs {@code git <args...>} with {@code cwd} as the working directory, capturing stdout and
-     * stderr as separate UTF-8 strings and the exit code. A non-zero git exit code is returned
-     * in the result, never thrown — callers decide what a given command's exit code means.
+     * stderr as separate UTF-8 strings, the exit code, and how the invocation ended. A non-zero git
+     * exit code is returned in the result, never thrown — callers decide what a given command's
+     * exit code means, after reading {@link GitCommandResult#termination()} first.
      *
      * <p>Repo-level mutating commands (see class javadoc) serialize per target clone; every other
-     * command runs immediately, unlocked.
+     * command runs immediately, unlocked. Network commands are bounded by the configured deadline;
+     * local ones are not.
      *
      * @param cwd the working directory for the git process
      * @param args the git subcommand and its arguments, e.g. {@code "status"} or {@code "init",
      *     "--bare"}
-     * @return the captured exit code and separate stdout/stderr
+     * @return the captured exit code, separate stdout/stderr, and the named termination
      * @throws GitBinaryNotFoundException if the configured git executable could not be launched
      *     at all (missing from {@code PATH}, not executable, ...)
      */
@@ -94,25 +148,10 @@ public final class GitProcessRunner {
      * own index/working tree or a single, independently-locked ref) is left unlocked. Leading
      * {@code -c key=value} global-option pairs are skipped before classifying, so a fetch that
      * carries per-invocation config (e.g. the harvest fetch's {@code protocol.ext.allow}) still
-     * serializes like any other fetch.
+     * serializes like any other fetch — the same skip the network classification uses.
      */
-    /**
-     * PIT M4 documented exception (build.gradle has the full rationale): {@code
-     * @DoNotMutate} on the {@code i + 1 < args.length} boundary in the {@code -c}
-     * skip-loop below. Mutating it to {@code i + 1 <= args.length} is provably
-     * equivalent — brute-forced over every argument sequence of length 0-5 from
-     * this method's vocabulary, both boundaries classify identically in every
-     * case, because a trailing {@code -c} with no following value only ever
-     * pushes {@code i} past the array end, which the {@code i >= args.length}
-     * guard right after the loop already turns into the same {@code false}
-     * result either way.
-     */
-    @DoNotMutate
     private static boolean isRepoLevelMutating(String... args) {
-        int i = 0;
-        while (i + 1 < args.length && args[i].equals("-c")) {
-            i += 2;
-        }
+        int i = GitNetworkCommands.subcommandIndex(args);
         if (i >= args.length) {
             return false;
         }
@@ -154,7 +193,9 @@ public final class GitProcessRunner {
     }
 
     private GitCommandResult execute(Path cwd, String... args) {
-        ProcessBuilder builder = new ProcessBuilder(commandLine(args));
+        boolean network = GitNetworkCommands.isNetwork(args);
+        ProcessBuilder builder =
+                new ProcessBuilder(commandLine(network ? GitNetworkCommands.withStallDetection(args) : args));
         builder.directory(cwd.toFile());
         // Pin git's message locale for the child process only: callers classify failures by
         // stderr content (e.g. the harvest fetch's non-fast-forward refusal, FR5 of
@@ -170,22 +211,67 @@ public final class GitProcessRunner {
         builder.environment().put("GIT_TERMINAL_PROMPT", "0");
         builder.environment().put("GIT_ASKPASS", "");
         builder.environment().put("SSH_ASKPASS", "");
+        if (network) {
+            GitNetworkCommands.applySshStallDetection(builder.environment());
+        }
 
-        Process process;
+        Duration deadline = network ? networkTimeout : null;
+        long startedAt = System.nanoTime();
+        Captured captured = capture(builder, deadline);
+        report(captured.termination(), args, deadline, Duration.ofNanos(System.nanoTime() - startedAt));
+        // The single choke point for git's diagnostics (NFR-S2 of fix-lifecycle-push): stderr is
+        // scrubbed of any remote-URL credentials here, before a caller can log it or carry it into
+        // a report a tracker publishes — the partial stderr of a killed command included, since a
+        // timed-out push is exactly where a credential-bearing URL tends to be half-printed.
+        // Stdout is deliberately left raw — `remote get-url origin` answers through it, and
+        // OriginRemote's caller needs the real URL.
+        String stderr = CredentialScrub.scrub(captured.stderr());
+        return new GitCommandResult(captured.exitCode(), captured.stdout(), stderr, captured.termination());
+    }
+
+    /**
+     * Logs the one WARN a bound that fired owes an operator (NFR-O1, NFR-O2): which class of
+     * command ended early, how long it ran, and — for a timeout — the deadline they would raise to
+     * give it more. Only the subcommand is named, never the full argv: a {@code clone} or a
+     * {@code push} argument can carry a credential-bearing remote URL, and this line is written
+     * before any scrub could reach it.
+     */
+    private void report(Termination termination, String[] args, @Nullable Duration deadline, Duration elapsed) {
+        if (termination == Termination.EXITED) {
+            return;
+        }
+        String subcommand = GitNetworkCommands.subcommand(args);
+        if (termination == Termination.TIMED_OUT) {
+            log.warn(
+                    "git network command timed out and its process tree was killed: subcommand={},"
+                            + " elapsed={}, deadline={}",
+                    subcommand,
+                    elapsed,
+                    deadline);
+            return;
+        }
+        log.warn(
+                "git command interrupted and its process tree was killed: subcommand={}, elapsed={}",
+                subcommand,
+                elapsed);
+    }
+
+    /**
+     * Runs {@code builder} under the shared subprocess supervisor: both streams drained
+     * concurrently with the process (so neither a full pipe nor a child holding stdout open can
+     * block the wait), the wait bounded by {@code deadline} when there is one, and on expiry or
+     * interruption the whole process tree terminated and reaped before the outcome comes back
+     * (FR2, FR3, FR6). Without the kill an interrupted caller — a shutdown, a revoked claim —
+     * would leave the git child running unattended with its pipes half-read; for a mutating
+     * command that means a push or fetch still writing into the clone after the run that owns it
+     * has gone.
+     */
+    private Captured capture(ProcessBuilder builder, @Nullable Duration deadline) {
         try {
-            process = builder.start();
+            return captureRunner.run(builder, deadline);
         } catch (IOException e) {
             throw new GitBinaryNotFoundException(gitBinary, e);
         }
-
-        String stdout = readFully(process.getInputStream());
-        // The single choke point for git's diagnostics (NFR-S2 of fix-lifecycle-push): stderr is
-        // scrubbed of any remote-URL credentials here, before a caller can log it or carry it into
-        // a report a tracker publishes. Stdout is deliberately left raw — `remote get-url origin`
-        // answers through it, and OriginRemote's caller needs the real URL.
-        String stderr = CredentialScrub.scrub(readFully(process.getErrorStream()));
-        int exitCode = waitFor(process);
-        return new GitCommandResult(exitCode, stdout, stderr);
     }
 
     private String[] commandLine(String... args) {
@@ -193,31 +279,5 @@ public final class GitProcessRunner {
         commandLine[0] = gitBinary;
         System.arraycopy(args, 0, commandLine, 1, args.length);
         return commandLine;
-    }
-
-    private static String readFully(InputStream in) {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try {
-            in.transferTo(buffer);
-        } catch (IOException e) {
-            // Stream read failure mid-command: keep whatever was captured so far.
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
-    }
-
-    /**
-     * Waits for {@code process}, and on interruption kills it before returning. Without the kill an
-     * interrupted caller (a shutdown, a revoked claim) leaves the git child running unattended with
-     * its pipes half-read — for a mutating command that means a push or fetch still writing into the
-     * clone after the run that owns it has gone.
-     */
-    private static int waitFor(Process process) {
-        try {
-            return process.waitFor();
-        } catch (InterruptedException e) {
-            process.destroy();
-            Thread.currentThread().interrupt();
-            return -1;
-        }
     }
 }

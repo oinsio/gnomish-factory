@@ -51,6 +51,10 @@ public final class WorktreeDivergenceCheck {
      */
     public DivergenceOutcome reconcile(String taskId, String branchName) {
         String trackingRef = "refs/remotes/origin/" + branchName;
+        // The fetch's own outcome is deliberately not read, and that stays correct under the
+        // bounded outcomes (FR7): everything below is decided from refs the clone actually holds,
+        // so a fetch killed on its deadline degrades to "no fresher tracking ref", never to a
+        // wrong divergence verdict.
         runner.run(worktreeRoot, "fetch", "origin", branchName + ":" + trackingRef);
         if (!refExists(trackingRef)) {
             return DivergenceOutcome.NO_REMOTE_TRACKING_REF;

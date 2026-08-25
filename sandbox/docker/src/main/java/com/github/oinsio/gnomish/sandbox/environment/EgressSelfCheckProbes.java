@@ -1,11 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -115,13 +115,23 @@ record EgressSelfCheckProbes(
 
     private Probe run(String... argv) {
         ExecHandle handle = environment.exec(new ExecCommand(List.of(argv), Map.of(), null, true));
-        String output;
-        try (var in = handle.output()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new SelfCheckFailedException("probe-io", "could not read probe output: " + e);
+        CapturedExec captured = capture(handle, "self-check probe");
+        return new Probe(captured.exitCode(), captured.output());
+    }
+
+    /**
+     * The probes' shared capture: output drained concurrently with the supervised
+     * wait (FR2, FR11 of bound-subprocess-commands), with a broken pipe kept in
+     * the self-check's own fail-closed classification. An interrupted wait lands
+     * here too — named in the cause, flag left set — so a shutdown still reads as
+     * a failed check, never as an in-box exit code.
+     */
+    static CapturedExec capture(ExecHandle handle, String what) {
+        try {
+            return CapturedExec.of(handle, what);
+        } catch (UncheckedIOException e) {
+            throw new SelfCheckFailedException("probe-io", "could not capture probe output: " + e.getCause());
         }
-        return new Probe(handle.waitForExit(), output);
     }
 
     /** One probe's observation; {@code toString} is the diagnostic detail a failure carries. */

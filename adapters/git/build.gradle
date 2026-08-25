@@ -41,6 +41,12 @@ dependencies {
     api project(':sandbox:core')
 
     implementation libs.slf4j.api
+    // The shared subprocess wait/kill/drain discipline (FR9, design D9/D10 of
+    // bound-subprocess-commands): `GitProcessRunner` bounds its network
+    // commands through it. `implementation` — the supervisor is held in a
+    // private field and `Termination` reaches consumers only through the
+    // package-private `GitCommandResult`, so no consumer compiles against it.
+    implementation project(':subprocess')
 
     // The task state file and `task.json` are Jackson documents. The state DTOs
     // are on this module's own api surface (the `git.state` mappers hand them
@@ -90,5 +96,13 @@ pitest {
 // sandbox backend it hands work to, and nothing sideways (FR2, M4, design D1):
 // no sibling adapter module appears here.
 layering {
-    allowedProjects = [':application', ':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core', ':sandbox:docker']
+    allowedProjects = [
+        ':application',
+        ':domain',
+        ':gitobjects',
+        ':gnomish-plugin-api',
+        ':sandbox:core',
+        ':sandbox:docker',
+        ':subprocess',
+    ]
 }

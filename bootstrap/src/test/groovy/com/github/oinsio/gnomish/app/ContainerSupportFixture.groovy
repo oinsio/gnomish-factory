@@ -16,14 +16,28 @@ final class ContainerSupportFixture {
 
     private ContainerSupportFixture() {}
 
-    /** The real per-run container support, over the real Docker runtime. */
+    /** The real per-run container support, over the real Docker runtime, {@code manual}-owned. */
     static ContainerSupportFactory real() {
+        forOwnership(OwnershipMode.MANUAL)
+    }
+
+    /**
+     * As {@link #real()}, but {@code tracked}-owned — the ownership label a {@code take}/{@code
+     * serve} dispatch of an already-claimed tracker task carries, as opposed to {@code run}'s
+     * {@code manual} label.
+     */
+    static ContainerSupportFactory tracked() {
+        forOwnership(OwnershipMode.TRACKED)
+    }
+
+    private static ContainerSupportFactory forOwnership(OwnershipMode ownershipMode) {
         { Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox, FactoryProperties factory, definition, List<String> credentialEnvVarsToScrub ->
             // The check providers' credential declarations are resolved by the composition root and
             // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
             // provider, so the declared set is empty.
             ContainerRunSupport.create(
-            cloneDir, taskId, segments, sandbox, List.<String> of(), credentialEnvVarsToScrub, OwnershipMode.MANUAL)
+            cloneDir, taskId, segments, sandbox, factory,
+            List.<String> of(), credentialEnvVarsToScrub, ownershipMode)
         } as ContainerSupportFactory
     }
 }

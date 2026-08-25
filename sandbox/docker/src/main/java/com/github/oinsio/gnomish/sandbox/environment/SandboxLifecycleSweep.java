@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.git.ProjectScope;
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -47,10 +48,14 @@ public final class SandboxLifecycleSweep {
      * to obtain a usable evaluator from outside this package.
      *
      * @param listener the verdict sink; never null
+     * @param dockerCommandTimeout the hard bound on each {@code docker} command the pass issues —
+     *     the installation's {@code factory.docker-command-timeout}, threaded from the composition
+     *     root because {@link DockerCli} is not nameable outside this package (FR5, FR10, design D8
+     *     of bound-subprocess-commands); never null
      * @return a sweep over the real {@code docker} binary; never null
      */
-    public static SandboxLifecycleSweep create(SweepVerdictListener listener) {
-        DockerCli docker = new DockerCli();
+    public static SandboxLifecycleSweep create(SweepVerdictListener listener, Duration dockerCommandTimeout) {
+        DockerCli docker = new DockerCli(dockerCommandTimeout);
         return new SandboxLifecycleSweep(docker, new ContainerEnvironmentDisposal(docker), listener);
     }
 

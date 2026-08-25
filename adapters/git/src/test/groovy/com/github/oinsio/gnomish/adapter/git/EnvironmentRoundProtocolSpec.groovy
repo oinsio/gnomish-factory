@@ -286,24 +286,6 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         check.inspect(BRANCH).isEmpty()
     }
 
-    // PIT SURVIVED "replaced return value with \"\"" on EnvironmentRoundSnapshot#readFully:
-    // exercised directly via reflection against a real InputStream — the smallest true unit
-    // for a private static helper — so a mutant that always returns "" is caught by asserting
-    // the exact, non-trivial content read back, not merely that reading doesn't throw.
-    def "readFully reads a multi-line InputStream back byte-for-byte, not the empty string"() {
-        given:
-        def method = EnvironmentRoundSnapshot.getDeclaredMethod('readFully', InputStream)
-        method.accessible = true
-        def content = 'line one\nline two\nünïcödé tail'
-        def input = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8))
-
-        when:
-        def result = method.invoke(null, input)
-
-        then:
-        result == content
-    }
-
     def "FR22: a rewritten in-box history is refused at the state-commit harvest too"() {
         given:
         gnomeWork()

@@ -92,6 +92,20 @@ dependencyAnalysis {
                 severity 'ignore'
             }
         }
+        // `:sandbox:docker` exports `:subprocess` as `api` and DAGP advises
+        // `implementation`, reading only the Java ABI: nothing of `:subprocess`
+        // appears on a public Java signature. The consumers that break are
+        // Groovy ones — `:test-fixtures` subclasses the package-private
+        // `DockerCli`, and groovyc canonicalizes the whole class, private
+        // members included, so `Captured` must be visible to them
+        // (`:test-fixtures:compileGroovy` fails on it otherwise). Narrowly
+        // scoped to the one rule in the one module; every other check still
+        // fails the build there.
+        project(':sandbox:docker') {
+            onIncorrectConfiguration {
+                severity 'ignore'
+            }
+        }
     }
 }
 

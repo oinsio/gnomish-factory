@@ -48,9 +48,17 @@ public class ManualRunConfiguration {
         return new FilesExistCheckRunner();
     }
 
+    /**
+     * The {@code command}-check runner, bounded by the installation's {@code
+     * factory.check-command-timeout} (FR5, FR12, design D8, D12 of bound-subprocess-commands): a
+     * check that has not exited when the deadline expires is killed tree-wide and fails as a
+     * quality failure carrying the tail captured so far, instead of hanging the run. Every later
+     * rebind of this runner ({@code withChildEnv}, {@code withEnvironments}) carries the bound
+     * along, so the value threaded here holds for every check of every mode.
+     */
     @Bean
-    public ShellCommandCheckRunner shellCommandCheckRunner() {
-        return new ShellCommandCheckRunner();
+    public ShellCommandCheckRunner shellCommandCheckRunner(FactoryProperties factoryProperties) {
+        return new ShellCommandCheckRunner().withCheckTimeout(factoryProperties.checkCommandTimeout());
     }
 
     @Bean
@@ -73,10 +81,15 @@ public class ManualRunConfiguration {
      * The one git subprocess runner every git-backed port shares (design D8 of add-git-workflow):
      * repo-level mutating commands serialize per clone through the runner, so handing every port
      * the same instance is what keeps concurrent slots correct.
+     *
+     * <p>Bounded by the installation's {@code factory.git-network-timeout} (FR5, design D8 of
+     * bound-subprocess-commands): commands that reach a remote — {@code fetch}, {@code push},
+     * {@code ls-remote}, {@code clone}, {@code remote update} — carry the deadline; local ones
+     * stay unbounded.
      */
     @Bean
-    public GitProcessRunner gitProcessRunner() {
-        return new GitProcessRunner();
+    public GitProcessRunner gitProcessRunner(FactoryProperties factoryProperties) {
+        return new GitProcessRunner(factoryProperties.gitNetworkTimeout());
     }
 
     /**

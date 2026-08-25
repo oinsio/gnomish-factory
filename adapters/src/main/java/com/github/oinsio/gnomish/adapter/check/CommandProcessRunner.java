@@ -1,19 +1,18 @@
 package com.github.oinsio.gnomish.adapter.check;
 
-import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Runs {@code sh -c <command>} through a {@link TaskExecutionEnvironment} — the
@@ -26,21 +25,73 @@ import org.jspecify.annotations.Nullable;
  * class contributes only the factory-set findings-file variable and never
  * touches {@link ProcessBuilder}.
  *
- * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core.
+ * <p>The run is bounded by the installation's check timeout (design D12, FR12):
+ * a check that has not exited when it expires has its whole process tree killed
+ * and reports {@link ExecHandle.Wait.TimedOut} — a quality failure for the
+ * caller to classify, carrying the tail captured so far, rather than a run that
+ * hangs until an operator notices. The tail is drained concurrently with the
+ * command ({@link BoundedTail}), because a stream read to its end on this thread
+ * is precisely what a hung command never lets return.
+ *
+ * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core; FR6,
+ * FR12, NFR-O1, D12 of bound-subprocess-commands.
  */
 final class CommandProcessRunner {
 
-    /** ~200 lines OR ~10 KB, whichever is hit first (design D6, FR7). */
-    private static final int MAX_TAIL_LINES = 200;
+    private static final Logger log = LoggerFactory.getLogger(CommandProcessRunner.class);
 
-    private static final int MAX_TAIL_BYTES = 10 * 1024;
+    /**
+     * The documented default for a verify command (FR5): generous enough that a
+     * real build-and-test check finishes under it, short enough that a wedged one
+     * does not hold a take for the rest of the night. An installation changes it
+     * through {@code factory.check-command-timeout}.
+     */
+    static final Duration DEFAULT_CHECK_TIMEOUT = Duration.ofMinutes(30);
+
+    /** How long the tail drain is waited on when a straggler still holds the pipe open (D2). */
+    static final Duration TAIL_JOIN_BOUND = Duration.ofSeconds(2);
+
+    /**
+     * The exit code reported when the command never got to choose one. Diagnostic
+     * context only: the outcome's {@code termination} already says the command did not
+     * run to completion, and the caller branches on that first.
+     */
+    private static final int UNKNOWN_EXIT_CODE = -1;
 
     private static final String FINDINGS_FILE_ENV_VAR = "GNOMISH_FINDINGS_FILE";
 
     private final String shell;
 
+    private final Duration checkTimeout;
+
+    private final Clock clock;
+
+    /** A runner over {@code shell} bounded by the documented default timeout. */
     CommandProcessRunner(String shell) {
+        this(shell, DEFAULT_CHECK_TIMEOUT, new SystemClock());
+    }
+
+    /**
+     * @param shell the shell executable to invoke via {@code -c <command>}
+     * @param checkTimeout the hard bound on one check; the composition root passes the
+     *     installation's {@code factory.check-command-timeout}, and specs inject a sub-second one
+     * @param clock the read-time source for the measured wall time
+     */
+    CommandProcessRunner(String shell, Duration checkTimeout, Clock clock) {
         this.shell = shell;
+        this.checkTimeout = checkTimeout;
+        this.clock = clock;
+    }
+
+    /**
+     * Returns a copy of this runner bounding its checks by {@code checkTimeout} — the seam the
+     * composition root threads the installation's configured value through (FR5).
+     *
+     * @param checkTimeout the hard bound on one check; never null, never negative
+     * @return a runner identical but for the bound; never null
+     */
+    CommandProcessRunner withCheckTimeout(Duration checkTimeout) {
+        return new CommandProcessRunner(shell, checkTimeout, clock);
     }
 
     /**
@@ -52,15 +103,16 @@ final class CommandProcessRunner {
      * turn that into a {@code CannotVerify} verdict without a stack trace
      * crashing the check.
      *
-     * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core.
+     * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core; FR12
+     * of bound-subprocess-commands.
      *
      * @param check the command check to run
      * @param environment the bound task environment the process runs in
      * @param findingsPath the environment-valid path handed to the command as
      *     {@code GNOMISH_FINDINGS_FILE} (allocated under the environment's
      *     scratch root), or {@code null} to run without a findings channel
-     * @return the captured exit code and bounded output tail, or {@code null} if
-     *     the process failed to start
+     * @return the captured exit code, bounded output tail and how the run ended,
+     *     or {@code null} if the process failed to start
      */
     @Nullable
     CommandOutcome run(VerifyCheck.Command check, TaskExecutionEnvironment environment, @Nullable String findingsPath) {
@@ -72,9 +124,18 @@ final class CommandProcessRunner {
             return null;
         }
 
-        String tail = readBoundedTail(handle);
-        int exitCode = handle.waitForExit();
-        return new CommandOutcome(exitCode, tail);
+        long startedAt = System.nanoTime();
+        BoundedTail tail = BoundedTail.start(handle.output());
+        ExecHandle.Wait ended = handle.waitForExitOrTimeout(checkTimeout, clock);
+        report(check, ended, Duration.ofNanos(System.nanoTime() - startedAt));
+        // Bounded on both paths: the command is over either way, so the drain has only the pipe's
+        // remaining bytes to read — unless something that escaped the tree still holds the pipe
+        // open, and neither a verdict nor a timeout report may wait on that (design D2).
+        String outputTail = tail.join(TAIL_JOIN_BOUND);
+        // Only a command that chose its own exit code has one; after a kill the code is the
+        // signal's, which would read as an ordinary red check.
+        int exitCode = ended instanceof ExecHandle.Wait.Exited ? handle.waitForExit() : UNKNOWN_EXIT_CODE;
+        return new CommandOutcome(exitCode, outputTail, ended);
     }
 
     /**
@@ -86,64 +147,43 @@ final class CommandProcessRunner {
         return run(check, environment, null);
     }
 
-    private java.util.List<String> shellCommand(VerifyCheck.Command check) {
-        return java.util.List.of(shell, "-c", check.command());
-    }
-
     /**
-     * Reads the process's merged stdout/stderr stream to completion while keeping only the last
-     * {@link #MAX_TAIL_LINES} lines capped at {@link #MAX_TAIL_BYTES} bytes: a fixed-capacity
-     * line deque evicts from the front once either bound would be exceeded, which is the natural
-     * way to keep "last N lines up to a byte cap" without buffering the whole stream first
-     * (relevant for long-running or chatty commands).
+     * Logs the one WARN a bound that fired owes an operator (NFR-O1, NFR-O2):
+     * which check ended early, how long it ran, and — for a timeout — the
+     * deadline they would raise to give it more. The check's command line is its
+     * id: a stage's verify list addresses its command checks by nothing else.
      */
-    private static String readBoundedTail(ExecHandle handle) {
-        Deque<String> lines = new ArrayDeque<>();
-        int bytes = 0;
-        try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(handle.output(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                int lineBytes = line.getBytes(StandardCharsets.UTF_8).length + 1;
-                lines.addLast(line);
-                bytes += lineBytes;
-                while (lines.size() > MAX_TAIL_LINES || bytes > MAX_TAIL_BYTES) {
-                    String evicted = requireEvicted(lines.pollFirst());
-                    bytes -= evicted.getBytes(StandardCharsets.UTF_8).length + 1;
-                }
+    private void report(VerifyCheck.Command check, ExecHandle.Wait ended, Duration elapsed) {
+        switch (ended) {
+            case ExecHandle.Wait.Exited ignored -> {
+                // A command that answered is silent: a WARN in the log means a bound actually fired.
             }
-        } catch (IOException e) {
-            // Stream read failure mid-command: keep whatever tail was captured.
+            case ExecHandle.Wait.TimedOut ignored ->
+                log.warn(
+                        "command check timed out and its process tree was killed: check={}, elapsed={}, deadline={}",
+                        check.command(),
+                        elapsed,
+                        checkTimeout);
+            case ExecHandle.Wait.Interrupted ignored ->
+                log.warn(
+                        "command check interrupted and its process tree was killed: check={}, elapsed={}",
+                        check.command(),
+                        elapsed);
         }
-        return String.join("\n", lines);
+    }
+
+    private List<String> shellCommand(VerifyCheck.Command check) {
+        return List.of(shell, "-c", check.command());
     }
 
     /**
-     * Asserts the just-evicted line is non-null: every entry into the loop above requires {@code
-     * lines.size() > MAX_TAIL_LINES} (>= 0, so the deque is non-empty) or {@code bytes >
-     * MAX_TAIL_BYTES} ({@code bytes} only grows when a line is added, so a positive running total
-     * also implies a non-empty deque) — {@code pollFirst()} on a non-empty deque never returns
-     * {@code null}. Isolated to its own method (rather than a defensive {@code if}/{@code break}
-     * inline) so the provably-unreachable null case has nowhere for a mutant to hide as a false
-     * SURVIVED.
+     * The outcome of one command run: exit code, the bounded output tail, and how
+     * the run ended — the caller reads {@code termination} before the exit code, since
+     * only a natural exit carries one the command chose.
      *
-     * <p>PIT M4 documented exception (build.gradle has the full rationale): {@code @DoNotMutate}
-     * — this line-count/byte-cap invariant is otherwise fully covered by CommandProcessRunnerSpec's
-     * boundary specs.
-     */
-    @DoNotMutate
-    private static String requireEvicted(@Nullable String evicted) {
-        if (evicted == null) {
-            throw new IllegalStateException("unreachable: loop guard implies a non-empty deque");
-        }
-        return evicted;
-    }
-
-    /**
-     * The outcome of one command run: exit code and the bounded output tail.
-     *
-     * @param exitCode the process's exit code
+     * @param exitCode the process's exit code; meaningful on {@link ExecHandle.Wait.Exited}
      * @param outputTail the bounded tail of the merged stdout/stderr stream
+     * @param termination whether the command exited, hit the check timeout, or was interrupted
      */
-    record CommandOutcome(int exitCode, String outputTail) {}
+    record CommandOutcome(int exitCode, String outputTail, ExecHandle.Wait termination) {}
 }

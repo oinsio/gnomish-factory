@@ -114,9 +114,11 @@ bounded, runs the D3 kill on expiry or interrupt, joins drains within a bound, r
 (`GitProcessRunner`, `DockerCli.run`): start from a caller-built `ProcessBuilder`, capture stdout
 and stderr separately, return `{termination, exitCode, stdout, stderr}`. Streaming callers
 (`HostExecHandle`, `ContainerFileChannel`, `GitExec`'s capped stdout) use the primitive and keep
-their own readers. The interrupt path gets one package-private seam (as `GitExec.await` has
-today), driven deterministically by the module's own spec — the five per-module timing-race
-`@DoNotMutate` exemptions collapse into it. *Alternative rejected:* one fat runner serving every
+their own readers. The interrupt path needs no production seam
+(amended during implementation from the originally planned package-private one, as `GitExec.await`
+had): the module's own spec drives it deterministically by pre-interrupting the calling thread
+before the wait — the five per-module timing-race `@DoNotMutate` exemptions collapse into that one
+spec-owned site. *Alternative rejected:* one fat runner serving every
 caller's I/O shape — caps, stdin, scrub, and tails are policy, and policy stays local (NG4).
 
 **D11 — `DockerCli.run` moves onto the capture runner with the docker deadline; `start` keeps

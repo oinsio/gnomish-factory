@@ -53,6 +53,10 @@ public final class TaskBranchLocator {
             return new BranchLocation.RemoteTracking(trackingRef);
         }
 
+        // The plain exit-code test stays correct across the bounded outcomes (FR7): the ref check
+        // that follows is the authority, and a fetch that was killed or interrupted cannot have
+        // created the tracking ref — either way the branch reads as not found, which is what an
+        // unreachable origin has always meant here.
         GitCommandResult fetch = runner.run(cloneDir, "fetch", "origin", branchName + ":" + trackingRef);
         if (fetch.exitCode() == 0 && refExists(cloneDir, trackingRef)) {
             return new BranchLocation.RemoteTracking(trackingRef);

@@ -53,8 +53,15 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
 
     def gitRunner = new GitProcessRunner()
 
+    // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
+    String originUrl
+
     def setupSpec() {
         gitea.start()
+    }
+
+    def setup() {
+        originUrl = gitea.createRepository("cross-instance-${System.nanoTime()}")
     }
 
     private static StageDefinition stage(String name) {
@@ -90,7 +97,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
     /** A brand-new, independent local clone of the Gitea repo — stands in for a separate machine. */
     private Path freshClone(String name) {
         Path dir = tempDir.resolve(name)
-        gitRunner.run(tempDir, 'clone', gitea.authenticatedCloneUrl(), dir.toString())
+        gitRunner.run(tempDir, 'clone', originUrl, dir.toString())
         dir
     }
 

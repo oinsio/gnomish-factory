@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +22,14 @@ import org.slf4j.LoggerFactory;
  * failure. No configured {@code origin} is likewise undeliverable — a purely local run has no
  * remote for a CI trigger to have fired on.
  *
- * <p>Implements FR21 of add-sandbox-core.
+ * <p>A push that did not run to its own exit spends no re-attempt (FR7 of
+ * bound-subprocess-commands): a killed or interrupted push established no remote outcome, so
+ * repeating it would only spend a second full deadline on a remote already proven unresponsive.
+ * Both cases are {@link Outcome.Undeliverable} — which the check resolves as CannotVerify,
+ * infrastructure rather than quality — with a reason that says the outcome is unknown rather than
+ * negative.
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR7 of bound-subprocess-commands.
  */
 public final class RemoteAttemptDelivery implements AttemptDelivery {
 
@@ -68,12 +76,26 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
         }
 
         GitCommandResult push = push();
-        if (push.exitCode() != 0) {
+        if (push.termination() == Termination.EXITED && push.exitCode() != 0) {
             log.warn(
                     "attempt-commit delivery push failed, re-attempting once: branch={}, stderr={}",
                     branch,
                     push.stderr().trim());
             push = push();
+        }
+        if (push.termination() != Termination.EXITED) {
+            log.warn(
+                    "attempt-commit delivery push {}: branch={}",
+                    push.termination() == Termination.TIMED_OUT ? "timed out" : "was interrupted",
+                    branch);
+            return new Outcome.Undeliverable(
+                    "attempt-commit delivery could not be verified",
+                    "push of " + branch
+                            + (push.termination() == Termination.TIMED_OUT
+                                    ? " was cut off on its deadline"
+                                    : " was interrupted before it finished")
+                            + ", so whether attempt commit " + attempt + " reached '" + OriginRemote.NAME
+                            + "' is unknown");
         }
         if (push.exitCode() != 0) {
             return new Outcome.Undeliverable(

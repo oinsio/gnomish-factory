@@ -55,6 +55,9 @@ class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFix
     Path worktreesRoot
     def gitRunner = new GitProcessRunner()
 
+    // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
+    String originUrl
+
     def setupSpec() {
         gitea.start()
     }
@@ -64,7 +67,8 @@ class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFix
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
         gitRunner.run(cloneDir, 'add', 'instructions.md')
         gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
+        originUrl = gitea.createRepository("best-effort-push-${System.nanoTime()}")
+        gitRunner.run(cloneDir, 'remote', 'add', 'origin', originUrl)
         gitRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
@@ -110,7 +114,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFix
 
         and: 'a fresh independent clone from Gitea, fetching just the task branch, already has that round commit'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitRunner.run(tempDir, 'clone', gitea.authenticatedCloneUrl(), freshClone.toString())
+        gitRunner.run(tempDir, 'clone', originUrl, freshClone.toString())
         gitRunner.run(freshClone, 'fetch', 'origin', "gnomish/${taskId}:refs/remotes/origin/gnomish/${taskId}")
         gitRunner.run(freshClone, 'cat-file', '-e', roundSha).exitCode() == 0
 

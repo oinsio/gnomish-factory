@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
 import spock.lang.Specification
@@ -57,9 +58,8 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'iso-project')
         Files.writeString(cloneDir.resolve('seed.txt'), 'seed\n')
-        gitRunner.run(cloneDir, 'add', 'seed.txt')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(cloneDir, 'branch', 'gnomish/iso-task')
+        commitAll(cloneDir)
+        gitOutput(cloneDir, 'branch', 'gnomish/iso-task')
     }
 
     def cleanup() {
@@ -78,7 +78,8 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
                 new ThreadSleeper(),
                 tempDir.resolve('guard-config'),
                 OwnershipMode.MANUAL,
-                'test-project')
+                'test-project',
+                Duration.ofMinutes(5))
     }
 
     // M2: the self-check catches broken isolation fail-closed — no gnome process may run in a

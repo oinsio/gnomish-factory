@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -23,7 +24,16 @@ import org.slf4j.LoggerFactory;
  * <p>Exhaustion never blocks the park (FR5): the verdict is data the caller carries into its
  * tracker write, which proceeds either way.
  *
- * <p>Implements FR4, FR5, NFR-R2, NFR-O1, UX2 of fix-lifecycle-push.
+ * <p>A push that did not run to its own exit is not a failed push (design D7 of
+ * bound-subprocess-commands): it burns no re-attempt — a second bounded wait on a remote that
+ * already proved unresponsive is the hang this fence must not reintroduce — and it never yields
+ * the {@code origin is behind} note on its own authority. A timed-out push is an <em>unknown</em>
+ * remote outcome, because the kill may have landed after the transfer did, so the fence asks
+ * {@code origin} once more and asserts "behind" only when {@code origin} itself answers that the
+ * tip is missing. An interrupted one is not re-checked at all: the run is shutting down.
+ *
+ * <p>Implements FR4, FR5, NFR-R2, NFR-O1, UX2 of fix-lifecycle-push; FR7, FR8, NFR-O2, UX2, UX3
+ * of bound-subprocess-commands.
  */
 public final class ParkDeliveryFence {
 
@@ -77,7 +87,7 @@ public final class ParkDeliveryFence {
         }
 
         GitCommandResult result = push.push(cloneDir, branch);
-        if (result.exitCode() != 0) {
+        if (result.termination() == Termination.EXITED && result.exitCode() != 0) {
             log.warn(
                     "park delivery push failed, re-attempting once: taskId={}, branch={}, stderr={}",
                     taskId,
@@ -85,21 +95,54 @@ public final class ParkDeliveryFence {
                     result.stderr().trim());
             result = push.push(cloneDir, branch);
         }
+        if (result.termination() != Termination.EXITED) {
+            return unverified(cloneDir, taskId, branch, tip.get(), result);
+        }
         if (result.exitCode() != 0) {
             log.warn(
                     "park delivery fence exhausted, parking anyway: taskId={}, branch={}, stderr={}",
                     taskId,
                     branch,
                     result.stderr().trim());
-            // The note names the action too (UX2): a human reading a park is deciding what to do
-            // next, and "origin is behind" is only actionable once they know that resuming this task
-            // elsewhere would read stale state until the branch is pushed.
-            return new ParkDeliveryVerdict.Undelivered(
-                    "Note: origin is behind this park — branch " + branch
-                            + " could not be pushed, so the remote does not yet carry the recorded outcome."
-                            + " Push it from this machine (git push origin " + branch
-                            + ") before resuming this task elsewhere; until then another instance would resume from stale state.");
+            return new ParkDeliveryVerdict.Undelivered(ParkDeliveryNotes.behind(branch));
         }
         return new ParkDeliveryVerdict.Delivered();
+    }
+
+    /**
+     * The verdict for a push that never established a remote outcome (FR7). An interrupt ends the
+     * fence where it stands — the run is going away, and the one remaining remote read would only
+     * be another command to abandon. A timeout gets exactly one bounded re-check, and only
+     * {@code origin}'s own answer can turn it into the {@code origin is behind} claim.
+     */
+    private ParkDeliveryVerdict unverified(
+            Path cloneDir, String taskId, String branch, String tip, GitCommandResult result) {
+        if (result.termination() == Termination.INTERRUPTED) {
+            log.warn(
+                    "park delivery push interrupted, delivery unverified, parking anyway: taskId={}, branch={}",
+                    taskId,
+                    branch);
+            return new ParkDeliveryVerdict.Undelivered(
+                    ParkDeliveryNotes.unverified(branch, "was interrupted before it finished"));
+        }
+        RemoteBranchTip.Carriage carriage = remoteTip.confirm(cloneDir, branch, tip);
+        if (carriage == RemoteBranchTip.Carriage.CARRIES) {
+            log.warn("park delivery push timed out, but origin carries the park: taskId={}, branch={}", taskId, branch);
+            return new ParkDeliveryVerdict.Delivered();
+        }
+        if (carriage == RemoteBranchTip.Carriage.ABSENT) {
+            log.warn(
+                    "park delivery push timed out, origin confirmed behind, parking anyway: taskId={}, branch={}",
+                    taskId,
+                    branch);
+            return new ParkDeliveryVerdict.Undelivered(ParkDeliveryNotes.behind(branch));
+        }
+        log.warn(
+                "park delivery push timed out and origin did not answer the re-check, parking anyway:"
+                        + " taskId={}, branch={}",
+                taskId,
+                branch);
+        return new ParkDeliveryVerdict.Undelivered(ParkDeliveryNotes.unverified(
+                branch, "was cut off on its deadline and origin did not answer the re-check"));
     }
 }

@@ -19,6 +19,9 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR6, FR17 of add-sandbox-core.
  */
+// Not a record: this is a behavior-bearing reader over the git seam (a collaborator, not immutable
+// data), kept as a plain final class for parity with its siblings in this package.
+@SuppressWarnings("ClassCanBeRecord")
 public final class ContainerResumeBranch {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerResumeBranch.class);
@@ -70,6 +73,9 @@ public final class ContainerResumeBranch {
         }
         if (isAncestor(cloneDir, local, tracking)) {
             log.info("local {} is behind origin; fast-forwarding the ref", branch);
+            // The plain exit-code test stays correct under the bounded outcomes (FR7): a fetch
+            // that was killed or interrupted did not fast-forward the ref either, and refusing to
+            // resume on a branch still behind origin is the same right answer for both.
             GitCommandResult ff = runner.run(cloneDir, "fetch", "origin", branch + ":" + branch);
             if (ff.exitCode() != 0) {
                 throw new IllegalStateException("could not fast-forward " + branch + ": " + ff.stderr());

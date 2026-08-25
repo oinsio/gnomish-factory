@@ -36,9 +36,16 @@ class RemotePrimitiveSingleSiteSpec extends Specification {
         filesContaining('"remote", "get-url"') == ['OriginRemote.java']
     }
 
+    // `GitNetworkCommands` names the same subcommand without constructing it: it classifies an
+    // argv as one that reaches a remote, so the runner can bound it (FR1 of
+    // bound-subprocess-commands). A classifier that lists every network subcommand is the opposite
+    // of the regrowth this scan guards against — a second CALL SITE would still red it.
     def "the remote-refs tip read is constructed in exactly one place"() {
         expect:
-        filesContaining('"ls-remote"') == ['RemoteBranchTip.java']
+        filesContaining('"ls-remote"') == [
+            'GitNetworkCommands.java',
+            'RemoteBranchTip.java'
+        ]
     }
 
     def "the remote name itself is spelled in exactly one place"() {

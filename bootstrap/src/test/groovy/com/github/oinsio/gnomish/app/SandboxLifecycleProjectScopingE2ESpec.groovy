@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -62,7 +62,6 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     List<String> taskIds = []
 
     def setup() {
@@ -88,16 +87,15 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
     private Path cloneWithOrigin(String name, String originUrl) {
         def dir = initWorkingRepo(tempDir, name)
         Files.writeString(dir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(dir, 'add', 'instructions.md')
-        gitRunner.run(dir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(dir, 'remote', 'add', 'origin', originUrl)
+        commitAll(dir)
+        addRemote(dir, 'origin', originUrl)
         dir
     }
 
     private String materializeRunningBox(Path cloneDir, String taskId, SandboxProperties sandboxProps, OwnershipMode mode) {
         taskIds << taskId
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                List.<String> of(), [], mode)
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], mode)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
@@ -122,7 +120,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
         def boxB = materializeRunningBox(projectB, taskB, tinyMinAge, OwnershipMode.TRACKED)
 
         when: 'project A alone runs a sweep tick, its oracle omitting every task (worst case for both)'
-        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
         pass.run(projectA, new LivenessVerdict.Live(Set.of()))
 
         then: 'A stopped its own unowned running box'
@@ -145,7 +143,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
         def box = materializeRunningBox(project, taskId, tinyMinAge, OwnershipMode.MANUAL)
 
         when: 'a sweep tick evaluates the host with an empty liveness verdict'
-        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(tinyMinAge, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
         pass.run(project, new LivenessVerdict.Live(Set.of()))
 
         then: 'the manual box is untouched — its own 24h age threshold governs it, not the oracle'

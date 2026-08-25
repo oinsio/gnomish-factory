@@ -20,7 +20,12 @@ import org.slf4j.LoggerFactory;
  * <p>Because the push runs before the decorated lifecycle call returns, a caller that proceeds to
  * a tracker write does so after the replication attempt, never before it (FR2).
  *
- * <p>Implements FR1, FR2, NFR-O1, NFR-R1 of fix-lifecycle-push.
+ * <p>The WARN names what actually happened (FR8 of bound-subprocess-commands): a push killed on
+ * its deadline and a push cut short by a shutdown each say so through {@link PushOutcome} rather
+ * than borrowing the rejected push's wording.
+ *
+ * <p>Implements FR1, FR2, NFR-O1, NFR-R1 of fix-lifecycle-push; FR8, NFR-O2, UX3 of
+ * bound-subprocess-commands.
  */
 final class LifecyclePush {
 
@@ -47,9 +52,11 @@ final class LifecyclePush {
             return;
         }
         GitCommandResult result = push.push(repo, branch);
-        if (result.exitCode() != 0) {
+        String outcome = PushOutcome.describe("lifecycle push", result);
+        if (outcome != null) {
             log.warn(
-                    "lifecycle push failed: taskId={}, branch={}, event={}, stderr={}",
+                    "{}: taskId={}, branch={}, event={}, stderr={}",
+                    outcome,
                     taskId,
                     branch,
                     event,

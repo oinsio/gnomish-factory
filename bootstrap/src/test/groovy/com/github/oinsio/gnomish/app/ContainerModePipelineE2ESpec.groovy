@@ -60,6 +60,9 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
     def gitRunner = new GitProcessRunner()
     String taskId = 'CTN-PIPE-1'
 
+    // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
+    String originUrl
+
     def setupSpec() {
         gitea.start()
     }
@@ -69,7 +72,8 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
         gitRunner.run(cloneDir, 'add', 'instructions.md')
         gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
+        originUrl = gitea.createRepository("container-pipeline-${System.nanoTime()}")
+        gitRunner.run(cloneDir, 'remote', 'add', 'origin', originUrl)
         gitRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
     }
 
@@ -132,7 +136,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
 
         and: 'the branch reached the real remote via the factory-side push — proven from a fresh clone'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitRunner.run(tempDir, 'clone', gitea.authenticatedCloneUrl(), freshClone.toString())
+        gitRunner.run(tempDir, 'clone', originUrl, freshClone.toString())
         gitRunner.run(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}")
         gitRunner.run(freshClone, 'cat-file', '-e', stateSha).exitCode() == 0
 

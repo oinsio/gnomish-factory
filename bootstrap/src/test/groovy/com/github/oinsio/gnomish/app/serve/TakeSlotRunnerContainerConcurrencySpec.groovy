@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.app.serve
 
-import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
 import com.github.oinsio.gnomish.app.ContainerE2eDocker
-import com.github.oinsio.gnomish.app.ContainerRunSupport
+import com.github.oinsio.gnomish.app.ContainerSupportFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
 import com.github.oinsio.gnomish.app.TaskGitFixture
@@ -29,11 +27,9 @@ import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
-import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
-import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -77,7 +73,6 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
 
     Path cloneDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
 
     // The real adapter, not a Mock(): two slot threads drive this tracker concurrently (Spock's
     // mock controller is single-thread territory), and only a real tracker records the terminal
@@ -89,8 +84,7 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'container-slots-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir, 'init')
         worktreesRoot = tempDir.resolve('worktrees-root')
         // Both tasks already claimed by THIS instance — the state a slot is dispatched in.
         TASK_IDS.each {
@@ -127,11 +121,9 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
         def bindings = new BindingProperties(BindingNames.CONTAINER, [:])
         // Mirrors the composition root's take/serve container support lambda (ManualRunRunner):
         // `tracked` ownership, since these are dispatched as already-claimed tracker tasks.
-        def containerSupport = { Path clone, String id, List<Segment> segments, SandboxProperties sandboxProps, FactoryProperties factoryProps, PipelineDefinition definition, List<String> creds ->
-            ContainerRunSupport.create(clone, id, segments, sandboxProps, [], creds, OwnershipMode.TRACKED)
-        }
         def containerTakeSupport = new ContainerTakeSupport(
-                properties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable, containerSupport)
+                properties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
+                ContainerSupportFixture.tracked())
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeSlotRunner(
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler,
@@ -171,10 +163,10 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
 
         and: 'each task reached its own completed branch carrying its own stage output'
         TASK_IDS.every { id ->
-            gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${id}").exitCode() == 0
+            gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${id}") == 0
         }
         TASK_IDS.every { id ->
-            gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', "gnomish/${id}").stdout().contains('output.txt')
+            gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', "gnomish/${id}").contains('output.txt')
         }
 
         and: 'each task disposed exactly its own environment — nothing left over for either key'

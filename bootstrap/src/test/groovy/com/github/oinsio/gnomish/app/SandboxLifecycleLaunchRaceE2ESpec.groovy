@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -53,14 +53,12 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
     Path tempDir
 
     Path cloneDir
-    def gitRunner = new GitProcessRunner()
     String taskId
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'race-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir)
     }
 
     def cleanup() {
@@ -93,14 +91,14 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
         // exact protection this spec is proving, not something to bypass.
         def sandboxProps = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                List.<String> of(), [], OwnershipMode.TRACKED)
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
         assert ContainerE2eDocker.containerRunning(boxName)
 
         when: 'a sweep tick evaluates the host with a liveness verdict that omits this task entirely'
-        def pass = SandboxLifecyclePassFactory.create(sandboxProps, Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
         pass.run(cloneDir, new LivenessVerdict.Live(Set.of()))
 
         then: 'the launching box is untouched — still running, nothing stopped or disposed'
