@@ -20,11 +20,17 @@ class ProcessSupervisorDescendantKillSpec extends Specification implements FakeB
     def "FR14: every descendant dies and is reaped, while the parent is left alone"() {
         given: 'a binary that forks a signal-ignoring child of its own and then blocks on stdin'
         Path pidFile = dir.resolve('child.pid')
-        // `read` is a shell builtin, so the parent itself blocks without forking a helper: every
-        // descendant below is one the kill is supposed to reach, and none is collateral.
+        // `wait` and `read` are shell builtins, so the parent itself blocks without forking a
+        // helper: every descendant below is one the kill is supposed to reach, none is collateral.
+        // The `wait` is what makes the parent reap the killed child: dash (Linux /bin/sh), unlike
+        // bash, does not reap a background child while blocked in `read`, and an unreaped zombie
+        // still reports alive through ProcessHandle — in production the parent is the JVM, whose
+        // process reaper does this for every child it spawned. After `wait` returns, `read` keeps
+        // the parent itself alive for the FR14 assertion.
         Path binary = fakeBinary(dir, 'parent', """
 sh -c 'trap "" TERM; sleep 600' &
 echo \$! > "\$1"
+wait
 read line
 """)
         Process process = new ProcessBuilder(binary.toString(), pidFile.toString()).start()
