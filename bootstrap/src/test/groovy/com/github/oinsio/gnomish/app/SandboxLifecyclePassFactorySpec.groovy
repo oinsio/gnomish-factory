@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
@@ -26,7 +27,7 @@ class SandboxLifecyclePassFactorySpec extends Specification {
         def sandbox = new SandboxProperties(null, null, null, null, [], [], false, null, null, null, null)
 
         expect:
-        SandboxLifecyclePassFactory.create(sandbox, clock) == SandboxLifecyclePass.NONE
+        SandboxLifecyclePassFactory.create(sandbox, new FactoryProperties(null, null, null, null, null), clock) == SandboxLifecyclePass.NONE
     }
 
     def "returns a real, usable pass when a sandbox image is configured"() {
@@ -40,7 +41,7 @@ class SandboxLifecyclePassFactorySpec extends Specification {
                 'gnomish/img', null, null, null, [], [], false, projectId, null, null, null)
 
         when:
-        def pass = SandboxLifecyclePassFactory.create(sandbox, clock)
+        def pass = SandboxLifecyclePassFactory.create(sandbox, new FactoryProperties(null, null, null, null, null), clock)
 
         then:
         pass != SandboxLifecyclePass.NONE

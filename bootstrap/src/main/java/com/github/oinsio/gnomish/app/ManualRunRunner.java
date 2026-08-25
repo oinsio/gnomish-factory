@@ -223,7 +223,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                 usageCommand,
                 boardCommand,
                 dashboardCommand,
-                SandboxLifecyclePassFactory.create(sandboxProperties, javaTimeClock),
+                SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, javaTimeClock),
                 containerTakeSupport);
     }
 
@@ -241,10 +241,14 @@ public final class ManualRunRunner implements ApplicationRunner {
      */
     static ContainerSupportFactory containerSupportFactory(
             List<String> checkCredentials, Map<String, CheckClientFactory> checkClientRegistry, OwnershipMode mode) {
-        return (clone, id, segments, sandboxProps, _, definition, creds) -> {
+        return (clone, id, segments, sandboxProps, factoryProps, definition, creds) -> {
             var credentials = new ArrayList<>(checkCredentials);
             credentials.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));
-            return ContainerRunSupport.create(clone, id, segments, sandboxProps, credentials, creds, mode);
+            // The seam's factoryProperties, ignored until now, carries the subprocess deadlines the
+            // bundle's git runner and container environments are bounded by (FR5, design D8 of
+            // bound-subprocess-commands).
+            return ContainerRunSupport.create(
+                    clone, id, segments, sandboxProps, factoryProps, credentials, creds, mode);
         };
     }
 

@@ -8,7 +8,45 @@ Define the contract every task branch obeys between factory transitions: a total
 
 ### Requirement: Total branch-shape classification
 <!-- implements FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract -->
-A classifier SHALL map any task branch tip — its file set, envelope versions, and claim epoch — to exactly one named shape from a closed set including at minimum: `Created` (initial state, including a pre-contract tip carrying `task.json` without `state.json`), `InProgress`, `Escalated` (parked awaiting a human), `CompletedUncleaned` (outcome recorded, cleanup pending), `Delivered`, `StaleEpoch`, `Corrupt` (with a reason naming the offending file and the observed vs expected content), and `Unknown`. An unsupported envelope version SHALL classify as `Corrupt` or `Unknown`, never as a closest legal match. The classifier SHALL never throw on content: only environment unavailability (git or daemon unreachable) may surface as an infrastructure error, and that error retries under existing policy without burning quality attempts.
+A classifier SHALL map any task branch tip — its file set, envelope versions, and claim epoch — to exactly one named shape from this closed set of eleven, which is the canonical vocabulary every other artifact of this change refers to rather than restates:
+
+| Shape | Meaning |
+|---|---|
+| `Bare` | the branch ref exists but carries no STARTED commit |
+| `Created` | the STARTED commit is present and no round has completed, including a pre-contract tip carrying `task.json` without `state.json` |
+| `InProgress` | a run is underway; rounds recorded, no outcome |
+| `Parked` | an outcome is recorded and a human is awaited; the pending-write marker is a sub-state, not a separate shape |
+| `Answered` | the human's decision is appended and the outcome cleared, so the branch is resumable |
+| `CompletedUncleaned` | an outcome is recorded and cleanup is still pending |
+| `Delivered` | cleanup completed, found by searching history for the cleanup commit and tolerating post-cleanup commits |
+| `StaleEpoch` | the tip's artifacts carry a claim epoch older than the live claim |
+| `UnsupportedVersion` | an envelope declares a version this factory does not support |
+| `Corrupt(reason)` | content is unreadable or self-contradictory; the reason names the offending file and the observed versus expected content |
+| `Unknown` | a legal-but-unrecognized combination |
+
+The happy-path progression of the shapes, with the two groups that leave it — quarantine on first classification and the stale-epoch fence:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Bare: branch ref created
+    Bare --> Created: STARTED commit
+    Created --> InProgress: round recorded
+    InProgress --> Parked: outcome, human awaited
+    Parked --> Answered: decision appended
+    Answered --> InProgress: resume
+    InProgress --> CompletedUncleaned: Completed outcome
+    CompletedUncleaned --> Delivered: cleanup + finish
+    Delivered --> [*]
+
+    state "Quarantine on first classification" as Q {
+        Corrupt
+        UnsupportedVersion
+        Unknown
+    }
+    StaleEpoch: StaleEpoch (older epoch than the live claim)
+```
+
+`StaleEpoch` is orthogonal to the progression: any artifact stamped with an epoch older than the live claim classifies as `StaleEpoch` regardless of its content. The set SHALL be modelled as a sealed hierarchy so readers switch without a default branch. An unsupported envelope version SHALL classify as `UnsupportedVersion`, never as `Corrupt`, `Unknown`, or a closest legal match — the distinct shape is what lets a version diagnosis name the version rather than a parse failure. No shape name SHALL collide with an existing domain type: the branch shape for "awaiting a human" is `Parked` (never `Escalated`, which names a `TaskOutcome` variant) and the shape for "decision landed" is `Answered` (never `Decision`, which names the human's answer record). The classifier SHALL never throw on content: only environment unavailability (git or daemon unreachable) may surface as an infrastructure error, and that error retries under existing policy without burning quality attempts.
 
 #### Scenario: Every generated tip classifies to exactly one shape
 - **WHEN** property-generated branch tips (arbitrary file subsets, envelope versions, and epochs) are classified
@@ -18,9 +56,9 @@ A classifier SHALL map any task branch tip — its file set, envelope versions, 
 - **WHEN** the tip carries `task.json` but no `state.json`
 - **THEN** the shape is `Created` and resume starts the first stage from scratch
 
-#### Scenario: Unsupported envelope version is classified, not thrown
+#### Scenario: Unsupported envelope version is its own shape, not a parse failure
 - **WHEN** a state file at the tip declares an envelope version the factory does not support
-- **THEN** the tip classifies as `Corrupt` with a diagnosis naming the file and the unsupported version, on every reading path including take and serve
+- **THEN** the tip classifies as `UnsupportedVersion` with a diagnosis naming the file, the observed version, and the supported range — on every reading path including take and serve — and never as `Corrupt` or `Unknown`
 
 ### Requirement: Classifier is the single entry to branch state
 <!-- implements FR2 of harden-task-branch-contract -->
@@ -66,6 +104,16 @@ Each (re)claim SHALL be issued a monotonically increasing epoch, recorded with t
 <!-- implements FR8, NFR-R3 of harden-task-branch-contract -->
 Per repository, one task SHALL be one ref and one logical transition one commit; movement across repositories is reconciled, never transactional. Origin is the sole inter-instance source of truth, and the durability point of any transition is its successful push, never the local commit. When the local branch and origin differ and the instance holds a live claim: local ahead of origin keeps local; local behind fast-forwards to origin; true divergence discards local (reset to the origin tip, dropping drafts) and continues automatically, with the reset applied as an explicit compare-and-swap against the tip the decision was made on. No automatic path SHALL force-push or rewrite origin history.
 
+```mermaid
+flowchart TD
+    C["Compare local vs origin<br/>(live claim held)"]
+    C -->|EQUAL| K["continue"]
+    C -->|AHEAD| A["keep local; push catches up"]
+    C -->|BEHIND| B["fast-forward to origin tip"]
+    C -->|DIVERGED| D["CAS-reset local ref to origin tip,<br/>drop drafts, continue"]
+    D -->|tip moved, CAS fails| R["classify again"]
+```
+
 #### Scenario: Divergence resolves automatically under the lease
 - **WHEN** the local branch and origin have truly diverged and the instance holds a live claim
 - **THEN** the local branch resets to the origin tip via compare-and-swap, drafts are dropped, and the take continues without an operator flag
@@ -80,10 +128,10 @@ Per repository, one task SHALL be one ref and one logical transition one commit;
 
 ### Requirement: Budgeted recovery with quarantine
 <!-- implements FR14, FR15, NFR-O1, NFR-O2 of harden-task-branch-contract -->
-Automatic recovery SHALL be budgeted by a persisted per-task counter of recovery attempts with backoff; this budget and the existing crash fuse SHALL be one accounting — one counter model, one quarantine outcome — while quality attempts stay separate. On exhaustion the task quarantines to the needs-human status with its failure history. `Corrupt` and `Unknown` shapes SHALL quarantine on first classification, without consuming budget cycles, with a diagnosis naming the offending file and the observed and expected shape. Every non-trivial repair SHALL emit one structured log line naming the shape, task, epoch, and action taken; repeated repair of the same task within a window SHALL surface as a warning. A quarantine report SHALL name the shape, the diagnosis, and the recovery attempts consumed, readable without factory logs.
+Automatic recovery SHALL be budgeted by a persisted per-task counter of recovery attempts with backoff; this budget and the existing crash fuse SHALL be one accounting — one counter model, one quarantine outcome — while quality attempts stay separate. On exhaustion the task quarantines to the needs-human status with its failure history. The three non-recoverable shapes — `Corrupt`, `UnsupportedVersion`, and `Unknown` — SHALL quarantine on first classification, without consuming budget cycles, with a diagnosis naming the offending file and the observed and expected shape (for `UnsupportedVersion`, the observed and supported versions). Every non-trivial repair SHALL emit one structured log line naming the shape, task, epoch, and action taken; repeated repair of the same task within a window SHALL surface as a warning. A quarantine report SHALL name the shape, the diagnosis, and the recovery attempts consumed, readable without factory logs.
 
-#### Scenario: Corrupt shape parks once with a diagnosis
-- **WHEN** a tip first classifies as `Corrupt` or `Unknown`
+#### Scenario: Non-recoverable shape parks once with a diagnosis
+- **WHEN** a tip first classifies as `Corrupt`, `UnsupportedVersion`, or `Unknown`
 - **THEN** the task quarantines immediately with a diagnosis naming the offending file and the expected shape, and no crash-fuse cycle is consumed
 
 #### Scenario: Exhausted budget quarantines with history

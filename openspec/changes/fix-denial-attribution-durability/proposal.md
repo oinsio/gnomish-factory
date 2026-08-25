@@ -9,6 +9,12 @@ delta modifies the same requirement ("Denials are captured as structured
 findings"); that block is rebased onto the merged text after this change
 archives.
 
+Coordination: lands after `harden-task-branch-contract`, whose
+`git-task-persistence` delta modifies the same requirement ("State directory
+with one writer per file" — the initial `state.json` is written once by
+`TaskRepository` in the STARTED commit); this change's block for that
+requirement is rebased onto the merged text after that change archives.
+
 ## Why
 
 `fix-denial-report-attachment` routes a guard denial onto the attempt record

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments;
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.BranchPush;
@@ -110,6 +111,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
             String taskId,
             List<Segment> segments,
             SandboxProperties sandboxProperties,
+            FactoryProperties factoryProperties,
             List<String> checkCredentialEnvVars,
             List<String> credentialEnvVarsToScrub,
             com.github.oinsio.gnomish.sandbox.environment.OwnershipMode ownershipMode) {
@@ -118,6 +120,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
                 taskId,
                 segments,
                 sandboxProperties,
+                factoryProperties,
                 checkCredentialEnvVars,
                 credentialEnvVarsToScrub,
                 ownershipMode);

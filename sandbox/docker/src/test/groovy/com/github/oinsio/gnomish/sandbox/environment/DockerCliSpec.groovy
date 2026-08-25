@@ -1,11 +1,14 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
+import com.github.oinsio.gnomish.subprocess.Termination
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
+import spock.lang.Timeout
 
 /**
  * FR3, FR4, NFR-R1 of add-sandbox-core: the docker subprocess seam captures
@@ -21,10 +24,18 @@ class DockerCliSpec extends Specification {
     Path tempDir
 
     private DockerCli cliBackedBy(String script) {
+        new DockerCli(fakeBinary(script))
+    }
+
+    private DockerCli cliBackedBy(String script, Duration commandTimeout) {
+        new DockerCli(fakeBinary(script), commandTimeout)
+    }
+
+    private String fakeBinary(String script) {
         Path bin = tempDir.resolve('fakedocker')
         Files.writeString(bin, "#!/bin/sh\n" + script)
         bin.toFile().setExecutable(true)
-        new DockerCli(bin.toString())
+        bin.toString()
     }
 
     private static String readFully(InputStream stream) {
@@ -67,6 +78,27 @@ class DockerCliSpec extends Specification {
 
         then:
         thrown(DockerUnavailableException)
+    }
+
+    @Timeout(30)
+    def "FR6 of bound-subprocess-commands: a killed command's partial stderr cannot testify the daemon unreachable"() {
+        given: 'a fake docker that cries daemon-unreachable and then hangs past the deadline'
+        // Two seconds, not milliseconds: the first exec of a freshly written script can take
+        // hundreds of milliseconds (macOS scans new executables), and the echo must land in the
+        // capture before the kill for the spec to exercise the classification at all.
+        def cli = cliBackedBy(
+                'echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock" 1>&2; sleep 600',
+                Duration.ofSeconds(2))
+
+        when:
+        def result = cli.run(['ps'])
+
+        then: 'the timeout is the outcome; only a command that ran to completion classifies an outage'
+        noExceptionThrown()
+        result.termination() == Termination.TIMED_OUT
+
+        and: 'the captured tail still carries what the command said before the kill'
+        result.stderr().contains('Cannot connect to the Docker daemon')
     }
 
     def "NFR-R1: a docker binary that cannot be launched is an infrastructure outage"() {

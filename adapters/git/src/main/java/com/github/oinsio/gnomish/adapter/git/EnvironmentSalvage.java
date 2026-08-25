@@ -2,15 +2,13 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.TaskSalvage;
+import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -60,7 +58,7 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment) implement
      */
     public boolean hasLeftovers() {
         try {
-            InBoxResult status = exec(STATUS);
+            CapturedExec status = exec(STATUS);
             return status.exitCode() == 0 && !status.output().trim().isEmpty();
         } catch (ProcessStartException | UncheckedIOException e) {
             log.warn("salvage probe could not reach the environment: {}", e.toString());
@@ -74,7 +72,7 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment) implement
             if (!hasLeftovers()) {
                 return;
             }
-            InBoxResult commit = exec(COMMIT);
+            CapturedExec commit = exec(COMMIT);
             if (commit.exitCode() != 0) {
                 throw new GitSalvageFailedException(taskId, "in-box salvage commit", commit.output());
             }
@@ -115,20 +113,10 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment) implement
         }
     }
 
-    private InBoxResult exec(String script) {
+    // Drained concurrently with the supervised wait (FR2, FR11 of bound-subprocess-commands); an
+    // interrupted wait surfaces as the UncheckedIOException the callers above already degrade on.
+    private CapturedExec exec(String script) {
         ExecHandle handle = environment.exec(new ExecCommand(List.of("sh", "-c", script), Map.of(), null, true));
-        String output = readFully(handle.output());
-        int exitCode = handle.waitForExit();
-        return new InBoxResult(exitCode, output);
+        return CapturedExec.of(handle, "in-box salvage command");
     }
-
-    private static String readFully(InputStream in) {
-        try (in) {
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read in-box command output", e);
-        }
-    }
-
-    private record InBoxResult(int exitCode, String output) {}
 }

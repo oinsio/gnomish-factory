@@ -1,14 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import com.github.oinsio.gnomish.domain.engine.port.Clock
-import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialCursor
-import com.github.oinsio.gnomish.sandbox.SandboxProperties
-import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -19,27 +12,14 @@ import spock.lang.Specification
  * and disposeExisting's full teardown of the round key's objects. The docker
  * availability probe moved out with its class ({@code DockerRuntimeProbeSpec}).
  */
-class ContainerEnvironmentsSpec extends Specification {
+class ContainerEnvironmentsSpec extends Specification implements ContainerEnvironmentsFixture {
 
     static final String KEY = 'org-repo-7'
-
-    def docker = new RecordingDockerCli()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, null, null, false, null, null, null, null)
-    def clock = { -> Instant.now() } as Clock
-    def harvester = { String container, String branch -> } as ContainerHarvest
-    def sleeper = { Duration d -> } as Sleeper
-
-    private ContainerEnvironments environments() {
-        new ContainerEnvironments(
-                docker, KEY, Path.of('/factory/clone'), harvester, sandbox,
-                clock, ChildEnvAllowlist.none(), sleeper, Path.of('/factory/guard-config'),
-                OwnershipMode.TRACKED, 'proj-1')
-    }
 
     // FR8, D9: the judge role gets a real self-checked container environment, never a null seam
     def "judgeEnvironment builds a self-checked container environment"() {
         when:
-        def judge = environments().judgeEnvironment()
+        def judge = environments(KEY).judgeEnvironment()
 
         then: 'a non-null decorator over the container adapter, guard attached'
         judge != null
@@ -53,7 +33,7 @@ class ContainerEnvironmentsSpec extends Specification {
     // FR3, FR8: the round role gets a real self-checked container environment, never a null seam
     def "roundEnvironment builds a self-checked container environment"() {
         when:
-        def round = environments().roundEnvironment()
+        def round = environments(KEY).roundEnvironment()
 
         then:
         round != null
@@ -68,7 +48,7 @@ class ContainerEnvironmentsSpec extends Specification {
     // never a null seam
     def "verificationEnvironment builds a self-checked container environment"() {
         when:
-        def verification = environments().verificationEnvironment()
+        def verification = environments(KEY).verificationEnvironment()
 
         then:
         verification != null
@@ -88,7 +68,7 @@ class ContainerEnvironmentsSpec extends Specification {
             args == GuardCommands.inspectGuardId(KEY) ? new DockerResult(0, 'sha256:container-1\n', '')
             : new DockerResult(0, '', '')
         }
-        def seam = environments()
+        def seam = environments(KEY)
 
         when:
         seam.restoreDenialCursor(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
@@ -101,13 +81,13 @@ class ContainerEnvironmentsSpec extends Specification {
     // FR6: the round key is exposed verbatim for keep/dispose bookkeeping
     def "baseKey returns the round environment's sanitized key"() {
         expect:
-        environments().baseKey() == KEY
+        environments(KEY).baseKey() == KEY
     }
 
     // FR6, NFR-R2: disposeExisting removes container, guard, volume and network of the round key
     def "disposeExisting tears down every docker object of the round key"() {
         when:
-        environments().disposeExisting()
+        environments(KEY).disposeExisting()
 
         then:
         docker.runs == [

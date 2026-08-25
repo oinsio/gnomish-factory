@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.git.ProjectIdentity
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
@@ -60,7 +60,6 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     List<String> taskIds = []
 
     def cleanup() {
@@ -89,16 +88,15 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
     private Path cloneWithOrigin(String name, String originUrl) {
         def dir = initWorkingRepo(tempDir, name)
         Files.writeString(dir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(dir, 'add', 'instructions.md')
-        gitRunner.run(dir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(dir, 'remote', 'add', 'origin', originUrl)
+        commitAll(dir)
+        addRemote(dir, 'origin', originUrl)
         dir
     }
 
     private String materializeRunningBox(Path cloneDir, String taskId, SandboxProperties sandboxProps) {
         taskIds << taskId
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                List.<String> of(), [], OwnershipMode.TRACKED)
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
@@ -110,7 +108,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
     private static List<SweepVerdict> sweep(Path cloneDir, SandboxProperties sandboxProps, LivenessVerdict liveness) {
         def collected = []
         SweepVerdictListener sink = { SweepVerdict v -> collected << v }
-        SandboxLifecyclePassFactory.create(sandboxProps, Clock.systemUTC()).run(cloneDir, liveness, sink)
+        SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null, null), Clock.systemUTC()).run(cloneDir, liveness, sink)
         collected
     }
 
@@ -162,7 +160,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
 
         when: 'a pass runs, the credential is rotated in place, and a second pass runs'
         def first = sweep(clone, props(image), liveness)
-        gitRunner.run(clone, 'remote', 'set-url', 'origin', after)
+        assert gitExitCode(clone, 'remote', 'set-url', 'origin', after) == 0
         def second = sweep(clone, props(image), liveness)
 
         then: 'the identity the two URLs derive is the same one'

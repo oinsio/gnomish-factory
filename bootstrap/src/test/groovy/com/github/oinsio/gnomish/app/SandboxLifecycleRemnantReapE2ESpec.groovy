@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -51,7 +51,6 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     String taskId
 
     def cleanup() {
@@ -76,9 +75,8 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
     private Path cloneWithOrigin(String name) {
         def dir = initWorkingRepo(tempDir, name)
         Files.writeString(dir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(dir, 'add', 'instructions.md')
-        gitRunner.run(dir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(dir, 'remote', 'add', 'origin', "https://example.invalid/org/${name}.git")
+        commitAll(dir)
+        addRemote(dir, 'origin', "https://example.invalid/org/${name}.git")
         dir
     }
 
@@ -94,7 +92,7 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
         def project = cloneWithOrigin('remnant-project')
         taskId = "CTN-REMNANT-${System.nanoTime() % 100000}"
         def support = ContainerRunSupport.create(project, taskId, segments(), tinyAges,
-                List.<String> of(), [], OwnershipMode.TRACKED)
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
         support.lease().environmentFor('work')
         assert ContainerE2eDocker.containerRunning("gnomish-box-${taskId}")
@@ -109,7 +107,7 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
         Thread.sleep(1500)
 
         when: 'a sweep tick evaluates the host with a liveness verdict that omits this task'
-        def summary = SandboxLifecyclePassFactory.create(tinyAges, Clock.systemUTC())
+        def summary = SandboxLifecyclePassFactory.create(tinyAges, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
                 .run(project, new LivenessVerdict.Live(Set.of()))
 
         then: 'the network is gone, and the pass reported the verdict that removed it'

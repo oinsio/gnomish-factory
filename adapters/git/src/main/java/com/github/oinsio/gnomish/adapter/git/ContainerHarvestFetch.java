@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerHarvest;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerTaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Locale;
 
@@ -55,6 +56,19 @@ public record ContainerHarvestFetch(GitProcessRunner runner, Path cloneDir) impl
                 "--no-recurse-submodules",
                 url(containerName),
                 refspec(branch));
+        if (result.termination() != Termination.EXITED) {
+            // A fetch killed on its deadline or cut short by a shutdown printed at most a partial
+            // transcript, and git writes its "non-fast-forward" refusal at the very end — so
+            // classifying that transcript would grade an unanswered fetch as a history-rewrite
+            // violation. It is a plain harvest failure, named as unfinished (FR7).
+            throw new HarvestFailedException(
+                    branch,
+                    "the harvest fetch "
+                            + (result.termination() == Termination.TIMED_OUT
+                                    ? "was cut off on its deadline"
+                                    : "was interrupted before it finished")
+                            + "; partial output: " + result.stderr().strip());
+        }
         if (result.exitCode() != 0) {
             throw classify(branch, result.stderr());
         }

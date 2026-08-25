@@ -2,12 +2,11 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
+import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.IsolationLevel;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -109,13 +108,9 @@ public final class EnvironmentSelfCheck {
      */
     private void probeRunsAsNonRoot() {
         ExecHandle handle = environment.exec(new ExecCommand(List.of("id", "-u"), Map.of(), null, true));
-        String output;
-        try (var in = handle.output()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8).strip();
-        } catch (IOException e) {
-            throw new SelfCheckFailedException("probe-io", "could not read probe output: " + e);
-        }
-        int exitCode = handle.waitForExit();
+        CapturedExec probe = EgressSelfCheckProbes.capture(handle, "self-check probe non-root");
+        String output = probe.output().strip();
+        int exitCode = probe.exitCode();
         if (exitCode != 0) {
             throw new SelfCheckFailedException(
                     "non-root", "could not read the in-box uid: exit " + exitCode + ", output: " + output);

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -14,11 +15,14 @@ import spock.lang.TempDir
  * The real box-to-factory transport is exercised by the Docker-gated specs;
  * here a recording fake git binary pins the exact argv without a daemon.
  */
-class ContainerHarvestFetchSpec extends Specification {
+class ContainerHarvestFetchSpec extends Specification implements BareGitRepoFixture {
 
     @TempDir
     Path tempDir
 
+    // The runner prefixes its own stall-detection options onto a fetch (FR4 of
+    // bound-subprocess-commands); what this spec pins is the caller's half of the argv, which
+    // follows them.
     def "FR5: fetch runs the factory-fixed argv — no-recurse-submodules, ext transport, unforced refspec"() {
         given: 'a fake git binary that records its argv'
         def record = tempDir.resolve('args.txt')
@@ -29,7 +33,7 @@ class ContainerHarvestFetchSpec extends Specification {
                 .fetch('gnomish-box-k7', 'gnomish/task-1')
 
         then:
-        Files.readAllLines(record) == [
+        Files.readAllLines(record) == stallDetectionArgv() + [
             '-c',
             'protocol.ext.allow=user',
             'fetch',
@@ -84,6 +88,34 @@ class ContainerHarvestFetchSpec extends Specification {
 
         then:
         noExceptionThrown()
+    }
+
+    // FR7 of bound-subprocess-commands: a fetch killed on its deadline printed at most a partial
+    // transcript, and git writes its non-fast-forward refusal at the very end — so the transcript
+    // must not be classified at all. It is a plain harvest failure, named as unfinished.
+    def "FR7: a fetch cut off on its deadline is an unfinished harvest, not a rewrite refusal"() {
+        given: 'a git that never returns, against a deadline far shorter than its stall'
+        def git = stallingGit()
+
+        when:
+        new ContainerHarvestFetch(new GitProcessRunner(git.toString(), Duration.ofSeconds(2)), tempDir)
+                .fetch('box', 'gnomish/task-1')
+
+        then:
+        def ex = thrown(HarvestFailedException)
+        ex.message.contains('was cut off on its deadline')
+        !ex.message.contains('history was rewritten')
+    }
+
+    // Long enough that the 2s deadline is the only thing that can end this fetch, short enough
+    // that a mutant which drops the bound fails on the stand-in's own exit instead of hanging.
+    private Path stallingGit() {
+        def script = tempDir.resolve('stalling-fetch-git.sh')
+        script.toFile().text = '''#!/bin/sh
+sleep 60
+'''
+        script.toFile().setExecutable(true)
+        script
     }
 
     private int scriptCounter = 0

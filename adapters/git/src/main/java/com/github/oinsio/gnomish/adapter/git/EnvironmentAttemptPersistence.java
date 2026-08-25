@@ -13,12 +13,11 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
+import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -130,10 +129,12 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         String message = ServiceCommitMessages.round(key.stage(), key.attempt());
         List<String> argv = List.of("sh", "-c", COMMIT_SCRIPT, "gnomish", STATE_PATH, tracePath, message);
         ExecHandle handle = environment.exec(new ExecCommand(argv, Map.of(), null, true));
-        String output = readFully(handle.output());
-        int exitCode = handle.waitForExit();
-        if (exitCode != 0) {
-            throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "in-box state commit", output);
+        // Drained concurrently with the supervised wait (FR2, FR11 of bound-subprocess-commands):
+        // a hung in-box command must never hold this thread on an uninterruptible pipe read.
+        CapturedExec commit = CapturedExec.of(handle, "in-box state commit");
+        if (commit.exitCode() != 0) {
+            throw new GitPersistFailedException(
+                    taskId, key.stage(), key.attempt(), "in-box state commit", commit.output());
         }
     }
 
@@ -201,13 +202,5 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         return runner.run(cloneDir, "rev-parse", "refs/heads/" + branch)
                 .stdout()
                 .trim();
-    }
-
-    private static String readFully(InputStream in) {
-        try (in) {
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read in-box commit output", e);
-        }
     }
 }

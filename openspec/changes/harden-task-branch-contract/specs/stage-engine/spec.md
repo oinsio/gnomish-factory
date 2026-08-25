@@ -16,11 +16,11 @@ The engine SHALL resume at attempt-boundary granularity from any valid recorded 
 - **THEN** the outcome is Escalated(PipelineMismatch), no execution or persistence port was invoked, and RunStarted and TaskFinished were emitted
 
 #### Scenario: Recorded pass is never re-executed
-- **WHEN** a run starts from a state whose last recorded round at the recorded position carries a passing verdict
+- **WHEN** a run starts from a state whose last recorded round at the recorded position carries a passing verdict, on a stage with `auto` advancement
 - **THEN** the engine advances past that stage without invoking the executor or any check for it, and execution continues at the following stage
 
 #### Scenario: Recorded pass on the final stage completes without re-running it
-- **WHEN** the recorded position is the final stage and its last recorded round carries a passing verdict
+- **WHEN** the recorded position is the final stage, its advancement is `auto`, and its last recorded round carries a passing verdict
 - **THEN** the run reaches Completed without re-executing the stage or re-invoking any judge
 
 ### Requirement: Strict attempt persistence

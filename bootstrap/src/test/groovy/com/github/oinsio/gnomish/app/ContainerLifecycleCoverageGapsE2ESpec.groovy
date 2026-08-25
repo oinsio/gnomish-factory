@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
@@ -170,7 +171,9 @@ advancement: auto
         def cloneDir = initWorkingRepo(tempDir, 'revocation-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
         commitAll(cloneDir, 'init')
-        addRemote(cloneDir, 'origin', gitea.authenticatedCloneUrl())
+        // Wired per feature — see GiteaContainerFixture's sharing rule.
+        def originUrl = gitea.createRepository("revocation-${System.nanoTime()}")
+        addRemote(cloneDir, 'origin', originUrl)
         gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
 
         taskId = "CTN-REVOKE-${System.nanoTime() % 100000}"
@@ -182,7 +185,7 @@ advancement: auto
                 'instructions.md', [], new AutonomyLimits(3),
                 AdvancementMode.AUTO)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(stage), sandboxProps,
-                List.<String> of(), [], OwnershipMode.TRACKED)
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
         def environment = support.lease().environmentFor('work')
         def handle = environment.exec(new ExecCommand(
@@ -205,8 +208,8 @@ advancement: auto
 
         and: 'the salvage commit reached the real remote'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitOutput(tempDir, 'clone', gitea.authenticatedCloneUrl(), freshClone.toString()) != null
-        gitOutput(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}") != null
-        gitOutput(freshClone, 'cat-file', '-e', salvageSha) != null
+        gitExitCode(tempDir, 'clone', originUrl, freshClone.toString()) == 0
+        gitExitCode(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}") == 0
+        gitExitCode(freshClone, 'cat-file', '-e', salvageSha) == 0
     }
 }

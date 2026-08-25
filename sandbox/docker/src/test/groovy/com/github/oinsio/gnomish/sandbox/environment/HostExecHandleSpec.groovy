@@ -10,8 +10,9 @@ import spock.lang.Specification
  * FR1, FR4 of add-sandbox-core: the host {@link ExecHandle}'s wait/kill/wall-time
  * mechanics over a real local process — the start instant is reported verbatim,
  * a timed-out wait kills (and reaps) the process rather than leaking it, the
- * natural exit code comes back unchanged, and an interrupted wait reports the
- * -1 sentinel with the interrupt flag preserved.
+ * natural exit code comes back unchanged, and an interrupted wait kills the
+ * process tree with the interrupt flag preserved (FR11 of
+ * bound-subprocess-commands).
  */
 class HostExecHandleSpec extends Specification {
 
@@ -57,17 +58,20 @@ class HostExecHandleSpec extends Specification {
         handle(['sh', '-c', 'exit 7']).waitForExit() == 7
     }
 
-    // FR4, NFR-R1: an interrupted wait reports the -1 sentinel and preserves the interrupt flag
-    def "an interrupted waitForExit reports -1 and preserves the interrupt flag"() {
+    // FR11 of bound-subprocess-commands: an interrupted waitForExit kills and reaps the tree
+    // instead of leaving the process running behind a shutdown, and preserves the interrupt flag
+    def "an interrupted waitForExit kills the process and preserves the interrupt flag"() {
         given: 'a long-running process'
         def h = handle(['sleep', '30'])
 
         when:
         Thread.currentThread().interrupt()
-        def code = h.waitForExit()
+        h.waitForExit()
 
-        then:
-        code == -1
+        then: 'nothing is left running behind the interrupt'
+        !process.isAlive()
+
+        and:
         Thread.interrupted() // asserts the flag survived (and clears it)
     }
 }

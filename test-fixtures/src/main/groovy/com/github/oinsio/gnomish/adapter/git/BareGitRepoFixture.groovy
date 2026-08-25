@@ -65,6 +65,16 @@ trait BareGitRepoFixture {
     }
 
     /**
+     * Runs an arbitrary {@code git} command in {@code repo} and returns its exit code, for specs
+     * that assert success/failure explicitly rather than treat any non-zero exit as a hard test
+     * error — the cross-module-safe entry point since {@link GitProcessRunner#run} is
+     * package-private.
+     */
+    int gitExitCode(Path repo, String... args) {
+        new GitProcessRunner().run(repo, args).exitCode()
+    }
+
+    /**
      * Writes an executable {@code git} stand-in that appends every invocation's argv to {@code log}
      * and then runs the real {@code git}, and returns its path — hand it to a
      * {@code GitProcessRunner} to observe what a code path SPENDS rather than only what it leaves
@@ -80,10 +90,37 @@ trait BareGitRepoFixture {
 
     /**
      * The leading subcommand of each invocation {@link #recordingGit} logged, in call order; empty
-     * when the stand-in was never invoked at all.
+     * when the stand-in was never invoked at all. Leading {@code -c key=value} global options are
+     * skipped exactly as {@code GitProcessRunner} skips them when classifying — the caller's own
+     * per-invocation config and the stall-detection options the runner prefixes onto every network
+     * command (FR4 of bound-subprocess-commands) are not what a call-count assertion is about.
      */
     List<String> recordedSubcommands(Path log) {
-        log.toFile().exists() ? log.toFile().readLines()*.split(' ')*.first() : []
+        log.toFile().exists() ? log.toFile().readLines().collect {
+            subcommandOf(it)
+        } : []
+    }
+
+    private String subcommandOf(String argvLine) {
+        def argv = argvLine.split(' ') as List
+        while (argv.size() > 1 && argv.first() == '-c') {
+            argv = argv.drop(2)
+        }
+        argv.first()
+    }
+
+    /**
+     * The stall-detection options {@code GitProcessRunner} prefixes onto every invocation that
+     * reaches a remote (FR4, design D5 of bound-subprocess-commands), so a spec asserting a
+     * command's exact argv can state the caller's half without restating the runner's.
+     */
+    List<String> stallDetectionArgv() {
+        [
+            '-c',
+            'http.lowSpeedLimit=1000',
+            '-c',
+            'http.lowSpeedTime=60'
+        ]
     }
 
     /**

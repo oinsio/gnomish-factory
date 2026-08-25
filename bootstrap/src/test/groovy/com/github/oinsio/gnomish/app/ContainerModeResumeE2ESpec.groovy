@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.EnvironmentRoundSnapshot
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -67,6 +68,9 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
     def gitRunner = new GitProcessRunner()
     String taskId
 
+    // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
+    String originUrl
+
     def setupSpec() {
         gitea.start()
     }
@@ -74,10 +78,10 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'resume-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
-        gitRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        commitAll(cloneDir)
+        originUrl = gitea.createRepository("resume-${System.nanoTime()}")
+        addRemote(cloneDir, 'origin', originUrl)
+        gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
     }
 
     def cleanup() {
@@ -139,7 +143,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
 
         and: 'the pending decision request rode the snapshot commit into the branch (FR23)'
         def branch = "gnomish/${taskId}"
-        gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', branch).stdout()
+        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
                 .contains(".gnomish-task/decisions/work-a0.json")
 
         when: 'a leftover is planted in the kept box (the uncommitted tail of a dead round)'
@@ -152,22 +156,21 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
                 .run(cloneDir, taskId, pipeline(), segments(), RunArguments.InteractiveMode.NONE, false)
 
         then: 'the leftover was salvaged in-box and harvested (FR6)'
-        def salvageSha = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: salvage$').stdout().trim()
+        def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
+                '^gnomish: salvage$')
         salvageSha
-        gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).stdout().contains('leftover.txt')
+        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).contains('leftover.txt')
 
         and: 'the task completed: cleaned tip with the work present, environment disposed'
-        def tipTree = gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', branch).stdout()
+        def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
         tipTree.contains('output.txt')
         !tipTree.contains('.gnomish-task/')
         ContainerE2eDocker.taskObjects(taskId).isEmpty()
 
         and: 'the completed branch reached the real remote'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitRunner.run(tempDir, 'clone', gitea.authenticatedCloneUrl(), freshClone.toString())
-        gitRunner.run(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}")
-                .exitCode() == 0
+        gitExitCode(tempDir, 'clone', originUrl, freshClone.toString()) == 0
+        gitExitCode(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}") == 0
     }
 
     // FR21/D15: killed between the snapshot and state commits — resume classifies the tip as an
@@ -183,7 +186,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         // No check provider is configured in this spec, so the SPI-declared check-credential set
         // the composition root resolves (FR17, D11 of add-plugin-architecture) is empty.
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                List.<String> of(), [], OwnershipMode.MANUAL)
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.MANUAL)
         support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
 
         and: 'the interrupted round: work written and snapshot-committed in-box, then the factory died'
@@ -206,17 +209,17 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
 
         then: 'the task completed — verification judged the harvested attempt commit, no agent ran'
         def branch = "gnomish/${taskId}"
-        def tipTree = gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', branch).stdout()
+        def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
         tipTree.contains('output.txt')
         !tipTree.contains('.gnomish-task/')
 
         and: 'exactly one round was recorded — the interrupted one, no attempt burned (FR21)'
-        def stateShas = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep',
-                '^gnomish: round work#0$').stdout().readLines().findAll {
+        def stateShas = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
+                '^gnomish: round work#0$').readLines().findAll {
                     !it.isBlank()
                 }
         stateShas.size() == 1
-        gitRunner.run(cloneDir, 'log', branch, '--grep', '^gnomish: round work#1$', '--format=%H')
-                .stdout().trim().isEmpty()
+        gitOutput(cloneDir, 'log', branch, '--grep', '^gnomish: round work#1$', '--format=%H')
+                .isEmpty()
     }
 }

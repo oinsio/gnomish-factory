@@ -20,11 +20,15 @@ flowchart TB
     api[":gnomish-plugin-api"]
     sandboxcore[":sandbox:core"]
     gitobjects[":gitobjects"]
+    subprocess[":subprocess"]
     domain[":domain"]
 
     bootstrap --> adapters
     adapters --> application
+    adapters --> subprocess
     application --> api & sandboxcore & gitobjects & domain
+    application --> subprocess
+    gitobjects --> subprocess
     api --> domain
     sandboxcore --> domain
 ```
@@ -35,6 +39,7 @@ The diagram shows the layers, not every edge. Notable specifics: `:adapters:gith
 |-----------------------|-------------------------------------------------------------------------------------------------------------------------------|
 | `:domain`             | the stage engine and the pipeline model — pure, no I/O, no framework                                                          |
 | `:gitobjects`         | git-object plumbing shared below the adapter layer                                                                            |
+| `:subprocess`         | the dependency-free JDK-only leaf: the one subprocess wait/kill/drain discipline (supervisor primitive + capture runner)      |
 | `:gnomish-plugin-api` | the published third-party contract: tracker port, `SecretsProvider`, the adapter SPI ([README](../../gnomish-plugin-api/README.md)); its `sample` submodule is a minimal consumer of that contract |
 | `:sandbox:core`       | the execution-environment port, capability passport and reconciliation                                                        |
 | `:sandbox:docker`     | the docker-CLI and host backends behind that port                                                                             |

@@ -6,6 +6,19 @@
 A park (Escalated or Paused) of a container-mode task SHALL record its outcome on the task branch through the same intent→effect→receipt protocol host mode uses: the factory-side outcome commit carrying the pending-write marker is the durable intent, the terminal tracker write is the effect, and the receipt is recorded after it. Recovery of a park intent without a receipt SHALL verify the effect at the tracker before re-driving it. A container-mode park therefore never leaves the branch silent: the human's escalation answer, on return, is read against a recorded park.
 <!-- implements FR10 of harden-task-branch-contract -->
 
+```mermaid
+sequenceDiagram
+    participant F as Factory
+    participant B as Task branch
+    participant T as Tracker
+
+    F->>B: intent commit (park outcome + pending marker)
+    F->>B: push
+    F->>T: effect (terminal tracker write)
+    F->>B: receipt commit + push
+    Note over F,T: kill before the receipt → next pickup verifies the effect at the tracker and re-drives it only if absent
+```
+
 #### Scenario: Container park round-trips a human decision
 - **WHEN** a container-mode task parks with a question, the operator answers, and the task is returned
 - **THEN** resume finds the recorded park outcome on the branch, reads the answer, and continues — it does not re-park with the same question

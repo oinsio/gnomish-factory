@@ -18,13 +18,26 @@ plugins {
 description = 'Internal shared git-object library: bare-repo commit/tree writes over git plumbing.'
 
 dependencies {
+    // The module's one production dependency (task 6.1, design D13 of
+    // bound-subprocess-commands): the shared subprocess wait/kill/drain
+    // discipline `GitExec.await` now runs on, replacing its own copy.
+    // `:subprocess` is itself a dependency-free JDK-only leaf (design D9), so
+    // the extraction property below is preserved — the folder move now carries
+    // two modules instead of one. `implementation`: the supervisor and its
+    // `Termination` are held inside `GitExec`, which is package-private, so
+    // nothing on this module's api surface mentions them.
+    implementation project(':subprocess')
+
     // Shared fakes and port-contract suites (FR7, design D8). No production
     // module may depend on `:test-fixtures` — test scope only.
     testImplementation project(':test-fixtures')
 }
 
-// `:gitobjects` is an extraction-ready library: the JDK and SLF4J only, never
-// a factory module (FR2, design D19 of add-sandbox-core).
+// `:gitobjects` is an extraction-ready library: the JDK, SLF4J, and the
+// dependency-free `:subprocess` leaf only — never a factory module (FR2, design
+// D19 of add-sandbox-core, as amended by design D13 of bound-subprocess-commands).
+// The single entry is safe precisely because `:subprocess` itself allows nothing:
+// were a dependency ever added there, this module's own gate would fail.
 layering {
-    allowedProjects = []
+    allowedProjects = [':subprocess']
 }

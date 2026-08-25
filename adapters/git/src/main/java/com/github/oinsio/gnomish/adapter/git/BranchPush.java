@@ -23,7 +23,10 @@ import org.slf4j.LoggerFactory;
  * — it never throws and never retries, since a push is never load-bearing for correctness once
  * the salvage commit already made the work durable locally.
  *
- * <p>Implements FR15, D2 of add-tracker-port.
+ * <p>Like its siblings, it names a killed or interrupted push for what it is through {@link
+ * PushOutcome} instead of calling it a failure (FR8 of bound-subprocess-commands).
+ *
+ * <p>Implements FR15, D2 of add-tracker-port; FR8, NFR-O2, UX3 of bound-subprocess-commands.
  */
 // Not a record: this is a behavior-bearing push service (a collaborator, not immutable data),
 // kept as a plain final class for parity with its documented sibling BestEffortPush.
@@ -54,11 +57,10 @@ public final class BranchPush {
         }
 
         GitCommandResult result = push.push(worktreeRoot, branch);
-        if (result.exitCode() != 0) {
+        String outcome = PushOutcome.describe("revocation push", result);
+        if (outcome != null) {
             log.warn(
-                    "revocation push failed: branch={}, stderr={}",
-                    branch,
-                    result.stderr().trim());
+                    "{}: branch={}, stderr={}", outcome, branch, result.stderr().trim());
         }
     }
 }

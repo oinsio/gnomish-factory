@@ -68,8 +68,9 @@ class ContainerFileChannelBoundarySpec extends Specification {
         argv[argv.indexOf('gnomish') + 1] == '/gnomish/scratch/out.json'
     }
 
-    // ContainerFileChannel#waitFor: a plain nonzero exit (no interrupt in play) must still
-    // surface as the failure, never coerced to 0.
+    // ContainerFileChannel#completed: a plain nonzero exit (no interrupt in play) must still
+    // surface as the failure, never coerced to 0 — and with nothing on stderr the message carries
+    // no empty stderr suffix.
     def "a plain nonzero exit from the in-box write is propagated, never coerced to 0"() {
         given:
         def docker = new ScriptedFileChannelDockerCli()
@@ -81,5 +82,38 @@ class ContainerFileChannelBoundarySpec extends Specification {
         then:
         def e = thrown(UncheckedIOException)
         e.message.contains('exit 5')
+        !e.message.contains('stderr')
+    }
+
+    // NFR-O1 of bound-subprocess-commands: the failure carries what the in-box command said on
+    // stderr — "exit 1" alone would send an operator back into the box to re-run it by hand.
+    def "a failing in-box write carries the command's stderr in the failure message"() {
+        given:
+        def docker = new ScriptedFileChannelDockerCli()
+        docker.process.exit = 1
+        docker.process.stderrStream = new ByteArrayInputStream('cat: no space left on device\n'.bytes)
+
+        when:
+        channel(docker).putFile('note.txt', 'x'.getBytes())
+
+        then:
+        def e = thrown(UncheckedIOException)
+        e.message.contains('exit 1')
+        e.message.contains('stderr: cat: no space left on device')
+    }
+
+    // NFR-O1: the same on the read path
+    def "a failing in-box read carries the command's stderr in the failure message"() {
+        given:
+        def docker = new ScriptedFileChannelDockerCli()
+        docker.process.exit = 2
+        docker.process.stderrStream = new ByteArrayInputStream('head: permission denied'.bytes)
+
+        when:
+        channel(docker).readFile('note.txt', 10)
+
+        then:
+        def e = thrown(UncheckedIOException)
+        e.message.contains('stderr: head: permission denied')
     }
 }

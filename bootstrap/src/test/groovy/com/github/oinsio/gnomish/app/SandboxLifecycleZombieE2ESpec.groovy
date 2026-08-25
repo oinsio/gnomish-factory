@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -73,8 +73,10 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
     Path tempDir
 
     Path cloneDir
-    def gitRunner = new GitProcessRunner()
     String taskId
+
+    // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
+    String originUrl
 
     def setupSpec() {
         gitea.start()
@@ -83,10 +85,10 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'zombie-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
-        gitRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        commitAll(cloneDir)
+        originUrl = gitea.createRepository("zombie-${System.nanoTime()}")
+        addRemote(cloneDir, 'origin', originUrl)
+        gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
     }
 
     def cleanup() {
@@ -130,7 +132,8 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
     // (ManualRunRunner).
     private static ContainerSupportFactory trackedContainerSupport() {
         { cloneDir, id, segments, sandboxProps, factoryProps, definition, creds ->
-            ContainerRunSupport.create(cloneDir, id, segments, sandboxProps, List.<String> of(), creds, OwnershipMode.TRACKED)
+            ContainerRunSupport.create(
+            cloneDir, id, segments, sandboxProps, factoryProps, List.<String> of(), creds, OwnershipMode.TRACKED)
         } as ContainerSupportFactory
     }
 
@@ -164,7 +167,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         Thread.sleep(1500)
 
         and: 'the sweep evaluates the host with a liveness verdict that omits this task — the oracle already judged it unowned'
-        def pass = SandboxLifecyclePassFactory.create(sandboxProps, Clock.systemUTC())
+        def pass = SandboxLifecyclePassFactory.create(sandboxProps, new FactoryProperties(null, null, null, null, null), Clock.systemUTC())
         def summary = pass.run(cloneDir, new LivenessVerdict.Live(Set.of()))
 
         then: 'the zombie box was stopped — not disposed — volume and network retained'
@@ -180,13 +183,12 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
 
         then: 'the leftover was salvaged in-box and harvested — the un-harvested tail is not lost'
         def branch = "gnomish/${taskId}"
-        def salvageSha = gitRunner.run(cloneDir, 'log', branch, '--format=%H', '--grep', '^gnomish: salvage$')
-                .stdout().trim()
+        def salvageSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep', '^gnomish: salvage$')
         salvageSha
-        gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).stdout().contains('leftover.txt')
+        gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', salvageSha).contains('leftover.txt')
 
         and: 'the task completed and the environment is fully disposed'
-        def tipTree = gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', branch).stdout()
+        def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)
         tipTree.contains('output.txt')
         !tipTree.contains('.gnomish-task/')
         ContainerE2eDocker.taskObjects(taskId).isEmpty()

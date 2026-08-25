@@ -1,8 +1,7 @@
-// Build script for the `:bootstrap` module (FR3, design D1/D3 of
-// split-into-modules): the composition root — `@SpringBootApplication`,
-// `main()`, every `@Configuration`, and the assembly/factory classes whose job
-// is to instantiate adapters and connect them to the ports the use cases
-// declare. It is the only module allowed to depend on `:adapters` (D3), which is
+// Build script for the `:bootstrap` module (FR3, design D1/D3 of split-into-modules): the
+// composition root — `@SpringBootApplication`, `main()`, every `@Configuration`, and the
+// assembly/factory classes whose job is to instantiate adapters and connect them to the ports
+// the use cases declare. It is the only module allowed to depend on `:adapters` (D3), which is
 // what makes it the composition root; it owns the Boot packaging and the E2E layers.
 
 // Dependency locking for this module's buildscript (plugin) classpath. The Boot
@@ -195,6 +194,7 @@ layering {
         ':gitobjects',
         ':gnomish-plugin-api',
         ':sandbox:core',
-        ':sandbox:docker'
+        ':sandbox:docker',
+        ':subprocess',
     ]
 }

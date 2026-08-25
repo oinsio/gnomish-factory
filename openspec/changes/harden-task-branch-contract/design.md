@@ -19,7 +19,7 @@ See proposal.md — Why. Constraints shaping the decisions:
 
 ## Goals / Non-Goals
 
-**Goals:** one principle (every pose has exactly one recovery owner), three mechanisms
+**Goals:** one principle (every shape has exactly one recovery owner), three mechanisms
 (single-commit transitions; intent→receipt for external effects; reaper-owned tracker
 shapes), each mechanism owned by exactly one class; discipline outlives the change via ADR +
 process rule + kill-point gate.
@@ -53,14 +53,18 @@ tip, `git show`, bare objects). *Rationale:* three access paths must not become 
 classifiers (FR1, FR2). *Alternative rejected:* per-reader classification — the scatter that
 produced the audit findings.
 
-**D4 — The shape set, exhaustively:** `Bare` (branch exists, no STARTED commit),
-`Created`, `InProgress`, `Parked` (outcome recorded; pending-marker sub-state), `Decision`
-(escalated with outcome cleared), `CompletedUncleaned`, `Delivered` (cleanup found by
-searching history for the cleanup commit, tolerating post-cleanup commits), `StaleEpoch`,
-`UnsupportedVersion`, `Corrupt(reason)`, `Unknown`. Sealed hierarchy; readers switch without
-default. Each shape declares roll-forward or discard recovery in one table (the saga "pivot"
-idea without the journal). *Alternative rejected:* hard-coded `tip^` delivered detection —
-breaks on any post-cleanup human commit.
+**D4 — One canonical shape vocabulary, owned by the spec.** The closed set of eleven shapes
+and their meanings live in exactly one place — the "Total branch-shape classification"
+requirement of the `task-branch-contract` spec. This design and the task list refer to that
+table; neither restates it. *Rationale:* three copies of a "closed" set is how the sets
+drift apart — one owner keeps the set actually closed. Two naming constraints the table encodes: a shape name must not collide with an
+existing domain type, so "awaiting a human" is `Parked` rather than `Escalated` (a
+`TaskOutcome` variant) and "decision landed" is `Answered` rather than `Decision` (the human's
+answer record); and an unsupported envelope version is its own shape rather than a flavour of
+`Corrupt`, so its diagnosis can name the version instead of a parse failure. Sealed hierarchy;
+readers switch without default. Each shape declares roll-forward or discard recovery in one
+table (the saga "pivot" idea without the journal). *Alternative rejected:* hard-coded `tip^`
+delivered detection — breaks on any post-cleanup human commit.
 
 **D5 — One intent→effect→receipt component for the five external-effect flows** (host park,
 container park, completion finish, decision acknowledge, abort mark; FR10). Flows supply the
@@ -81,14 +85,16 @@ allocates the monotonic number. *Alternative rejected:* an epoch counter in `sta
 a second writer-owned counter that resume must reconcile.
 
 **D7 — One marked-comment primitive in the GitHub adapter** (FR11): hidden content-identity
-marker (`task + intent kind`), find-then-upsert; the five existing marker kinds migrate onto
+marker (`task + intent kind`), find-then-upsert; the eight existing marker kinds migrate onto
 it. Keyed never on the bot account (a documented Renovate failure). *Alternative rejected:*
 idempotency for new writes only — mixed guarantees are none.
 
 **D8 — One replica-pair reconciler.** The EQUAL/AHEAD/BEHIND/DIVERGED relation and its
 policies (keep / fast-forward / discard-under-lease) live in one component instantiated for
-clone↔origin in both execution modes, replacing the host and container twins; the box↔clone
-harvest refusal maps to the same DIVERGED verdict (FR8). The discard reset is a local-ref CAS
+clone↔origin in both execution modes, replacing the host and container twins (`WorktreeDivergenceCheck`,
+`ContainerResumeBranch`) — and `OriginReconciliation`, the third computer of the same
+ancestry relation at task touchpoints, consumes the reconciler's verdict instead of keeping
+its own; the box↔clone harvest refusal maps to the same DIVERGED verdict (FR8). The discard reset is a local-ref CAS
 against the decided tip; origin history is never rewritten (NFR-R3). *Rationale:* arbitration
 became decidable when the claim protocol landed — origin advances only through legitimate
 lease holders, so unpushed local work is already "nonexistent" by NFR-R3 of the git-workflow
@@ -97,13 +103,17 @@ the lease, and the flag re-introduces manual surgery.
 
 **D9 — One automatic-retry accounting** (FR14): the crash fuse and the recovery budget merge
 into a single persisted counter model with categorized causes (instance crash / recovery
-failure) and one quarantine outcome carrying the history. Corrupt/Unknown/UnsupportedVersion
-bypass the counter — first classification quarantines (FR15). *Rationale:* two near-identical
+failure) and one quarantine outcome carrying the history. The three non-recoverable shapes
+named in D4's table bypass the counter — first classification quarantines (FR15). *Rationale:* two near-identical
 counters with two thresholds invite the drift the audit already found in the abort marker.
 *Alternative rejected:* a separate recovery counter beside the fuse.
 
-**D10 — The atomic file writer moves to a shared dependency-free leaf module**, and both
-persisters plus the existing dashboard writer use it (FR5). Durability point remains the
+**D10 — The atomic file writer moves to a shared dependency-free leaf module** (`atomicfile`),
+and every non-atomic writer of `.gnomish-task/` files adopts it — per the code these are the
+host-side writers `GitAttemptPersistence`, `GitTaskRepository` (initial files),
+`TerminalWriteMarker`, and `TraceLineWriter`; the container persister writes blobs through
+the bare-objects repository and is atomic at commit granularity by construction; the
+dashboard writer already uses the writer and only moves with it (FR5). Durability point remains the
 successful push: local fsync discipline is deliberately NOT added — a lost local write is
 expendable by D8's arbitration; this acceptance is recorded in the ADR. *Alternative
 rejected:* a second copy in the git adapter (module boundaries forbid the sideways import;
@@ -111,11 +121,17 @@ copies drift).
 
 **D11 — One factory-owned-paths policy for salvage** (FR5): the `.gnomish-task/` ownership
 list is a single constant consumed by host and container salvage; factory files restore from
-tip, gnome files salvage.
+tip, gnome files salvage. *Rationale:* two mode-local ownership lists are the same scatter
+D3 removes from classification — they drift, and a path missed by one mode silently trusts
+the dirty worktree. *Alternative rejected:* per-mode lists kept in each salvage — the
+divergence opportunity this change exists to close.
 
 **D12 — Container parks record through the existing bare-objects repository; escalated
 resume disposes the kept box before the decision commit** (FR10, FR17). *Rationale:* the
-pending-marker write already exists on the bare-objects path (host parity); for the decision,
+bare-objects repository already carries the outcome write (`recordOutcome`), but the
+container park path never invokes it today — the Why's "records nothing on the branch" and
+this reuse are both true; the pending-marker protocol lands on that existing write path
+(host parity); for the decision,
 no clone→live-box channel exists, so the invariant "no factory-side commit while a kept box
 survives" is enforced by disposal — the next round's fresh box seeds from the decided tip;
 cost is one re-seed. *Alternative rejected:* pushing the decision into the live box — builds
@@ -126,25 +142,69 @@ pickup)** (M1): each multi-step transition enumerates its durable steps; the har
 after each, runs the pickup against a local bare origin (Gitea only where a real remote
 protocol matters), asserts the classified shape and convergence, and runs every recovery
 twice (idempotence). Gate placement per Q4: `check` if measured runtime allows, else a
-dedicated CI lane — decided by measurement, recorded in tasks.
+dedicated CI lane — decided by measurement, recorded in tasks. *Rationale:* the audit found
+the defect class by asking "what does the next pickup see?" — the table makes that question
+executable for every transition, present and future (G5). *Alternative rejected:* per-defect
+regression specs only — they pin the seventeen known findings and leave every new transition
+unasked.
 
 **D14 — Fetch-failure classification builds on the subprocess outcomes** (FR6): a locate
 fetch is "branch absent" only on a confirmed missing-remote-ref result; timed-out,
 interrupted, and every other failure classify as infrastructure (retry, then abort the
-take). The same split applies to the remote-tip probe used by reconciliation.
+take). The same split applies to the remote-tip probe used by reconciliation. These
+infrastructure retries are their own budget, distinct from the single bounded re-attempt
+bound-subprocess-commands governs: that change forbids spending a re-attempt on an
+interrupted or timed-out invocation, and FR6/FR7 comply — an interrupted invocation is
+never re-driven within the run, and a timed-out network invocation re-enters only the
+infrastructure-retry policy (Resilience4j), never a re-attempt count. For the load-bearing
+first push (FR7) a timed-out push is an unknown remote outcome: the retry loop SHALL
+re-check the remote tip within its own bound before re-pushing, and treats a confirmed
+landed ref as success. *Rationale:* only the subprocess layer can distinguish
+"origin confirmed the ref missing" from "the invocation never got an answer" — the named
+outcomes make the split decidable where a bare exit code could not. *Alternative rejected:*
+treating any locate-fetch failure as "branch absent" (the status quo — the duplicate-branch
+defect U5 fixes).
 
 **D15 — Documentation layering** (G5): the ADR carries the principle and the three
 mechanisms plus rejected alternatives (saga journal, WAL, block counters, fsync); a new
 `.claude/rules/` crash-consistency rule carries the future-work checklist (every multi-step
 transition names its kill windows and recovery owner); `docs/glossary.md` gains the terms
-branch shape, recovery owner, claim epoch, intent/receipt. Design decisions here stay scoped
-to this change; the durable principle lives in the ADR.
+branch shape, tracker shape, sweep universe, recovery owner, claim epoch,
+intent/receipt. Design decisions here stay scoped
+to this change; the durable principle lives in the ADR. *Rationale:* each medium matches its
+lifetime — the archived design cannot govern future changes, the ADR and rule can.
+*Alternative rejected:* keeping the principle only in this design.md — it archives with the
+change and outlives nothing (the G5 failure mode).
+
+**D16 — The tracker medium gets the same total classification as the branch medium** (FR19,
+FR12). One core classifier — the mirror of D3 — maps adapter-reported tracker facts (state
+labels, claim footprint, boundary markers) to the closed shape set owned by the
+`claim-heartbeat` delta; consumers switch exhaustively; adapters report facts and never
+judge (the audit found the staleness judgment split between the `listOpen` omission rule and
+the reaper's eligibility filter — two half-brains no sweep could reconcile). The reaper
+sweeps the union of both listings, because a sweeper filtering on the very label a kill
+window may not have written yet is structurally blind (precedents: Kubernetes
+ownerReference-at-creation, Prow sinker's complement query). Time judgments (staleness TTL,
+window grace) stay with the observation memory. Write order follows the sweep-universe
+rule: the label admitting the task into the universe first, the label removing it last,
+truth markers between — markers are the truth, labels the index. The repairs are port
+physics, never adapter judgment: `removeStaleClaim` generalizes to dead footprints
+(absent live version), and one new `repairIndex` operation restores a claimless working
+task and completes a marker's lagging flip, both guarded by a re-read no-op. *Alternatives rejected:*
+claim comment before the label with a lease deadline in the comment body — reintroduces
+holder-written time the staleness model deliberately avoids, and its kill window freezes on
+a ready-labeled issue outside every sweep while still winning the earliest-id race; the
+task-branch ref as the claim CAS — collapses the two writes into one atomic primitive but
+moves mutual exclusion into a medium a non-git tracker adapter lacks (kept as an open ADR
+question for the future).
 
 ## Risks / Trade-offs
 
 - [Scope at the top of the 1–4 week invariant] → cut line, in order: D13 harness breadth
   (keep transitions touched by fixed defects, backfill the rest in a follow-up), D7
-  migration of pre-existing marker kinds. Both trail cleanly without reopening interfaces.
+  migration of pre-existing marker kinds (eight, not the five first estimated — the larger
+  volume strengthens this cut, and partial migration still trails cleanly: unmigrated kinds
+  keep their current write paths). Both trail cleanly without reopening interfaces.
 - [Classifier becomes a bottleneck for every reader] → it is one read of a tip already being
   read; adapters add no extra subprocess calls beyond today's.
 - [Automatic discard destroys work] → only unpushed work under a lost lease — already

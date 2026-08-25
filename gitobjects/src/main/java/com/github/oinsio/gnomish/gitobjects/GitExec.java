@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.gitobjects;
 
-import java.io.ByteArrayOutputStream;
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
+import com.github.oinsio.gnomish.subprocess.Supervision;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,14 +14,34 @@ import org.jspecify.annotations.Nullable;
 /**
  * Runs one {@code git} plumbing command against a fixed {@code --git-dir}, capturing exit code,
  * stdout bytes, and stderr text, with optional stdin and a per-call stdout size cap. The only place
- * this library touches a subprocess — deliberately its own minimal runner (JDK only) rather than
- * the factory's {@code GitProcessRunner}, so {@code gitobjects} stays import-independent of the
- * factory (design D19). Ambient git config is neutralized and pathspec magic disabled, so behavior
- * and commit ids do not depend on the operator's environment.
+ * this library touches a subprocess — deliberately not the factory's {@code GitProcessRunner}, so
+ * {@code gitobjects} stays import-independent of the factory (design D19). Ambient git config is
+ * neutralized and pathspec magic disabled, so behavior and commit ids do not depend on the
+ * operator's environment.
  *
- * <p>Implements FR25 of add-sandbox-core.
+ * <p>The I/O policy — the stdout cap, the stdin feed, the hermetic environment, and the loud
+ * {@link GitObjectsException} an interruption raises — is this class's own and unchanged; its
+ * stream mechanics (the pump threads and the capped read) live in {@link GitExecStreams}, split
+ * out along the file-size rule only. What is
+ * no longer its own is the wait and the kill: those run on the dependency-free {@link
+ * ProcessSupervisor}, so the library keeps one runner rather than a private copy of mechanics that
+ * are fixed in one place for every caller (design D13 of bound-subprocess-commands, superseding
+ * D19's own-runner clause). D19's goal is untouched — {@code :subprocess} reaches nothing at all,
+ * so extraction still means a folder move, of two modules instead of one.
+ *
+ * <p>Stdout is deliberately read on the calling thread, before the supervised wait — the shape the
+ * streaming callers of design D10 keep for themselves: the cap must be enforced while the bytes
+ * arrive, and stdin/stderr are pumped concurrently, so the only way this read blocks the caller is
+ * a local {@code git} plumbing command that hangs while holding its stdout open. NG3 of
+ * bound-subprocess-commands classifies that as a broken machine, not a condition to engineer
+ * around — the same acceptance that keeps {@link #await} unbounded.
+ *
+ * <p>Implements FR25 of add-sandbox-core; FR13, FR9 of bound-subprocess-commands.
  */
 record GitExec(Path gitDir, String gitBinary) {
+
+    /** Stateless and thread-safe: one instance serves every command this library runs. */
+    private static final ProcessSupervisor SUPERVISOR = new ProcessSupervisor();
 
     @SuppressWarnings("ArrayRecordComponent") // captured output bytes, consumed once by the caller
     record Result(int exitCode, byte[] stdout, String stderr, boolean truncated) {
@@ -50,12 +70,45 @@ record GitExec(Path gitDir, String gitBinary) {
             throw new GitObjectsException("could not launch git binary: " + gitBinary, e);
         }
 
-        Thread stdinThread = feed(process, stdin);
+        Thread stdinThread = GitExecStreams.feed(process, stdin);
         StringBuilder stderr = new StringBuilder();
-        Thread stderrThread = drain(process.getErrorStream(), stderr);
-        Capped out = readCapped(process.getInputStream(), stdoutCap);
+        Thread stderrThread = GitExecStreams.drain(process.getErrorStream(), stderr);
+        GitExecStreams.Capped out = readCappedThenAwaitOnFailure(process, stdinThread, stderrThread, stdoutCap);
         int exit = await(process, stdinThread, stderrThread);
-        return new Result(exit, out.bytes, stderr.toString(), out.truncated);
+        return new Result(exit, out.bytes(), stderr.toString(), out.truncated());
+    }
+
+    /**
+     * Reads the capped stdout, guaranteeing {@link #await} still runs on the way out when the read
+     * itself fails — otherwise a thrown {@link GitObjectsException} from {@link GitExecStreams#readCapped} (an
+     * {@code IOException}, or an interrupt mid-read) would skip {@link #await} entirely and orphan
+     * the subprocess: no kill/reap through {@link ProcessSupervisor}, and the stdin/stderr pump
+     * threads never joined (FR13, NFR-R2).
+     */
+    private static GitExecStreams.Capped readCappedThenAwaitOnFailure(
+            Process process, Thread stdinThread, Thread stderrThread, long stdoutCap) {
+        try {
+            return GitExecStreams.readCapped(process.getInputStream(), stdoutCap);
+        } catch (RuntimeException failure) {
+            awaitSuppressingSecondFailure(process, stdinThread, stderrThread, failure);
+            throw failure;
+        }
+    }
+
+    /**
+     * Runs the cleanup {@link #await} owes the caller once {@link GitExecStreams#readCapped} has already failed,
+     * enriching {@code failure} with any second failure {@code await} itself raises rather than
+     * losing it — reachable whenever a pump thread is still alive and the calling thread's
+     * interrupt flag is still set, since {@link Thread#join()} raises immediately on an alive
+     * thread under those conditions (FR13, NFR-R2).
+     */
+    private static void awaitSuppressingSecondFailure(
+            Process process, Thread stdinThread, Thread stderrThread, RuntimeException failure) {
+        try {
+            await(process, stdinThread, stderrThread);
+        } catch (RuntimeException fromAwait) {
+            failure.addSuppressed(fromAwait);
+        }
     }
 
     private String[] commandLine(List<String> args) {
@@ -73,102 +126,44 @@ record GitExec(Path gitDir, String gitBinary) {
     }
 
     /**
-     * Starts the stdin pump. Built through {@link Thread#ofPlatform()} rather than {@code new
-     * Thread(...)} + {@code setDaemon} + {@code start} deliberately: the builder makes "daemon" and
-     * "started" part of constructing the thread, so neither can be dropped independently. As three
-     * separate statements, a mutation removing the {@code start()} call left every git command that
-     * reads stdin blocked forever on a pipe nobody closes — and {@link #await} has no deadline, so
-     * the hang surfaced as a PIT TIMED_OUT rather than a failing spec, in whichever covering spec
-     * happened to run first (task 9.1 of split-into-modules). The builder calls all return values,
-     * so no void-call mutation of this method exists to hang (FR25).
+     * Waits for the git subprocess, then joins the pump threads so no caller can observe a
+     * partially drained stream (FR25).
+     *
+     * <p>No deadline is passed: a local plumbing command against a bare repository that never
+     * returns is a broken machine, not a broken remote, and bounding it would only turn one failure
+     * mode into another (NG3 of bound-subprocess-commands). What the supervisor contributes here is
+     * the kill discipline on the interrupt path — the tree is signalled cooperatively, forced if it
+     * ignores that, and reaped — where this class previously destroyed the parent alone and left
+     * any child git had forked behind (FR13, NFR-R2).
+     *
+     * <p>Package-private because the pump-join specs drive it directly; the interrupt path itself
+     * is no longer this module's to rehearse — {@code ProcessSupervisorInterruptSpec} owns the one
+     * driven seam now (design D10), and what stays here is only the translation of a named
+     * {@link Termination} into this library's exception contract.
      */
-    private static Thread feed(Process process, byte @Nullable [] stdin) {
-        return Thread.ofPlatform().name("gitexec-stdin").daemon(true).start(() -> {
-            try (OutputStream os = process.getOutputStream()) {
-                if (stdin != null) {
-                    os.write(stdin);
-                }
-            } catch (IOException ignored) {
-                // The process may have exited before consuming stdin; its exit code speaks.
-            }
-        });
-    }
-
-    private static Thread drain(InputStream stream, StringBuilder sink) {
-        Thread thread = new Thread(
-                () -> {
-                    try {
-                        sink.append(new String(stream.readAllBytes(), StandardCharsets.UTF_8));
-                    } catch (IOException ignored) {
-                        // Partial stderr is acceptable diagnostic context.
-                    }
-                },
-                "gitexec-stderr");
-        thread.setDaemon(true);
-        thread.start();
-        return thread;
-    }
-
-    @SuppressWarnings("ArrayRecordComponent") // transient capture buffer, never retained or shared
-    private record Capped(byte[] bytes, boolean truncated) {}
-
-    private static Capped readCapped(InputStream in, long cap) {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try {
-            if (cap < 0) {
-                in.transferTo(buffer);
-                return new Capped(buffer.toByteArray(), false);
-            }
-            byte[] chunk = new byte[8192];
-            long remaining = cap;
-            int read;
-            while (hasRemainingCapacity(remaining)
-                    && (read = in.read(chunk, 0, (int) Math.min(chunk.length, remaining))) != -1) {
-                if (Thread.currentThread().isInterrupted()) {
-                    throw new GitObjectsException("interrupted while reading git output", new InterruptedException());
-                }
-                buffer.write(chunk, 0, read);
-                remaining -= read;
-            }
-            boolean truncated = in.read() != -1;
-            in.transferTo(OutputStream.nullOutputStream());
-            return new Capped(buffer.toByteArray(), truncated);
-        } catch (IOException e) {
-            throw new GitObjectsException("failed reading git output", e);
-        }
-    }
-
-    /**
-     * PIT M4 documented exception (build.gradle has the full rationale): {@code @DoNotMutate}
-     * because flipping this boundary to {@code remaining >= 0} makes {@link #readCapped} busy-spin
-     * forever the moment {@code remaining} hits exactly zero — a real read of length zero always
-     * returns {@code 0} immediately (never blocks, per {@link InputStream#read(byte[], int, int)}),
-     * so the loop condition stays true and nothing ever changes. Observed in practice: whenever a
-     * cap and the 8KiB read-chunk size divide evenly, or a cap exactly matches a blob's length, the
-     * mutated boundary hung a PIT minion for 30+ minutes across three unrelated covering tests
-     * (a stdout-cap-of-zero case, a readBlob-at-exact-cap case, and an oversized-pin case whose
-     * 1 MiB cap happens to be a multiple of 8192) — no single test-side fix (bounded waits,
-     * interruption checks) closes every such coincidence, since any future caller with a
-     * chunk-aligned cap reopens it. Isolated into its own method so only this one boundary is
-     * exempted; every other mutation in {@link #readCapped} stays covered.
-     */
-    @DoNotMutate
-    private static boolean hasRemainingCapacity(long remaining) {
-        return remaining > 0;
-    }
-
-    // Package-private test seam: the interrupt path cannot be reached deterministically through
-    // run() (git exits before waitFor blocks), so the spec pre-interrupts and calls await directly.
     static int await(Process process, Thread stdinThread, Thread stderrThread) {
+        Supervision supervision = SUPERVISOR.await(process, null);
+        if (supervision.termination() == Termination.INTERRUPTED) {
+            // The supervisor restored the interrupt flag and killed the tree before returning.
+            throw interrupted(new InterruptedException());
+        }
+        joinPumps(stdinThread, stderrThread);
+        return supervision.exitCode();
+    }
+
+    private static void joinPumps(Thread stdinThread, Thread stderrThread) {
         try {
-            int exit = process.waitFor();
             stdinThread.join();
             stderrThread.join();
-            return exit;
         } catch (InterruptedException e) {
+            // The process has already exited by now, so there is nothing left to kill; only the
+            // flag and the loud failure are owed to the caller.
             Thread.currentThread().interrupt();
-            process.destroy();
-            throw new GitObjectsException("interrupted waiting for git", e);
+            throw interrupted(e);
         }
+    }
+
+    private static GitObjectsException interrupted(InterruptedException cause) {
+        return new GitObjectsException("interrupted waiting for git", cause);
     }
 }

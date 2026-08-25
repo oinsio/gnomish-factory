@@ -1,15 +1,17 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.io.ByteArrayOutputStream;
+import com.github.oinsio.gnomish.subprocess.CaptureRunner;
+import com.github.oinsio.gnomish.subprocess.Captured;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Shells out to the real {@code docker} binary via {@link ProcessBuilder} — no
@@ -27,41 +29,92 @@ import java.util.Locale;
  * infrastructure failure — never a {@link DockerResult} a caller might mistake
  * for a command that merely exited non-zero.
  *
- * <p>Implements FR3, FR4, NFR-R1 of add-sandbox-core.
+ * <p>Every management command is bounded (FR10, design D11): it runs under the
+ * shared subprocess supervisor, which drains both streams concurrently with the
+ * process and, on expiry or interruption, kills the whole process tree and reaps
+ * it before returning a named {@link Termination}. The bound matters because a
+ * management command is not always local — {@code docker run} on an image the
+ * host does not have reaches a registry, and a registry that accepts the
+ * connection and then never answers used to hold the whole take. {@link #start}
+ * stays unbounded: its process is a live streaming exec whose caller
+ * ({@code HostExecHandle}, {@link ContainerFileChannel}) owns the wait.
+ *
+ * <p>Implements FR3, FR4, NFR-R1 of add-sandbox-core; FR6, FR10, NFR-O1 of
+ * bound-subprocess-commands.
  */
 class DockerCli {
 
+    private static final Logger log = LoggerFactory.getLogger(DockerCli.class);
+
     private static final String DAEMON_UNREACHABLE = "cannot connect to the docker daemon";
 
+    /**
+     * The documented default for a management command (FR5): generous enough
+     * that a real {@code docker run} pulling a real image finishes under it,
+     * short enough that a wedged daemon or registry does not hold a take for the
+     * rest of the night. An installation raises it through {@code
+     * factory.docker-command-timeout}.
+     */
+    static final Duration DEFAULT_COMMAND_TIMEOUT = Duration.ofMinutes(5);
+
     private final String dockerBinary;
+    private final Duration commandTimeout;
+    private final CaptureRunner captureRunner = new CaptureRunner();
 
     DockerCli() {
         this("docker");
     }
 
     DockerCli(String dockerBinary) {
-        this.dockerBinary = dockerBinary;
+        this(dockerBinary, DEFAULT_COMMAND_TIMEOUT);
     }
 
     /**
-     * Runs {@code docker <args...>}, capturing stdout/stderr as separate UTF-8
-     * strings and the exit code. A non-zero exit is returned, not thrown —
-     * callers decide what it means — <em>unless</em> the daemon reported itself
-     * unreachable, which is thrown as {@link DockerUnavailableException}.
+     * The real {@code docker} binary under an explicit deadline — what this package's public
+     * entry points hand the installation's {@code factory.docker-command-timeout} through (FR5,
+     * design D8 of bound-subprocess-commands).
+     *
+     * @param commandTimeout the hard bound on a management command
+     */
+    DockerCli(Duration commandTimeout) {
+        this("docker", commandTimeout);
+    }
+
+    /**
+     * @param dockerBinary the docker executable to invoke
+     * @param commandTimeout the hard bound on a management command; the composition root passes
+     *     the installation's {@code factory.docker-command-timeout}, and specs inject a
+     *     sub-second one
+     */
+    DockerCli(String dockerBinary, Duration commandTimeout) {
+        this.dockerBinary = dockerBinary;
+        this.commandTimeout = commandTimeout;
+    }
+
+    /**
+     * Runs {@code docker <args...>} under the command deadline, capturing
+     * stdout/stderr as separate UTF-8 strings, the exit code, and how the
+     * invocation ended. A non-zero exit is returned, not thrown — callers decide
+     * what it means, after reading {@link DockerResult#termination()} first —
+     * <em>unless</em> the daemon reported itself unreachable, which is thrown as
+     * {@link DockerUnavailableException}.
      *
      * @param args the docker subcommand and its arguments (no leading {@code docker})
-     * @return the captured exit code and separate stdout/stderr
+     * @return the named termination, the captured exit code and separate stdout/stderr
      * @throws DockerUnavailableException if the binary cannot launch or the daemon is unreachable
      */
     DockerResult run(List<String> args) {
-        Process process = launch(args);
-        String stdout = readFully(process.getInputStream());
-        String stderr = readFully(process.getErrorStream());
-        int exitCode = waitFor(process);
-        if (exitCode != 0 && stderr.toLowerCase(Locale.ROOT).contains(DAEMON_UNREACHABLE)) {
-            throw new DockerUnavailableException("docker daemon is unreachable: " + stderr.strip(), null);
+        Captured captured = capture(args);
+        // Only a command that ran to completion can testify about the daemon: a killed one's exit
+        // code is the signal's and its stderr is a partial capture, and neither may turn a timeout
+        // or a shutdown into an outage report (FR6 of bound-subprocess-commands).
+        if (captured.termination() == Termination.EXITED
+                && captured.exitCode() != 0
+                && captured.stderr().toLowerCase(Locale.ROOT).contains(DAEMON_UNREACHABLE)) {
+            throw new DockerUnavailableException(
+                    "docker daemon is unreachable: " + captured.stderr().strip(), null);
         }
-        return new DockerResult(exitCode, stdout, stderr);
+        return new DockerResult(captured.exitCode(), captured.stdout(), captured.stderr(), captured.termination());
     }
 
     /**
@@ -85,13 +138,46 @@ class DockerCli {
         }
     }
 
-    private Process launch(List<String> args) {
-        ProcessBuilder builder = builder(args);
+    /**
+     * Runs the management command under the shared supervisor and reports a bound
+     * that fired. A binary that cannot be launched at all is the daemon-outage
+     * classification this class owns, not a result: there is no docker to ask.
+     */
+    private Captured capture(List<String> args) {
+        long startedAt = System.nanoTime();
         try {
-            return builder.start();
+            Captured captured = captureRunner.run(builder(args), commandTimeout);
+            report(captured.termination(), args, Duration.ofNanos(System.nanoTime() - startedAt));
+            return captured;
         } catch (IOException e) {
             throw new DockerUnavailableException("could not launch docker binary '" + dockerBinary + "'", e);
         }
+    }
+
+    /**
+     * Logs the one WARN a bound that fired owes an operator (NFR-O1, NFR-O2):
+     * which command ended early, how long it ran, and — for a timeout — the
+     * deadline they would raise to give it more. Only the subcommand is named,
+     * never the full argv, which carries container keys and mount paths.
+     */
+    private void report(Termination termination, List<String> args, Duration elapsed) {
+        if (termination == Termination.EXITED) {
+            return;
+        }
+        String subcommand = args.isEmpty() ? "docker" : args.getFirst();
+        if (termination == Termination.TIMED_OUT) {
+            log.warn(
+                    "docker command timed out and its process tree was killed: subcommand={},"
+                            + " elapsed={}, deadline={}",
+                    subcommand,
+                    elapsed,
+                    commandTimeout);
+            return;
+        }
+        log.warn(
+                "docker command interrupted and its process tree was killed: subcommand={}, elapsed={}",
+                subcommand,
+                elapsed);
     }
 
     private ProcessBuilder builder(List<String> args) {
@@ -101,33 +187,5 @@ class DockerCli {
         commandLine.add(dockerBinary);
         commandLine.addAll(args);
         return new ProcessBuilder(commandLine);
-    }
-
-    private static String readFully(InputStream in) {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try {
-            in.transferTo(buffer);
-        } catch (IOException e) {
-            // Stream read failure mid-command: keep whatever was captured so far (as GitProcessRunner).
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
-    }
-
-    /**
-     * PIT M4 documented exception: {@code @DoNotMutate} — the {@code
-     * InterruptedException} catch is a genuine timing race (a thread interrupt
-     * landing in the brief window while a docker management command runs), not
-     * reliably reproducible in a unit test; the happy path (exit code returned)
-     * is covered by every {@code DockerCli} run spec. Same rationale and
-     * granularity as {@code GitProcessRunner#waitFor}.
-     */
-    @DoNotMutate
-    private static int waitFor(Process process) {
-        try {
-            return process.waitFor();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return -1;
-        }
     }
 }

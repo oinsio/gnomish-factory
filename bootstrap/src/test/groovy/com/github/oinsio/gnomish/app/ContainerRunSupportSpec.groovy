@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -385,11 +386,11 @@ exit 0
 
         when:
         def configuredSupport = ContainerRunSupport.create(
-                cloneDir, 'T-CFG', segments, sandbox, [
+                cloneDir, 'T-CFG', segments, sandbox, new FactoryProperties(null, null, null, null, null), [
                     GithubCheckClientFactory.TOKEN_ENV_VAR
                 ], [], OwnershipMode.MANUAL)
         def unconfiguredSupport =
-                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, [], [],
+                ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, new FactoryProperties(null, null, null, null, null), [], [],
                 OwnershipMode.MANUAL)
 
         then:

@@ -38,9 +38,12 @@ public interface ExecHandle {
 
     /**
      * Waits up to {@code timeout} for the process to exit; on expiry the process
-     * is forcibly killed and reaped before returning {@link Wait.TimedOut} (an
-     * infrastructure failure of the round — no verdict exists), otherwise
-     * returns {@link Wait.Exited} with the measured start-to-exit wall time.
+     * and every descendant it spawned are killed and reaped before returning
+     * {@link Wait.TimedOut} (an infrastructure failure of the round — no verdict
+     * exists), otherwise returns {@link Wait.Exited} with the measured
+     * start-to-exit wall time. A wait cut short by an interrupt kills the same
+     * tree and returns {@link Wait.Interrupted}, with the interrupt flag
+     * restored (FR11 of bound-subprocess-commands).
      *
      * @param timeout the round timeout budget; never null, never negative
      * @param clock the read-time source for the exit instant; never null
@@ -58,7 +61,14 @@ public interface ExecHandle {
 
     /**
      * The outcome of {@link #waitForExitOrTimeout}: a natural exit within budget
-     * ({@link Exited}) or a timeout that forced a kill ({@link TimedOut}).
+     * ({@link Exited}), a timeout that forced a kill ({@link TimedOut}), or a
+     * wait cut short by an interrupt ({@link Interrupted}).
+     *
+     * <p>The three are named rather than folded into an exit code precisely
+     * because they mean different things to the caller deciding what to report:
+     * only {@link Exited} carries a verdict at all, and an interrupt is the one
+     * case where nothing about the work is known and nothing should be blamed on
+     * the round's own budget (FR11 of bound-subprocess-commands).
      */
     sealed interface Wait {
 
@@ -69,7 +79,15 @@ public interface ExecHandle {
          */
         record Exited(Duration wallTime) implements Wait {}
 
-        /** The timeout expired before exit; the process was forcibly killed. */
+        /** The timeout expired before exit; the process tree was killed and reaped. */
         record TimedOut() implements Wait {}
+
+        /**
+         * The waiting thread was interrupted before the process exited; the
+         * process tree was killed and reaped and the interrupt flag restored.
+         * Distinct from {@link TimedOut}: the round's budget is blameless, so an
+         * operator must not be told the work took too long.
+         */
+        record Interrupted() implements Wait {}
     }
 }

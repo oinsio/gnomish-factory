@@ -119,6 +119,10 @@ layering {
         ':gitobjects',
         ':gnomish-plugin-api',
         ':sandbox:core',
-        ':sandbox:docker'
+        ':sandbox:docker',
+        // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the
+        // dependency-free `:subprocess` leaf onto the runtime classpath the gate
+        // reads (design D9/D11 of bound-subprocess-commands).
+        ':subprocess',
     ]
 }

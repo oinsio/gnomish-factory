@@ -46,7 +46,9 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
     // Design D2: the refspec is EXPLICIT — `origin <branch>:<branch>`, never a bare branch name
     // leaning on git's implicit refspec inference (which `push.default` can redirect) and never a
     // forced `+`-prefixed one. Asserted over the argv itself through the runner's git-binary seam:
-    // pushing successfully proves the command works, not that it is spelled this way.
+    // pushing successfully proves the command works, not that it is spelled this way. The runner's
+    // own stall-detection options precede it, a push being a network command (FR4 of
+    // bound-subprocess-commands); everything after them is this class's.
     def "the command is the exact explicit refspec, with no other argument"() {
         given: 'a git stand-in that reports the argv it was handed'
         def fakeGit = tempDir.resolve('argv-reporting-git')
@@ -57,7 +59,11 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
         def result = new RefspecPush(new GitProcessRunner(fakeGit.toString())).push(clone, BRANCH)
 
         then:
-        result.stdout().trim() == "push origin ${BRANCH}:${BRANCH}"
+        result.stdout().trim() == (stallDetectionArgv() + [
+            'push',
+            'origin',
+            "${BRANCH}:${BRANCH}"
+        ]).join(' ')
     }
 
     // The production shape (FR1): a host-mode lifecycle push runs from the CLONE, whose HEAD is on

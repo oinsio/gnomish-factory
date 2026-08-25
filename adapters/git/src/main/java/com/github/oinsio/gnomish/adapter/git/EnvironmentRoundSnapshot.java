@@ -2,13 +2,10 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
+import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -80,10 +77,10 @@ public final class EnvironmentRoundSnapshot {
         String message = ServiceCommitMessages.snapshot(stage, round);
         List<String> argv = List.of("sh", "-c", SNAPSHOT_SCRIPT, "gnomish", message);
         ExecHandle handle = environment.exec(new ExecCommand(argv, Map.of(), null, true));
-        String output = readFully(handle.output());
-        int exitCode = handle.waitForExit();
-        if (exitCode != 0) {
-            throw new GitPersistFailedException(taskId, stage, round, "in-box snapshot commit", output);
+        // Drained concurrently with the supervised wait (FR2, FR11 of bound-subprocess-commands).
+        CapturedExec commit = CapturedExec.of(handle, "in-box snapshot commit");
+        if (commit.exitCode() != 0) {
+            throw new GitPersistFailedException(taskId, stage, round, "in-box snapshot commit", commit.output());
         }
 
         environment.harvest();
@@ -93,13 +90,5 @@ public final class EnvironmentRoundSnapshot {
                 .trim();
         attemptCommit.record(tip);
         return tip;
-    }
-
-    private static String readFully(InputStream in) {
-        try (in) {
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read in-box snapshot output", e);
-        }
     }
 }

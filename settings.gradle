@@ -33,6 +33,12 @@ rootProject.name = 'gnomish-factory'
 // added pass by pass; whatever has not been extracted yet still lives in the
 // root project, which stays the composition root until `:bootstrap` exists.
 include 'domain'
+// The subprocess-supervision leaf (FR9, NFR-S3, design D9 of
+// bound-subprocess-commands): the factory's one wait/kill/drain discipline for
+// the OS processes it launches — git, docker, agent CLIs, verify commands.
+// Deliberately dependency-free (JDK only), which is what lets `:gitobjects`
+// depend on it without acquiring a dependency on the factory or its domain.
+include 'subprocess'
 include 'gitobjects'
 include 'gnomish-plugin-api'
 // Not a layer of the factory: a stand-in third-party adapter that keeps the

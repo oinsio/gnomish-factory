@@ -71,12 +71,16 @@ final class ExecutorRoundExecution {
         try (StreamDrain drain = StreamDrain.start(launched.output(), clock, listenerFor(progressListener, round))) {
             Duration roundTimeout = RoundTimeout.resolve(executor.settings());
             var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
-            if (wait instanceof ExecHandle.Wait.TimedOut) {
-                // Classified before the drain's events are consulted (FR3): the kill closed
-                // the pipe mid-read, and that secondary symptom must not mask the timeout.
-                throw new RoundTimeoutException(roundTimeout);
-            }
-            var wallTime = ((ExecHandle.Wait.Exited) wait).wallTime();
+            // Both early endings are classified before the drain's events are consulted (FR3):
+            // the kill closed the pipe mid-read, and that secondary symptom must not mask what
+            // actually ended the round. An interrupt is its own failure, never the budget's
+            // (FR6, FR11 of bound-subprocess-commands).
+            var wallTime =
+                    switch (wait) {
+                        case ExecHandle.Wait.Exited exited -> exited.wallTime();
+                        case ExecHandle.Wait.TimedOut ignored -> throw new RoundTimeoutException(roundTimeout);
+                        case ExecHandle.Wait.Interrupted ignored -> throw new RoundInterruptedException();
+                    };
 
             List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
             Instant roundEnd = clock.now();

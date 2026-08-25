@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish;
 
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -10,8 +9,9 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 /**
  * Immutable typed configuration of a factory instance, bound from the {@code factory.*} external
- * properties via constructor binding (design D4). Validation is plain Java triggered by the
- * compact constructor — directly spec-able and mutation-testable, no Bean Validation.
+ * properties via constructor binding (design D4). Validation is plain Java in the
+ * {@link FactoryPropertyDefaults} companion, triggered by the canonical constructor — directly
+ * spec-able and mutation-testable, no Bean Validation.
  *
  * <p>Implements FR3 of add-project-skeleton.
  *
@@ -49,6 +49,17 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  *     keyed by profile name and carried as raw untyped content, that a port subsection references as
  *     {@code connection: <name>} instead of inlining endpoint and credential-name keys (FR16, design
  *     D8 of add-plugin-architecture); defaults to an empty map (no profile defined) when absent
+ * @param gitNetworkTimeout the hard bound on a git command that reaches a remote — {@code fetch},
+ *     {@code push}, {@code ls-remote}, {@code clone}, {@code remote update} ({@code
+ *     factory.git-network-timeout}); defaults to 5 minutes when unset, rejected when non-positive
+ *     (FR5, UX1, design D8 of bound-subprocess-commands); local git commands stay unbounded
+ * @param dockerCommandTimeout the hard bound on one {@code docker} management command ({@code
+ *     factory.docker-command-timeout}); defaults to 5 minutes when unset, rejected when
+ *     non-positive (FR5, UX1, design D8 of bound-subprocess-commands)
+ * @param checkCommandTimeout the hard bound on one {@code command} check ({@code
+ *     factory.check-command-timeout}); defaults to 30 minutes when unset, rejected when
+ *     non-positive — expiry is a quality failure carrying the captured tail (FR5, FR12, UX1,
+ *     design D8, D12 of bound-subprocess-commands)
  */
 @ConfigurationProperties("factory")
 public record FactoryProperties(
@@ -58,17 +69,17 @@ public record FactoryProperties(
         List<String> agentCliEnvPassthrough,
         Tracker tracker,
         Map<String, Map<String, Object>> check,
-        Map<String, Map<String, Object>> connections) {
+        Map<String, Map<String, Object>> connections,
+        Duration gitNetworkTimeout,
+        Duration dockerCommandTimeout,
+        Duration checkCommandTimeout) {
 
-    private static final String DEFAULT_INSTANCE_NAME = "gnomish-factory";
-    private static final String DEFAULT_AGENT_CLI_BINARY = "claude";
-    private static final Duration DEFAULT_AGENT_CLI_TAIL_DRAIN_GRACE = Duration.ofSeconds(5);
-
-    // The tracker/agentCliEnvPassthrough null-checks below are real, not IDE dead-code noise:
-    // Spring's reflective constructor binding can pass null for these record components despite
-    // the compile-time @NullMarked contract, and FactoryPropertiesSpec constructs this record
-    // with an explicit null for both to exercise exactly that path.
-    // @ConstructorBinding is required, not decorative: the convenience constructor below makes this
+    // Every component is resolved through FactoryPropertyDefaults rather than inline: Spring's
+    // reflective constructor binding can pass null for any component despite the compile-time
+    // @NullMarked contract (FactoryPropertiesSpec constructs the record with explicit nulls to
+    // exercise exactly that path), and PIT's record filter would suppress mutations of logic
+    // inlined into a record constructor — the companion keeps the validation in the mutation scope.
+    // @ConstructorBinding is required, not decorative: the convenience constructors below make this
     // record's constructors ambiguous to Spring's binder, which then reports "No default constructor
     // found" and fails every context. This names the canonical one as the binding target.
     @ConstructorBinding
@@ -79,14 +90,53 @@ public record FactoryProperties(
             @Nullable List<String> agentCliEnvPassthrough,
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
+            @Nullable Map<String, Map<String, Object>> connections,
+            @Nullable Duration gitNetworkTimeout,
+            @Nullable Duration dockerCommandTimeout,
+            @Nullable Duration checkCommandTimeout) {
+        this.instanceName = FactoryPropertyDefaults.instanceName(instanceName);
+        this.agentCliBinary = FactoryPropertyDefaults.agentCliBinary(agentCliBinary);
+        this.agentCliTailDrainGrace = FactoryPropertyDefaults.tailDrainGrace(agentCliTailDrainGrace);
+        this.agentCliEnvPassthrough = FactoryPropertyDefaults.envPassthrough(agentCliEnvPassthrough);
+        this.tracker = FactoryPropertyDefaults.tracker(tracker);
+        this.check = FactoryPropertyDefaults.subsections(check);
+        this.connections = FactoryPropertyDefaults.subsections(connections);
+        this.gitNetworkTimeout = FactoryPropertyDefaults.positiveTimeout(
+                gitNetworkTimeout, FactoryPropertyDefaults.DEFAULT_GIT_NETWORK_TIMEOUT, "factory.git-network-timeout");
+        this.dockerCommandTimeout = FactoryPropertyDefaults.positiveTimeout(
+                dockerCommandTimeout,
+                FactoryPropertyDefaults.DEFAULT_DOCKER_COMMAND_TIMEOUT,
+                "factory.docker-command-timeout");
+        this.checkCommandTimeout = FactoryPropertyDefaults.positiveTimeout(
+                checkCommandTimeout,
+                FactoryPropertyDefaults.DEFAULT_CHECK_COMMAND_TIMEOUT,
+                "factory.check-command-timeout");
+    }
+
+    /**
+     * Convenience for the callers predating the three subprocess deadlines (FR5, design D8 of
+     * bound-subprocess-commands): each deadline keeps its documented default. Property binding
+     * ignores this one too — see the note on {@code @ConstructorBinding} above.
+     */
+    public FactoryProperties(
+            @Nullable String instanceName,
+            @Nullable String agentCliBinary,
+            @Nullable Duration agentCliTailDrainGrace,
+            @Nullable List<String> agentCliEnvPassthrough,
+            @Nullable Tracker tracker,
+            @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections) {
-        this.instanceName = defaultInstanceName(instanceName);
-        this.agentCliBinary = defaultAgentCliBinary(agentCliBinary);
-        this.agentCliTailDrainGrace = defaultTailDrainGrace(agentCliTailDrainGrace);
-        this.agentCliEnvPassthrough = defaultEnvPassthrough(agentCliEnvPassthrough);
-        this.tracker = defaultTracker(tracker);
-        this.check = defaultSubsections(check);
-        this.connections = defaultSubsections(connections);
+        this(
+                instanceName,
+                agentCliBinary,
+                agentCliTailDrainGrace,
+                agentCliEnvPassthrough,
+                tracker,
+                check,
+                connections,
+                null,
+                null,
+                null);
     }
 
     /**
@@ -118,87 +168,6 @@ public record FactoryProperties(
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections) {
         this(instanceName, agentCliBinary, null, agentCliEnvPassthrough, tracker, check, connections);
-    }
-
-    /**
-     * Resolves the unset case to the neutral {@code gnomish-factory} default (design D5, D6); a
-     * value explicitly set to blank (e.g. {@code factory.instance-name=""}) is still rejected —
-     * that is a configuration mistake, not "unset". Kept as an explicit method rather than inline
-     * in the compact constructor: PIT's record filter suppresses all mutations inside a record's
-     * canonical constructor, which would silently exempt the validation logic from the 100%
-     * mutation gate (FR6 of add-project-skeleton). The parameter is {@code @Nullable} because
-     * framework property binding constructs the record reflectively and can pass null despite
-     * this package's {@code @NullMarked} default.
-     */
-    private static String defaultInstanceName(@Nullable String instanceName) {
-        if (instanceName == null) {
-            return DEFAULT_INSTANCE_NAME;
-        }
-        if (instanceName.isBlank()) {
-            throw new IllegalArgumentException("factory.instance-name must not be blank");
-        }
-        return instanceName;
-    }
-
-    /**
-     * Resolves the unset case to the {@code claude}-on-PATH default (design D7). Kept as an
-     * explicit method for the same PIT record-constructor reason as {@link #defaultInstanceName}.
-     */
-    private static String defaultAgentCliBinary(@Nullable String agentCliBinary) {
-        return agentCliBinary == null ? DEFAULT_AGENT_CLI_BINARY : agentCliBinary;
-    }
-
-    /**
-     * Resolves the unset case to the 5-second default and rejects a non-positive value — a grace
-     * of zero or less could never absorb a piped tail, so it is a configuration mistake caught at
-     * startup, before any dialog (FR7, design D2 of fix-round-stdout-drain). A malformed value
-     * ({@code "banana"}) never reaches here: Spring's Duration conversion fails the bind first,
-     * which is the same startup error one layer up. Kept as an explicit method for the same PIT
-     * record-constructor reason as {@link #defaultInstanceName}.
-     */
-    private static Duration defaultTailDrainGrace(@Nullable Duration agentCliTailDrainGrace) {
-        if (agentCliTailDrainGrace == null) {
-            return DEFAULT_AGENT_CLI_TAIL_DRAIN_GRACE;
-        }
-        if (agentCliTailDrainGrace.isZero() || agentCliTailDrainGrace.isNegative()) {
-            throw new IllegalArgumentException("factory.agent-cli-tail-drain-grace must be positive");
-        }
-        return agentCliTailDrainGrace;
-    }
-
-    /**
-     * Resolves the unset case to an empty passthrough list (design D7). Kept as an explicit
-     * method for the same PIT record-constructor reason as {@link #defaultInstanceName}.
-     */
-    private static List<String> defaultEnvPassthrough(@Nullable List<String> agentCliEnvPassthrough) {
-        return agentCliEnvPassthrough == null ? List.of() : agentCliEnvPassthrough;
-    }
-
-    /**
-     * Resolves the unset case to {@link Tracker}'s own defaults (design D5, D10). Kept as an
-     * explicit method for the same PIT record-constructor reason as {@link #defaultInstanceName}.
-     */
-    private static Tracker defaultTracker(@Nullable Tracker tracker) {
-        return tracker == null ? new Tracker(null, null) : tracker;
-    }
-
-    /**
-     * Resolves the unset case to an empty map (no check provider configured, no connection profile
-     * defined) and defends the map's immutability. No key or value is interpreted here: both {@code
-     * factory.check} and {@code factory.connections} are open-ended sets of named subsections whose
-     * content only the provider's own {@code CheckSubsectionValidator} may grade (FR4, FR5, FR16,
-     * design D12 of add-plugin-architecture) — which is why the vendor-shaped {@code Check.Github}
-     * record with its both-or-neither constructor is gone from core. Kept as an explicit method for
-     * the same PIT record-constructor reason as {@link #defaultInstanceName}.
-     */
-    private static Map<String, Map<String, Object>> defaultSubsections(
-            @Nullable Map<String, Map<String, Object>> sections) {
-        if (sections == null) {
-            return Map.of();
-        }
-        var copy = new LinkedHashMap<String, Map<String, Object>>();
-        sections.forEach((name, content) -> copy.put(name, content == null ? Map.of() : Map.copyOf(content)));
-        return Map.copyOf(copy);
     }
 
     /**

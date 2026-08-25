@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.app.git.ProjectScope
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
+import java.time.Duration
 
 /**
  * `sandbox-lifecycle` end to end through {@link SandboxLifecycleSweep}: project-scoped listing,
@@ -18,7 +19,7 @@ class SandboxLifecycleSweepSpec extends SandboxLifecycleSweepSpecBase {
 
     def "create builds a real, usable sweep over the real docker binary"() {
         expect:
-        SandboxLifecycleSweep.create(listener) != null
+        SandboxLifecycleSweep.create(listener, Duration.ofMinutes(5)) != null
     }
 
     def "lists only this project's objects, using both the factory and project label filters"() {

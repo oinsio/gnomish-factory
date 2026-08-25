@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -13,15 +14,35 @@ import java.util.Optional;
  *
  * <p>Cheap by design: one remote round-trip, and the ancestry question is then answered from the
  * local object database — the factory clone already has every object it authored. An unreachable
- * remote, an absent remote branch, or a tip the clone does not know all answer "not delivered"
- * rather than throwing; the caller decides what to do about it.
+ * remote or an absent remote branch answers "not delivered" rather than throwing; a tip the clone
+ * cannot resolve (a descendant pushed by another instance) answers {@link Carriage#UNKNOWN}, never
+ * absence; the caller decides what to do about it.
  *
- * <p>Implements FR3, FR4 of fix-lifecycle-push.
+ * <p>The read answers three-way, not two-way ({@link Carriage}): "origin answered and does not
+ * carry it" and "origin never answered" look identical in an {@link Optional}, and telling them
+ * apart is exactly what stops a killed push from being reported as {@code origin is behind}
+ * (design D7 of bound-subprocess-commands).
+ *
+ * <p>Implements FR3, FR4 of fix-lifecycle-push; FR7 of bound-subprocess-commands.
  */
 // Not a record: this is a behavior-bearing reader over the git seam (a collaborator, not immutable
 // data), kept as a plain final class for parity with its siblings in this package.
 @SuppressWarnings("ClassCanBeRecord")
 final class RemoteBranchTip {
+
+    /**
+     * What one bounded remote read established about a commit's presence on {@code origin}.
+     *
+     * <p>Implements FR7 of bound-subprocess-commands.
+     */
+    enum Carriage {
+        /** {@code origin} answered, and its tip for the branch demonstrably contains the commit. */
+        CARRIES,
+        /** {@code origin} answered, and what it holds does not contain the commit. */
+        ABSENT,
+        /** {@code origin} never answered — unreachable, cut off on its deadline, or interrupted. */
+        UNKNOWN
+    }
 
     private final GitProcessRunner runner;
 
@@ -38,8 +59,57 @@ final class RemoteBranchTip {
      *     branch at all
      */
     Optional<String> read(Path repo, String branch) {
-        GitCommandResult lsRemote = runner.run(repo, "ls-remote", OriginRemote.NAME, "refs/heads/" + branch);
-        if (lsRemote.exitCode() != 0 || lsRemote.stdout().isBlank()) {
+        return tipOf(lsRemote(repo, branch));
+    }
+
+    /**
+     * The three-way delivery question a caller must ask when its push did not run to its own exit:
+     * only a remote that actually answered can put a commit's absence on the record.
+     *
+     * @param repo the clone the read runs from; never null
+     * @param branch the task branch name; never blank
+     * @param commit the commit whose delivery is in question; never blank
+     * @return whether {@code origin} carries {@code commit}, demonstrably does not, or did not say
+     */
+    Carriage confirm(Path repo, String branch, String commit) {
+        GitCommandResult lsRemote = lsRemote(repo, branch);
+        if (lsRemote.termination() != Termination.EXITED || lsRemote.exitCode() != 0) {
+            return Carriage.UNKNOWN;
+        }
+        // An answered read with no ref for the branch is a positive fact: origin does not have it.
+        return tipOf(lsRemote)
+                .map(remoteTip -> ancestryVerdict(runner.run(repo, "merge-base", "--is-ancestor", commit, remoteTip)))
+                .orElse(Carriage.ABSENT);
+    }
+
+    /**
+     * Maps one {@code merge-base --is-ancestor} result onto {@link Carriage}. Git's documented
+     * contract for the command is exit 0 = ancestor, exit 1 = not an ancestor, any other status =
+     * error — which includes a remote tip the clone cannot resolve (a descendant pushed by another
+     * instance). Only the documented "no" is allowed to put absence on the record; an error, like
+     * an invocation that never ran to its own exit, is {@link Carriage#UNKNOWN}.
+     *
+     * <p>Implements FR7 of bound-subprocess-commands.
+     */
+    static Carriage ancestryVerdict(GitCommandResult ancestry) {
+        if (ancestry.termination() != Termination.EXITED) {
+            return Carriage.UNKNOWN;
+        }
+        return switch (ancestry.exitCode()) {
+            case 0 -> Carriage.CARRIES;
+            case 1 -> Carriage.ABSENT;
+            default -> Carriage.UNKNOWN;
+        };
+    }
+
+    private GitCommandResult lsRemote(Path repo, String branch) {
+        return runner.run(repo, "ls-remote", OriginRemote.NAME, "refs/heads/" + branch);
+    }
+
+    private static Optional<String> tipOf(GitCommandResult lsRemote) {
+        if (lsRemote.termination() != Termination.EXITED
+                || lsRemote.exitCode() != 0
+                || lsRemote.stdout().isBlank()) {
             return Optional.empty();
         }
         return Optional.of(lsRemote.stdout().strip().split("\\s+", 2)[0]);
@@ -56,9 +126,7 @@ final class RemoteBranchTip {
      * @return {@code true} only when the remote tip demonstrably contains {@code commit}
      */
     boolean carries(Path repo, String branch, String commit) {
-        return read(repo, branch)
-                .map(remoteTip -> isAncestor(repo, commit, remoteTip))
-                .orElse(false);
+        return confirm(repo, branch, commit) == Carriage.CARRIES;
     }
 
     /**

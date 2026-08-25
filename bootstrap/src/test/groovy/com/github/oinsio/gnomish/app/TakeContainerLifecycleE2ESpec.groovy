@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
@@ -13,12 +12,14 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
@@ -67,7 +68,9 @@ class TakeContainerLifecycleE2ESpec extends Specification implements BareGitRepo
 
     Path projectDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
+
+    // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
+    String originUrl
 
     def setupSpec() {
         gitea.start()
@@ -101,8 +104,9 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
-        gitRunner.run(projectDir, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
-        gitRunner.run(projectDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        originUrl = gitea.createRepository("container-take-${System.nanoTime()}")
+        addRemote(projectDir, 'origin', originUrl)
+        gitOutput(projectDir, 'push', 'origin', 'HEAD:refs/heads/main')
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
@@ -110,21 +114,21 @@ tracker:
         ContainerE2eDocker.removeTaskObjects(REF.id())
     }
 
-    private ContainerTakeSupport containerTakeSupport(FactoryProperties factoryProperties) {
+    private static ContainerTakeSupport containerTakeSupport(FactoryProperties factoryProperties) {
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
         def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def registry = AdapterBindingRegistry.ratified([
             new ContainerBindingProvider()
         ], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(BindingNames.CONTAINER, [:])
-        ContainerSupportFactory containerSupport = { clone, id, segments, sandboxProps, factoryProps, definition, creds ->
-            ContainerRunSupport.create(clone, id, segments, sandboxProps, [], creds, OwnershipMode.TRACKED)
+        def containerSupport = { Path clone, String id, List<Segment> segments, SandboxProperties sandboxProps, FactoryProperties factoryProps, PipelineDefinition definition, List<String> creds ->
+            ContainerRunSupport.create(clone, id, segments, sandboxProps, factoryProps, [], creds, OwnershipMode.TRACKED)
         }
         new ContainerTakeSupport(
                 factoryProperties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable, containerSupport)
     }
 
-    private TakeCommand newCommand(FactoryProperties factoryProperties, Object tracker, Object trackerFactory) {
+    private TakeCommand newCommand(FactoryProperties factoryProperties, TrackerAdapterFactory trackerFactory) {
         TakeCommandFactory.of(
                 newAssembly(factoryProperties),
                 TaskGitFixture.real(),
@@ -152,7 +156,7 @@ tracker:
         def trackerFactory = new FixedTrackerAdapterFactory({ tracker })
         FakeAgentSandboxImage.ensureBuilt('plain-round')
         def factoryProperties = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
-        def command = newCommand(factoryProperties, tracker, trackerFactory)
+        def command = newCommand(factoryProperties, trackerFactory)
 
         when: 'take is run against the seeded ref in explicit mode'
         command.run(args('take', REF.id(), "--dir=$projectDir"))
@@ -167,9 +171,9 @@ tracker:
         and: 'the branch really ran in the box and reached the real remote via the factory-side push'
         def branch = "gnomish/${REF.id()}"
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitRunner.run(tempDir, 'clone', gitea.authenticatedCloneUrl(), freshClone.toString())
-        gitRunner.run(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}")
-        def tipTree = gitRunner.run(freshClone, 'ls-tree', '-r', '--name-only', "origin/${branch}").stdout()
+        gitExitCode(tempDir, 'clone', originUrl, freshClone.toString()) == 0
+        gitExitCode(freshClone, 'fetch', 'origin', "${branch}:refs/remotes/origin/${branch}") == 0
+        def tipTree = gitOutput(freshClone, 'ls-tree', '-r', '--name-only', "origin/${branch}")
         tipTree.contains('output.txt')
 
         and: 'the task environment is disposed: no container, volume, or network object remains'

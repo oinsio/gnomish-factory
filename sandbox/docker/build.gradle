@@ -45,6 +45,17 @@ dependencies {
     api project(':application')
 
     implementation libs.slf4j.api
+    // The shared subprocess wait/kill/drain discipline (FR9, design D9/D10/D11
+    // of bound-subprocess-commands): `DockerCli.run` bounds every management
+    // command through it, and `HostExecHandle` waits and tree-kills through it.
+    // `api`, not `implementation`: DAGP's advice here is Java-ABI reasoning that
+    // does not hold for this build's Groovy consumers. `:test-fixtures` subclasses
+    // `DockerCli`, and the Groovy compiler canonicalizes the whole class — private
+    // members included — so a consumer that cannot see `Captured` fails to compile
+    // against it at all (observed: `:test-fixtures:compileGroovy` failing on
+    // `com.github.oinsio.gnomish.subprocess.Captured`). The root `dependencyAnalysis`
+    // block records the matching narrow exemption.
+    api project(':subprocess')
 
     // `GuardDenialLog` parses the guard's structured JSONL denials into
     // findings (NFR-O1 of add-sandbox-core). The BOM carries the CVE-fixed
@@ -67,5 +78,12 @@ dependencies {
 // application port named above — plus what `:application` re-exposes
 // transitively. Never a sibling backend, an adapter, or the composition root.
 layering {
-    allowedProjects = [':application', ':domain', ':gitobjects', ':gnomish-plugin-api', ':sandbox:core']
+    allowedProjects = [
+        ':application',
+        ':domain',
+        ':gitobjects',
+        ':gnomish-plugin-api',
+        ':sandbox:core',
+        ':subprocess',
+    ]
 }

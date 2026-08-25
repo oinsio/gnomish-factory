@@ -58,6 +58,14 @@ final class JudgeRoundExecution {
                 return cannotVerify(
                         "agent round exceeded roundTimeout and was killed", "roundTimeout: " + roundTimeout);
             }
+            if (wait instanceof ExecHandle.Wait.Interrupted) {
+                // The never-throw contract again, and a cause of its own: blaming the budget for a
+                // shutdown would send an operator to raise a number that was never the problem
+                // (FR6, FR11 of bound-subprocess-commands).
+                return cannotVerify(
+                        "agent round wait was interrupted and the process tree was killed",
+                        "roundTimeout: " + roundTimeout);
+            }
 
             List<TimestampedEvent> events = drain.await(factoryProperties.agentCliTailDrainGrace());
             Instant roundEnd = clock.now();

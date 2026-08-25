@@ -33,7 +33,14 @@ import org.slf4j.LoggerFactory;
  *       remains the authoritative verdict for the round itself.
  * </ul>
  *
- * <p>Implements FR11, NFR-O2, NFR-S1 of add-git-workflow.
+ * <p>A push that was killed on its deadline or cut short by a shutdown is not a failed push: it
+ * says so in its own words through {@link PushOutcome}, so an operator reading the WARN can tell a
+ * remote that rejected the push from one that never answered and from a factory that was stopping
+ * (UX3 of bound-subprocess-commands). The discipline is unchanged either way — still one WARN,
+ * still no retry, still no throw.
+ *
+ * <p>Implements FR11, NFR-O2, NFR-S1 of add-git-workflow; FR8, NFR-O2, UX3 of
+ * bound-subprocess-commands.
  */
 final class BestEffortPush {
 
@@ -97,9 +104,11 @@ final class BestEffortPush {
         }
 
         GitCommandResult result = push.push(worktreeRoot, branch);
-        if (result.exitCode() != 0) {
+        String outcome = PushOutcome.describe("push", result);
+        if (outcome != null) {
             log.warn(
-                    "push failed: taskId={}, stage={}, round={}, branch={}, stderr={}",
+                    "{}: taskId={}, stage={}, round={}, branch={}, stderr={}",
+                    outcome,
                     taskId,
                     stage,
                     round,

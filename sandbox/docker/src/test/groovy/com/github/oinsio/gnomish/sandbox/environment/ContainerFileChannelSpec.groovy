@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import java.io.InterruptedIOException
 import java.nio.charset.StandardCharsets
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -13,8 +14,8 @@ import spock.lang.Specification
  * mechanics verified without a daemon (a scripted fake {@link DockerCli} and
  * {@link Process}) — the read cap truncates over-cap bytes exactly and stays
  * silent at exactly-the-cap, putFile waits for its stdin pump before judging the
- * exit, and an interrupted wait preserves the interrupt flag while surfacing the
- * write failure. Real in-box streaming is covered by the Docker-gated contract
+ * exit, and an interrupted wait preserves the interrupt flag while naming the
+ * interruption rather than coding it as an exit value. Real in-box streaming is covered by the Docker-gated contract
  * spec.
  */
 class ContainerFileChannelSpec extends Specification {
@@ -99,16 +100,36 @@ class ContainerFileChannelSpec extends Specification {
         Thread.interrupted() // asserts the flag was restored (and clears it)
     }
 
-    // FR1, NFR-R1: an interrupted wait surfaces the write failure (exit -1) and the interrupt
-    // flag survives both the exec wait and the pump join — never swallowed
-    def "an interrupted putFile preserves the interrupt flag and reports the failed wait"() {
+    // FR11 of bound-subprocess-commands: an interrupted wait is reported by name — an
+    // InterruptedIOException, not the exit -1 an in-box script could itself have chosen — and the
+    // interrupt flag survives both the exec wait and the pump join
+    def "an interrupted putFile names the interruption instead of coding it as exit -1"() {
         when:
         Thread.currentThread().interrupt()
         channel().putFile('note.txt', 'x'.getBytes(StandardCharsets.UTF_8))
 
         then:
         def e = thrown(UncheckedIOException)
-        e.message.contains('exit -1')
+        e.cause instanceof InterruptedIOException
+        e.message.contains('in-box write to note.txt')
+        !e.message.contains('exit -1')
+
+        and:
         Thread.interrupted() // asserts the flag was restored (and clears it)
+    }
+
+    // FR11: the same naming on the read path — an interrupted read is never an in-box exit code
+    def "an interrupted readFile names the interruption instead of coding it as exit -1"() {
+        when:
+        Thread.currentThread().interrupt()
+        channel().readFile('note.txt', 10)
+
+        then:
+        def e = thrown(UncheckedIOException)
+        e.cause instanceof InterruptedIOException
+        e.message.contains('in-box read of note.txt')
+
+        and:
+        Thread.interrupted()
     }
 }

@@ -1,0 +1,34 @@
+// Build script for the `:subprocess` module (FR9, NFR-S3, design D9 of
+// bound-subprocess-commands): the factory's one subprocess wait/kill/drain
+// discipline — concurrent draining, a bounded wait, a two-phase process-tree
+// kill with reap, and a named outcome (EXITED / TIMED_OUT / INTERRUPTED).
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no
+// logging backend, no domain types (in particular no domain `Clock`). That
+// emptiness is load-bearing rather than tidy: `:gitobjects` is extraction-ready
+// only while everything it reaches is JDK-only (design D19 of add-sandbox-core),
+// so a dependency added here would break that module's build the moment it
+// migrates (task 6.1). There is no production-scope declaration below because
+// there is nothing to declare, and the layering gate below proves it stays that
+// way (M5). Callers own their logging and their I/O policy — captures, caps,
+// stdin, credential scrubbing, output tails (NG4); this module owns only wait,
+// kill, drain and outcome.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and
+// the PIT mutation gate all come from the convention plugins (design D9).
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — none —
+    // is stated below, and is the build half of NFR-S3.
+    id 'layering-conventions'
+}
+
+description = 'Subprocess supervision: concurrent drains, bounded waits, two-phase process-tree kill, named termination.'
+
+// `:subprocess` is a dependency-free leaf: it reaches no other project at all
+// (NFR-S3, M5). This is the same gate `:domain` and `:gitobjects` carry, and the
+// reason it is not merely "no internal factory module": the module must stay
+// extractable together with `:gitobjects` by a folder move.
+layering {
+    allowedProjects = []
+}

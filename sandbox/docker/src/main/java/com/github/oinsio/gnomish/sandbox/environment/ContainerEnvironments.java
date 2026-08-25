@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -54,6 +55,10 @@ public final class ContainerEnvironments {
      * {@link DockerCli} is deliberately package-private — app-layer assemblies name only the
      * environment-facing types. See the canonical constructor below for parameter semantics.
      *
+     * @param dockerCommandTimeout the hard bound on each {@code docker} management command this
+     *     task issues — the installation's {@code factory.docker-command-timeout}, threaded from
+     *     the composition root because {@link DockerCli} is not nameable outside this package
+     *     (FR5, FR10, design D8 of bound-subprocess-commands); never null
      * @return the per-task environment seam; never null
      */
     public static ContainerEnvironments forTask(
@@ -66,9 +71,10 @@ public final class ContainerEnvironments {
             Sleeper sleeper,
             Path guardConfigRoot,
             OwnershipMode mode,
-            String projectId) {
+            String projectId,
+            Duration dockerCommandTimeout) {
         return new ContainerEnvironments(
-                new DockerCli(),
+                new DockerCli(dockerCommandTimeout),
                 baseKey,
                 sourceClone,
                 harvester,

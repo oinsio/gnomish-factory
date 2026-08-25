@@ -86,9 +86,11 @@ public final class OriginReconciliation {
                 remote.orElse("(absent or unreachable)"),
                 localTip);
         GitCommandResult result = push.push(repo, branch);
-        if (result.exitCode() != 0) {
+        String outcome = PushOutcome.describe("origin reconciliation push", result);
+        if (outcome != null) {
             log.warn(
-                    "origin reconciliation push failed: taskId={}, branch={}, touchpoint={}, stderr={}",
+                    "{}: taskId={}, branch={}, touchpoint={}, stderr={}",
+                    outcome,
                     taskId,
                     branch,
                     touchpoint,

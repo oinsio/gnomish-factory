@@ -191,6 +191,30 @@ terms) live in `.claude/rules/process-invariants.md`.
   instance registry or lock file — the sweep has no liveness source beyond
   the tracker's own claim heartbeat.
 
+## Subprocess supervision
+
+- **Subprocess supervisor** — the factory's one wait/kill/drain discipline for
+  the OS processes it launches (git, docker, agent CLIs, verify commands):
+  output drained concurrently with the running process, an optional hard
+  deadline on the wait, and on expiry or interruption a two-phase kill of the
+  whole process tree followed by a reap. It owns mechanics only — logging,
+  output caps, stdin feeds, credential scrubbing and what an exit code means
+  stay with the caller. *Not:* a supervisor in the process-manager sense — it
+  never restarts anything.
+- **Termination** — how a supervised invocation ended, named separately from
+  the exit code: `EXITED` (the process chose its own code), `TIMED_OUT` (the
+  deadline expired and the tree was killed), `INTERRUPTED` (the waiting thread
+  was interrupted and the tree was killed). *Never:* a sentinel exit code such
+  as `-1` for interruption — collapsing the three into one number is the defect
+  the term exists to remove.
+- **Drain** — one output stream read on a thread of its own, concurrently with
+  the running process, so neither a full OS pipe buffer nor a child that never
+  closes its stdout can block the wait.
+- **Kill grace** — the bounded wait between the cooperative terminate and the
+  forced kill, so git and docker can remove their lock and temporary files on a
+  catchable signal. A bound on waiting, not a sleep: a tree that stops early
+  returns early.
+
 ## Abbreviations
 
 | Abbreviation | Meaning                                                                    |

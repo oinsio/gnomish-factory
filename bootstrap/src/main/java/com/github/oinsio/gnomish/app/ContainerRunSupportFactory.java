@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.OriginRemote;
@@ -37,6 +38,11 @@ final class ContainerRunSupportFactory {
      * @param taskId the task whose environments this run owns; never blank
      * @param segments the run's segment plan; never empty
      * @param sandboxProperties the operator sandbox config; never null
+     * @param factoryProperties the installation config; read here only for the two subprocess
+     *     deadlines this bundle's collaborators are bounded by — {@code factory.git-network-timeout}
+     *     for the shared git runner and {@code factory.docker-command-timeout} for the task's
+     *     container environments and the lifecycle pass (FR5, design D8 of
+     *     bound-subprocess-commands); never null
      * @param checkCredentialEnvVars the credential names the configured check providers declared
      *     through the SPI (FR17, design D11 of add-plugin-architecture), resolved once by the
      *     composition root — no vendor constant is named here
@@ -52,10 +58,11 @@ final class ContainerRunSupportFactory {
             String taskId,
             List<Segment> segments,
             SandboxProperties sandboxProperties,
+            FactoryProperties factoryProperties,
             List<String> checkCredentialEnvVars,
             List<String> credentialEnvVarsToScrub,
             OwnershipMode ownershipMode) {
-        var runner = new GitProcessRunner();
+        var runner = new GitProcessRunner(factoryProperties.gitNetworkTimeout());
         List<String> credentials = new ArrayList<>(credentialEnvVarsToScrub);
         credentials.addAll(checkCredentialEnvVars);
         var allowlist = ChildEnvAllowlist.of(sandboxProperties.envPassthrough(), credentials);
@@ -74,8 +81,10 @@ final class ContainerRunSupportFactory {
                 new ThreadSleeper(),
                 Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir")), "gnomish-guard"),
                 ownershipMode,
-                projectId);
-        var sandboxLifecyclePass = SandboxLifecyclePassFactory.create(sandboxProperties, Clock.systemUTC());
+                projectId,
+                factoryProperties.dockerCommandTimeout());
+        var sandboxLifecyclePass =
+                SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, Clock.systemUTC());
         return new ContainerRunSupport(runner, cloneDir, taskId, environments, segments, sandboxLifecyclePass);
     }
 }

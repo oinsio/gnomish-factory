@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import java.util.concurrent.CountDownLatch
+
 /**
  * A scripted {@link DockerCli} + {@link Process} pair shared by the file-channel
  * mechanics and boundary specs (FR1, NFR-S3 of add-sandbox-core): {@code run()}
@@ -29,20 +31,30 @@ class ScriptedFileChannelDockerCli extends DockerCli {
 }
 
 /**
- * A scripted exec'd process for the file-channel specs: stdout is canned bytes,
- * stdin is a {@link SlowCloseStdin} sink a spec can delay or inspect, and
- * {@code waitFor} either honours a real pending interrupt (throws and clears the
- * flag, matching {@link Process#waitFor()}) or — when {@link #interruptOnWaitFor}
- * is set — completes normally while leaving the flag set on the calling thread,
- * scripting an interrupt that lands on the stdin pump join that follows inside
+ * A scripted exec'd process for the file-channel specs: stdout is canned bytes
+ * (or, for the stall spec, a caller-supplied {@link InputStream}), stdin is a
+ * {@link SlowCloseStdin} sink a spec can delay or inspect, and {@code waitFor}
+ * either honours a real pending interrupt (throws and clears the flag, matching
+ * {@link Process#waitFor()}) or — when {@link #interruptOnWaitFor} is set —
+ * completes normally while leaving the flag set on the calling thread, scripting
+ * an interrupt that lands on the stdin pump join that follows inside
  * {@code ContainerFileChannel#putFile}.
+ *
+ * <p>{@link #exitsOnlyWhenStderrDrained} models the one thing an in-JVM fake
+ * otherwise cannot: a real child cannot exit while a pipe nobody reads is full,
+ * so a channel that leaves stderr undrained wedges its own wait.
  */
 class ScriptedFileChannelProcess extends FakeProcess {
 
     final SlowCloseStdin stdin = new SlowCloseStdin()
     byte[] stdout = new byte[0]
+    InputStream stdoutStream = null
+    InputStream stderrStream = null
     int exit = 0
     boolean interruptOnWaitFor = false
+    boolean exitsOnlyWhenStderrDrained = false
+
+    private final CountDownLatch stderrDrained = new CountDownLatch(1)
 
     @Override
     OutputStream getOutputStream() {
@@ -51,13 +63,22 @@ class ScriptedFileChannelProcess extends FakeProcess {
 
     @Override
     InputStream getInputStream() {
-        new ByteArrayInputStream(stdout)
+        stdoutStream ?: new ByteArrayInputStream(stdout)
+    }
+
+    @Override
+    InputStream getErrorStream() {
+        new EofSignallingStream(stderrStream ?: new ByteArrayInputStream(new byte[0]), stderrDrained)
     }
 
     @Override
     int waitFor() throws InterruptedException {
         if (interruptOnWaitFor) {
             Thread.currentThread().interrupt()
+            return exit
+        }
+        if (exitsOnlyWhenStderrDrained) {
+            stderrDrained.await()
             return exit
         }
         if (Thread.interrupted()) {
@@ -84,5 +105,25 @@ class SlowCloseStdin extends ByteArrayOutputStream {
             Thread.sleep(closeDelayMillis)
         }
         closed = true
+    }
+}
+
+/** Counts down {@code drained} once its source has been read to the end. */
+class EofSignallingStream extends FilterInputStream {
+
+    private final CountDownLatch drained
+
+    EofSignallingStream(InputStream source, CountDownLatch drained) {
+        super(source)
+        this.drained = drained
+    }
+
+    @Override
+    int read(byte[] buffer, int off, int len) {
+        int read = super.read(buffer, off, len)
+        if (read < 0) {
+            drained.countDown()
+        }
+        return read
     }
 }
