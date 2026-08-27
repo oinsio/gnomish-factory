@@ -134,8 +134,9 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   durability boundary stays; only the first push of a new branch becomes load-bearing.
 - NG2: true server-side fencing — git and GitHub cannot reject stale-epoch writes; epochs
   make zombie writes detectable and classifiable, not impossible.
-- NG3: retry/backoff policy for subprocess invocations — owned by
-  `bound-subprocess-commands`.
+- NG3: bounding the duration of a single subprocess invocation (deadlines, stall
+  detection) — owned by the `subprocess-supervision` capability; attempt counts and
+  backoff for retried operations are the FR6/FR7 budgets of this change.
 - NG4: narrowing the heartbeat partition window below one round — the epoch plus self-fencing
   bounds its cost to one duplicate round, which is accepted.
 - NG5: multi-ref or cross-repository transactions — cross-repo movement stays reconciled,
@@ -178,10 +179,14 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   branch: a human decision lands with the attempt-counter reset; a passing round lands with
   the advanced pipeline position; a container park lands as the outcome commit with the
   pending marker. No mutually-implied fields may split across commits.
-- FR5: state files SHALL be written atomically (temp file + atomic rename) by every
-  filesystem writer of `.gnomish-task/` files (the container persister writes blobs through
-  the bare-objects repository and is atomic at commit granularity by construction); recovery SHALL restore factory-owned files under
-  `.gnomish-task/` from the branch tip and never salvage them from a dirty worktree, while
+- FR5: no reader of `.gnomish-task/` state files — a salvaging resume included — SHALL ever
+  observe a partially written file. Each write medium realizes the invariant per the
+  crash-consistency ADR's durability table: host-worktree writers use the shared atomic
+  writer (temp file + atomic rename); the container-side persisters are atomic at commit
+  granularity — round state is written into the box and committed in-box, lifecycle commits
+  are built from bare objects — so a partial in-box write never reaches a commit. Recovery
+  SHALL restore factory-owned files under `.gnomish-task/` from the branch tip and never
+  salvage them from a dirty worktree (which also shields the partial in-box write), while
   gnome-owned work files remain salvageable; both salvage paths SHALL consume one shared
   factory-owned-paths policy.
 - FR6: fresh-vs-resume routing SHALL rely only on origin-confirmed state: a locate fetch that

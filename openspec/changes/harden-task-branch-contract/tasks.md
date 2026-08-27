@@ -7,10 +7,14 @@ failing-first Spock specs (`.claude/rules/testing.md`).
 ## 0. Durable documentation and coordination
 
 - [ ] 0.1 Write the crash-consistency ADR in `docs/adr/` (D1, D15): principle, three
-      mechanisms, per-shape roll-forward/discard table, rejected alternatives (saga journal,
-      WAL, block counters, local fsync), durability point = successful push
+      mechanisms, per-shape roll-forward/discard table, the per-medium
+      atomicity/durability table (host atomic writer / in-box commit granularity / bare
+      objects) with its accepted non-mechanisms (no local fsync, no atomic in-box
+      `putFile` — D10), rejected alternatives (saga journal, WAL, block counters),
+      durability point = successful push
 - [ ] 0.2 Add the `.claude/rules/` crash-consistency checklist rule for future multi-step
-      transitions (D15, G5)
+      transitions (D15, G5); include the referencing rule: policy ownership is cited by
+      capability (capabilities outlive archives), provenance by change name
 - [ ] 0.3 Add glossary entries: branch shape (with the canonical eleven-shape table copied
       from the `task-branch-contract` spec, its owner), tracker shape (table owner: the
       `claim-heartbeat` spec), sweep universe, recovery owner, claim epoch, intent/receipt;
@@ -101,7 +105,10 @@ failing-first Spock specs (`.claude/rules/testing.md`).
 
 - [ ] 6.1 Locate fetch classification on subprocess outcomes: only confirmed-missing-ref is
       "absent"; everything else is infrastructure — retry, then abort the take (D14, FR6);
-      same split for the remote-tip probe
+      same split for the remote-tip probe; each execution medium maps its native outcome
+      representation onto the taxonomy in one adapter-owned seam — in container mode the
+      named interrupt arrives as `CapturedExec`'s `InterruptedIOException` cause, never
+      branched on ad hoc at call sites (D14)
 - [ ] 6.2 Load-bearing first push of a new branch: bounded retry, abort-before-round on
       exhaustion; later pushes stay best-effort (FR7)
 - [ ] 6.3 Replica-pair reconciler consolidating the host and container divergence twins
@@ -133,7 +140,9 @@ failing-first Spock specs (`.claude/rules/testing.md`).
 
 - [ ] 9.1 Table-driven harness: enumerate durable steps of every multi-step transition
       (host and container), kill after each, run pickup, assert converged shape; every
-      recovery runs twice asserting no-op (D13, M1, NFR-R1, UX1)
+      recovery runs twice asserting no-op (D13, M1, NFR-R1, UX1); the no-op assertion
+      tolerates `CapturedExec`'s conservative interrupt classification — at worst a re-run
+      service commit, never paid work (D13, NFR-C1)
 - [ ] 9.1b Tracker kill windows: the in-memory reference adapter is atomic, so the GitHub
       adapter's own suite fails the connection after each write of the claim, abort,
       finish, park, and reap sequences (WireMock) and asserts every frozen state

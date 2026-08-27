@@ -178,9 +178,13 @@ Every logical transition of a task SHALL become durable as exactly one commit on
 - **THEN** its outcome and the pending marker land in one commit, and no tip shows the outcome without the marker or the marker without the outcome
 
 ### Requirement: Atomic state-file writes
-Both the host and container persisters SHALL write state files by writing a temp file and atomically renaming it into place; no reader — including a salvaging resume — SHALL ever observe a partially written `state.json` or `task.json`.
+No reader of `.gnomish-task/` state files — a salvaging resume included — SHALL ever observe a partially written `state.json` or `task.json`. Each write medium realizes the invariant per the crash-consistency ADR's durability table: host-worktree writers SHALL write a temp file and atomically rename it into place; the container-side persisters are atomic at commit granularity — round state is written into the box and committed in-box, lifecycle commits are built from bare objects — so a partial in-box write never reaches a commit, and the factory-owned-paths restore rule keeps salvage away from it.
 <!-- implements FR5 of harden-task-branch-contract -->
 
-#### Scenario: A kill mid-write leaves a whole file
-- **WHEN** the process dies during a state-file write
+#### Scenario: A kill mid-write on the host leaves a whole file
+- **WHEN** the process dies during a host-worktree state-file write
 - **THEN** the path holds either the complete previous content or the complete new content, and the next reader parses it without error
+
+#### Scenario: A kill mid-write in the box never surfaces a partial file
+- **WHEN** the process dies during an in-box `state.json` write, leaving a partial file in the box worktree
+- **THEN** no commit carries the partial file, and neither resume nor salvage reads it — factory-owned files are restored from the branch tip

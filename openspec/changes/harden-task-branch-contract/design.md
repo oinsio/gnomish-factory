@@ -111,13 +111,22 @@ counters with two thresholds invite the drift the audit already found in the abo
 **D10 — The atomic file writer moves to a shared dependency-free leaf module** (`atomicfile`),
 and every non-atomic writer of `.gnomish-task/` files adopts it — per the code these are the
 host-side writers `GitAttemptPersistence`, `GitTaskRepository` (initial files),
-`TerminalWriteMarker`, and `TraceLineWriter`; the container persister writes blobs through
-the bare-objects repository and is atomic at commit granularity by construction; the
-dashboard writer already uses the writer and only moves with it (FR5). Durability point remains the
-successful push: local fsync discipline is deliberately NOT added — a lost local write is
-expendable by D8's arbitration; this acceptance is recorded in the ADR. *Alternative
-rejected:* a second copy in the git adapter (module boundaries forbid the sideways import;
-copies drift).
+`TerminalWriteMarker`, and `TraceLineWriter`; the container-side persisters are atomic at
+commit granularity by construction — the round-state persister
+(`EnvironmentAttemptPersistence`) writes `state.json` into the box through the file
+channel's `putFile` (a plain in-box write, not temp+rename) and commits in-box, using bare
+objects only for read-back verification, while the lifecycle persister
+(`GitObjectsTaskRepository`) builds its commits from bare objects — so a partial in-box
+write never reaches a commit, and FR5's restore-from-tip rule keeps every reader away from
+it; the dashboard writer already uses the writer and only moves with it (FR5). The
+per-medium atomicity/durability table (host atomic writer / in-box commit granularity /
+bare objects) is owned by the crash-consistency ADR (D15); the ADR also records two
+accepted non-mechanisms: durability point remains the successful push — local fsync
+discipline is deliberately NOT added, a lost local write is expendable by D8's
+arbitration — and `putFile` is deliberately NOT made atomic: commit granularity plus the
+restore-from-tip rule already carry the invariant, and a second guard on the same path
+would blur which mechanism owns it. *Alternative rejected:* a second copy in the git
+adapter (module boundaries forbid the sideways import; copies drift).
 
 **D11 — One factory-owned-paths policy for salvage** (FR5): the `.gnomish-task/` ownership
 list is a single constant consumed by host and container salvage; factory files restore from
@@ -141,7 +150,10 @@ the missing reverse channel for one consumer and doubles the reconciliation surf
 pickup)** (M1): each multi-step transition enumerates its durable steps; the harness kills
 after each, runs the pickup against a local bare origin (Gitea only where a real remote
 protocol matters), asserts the classified shape and convergence, and runs every recovery
-twice (idempotence). Gate placement per Q4: `check` if measured runtime allows, else a
+twice (idempotence). The idempotence assertion tolerates `CapturedExec`'s documented
+conservative interrupt classification — an interrupt landing just after a clean exit
+re-runs at worst a service commit, never paid executor or judge work (NFR-C1 untouched).
+Gate placement per Q4: `check` if measured runtime allows, else a
 dedicated CI lane — decided by measurement, recorded in tasks. *Rationale:* the audit found
 the defect class by asking "what does the next pickup see?" — the table makes that question
 executable for every transition, present and future (G5). *Alternative rejected:* per-defect
@@ -159,7 +171,13 @@ never re-driven within the run, and a timed-out network invocation re-enters onl
 infrastructure-retry policy (Resilience4j), never a re-attempt count. For the load-bearing
 first push (FR7) a timed-out push is an unknown remote outcome: the retry loop SHALL
 re-check the remote tip within its own bound before re-pushing, and treats a confirmed
-landed ref as success. *Rationale:* only the subprocess layer can distinguish
+landed ref as success. The named-outcome taxonomy (exited / timed-out / interrupted) has
+one representation per execution medium — `GitCommandResult.Termination` in the git
+runner, an `InterruptedIOException` cause from `CapturedExec` on the in-box exec path —
+and each medium maps its native representation onto the taxonomy in exactly one
+adapter-owned seam (the D3 principle applied to invocation outcomes): classification and
+retry policy consume the taxonomy only, and no call site branches on exception types ad
+hoc. *Rationale:* only the subprocess layer can distinguish
 "origin confirmed the ref missing" from "the invocation never got an answer" — the named
 outcomes make the split decidable where a bare exit code could not. *Alternative rejected:*
 treating any locate-fetch failure as "branch absent" (the status quo — the duplicate-branch

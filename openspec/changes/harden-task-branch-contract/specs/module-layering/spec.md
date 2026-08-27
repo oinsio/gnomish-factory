@@ -11,9 +11,10 @@ The build SHALL be organized into layered Gradle modules by hexagonal layer:
 `application`, one or more `adapters` modules, `sandbox` modules, and
 `bootstrap`. `atomicfile` is the dependency-free leaf holding the shared
 atomic file writer (temp file + atomic rename) consumed by the host-side
-`.gnomish-task/` writers and the dashboard writer; the container persister
-writes blobs through the bare-objects repository and is atomic at commit
-granularity by construction, so it does not consume the writer.
+`.gnomish-task/` writers and the dashboard writer; the container-side
+persisters reach durability at commit granularity — round state committed
+in-box, lifecycle commits built from bare objects — so neither consumes the
+writer.
 <!-- implements FR9 of bound-subprocess-commands; originally FR1 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
 
@@ -79,6 +80,6 @@ their emptiness is what keeps their consumers free of transitive coupling.
 - **WHEN** the host persister and the dashboard writer perform an atomic file
   write
 - **THEN** each consumes the `:atomicfile` writer — no module keeps a private
-  copy of the temp-file-plus-rename discipline — while the container persister
-  reaches durability through bare-objects commits and consumes no filesystem
-  writer
+  copy of the temp-file-plus-rename discipline — while the container-side
+  persisters reach durability at commit granularity and consume no host
+  filesystem writer
