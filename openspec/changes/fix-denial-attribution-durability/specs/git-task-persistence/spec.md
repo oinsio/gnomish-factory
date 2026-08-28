@@ -17,8 +17,25 @@
 - **WHEN** a round leaves a decision request in `.gnomish-task/decisions/`
 - **THEN** the gnome is that file's only writer and every other `.gnomish-task/` path keeps its single factory-side writer
 
+### Requirement: Attempt denials in the state file
+Each attempt record in `state.json` SHALL carry a denials list — structured findings recorded by the environment's egress guard during that attempt's round — separate from check results. Each denial entry SHALL carry its source-assigned identity when known — the denial source's event timestamp paired with the source identity — additively under contract v1: an absent identity reads as "unknown, keep". The list SHALL NOT participate in the attempt's result, the stage's overall verdict, or the prior-failure feedback of a retry. The field is additive under contract v1: readers SHALL treat an absent field as an empty list, and existing documents without it remain readable.
+<!-- implements FR2, FR4 of fix-denial-report-attachment -->
+<!-- implements FR7 of fix-denial-attribution-durability -->
+
+#### Scenario: Denials persist with the attempt
+- **WHEN** a round with a guard denial is committed to the task branch
+- **THEN** the attempt's entry in `state.json` carries the denial finding and its identity, and the attempt's result is unchanged by its presence
+
+#### Scenario: Pre-existing state files stay readable
+- **WHEN** a state file written before this contract addition is read
+- **THEN** it parses under contract v1 with every attempt's denials read as empty
+
+#### Scenario: Denials never feed retries
+- **WHEN** an attempt with denials fails on a check and the stage retries
+- **THEN** the feedback context of the retry contains only the check findings, not the denials
+
 ### Requirement: Denial cursor in the state file
-`state.json` SHALL carry the environment's denial read position at commit time — the opaque position paired with the identity of the denial source it was read from — so an instance resuming the task continues the denial delta from the newest source-matching committed position at the branch tip (`state.json`'s attempt-side cursor or `task.json`'s escalation-side cursor, whichever is newer), instead of re-reading everything the source still holds. The field is environment bookkeeping, not task state: it SHALL NOT affect the position, attempts, or usage a reader reconstructs. It is additive under contract v1: an absent field means "no cursor to resume from", and a writer with no denial source records none.
+`state.json` SHALL carry the environment's denial read position at commit time — the opaque position paired with the identity of the denial source it was read from — so an instance resuming the task continues the denial delta from the newest source-matching committed position at the branch tip (`state.json`'s attempt-side cursor or `task.json`'s escalation-side cursor, whichever is newer), instead of re-reading everything the source still holds. The field is environment bookkeeping, not task state: it SHALL NOT affect the position, attempts, or usage a reader reconstructs. It is additive under contract v1: an absent field means "no cursor to resume from", and a writer with no denial source records none. No lifecycle rewrite of `state.json` SHALL drop a committed cursor: a writer that regenerates the file for another transition (a RESUMED commit, a decision append) carries the tip's cursor forward unchanged.
 <!-- implements FR5 of fix-denial-report-attachment -->
 <!-- implements FR3, FR5 of fix-denial-attribution-durability -->
 
@@ -34,10 +51,14 @@
 - **WHEN** a state file with no cursor field is read
 - **THEN** it parses under contract v1 and the run reads its denial source from the beginning
 
+#### Scenario: A lifecycle rewrite preserves the cursor
+- **WHEN** a RESUMED commit rewrites `state.json` on a tip whose file carries a committed cursor
+- **THEN** the rewritten file carries the same cursor, and a restore from the new tip offers it
+
 ## ADDED Requirements
 
 ### Requirement: Escalation denials in task.json
-A `cannotExecute` escalation recorded in `task.json` SHALL carry the denials read from the environment of the round that could not execute, using the same finding shape as check findings and attempt denials. The field is additive under contract v1: it is present as an empty array when the failed round recorded no denial, and documents written before this addition SHALL read it as empty. The denials SHALL NOT appear in the attempt history — the round they belong to was never recorded as an attempt — and SHALL influence no derived field.
+A `cannotExecute` escalation recorded in `task.json` SHALL carry the denials read from the environment of the round that could not execute, using the same finding shape as check findings and attempt denials, each entry carrying its source-assigned identity when known (additive; absent reads as "unknown, keep"). The field is additive under contract v1: it is present as an empty array when the failed round recorded no denial, and documents written before this addition SHALL read it as empty. The denials SHALL NOT appear in the attempt history — the round they belong to was never recorded as an attempt — and SHALL influence no derived field.
 <!-- implements FR2, NFR-S1 of fix-denial-attribution-durability -->
 
 #### Scenario: A parked task keeps the hung round's denial
@@ -53,7 +74,7 @@ A `cannotExecute` escalation recorded in `task.json` SHALL carry the denials rea
 - **THEN** the recorded escalation and its denials remain readable in the file's git history
 
 ### Requirement: Denial cursor rides the escalation write
-`task.json` SHALL carry the environment's denial read position as it stood after an escalation's denials were drained — the same opaque-position-plus-source-identity shape `state.json` records with an attempt — written in the same write as the escalation it belongs to, so the durable position can lag the record carrying its denials but never lead it. Like `state.json`'s cursor, the field is environment bookkeeping, not task state: it SHALL influence no reconstructed field and never appear in `status.json`. It is additive under contract v1: absent means "no cursor to resume from". Writing it is best-effort: an environment that cannot answer its cursor at park time writes none and never fails the park. An instance resuming the task SHALL be offered the newest source-matching committed position across `state.json` and `task.json` at the branch tip.
+`task.json` SHALL carry the environment's denial read position as it stood after an escalation's denials were drained — the same opaque-position-plus-source-identity shape `state.json` records with an attempt — written in the same lifecycle commit as the escalation it belongs to, through the shared atomic writer, so the durable position can lag the record carrying its denials but never lead it. Like `state.json`'s cursor, the field is environment bookkeeping, not task state: it SHALL influence no reconstructed field and never appear in `status.json`. It is additive under contract v1: absent means "no cursor to resume from". Writing it is best-effort: an environment that cannot answer its cursor at park time writes none and never fails the park. An instance resuming the task SHALL be offered the newest source-matching committed position across `state.json` and `task.json` at the branch tip.
 <!-- implements FR3, FR5, NFR-R1 of fix-denial-attribution-durability -->
 
 #### Scenario: The drained position is committed with the escalation
