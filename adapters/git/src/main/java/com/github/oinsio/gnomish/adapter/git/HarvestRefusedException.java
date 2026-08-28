@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import java.io.Serial;
 
 /**
@@ -16,7 +17,14 @@ import java.io.Serial;
  * not be completed at all (transport or repository trouble), not that git
  * examined the history and said no.
  *
- * <p>Implements FR5 of add-sandbox-core.
+ * <p>The box and the clone are a replica pair like any other, and a refused harvest is that
+ * pair's {@link DivergenceOutcome#DIVERGED} — the same verdict the clone-versus-origin reconciler
+ * names, judged by the same vocabulary (design D8 of harden-task-branch-contract). The policy
+ * differs because the medium does: there is no clone-to-live-box channel to reset the box's ref
+ * through, so this pair's divergence is resolved by disposing the box and re-seeding from the
+ * decided tip, never by a discard-under-lease write.
+ *
+ * <p>Implements FR5 of add-sandbox-core; FR8 of harden-task-branch-contract.
  */
 public final class HarvestRefusedException extends RuntimeException {
 
@@ -30,5 +38,15 @@ public final class HarvestRefusedException extends RuntimeException {
     public HarvestRefusedException(String branch, String stderr) {
         super("harvest refused for branch \"" + branch + "\": history was rewritten inside the environment"
                 + " (non-fast-forward): " + stderr.strip());
+    }
+
+    /**
+     * This refusal's replica-pair verdict, so a caller reasoning about divergence reads one
+     * vocabulary rather than a mode-local exception type.
+     *
+     * @return always {@link DivergenceOutcome#DIVERGED}
+     */
+    public DivergenceOutcome verdict() {
+        return DivergenceOutcome.DIVERGED;
     }
 }

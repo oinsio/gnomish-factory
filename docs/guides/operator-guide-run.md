@@ -71,7 +71,7 @@ Worktrees live outside the clone, under `~/.gnomish/worktrees/<project-name>/<sa
 - **no recorded outcome** (the process died mid-round) → continues from the recorded position; any uncommitted work from the interrupted round is salvaged into a service commit by default, or discarded and the round replayed if `--discard-work` is given;
 - **completed** → reports the outcome and exits without further work.
 
-If the local branch and its remote counterpart have diverged, resume needs a human: equal state continues normally, a local branch behind origin fast-forwards (discarding any uncommitted leftovers), and a local branch ahead of origin continues from local — but a true divergence is a hard stop (exit code 5, `DivergedBranchException`) rather than an automatic merge.
+Resume reconciles the local branch against its remote counterpart automatically, and never asks for git surgery: equal state continues normally, a local branch behind origin fast-forwards (discarding any uncommitted leftovers), a local branch ahead of origin continues from local, and a true divergence discards the local line — the local ref is reset to the origin tip under a compare-and-swap — and the run continues from what origin holds. Origin wins because a commit that never reached origin was never durable for the fleet. Origin history itself is never rewritten: the local ref is the only thing that moves, and every discard is named in a WARN with both tips.
 
 ## Exit codes
 
@@ -84,7 +84,7 @@ The process exit code reports the outcome — anything `>= 10` means the engine 
 | 2    | usage error                                                         |
 | 3    | pipeline load failure                                               |
 | 4    | stdin exhausted mid-stage (Ctrl-D at an ordinary prompt)            |
-| 5    | diverged branch on resume — needs a human to reconcile              |
+| 5    | reserved (was: diverged branch on resume, now reconciled automatically) |
 | 6    | task not found (`status`/`usage` only — no `gnomish/<task>` branch) |
 | 10   | escalated (attempts exhausted / undecidable)                        |
 | 11   | paused at a manual checkpoint                                       |
@@ -103,7 +103,7 @@ Pushing the task branch is the factory's job, never yours. Every commit the fact
 
 Push is best-effort by design: durability is the recorded branch state, so a failed push logs one WARN and the run continues. Two mechanisms close the gap a lost push leaves:
 
-- **Touchpoint reconciliation.** At resume start and at a run's terminal boundary — unless that boundary parks the task, where the fence below does the same job more thoroughly — the factory compares `origin`'s tip for the branch with the local one. If `origin` is missing the branch or holds a strict ancestor of the local tip, it pushes. So a push lost to a crash or an outage is delivered by the next instance to touch the task, whichever machine that is. It costs one `ls-remote` when `origin` is already current, never blocks the run, and does nothing at all where the two histories diverged — repairing that is a human's call.
+- **Touchpoint reconciliation.** At resume start and at a run's terminal boundary — unless that boundary parks the task, where the fence below does the same job more thoroughly — the factory compares `origin`'s tip for the branch with the local one. If `origin` is missing the branch or holds a strict ancestor of the local tip, it pushes. So a push lost to a crash or an outage is delivered by the next instance to touch the task, whichever machine that is. It costs one `ls-remote` when `origin` is already current, never blocks the run, and pushes nothing where the two histories diverged — resolving that belongs to the resume-time reconciler, which has already run by then, not to a touchpoint.
 - **Delivery fence before a park.** Before the tracker is told a task is escalated or paused, the factory verifies the park's commit — the recorded outcome and its pending-write marker — is on `origin`, pushing with one bounded re-attempt if it is not. This is what makes a park safe to pick up from another machine: the tracker never announces a park whose commit `origin` lacks. If the fence exhausts its attempts, the park still lands and its report on the tracker carries one extra line saying `origin` is behind the recorded park; that line names the branch and the `git push origin <branch>` that fixes it — until it is pushed, another instance resuming the task would read stale state.
 
 In a clone with **no `origin` remote**, all of this is silent: no push is attempted at any point, and no warnings are logged. A purely local run behaves exactly as it did before.

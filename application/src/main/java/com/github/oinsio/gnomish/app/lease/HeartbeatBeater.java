@@ -14,36 +14,31 @@ import org.slf4j.LoggerFactory;
  * claim-gone answer is logged and reported back via the return value so the caller can drop the dead
  * claim from its held set and surface the loss; this class never touches that held set itself.
  *
- * <p>Implements FR8 of add-claim-heartbeat.
+ * <p>The three answers are the {@link BeatOutcome} values: an infrastructure failure is {@code
+ * UNCONFIRMED} rather than a silent {@code false}, because "the beat did not reach a verdict" is
+ * what self-fencing counts (FR13 of harden-task-branch-contract) — the caller decides how long an
+ * unconfirmed claim may stay unconfirmed before it freezes the run's writes.
+ *
+ * <p>Implements FR8 of add-claim-heartbeat. Implements FR13 of harden-task-branch-contract.
  */
-final class HeartbeatBeater {
+record HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, Clock clock) {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatBeater.class);
 
-    private final Tracker tracker;
-    private final HeartbeatProgress progress;
-    private final Clock clock;
-
-    HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, Clock clock) {
-        this.tracker = tracker;
-        this.progress = progress;
-        this.clock = clock;
-    }
-
-    /** Returns true if the tracker reports the claim gone (reaped or taken over). */
-    boolean beat(TaskRef ref) {
+    /** What this beat learned about {@code ref}'s claim. */
+    BeatOutcome beat(TaskRef ref) {
         String payload = HeartbeatPayload.render(progress.progressFor(ref.id()), clock.now());
         HeartbeatResult result;
         try {
             result = tracker.heartbeat(ref, payload);
         } catch (RuntimeException e) {
             log.warn("beat failed for {}; continuing", ref.id(), e);
-            return false;
+            return BeatOutcome.UNCONFIRMED;
         }
         if (result instanceof HeartbeatResult.ClaimGone) {
             log.info("claim gone for {}; surfacing to sink and dropping", ref.id());
-            return true;
+            return BeatOutcome.CLAIM_GONE;
         }
-        return false;
+        return BeatOutcome.BEATEN;
     }
 }

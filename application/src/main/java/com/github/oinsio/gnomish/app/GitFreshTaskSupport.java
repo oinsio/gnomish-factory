@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
+import com.github.oinsio.gnomish.domain.engine.TaskState;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -29,10 +30,19 @@ final class GitFreshTaskSupport {
      * HEAD} when {@code null}; {@link TaskRepository#createTask} requires a non-blank {@code
      * baseRef}, so {@code "HEAD"} is passed through literally rather than {@code null} — matching
      * {@code TaskBranchCreator}'s own "{@code null} means HEAD" convention one layer down.
+     *
+     * <p>{@code initialState} is the state the caller synthesized from the frozen pipeline law,
+     * recorded in the STARTED commit beside the context (FR3, design D2 of
+     * harden-task-branch-contract) so a first-round crash still leaves a readable branch.
      */
-    static void createTask(TaskRepository taskRepository, String taskId, TaskContext context, @Nullable String base) {
+    static void createTask(
+            TaskRepository taskRepository,
+            String taskId,
+            TaskContext context,
+            @Nullable String base,
+            TaskState initialState) {
         try {
-            taskRepository.createTask(context, base == null ? "HEAD" : base);
+            taskRepository.createTask(context, base == null ? "HEAD" : base, initialState);
         } catch (GitTaskRepositoryException e) {
             throw new UsageException("could not start git-mode task \"" + taskId + "\": " + e.getMessage()
                     + " — this is a fresh run, not --resume; pick a different --task-id, fix --base, or resume the"

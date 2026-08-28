@@ -39,10 +39,10 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         String recorded = null
 
         when:
-        repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD')
+        repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD', TaskState.atStageStart('work'))
 
         then:
-        1 * delegate.createTask(_, 'HEAD') >> {
+        1 * delegate.createTask(_, 'HEAD', _) >> {
             recorded = commitOnTaskBranch('started')
         }
         remoteTip() == Optional.of(recorded)
@@ -55,10 +55,10 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         String recorded = null
 
         when:
-        repository.appendDecision(TASK_ID, new Decision('do it', null, null, Instant.parse('2026-01-01T00:00:00Z')))
+        repository.appendDecision(TASK_ID, new Decision('do it', null, null, Instant.parse('2026-01-01T00:00:00Z')), TaskState.atStageStart('work'))
 
         then:
-        1 * delegate.appendDecision(TASK_ID, _) >> {
+        1 * delegate.appendDecision(TASK_ID, _, _) >> {
             recorded = commitOnTaskBranch('resumed')
         }
         remoteTip() == Optional.of(recorded)

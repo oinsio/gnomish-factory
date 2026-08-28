@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
@@ -56,7 +57,7 @@ class EnvironmentHarvestParentGuardSpec extends Specification implements BareGit
         def attemptRef = new AttemptCommitRef()
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
         def snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef)
-        def persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef)
+        def persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
         snapshotStep.snapshot(TASK, 'implement', 1)
         box.hijack = { setBranchToOrphan() }

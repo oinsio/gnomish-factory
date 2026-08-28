@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import spock.lang.Specification
 
 /**
@@ -26,10 +27,10 @@ class GitFreshTaskSupportSpec extends Specification {
         def taskRepository = Mock(TaskRepository)
 
         when:
-        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, 'release/1.2')
+        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, 'release/1.2', TaskState.atStageStart('build'))
 
         then:
-        1 * taskRepository.createTask(CONTEXT, 'release/1.2')
+        1 * taskRepository.createTask(CONTEXT, 'release/1.2', _)
     }
 
     // FR6: an absent --base becomes the literal "HEAD" rather than a null — the port requires a
@@ -39,10 +40,10 @@ class GitFreshTaskSupportSpec extends Specification {
         def taskRepository = Mock(TaskRepository)
 
         when:
-        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, null)
+        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, null, TaskState.atStageStart('build'))
 
         then:
-        1 * taskRepository.createTask(CONTEXT, 'HEAD')
+        1 * taskRepository.createTask(CONTEXT, 'HEAD', _)
     }
 
     // FR7: on a fresh run both causes createTask can fail for (a branch already exists for this
@@ -51,13 +52,13 @@ class GitFreshTaskSupportSpec extends Specification {
     def "remaps a creation failure into a usage error naming the task and the way out"() {
         given:
         def taskRepository = Stub(TaskRepository) {
-            createTask(_, _) >> {
+            createTask(_, _, _) >> {
                 throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'gnomish/PROJ-1')
             }
         }
 
         when:
-        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, null)
+        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, null, TaskState.atStageStart('build'))
 
         then:
         def ex = thrown(UsageException)
@@ -72,11 +73,11 @@ class GitFreshTaskSupportSpec extends Specification {
         given:
         def boom = new IllegalStateException('boom')
         def taskRepository = Stub(TaskRepository) {
-            createTask(_, _) >> { throw boom }
+            createTask(_, _, _) >> { throw boom }
         }
 
         when:
-        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, null)
+        GitFreshTaskSupport.createTask(taskRepository, 'PROJ-1', CONTEXT, null, TaskState.atStageStart('build'))
 
         then:
         def thrownEx = thrown(IllegalStateException)

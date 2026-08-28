@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.app.lease
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
-import com.github.oinsio.gnomish.app.port.tracker.OpenTask
+import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CountDownLatch
@@ -30,12 +32,14 @@ class StalenessMemoryConcurrencySpec extends Specification {
     private final VirtualMonotonicTime time = new VirtualMonotonicTime()
     private final StalenessMemory memory = new StalenessMemory(time, TTL)
 
-    private static OpenTask working(String ref, ClaimVersion version) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, 'fixture title')
+    private static TrackerObservation working(String ref, ClaimVersion version) {
+        TrackerObservation.of(
+                new TaskRef(ref),
+                TrackerFacts.of(StateLabels.workingOnly(), new ClaimFacts.Live('inst-1', version)))
     }
 
     private static ClaimVersion version(int beat) {
-        new ClaimVersion('marker-1', ANCIENT.plusSeconds(beat))
+        new ClaimVersion('marker-1', ANCIENT.plusSeconds(beat), new ClaimEpoch(1))
     }
 
     // FR3, NFR-R1: staleRefs() is read from the sweep thread while the reaper thread mutates the

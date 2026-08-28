@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import org.jspecify.annotations.Nullable;
 
@@ -36,13 +37,18 @@ import org.jspecify.annotations.Nullable;
  * thrown {@code persist} instead ends the run as {@link TaskOutcome.Aborted} through the
  * journal (FR11, NFR-O1).
  *
- * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13, NFR-O1 of add-stage-engine.
+ * <p>A passing round's persisted state already carries the advanced position (FR4 of
+ * harden-task-branch-contract), so no kill can freeze "passed, but still at it".
+ *
+ * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13, NFR-O1 of add-stage-engine; FR4 of
+ * harden-task-branch-contract.
  */
 final class StageAttemptLoop {
 
     private final RoundExecution roundExecution;
     private final AttemptJournal journal;
     private final Clock clock;
+    private final PipelineDefinition definition;
 
     /**
      * Wires the loop from a run's ports: the {@link RoundExecution} that runs each round is
@@ -53,11 +59,14 @@ final class StageAttemptLoop {
      * @param ports the run's collaborators the loop reads executor/listener/persistence from;
      *     never null
      * @param verifyOrchestrator the verify chain the round's checks run through; never null
+     * @param definition the pipeline whose declared order a passing round advances along, so the
+     *     advanced position rides that round's own commit (FR4 of harden-task-branch-contract)
      */
-    StageAttemptLoop(EnginePorts ports, VerifyOrchestrator verifyOrchestrator) {
+    StageAttemptLoop(EnginePorts ports, VerifyOrchestrator verifyOrchestrator, PipelineDefinition definition) {
         this.roundExecution = new RoundExecution(ports.executor(), verifyOrchestrator, ports.listener());
         this.journal = new AttemptJournal(ports.listener(), ports.persistence());
         this.clock = ports.clock();
+        this.definition = definition;
     }
 
     /**
@@ -94,7 +103,7 @@ final class StageAttemptLoop {
                     context.taskId(), stage.name(), current.attempts().size()));
             switch (roundExecution.execute(context, current, workspace, stage, startedAt)) {
                 case RoundOutcome.Verified verified -> {
-                    var newState = newState(current, verified);
+                    var newState = newState(current, verified, stage);
                     var aborted = journal.commit(context.taskId(), newState, verified.key(), verified.trace());
                     if (aborted != null) {
                         return new StageResult.Terminal(aborted);
@@ -129,9 +138,15 @@ final class StageAttemptLoop {
      * TaskState#recordUnburnedRound}. Recorded before persisting, so routing later reads an
      * already-computed state and never re-records.
      */
-    private static TaskState newState(TaskState state, RoundOutcome.Verified verified) {
+    private TaskState newState(TaskState state, RoundOutcome.Verified verified, StageDefinition stage) {
         if (verified.verdict() instanceof Verdict.Fail) {
             return state.recordQualityFailure(verified.record());
+        }
+        if (verified.verdict() instanceof Verdict.Pass) {
+            // FR4 of harden-task-branch-contract: a pass and the advancement it implies are one
+            // transition, so they are one commit. The engine re-applies the same advance to its
+            // in-memory state, which is why this stays a pure widening of what is persisted.
+            return state.recordPassAndAdvance(verified.record(), Advancement.positionAfter(definition, stage));
         }
         return state.recordUnburnedRound(verified.record());
     }

@@ -2,16 +2,18 @@ package com.github.oinsio.gnomish.adapter.tracker
 
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 
 /**
@@ -104,7 +106,12 @@ abstract class DelegatingTracker implements Tracker {
     }
 
     @Override
-    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
-        delegate.removeStaleClaim(ref, observedVersion)
+    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
+        delegate.removeStaleClaim(ref, observedClaim)
+    }
+
+    @Override
+    RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        delegate.repairIndex(ref, observedFacts)
     }
 }

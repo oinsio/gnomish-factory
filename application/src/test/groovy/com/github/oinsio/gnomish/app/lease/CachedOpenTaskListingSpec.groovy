@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 import spock.lang.Specification
 
@@ -20,7 +21,7 @@ class CachedOpenTaskListingSpec extends Specification {
 
     private static OpenTask working(String ref) {
         new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'),
-                new ClaimVersion('m1', Instant.parse('2000-01-01T00:00:00Z')), 'fixture title')
+                new ClaimVersion('m1', Instant.parse('2000-01-01T00:00:00Z'), new ClaimEpoch(1)), 'fixture title')
     }
 
     def "starts Failed before any tick has published"() {

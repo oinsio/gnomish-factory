@@ -3,8 +3,10 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -36,9 +38,9 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     }
 
     private void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot).createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), null)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), null, TaskState.atStageStart('implement'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
-        def persistence = new GitAttemptPersistence(runner, worktree, taskId)
+        def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
@@ -174,5 +176,96 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
 
         then:
         thrown(UsageException)
+    }
+
+    // FR16, UX4 of harden-task-branch-contract: every legal shape renders calmly, and only the
+    // three quarantine shapes refuse inspection — with a diagnosis, never a stack trace.
+    def "FR16: a delivered branch renders as delivered, not as a missing state file"() {
+        given: 'a completed task whose cleanup commit stripped .gnomish-task/ from the tip'
+        persistRound('DELIVERED-1', TaskState.atStageStart('implement'))
+        def repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.finishCleanup('DELIVERED-1')
+        def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'DELIVERED-1')
+
+        when:
+        def output = captureStdout { newCommand().run(args) }
+
+        then:
+        noExceptionThrown()
+        output.contains('Task: DELIVERED-1')
+        output.contains('Shape: Delivered')
+        !output.contains('Diagnosis')
+    }
+
+    def "FR16: an unknown state-file version refuses inspection with a diagnosis, no stack trace, nothing mutated"() {
+        given: 'a task branch whose state.json declares version 2'
+        persistRound('VERSION-2', TaskState.atStageStart('implement'))
+        def worktree = worktreesRoot.resolve('clone').resolve('VERSION-2')
+        def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
+        stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":2')
+        runner.run(worktree, 'add', '-A')
+        runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 2')
+        def tipBefore = runner.run(cloneDir, 'rev-parse', 'gnomish/VERSION-2').stdout().trim()
+        def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'VERSION-2')
+
+        when:
+        def output = captureStdoutExpectingThrow(BranchShapeRefusedException) {
+            newCommand().run(args)
+        }
+
+        then: 'the diagnosis names the file, the observed version and the supported one'
+        output.contains('Shape: UnsupportedVersion')
+        output.contains('state.json declaring version 2 where this factory supports 1')
+
+        and: 'nothing was mutated — the branch tip is where it was'
+        runner.run(cloneDir, 'rev-parse', 'gnomish/VERSION-2').stdout().trim() == tipBefore
+    }
+
+    def "FR16: --json renders the refusing shape as JSON with its diagnosis"() {
+        given:
+        persistRound('VERSION-3', TaskState.atStageStart('implement'))
+        def worktree = worktreesRoot.resolve('clone').resolve('VERSION-3')
+        def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
+        stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":9')
+        runner.run(worktree, 'add', '-A')
+        runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 9')
+        def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'VERSION-3', '--json')
+
+        when:
+        def output = captureStdoutExpectingThrow(BranchShapeRefusedException) {
+            newCommand().run(args)
+        }
+
+        then:
+        output.contains('"shape" : "UnsupportedVersion"')
+        output.contains('"taskId" : "VERSION-3"')
+        output.contains('declaring version 9')
+    }
+
+    def "FR16, UX4: a mixed-shape clone lists one row per task, the bad branch included"() {
+        given: 'one healthy task, one delivered task and one with a broken state file'
+        persistRound('MIXED-OK', TaskState.atStageStart('implement'))
+        persistRound('MIXED-DONE', TaskState.atStageStart('implement'))
+        def repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        repository.recordOutcome('MIXED-DONE', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.finishCleanup('MIXED-DONE')
+        persistRound('MIXED-BAD', TaskState.atStageStart('implement'))
+        def broken = worktreesRoot.resolve('clone').resolve('MIXED-BAD')
+        new File(broken.toFile(), '.gnomish-task/state.json').text = '{ not json'
+        runner.run(broken, 'add', '-A')
+        runner.run(broken, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'break')
+        def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir)
+
+        when:
+        def output = captureStdout { newCommand().run(args) }
+
+        then: 'the listing survives the bad branch and names every shape'
+        noExceptionThrown()
+        output.contains('MIXED-OK')
+        output.contains('MIXED-DONE')
+        output.contains('Delivered')
+        output.contains('MIXED-BAD')
+        output.contains('Corrupt')
     }
 }

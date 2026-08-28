@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -114,7 +115,15 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         1 * support.keepStopped()
         0 * support.completeAndDispose(_)
         0 * support.recordAborted(_)
+
+        and: 'FR10, D12 of harden-task-branch-contract: the park is recorded on the branch BEFORE the tracker write'
+        1 * support.recordPark({ it instanceof TaskOutcome.Escalated })
+
+        then: 'and only then does the effect go out, followed by its receipt'
         1 * tracker.park(REF, ParkReason.ESCALATION, _)
+
+        then:
+        1 * support.confirmTerminalWrite()
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.ESCALATION
     }
@@ -139,7 +148,15 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         then:
         1 * support.keepStopped()
         0 * support.completeAndDispose(_)
+
+        and: 'FR10, D12 of harden-task-branch-contract: a checkpoint park is recorded on the branch too'
+        1 * support.recordPark({ it instanceof TaskOutcome.Paused })
+
+        then:
         1 * tracker.park(REF, ParkReason.CHECKPOINT, _)
+
+        then:
+        1 * support.confirmTerminalWrite()
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.CHECKPOINT
     }

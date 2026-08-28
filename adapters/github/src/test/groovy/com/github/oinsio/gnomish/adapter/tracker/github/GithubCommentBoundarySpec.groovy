@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause
 import java.time.Instant
 import spock.lang.Specification
 
@@ -18,15 +19,21 @@ import spock.lang.Specification
 class GithubCommentBoundarySpec extends Specification {
 
     private static ParsedMarker claimMarker(String instance, String at) {
-        new ParsedMarker(GithubMarkerKind.CLAIM, instance, Instant.parse(at), 1, 'claimed', null)
+        new ParsedMarker(GithubMarkerKind.CLAIM, instance, Instant.parse(at), 1, 'claimed', null, null, null)
     }
 
     private static ParsedMarker abortMarker(String instance, String at) {
-        new ParsedMarker(GithubMarkerKind.ABORT, instance, Instant.parse(at), 1, 'aborted', null)
+        new ParsedMarker(GithubMarkerKind.ABORT, instance, Instant.parse(at), 1, 'aborted', null, null, null)
+    }
+
+    /** An ABORT marker categorized as a failed branch repair (FR14 of harden-task-branch-contract). */
+    private static ParsedMarker recoveryAbortMarker(String instance, String at) {
+        new ParsedMarker(GithubMarkerKind.ABORT, instance, Instant.parse(at), 1, 'aborted',
+                RecoveryCause.RECOVERY_FAILURE.wireValue(), null, null)
     }
 
     private static ParsedMarker progressMarker(String instance, String at) {
-        new ParsedMarker(GithubMarkerKind.PROGRESS, instance, Instant.parse(at), 1, 'progressed', null)
+        new ParsedMarker(GithubMarkerKind.PROGRESS, instance, Instant.parse(at), 1, 'progressed', null, null, null)
     }
 
     def "abortFactsSinceBoundary returns AbortFacts.none when there is no boundary marker at all"() {
@@ -140,6 +147,44 @@ class GithubCommentBoundarySpec extends Specification {
 
         expect: 'the immediately-preceding abort is at-or-before the boundary, so it is not counted'
         GithubCommentBoundary.abortFactsSinceBoundary(markers) == AbortFacts.none()
+    }
+
+    // FR14 of harden-task-branch-contract: one counter, two categories. The marker's reason field
+    // carries the category, so the recovery share is folded out of the total — post-PROGRESS arm.
+    def "abortFactsSinceBoundary splits the post-progress aborts into the recovery share and the crash remainder"() {
+        given: 'after the progress marker: one failed branch repair, one uncategorized (crash) abort'
+        def markers = [
+            progressMarker('instance-a', '2026-07-20T08:00:00Z'),
+            recoveryAbortMarker('instance-a', '2026-07-20T09:00:00Z'),
+            abortMarker('instance-a', '2026-07-20T09:30:00Z'),
+        ]
+
+        when:
+        def facts = GithubCommentBoundary.abortFactsSinceBoundary(markers)
+
+        then:
+        facts.count() == 2
+        facts.recoveryCount() == 1
+        facts.crashCount() == 1
+    }
+
+    // FR14: the same split on the other arm — the abort streak scanned backward from an active claim.
+    def "abortFactsSinceBoundary splits the pre-claim abort streak into the recovery share and the crash remainder"() {
+        given: 'three aborts before the holder\'s active claim, only the earliest a failed repair'
+        def markers = [
+            recoveryAbortMarker('instance-a', '2026-07-20T08:00:00Z'),
+            abortMarker('instance-a', '2026-07-20T08:30:00Z'),
+            abortMarker('instance-a', '2026-07-20T09:00:00Z'),
+            claimMarker('instance-a', '2026-07-20T10:00:00Z'),
+        ]
+
+        when:
+        def facts = GithubCommentBoundary.abortFactsSinceBoundary(markers)
+
+        then: 'the shares are asymmetric, so the split cannot hold by coincidence'
+        facts.count() == 3
+        facts.recoveryCount() == 1
+        facts.crashCount() == 2
     }
 
     def "latestBoundaryIndex and activeClaim ignore a PROGRESS marker entirely"() {

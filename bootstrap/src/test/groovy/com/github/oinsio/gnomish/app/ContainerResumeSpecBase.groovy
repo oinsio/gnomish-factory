@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -49,7 +50,6 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     def docker = new ScriptedSandboxDocker()
     def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     Path cloneDir
@@ -59,12 +59,11 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir, 'init')
         Path index = tempDir.resolve('index')
         Files.createDirectories(index)
         gitObjects = GitObjects.open(cloneDir.resolve('.git'), index)
-        repository = new GitObjectsTaskRepository(gitObjects)
+        repository = new GitObjectsTaskRepository(gitObjects, ClaimEpochSource.NONE)
     }
 
     protected static StageDefinition stage() {
@@ -98,7 +97,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         def factory = { Path c, String t, List<Segment> s, SandboxProperties sp, fp, definition, List<String> creds ->
             def environments = docker.environments(
             TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'))
-            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE)
+            new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         new ContainerResumeRunner(
                 newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), 'taskId', factory)

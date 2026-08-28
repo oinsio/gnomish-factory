@@ -3,16 +3,18 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.util.List;
@@ -105,7 +107,8 @@ final class GithubTrackerFixtureAdapter implements Tracker {
     @Override
     public List<ReadyTask> listReady(int limit) {
         return delegate.listReady(limit).stream()
-                .map(rt -> new ReadyTask(toFixture(rt.ref()), rt.abortFacts(), rt.returned(), rt.finished(), rt.title()))
+                .map(rt -> new ReadyTask(
+                        toFixture(rt.ref()), rt.abortFacts(), rt.returned(), rt.finished(), rt.title(), rt.claim()))
                 .toList();
     }
 
@@ -176,7 +179,8 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         // Like listReady, each returned entry's canonical ref translates back to the fixture ref the
         // contract suite seeded; the opaque ClaimVersion and the state carry through unchanged.
         return delegate.listOpen().stream()
-                .map(open -> new OpenTask(toFixture(open.ref()), open.state(), open.claimVersion(), open.title()))
+                .map(open -> new OpenTask(
+                        toFixture(open.ref()), open.state(), open.claimVersion(), open.title(), open.facts()))
                 .toList();
     }
 
@@ -187,9 +191,15 @@ final class GithubTrackerFixtureAdapter implements Tracker {
     }
 
     @Override
-    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
         // RemoveStaleClaimResult (Removed/Mismatch) carries no TaskRef, so only the input ref is translated.
-        return delegate.removeStaleClaim(canonicalRefFor(ref), observedVersion);
+        return delegate.removeStaleClaim(canonicalRefFor(ref), observedClaim);
+    }
+
+    @Override
+    public RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        // RepairIndexResult carries no TaskRef either, so only the input ref is translated.
+        return delegate.repairIndex(canonicalRefFor(ref), observedFacts);
     }
 
     // --- Fixture seeding, delegated to FixtureSeeder for the wire-shape details ---
@@ -219,6 +229,15 @@ final class GithubTrackerFixtureAdapter implements Tracker {
      */
     void seedWorkingWithClaim(TaskRef ref, String holder) {
         seeder.seedWorkingWithClaim(issueFor(ref), holder);
+    }
+
+    /**
+     * Seeds {@code ref}'s fixture issue with the working label and NO claim comment — the state the
+     * claim sequence freezes between its label write and the comment it never posted, per {@code
+     * TrackerShapeFactsContract.seedWorkingWithoutClaim} (FR19 of harden-task-branch-contract).
+     */
+    void seedWorkingWithoutClaim(TaskRef ref) {
+        issueFor(ref).addLabel(FixtureSeeder.WORKING_LABEL);
     }
 
     /**

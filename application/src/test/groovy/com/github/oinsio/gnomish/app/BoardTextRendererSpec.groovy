@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.board.EligibilityReason
 import com.github.oinsio.gnomish.board.ReadyRow
 import com.github.oinsio.gnomish.board.ReadySummary
 import com.github.oinsio.gnomish.board.WorkingRow
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 import spock.lang.Specification
 
@@ -175,7 +176,7 @@ class BoardTextRendererSpec extends Specification {
     // FR4, spec scenario "Working rows show holder and claim age"
     def "renders a Working row's holder and claim age, with no staleness verdict"() {
         given:
-        def claimVersion = new ClaimVersion('marker-1', GENERATED_AT.minusSeconds(180))
+        def claimVersion = new ClaimVersion('marker-1', GENERATED_AT.minusSeconds(180), new ClaimEpoch(1))
         def board = model([], [
             new WorkingRow(new TaskRef('w-1'), 'Working task', 'factory-a-1b2c', claimVersion)
         ])

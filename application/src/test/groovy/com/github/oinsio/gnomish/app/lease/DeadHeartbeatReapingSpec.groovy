@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.claimBy
 import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.version
 import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.workingBy
 
@@ -41,7 +42,7 @@ class DeadHeartbeatReapingSpec extends Specification {
     private static final TaskRef OWN = new TaskRef('github:o/r#own')
     private static final String SELF_INSTANCE = 'gnomish-self'
 
-    private final Tracker tracker = Mock()
+    private final Tracker tracker = Mock(Tracker) { listReady(_) >> [] }
     private final VirtualMonotonicTime monotonic = new VirtualMonotonicTime()
     private final StalenessMemory staleness = new StalenessMemory(monotonic, TTL)
     private final Reaper reaper = new Reaper(tracker, staleness)
@@ -142,6 +143,6 @@ class DeadHeartbeatReapingSpec extends Specification {
         1 * tracker.listOpen() >> [
             workingBy(OWN, SELF_INSTANCE, v)
         ]
-        1 * tracker.removeStaleClaim(OWN, v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(OWN, claimBy(SELF_INSTANCE, v)) >> new RemoveStaleClaimResult.Removed()
     }
 }

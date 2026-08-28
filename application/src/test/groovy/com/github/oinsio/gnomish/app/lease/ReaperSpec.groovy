@@ -4,12 +4,14 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -34,7 +36,7 @@ class ReaperSpec extends Specification {
     private static final Duration TTL = Duration.ofMinutes(15)
     private static final Instant ANCIENT = Instant.parse('2000-01-01T00:00:00Z')
 
-    private final Tracker tracker = Mock()
+    private final Tracker tracker = Mock(Tracker) { listReady(_) >> [] }
     private final VirtualMonotonicTime time = new VirtualMonotonicTime()
     private final StalenessMemory memory = new StalenessMemory(time, TTL)
     private final Reaper reaper = new Reaper(tracker, memory)
@@ -43,8 +45,12 @@ class ReaperSpec extends Specification {
         new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, 'fixture title')
     }
 
+    private static ClaimFacts claimOf(ClaimVersion version, String holder = 'inst-1') {
+        new ClaimFacts.Live(holder, version)
+    }
+
     private static ClaimVersion version(String marker = 'm1', String updatedAt = ANCIENT.toString()) {
-        new ClaimVersion(marker, Instant.parse(updatedAt))
+        new ClaimVersion(marker, Instant.parse(updatedAt), new ClaimEpoch(1))
     }
 
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
@@ -83,7 +89,7 @@ class ReaperSpec extends Specification {
             working('T-stale', v),
             working('T-fresh', version('m2'))
         ]
-        1 * tracker.removeStaleClaim(new TaskRef('T-stale'), v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-stale'), claimOf(v)) >> new RemoveStaleClaimResult.Removed()
         0 * tracker.removeStaleClaim(new TaskRef('T-fresh'), _)
     }
 
@@ -105,7 +111,7 @@ class ReaperSpec extends Specification {
 
         then:
         1 * tracker.listOpen() >> [working('T-1', v)]
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v)) >> new RemoveStaleClaimResult.Removed()
         0 * tracker.claim(_, _)
     }
 
@@ -132,8 +138,8 @@ class ReaperSpec extends Specification {
 
         then:
         1 * tracker.listOpen() >> open
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v1) >> new RemoveStaleClaimResult.Mismatch(null)
-        1 * tracker.removeStaleClaim(new TaskRef('T-2'), v2) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v1)) >> new RemoveStaleClaimResult.Mismatch(null)
+        1 * tracker.removeStaleClaim(new TaskRef('T-2'), claimOf(v2)) >> new RemoveStaleClaimResult.Removed()
         noExceptionThrown()
     }
 
@@ -162,8 +168,8 @@ class ReaperSpec extends Specification {
 
         then:
         1 * tracker.listOpen() >> open
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v1) >> new RemoveStaleClaimResult.Mismatch(null)
-        1 * tracker.removeStaleClaim(new TaskRef('T-2'), v2) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v1)) >> new RemoveStaleClaimResult.Mismatch(null)
+        1 * tracker.removeStaleClaim(new TaskRef('T-2'), claimOf(v2)) >> new RemoveStaleClaimResult.Removed()
 
         and: 'exactly the mismatched claim logs the converging INFO line; the removed one does not'
         def converging = events.findAll {
@@ -195,10 +201,10 @@ class ReaperSpec extends Specification {
         reaper.reapOnce([])
 
         then:
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v1) >> {
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v1)) >> {
             throw new RuntimeException('5xx')
         }
-        1 * tracker.removeStaleClaim(new TaskRef('T-2'), v2) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-2'), claimOf(v2)) >> new RemoveStaleClaimResult.Removed()
         1 * tracker.listOpen() >> open
         noExceptionThrown()
     }
@@ -242,7 +248,7 @@ class ReaperSpec extends Specification {
 
         then: 'only now is the genuinely dead claim reaped, with the observed version'
         1 * tracker.listOpen() >> [working('T-1', v)]
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v)) >> new RemoveStaleClaimResult.Removed()
     }
 
     // FR9 "Long outage, no casualties": the tracker is down for SEVERAL TTLs while a live
@@ -327,7 +333,7 @@ class ReaperSpec extends Specification {
 
         then: 'only the foreign claim is reaped; the own claim is never removed'
         1 * tracker.listOpen() >> open
-        1 * tracker.removeStaleClaim(new TaskRef('T-foreign'), foreignVersion) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-foreign'), claimOf(foreignVersion)) >> new RemoveStaleClaimResult.Removed()
         0 * tracker.removeStaleClaim(ownRef, _)
     }
 
@@ -352,7 +358,7 @@ class ReaperSpec extends Specification {
 
         then:
         1 * tracker.listOpen() >> open
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> {
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v)) >> {
             throw new RuntimeException('5xx')
         }
 
@@ -361,7 +367,7 @@ class ReaperSpec extends Specification {
 
         then: 'the reaper retries the removal instead of staying silent'
         1 * tracker.listOpen() >> open
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v)) >> new RemoveStaleClaimResult.Removed()
     }
 
     // FR3, NFR-C2 of add-serve-sandbox-lifecycle: a successful listOpen is published to the

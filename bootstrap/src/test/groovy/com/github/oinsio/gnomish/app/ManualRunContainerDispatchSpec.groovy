@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
@@ -71,7 +72,8 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
                 [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null))
+                new ServeProperties(0, null, null, null, null, null, null),
+                new ClaimEpochBook())
         // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.
         runner.@dockerProbe = { true } as BooleanSupplier
         runner

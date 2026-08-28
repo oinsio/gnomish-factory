@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -12,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import spock.lang.Specification
 
@@ -105,7 +107,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     // claim's job (a re-claimed task comes back Held and is refused there, naming the holder).
     def "a confirmed takeover returns the observed stale claim and then claims by the ordinary lease"() {
         given:
-        def observed = new ClaimVersion('marker-7', NOW.minusSeconds(90))
+        def observed = new ClaimVersion('marker-7', NOW.minusSeconds(90), new ClaimEpoch(1))
         def tracker = Mock(Tracker)
         def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, _age ->
             TakeoverConfirmation.Decision.CONFIRMED
@@ -115,11 +117,11 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
         when:
         def result = take(takeover, tracker)
 
-        then: 'the version handed to removeStaleClaim is the one listOpen reported for THIS ref'
+        then: 'the footprint handed to removeStaleClaim is the one listOpen reported for THIS ref'
         1 * tracker.listOpen() >> [
             new OpenTask(REF, new TrackerTaskState.Working(HOLDER), observed, 'title')
         ]
-        1 * tracker.removeStaleClaim(REF, observed)
+        1 * tracker.removeStaleClaim(REF, new ClaimFacts.Live(HOLDER, observed))
 
         and: 'and the run then goes through the ordinary claim, whose own refusal it returns'
         1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held(HOLDER)
@@ -151,7 +153,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     // merely answered for. A seam that is consulted at all fails this scenario.
     def "the --takeover flag bypasses the confirmation seam entirely"() {
         given:
-        def tracker = trackerHolding(new ClaimVersion('marker-7', NOW.minusSeconds(5)))
+        def tracker = trackerHolding(new ClaimVersion('marker-7', NOW.minusSeconds(5), new ClaimEpoch(1)))
         def consulted = false
         def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, _age ->
             consulted = true
@@ -173,7 +175,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     // hours AND the leftover minutes — and an unobservable version reads as "unknown", never as 0s.
     def "renders the last-beat age the confirmation prompt shows"() {
         given:
-        def version = beatAge == null ? null : new ClaimVersion('marker-7', NOW.minus(beatAge))
+        def version = beatAge == null ? null : new ClaimVersion('marker-7', NOW.minus(beatAge), new ClaimEpoch(1))
         def tracker = trackerHolding(version)
         String shown = null
         def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, age ->
@@ -204,7 +206,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
     // 0s rather than rendering a negative age.
     def "clamps a future-dated beat to zero rather than rendering a negative age"() {
         given:
-        def tracker = trackerHolding(new ClaimVersion('marker-7', NOW.plusSeconds(30)))
+        def tracker = trackerHolding(new ClaimVersion('marker-7', NOW.plusSeconds(30), new ClaimEpoch(1)))
         String shown = null
         def takeover = new TakeTakeover(claimAndWork(git, tracker, Stub(RunAssembly)), { _ref, _holder, age ->
             shown = age
@@ -237,7 +239,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
 
         then:
         1 * tracker.listOpen() >> [
-            new OpenTask(other, new TrackerTaskState.Working('someone'), new ClaimVersion('m', NOW.minusSeconds(5)), 'other')
+            new OpenTask(other, new TrackerTaskState.Working('someone'), new ClaimVersion('m', NOW.minusSeconds(5), new ClaimEpoch(1)), 'other')
         ]
         shown == 'unknown'
     }

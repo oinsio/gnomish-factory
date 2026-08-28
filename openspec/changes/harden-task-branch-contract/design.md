@@ -183,12 +183,14 @@ outcomes make the split decidable where a bare exit code could not. *Alternative
 treating any locate-fetch failure as "branch absent" (the status quo — the duplicate-branch
 defect U5 fixes).
 
-**D15 — Documentation layering** (G5): the ADR carries the principle and the three
+**D15 — Documentation layering** (G5): the ADR
+(`docs/adr/0003-crash-consistency.md`) carries the principle and the three
 mechanisms plus rejected alternatives (saga journal, WAL, block counters, fsync); a new
-`.claude/rules/` crash-consistency rule carries the future-work checklist (every multi-step
-transition names its kill windows and recovery owner); `docs/glossary.md` gains the terms
+`.claude/rules/crash-consistency.md` rule carries the future-work checklist (every multi-step
+transition names its kill windows and recovery owner); `docs/glossary.md` gains the
+"Crash consistency" section with the terms
 branch shape, tracker shape, sweep universe, recovery owner, claim epoch,
-intent/receipt. Design decisions here stay scoped
+intent/receipt, quarantine, and the epoch sense of fence. Design decisions here stay scoped
 to this change; the durable principle lives in the ADR. *Rationale:* each medium matches its
 lifetime — the archived design cannot govern future changes, the ADR and rule can.
 *Alternative rejected:* keeping the principle only in this design.md — it archives with the

@@ -129,8 +129,13 @@ public final class TrackerHealthTracker implements Tracker {
     }
 
     @Override
-    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
-        return call(() -> delegate.removeStaleClaim(ref, observedVersion));
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
+        return call(() -> delegate.removeStaleClaim(ref, observedClaim));
+    }
+
+    @Override
+    public RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        return call(() -> delegate.repairIndex(ref, observedFacts));
     }
 
     /** Runs a void delegate call through the same success/failure accounting as {@link #call}. */

@@ -86,7 +86,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
         run()
 
         then:
-        1 * taskRepository.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD')
+        1 * taskRepository.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
 
         and:
         1 * support.sweepOrphans()
@@ -100,7 +100,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
         run(base)
 
         then:
-        1 * taskRepository.createTask(_, expected)
+        1 * taskRepository.createTask(_, expected, _)
 
         where:
         base || expected
@@ -112,7 +112,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
     // path, so the exit code and the guidance do not depend on which mode was used.
     def "remaps a creation failure into the same usage error the host path raises"() {
         given:
-        taskRepository.createTask(_, _) >> {
+        taskRepository.createTask(_, _, _) >> {
             throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'x')
         }
 

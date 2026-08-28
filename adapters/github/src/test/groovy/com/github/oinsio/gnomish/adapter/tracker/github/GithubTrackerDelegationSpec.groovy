@@ -6,9 +6,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -50,6 +52,11 @@ class GithubTrackerDelegationSpec extends Specification {
     def setup() {
         wireMock = new WireMockServer(0)
         wireMock.start()
+        // The find half of the FR11 find-then-upsert primitive: every factory comment write reads
+        // the thread first. Specs that need a populated thread add their own, more recent stub.
+        wireMock.stubFor(get(urlMatching('.*/comments\\?per_page=100'))
+                .willReturn(aResponse()
+                .withStatus(200).withBody('[]')))
     }
 
     def cleanup() {
@@ -65,6 +72,9 @@ class GithubTrackerDelegationSpec extends Specification {
                 .build()
     }
 
+    private static final GithubStateLabels LABELS =
+    new GithubStateLabels('gnomish:ready', 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered')
+
     private GithubTracker newTracker() {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
         def labelOps = new GithubLabelOps(httpClient)
@@ -73,14 +83,15 @@ class GithubTrackerDelegationSpec extends Specification {
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
                 new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered'),
                 new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
-                new GithubStateWrites(httpClient, labelOps, 'gnomish-factory-x7k2q1',
+                new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
-                new GithubCorrespondence(httpClient, 'gnomish-factory-x7k2q1'),
-                new GithubDecisions(httpClient, 'gnomish-factory-x7k2q1'),
+                new GithubCorrespondence(markerWriter(httpClient, 'gnomish-factory-x7k2q1')),
+                new GithubDecisions(httpClient, markerWriter(httpClient, 'gnomish-factory-x7k2q1')),
                 new GithubHeartbeat(httpClient, 'gnomish-factory-x7k2q1'),
-                new GithubOpenQuery(cache, 'acme', 'widgets', 'gnomish:working', 'gnomish:needs-human'),
-                new GithubStaleClaimRemoval(httpClient, labelOps, 'gnomish-factory-x7k2q1',
-                'gnomish:working', 'gnomish:ready'))
+                new GithubOpenQuery(cache, 'acme', 'widgets', LABELS),
+                new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
+                'gnomish:working', 'gnomish:ready'),
+                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'), LABELS))
     }
 
     private TaskRef ref() {
@@ -195,5 +206,9 @@ class GithubTrackerDelegationSpec extends Specification {
         then: 'the delegated call fired — a dropped void call would post no comment at all'
         wireMock.verify(postRequestedFor(urlEqualTo(POST_COMMENTS_URL))
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"progress"'))))
+    }
+
+    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

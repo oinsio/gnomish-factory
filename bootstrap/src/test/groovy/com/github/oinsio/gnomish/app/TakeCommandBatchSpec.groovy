@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -124,10 +125,10 @@ tracker:
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
         tracker.claim(refA, _) >> { TaskRef r, String instanceId ->
-            claimedByA = instanceId; new ClaimResult.Acquired()
+            claimedByA = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
-            claimedByB = instanceId; new ClaimResult.Acquired()
+            claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
@@ -155,7 +156,7 @@ tracker:
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
         tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
-            claimedByB = instanceId; new ClaimResult.Acquired()
+            claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
@@ -202,7 +203,7 @@ tracker:
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
         tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
-            claimedByB = instanceId; new ClaimResult.Acquired()
+            claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         // fakeFactory's expandRef always throws UnsupportedOperationException (not used by this
         // fixture) — a short ref like '42' reaches it, so the ref fails for a reason outside this
@@ -246,7 +247,7 @@ tracker:
             : trackerTask(refB, new TrackerTaskState.Working(claimedByB), 'PROJ-2')
         }
         tracker.claim(refB, _) >> { TaskRef r, String instanceId ->
-            claimedByB = instanceId; new ClaimResult.Acquired()
+            claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
         def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))

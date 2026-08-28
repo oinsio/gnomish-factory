@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
@@ -44,7 +45,7 @@ class EnvironmentStateCommitFailureSpec extends Specification implements BareGit
         box.materialize(BRANCH, null)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
         snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef)
-        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef)
+        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
     }
 
     // FR21, FR22: the exception's detail is the in-box command output read back through the

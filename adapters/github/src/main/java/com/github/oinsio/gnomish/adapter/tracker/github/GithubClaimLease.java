@@ -3,17 +3,15 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -40,7 +38,34 @@ import java.util.Optional;
  * failure variant of {@link ClaimResult}, so — per the port's convention of
  * signalling infra failure by throwing — this never returns a result here.
  *
- * <p>Implements FR6, NFR-R1 of add-tracker-port.
+ * <p>Content identity and the fused find (FR11, UX3 of harden-task-branch-contract): the claim
+ * marker carries the identity {@code claim@<instanceId>}, but its find-then-upsert is fused into
+ * the verify-read this method already performs rather than delegated to {@link
+ * GithubCommentUpsert}. Two reasons, both structural. The claim must obtain a <em>fresh</em>
+ * comment id to race with and to become the tenure's epoch (design D6), so it cannot begin by
+ * updating an existing comment; and its scope is the post-boundary window, not the whole thread —
+ * a claim comment from a tenure that has since parked, aborted, or been reaped is deliberately
+ * <em>not</em> the same comment, which is what lets a reclaim mint a strictly greater epoch
+ * (FR13). So the verify-read is the find: if this instance's own identity already appears in the
+ * window — a claim comment left by an attempt that died before verifying — that earlier comment
+ * legitimately holds the lease by earliest id, this attempt adopts it as its epoch, and the
+ * duplicate this attempt just posted is deleted. The thread never accumulates duplicate claims,
+ * and no extra API read is paid for the guarantee.
+ *
+ * <p>The claim marker carries no {@code epoch} stamp: its own comment id <em>is</em> the epoch,
+ * and it is not assigned until the comment exists.
+ *
+ * <p>Write order is contract (FR12 of harden-task-branch-contract), and it follows the
+ * sweep-universe rule: the working label goes on FIRST — it is the write that admits the task into
+ * the sweep's own query — then the claim comment, then the verify-read. Every kill window of the
+ * sequence therefore freezes a state the sweep enumerates and no window is authoritative in the
+ * race: a kill before the comment leaves the working label with no claim footprint, the {@code
+ * ClaimPending} shape the reaper rolls back after its grace; a kill after it leaves an ordinary
+ * dead-holder {@code Claimed} the TTL reaps. The race-winning write is the last one, so a frozen
+ * window never wins a lease it did not verify.
+ *
+ * <p>Implements FR6, NFR-R1 of add-tracker-port; FR11, FR12, FR13, UX3 of
+ * harden-task-branch-contract.
  */
 // Not a record: this is a behavior-bearing claim service (a collaborator holding an HttpClient and
 // label ops, not immutable data), kept as a plain final class for parity with its documented
@@ -63,49 +88,47 @@ public final class GithubClaimLease {
         this.workingLabel = workingLabel;
     }
 
-    /** Implements {@code Tracker.claim} for GitHub (FR6, NFR-R1). */
+    /** Implements {@code Tracker.claim} for GitHub (FR6, NFR-R1, FR12). */
     public ClaimResult claim(TaskRef ref, String instanceId) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
+        GithubCommentIdentity identity = claimIdentityOf(id, instanceId);
+        // Step 1 of the sweep-universe order (FR12): the working label first, so every later kill
+        // window freezes a task the sweep's own listing enumerates.
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), readyLabel, workingLabel);
 
-        long ownCommentId = postClaimComment(id, instanceId);
-        List<CommentAndMarker> comments = listCommentsOrCleanUp(id, ownCommentId);
+        long ownCommentId = postClaimComment(id, instanceId, identity);
+        GithubClaimWindow window = listCommentsOrCleanUp(id, ownCommentId);
 
-        int fromIndex = latestBoundaryIndex(comments).map(i -> i + 1).orElse(0);
-        long winnerId = ownCommentId;
-        String winnerInstance = instanceId;
-        for (int i = fromIndex; i < comments.size(); i++) {
-            CommentAndMarker candidate = comments.get(i);
-            if (candidate.marker().kind() != GithubMarkerKind.CLAIM) {
-                continue;
-            }
-            if (isEarlier(candidate.id(), winnerId)) {
-                winnerId = candidate.id();
-                winnerInstance = candidate.marker().instance();
-            }
+        Optional<GithubClaimWindow.Entry> beatenBy = window.winnerAgainst(ownCommentId);
+        if (beatenBy.isPresent() && !identity.equals(beatenBy.get().marker().identity())) {
+            deleteComment(id, ownCommentId);
+            return new ClaimResult.Held(beatenBy.get().marker().instance());
         }
-
-        if (winnerId == ownCommentId) {
-            return new ClaimResult.Acquired();
-        }
-        deleteComment(id, ownCommentId);
-        return new ClaimResult.Held(winnerInstance);
+        // The winning comment's id IS the tenure's epoch (design D6, FR13 of
+        // harden-task-branch-contract): GitHub assigns comment ids in increasing order, so a
+        // reclaim after any boundary necessarily outranks the tenure it replaced. The winner may
+        // be this instance's own earlier claim comment, left by an attempt that died before
+        // verifying — it holds the lease, and every other comment of this identity in the window
+        // is that attempt's duplicate (FR11, UX3).
+        long winnerId = beatenBy.map(GithubClaimWindow.Entry::id).orElse(ownCommentId);
+        window.duplicatesOf(identity, winnerId).forEach(duplicate -> deleteComment(id, duplicate));
+        return new ClaimResult.Acquired(new ClaimEpoch(winnerId));
     }
 
-    // PIT M4 documented exception (build.gradle has the full rationale style): @DoNotMutate
-    // because `<` vs `<=` (ConditionalsBoundaryMutator) is a genuine equivalent mutant here —
-    // GitHub comment ids are server-assigned and always distinct within one issue, so `candidateId
-    // <= winnerId` can only ever disagree with `candidateId < winnerId` at candidateId ==
-    // winnerId, a value this comparison never receives (a candidate is never compared against its
-    // own id). Covered at the ordinary test level by GithubClaimLeaseSpec's claim-race scenario.
-    @DoNotMutate
-    private static boolean isEarlier(long candidateId, long winnerId) {
-        return candidateId < winnerId;
+    /** The content identity every claim comment of {@code instanceId} on this task carries (FR11). */
+    private static GithubCommentIdentity claimIdentityOf(GithubTaskId id, String instanceId) {
+        return GithubCommentIdentity.of(id, GithubMarkerKind.CLAIM.wireValue() + "@" + instanceId);
     }
 
-    private long postClaimComment(GithubTaskId id, String instanceId) {
+    private long postClaimComment(GithubTaskId id, String instanceId, GithubCommentIdentity identity) {
         String body = GithubMarker.render(
-                GithubMarkerKind.CLAIM, instanceId, Instant.now(), "🤖 gnomish: claimed by " + instanceId);
+                GithubMarkerKind.CLAIM,
+                instanceId,
+                Instant.now(),
+                "🤖 gnomish: claimed by " + instanceId,
+                null,
+                identity,
+                null);
         String path = "/repos/%s/%s/issues/%d/comments".formatted(id.owner(), id.repo(), id.issueNumber());
         HttpRequest.Builder request = httpClient
                 .newRequest(path)
@@ -125,7 +148,7 @@ public final class GithubClaimLease {
      * failure ({@link GithubHttpException} or {@link GithubClaimException})
      * best-effort deletes {@code ownCommentId} first, then rethrows.
      */
-    private List<CommentAndMarker> listCommentsOrCleanUp(GithubTaskId id, long ownCommentId) {
+    private GithubClaimWindow listCommentsOrCleanUp(GithubTaskId id, long ownCommentId) {
         try {
             return listComments(id);
         } catch (GithubHttpException | GithubClaimException e) {
@@ -134,7 +157,7 @@ public final class GithubClaimLease {
         }
     }
 
-    private List<CommentAndMarker> listComments(GithubTaskId id) {
+    private GithubClaimWindow listComments(GithubTaskId id) {
         String path = "/repos/%s/%s/issues/%d/comments?per_page=100".formatted(id.owner(), id.repo(), id.issueNumber());
         HttpRequest.Builder request = httpClient.newRequest(path).GET();
         HttpResponse<String> response = httpClient.send(request);
@@ -142,7 +165,7 @@ public final class GithubClaimLease {
             throw new GithubClaimException("Failed to list comments for %s/%s#%d: HTTP %d"
                     .formatted(id.owner(), id.repo(), id.issueNumber(), response.statusCode()));
         }
-        return parseCommentsWithIds(response.body(), id);
+        return GithubClaimWindow.of(response.body(), id);
     }
 
     private void deleteComment(GithubTaskId id, long commentId) {
@@ -158,63 +181,6 @@ public final class GithubClaimLease {
         }
     }
 
-    /**
-     * Returns the index of the latest (highest comment-order) boundary marker
-     * among {@code comments}, or empty if none is present. A boundary is any
-     * marker that ended the prior working session and so voids every claim
-     * posted before it (design D13: "since the newest boundary marker —
-     * release/park/abort/finish — whichever is newest"): an {@code abort}
-     * (task returned to {@code Ready}), a {@code park} or {@code finish} — the
-     * two session-ending kinds {@link GithubStateWrites} writes (enforce-
-     * finish-terminality task 3.1 split the former single {@code REPORT} kind
-     * into these two) — or a {@code stale_claim_removed} marker (a reaper's
-     * stale-claim-removal boundary; add-claim-heartbeat design D5, FR4): the
-     * removal marker
-     * anchors the next lease round exactly like release/park/abort/finish, so
-     * a re-claim after a reaper freed the task ignores the dead holder's
-     * original CLAIM comment even when a best-effort delete failure left it
-     * physically in the thread. ({@code release} posts no marker on GitHub —
-     * it is a documented no-op, design D2 — so it never appears here.)
-     *
-     * <p>Without this, a stale CLAIM left by a holder that has since parked,
-     * finished, or been reaped always wins by earliest id, so a task returned
-     * to {@code Ready} after a park or a stale-claim removal could never be
-     * re-claimed until an abort happened to reset the window. GitHub's own
-     * comments-listing order already reflects the server-side total order
-     * (design D13), so this scans by list position rather than by parsed
-     * timestamp — immune to clock skew between racing instances.
-     *
-     * <p>The boundary-kind set itself is {@link GithubClaimComment#isBoundary};
-     * this class reuses it rather than keeping its own copy of the same
-     * {@code ABORT}/{@code PARK}/{@code FINISH}/{@code STALE_CLAIM_REMOVED}
-     * condition.
-     */
-    private static Optional<Integer> latestBoundaryIndex(List<CommentAndMarker> comments) {
-        Integer index = null;
-        for (int i = 0; i < comments.size(); i++) {
-            if (GithubClaimComment.isBoundary(comments.get(i).marker().kind())) {
-                index = i;
-            }
-        }
-        return Optional.ofNullable(index);
-    }
-
-    private static List<CommentAndMarker> parseCommentsWithIds(String commentsJson, GithubTaskId id) {
-        try {
-            JsonNode array = MAPPER.readTree(commentsJson);
-            List<CommentAndMarker> comments = new ArrayList<>();
-            for (JsonNode comment : array) {
-                GithubMarker.parse(comment.get("body").asText())
-                        .ifPresent(marker -> comments.add(
-                                new CommentAndMarker(comment.get("id").asLong(), marker)));
-            }
-            return List.copyOf(comments);
-        } catch (JsonProcessingException e) {
-            throw new GithubClaimException("Failed to parse comments response for %s/%s#%d"
-                    .formatted(id.owner(), id.repo(), id.issueNumber()));
-        }
-    }
-
     private static long readCommentId(String createdCommentJson, GithubTaskId id) {
         try {
             JsonNode node = MAPPER.readTree(createdCommentJson);
@@ -224,7 +190,4 @@ public final class GithubClaimLease {
                     .formatted(id.owner(), id.repo(), id.issueNumber()));
         }
     }
-
-    /** Pairs a raw GitHub comment id with its parsed structural marker, local to this class (task 4.11). */
-    private record CommentAndMarker(long id, ParsedMarker marker) {}
 }

@@ -7,10 +7,12 @@ import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
@@ -115,8 +117,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def runner = new GitProcessRunner()
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
-        new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'))
-                .createTask(new TaskContext('PROJ-1', 'T', 'B', []), null)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'), ClaimEpochSource.NONE)
+                .createTask(new TaskContext('PROJ-1', 'T', 'B', []), null, TaskState.atStageStart('build'))
 
         def args = new DefaultApplicationArguments('usage', "--dir=${cloneDir}".toString(), 'PROJ-1')
         def originalOut = System.out

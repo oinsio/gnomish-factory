@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -105,7 +106,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
             listReady: { int limit -> feedQuery.listReady(limit) },
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def ledger = new SlotLedger(1)

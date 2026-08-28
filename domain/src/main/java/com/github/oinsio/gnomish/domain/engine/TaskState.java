@@ -32,12 +32,12 @@ import java.util.List;
  *
  * <p>Implements FR8, FR13, FR14, NFR-C1 of add-stage-engine.
  *
- * @param position where the task sits in its pipeline; never null
+ * @param position     where the task sits in its pipeline; never null
  * @param attemptsUsed quality failures burned in the current stage; never negative
- * @param attempts every executed round of the current stage, in order; defensively
- *     copied, unmodifiable, possibly empty
- * @param totals cumulative executor usage over the whole task, folded forward on every
- *     recorded round and surviving advancement and resume; never null (FR13, NFR-C1, D5)
+ * @param attempts     every executed round of the current stage, in order; defensively
+ *                     copied, unmodifiable, possibly empty
+ * @param totals       cumulative executor usage over the whole task, folded forward on every
+ *                     recorded round and surviving advancement and resume; never null (FR13, NFR-C1, D5)
  */
 public record TaskState(Position position, int attemptsUsed, List<AttemptRecord> attempts, ExecutorUsage totals) {
 
@@ -98,8 +98,67 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
         return new TaskState(next, 0, List.of(), totals);
     }
 
+    /**
+     * Returns a new state that appends a <em>passing</em> {@code round} and, in the same value,
+     * advances the position to {@code next} with {@code attemptsUsed} reset (FR4 of
+     * harden-task-branch-contract). The two facts are true only together — the stage passed, so
+     * the task is past it — and this is the state the round's own commit records, so a kill after
+     * it can never freeze "the stage passed but the position says re-run it" and pay for the green
+     * stage twice.
+     *
+     * <p>The round stays in {@code attempts} rather than being dropped by the advance: that commit
+     * is the only place the passing round is ever recorded, and the audit trail (and the usage
+     * walk over it) reads it there. The next stage's first round replaces the list, exactly as
+     * {@link #advanceTo} would have.
+     *
+     * @param round the passing round to record; never null
+     * @param next  the position the pass advances to; never null
+     */
+    public TaskState recordPassAndAdvance(AttemptRecord round, Position next) {
+        return new TaskState(next, 0, append(round), totals.plus(round.executorUsage()));
+    }
+
+    /**
+     * The state a <em>resume</em> starts the position's stage from. A recorded round that PASSED
+     * belongs to the stage that passed — the same commit already advanced the position past it
+     * (FR4 of harden-task-branch-contract) — so its history is not the history of the stage about
+     * to run: the resumed stage starts with an empty attempt list, and its first round is round
+     * zero rather than a continuation of the finished stage's numbering.
+     *
+     * <p>Only a resume needs this. Within a live run the engine's own advance already emptied the
+     * list before the next stage began; this is the same normalization applied to a state that
+     * arrives from the branch instead of from memory, which is why it is idempotent and a no-op for
+     * every state whose last recorded round did not pass.
+     *
+     * <p>Implements FR4, FR9 of harden-task-branch-contract.
+     *
+     * @return this state with a finished stage's attempts dropped; never null
+     */
+    public TaskState startOfStage() {
+        if (attempts.isEmpty() || attempts.getLast().result() != AttemptRecord.Result.PASSED) {
+            return this;
+        }
+        return advanceTo(position);
+    }
+
+    /**
+     * The state a human decision resumes into: the same position, {@code attemptsUsed} back to
+     * zero and the attempt history emptied, with the cumulative {@code totals} preserved — the
+     * answered stage starts its budget over, it does not restart the task (FR4 of
+     * harden-task-branch-contract).
+     *
+     * <p>One formula, one home: the reset rides the decision's own commit, so every caller that
+     * appends a decision hands this exact state to {@code TaskRepository#appendDecision} rather
+     * than spelling the reset out again. Two facts that are only true together land together.
+     *
+     * @return the reset state to resume from; never null
+     */
+    public TaskState resetAttempts() {
+        return new TaskState(position, 0, List.of(), totals);
+    }
+
     private List<AttemptRecord> append(AttemptRecord round) {
-        var next = new ArrayList<AttemptRecord>(attempts);
+        var next = new ArrayList<>(attempts);
         next.add(round);
         return next;
     }

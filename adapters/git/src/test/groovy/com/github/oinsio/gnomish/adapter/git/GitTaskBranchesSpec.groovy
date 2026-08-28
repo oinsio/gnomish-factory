@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -49,11 +51,11 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture {
     }
 
     private void seedTask(String taskId) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot).createTask(new TaskContext(taskId, 'T', 'B', []), null)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'T', 'B', []), null, TaskState.atStageStart('implement'))
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId).persist(taskId, TaskState.atStageStart('implement'), trace)
+        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, TaskState.atStageStart('implement'), trace)
     }
 
     def "harden delegates to FactoryCloneHardening — the clone's hooksPath is repointed"() {
@@ -105,6 +107,34 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture {
         branches.locate(cloneDir, 'NO-SUCH') instanceof BranchLocation.NotFound
     }
 
+    // FR1, FR2 of harden-task-branch-contract: the facade is where the located ref meets the
+    // classifier, so every take, resume and reconcile path asks one question and gets one name.
+    def "FR2: classifyShape names the located tip through the one classifier"() {
+        given: 'a started task whose state records no round yet'
+        seedTask('PROJ-9')
+
+        expect:
+        branches.classifyShape(cloneDir, 'PROJ-9') instanceof BranchShape.Created
+
+        and: 'a branch that exists nowhere is Bare — the shape the take routes to a fresh claim'
+        branches.classifyShape(cloneDir, 'NO-SUCH') instanceof BranchShape.Bare
+    }
+
+    def "FR2: a recorded park is named Parked, and a Completed tip still holding its envelope CompletedUncleaned"() {
+        given:
+        seedTask('PROJ-10')
+        def repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        repository.recordOutcome('PROJ-10', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+
+        expect:
+        branches.classifyShape(cloneDir, 'PROJ-10') instanceof BranchShape.Parked
+
+        and: 'the outcome commit without its cleanup behind it is the kill-window shape, not delivery'
+        seedTask('PROJ-11')
+        repository.recordOutcome('PROJ-11', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        branches.classifyShape(cloneDir, 'PROJ-11') instanceof BranchShape.CompletedUncleaned
+    }
+
     def "list delegates to TaskBranchLister and returns the rows it found"() {
         given:
         seedTask('PROJ-4')
@@ -129,7 +159,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture {
         given: 'a delivered task branch, whose tip no longer carries the state files'
         seedTask('PROJ-6')
         def finalState = TaskState.atStageStart('implement')
-        new GitTaskRepository(runner, cloneDir, worktreesRoot)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
                 .recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState))
 
         when:

@@ -2,16 +2,18 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import java.util.List;
 
@@ -28,7 +30,12 @@ import java.util.List;
  * names/{@code
  * instanceId} every collaborator needs.
  *
- * <p>Implements FR1, FR4, NFR-R1 of add-tracker-port.
+ * <p>Every write that a bounded terminal-write retry may cover runs through {@link
+ * GithubTransport}, so a transport failure the HTTP core could not retry away surfaces as the
+ * port's retryable outage rather than as a fault that skips the caller's budget (FR18 of
+ * harden-task-branch-contract).
+ *
+ * <p>Implements FR1, FR4, NFR-R1 of add-tracker-port; FR18 of harden-task-branch-contract.
  *
  * <p>Callers typically build the individual collaborators once (each needing
  * only a subset of these) and pass them here; this record takes the
@@ -47,6 +54,7 @@ import java.util.List;
  * @param heartbeat implements {@code heartbeat}
  * @param openQuery implements {@code listOpen}
  * @param staleClaimRemoval implements {@code removeStaleClaim}
+ * @param indexRepair implements {@code repairIndex}
  */
 public record GithubTracker(
         GithubFeedQuery feedQuery,
@@ -57,7 +65,8 @@ public record GithubTracker(
         GithubDecisions decisions,
         GithubHeartbeat heartbeat,
         GithubOpenQuery openQuery,
-        GithubStaleClaimRemoval staleClaimRemoval)
+        GithubStaleClaimRemoval staleClaimRemoval,
+        GithubIndexRepair indexRepair)
         implements Tracker {
 
     @Override
@@ -94,38 +103,38 @@ public record GithubTracker(
 
     @Override
     public void park(TaskRef ref, ParkReason reason, String report) {
-        stateWrites.park(ref, reason, report);
+        GithubTransport.run(() -> stateWrites.park(ref, reason, report));
     }
 
     @Override
     public void finish(TaskRef ref, String summary) {
-        stateWrites.finish(ref, summary);
+        GithubTransport.run(() -> stateWrites.finish(ref, summary));
     }
 
     @Override
     public void declineFinished(TaskRef ref, String message) {
-        stateWrites.declineFinished(ref, message);
+        GithubTransport.run(() -> stateWrites.declineFinished(ref, message));
     }
 
     @Override
     public void recordAbort(TaskRef ref, AbortRecord record) {
-        stateWrites.recordAbort(ref, record);
+        GithubTransport.run(() -> stateWrites.recordAbort(ref, record));
     }
 
     @Override
     public void acknowledgeDecision(TaskRef ref, String decisionText) {
-        decisions.acknowledgeDecision(ref, decisionText);
+        GithubTransport.run(() -> decisions.acknowledgeDecision(ref, decisionText));
     }
 
     // Implements FR1 of fix-abort-progress-reset.
     @Override
     public void recordProgress(TaskRef ref) {
-        stateWrites.recordProgress(ref);
+        GithubTransport.run(() -> stateWrites.recordProgress(ref));
     }
 
     @Override
     public void postNote(TaskRef ref, String text) {
-        correspondence.postNote(ref, text);
+        GithubTransport.run(() -> correspondence.postNote(ref, text));
     }
 
     @Override
@@ -139,7 +148,12 @@ public record GithubTracker(
     }
 
     @Override
-    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
-        return staleClaimRemoval.removeStaleClaim(ref, observedVersion);
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
+        return staleClaimRemoval.removeStaleClaim(ref, observedClaim);
+    }
+
+    @Override
+    public RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        return indexRepair.repairIndex(ref, observedFacts);
     }
 }

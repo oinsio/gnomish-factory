@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -55,10 +56,10 @@ class StatusInterruptedHonestySpec extends Specification implements BareGitRepoF
     /** Records exactly one round commit and, deliberately, never calls {@code recordOutcome} —
      * the branch state a process leaves behind if it dies right after the round commit. */
     private void recordInterruptedRound(String taskId, String stage = 'implement', int round = 0) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot)
-                .createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), null)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+                .createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), null, TaskState.atStageStart('verify'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
-        def persistence = new GitAttemptPersistence(runner, worktree, taskId)
+        def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
@@ -105,7 +106,7 @@ class StatusInterruptedHonestySpec extends Specification implements BareGitRepoF
     def "NFR-R2: a task with a recorded outcome is distinguishable from the interrupted case"() {
         given: 'contrast fixture — same shape, but recordOutcome was actually called (Paused, not Completed, so FR15 cleanup does not remove .gnomish-task/ before this read)'
         recordInterruptedRound('PROJ-INT-3')
-        new GitTaskRepository(runner, cloneDir, worktreesRoot).recordOutcome('PROJ-INT-3',
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).recordOutcome('PROJ-INT-3',
                 new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'))
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'PROJ-INT-3', '--json')
 

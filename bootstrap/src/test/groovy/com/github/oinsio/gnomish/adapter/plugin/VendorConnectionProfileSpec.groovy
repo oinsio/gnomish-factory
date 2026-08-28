@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.ConnectionProfiles
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import java.nio.file.Files
@@ -215,7 +216,7 @@ tracker:
     /** The real, discovered tracker subsection validators — the github one grades what loads here. */
     private static Map trackerValidators() {
         def configuration = new TrackerAdapterConfiguration()
-        configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry())
+        configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry(new ClaimEpochBook()))
     }
 
     /** A minimal valid tree whose config.yaml carries the given tracker section. */

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolCall;
@@ -13,16 +14,12 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
-import com.github.oinsio.gnomish.sandbox.CapturedExec;
-import com.github.oinsio.gnomish.sandbox.ExecCommand;
-import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 /**
  * The sandboxed realization of the engine's {@link AttemptPersistence} port
@@ -57,7 +54,7 @@ import java.util.Map;
  */
 public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
-    private static final String STATE_PATH = ".gnomish-task/state.json";
+    private static final String STATE_PATH = GnomishTaskPaths.STATE_JSON_PATH;
 
     // Paths and the commit message travel as positional args ($1-$3), never string-interpolated
     // into the script, so neither can carry a shell metacharacter that alters the command —
@@ -71,6 +68,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private final String branch;
     private final AttemptCommitRef attemptCommit;
     private final HarvestedBoundaryCheck boundaryCheck;
+    private final ClaimEpochSource epochs;
     private String previousTip;
 
     /**
@@ -81,6 +79,8 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
      *     read-back (D16)
      * @param taskId the tracker's original taskId; sanitized into the task branch name
      * @param attemptCommit the run's attempt-commit ref, recorded by the snapshot step
+     * @param epochs the tenure the in-box state commits are stamped with (FR13 of
+     *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is held
      */
     public EnvironmentAttemptPersistence(
             TaskExecutionEnvironment environment,
@@ -88,7 +88,8 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
             Path cloneDir,
             GitObjects gitObjects,
             String taskId,
-            AttemptCommitRef attemptCommit) {
+            AttemptCommitRef attemptCommit,
+            ClaimEpochSource epochs) {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;
@@ -96,6 +97,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.attemptCommit = attemptCommit;
         this.boundaryCheck = new HarvestedBoundaryCheck(runner, cloneDir);
+        this.epochs = epochs;
         this.previousTip = currentTip();
     }
 
@@ -126,13 +128,15 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private void commitInBox(String taskId, AttemptKey key, String tracePath) {
         // Only the two factory files are staged: gnome residue outside .gnomish-task/ belongs to
         // the next round (or salvage), never to the state commit (D15).
-        String message = ServiceCommitMessages.round(key.stage(), key.attempt());
-        List<String> argv = List.of("sh", "-c", COMMIT_SCRIPT, "gnomish", STATE_PATH, tracePath, message);
-        ExecHandle handle = environment.exec(new ExecCommand(argv, Map.of(), null, true));
-        // Drained concurrently with the supervised wait (FR2, FR11 of bound-subprocess-commands):
-        // a hung in-box command must never hold this thread on an uninterruptible pipe read.
-        CapturedExec commit = CapturedExec.of(handle, "in-box state commit");
-        if (commit.exitCode() != 0) {
+        String message = ClaimEpochTrailer.stamp(
+                ServiceCommitMessages.round(key.stage(), key.attempt()),
+                epochs.epochFor(taskId).orElse(null));
+        // Run through the medium's one outcome seam (D14): the wait is drained concurrently, so a
+        // hung in-box command never holds this thread on an uninterruptible pipe read (FR2, FR11
+        // of bound-subprocess-commands), and an interrupted wait comes back named.
+        InBoxGitCommand.Outcome commit = new InBoxGitCommand(environment)
+                .run("in-box state commit", COMMIT_SCRIPT, List.of("gnomish", STATE_PATH, tracePath, message));
+        if (!commit.succeeded()) {
             throw new GitPersistFailedException(
                     taskId, key.stage(), key.attempt(), "in-box state commit", commit.output());
         }

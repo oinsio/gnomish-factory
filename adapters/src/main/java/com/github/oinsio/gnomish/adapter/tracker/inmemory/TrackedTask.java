@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
+import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.time.Instant;
@@ -35,12 +37,15 @@ final class TrackedTask {
     private TaskSnapshot snapshot;
     private TrackerTaskState state;
     private int abortCount;
+    private int recoveryCount;
     private @Nullable Instant lastAbortAt;
     private final List<HumanReply> pendingReplies = new ArrayList<>();
     private @Nullable Instant lastAckAt;
     private @Nullable String lastReport;
     private @Nullable String lastSummary;
     private @Nullable ClaimMarker claimMarker;
+    private @Nullable String lastClaimHolder;
+    private @Nullable ParkReason lastParkReason;
     private final List<CorrespondenceEntry> thread = new ArrayList<>();
 
     TrackedTask(TaskSnapshot snapshot, TrackerTaskState state) {
@@ -79,6 +84,28 @@ final class TrackedTask {
     /** Establishes a claim marker whose version {@code listOpen} then reports (FR5 of add-claim-heartbeat). */
     void establishClaim(ClaimMarker marker) {
         this.claimMarker = marker;
+        this.lastClaimHolder = marker.holder();
+    }
+
+    /**
+     * The instance named by the most recent claim marker this task ever carried, kept after the
+     * marker itself is gone so a dead footprint can still name its last-known holder (FR19 of
+     * harden-task-branch-contract).
+     */
+    @Nullable
+    String lastClaimHolder() {
+        return lastClaimHolder;
+    }
+
+    /** Remembers the reason of the latest park, so a lagging park flip can be completed with it. */
+    void parkReason(ParkReason reason) {
+        this.lastParkReason = reason;
+    }
+
+    /** The latest recorded park reason, or {@code null} when this task was never parked. */
+    @Nullable
+    ParkReason parkReason() {
+        return lastParkReason;
     }
 
     /** Clears the marker when the task leaves {@code Working} — park/finish/recordAbort/release (FR5). */
@@ -87,11 +114,18 @@ final class TrackedTask {
     }
 
     AbortFacts abortFacts() {
-        return new AbortFacts(abortCount, lastAbortAt);
+        return new AbortFacts(abortCount, lastAbortAt, recoveryCount);
     }
 
-    void recordAbort(Instant at) {
+    /**
+     * Spends one attempt of the unified recovery accounting (FR14 of harden-task-branch-contract):
+     * the total always advances, and {@code category} decides which share of it grows.
+     */
+    void recordAbort(Instant at, RecoveryCause category) {
         abortCount++;
+        if (category == RecoveryCause.RECOVERY_FAILURE) {
+            recoveryCount++;
+        }
         lastAbortAt = at;
     }
 
@@ -103,6 +137,7 @@ final class TrackedTask {
      */
     void recordProgress() {
         abortCount = 0;
+        recoveryCount = 0;
         lastAbortAt = null;
     }
 

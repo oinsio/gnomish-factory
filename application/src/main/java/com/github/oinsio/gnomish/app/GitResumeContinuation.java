@@ -104,11 +104,7 @@ final class GitResumeContinuation {
         DialogConsole console = assembly.dialogConsole(bootstrap.context(), finalState);
         var dialog = new EscalationResumeDialog(console, Clock.systemUTC());
         RunnerOutcomeLoop.Resumption resumption = dialog.handle(bootstrap.context(), escalated);
-        if (resumption == null) {
-            return;
-        }
-
-        recordDecisionIfAppended(resumption.context());
+        recordDecisionIfAppended(resumption.context(), resumption.state());
         runToTerminalBoundary(definition, resumption.context(), resumption.state(), interactiveMode);
     }
 
@@ -187,12 +183,12 @@ final class GitResumeContinuation {
      * bootstrap's original context, since the dialog only returns the possibly-appended {@link
      * TaskContext}, not a boolean flag.
      */
-    private void recordDecisionIfAppended(TaskContext resumedContext) {
+    private void recordDecisionIfAppended(TaskContext resumedContext, TaskState resetState) {
         int before = bootstrap.context().decisions().size();
         int after = resumedContext.decisions().size();
         if (after > before) {
             taskRepository.appendDecision(
-                    bootstrap.taskId(), resumedContext.decisions().get(after - 1));
+                    bootstrap.taskId(), resumedContext.decisions().get(after - 1), resetState);
         }
     }
 }

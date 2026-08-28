@@ -5,8 +5,10 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.take.DecisionAck;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
+import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 import java.util.List;
@@ -17,8 +19,8 @@ import java.util.List;
  * EscalationReport.DecisionNeeded} — the two escalation kinds design D3 maps to {@link
  * ParkReason#ESCALATION}): collects human replies posted since the last ack (FR12) and either
  * re-parks a {@code DecisionNeeded} restating the question when no reply is pending yet (FR13,
- * design D12), or acks the freshest pending reply before running the engine (FR12,
- * ack-before-acting).
+ * design D12), or commits the freshest pending reply to the branch and acknowledges it — in that
+ * order (FR12 of harden-task-branch-contract) — before running the engine.
  *
  * <p>{@code AttemptsExhausted} never re-parks here: the human returning the task to work is itself
  * the confirmation (design D12), matching {@code EscalationResumeDialog#handleResumable}'s
@@ -36,7 +38,7 @@ import java.util.List;
  * <p>Implements FR12, FR13 of add-tracker-port; FR1 of add-serve-sandbox-lifecycle.
  *
  * @param <B> the loaded-branch bundle {@code mechanics} produces
- * @param mechanics supplies {@link ResumeMechanics#resumeWithDecision}; never null
+ * @param mechanics supplies the branch-side decision append and the resumed run; never null
  */
 public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mechanics) {
 
@@ -77,8 +79,15 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
                 ackAndResume(cloneDir, branch, finalState, interactiveMode, tracker, ref, instanceId, latest);
             case EscalationReport.AttemptsExhausted _
             when latest == null ->
-                mechanics.resumeWithDecision(
-                        cloneDir, branch, finalState, null, interactiveMode, tracker, ref, instanceId);
+                mechanics.resumeDecided(
+                        cloneDir,
+                        branch,
+                        branch.context(),
+                        finalState.resetAttempts(),
+                        interactiveMode,
+                        tracker,
+                        ref,
+                        instanceId);
             case EscalationReport.AttemptsExhausted _ ->
                 ackAndResume(cloneDir, branch, finalState, interactiveMode, tracker, ref, instanceId, latest);
             case null, default ->
@@ -104,8 +113,16 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
             TaskRef ref,
             InstanceId instanceId,
             HumanReply latest) {
-        tracker.acknowledgeDecision(ref, latest.body());
-        return mechanics.resumeWithDecision(
-                cloneDir, branch, finalState, latest.body(), interactiveMode, tracker, ref, instanceId);
+        // FR12 of harden-task-branch-contract: the decision is durable on the branch BEFORE its
+        // acknowledge posts. Acknowledging first would, on a kill between the two, consume the reply
+        // — the next collection starts after the ack — while the branch still carries no answer.
+        var resetState = finalState.resetAttempts();
+        TaskContext decided = DecisionAck.appendThenAcknowledge(
+                tracker,
+                ref,
+                latest.body(),
+                () -> mechanics.appendDecision(cloneDir, branch, finalState, resetState, latest.body()));
+        return mechanics.resumeDecided(
+                cloneDir, branch, decided, resetState, interactiveMode, tracker, ref, instanceId);
     }
 }

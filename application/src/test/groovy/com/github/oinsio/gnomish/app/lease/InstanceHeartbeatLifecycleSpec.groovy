@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -39,7 +40,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
     private final Tracker tracker = [
         heartbeat: { TaskRef ref, String payload ->
             beats.incrementAndGet()
-            new HeartbeatResult.Beaten(new ClaimVersion('m', Instant.EPOCH))
+            new HeartbeatResult.Beaten(new ClaimVersion('m', Instant.EPOCH, new ClaimEpoch(1)))
         }
     ] as Tracker
     private final InstanceHeartbeat hb = new InstanceHeartbeat(

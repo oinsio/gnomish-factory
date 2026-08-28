@@ -29,7 +29,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision escalates to AttemptsExhausted and calls tracker.park(ESCALATION)"() {
         given: 'a task with one persisted round, an attempt-limit-1 stage whose check always fails'
         def taskId = 'PROJ-5'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
 
@@ -66,7 +66,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision finishes a Completed outcome on the tracker with a real report"() {
         given:
         def taskId = 'PROJ-6'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def runner = newTakeResumeRunner()
@@ -92,7 +92,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision parks a Paused checkpoint on the tracker with CHECKPOINT"() {
         given: 'a task with one persisted round and a manual-checkpoint stage that passes verification'
         def taskId = 'PROJ-7'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def runner = newTakeResumeRunner()

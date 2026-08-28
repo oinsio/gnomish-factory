@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.Segment;
@@ -40,11 +41,12 @@ record ContainerResumeMechanics(
 
     @Override
     public void confirmTerminalWrite(Path cloneDir, ContainerResumeBootstrap branch) {
-        // Deliberately nothing: container mode's factory-side task repository has no
-        // confirmTerminalWrite yet, so a container branch always reads as tracker-write-pending and
-        // every future resume re-delivers the park. Safe and idempotent — the ClaimGuard pre-write
-        // check makes a repeat delivery a no-op — it just never "settles" the way a host branch's
-        // marker does. See ContainerResumeBootstrap#trackerWritePending.
+        branch.support().confirmTerminalWrite();
+    }
+
+    @Override
+    public void finishCleanup(Path cloneDir, ContainerResumeBootstrap branch) {
+        branch.support().finishCleanup();
     }
 
     @Override
@@ -62,16 +64,26 @@ record ContainerResumeMechanics(
     }
 
     @Override
-    public TakeResult resumeWithDecision(
+    public TaskContext appendDecision(
             Path cloneDir,
             ContainerResumeBootstrap branch,
             TaskState finalState,
-            @Nullable String decisionText,
+            TaskState resetState,
+            String decisionText) {
+        return resumeRunner.appendDecision(branch, finalState, resetState, decisionText);
+    }
+
+    @Override
+    public TakeResult resumeDecided(
+            Path cloneDir,
+            ContainerResumeBootstrap branch,
+            TaskContext context,
+            TaskState resetState,
             RunArguments.InteractiveMode interactiveMode,
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        return resumeRunner.resumeWithDecision(
-                cloneDir, branch, definition, finalState, decisionText, interactiveMode, tracker, ref, instanceId);
+        return resumeRunner.resumeDecided(
+                cloneDir, branch, definition, context, resetState, interactiveMode, tracker, ref, instanceId);
     }
 }

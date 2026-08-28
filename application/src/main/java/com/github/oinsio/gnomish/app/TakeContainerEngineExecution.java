@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.app.take.FinishTransition;
+import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
 import com.github.oinsio.gnomish.app.take.RevocationDetectedException;
 import com.github.oinsio.gnomish.app.take.TakeResult;
@@ -50,16 +52,12 @@ import org.jspecify.annotations.Nullable;
  * object by construction, so the only objects it could ever act on are the {@code manual} ones of
  * somebody else's {@code gnomish run} session — acted on outside the daemon's ledger and vitals.
  *
- * <p>Scope note, settled by task 5.2 of add-serve-sandbox-lifecycle and deliberately left open:
- * the "tracker-write pending" marker reconcile optimization {@link TakeEngineExecution} clears via
- * {@code TaskLifecycleStore#confirmTerminalWrite} has no container-mode equivalent — the
- * factory-side bare-object task repository ({@code GitObjectsTaskRepository}) implements only the
- * plain {@code TaskRepository} port. A park here always leaves the marker set; a later resume
- * conservatively reconciles it as an orphaned park (zero engine rounds) rather than reading it as
- * already-settled. Task 5.2 brought the full host routing table to container mode and found this
- * costs correctness nothing — only one wasted reconcile per parked container task — so closing it
- * would mean widening the bare-object repository's port surface for a fast path, which no
- * requirement of this change asks for.
+ * <p>A park here records its outcome on the branch and settles its marker exactly as host mode does
+ * (FR10, design D12 of harden-task-branch-contract). Both halves used to be missing: the
+ * factory-side bare-object repository implemented only the plain {@code TaskRepository}, so a
+ * container park wrote nothing at all and every later resume re-parked the task against a branch
+ * that had no park on it. The repository is a {@code TaskLifecycleStore} now, and this class drives
+ * its {@code recordPark}/{@code confirmTerminalWrite} pair through the shared protocol.
  *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, FR13, FR15, FR18, D2, D3, D19 of
  * add-tracker-port and add-sandbox-core.
@@ -106,9 +104,21 @@ record TakeContainerEngineExecution(
         settleTerminalBoundary(support, outcome);
 
         var retry = TerminalWriteRetry.system();
-        // See class javadoc's scope note: container mode has no durable pending-write marker yet.
-        Runnable clearMarker = () -> {};
         String branchName = TaskIdSanitizer.branchName(taskId);
+        // The park's intent is recorded here, not in settleTerminalBoundary: that method only settles
+        // the box (kept stopped), and the outcome commit belongs to the protocol that follows it
+        // (FR10, D12 of harden-task-branch-contract). No delivery fence exists in container mode —
+        // the recording push is the repository decorator's, best-effort as every container-mode push
+        // is — so the verdict handed to the report is Delivered. The completion's intent, by
+        // contrast, was recorded inside completeAndDispose, which D19 orders before this point; what
+        // remains of it is the cleanup commit, the destructive last step behind the confirmed finish.
+        var park = new ParkTransition.Fresh(
+                () -> {
+                    support.recordPark(outcome);
+                    return new ParkDeliveryVerdict.Delivered();
+                },
+                support::confirmTerminalWrite);
+        var finish = new FinishTransition.Fresh(() -> {}, support::finishCleanup);
         return TakeOutcomeDispatch.dispatch(
                 outcome,
                 context,
@@ -117,13 +127,10 @@ record TakeContainerEngineExecution(
                 ref,
                 instanceId,
                 retry,
-                clearMarker,
+                park,
                 abortHandler,
                 abortThreshold,
-                // No fence in container mode: a container park records no lifecycle commit at all
-                // (NG1, design D4 of fix-lifecycle-push), so there is nothing for it to deliver —
-                // the escalation report reaches origin with the round's own state-commit push.
-                new ParkDeliveryVerdict.Delivered());
+                finish);
     }
 
     /**

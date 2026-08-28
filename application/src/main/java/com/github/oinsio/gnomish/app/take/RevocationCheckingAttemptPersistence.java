@@ -71,9 +71,20 @@ import org.slf4j.LoggerFactory;
  * while every existing heartbeat-loss caller keeps that exact wording via {@code ClaimLossFlag
  * #DEFAULT_REASON}.
  *
+ * <p><b>The self-fencing freeze (FR13 of harden-task-branch-contract).</b> The same flag also
+ * carries the weaker "claim unconfirmed" state, and that one is consulted BEFORE the delegate
+ * persists rather than after: a holder that no longer knows its claim is live must not write at
+ * all until it re-verifies (claim-heartbeat "Unconfirmed heartbeat freezes writes at the
+ * boundary"). Re-verification is one {@code fetchTask} — the same "still ours" question this
+ * decorator already asks, asked earlier — so a claim that is still ours lifts the freeze and the
+ * round persists normally, at the cost of one conditional read on a boundary the beats could not
+ * confirm. A claim that is no longer ours throws before the round is written, which is exactly the
+ * write the fence exists to prevent; the round's work is not lost, since salvage commits it
+ * locally and the git fence arbitrates the push.
+ *
  * <p>Implements FR15, D2 of add-tracker-port. Implements FR2, NFR-R1, NFR-O1 of
  * fix-abort-progress-reset. Implements FR8, D7 of add-claim-heartbeat. Implements FR11, D9 of
- * add-factory-serve.
+ * add-factory-serve. Implements FR13 of harden-task-branch-contract.
  */
 public final class RevocationCheckingAttemptPersistence implements AttemptPersistence {
 
@@ -136,6 +147,7 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
      */
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
+        freezeUntilReverified(taskId);
         delegate.persist(taskId, state, trace);
 
         // FR8, design D7: a beat that answered "claim gone" flags the loss for the nearest round
@@ -157,6 +169,27 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
             detected = exception;
             throw exception;
         }
+    }
+
+    /**
+     * The self-fencing gate (FR13): while the claim is unconfirmed, nothing is written until one
+     * {@code fetchTask} says the claim is still ours. A confirming answer lifts the freeze — the
+     * boundary proceeds normally — and any other answer throws before the delegate writes anything.
+     * A claim that was never frozen costs nothing here: no read is made at all.
+     */
+    private void freezeUntilReverified(String taskId) {
+        if (!claimLossFlag.isUnconfirmed(ref)) {
+            return;
+        }
+        TrackerTaskState current = tracker.fetchTask(ref).state();
+        if (current instanceof TrackerTaskState.Working(String holder) && holder.equals(instanceId.value())) {
+            log.info("claim for {} re-verified at the round boundary; writes resume", ref.id());
+            claimLossFlag.confirmedByReverification(ref);
+            return;
+        }
+        var exception = new RevocationDetectedException(taskId, RevocationReason.describe(current));
+        detected = exception;
+        throw exception;
     }
 
     /**

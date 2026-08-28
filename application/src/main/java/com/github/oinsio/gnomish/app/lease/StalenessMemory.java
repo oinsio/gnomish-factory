@@ -1,9 +1,6 @@
 package com.github.oinsio.gnomish.app.lease;
 
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
-import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,170 +11,130 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * The core staleness policy (design D2): a per-claim observation memory that, fed a
- * stream of {@code listOpen} results over time, decides which held claims have gone
- * stale by <em>local observation of claim versions</em> — never by comparing the
- * instance's clock to the tracker's {@code updatedAt} (D2 forbids cross-host clock
- * arithmetic). It is pure policy: the reaper (task 4.3) drives it each heartbeat tick
- * — {@code listOpen} → {@link #observe} → {@code removeStaleClaim} for each returned
- * {@link StaleClaim} — and this class knows nothing of HTTP, threads, or tracker
- * physics.
+ * The core timing policy of the sweep (design D2, generalized by D16): a per-task observation
+ * memory that, fed the classified {@link TrackerObservation}s of tick after tick, decides which
+ * non-steady shapes have stood long enough to repair — by <em>local observation</em>, never by
+ * comparing the instance's clock to a tracker timestamp (D2 forbids cross-host clock arithmetic).
+ * It is pure policy: the reaper drives it each tick — sweep → {@link #observe} → the port repair
+ * each emitted {@link TrackerRepair} names — and this class knows nothing of HTTP, threads, or
+ * tracker physics.
  *
- * <p><b>The rule.</b> For every eligible claim — a {@code Working} task carrying a
- * non-null {@link ClaimVersion} — the memory records the version and the monotonic
- * instant of the observer's <em>own first sighting</em> of it. A claim is stale when
- * that version has stood unchanged for the TTL, measured as {@code nanoTime() −
- * firstSeenNanos ≥ ttl.toNanos()} on the injected {@link MonotonicTime}. Two
- * properties fall out by construction:
+ * <p><b>The rule.</b> Every observation whose shape is not steady, plus every held {@code Claimed}
+ * tenure, is remembered with the monotonic instant of the observer's <em>own first sighting</em> of
+ * that exact shape, and released for repair once that shape has stood unchanged for its own
+ * threshold: the reassignment TTL for a {@code Claimed} tenure (its claim version is part of the
+ * shape, so a beat resets the timer), the window grace for the two graced window shapes, and no
+ * wait at all for {@code IndexLagging} — its marker is already the truth. Two properties fall out:
+ * a fresh observer meeting an already-old claim still gives it a full TTL from first sight, and a
+ * version change replaces the shape, so first-seen and the emission latch reset together and a
+ * beaten claim is never released.
  *
- * <ul>
- *   <li><b>Grace period.</b> First-seen is keyed off this observer's own clock, never
- *       off {@code updatedAt}, so a fresh observer that meets a claim whose server
- *       timestamp is already old still gives it a full TTL from first sight before
- *       judging it stale (FR2 "grace period by construction").
- *   <li><b>Beaten claim never stale.</b> When the version changes — a beat refreshed
- *       {@code updatedAt}, or a takeover minted a new marker — the first-seen timer
- *       resets to the new version's first sighting, so a claim beaten within every
- *       TTL window is never classified stale (FR2, NFR-R1).
- * </ul>
+ * <p><b>No eligibility filter.</b> Every enumerated task enters the memory regardless of its claim
+ * facts — a dead footprint or an absent claim is never dropped for lacking a live version (FR19).
+ * Steady shapes are remembered as nothing: they need no repair, and forgetting them keeps the map
+ * bounded by the non-steady set. Emission is once per shape, so the reaper does not re-fire at the
+ * same frozen state every interval; {@link #retryEmission} re-arms one entry whose repair failed.
  *
- * <p><b>Emission is once per version.</b> {@link #observe} returns only the claims
- * that <em>crossed</em> the TTL threshold on this tick — a claim is emitted exactly
- * once for a given version, not on every subsequent tick it remains stale. This keeps
- * the reaper from firing redundant {@code removeStaleClaim} calls at the same dead
- * claim every interval: the happy path is emit → remove → the task leaves {@code
- * Working} and vanishes from the next {@code listOpen}; and if the version later
- * changes (a live beat or takeover), the timer and the emitted latch reset together,
- * so a newly-stale later version is emitted afresh.
+ * <p><b>Threading.</b> Mutated by exactly one writer — the standing reaper's own thread — and read
+ * from a second, the daemon's sandbox-lifecycle tick through {@link LivenessOracle}; every method
+ * touching the map is therefore {@code synchronized}, and none performs I/O under the lock.
  *
- * <p><b>No leak.</b> Each {@link #observe} forgets every claim not present as an
- * eligible entry in the current {@code listOpen}: a task that closed, returned to
- * {@code Ready}, or lost its claim marker drops out of memory, and if it reappears its
- * timer restarts from that later first sighting.
- *
- * <p><b>Threading.</b> Stateful, and mutated by exactly one writer: the standing reaper's
- * own thread, which calls {@link #observe}, {@link #forgetAll} and {@link #retryEmission}
- * sequentially. It is nonetheless read from a SECOND thread — the daemon's sandbox-lifecycle
- * tick reads {@link #staleRefs()} through {@link LivenessOracle} on its own virtual thread
- * (design D7 of add-serve-sandbox-lifecycle) — so every method that touches the observation
- * map is {@code synchronized} on this instance. Without that, the reader iterates a {@code
- * HashMap} the reaper is restructuring: a {@code ConcurrentModificationException} kills the
- * sweep tick, and a torn read feeds the destructive {@code unowned} verdict. All four methods
- * are pure in-memory work — no I/O runs under the lock, so the reaper never blocks the sweep
- * for longer than a map walk.
- *
- * <p>The TTL ({@code multiplier × beat interval}, design D8) is taken as a
- * constructor {@link Duration} — the config wiring that derives it from {@code
- * tracker.heartbeat-interval} and {@code tracker.heartbeat-ttl-multiplier} is task
- * 5.1; this class never hardcodes it.
- *
- * <p>Implements FR2, NFR-R1 of add-claim-heartbeat.
+ * <p>Implements FR2, NFR-R1 of add-claim-heartbeat; FR19, FR12 of harden-task-branch-contract.
  */
 public final class StalenessMemory {
 
     private final MonotonicTime time;
     private final long ttlNanos;
+    private final long graceNanos;
     private final Map<TaskRef, Observation> observations = new HashMap<>();
 
     /**
-     * @param time the monotonic time source TTL is measured on; never null
-     * @param ttl the staleness threshold ({@code multiplier × beat interval}, D8);
-     *     must be strictly positive — a zero or negative TTL would flag every claim
-     *     stale on first sight
+     * The memory with one deadline for both timers — the reassignment TTL also serving as the
+     * window grace, for a caller with no separate grace of its own.
+     *
+     * @param time the monotonic time source both timers are measured on; never null
+     * @param ttl the reassignment threshold; must be strictly positive
      */
     public StalenessMemory(MonotonicTime time, Duration ttl) {
-        this.time = time;
-        this.ttlNanos = requirePositive(ttl).toNanos();
+        this(time, ttl, ttl);
     }
 
     /**
-     * Records this tick's {@code listOpen} observation and returns the claims that
-     * just crossed the TTL threshold (see the class contract for the once-per-version
-     * emission and grace-period semantics). Only {@code Working} entries with a
-     * non-null {@link ClaimVersion} are ever eligible; {@code AwaitingHuman} entries
-     * and {@code Working} entries with an absent claim marker are never stale. Claims
-     * absent from {@code openTasks} are forgotten.
-     *
-     * <p>Implements FR2, NFR-R1 of add-claim-heartbeat.
-     *
-     * @param openTasks the current {@code listOpen} result; never null
-     * @return the claims newly judged stale on this tick, in {@code openTasks} order;
-     *     never null, empty when none crossed the threshold
+     * @param time the monotonic time source both timers are measured on; never null
+     * @param ttl the reassignment threshold a {@code Claimed} tenure's version must stand
+     *     unchanged for; must be strictly positive
+     * @param windowGrace how long a frozen window shape must stand before the reaper repairs it —
+     *     the pause that lets an in-flight write sequence finish itself; must be strictly positive
      */
-    public synchronized List<StaleClaim> observe(List<OpenTask> openTasks) {
-        long now = time.nanoTime();
-        Map<TaskRef, ClaimVersion> eligible = eligibleClaims(openTasks);
-        observations.keySet().retainAll(eligible.keySet());
+    public StalenessMemory(MonotonicTime time, Duration ttl, Duration windowGrace) {
+        this.time = time;
+        this.ttlNanos = requirePositive(ttl, "ttl").toNanos();
+        this.graceNanos = requirePositive(windowGrace, "windowGrace").toNanos();
+    }
 
-        List<StaleClaim> newlyStale = new ArrayList<>();
-        for (var entry : eligible.entrySet()) {
-            TaskRef ref = entry.getKey();
-            ClaimVersion version = entry.getValue();
-            Observation observation = observations.get(ref);
-            if (observation == null || !observation.version.equals(version)) {
-                observation = new Observation(version, now);
-                observations.put(ref, observation);
+    /**
+     * Records this tick's sweep and returns the shapes that just crossed their threshold, in sweep
+     * order. Observations absent from {@code sweep} are forgotten. Implements FR2 of
+     * add-claim-heartbeat; FR19 of harden-task-branch-contract.
+     *
+     * @param sweep this tick's classified observations; never null
+     * @return the repairs released on this tick; never null, possibly empty
+     */
+    public synchronized List<TrackerRepair> observe(List<TrackerObservation> sweep) {
+        long now = time.nanoTime();
+        Map<TaskRef, TrackerObservation> timed = timedShapes(sweep);
+        observations.keySet().retainAll(timed.keySet());
+
+        List<TrackerRepair> released = new ArrayList<>();
+        for (var entry : timed.entrySet()) {
+            TrackerObservation seen = entry.getValue();
+            Observation observation = observations.get(entry.getKey());
+            if (observation == null || !observation.seen.shape().equals(seen.shape())) {
+                observation = new Observation(seen, now);
+                observations.put(entry.getKey(), observation);
             }
-            if (now - observation.firstSeenNanos >= ttlNanos && !observation.emitted) {
+            if (!observation.emitted && now - observation.firstSeenNanos >= thresholdNanos(seen.shape())) {
                 observation.emitted = true;
-                newlyStale.add(new StaleClaim(ref, version));
+                released.add(new TrackerRepair(entry.getKey(), seen.facts(), seen.shape()));
             }
         }
-        return List.copyOf(newlyStale);
+        return List.copyOf(released);
     }
 
     /**
-     * Discards every observation window, so the next {@link #observe} treats every claim as
-     * first-seen at that later instant and its TTL restarts from scratch. The reaper (task
-     * 4.3) calls this when a {@code listOpen} outage denies it an observation: TTL is measured
-     * between observations, so an interrupted stream must not let a pre-outage window keep
-     * running on the monotonic clock while the tracker is unreachable. On recovery every claim
-     * therefore gets a fresh TTL window from its next observation — a holder that also lost
-     * tracker access and has not yet re-beaten is never falsely reaped for time that elapsed
-     * while no observer could read versions (FR9 "recovery restarts windows", design D2). The
-     * cost is that a genuinely dead claim needs one fresh TTL after recovery to be reaped;
-     * safety outranks that promptness.
-     *
-     * <p>Implements FR9 of add-claim-heartbeat.
+     * Discards every observation window, so the next {@link #observe} treats every shape as
+     * first-seen at that later instant. The reaper calls this when a listing outage denies it an
+     * observation: both timers are measured between observations, so an interrupted stream must not
+     * let a pre-outage window keep running while the tracker is unreachable (FR9). A genuinely dead
+     * claim then costs one fresh TTL after recovery; safety outranks that promptness. Implements
+     * FR9 of add-claim-heartbeat.
      */
     public synchronized void forgetAll() {
         observations.clear();
     }
 
     /**
-     * Re-arms the once-per-version emission latch for a claim whose removal failed, so the
-     * SAME unchanged version is emitted again on the next {@link #observe} instead of staying
-     * silent until the version changes or the memory is dropped. The reaper (task 4.3) calls
-     * this after a {@code removeStaleClaim} infrastructure failure (design D14): {@link
-     * #observe} latches emission before the removal is even attempted, so without re-arming a
-     * failed removal would leave the claim {@code Working} yet un-emitted forever. Guarded by
-     * the observed version — a claim whose current observation has since moved to a different
-     * version (a live beat or takeover reset the timer) is left untouched, so a stale-but-
-     * superseded version can never resurrect the current one.
+     * Re-arms the once-per-shape latch for a repair that failed, so the SAME unchanged shape is
+     * emitted again next tick instead of staying silent until the facts change (design D14).
+     * Guarded by the shape: an entry that has since moved on is left untouched. Implements FR4 of
+     * add-claim-heartbeat; FR19 of harden-task-branch-contract.
      *
-     * <p>Implements FR4 of add-claim-heartbeat.
-     *
-     * @param claim the claim (ref + the exact version that failed to remove) to re-arm; never
-     *     null
+     * @param repair the repair (ref + the exact shape) that failed; never null
      */
-    public synchronized void retryEmission(StaleClaim claim) {
-        Observation observation = observations.get(claim.ref());
-        if (observation != null && observation.version.equals(claim.version())) {
+    public synchronized void retryEmission(TrackerRepair repair) {
+        Observation observation = observations.get(repair.ref());
+        if (observation != null && observation.seen.shape().equals(repair.shape())) {
             observation.emitted = false;
         }
     }
 
     /**
-     * The refs currently latched stale — every remembered claim whose once-per-version emission
-     * has fired and has not since been superseded by a version change or forgotten (design D2 of
-     * add-serve-sandbox-lifecycle: the liveness oracle's "unowned" verdict reuses this exact
-     * latch, so a claim already emitted stale on an earlier tick but not yet removed — a pending
-     * {@code removeStaleClaim} retry — still classifies unowned, not merely the claims newly
-     * emitted this call). A pure read of the current observation state; never mutates.
+     * The refs currently latched for repair — every remembered task whose emission has fired and has
+     * not since been superseded or forgotten. The liveness oracle's "unowned" verdict reuses this
+     * exact latch, so a task whose repair is still pending classifies unowned too. Implements FR3
+     * of add-serve-sandbox-lifecycle.
      *
-     * <p>Implements FR3 of add-serve-sandbox-lifecycle.
-     *
-     * @return the currently-stale refs; never null, empty when none are latched stale
+     * @return the currently-latched refs; never null, possibly empty
      */
     public synchronized Set<TaskRef> staleRefs() {
         return observations.entrySet().stream()
@@ -186,38 +143,55 @@ public final class StalenessMemory {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    /** The eligible claims in {@code listOpen} order: {@code Working} with a non-null version. */
-    private static Map<TaskRef, ClaimVersion> eligibleClaims(List<OpenTask> openTasks) {
-        Map<TaskRef, ClaimVersion> eligible = new LinkedHashMap<>();
-        for (OpenTask task : openTasks) {
-            if (task.state() instanceof TrackerTaskState.Working && task.claimVersion() != null) {
-                eligible.put(task.ref(), task.claimVersion());
+    /** The observations worth timing, in sweep order: the non-steady shapes plus held tenures. */
+    private static Map<TaskRef, TrackerObservation> timedShapes(List<TrackerObservation> sweep) {
+        Map<TaskRef, TrackerObservation> timed = new LinkedHashMap<>();
+        for (TrackerObservation observation : sweep) {
+            if (isTimed(observation.shape())) {
+                timed.put(observation.ref(), observation);
             }
         }
-        return eligible;
+        return timed;
     }
 
-    private static Duration requirePositive(Duration ttl) {
-        if (ttl.compareTo(Duration.ZERO) <= 0) {
-            throw new IllegalArgumentException("StalenessMemory ttl must be strictly positive, got " + ttl);
+    /** A {@code Claimed} tenure is timed against the TTL; the three window shapes, against grace. */
+    private static boolean isTimed(TrackerShape shape) {
+        return shape instanceof TrackerShape.Claimed
+                || shape instanceof TrackerShape.ClaimPending
+                || shape instanceof TrackerShape.ClaimAbandoned
+                || shape instanceof TrackerShape.IndexLagging;
+    }
+
+    private long thresholdNanos(TrackerShape shape) {
+        if (shape instanceof TrackerShape.IndexLagging) {
+            return 0L;
         }
-        return ttl;
+        return shape instanceof TrackerShape.Claimed ? ttlNanos : graceNanos;
+    }
+
+    private static Duration requirePositive(Duration value, String name) {
+        if (value.compareTo(Duration.ZERO) <= 0) {
+            throw new IllegalArgumentException(
+                    "StalenessMemory %s must be strictly positive, got %s".formatted(name, value));
+        }
+        return value;
     }
 
     /**
-     * One observed claim's memory: the version seen, the monotonic first-sighting
-     * instant TTL is measured from, and whether this version has already been emitted
-     * as stale (the once-per-version latch). Mutable and private — replaced wholesale
-     * when the version changes, so first-seen and the latch reset together.
+     * One observed task's memory: the observation seen (facts and shape), the monotonic
+     * first-sighting instant its threshold is measured from, and whether that shape has already
+     * been released for repair.
+     * Mutable and private — replaced wholesale when the shape changes, so first-seen and the latch
+     * reset together.
      */
     private static final class Observation {
 
-        private final ClaimVersion version;
+        private final TrackerObservation seen;
         private final long firstSeenNanos;
         private boolean emitted;
 
-        private Observation(ClaimVersion version, long firstSeenNanos) {
-            this.version = version;
+        private Observation(TrackerObservation seen, long firstSeenNanos) {
+            this.seen = seen;
             this.firstSeenNanos = firstSeenNanos;
         }
     }

@@ -1,14 +1,20 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
  * FR8, FR13 of add-git-workflow: local -> remote-tracking -> narrow fetch of exactly
  * {@code gnomish/<task>} -> "not found", shared verbatim by resume (4.6) and inspection (5.2).
+ *
+ * FR6 of harden-task-branch-contract: absence is a fact only origin can state, so a fetch that
+ * failed for any other reason answers {@code Unavailable} — retried under the infrastructure
+ * budget — instead of the "not found" that routed a duplicate branch into existence.
  */
 class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture {
 
@@ -165,5 +171,80 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         then:
         location instanceof BranchLocation.Local
         (location as BranchLocation.Local).ref() == 'refs/heads/gnomish/PROJ-7-fix-it'
+    }
+
+    /** No-wait budget: the same three attempts and doubling backoff, with the sleeps virtualized. */
+    private TaskBranchLocator instantRetryLocator(GitProcessRunner boundRunner = runner) {
+        new TaskBranchLocator(boundRunner, new GitInfrastructureRetry(
+                        { Duration ignored -> } as Sleeper, GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
+    }
+
+    def "FR6: an unreachable origin is unavailable, never absent — no fresh branch may be forked from it"() {
+        given: 'a clone whose origin URL points nowhere, so neither the fetch nor the probe gets an answer'
+        def clone = initWorkingRepo(tempDir, 'clone-unreachable')
+        commit(clone, 'a.txt', 'first')
+        runner.run(clone, 'remote', 'add', 'origin', tempDir.resolve('does-not-exist.git').toString())
+
+        when:
+        def location = instantRetryLocator().locate(clone, 'PROJ-8')
+
+        then: 'the lookup reports what it is — unestablished — and names why'
+        location instanceof BranchLocation.Unavailable
+        (location as BranchLocation.Unavailable).reason().contains('gnomish/PROJ-8')
+        !(location instanceof BranchLocation.NotFound)
+    }
+
+    def "FR6: a branch origin confirms it carries but the fetch could not deliver is unavailable"() {
+        given: 'a git that answers the branch probe but fails every fetch'
+        def gitBinary = dispatchingGit()
+        def clone = initWorkingRepo(tempDir, 'clone-fetch-broken')
+        commit(clone, 'a.txt', 'first')
+
+        when:
+        def location = instantRetryLocator(new GitProcessRunner(gitBinary.toString())).locate(clone, 'PROJ-9')
+
+        then:
+        location instanceof BranchLocation.Unavailable
+        def reason = (location as BranchLocation.Unavailable).reason()
+        reason.contains('origin carries gnomish/PROJ-9')
+
+        and: 'the reason names what the fetch itself did, so the abort diagnoses more than "failed"'
+        reason.contains('the fetch exited 128')
+        reason.contains('unable to access origin')
+    }
+
+    def "FR6: the unsettled lookup is re-attempted under the infrastructure budget before giving up"() {
+        given:
+        def gitBinary = dispatchingGit()
+        def clone = initWorkingRepo(tempDir, 'clone-retry-count')
+        commit(clone, 'a.txt', 'first')
+
+        when:
+        instantRetryLocator(new GitProcessRunner(gitBinary.toString())).locate(clone, 'PROJ-10')
+
+        then: 'the fetch ran once per attempt of the budget, and no more'
+        Files.readAllLines(tempDir.resolve('fetch-count.txt')).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+    }
+
+    /**
+     * A git that fails every fetch while answering {@code ls-remote} with a real ref: the one
+     * combination that separates "origin has no such branch" from "this clone could not get it",
+     * and one a real remote cannot be talked into producing on demand.
+     */
+    private Path dispatchingGit() {
+        def script = tempDir.resolve('dispatching-git.sh')
+        script.toFile().text = """#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in
+    fetch) echo x >> '${tempDir.resolve('fetch-count.txt')}'; echo 'fatal: unable to access origin' 1>&2; exit 128;;
+    ls-remote) echo '1111111111111111111111111111111111111111\trefs/heads/gnomish/PROJ'; exit 0;;
+    rev-parse) exit 1;;
+    remote) echo 'https://example.invalid/repo.git'; exit 0;;
+  esac
+done
+exit 1
+"""
+        script.toFile().setExecutable(true)
+        script
     }
 }

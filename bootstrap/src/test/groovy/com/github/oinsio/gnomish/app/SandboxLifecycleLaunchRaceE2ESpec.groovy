@@ -3,8 +3,10 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -91,8 +93,8 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
         // exact protection this spec is proving, not something to bypass.
         def sandboxProps = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('build'))
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
         assert ContainerE2eDocker.containerRunning(boxName)

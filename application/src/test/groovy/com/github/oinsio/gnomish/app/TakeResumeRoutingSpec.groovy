@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -60,6 +61,12 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     /** The state.json a scenario wants read back; assignable, since setup() stubs the port once. */
     TaskState recordedState = TaskState.atStageStart('build')
 
+    /**
+     * How the state.json read behaves — a closure rather than a value, so a scenario can make the
+     * read THROW (the pre-contract tip of FR3) without re-stubbing a port setup() already stubbed.
+     */
+    Closure<TaskState> stateRead = { recordedState }
+
     Tracker tracker = Mock(Tracker)
     TaskLifecycleStore lifecycleStore = Mock(TaskLifecycleStore)
     TaskBranchGit branches = Stub(TaskBranchGit)
@@ -71,6 +78,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         worktree = worktreesRoot.resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        branches.classifyShape(_, _) >> new BranchShape.InProgress()
         // FR4 of fix-lifecycle-push: the park path runs the delivery fence; a sealed verdict has no
         // Spock dummy, so the routing specs state the delivered case explicitly.
         branches.fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
@@ -78,7 +86,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_, _) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-        store.readRecordedState(_) >> { recordedState }
+        store.readRecordedState(_) >> { stateRead.call() }
     }
 
     private TaskGit git() {
@@ -99,7 +107,8 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult resume(TakeDispositionResume chain, boolean discardWork = false) {
-        chain.resumeExisting(CLONE_DIR, RunArguments.InteractiveMode.NONE,
+        chain.resumeExisting(
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE,
                 discardWork, 'PROJ-1', tracker, REF, INSTANCE)
     }
 
@@ -126,6 +135,28 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
 
         and: 'no round was paid for'
         executor.requests.isEmpty()
+    }
+
+    // FR3 of harden-task-branch-contract: a PRE-CONTRACT tip — task.json present, state.json
+    // absent, because the branch was created before the STARTED commit carried the initial state
+    // — is a legal shape, not a fault. It resumes the pipeline's first stage from scratch, which
+    // is the crash loop and the unreturnable park FR3 closes.
+    def "resumes a pre-contract tip at the first stage instead of failing"() {
+        given: 'a branch whose task.json reads back but whose state.json is absent'
+        def executor = new ScriptedExecutor([completedRound()])
+        store.readTaskRecord(_) >> recordWith(null, null, false)
+        stateRead = {
+            throw new UncheckedIOException(new NoSuchFileException('state.json'))
+        }
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = resume(resumeChain(executor))
+
+        then: 'the engine really ran — from the first stage, not from an unreadable position'
+        !executor.requests.isEmpty()
+        executor.requests.first().stage().name() == 'build'
+        result instanceof TakeResult.Delivered
     }
 
     // FR10: only the "cleanup already ran" shape is reconciled. Any other I/O fault reading the
@@ -201,6 +232,43 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         executor.requests.isEmpty()
     }
 
+    // FR12 of harden-task-branch-contract: the kill window between the decision commit and its
+    // acknowledge. The branch already carries the answer, so nothing is re-decided and no round is
+    // re-run — only the acknowledge is re-driven, into the same upserted marker.
+    def "FR12: an answered branch whose acknowledge never landed re-drives just the acknowledge"() {
+        given:
+        store.readTaskRecord(_) >> recordWithDecision('use postgres')
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = resume(resumeChain())
+
+        then: 'the reply the branch already recorded is still pending, so the marker is re-posted'
+        tracker.collectDecisions(REF) >> [
+            new HumanReply('use postgres', NOW)
+        ]
+        1 * tracker.acknowledgeDecision(REF, 'use postgres')
+
+        and: 'nothing else is repeated — no decision is appended a second time'
+        0 * lifecycleStore.appendDecision(_, _, _)
+        result instanceof TakeResult.Delivered
+    }
+
+    // FR12: the same branch whose acknowledge did land pays one read and writes nothing.
+    def "FR12: an answered branch whose acknowledge already landed re-posts nothing"() {
+        given:
+        store.readTaskRecord(_) >> recordWithDecision('use postgres')
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = resume(resumeChain())
+
+        then:
+        tracker.collectDecisions(REF) >> []
+        0 * tracker.acknowledgeDecision(_, _)
+        result instanceof TakeResult.Delivered
+    }
+
     // FR9, FR12, D3: with a reply present the decision is acknowledged on the tracker and appended
     // to the task's own decision history (author "tracker" — it came from a comment, not a
     // console), then the engine resumes carrying it.
@@ -221,7 +289,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         1 * tracker.acknowledgeDecision(REF, 'use postgres')
         1 * lifecycleStore.appendDecision('PROJ-1', {
             it.body() == 'use postgres' && it.author() == 'tracker'
-        })
+        }, _)
 
         and:
         result instanceof TakeResult.Delivered
@@ -241,7 +309,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         then:
         1 * tracker.collectDecisions(REF) >> []
         0 * tracker.park(_, _, _)
-        0 * lifecycleStore.appendDecision(_, _)
+        0 * lifecycleStore.appendDecision(_, _, _)
         result instanceof TakeResult.Delivered
     }
 
@@ -313,7 +381,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         ]
         1 * lifecycleStore.appendDecision('PROJ-1', {
             it.stage() == expectedStage
-        })
+        }, _)
 
         where:
         finalState || expectedStage

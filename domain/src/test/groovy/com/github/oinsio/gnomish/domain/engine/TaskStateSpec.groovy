@@ -152,6 +152,51 @@ class TaskStateSpec extends Specification {
         advanced.attemptsUsed() == 0
     }
 
+    // FR4 of harden-task-branch-contract: the state a human decision resumes into — the answered
+    // stage starts its attempt budget over, in place, without restarting the task. One formula,
+    // one home: the callers that append a decision hand exactly this to the repository, so the
+    // reset rides the decision's own commit.
+    def "resetAttempts clears the burn in place, keeping the position and the cumulative totals"() {
+        given: 'an exhausted stage with recorded rounds and cumulative usage'
+        def state = TaskState.atStageStart('build')
+                .recordQualityFailure(round(0))
+                .recordQualityFailure(round(1))
+
+        when: 'the human answer resumes it'
+        def reset = state.resetAttempts()
+
+        then: 'nothing is burned and the current-stage history is cleared'
+        reset.attemptsUsed() == 0
+        reset.attempts().isEmpty()
+
+        and: 'the task stays exactly where it was — a decision resumes a stage, it does not advance one'
+        reset.position() == state.position()
+
+        and: 'the whole-task usage aggregate survives the reset'
+        reset.totals() == state.totals()
+    }
+
+    // FR4 of harden-task-branch-contract: a pass and the advancement it implies are one value, so
+    // they can be one commit — and the passing round stays in it, since that commit is the only
+    // place it is ever recorded.
+    def "recordPassAndAdvance moves the position and keeps the passing round in the same state"() {
+        given: 'a stage that failed once before passing'
+        def state = TaskState.atStageStart('build').recordQualityFailure(round(0))
+
+        when: 'the passing round is recorded with the advance it implies'
+        def passed = state.recordPassAndAdvance(round(1), new Position.AtStage('review'))
+
+        then: 'the position is already the next stage and nothing is burned there'
+        passed.position() == new Position.AtStage('review')
+        passed.attemptsUsed() == 0
+
+        and: 'the passing round is recorded in that same state, after the round it followed'
+        passed.attempts()*.round() == [0, 1]
+
+        and: 'its usage is folded into the cumulative totals'
+        passed.totals() == state.totals().plus(round(1).executorUsage())
+    }
+
     // FR13: the attempts list is defensively copied from the constructor source
     def "the attempts list is defensively copied from the source"() {
         given: 'a mutable source list'

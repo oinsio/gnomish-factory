@@ -43,6 +43,7 @@ public record CorrespondenceEntry(Kind kind, String text) {
         NOTE,
         PROGRESS,
         HEARTBEAT,
-        STALE_CLAIM_REMOVED
+        STALE_CLAIM_REMOVED,
+        INDEX_REPAIR
     }
 }

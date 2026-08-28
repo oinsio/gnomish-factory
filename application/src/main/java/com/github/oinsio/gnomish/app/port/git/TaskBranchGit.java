@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -37,7 +38,7 @@ public interface TaskBranchGit {
      * @param taskId the tracker's original taskId; never null
      * @return {@code true} when the branch exists locally after this call; {@code false} when it
      *     exists nowhere
-     * @throws DivergedBranchException if the local and delivered tips share no ancestry
+     * @throws BranchLocationUnavailableException if the lookup could not reach origin
      */
     boolean ensureLocalTaskBranch(Path cloneDir, String taskId);
 
@@ -50,6 +51,21 @@ public interface TaskBranchGit {
      * @return the branch's location; never null
      */
     BranchLocation locate(Path cloneDir, String taskId);
+
+    /**
+     * Classifies {@code taskId}'s branch tip into exactly one {@linkplain
+     * com.github.oinsio.gnomish.domain.branch.BranchShape shape} — the one question every take,
+     * resume and reconcile path asks before it decides what to do (FR1, FR2). The classification
+     * reads the tip, never a working copy, so a crashed instance's half-written files cannot
+     * influence it (FR5).
+     *
+     * @param cloneDir the clone the branch lives in; never null
+     * @param taskId the tracker's original taskId; never null
+     * @return the tip's shape; never null and never a thrown content failure
+     * @throws BranchLocationUnavailableException when the lookup could not establish whether the
+     *     branch exists at all (FR6)
+     */
+    BranchShape classifyShape(Path cloneDir, String taskId);
 
     /**
      * Lists one row per task branch reachable from {@code cloneDir}, for {@code gnomish status}.

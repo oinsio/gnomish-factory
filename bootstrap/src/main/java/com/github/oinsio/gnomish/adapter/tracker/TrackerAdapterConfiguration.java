@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.plugin.ProviderDiscoveryReport;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.UsageException;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -62,8 +63,19 @@ public class TrackerAdapterConfiguration {
      * posture, which is what makes a provider nobody meant to install visible before any task runs.
      */
     @Bean
-    public Map<String, TrackerAdapterFactory> trackerAdapterRegistry() {
-        return ProviderDiscoveryReport.reported(PORT, TrackerAdapterDiscovery.discover());
+    public Map<String, TrackerAdapterFactory> trackerAdapterRegistry(ClaimEpochBook claimEpochBook) {
+        Map<String, TrackerAdapterFactory> discovered =
+                ProviderDiscoveryReport.reported(PORT, TrackerAdapterDiscovery.discover());
+        // FR13 of harden-task-branch-contract: every live tracker keeps the instance's claim-epoch
+        // book current, so a tenure is recorded the moment it is issued and forgotten the moment it
+        // ends — wherever the claim was made. Wrapping the registry rather than each command is what
+        // makes that true of a command added later, too. The discovery report above is written over
+        // the raw providers, so the operator still reads the artifact behind each entry, not a
+        // decorator's name.
+        return discovered.entrySet().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey,
+                        entry -> new EpochRecordingTrackerFactory(entry.getValue(), claimEpochBook)));
     }
 
     /**
@@ -73,7 +85,7 @@ public class TrackerAdapterConfiguration {
      * errors (FR17 — the "Adapter errors aggregate with core errors" scenario) rather than surfacing
      * only later as a GitHub API error during {@code take}.
      *
-     * <p>Derived from {@link #trackerAdapterRegistry()} rather than discovered separately (design D1,
+     * <p>Derived from {@link #trackerAdapterRegistry(ClaimEpochBook)} rather than discovered separately (design D1,
      * D3 of add-plugin-architecture): each provider exposes its own validator through {@link
      * TrackerAdapterFactory#subsectionValidator()}, so the two registries are keyed identically by
      * construction and cannot drift. A provider that grades no subsection content contributes no

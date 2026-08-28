@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.app.lease
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 
 /**
@@ -18,10 +20,15 @@ class ClaimFixtures {
     }
 
     static ClaimVersion version(String marker) {
-        new ClaimVersion(marker, Instant.EPOCH)
+        new ClaimVersion(marker, Instant.EPOCH, new ClaimEpoch(1))
     }
 
     static OpenTask workingBy(TaskRef ref, String instance, ClaimVersion v) {
         new OpenTask(ref, new TrackerTaskState.Working(instance), v, 'fixture title')
+    }
+
+    /** The live claim footprint of {@code workingBy} — the guard a reap is now called with. */
+    static ClaimFacts claimBy(String instance, ClaimVersion v) {
+        new ClaimFacts.Live(instance, v)
     }
 }

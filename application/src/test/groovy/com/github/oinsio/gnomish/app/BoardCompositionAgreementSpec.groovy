@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.board.BoardComposition
 import com.github.oinsio.gnomish.board.json.BoardJsonMapper
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Path
@@ -63,7 +64,7 @@ class BoardCompositionAgreementSpec extends Specification implements Application
         ]
         def open = [
             new OpenTask(new TaskRef('w-1'), new TrackerTaskState.Working('someone'),
-            new ClaimVersion('marker-1', NOW - Duration.ofMinutes(3)), 'Refactor retry module'),
+            new ClaimVersion('marker-1', NOW - Duration.ofMinutes(3), new ClaimEpoch(1)), 'Refactor retry module'),
             new OpenTask(new TaskRef('h-1'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'Needs a decision')
         ]
         def tracker = new RecordingReadOnlyTracker(ready, open)

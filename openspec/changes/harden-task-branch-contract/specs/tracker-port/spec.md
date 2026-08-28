@@ -170,6 +170,37 @@ write (see the kill-point harness).
 
 ## ADDED Requirements
 
+### Requirement: The tenure record is published to writers
+The claim epoch a tenure was issued SHALL be readable by every writer that
+stamps it, through one published read-only seam on the contract — "which epoch
+does this instance hold on this task right now" — filled at the single claim
+choke point and never re-derived. An adapter whose writes are physically
+non-atomic SHALL be handed that seam when it is constructed, so its own writers
+stamp the tenure they write under; an adapter that does not stamp epochs SHALL
+be constructible without one. No component SHALL keep a second tenure record of
+its own: a duplicated fencing token is exactly the divergence the epoch exists
+to detect.
+<!-- implements FR13 of harden-task-branch-contract -->
+
+#### Scenario: An adapter's own writes carry the tenure it holds
+- **WHEN** an instance holding a claim on a task performs a tracker write for
+  that task through an adapter that stamps epochs
+- **THEN** the write carries the epoch that claim was issued, readable back by
+  any instance
+
+#### Scenario: A claimless writer stamps no epoch and still writes
+- **WHEN** a path that holds no claim on the task performs a tracker write —
+  correspondence after the claim was dropped, or a reaper acting on another
+  instance's tenure
+- **THEN** the write carries no tenure stamp and still succeeds; an absent
+  tenure is an ordinary state, never a failure
+
+#### Scenario: An adapter that does not stamp epochs is still constructible
+- **WHEN** an adapter that carries no epoch of its own is built
+- **THEN** it is constructed without a tenure record and its behavior is
+  unchanged — epoch stamping is adapter-optional, and the claim token contract
+  above is what every adapter still owes
+
 ### Requirement: Claim issues a monotonic claim token
 A successful `claim` SHALL return an opaque claim token that is strictly
 increasing per task across successive (re)claims, and the same token SHALL be

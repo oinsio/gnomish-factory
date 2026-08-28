@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -74,11 +75,11 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
                 new GitProcessRunner(), cloneDir, taskId,
                 environments, [
                     new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
-                ], SandboxLifecyclePass.NONE)
+                ], SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
     }
 
     private static void createTask(ContainerRunSupport support, String taskId = 'T-1') {
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('build'))
     }
 
     // D19: the aborted boundary commits the outcome on the branch tip and pushes it best-effort.
@@ -136,10 +137,14 @@ exit 0
     // its own, so it has NO recording push behind it — the keep boundary's reconciliation is the
     // only thing that can still deliver the tip the human is about to be pointed at.
     def "the park terminal boundary reconciles origin with no recording push of its own behind it"() {
-        given: 'a task branch whose creation push was rejected, so origin has never seen the branch'
-        rejectFirstPush()
+        given: 'a task branch created while the clone had no origin, so origin has never seen it'
+        // The branch's own first push is load-bearing now (FR7 of harden-task-branch-contract) and
+        // would retry until it landed, so the way to reach the park boundary with an undelivered
+        // branch is a clone that had nowhere to push it in the first place.
         def support = support()
+        assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
         createTask(support)
+        addRemote(cloneDir, 'origin', origin.toString())
         assert gitOutput(cloneDir, 'ls-remote', 'origin', 'refs/heads/gnomish/T-1').isEmpty()
 
         when: 'the run parks: no outcome is recorded in container mode, the box is just kept stopped'
@@ -161,6 +166,44 @@ exit 0
 
         then: 'the cleanup tip reached origin through the reconciliation'
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
+    }
+
+    // FR10, D12 of harden-task-branch-contract: the container park's durable intent and its
+    // receipt, as two separate commits on the branch. The intent carries the pending marker so a
+    // pickup that finds it knows the tracker write is still owed; the receipt clears it, so the same
+    // pickup afterwards reads a settled park rather than an orphaned one.
+    def "FR10: a container park records its intent with the pending marker, then receipts it"() {
+        given:
+        def support = support()
+        createTask(support)
+
+        when: 'the park\'s durable intent lands'
+        support.recordPark(new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'))
+
+        then: 'the branch records the outcome and says the tracker write is still owed'
+        def parked = support.readTaskJson()
+        parked.outcome() != null
+        parked.trackerWritePending()
+
+        when: 'the tracker write lands and its receipt is recorded'
+        support.confirmTerminalWrite()
+
+        then: 'the same branch now reads as a settled park'
+        !support.readTaskJson().trackerWritePending()
+    }
+
+    // FR3 of harden-task-branch-contract, the container half: a tip carrying no state.json at all —
+    // a branch created before the STARTED commit carried one — has no recorded state to read back,
+    // and resumes from the first stage instead of failing. The host twin is
+    // HostResumeMechanics#readFinalState's NoSuchFileException arm.
+    def "FR3: a tip carrying no state.json reads back the initial state of the first stage"() {
+        given: 'the task branch points at a commit predating the .gnomish-task/ envelope'
+        def support = support()
+        createTask(support)
+        gitOutput(cloneDir, 'update-ref', 'refs/heads/gnomish/T-1', gitOutput(cloneDir, 'rev-parse', 'HEAD'))
+
+        expect:
+        (support.readStateOrInitial('build').position() as Position.AtStage).name() == 'build'
     }
 
     // FR6, D9: keep semantics — the fresh judge box holds nothing durable and is disposed; the
@@ -299,7 +342,10 @@ exit 0
         gitOutput(cloneDir, 'checkout', 'gnomish/T-1')
         Files.writeString(cloneDir.resolve('.gnomish-task/state.json'), json)
         gitOutput(cloneDir, 'add', '.gnomish-task/state.json')
-        gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '-m', 'state')
+        // --allow-empty: the STARTED commit already carries an initial state.json (FR3 of
+        // harden-task-branch-contract), so a scenario committing that same starting state has
+        // nothing to stage — the commit is still the round boundary the scenario needs.
+        gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '--allow-empty', '-m', 'state')
         gitOutput(cloneDir, 'checkout', originalBranch)
     }
 
@@ -366,8 +412,12 @@ exit 0
             'gnomish-net-' + KEY
         ])
 
-        and: 'the completed outcome was recorded — one commit below the tip, since Completed adds a cleanup commit removing .gnomish-task/ (D19)'
-        gitOutput(cloneDir, 'show', 'gnomish/T-1~1:.gnomish-task/task.json').contains('"completed"')
+        and: 'the completed outcome is recorded at the tip — the cleanup commit is a separate destructive step (FR10 of harden-task-branch-contract)'
+        gitOutput(cloneDir, 'show', 'gnomish/T-1:.gnomish-task/task.json').contains('"completed"')
+
+        and: 'finishCleanup then strips the envelope, and that tip reaches origin too'
+        support.finishCleanup()
+        gitOutput(cloneDir, 'ls-tree', 'gnomish/T-1', '--', '.gnomish-task') == ''
 
         and: 'the completed outcome reached origin (BranchPush::pushBestEffort)'
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
@@ -388,10 +438,10 @@ exit 0
         def configuredSupport = ContainerRunSupport.create(
                 cloneDir, 'T-CFG', segments, sandbox, new FactoryProperties(null, null, null, null, null), [
                     GithubCheckClientFactory.TOKEN_ENV_VAR
-                ], [], OwnershipMode.MANUAL)
+                ], [], OwnershipMode.MANUAL, ClaimEpochSource.NONE)
         def unconfiguredSupport =
                 ContainerRunSupport.create(cloneDir, 'T-UNCFG', segments, sandbox, new FactoryProperties(null, null, null, null, null), [], [],
-                OwnershipMode.MANUAL)
+                OwnershipMode.MANUAL, ClaimEpochSource.NONE)
 
         then:
         configuredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)

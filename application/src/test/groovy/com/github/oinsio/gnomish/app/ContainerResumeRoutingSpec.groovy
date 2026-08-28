@@ -195,7 +195,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         then:
         1 * taskRepository.appendDecision('PROJ-1', {
             it.body() == 'use postgres'
-        })
+        }, _)
 
         then: 'and only then does the environment come up'
         1 * support.sweepOrphans()
@@ -213,7 +213,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         resume()
 
         then:
-        0 * taskRepository.appendDecision(_, _)
+        0 * taskRepository.appendDecision(_, _, _)
         executor.requests.size() == 1
     }
 
@@ -244,7 +244,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         console.printed.any {
             it.contains("Stage 'build' passed") && it.contains('Manual checkpoint')
         }
-        0 * taskRepository.appendDecision(_, _)
+        0 * taskRepository.appendDecision(_, _, _)
         executor.requests.size() == 1
     }
 

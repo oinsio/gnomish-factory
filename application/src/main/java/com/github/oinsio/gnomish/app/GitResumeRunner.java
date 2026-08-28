@@ -22,9 +22,10 @@ import java.nio.file.Path;
  *
  * <p>{@link #bootstrap} also reconciles local/origin divergence (FR9, NFR-R3, design D9) once,
  * right after the worktree is materialized and before {@code task.json} is read back — equal or
- * ahead leave the worktree untouched; behind fast-forwards it and discards uncommitted leftovers
- * (a {@link com.github.oinsio.gnomish.adapter.git.WorktreeDivergenceCheck}); diverged throws
- * {@link com.github.oinsio.gnomish.app.port.git.DivergedBranchException}. Running this once in
+ * ahead leave the worktree untouched; behind fast-forwards it and discards uncommitted leftovers;
+ * and true divergence discards the local line and continues from origin, automatically and with no
+ * operator flag (FR8 of harden-task-branch-contract) — all four through the one replica-pair
+ * reconciler both execution modes share. Running this once in
  * {@code bootstrap}, ahead of the outcome switch, applies it uniformly to every resume outcome
  * (null/escalated/paused/completed alike), since divergence is a general resume precondition, not
  * specific to one outcome.
@@ -54,7 +55,8 @@ final class GitResumeRunner {
      *     worktrees are created (design D6); production wiring resolves {@code
      *     ~/.gnomish/worktrees}, tests pass a temp directory
      * @param taskIdMdcKey the MDC key to set to the branch's recorded taskId once bootstrap
-     *     succeeds (design D9, task 8.2), matching {@link ManualRunRunner}'s own key
+     *     succeeds (design D9, task 8.2), matching the {@code bootstrap}-module {@code
+     *     ManualRunRunner}'s own key
      */
     GitResumeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, String taskIdMdcKey) {
         this.assembly = assembly;
@@ -103,9 +105,7 @@ final class GitResumeRunner {
      * @throws UsageException if no branch for {@code taskId} exists locally, as a remote-tracking
      *     ref, or on {@code origin} (even after the narrow fetch attempt)
      * @throws com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException if
-     *     {@code task.json}'s {@code "version"} is missing or unsupported
-     * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException if the worktree's
-     *     local branch tip and its {@code origin} remote-tracking tip share no ancestry
+     *     {@code task.json}'s {@code "version"} is missing or unsupported@code origin} remote-tracking tip share no ancestry
      *     relationship (FR9)
      */
     ResumeBootstrap bootstrap(Path cloneDir, String taskId) {

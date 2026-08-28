@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -133,7 +134,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
     private static ContainerSupportFactory trackedContainerSupport() {
         { cloneDir, id, segments, sandboxProps, factoryProps, definition, creds ->
             ContainerRunSupport.create(
-            cloneDir, id, segments, sandboxProps, factoryProps, List.<String> of(), creds, OwnershipMode.TRACKED)
+            cloneDir, id, segments, sandboxProps, factoryProps, List.<String> of(), creds, OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
     }
 

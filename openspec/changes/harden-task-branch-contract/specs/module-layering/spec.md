@@ -49,6 +49,14 @@ their emptiness is what keeps their consumers free of transitive coupling.
 <!-- implements FR9, NFR-S3 of bound-subprocess-commands; originally FR2 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
 
+#### Scenario: A vendor adapter reaches the tenure record through the contract
+- **WHEN** a vendor adapter module stamps its writes with the claim epoch of
+  the tenure it is writing under
+- **THEN** it reads that tenure through the published contract module, not
+  through `application` — the read-only seam lives beside the tracker port so
+  a bundle a third party could build reaches it, and no adapter keeps a
+  tenure record of its own
+
 #### Scenario: Port-layer modules stay below the adapters
 - **WHEN** the boundary rules run against `:sandbox:core` and
   `:gnomish-plugin-api`

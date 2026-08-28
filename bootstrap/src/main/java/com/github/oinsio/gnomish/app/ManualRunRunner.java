@@ -8,9 +8,11 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
@@ -154,7 +156,8 @@ public final class ManualRunRunner implements ApplicationRunner {
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
-            ServeProperties serveProperties) {
+            ServeProperties serveProperties,
+            ClaimEpochBook claimEpochBook) {
         this.argumentsParser = argumentsParser;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
@@ -186,7 +189,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                         factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections())),
                 checkClientRegistry);
         ContainerSupportFactory containerSupport =
-                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.MANUAL);
+                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.MANUAL, claimEpochBook);
         this.containerGitModeRunner =
                 new ContainerGitModeRunner(assembly, git, sandboxProperties, factoryProperties, containerSupport);
         this.containerResumeRunner = new ContainerResumeRunner(
@@ -198,7 +201,7 @@ public final class ManualRunRunner implements ApplicationRunner {
         // identical to run's above except for the ownership label it closes over (`tracked`, not
         // `manual` — take/serve claim tasks through the tracker, run never does).
         ContainerSupportFactory takeContainerSupport =
-                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.TRACKED);
+                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.TRACKED, claimEpochBook);
         this.containerTakeSupport = new ContainerTakeSupport(
                 factoryProperties,
                 bindingProperties,
@@ -240,7 +243,10 @@ public final class ManualRunRunner implements ApplicationRunner {
      * TakeContainer*} fresh-claim specs ({@code TRACKED}, task 5.1).
      */
     static ContainerSupportFactory containerSupportFactory(
-            List<String> checkCredentials, Map<String, CheckClientFactory> checkClientRegistry, OwnershipMode mode) {
+            List<String> checkCredentials,
+            Map<String, CheckClientFactory> checkClientRegistry,
+            OwnershipMode mode,
+            ClaimEpochSource epochs) {
         return (clone, id, segments, sandboxProps, factoryProps, definition, creds) -> {
             var credentials = new ArrayList<>(checkCredentials);
             credentials.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));
@@ -248,7 +254,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             // bundle's git runner and container environments are bounded by (FR5, design D8 of
             // bound-subprocess-commands).
             return ContainerRunSupport.create(
-                    clone, id, segments, sandboxProps, factoryProps, credentials, creds, mode);
+                    clone, id, segments, sandboxProps, factoryProps, credentials, creds, mode, epochs);
         };
     }
 

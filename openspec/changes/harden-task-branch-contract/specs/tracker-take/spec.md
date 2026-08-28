@@ -158,16 +158,25 @@ never rewritten.
 
 ### Requirement: A Completed-without-cleanup tip is finished, never re-executed
 When the branch tip records the `Completed` outcome but the cleanup commit is
-absent, the take SHALL finish the delivery — commit the cleanup, push, and
-deliver the tracker finish — and SHALL NOT re-enter the engine: zero rounds,
-no executor or judge invocation.
+absent, the take SHALL finish the delivery — deliver the tracker finish, then
+commit the cleanup and push it — and SHALL NOT re-enter the engine: zero
+rounds, no executor or judge invocation. The order is FR10's: the cleanup is
+the destructive step and runs behind the confirmed finish, so a kill anywhere
+in the sequence leaves the tip recording `Completed` with its envelope intact —
+the same shape this requirement recovers.
 <!-- implements FR9 of harden-task-branch-contract -->
 
 #### Scenario: Kill between Completed and cleanup costs no re-run
 - **WHEN** a previous run died after committing `Completed` but before its
   cleanup commit, and the task is taken again
-- **THEN** the run commits the cleanup, pushes, posts the finish, and exits
+- **THEN** the run posts the finish, commits the cleanup, pushes, and exits
   with the delivery exit code without executing any stage
+
+#### Scenario: A finish that already landed is not posted twice
+- **WHEN** the recovering run probes the tracker and finds the task already
+  finished
+- **THEN** no second finish is written, the cleanup commit still lands, and the
+  run exits with the delivery exit code
 
 ### Requirement: Recovery attempts share one budgeted accounting with the crash fuse
 Automatic recovery of a non-clean branch shape SHALL be budgeted: a persisted

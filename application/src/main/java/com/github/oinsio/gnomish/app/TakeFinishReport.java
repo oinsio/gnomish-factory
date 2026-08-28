@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.ClaimGuard;
+import com.github.oinsio.gnomish.app.take.FinishEffect;
+import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.TakeOutcomeMapper;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
@@ -74,7 +76,18 @@ final class TakeFinishReport {
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        return finish(completed, context, branchName, tracker, ref, instanceId, TerminalWriteRetry.system());
+        return finish(
+                completed,
+                context,
+                branchName,
+                tracker,
+                ref,
+                instanceId,
+                TerminalWriteRetry.system(),
+                // The caller of this convenience overload has already recorded the outcome commit and
+                // owns the cleanup itself, so both branch-side steps are empty here — but the write is
+                // still a fresh one, which is what keeps it from spending a probe read (FR10).
+                new FinishTransition.Fresh(() -> {}, () -> {}));
     }
 
     /**
@@ -98,20 +111,40 @@ final class TakeFinishReport {
             TaskRef ref,
             InstanceId instanceId,
             TerminalWriteRetry retry) {
+        return finish(
+                completed,
+                context,
+                branchName,
+                tracker,
+                ref,
+                instanceId,
+                retry,
+                new FinishTransition.Fresh(() -> {}, () -> {}));
+    }
+
+    /**
+     * As the overload above, but with the completion's branch-side steps supplied: the {@code
+     * Completed} outcome commit as the durable intent, and the cleanup commit plus workspace
+     * disposal as the destructive tail behind the confirmed finish (FR9, FR10 of
+     * harden-task-branch-contract). A recovered completion — a tip already recording {@code
+     * Completed} — probes the tracker before re-driving the write.
+     *
+     * @param transition the completion's branch-side steps; never null
+     */
+    static TakeResult finish(
+            TaskOutcome.Completed completed,
+            TaskContext context,
+            String branchName,
+            Tracker tracker,
+            TaskRef ref,
+            InstanceId instanceId,
+            TerminalWriteRetry retry,
+            FinishTransition transition) {
         var report = StatusReport.build(context, completed.finalState(), null, LiveActivity.idle());
         String rendered = new StatusTextRenderer().renderFull(report);
         String summary = rendered + "\n" + "Branch: " + branchName;
 
-        if (ClaimGuard.stillOurs(tracker, ref, instanceId)) {
-            if (retry.confirm(() -> tracker.finish(ref, summary)) == TerminalWriteRetry.Result.DEFERRED) {
-                log.error(
-                        "finish of {} could not be written before the retry bound elapsed; the branch records the "
-                                + "delivery and a later resume will reconcile the deferred finish",
-                        ref.id());
-            }
-        } else {
-            log.warn("skipping finish of {}: claim is no longer held by this instance", ref.id());
-        }
+        new FinishEffect(tracker, ref, instanceId, summary, retry, transition, log).drive();
         return new TakeResult.Delivered(completed.finalState(), summary);
     }
 }

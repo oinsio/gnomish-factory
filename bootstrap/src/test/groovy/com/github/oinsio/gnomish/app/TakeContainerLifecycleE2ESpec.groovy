@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -122,7 +123,7 @@ tracker:
         ], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(BindingNames.CONTAINER, [:])
         def containerSupport = { Path clone, String id, List<Segment> segments, SandboxProperties sandboxProps, FactoryProperties factoryProps, PipelineDefinition definition, List<String> creds ->
-            ContainerRunSupport.create(clone, id, segments, sandboxProps, factoryProps, [], creds, OwnershipMode.TRACKED)
+            ContainerRunSupport.create(clone, id, segments, sandboxProps, factoryProps, [], creds, OwnershipMode.TRACKED, ClaimEpochSource.NONE)
         }
         new ContainerTakeSupport(
                 factoryProperties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable, containerSupport)

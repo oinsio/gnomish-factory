@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker.contract
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -7,7 +8,9 @@ import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
+import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -60,9 +63,10 @@ abstract class TrackerReapContract extends TrackerHeartbeatContract {
         def ref = new TaskRef('fixture:reap-round-trip')
         seedWorkingWithClaim(adapter, ref, 'instance-a')
         ClaimVersion dead = claimVersionOf(adapter, ref)
+        def deadFootprint = claimFactsOf(adapter, ref)
 
-        when: 'a reaper removes the stale claim against the version it observed'
-        def result = adapter.removeStaleClaim(ref, dead)
+        when: 'a reaper removes the stale claim against the footprint it observed'
+        def result = adapter.removeStaleClaim(ref, deadFootprint)
 
         then: 'the removal succeeds as one operation'
         result instanceof RemoveStaleClaimResult.Removed
@@ -88,12 +92,13 @@ abstract class TrackerReapContract extends TrackerHeartbeatContract {
         def ref = new TaskRef('fixture:reap-mismatch')
         seedWorkingWithClaim(adapter, ref, 'instance-a')
         ClaimVersion stale = claimVersionOf(adapter, ref)
+        def staleFootprint = claimFactsOf(adapter, ref)
         adapter.heartbeat(ref, 'stage=build attempt=1 alive-at=now')
         ClaimVersion live = claimVersionOf(adapter, ref)
         assert live != stale
 
-        when: 'the reaper tries to remove the claim against the now-stale version'
-        def result = adapter.removeStaleClaim(ref, stale)
+        when: 'the reaper tries to remove the claim against the now-stale footprint'
+        def result = adapter.removeStaleClaim(ref, staleFootprint)
 
         then: 'nothing is removed — the result reports the live claim, non-null and equal to the post-beat version'
         result instanceof RemoveStaleClaimResult.Mismatch
@@ -115,7 +120,7 @@ abstract class TrackerReapContract extends TrackerHeartbeatContract {
         def adapter = tracker.get()
         def ref = new TaskRef("fixture:reap-race-${repetition}")
         seedWorkingWithClaim(adapter, ref, 'instance-a')
-        ClaimVersion observed = claimVersionOf(adapter, ref)
+        def observed = claimFactsOf(adapter, ref)
         def reaperCount = 2
         def barrier = new CyclicBarrier(reaperCount)
 
@@ -125,14 +130,14 @@ abstract class TrackerReapContract extends TrackerHeartbeatContract {
         // and close() would await it and hang the run instead of failing it. The 3s
         // get() bound keeps that inside PIT's default per-mutation budget; the
         // critical section itself is microseconds.
-        List<RemoveStaleClaimResult> results
+        List<RemoveStaleClaimResult> results = []
         def pool = Executors.newVirtualThreadPerTaskExecutor()
         try {
             def futures = (1..reaperCount).collect {
                 pool.submit({
                     barrier.await(5, TimeUnit.SECONDS)
                     adapter.removeStaleClaim(ref, observed)
-                } as java.util.concurrent.Callable)
+                } as Callable<RemoveStaleClaimResult>)
             }
             results = futures.collect { it.get(3, TimeUnit.SECONDS) }
         } finally {
@@ -169,7 +174,8 @@ abstract class TrackerReapContract extends TrackerHeartbeatContract {
         // (the reader helpers below would find nothing). The guard is irrelevant here — an
         // absent task can match no version — so a synthetic observed version is passed purely
         // to satisfy the never-null parameter; the outcome is Mismatch(null) regardless of it.
-        def observed = new ClaimVersion('never-existed', Instant.EPOCH)
+        def observed = new ClaimFacts.Live(
+                'never-existed-holder', new ClaimVersion('never-existed', Instant.EPOCH, new ClaimEpoch(1)))
 
         when: 'the reaper targets a task the tracker has never heard of'
         def result = adapter.removeStaleClaim(ref, observed)

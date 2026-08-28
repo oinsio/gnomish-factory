@@ -145,9 +145,13 @@ footprint (`ClaimPending`) it flips the working label back to ready; for an
 observed boundary marker newer than the labels it implies (`IndexLagging`) it
 flips the labels to the marker's implied pair — delivered for a finish
 marker, needs-human for a park marker, ready for an abort or stale-claim
-removal marker. It SHALL post the structural repair marker before the label
-flips, following the kill-safe ordering, so its own kill window freezes
-`IndexLagging` and stays swept. Before acting it SHALL re-read labels and
+removal marker. It SHALL post the structural repair marker before the label flips, following the
+kill-safe ordering, so its own kill window freezes a shape the sweep still
+enumerates: the repair marker SHALL NOT be a claim boundary — it implies no
+state of its own and must never displace the boundary whose flip it is
+completing — so a kill after it leaves the observed shape unchanged
+(`IndexLagging` when a boundary's flip was being completed, `ClaimPending` when
+a claim was being rolled back), and a later tick runs the same repair again. Before acting it SHALL re-read labels and
 comments and no-op, reporting the current facts, when they no longer match
 the caller's observation; racing repairs converge on the flipped labels.
 <!-- implements FR19, FR12 of harden-task-branch-contract -->
@@ -167,8 +171,9 @@ the caller's observation; racing repairs converge on the flipped labels.
 #### Scenario: Killed repair stays inside the sweep universe
 - **WHEN** the repairing instance dies after posting the repair marker but
   before the label flips
-- **THEN** the frozen state classifies `IndexLagging` and a later tick
-  completes the same flip
+- **THEN** the frozen state classifies as the very shape being repaired —
+  `IndexLagging` for a flip being completed, `ClaimPending` for a claim being
+  rolled back — and a later tick runs the same repair again
 
 ### Requirement: Open-task listing reports facts via state labels
 `listOpen` SHALL query open issues carrying the working or needs-human labels
@@ -217,7 +222,35 @@ content-identity marker and update it in place; post a new comment only when no
 match exists. All eight existing marker kinds — claim, abort, decision acknowledge, note,
 park report, finish report, progress, and stale-claim removal — SHALL be
 written through this behavior; no factory write path posts blind.
-<!-- implements FR11, UX3 of harden-task-branch-contract -->
+
+The identity SHALL be scoped so that re-driving one logical write converges
+while a genuinely new occurrence does not. Concretely, the intent is the marker
+kind qualified by its occurrence, and the occurrence is the tenure's claim epoch
+for every write made under the writer's own claim. Scoping by task alone is
+forbidden: four kinds — abort, park, finish, stale-claim removal — are claim
+boundaries, the lease anchors on the latest boundary by position in the thread,
+and updating a comment in place does not move it, so a task-scoped boundary
+marker would freeze the anchor behind claims that have already passed it. The
+same scoping keeps the abort count honest, since at most one abort ends a
+tenure. Three writes name their occurrence differently, each for a stated
+reason: the claim, which mints the epoch and therefore cannot be scoped by it,
+scopes by the claiming instance and searches only the window after the newest
+boundary marker — so a reclaim past any boundary lands as a new comment and
+mints a strictly greater epoch; the stale-claim removal, which acts on another
+instance's tenure, scopes by the epoch of the claim it removes; and the decision
+acknowledge, which a tenure may perform more than once, scopes by the tenure and
+the decision it answers together, so no answered decision is collected twice.
+The claimless correspondence paths — a note posted after the claim was dropped,
+and the decline of a finished task — scope by their own text, which is their
+occurrence.
+
+The claim's find MAY be fused into the verify-read its lease race already
+performs rather than paid for as a separate read, since the claim must obtain a
+fresh comment id to race with and cannot begin by updating an existing comment:
+a claim comment of the same identity already present in the window is a prior
+attempt's, it holds the lease by earliest id, the current attempt adopts it as
+its epoch, and the duplicate is deleted.
+<!-- implements FR11, FR13, UX3 of harden-task-branch-contract -->
 
 #### Scenario: Crash-retry updates instead of duplicating
 - **WHEN** an instance posts a park report, dies before confirming the write,
@@ -230,6 +263,32 @@ written through this behavior; no factory write path posts blind.
   posted for the same task and intent
 - **THEN** the upsert matches on content identity, not on the posting instance,
   and updates the existing comment
+
+#### Scenario: A later tenure's boundary marker is a new comment
+- **WHEN** a task is parked, returned by a human, claimed again, and parked
+  again with a different report
+- **THEN** the second park lands as a new comment at the end of the thread — not
+  as an edit of the first — so the lease anchors on the second park and a claim
+  posted between the two no longer counts as live
+
+#### Scenario: A reclaim past a boundary mints a new claim comment
+- **WHEN** the same instance claims a task, the task is returned by an abort,
+  and that same instance claims it again
+- **THEN** the second claim posts its own comment with a strictly greater id,
+  because the first is outside the post-boundary window its identity is
+  searched in
+
+#### Scenario: A crashed claim attempt leaves no duplicate
+- **WHEN** an instance posts its claim comment, dies before the verify-read,
+  and re-drives the same claim within the same boundary window
+- **THEN** the earlier comment wins by earliest id and becomes the tenure's
+  epoch, and the duplicate the retry posted is deleted
+
+#### Scenario: Every marker of a tenure carries its epoch
+- **WHEN** an instance holding a claim writes a park, finish, abort,
+  acknowledge, or progress marker
+- **THEN** the marker carries the epoch that claim was issued, so a reader can
+  tell a superseded tenure's write from the current one
 
 ### Requirement: Kill-safe ordering of tracker write sequences
 A human decision SHALL be durable on the task branch before its acknowledge

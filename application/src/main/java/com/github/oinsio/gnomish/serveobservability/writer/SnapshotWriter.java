@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * trigger, and on every wake runs exactly one {@link SnapshotWriteCycle} — the extracted write
  * half (serialize + atomic overwrite + retention sweep), so this class owns only the thread
  * lifecycle and wake-signal coalescing. Two trigger points (timer, dirty trigger), one write point
- * (FR1): no other thread ever writes the target file, so {@link AtomicFileWriter}'s "reader never
+ * (FR1): no other thread ever writes the target file, so {@link com.github.oinsio.gnomish.atomicfile.AtomicFileWriter}'s "reader never
  * sees a partial file" guarantee is never raced by a second concurrent writer.
  *
  * <p>Rapid {@link #markDirty()} calls coalesce: the wake signal is a semaphore whose surplus

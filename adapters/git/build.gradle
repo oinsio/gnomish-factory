@@ -30,6 +30,11 @@ dependencies {
     // value model their signatures are drawn in.
     api project(':application')
     api project(':domain')
+    // The published contract: `ClaimEpochSource` — the tenure record the branch writers ask before
+    // stamping a commit with its claim epoch (FR13 of harden-task-branch-contract) — moved onto
+    // the plugin API when the GitHub adapter needed the same one record, so this module now names
+    // it directly rather than inheriting it through `:application`.
+    api project(':gnomish-plugin-api')
     // Git object plumbing: this module writes and reads the task branch's
     // objects directly where a subprocess would be wasteful.
     api project(':gitobjects')
@@ -47,6 +52,13 @@ dependencies {
     // private field and `Termination` reaches consumers only through the
     // package-private `GitCommandResult`, so no consumer compiles against it.
     implementation project(':subprocess')
+    // The shared atomic file-write discipline (FR5, design D10 of
+    // harden-task-branch-contract): every host-side writer of a `.gnomish-task/`
+    // file — `GitTaskRepository`, `GitAttemptPersistence`, `TerminalWriteMarker`,
+    // `TraceLineWriter` — renames a temp file onto its target through it, so a
+    // kill mid-write leaves a whole file for the next pickup to classify.
+    // `implementation`: the writer is called from method bodies only.
+    implementation project(':atomicfile')
 
     // The task state file and `task.json` are Jackson documents. The state DTOs
     // are on this module's own api surface (the `git.state` mappers hand them
@@ -98,6 +110,7 @@ pitest {
 layering {
     allowedProjects = [
         ':application',
+        ':atomicfile',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',

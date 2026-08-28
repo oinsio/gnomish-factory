@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import spock.lang.Specification
 
 /**
@@ -39,6 +40,7 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
     private TakeDisposition disposition() {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         new TakeDisposition(Stub(RunAssembly), git, WORKTREES_ROOT,
                 new AbortHandler(tracker, FIXED_CLOCK), 3, 'taskId', [], ClaimBeat.NONE, false, { _ref, _holder, _age ->

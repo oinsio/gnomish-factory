@@ -4,7 +4,9 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore
 import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 
 /**
  * The real git-backed {@link TaskGit} a spec passes wherever production wiring injects the bean
@@ -19,9 +21,19 @@ final class TaskGitFixture {
 
     private TaskGitFixture() {}
 
-    /** A {@link TaskGit} over the real {@code git} binary. */
+    /** A {@link TaskGit} over the real {@code git} binary, holding no claim tenure. */
     static TaskGit real() {
+        real(ClaimEpochSource.NONE)
+    }
+
+    /**
+     * A {@link TaskGit} over the real {@code git} binary whose writers stamp {@code epochs}'
+     * tenure into every commit (FR13 of harden-task-branch-contract) — the shape production
+     * wiring builds, where the book is the process-wide {@link ClaimEpochBook}.
+     */
+    static TaskGit real(ClaimEpochSource epochs) {
         def runner = new GitProcessRunner()
-        new TaskGit(new GitTaskStore(runner), new GitTaskBranches(runner), new GitTaskWorktrees(runner))
+        new TaskGit(new GitTaskStore(runner, epochs), new GitTaskBranches(runner, epochs),
+                new GitTaskWorktrees(runner, epochs))
     }
 }

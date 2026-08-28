@@ -23,4 +23,19 @@ public interface TaskLifecycleStore extends TaskRepository {
      * @param taskId the tracker's original taskId; never blank
      */
     void confirmTerminalWrite(String taskId);
+
+    /**
+     * Commits the {@code Completed} cleanup commit, removing {@code .gnomish-task/} from the branch
+     * tip. The destructive last step of the completion sequence (FR10 of
+     * harden-task-branch-contract): it runs only once the constructive steps have their receipts —
+     * the outcome commit is durable and the terminal tracker finish has landed — so a tip recording
+     * {@code Completed} without it is a finished task awaiting cleanup, never one to re-execute.
+     * Prior commits stay reachable as the audit trail.
+     *
+     * <p>Idempotent: a tip whose {@code .gnomish-task/} is already gone is already cleaned, and this
+     * call changes nothing.
+     *
+     * @param taskId the tracker's original taskId; never blank
+     */
+    void finishCleanup(String taskId);
 }

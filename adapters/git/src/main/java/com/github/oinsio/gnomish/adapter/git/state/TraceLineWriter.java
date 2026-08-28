@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.ToolCall;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -31,7 +31,11 @@ import java.nio.file.Path;
  * mirroring "an attempt need not have invoked any tool" ({@link
  * ToolTrace#calls()} javadoc).
  *
- * <p>Implements FR3 of add-git-workflow.
+ * <p>The file is renamed into place through the shared {@link AtomicFileWriter} (design D10 of
+ * harden-task-branch-contract), which also creates the parent directories: a reader of a round's
+ * trace never sees a half-written line.
+ *
+ * <p>Implements FR3 of add-git-workflow; FR5 of harden-task-branch-contract.
  */
 public final class TraceLineWriter {
 
@@ -83,11 +87,10 @@ public final class TraceLineWriter {
      */
     public static void write(Path gnomishTaskRoot, ToolTrace trace) throws IOException {
         Path target = gnomishTaskRoot.resolve(relativePath(trace.key()));
-        Files.createDirectories(target.getParent());
         StringBuilder content = new StringBuilder();
         for (ToolCall call : trace.calls()) {
             content.append(renderLine(call)).append('\n');
         }
-        Files.writeString(target, content.toString());
+        AtomicFileWriter.write(target, content.toString());
     }
 }

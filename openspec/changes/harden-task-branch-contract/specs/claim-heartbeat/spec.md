@@ -194,7 +194,7 @@ set of named shapes, each with exactly one recovery owner:
 | `Returned` | ready label with park/finish history | queue; a finished return routes to decline |
 | `Revoked` | issue closed | terminal |
 | `ClaimPending` | working label (ready may linger), no claim footprint | reaper: grace, then restore ready |
-| `ClaimAbandoned` | working label, claim footprint without a live version | reaper: grace, then stale-claim removal |
+| `ClaimAbandoned` | a claim footprint no working tenure backs: a working label with a footprint carrying no live version, or a ready label still carrying a live claim marker (the suspension leftover) | reaper: grace, then stale-claim removal |
 | `IndexLagging` | a boundary marker newer than the labels it implies | reaper: complete the label flip toward the marker |
 | `Foreign` | any other combination | none — surfaced with a diagnosis, never auto-repaired |
 
@@ -202,9 +202,18 @@ Rows are made disjoint by a fixed classification precedence: a closed issue
 classifies `Revoked` over every other fact; otherwise a boundary marker newer
 than the labels it implies classifies `IndexLagging` before any label-derived
 shape; among the label-derived shapes the claim footprint separates `Claimed`,
-`ClaimPending`, and `ClaimAbandoned`, and recorded park/finish history
-separates `Returned` from `Ready`; only a combination matching no row above
-classifies `Foreign`.
+`ClaimPending`, and `ClaimAbandoned`; a ready-labeled task carrying a live
+claim footprint classifies `ClaimAbandoned` before any other ready-labeled
+shape, and a dead footprint on a ready task is merely the history of the
+tenure its boundary already ended; recorded park/finish history separates
+`Returned` from `Ready`; only a combination matching no row above classifies
+`Foreign`.
+
+A boundary marker counts as newer than the labels it implies exactly when it
+was recorded after the task's newest claim marker and the task still wears the
+working label: a boundary that ended an earlier tenure says nothing about the
+current one, and a boundary the human has already acted on — a park marker on
+a task they returned to ready — is `Returned`, not a lagging index.
 
 Markers are the truth; labels are the index the listing queries filter on. The
 three window shapes — `ClaimPending`, `ClaimAbandoned`, `IndexLagging` — are

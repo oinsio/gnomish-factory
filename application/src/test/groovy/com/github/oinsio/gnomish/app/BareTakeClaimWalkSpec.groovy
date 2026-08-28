@@ -13,6 +13,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import java.util.Random
 import spock.lang.Specification
@@ -51,6 +53,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     private BareTakeClaimWalk walk(int wipLimit = 10) {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, wipLimit, new Random(1))
@@ -100,6 +103,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         }
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
@@ -111,7 +115,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         ])
 
         then: 'exactly one claim was won, and only that task was dispatched'
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * tracker.fetchTask(_) >> readyTask()
         thrown(UsageException)
     }
@@ -127,6 +131,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         }
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
@@ -140,7 +145,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         then: 'the lost race did not stop the walk — the next candidate was claimed and dispatched'
         2 * tracker.claim(_, _) >>> [
             new ClaimResult.Held('someone-else'),
-            new ClaimResult.Acquired()
+            new ClaimResult.Acquired(new ClaimEpoch(1))
         ]
         1 * tracker.fetchTask(_) >> readyTask()
         thrown(UsageException)
@@ -202,7 +207,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         def result = resolve(subject, [ready('github:o/r#1')])
 
         then:
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * tracker.recordAbort(_, _)
 
         and: 'fetched twice: once to dispatch, once by the crash-abort reading the abort facts'

@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -87,7 +88,7 @@ class GithubHeartbeatSpec extends Specification {
         def result = newHeartbeat().heartbeat(refFor(60), '🤖 gnomish: stage build, attempt 2, alive 10:05')
 
         then: 'the version anchors on the stable comment id 501 with the new updated_at'
-        result == new HeartbeatResult.Beaten(new ClaimVersion('501', Instant.parse('2026-07-23T10:05:00Z')))
+        result == new HeartbeatResult.Beaten(new ClaimVersion('501', Instant.parse('2026-07-23T10:05:00Z'), new ClaimEpoch(501)))
 
         and: 'exactly one write — the PATCH on the existing comment id — carrying a refreshed CLAIM marker + progress line'
         wireMock.verify(1, patchRequestedFor(urlPathEqualTo('/repos/acme/widgets/issues/comments/501'))
@@ -118,8 +119,8 @@ class GithubHeartbeatSpec extends Specification {
         def second = heartbeat.heartbeat(refFor(61), 'p2')
 
         then:
-        first == new HeartbeatResult.Beaten(new ClaimVersion('777', Instant.parse('2026-07-23T10:05:00Z')))
-        second == new HeartbeatResult.Beaten(new ClaimVersion('777', Instant.parse('2026-07-23T10:10:00Z')))
+        first == new HeartbeatResult.Beaten(new ClaimVersion('777', Instant.parse('2026-07-23T10:05:00Z'), new ClaimEpoch(777)))
+        second == new HeartbeatResult.Beaten(new ClaimVersion('777', Instant.parse('2026-07-23T10:10:00Z'), new ClaimEpoch(777)))
     }
 
     def "FR8: a 404 on the beat PATCH means the claim comment is gone, not an infrastructure failure"() {

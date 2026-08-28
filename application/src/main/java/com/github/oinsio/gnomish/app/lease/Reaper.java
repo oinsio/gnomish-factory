@@ -1,76 +1,80 @@
 package com.github.oinsio.gnomish.app.lease;
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
+import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The real {@link ReaperDuty} (design D4): on each heartbeat tick, AFTER the instance has
- * beaten every claim it holds, the thread runs this once. One reap: {@code listOpen} → feed
- * the {@link StalenessMemory} → {@code removeStaleClaim} for each claim the memory just
- * judged stale. The reaper NEVER claims a reaped task for itself — the removal alone returns
- * the task to {@code Ready}, whence it re-enters the ordinary lease queue (FR4, design D5).
+ * The real {@link ReaperDuty} (design D4, generalized by D16): one tick is one sweep of the whole
+ * sweep universe — {@code listReady} plus {@code listOpen} — classified through {@link
+ * TrackerShapeClassifier}, timed by the {@link StalenessMemory}, and repaired through the port
+ * operation each released shape's recovery names. The union is the point: a sweeper filtering on
+ * the very label a kill window may not have written yet is structurally blind, so the ready feed's
+ * claim facts are swept beside the open listing's.
  *
- * <p><b>Convergence.</b> {@code removeStaleClaim} is guarded by the observed version and is
- * idempotent in effect: a racing reaper or a live beat that changed the claim since the
- * observation yields {@link RemoveStaleClaimResult.Mismatch}, a safe no-op the reaper does
- * NOT treat as an error — two instances reaping the same stale claim converge to a single
- * {@code Ready} transition without coordination (NFR-R2, design D5).
+ * <p><b>Repairs.</b> A dead tenure ({@code Claimed} past its TTL) and an abandoned footprint go
+ * through {@code removeStaleClaim}; a pending claim and a lagging index go through {@code
+ * repairIndex}. The reaper NEVER claims a repaired task for itself — the repair alone returns it to
+ * circulation, whence it re-enters the ordinary lease queue (FR4, design D5).
  *
- * <p><b>Outage.</b> When {@code listOpen} throws (network/5xx), the reaper forgets every
- * observation window ({@link StalenessMemory#forgetAll()}) and skips the tick: no observation
- * means no staleness progress, and dropping the pre-outage windows makes recovery restart each
- * claim's TTL from its first post-outage sighting. This is FR9's "recovery restarts windows" —
- * a holder that also lost tracker access and has not yet re-beaten gets a fresh grace window
- * instead of being reaped for a window that elapsed on the monotonic clock while no observer
- * could read versions. Safety (never falsely reap a live claim) outranks promptness (a
- * genuinely dead claim then costs one fresh TTL after recovery to reap). The next tick retries.
- * A {@code removeStaleClaim} infrastructure failure on ONE claim is caught per-claim so the
- * remaining stale claims are still reaped this tick.
+ * <p><b>Convergence.</b> Both repairs are guarded by the observed facts and idempotent in effect: a
+ * racing reaper or a live beat that moved the facts yields a mismatch or unchanged result, a safe
+ * no-op the reaper does NOT treat as an error (NFR-R2, design D5).
  *
- * <p>A genuinely unexpected exception would propagate to the heartbeat thread's per-tick
- * guard (task 4.2), which keeps the thread alive; the two handled cases above are the only
- * expected failures. Not thread-safe: one reaper belongs to one reaper thread that calls {@link
- * #reapOnce(Collection)} sequentially, and is the sole WRITER of its {@link StalenessMemory} — that
- * memory is additionally read by the sandbox-lifecycle tick thread and synchronizes for it. Task 6.1
- * constructs the reaper with the take run's {@link Tracker} and a per-run {@link StalenessMemory}.
+ * <p><b>Outage.</b> When either listing throws, the reaper forgets every observation window ({@link
+ * StalenessMemory#forgetAll()}) and skips the tick: no observation means no progress toward any
+ * threshold, and dropping pre-outage windows makes recovery restart each timer from its first
+ * post-outage sighting (FR9). A repair failure on ONE task is caught per-task so the rest still
+ * run, and re-arms that task for a later tick.
  *
- * <p>Implements FR4, FR9, NFR-R2 of add-claim-heartbeat.
+ * <p>Not thread-safe: one reaper belongs to one reaper thread that calls {@link
+ * #reapOnce(Collection)} sequentially, and is the sole WRITER of its {@link StalenessMemory}.
+ *
+ * <p>Implements FR4, FR9, NFR-R2 of add-claim-heartbeat; FR19, FR12 of harden-task-branch-contract.
  */
 // A final class, not a record: PIT's Gregor engine RUN_ERRORs (crashes its minion JVM) when
 // mutating a record here — the JVMTI RedefineClasses restriction on record classes
-// (hcoles/pitest#1285), test-independent, not a real coverage gap. Reaper is never compared or
-// hashed, so as a plain class its methods mutate and are killed normally.
+// (hcoles/pitest#1285), test-independent, not a real coverage gap.
 public final class Reaper implements ReaperDuty {
 
     private static final Logger log = LoggerFactory.getLogger(Reaper.class);
+
+    /**
+     * How many ready entries one sweep enumerates. The ready feed is a limited call by contract;
+     * this bound is the sweep's own, and a full page is logged rather than silently truncated, so a
+     * backlog deeper than one page is visible instead of looking like full coverage.
+     */
+    private static final int READY_SWEEP_LIMIT = 100;
 
     private final Tracker tracker;
     private final StalenessMemory memory;
     private final OpenTaskListingSink listingSink;
 
     /**
-     * @param tracker the port the reaper lists open tasks through and removes stale claims
-     *     with; never null
-     * @param memory the per-run staleness policy fed each successful observation; never null
+     * @param tracker the port the reaper sweeps and repairs through; never null
+     * @param memory the per-run observation memory fed each successful sweep; never null
      */
     public Reaper(Tracker tracker, StalenessMemory memory) {
         this(tracker, memory, OpenTaskListingSink.NONE);
     }
 
     /**
-     * @param tracker the port the reaper lists open tasks through and removes stale claims
-     *     with; never null
-     * @param memory the per-run staleness policy fed each successful observation; never null
-     * @param listingSink taps this tick's {@code listOpen} result (or failure) so a consumer —
-     *     the liveness oracle (task 2.1 of add-serve-sandbox-lifecycle) — can reuse it without a
-     *     second tracker call; never null, {@link OpenTaskListingSink#NONE} if unused
+     * @param tracker the port the reaper sweeps and repairs through; never null
+     * @param memory the per-run observation memory fed each successful sweep; never null
+     * @param listingSink taps this tick's {@code listOpen} result (or failure) so the liveness
+     *     oracle can reuse it without a second tracker call; never null
      */
     public Reaper(Tracker tracker, StalenessMemory memory, OpenTaskListingSink listingSink) {
         this.tracker = tracker;
@@ -79,66 +83,98 @@ public final class Reaper implements ReaperDuty {
     }
 
     /**
-     * Runs the reaper once for this tick (FR4). Lists open tasks, drops the instance's own
-     * held claims (design D13), feeds the rest to the staleness memory, and removes every
-     * newly-stale claim. On a {@code listOpen} outage it forgets all observation windows so
-     * recovery restarts them (FR9, design D2); a per-claim removal failure never stops the
-     * rest and re-arms that claim for a later retry (design D14).
+     * Runs one sweep tick (FR4, FR19): enumerates the union of both listings, drops the instance's
+     * own held claims, classifies and times the rest, and repairs everything the memory releases.
      *
-     * <p>Implements FR4, FR9 of add-claim-heartbeat.
+     * <p>Implements FR4, FR9 of add-claim-heartbeat; FR19 of harden-task-branch-contract.
      *
-     * @param ownClaims the claims the instance currently holds, excluded from observation so
-     *     a live holder never reaps itself; never null, may be empty
+     * @param ownClaims the claims the instance currently holds, excluded from observation so a live
+     *     holder never reaps itself; never null, may be empty
      */
     @Override
     public void reapOnce(Collection<TaskRef> ownClaims) {
         List<OpenTask> openTasks;
+        List<ReadyTask> readyTasks;
         try {
             openTasks = tracker.listOpen();
+            readyTasks = tracker.listReady(READY_SWEEP_LIMIT);
         } catch (RuntimeException e) {
-            // Tracker outage: forget the observation windows so recovery restarts each claim's
-            // TTL from its first post-outage sighting (FR9 "recovery restarts windows", D2). No
-            // observation is fed, so no staleness accrues; and no pre-outage window survives to
-            // falsely reap a live holder that also lost tracker access and has not re-beaten.
-            log.warn("listOpen failed; forgetting observation windows, recovery restarts them", e);
+            // Tracker outage: forget the observation windows so recovery restarts every timer from
+            // its first post-outage sighting (FR9, D2). No observation is fed, so nothing accrues,
+            // and no pre-outage window survives to falsely repair a state that has since moved.
+            log.warn("sweep listing failed; forgetting observation windows, recovery restarts them", e);
             memory.forgetAll();
             listingSink.onListingFailed();
             return;
         }
-        // Publish the full listing (own claims still included) BEFORE the exclusion below, so a
-        // consumer of the sink sees the same tick's listOpen result the reaper itself acted on —
-        // no second tracker call (design D1, NFR-C2 of add-serve-sandbox-lifecycle).
+        // Publish the full open listing (own claims still included) BEFORE the exclusion below, so
+        // a consumer of the sink sees the same tick's result the reaper itself acted on — no second
+        // tracker call (design D1, NFR-C2 of add-serve-sandbox-lifecycle).
         listingSink.onListed(openTasks);
-        // Exclude the instance's own held claims BEFORE observation (design D13): a run whose
-        // beats are failing while its listOpen still succeeds would otherwise watch its own
-        // unchanged version cross the TTL and reap its own live claim. Only a foreign observer
-        // may reap this instance; the instance itself knows it is alive.
+        if (readyTasks.size() == READY_SWEEP_LIMIT) {
+            log.info("ready feed filled the sweep page of {}; deeper entries wait for a later tick", READY_SWEEP_LIMIT);
+        }
+        // Exclude the instance's own held claims BEFORE observation (design D13): a run whose beats
+        // are failing while its listings still succeed would otherwise watch its own unchanged
+        // version cross the TTL and reap its own live claim. Only a foreign observer may reap this
+        // instance; the instance itself knows it is alive.
         Set<TaskRef> own = Set.copyOf(ownClaims);
-        List<OpenTask> foreign =
-                openTasks.stream().filter(task -> !own.contains(task.ref())).toList();
-        for (StaleClaim claim : memory.observe(foreign)) {
-            reap(claim);
+        List<TrackerObservation> sweep = TrackerObservation.sweep(foreign(readyTasks, own), openFacts(openTasks, own));
+        for (TrackerRepair repair : memory.observe(sweep)) {
+            repair(repair);
         }
     }
 
-    private void reap(StaleClaim claim) {
+    private static List<ReadyTask> foreign(List<ReadyTask> readyTasks, Set<TaskRef> own) {
+        return readyTasks.stream().filter(task -> !own.contains(task.ref())).toList();
+    }
+
+    private static Map<TaskRef, TrackerFacts> openFacts(List<OpenTask> openTasks, Set<TaskRef> own) {
+        Map<TaskRef, TrackerFacts> facts = new LinkedHashMap<>();
+        for (OpenTask task : openTasks) {
+            if (!own.contains(task.ref())) {
+                facts.put(task.ref(), task.facts());
+            }
+        }
+        return facts;
+    }
+
+    /** Routes one released shape to the port operation its recovery names, converging on a no-op. */
+    private void repair(TrackerRepair repair) {
         try {
-            RemoveStaleClaimResult result = tracker.removeStaleClaim(claim.ref(), claim.version());
-            if (result instanceof RemoveStaleClaimResult.Mismatch) {
-                // A racing reaper or a live beat changed the claim; a safe no-op, not an error.
-                log.info(
-                        "stale claim {} already changed; nothing removed, converging",
-                        claim.ref().id());
+            switch (repair.shape()) {
+                case TrackerShape.Claimed(ClaimFacts.Live claim) -> removeClaim(repair, claim);
+                case TrackerShape.ClaimAbandoned(ClaimFacts claim) -> removeClaim(repair, claim);
+                case TrackerShape.ClaimPending() -> repairIndex(repair);
+                case TrackerShape.IndexLagging ignored -> repairIndex(repair);
+                default -> log.debug("no repair owned for {}", repair.shape());
             }
         } catch (RuntimeException e) {
-            // Infrastructure failure removing ONE claim must not stop reaping the others, and
-            // must not silence it: re-arm the once-per-version latch (design D14) so the same
-            // unchanged version is retried next tick instead of staying Working until it changes.
+            // An infrastructure failure repairing ONE task must not stop the others, and must not
+            // silence it: re-arm the once-per-shape latch (design D14) so the same unchanged shape
+            // is retried next tick instead of staying frozen until its facts change.
             log.warn(
-                    "removeStaleClaim failed for {}; continuing with the rest",
-                    claim.ref().id(),
+                    "repair failed for {}; continuing with the rest",
+                    repair.ref().id(),
                     e);
-            memory.retryEmission(claim);
+            memory.retryEmission(repair);
+        }
+    }
+
+    private void removeClaim(TrackerRepair repair, ClaimFacts claim) {
+        if (tracker.removeStaleClaim(repair.ref(), claim) instanceof RemoveStaleClaimResult.Mismatch) {
+            // A racing reaper or a live beat changed the claim; a safe no-op, not an error.
+            log.info(
+                    "claim on {} already changed; nothing removed, converging",
+                    repair.ref().id());
+        }
+    }
+
+    private void repairIndex(TrackerRepair repair) {
+        if (tracker.repairIndex(repair.ref(), repair.facts()) instanceof RepairIndexResult.Unchanged) {
+            log.info(
+                    "index of {} already moved; nothing repaired, converging",
+                    repair.ref().id());
         }
     }
 }

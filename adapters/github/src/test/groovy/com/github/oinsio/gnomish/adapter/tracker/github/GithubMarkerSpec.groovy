@@ -130,4 +130,55 @@ class GithubMarkerSpec extends Specification {
         body.contains('"version":1')
         parsed.get().version() == 1
     }
+
+    def "an identity-stamped marker round-trips its content identity (FR11)"() {
+        given:
+        def at = Instant.parse('2026-07-20T12:00:00Z')
+        def identity = new GithubCommentIdentity('acme/widgets#42', 'park')
+
+        when:
+        def body = GithubMarker.render(GithubMarkerKind.PARK, 'gnomish-factory-x7k2q1', at,
+                'parked: need a decision', 'escalation', identity, null)
+        def parsed = GithubMarker.parse(body)
+
+        then:
+        body.contains('"task":"acme/widgets#42","intent":"park"')
+        parsed.get().identity() == identity
+        parsed.get().reason() == 'escalation'
+    }
+
+    def "the identity rides the hidden line only, leaving the human text untouched (NFR-S1)"() {
+        given:
+        def at = Instant.parse('2026-07-20T12:00:00Z')
+
+        when:
+        def body = GithubMarker.render(GithubMarkerKind.FINISH, 'gnomish-factory-x7k2q1', at, 'delivered', null,
+                new GithubCommentIdentity('acme/widgets#42', 'finish'), null)
+
+        then:
+        def lines = body.split('\n', 2)
+        lines[0].contains('"intent":"finish"')
+        lines[1] == 'delivered'
+    }
+
+    def "a marker rendered without an identity keeps the original wire shape and parses with a null identity"() {
+        given:
+        def at = Instant.parse('2026-07-20T12:00:00Z')
+
+        when:
+        def body = GithubMarker.render(GithubMarkerKind.NOTE, 'gnomish-factory-x7k2q1', at, 'note')
+        def parsed = GithubMarker.parse(body)
+
+        then:
+        !body.contains('"task"')
+        !body.contains('"intent"')
+        parsed.get().identity() == null
+    }
+
+    def "a half-present identity pair parses as no identity at all"() {
+        expect:
+        GithubMarker.parse('<!-- gnomish {"kind":"note","instance":"gnomish-factory-x7k2q1",' +
+                '"at":"2026-07-20T12:00:00Z","version":1,"task":"acme/widgets#42"} -->\nhello')
+                .get().identity() == null
+    }
 }

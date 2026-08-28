@@ -12,6 +12,11 @@ import java.io.Serial;
  * HEAD. Distinct from "branch not found" ({@link BranchStateResult.NotFound}): the branch exists,
  * only the requested file at its tip does not.
  *
+ * <p>Inspection no longer raises it: {@link BranchStateReader} and {@link TaskBranchLister} decide
+ * what a tip holds through the shape classifier and report a delivered or bare branch as its shape
+ * (FR16 of harden-task-branch-contract). What remains is {@link DeliveredBranchReader}'s recovery
+ * read of the commit before cleanup, where a missing file really is a broken assumption.
+ *
  * <p>Implements FR13 of add-git-workflow.
  */
 public final class BranchStateFileMissingException extends RuntimeException {

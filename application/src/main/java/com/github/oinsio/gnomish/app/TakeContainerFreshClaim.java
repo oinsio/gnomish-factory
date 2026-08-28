@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  * creates the task branch factory-side over bare git objects instead of a host worktree —
  * mirroring {@link ContainerGitModeRunner}'s fresh-run sequence — with {@code tracked}
  * labelling (as opposed to {@code run}'s {@code manual} labelling, per the {@link
- * ContainerTakeSupport#containerSupportFactory} the caller resolved), then runs the engine once
+ * ContainerTakeSupport#containerSupportFactory()} the caller resolved), then runs the engine once
  * through {@link TakeContainerEngineExecution}.
  *
  * <p>Implements FR1, FR2 of add-serve-sandbox-lifecycle; FR9, FR11, D3 of add-tracker-port.
@@ -59,7 +59,8 @@ final class TakeContainerFreshClaim {
                         containerTakeSupport.factoryProperties(),
                         definition,
                         credentialEnvVarsToScrub);
-        GitFreshTaskSupport.createTask(support.taskRepository(), taskId, synthesized.context(), base);
+        GitFreshTaskSupport.createTask(
+                support.taskRepository(), taskId, synthesized.context(), base, synthesized.initialState());
 
         var execution = new TakeContainerEngineExecution(
                 assembly, abortHandler, abortThreshold, credentialEnvVarsToScrub, claimLossFlag, cloneDir);

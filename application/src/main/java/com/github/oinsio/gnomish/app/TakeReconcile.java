@@ -1,21 +1,18 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
-import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -62,28 +59,6 @@ final class TakeReconcile {
     private TakeReconcile() {}
 
     /**
-     * Posts the deferred finish for a delivered-but-unfinished branch and returns {@link
-     * TakeResult.Delivered}, running no engine round (FR10, D10, NFR-C1).
-     *
-     * <p>Implements FR10, D10, NFR-C1 of add-claim-heartbeat.
-     *
-     * @param git the task-git capability set the delivered branch state is read through; never null
-     * @param cloneDir the project clone; never mutated
-     * @param taskId the tracker's original taskId whose branch recorded {@code Completed}
-     * @param tracker the tracker port the deferred finish is made through; never null
-     * @param ref the task's tracker identity; never null
-     * @param instanceId this factory instance's identity, for the pre-write claim check; never null
-     * @return the {@link TakeResult.Delivered} the deferred finish produced; never null
-     */
-    static TakeResult deliverCompleted(
-            TaskGit git, Path cloneDir, String taskId, Tracker tracker, TaskRef ref, InstanceId instanceId) {
-        DeliveredBranchState delivered = git.branches().readDelivered(cloneDir, taskId);
-        var completed = new TaskOutcome.Completed(delivered.finalState());
-        return TakeFinishReport.finish(
-                completed, delivered.context(), TaskIdSanitizer.branchName(taskId), tracker, ref, instanceId);
-    }
-
-    /**
      * Posts the deferred park for an {@code Escalated}/{@code Paused} branch whose "tracker-write
      * pending" marker is still set (the park write never landed), running no engine round: the park
      * is reconstructed from the branch's own recorded outcome ({@code task.json}) and final state
@@ -97,10 +72,9 @@ final class TakeReconcile {
      *
      * <p>Mode-independent (design D8 of add-serve-sandbox-lifecycle): the park is rebuilt from the
      * branch's own facts and the tracker write is the whole action, so host and container mode
-     * differ only in the two values passed in — where {@code finalState} was read from, and whether
-     * clearing the pending marker does anything (container mode has no marker write yet, so its
-     * {@code clearMarker} is a no-op and every future resume re-delivers the park; idempotent by the
-     * {@code ClaimGuard} pre-write check).
+     * differ only in where {@code finalState} was read from and how the marker is cleared — both
+     * modes do clear it now (FR10, D12 of harden-task-branch-contract), so a re-delivered park
+     * settles instead of returning on every later resume.
      *
      * @param branch the resumed branch: recorded park outcome, escalation report, branch name
      * @param finalState the branch's last durably recorded state, read by the caller's mechanics
@@ -113,7 +87,7 @@ final class TakeReconcile {
      *     the tip on the way in, but that catch-up is best-effort and swallows its failure — so the
      *     fence still runs before this write, and an {@code Undelivered} verdict puts the
      *     origin-behind line in the re-posted park report exactly as a fresh park does. A caller
-     *     with no fence to run (container mode, which records no park lifecycle commit) passes
+     *     with no fence to run (container mode, whose pushes are best-effort throughout) passes
      *     {@link ParkDeliveryVerdict.Delivered}
      * @return the {@link TakeResult.AwaitingHuman} the deferred park produced; never null
      */
@@ -126,26 +100,20 @@ final class TakeReconcile {
             InstanceId instanceId,
             ParkDeliveryVerdict parkDelivery) {
         var retry = TerminalWriteRetry.system();
-        String replicationNote = parkDelivery.reportNote();
+        // A recovered park: its intent is already on the branch, so the protocol probes the tracker
+        // before re-driving the write and adds no duplicate artifact (FR10).
+        var transition = new ParkTransition.Recovered(parkDelivery, clearMarker);
         if (branch.outcome() instanceof RecordedOutcome.Paused(var passedStage)) {
             var pausedOutcome = new TaskOutcome.Paused(finalState, passedStage);
             return TakePauseExit.finish(
-                    pausedOutcome,
-                    branch.context(),
-                    branch.branchName(),
-                    tracker,
-                    ref,
-                    instanceId,
-                    retry,
-                    clearMarker,
-                    replicationNote);
+                    pausedOutcome, branch.context(), branch.branchName(), tracker, ref, instanceId, retry, transition);
         }
         // The only remaining park kind is Escalated: resumeExisting calls deliverPark solely for an
         // Escalated/Paused branch, and recordOutcome always records lastEscalation alongside an
         // Escalated outcome — so the report is present. The instanceof pattern above already handles
         // a null outcome (it simply doesn't match), so no explicit null case is needed here.
         var escalated = new TaskOutcome.Escalated(finalState, requireEscalationReport(branch.lastEscalation()));
-        return TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker, replicationNote);
+        return TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, transition);
     }
 
     // PIT M4 documented exception: @DoNotMutate — the null branch is provably unreachable on the

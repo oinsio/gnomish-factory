@@ -42,7 +42,7 @@ import org.slf4j.MDC;
  *
  * <p><b>Exception boundary (deliberate).</b> {@link TakeClaimAndWork#dispatchAfterClaim} already
  * funnels ordinary {@code RuntimeException}s through its own crash-abort protocol, rethrowing only
- * {@code UsageException}/{@code DivergedBranchException} unchanged — but a slot must never let
+ * {@code UsageException} unchanged — but a slot must never let
  * anything escape {@link #run(TaskRef)}: {@link FeedAutomaton} installs no uncaught-exception
  * handler on its virtual thread. This class catches every {@link Throwable} here, logs it at
  * ERROR, and swallows it — a failed slot must not take down the daemon. Implements FR1, M2 of

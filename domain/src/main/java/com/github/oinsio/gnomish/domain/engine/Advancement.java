@@ -49,4 +49,20 @@ final class Advancement {
     static Position nextPosition(@Nullable StageDefinition next) {
         return next == null ? new Position.PipelineEnd() : new Position.AtStage(next.name());
     }
+
+    /**
+     * Where a pass of {@code stage} leaves the task: the stage declared after it, or the explicit
+     * {@link Position.PipelineEnd} past the last one (FR8). The advancement <em>mode</em> does not
+     * enter: {@code AUTO} and {@code MANUAL} move the position identically and differ only in
+     * whether the run continues or parks, which stays the {@link Engine}'s decision. The {@link
+     * StageAttemptLoop} asks this to decide what a passing round's own commit records (FR4 of
+     * harden-task-branch-contract).
+     *
+     * @param definition the pipeline whose declared order is walked; never null
+     * @param stage the stage that just passed; never null
+     * @return the position the pass advances to; never null
+     */
+    static Position positionAfter(PipelineDefinition definition, StageDefinition stage) {
+        return nextPosition(nextStage(definition, stage));
+    }
 }

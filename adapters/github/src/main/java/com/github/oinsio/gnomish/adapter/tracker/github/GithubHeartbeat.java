@@ -111,8 +111,7 @@ public final class GithubHeartbeat {
             throw new GithubHeartbeatException("Failed to beat claim comment %d on %s/%s: HTTP %d"
                     .formatted(commentId, id.owner(), id.repo(), status));
         }
-        return new HeartbeatResult.Beaten(
-                new ClaimVersion(Long.toString(commentId), readUpdatedAt(response.body(), id)));
+        return new HeartbeatResult.Beaten(GithubClaimComment.versionOf(commentId, readUpdatedAt(response.body(), id)));
     }
 
     private static Instant readUpdatedAt(String patchResponseJson, GithubTaskId id) {

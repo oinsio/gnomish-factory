@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import java.time.Instant
@@ -108,6 +109,11 @@ class TrackerHealthTrackerSpec extends Specification {
         tracker.consecutiveFailures() == 0
     }
 
+    private static final ClaimFacts CLAIM =
+    new ClaimFacts.Live('instance', new ClaimVersion('marker-1', Instant.EPOCH, new ClaimEpoch(1)))
+
+    private static final TrackerFacts FACTS = TrackerFacts.of(StateLabels.workingOnly(), CLAIM)
+
     def "every Tracker operation is delegated"() {
         when:
         tracker.listReady(5)
@@ -124,7 +130,8 @@ class TrackerHealthTrackerSpec extends Specification {
         tracker.declineFinished(REF, 'message')
         tracker.listOpen()
         tracker.heartbeat(REF, 'progress')
-        tracker.removeStaleClaim(REF, new ClaimVersion('marker-1', Instant.EPOCH))
+        tracker.removeStaleClaim(REF, CLAIM)
+        tracker.repairIndex(REF, FACTS)
 
         then:
         1 * delegate.listReady(5)
@@ -141,7 +148,8 @@ class TrackerHealthTrackerSpec extends Specification {
         1 * delegate.declineFinished(REF, 'message')
         1 * delegate.listOpen()
         1 * delegate.heartbeat(REF, 'progress')
-        1 * delegate.removeStaleClaim(REF, _ as ClaimVersion)
+        1 * delegate.removeStaleClaim(REF, _ as ClaimFacts)
+        1 * delegate.repairIndex(REF, _ as TrackerFacts)
     }
 
     // PIT: every delegating method must return the delegate's ACTUAL value unchanged, not just
@@ -158,19 +166,22 @@ class TrackerHealthTrackerSpec extends Specification {
         def openTasks = [
             new OpenTask(REF, new TrackerTaskState.Gone(), null, 'fixture title')
         ]
-        def heartbeatResult = new HeartbeatResult.Beaten(new ClaimVersion('marker-1', Instant.EPOCH))
+        def heartbeatResult = new HeartbeatResult.Beaten(new ClaimVersion('marker-1', Instant.EPOCH, new ClaimEpoch(1)))
         def removeResult = new RemoveStaleClaimResult.Removed()
+        def repairResult = new RepairIndexResult.Repaired(FACTS)
         delegate.fetchTask(REF) >> fetchedTask
         delegate.collectDecisions(REF) >> decisions
         delegate.listOpen() >> openTasks
         delegate.heartbeat(REF, 'progress') >> heartbeatResult
-        delegate.removeStaleClaim(REF, _ as ClaimVersion) >> removeResult
+        delegate.removeStaleClaim(REF, _ as ClaimFacts) >> removeResult
+        delegate.repairIndex(REF, _ as TrackerFacts) >> repairResult
 
         expect:
         tracker.fetchTask(REF).is(fetchedTask)
         tracker.collectDecisions(REF).is(decisions)
         tracker.listOpen().is(openTasks)
         tracker.heartbeat(REF, 'progress').is(heartbeatResult)
-        tracker.removeStaleClaim(REF, new ClaimVersion('marker-1', Instant.EPOCH)).is(removeResult)
+        tracker.removeStaleClaim(REF, CLAIM).is(removeResult)
+        tracker.repairIndex(REF, FACTS).is(repairResult)
     }
 }

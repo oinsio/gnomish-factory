@@ -40,6 +40,25 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
         tracker.fetchTask(ref).abortFacts().count() == 0
     }
 
+    // FR14 of harden-task-branch-contract: a seeded history replays its categories, so a fixture
+    // can stand a task up mid-streak with the crash and repair shares it means to describe
+    def "seeded facts replay their recovery share as well as their total"() {
+        given: 'a tracker and harness'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:seed-categories')
+
+        when: 'three attempts are seeded, one of them a failed branch repair'
+        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(),
+                new AbortFacts(3, Instant.parse('2026-07-20T10:00:00Z'), 1))
+
+        then:
+        def facts = tracker.fetchTask(ref).abortFacts()
+        facts.count() == 3
+        facts.recoveryCount() == 1
+        facts.crashCount() == 2
+    }
+
     def "seedReply fully releases the store lock on exit"() {
         given: 'a tracker and harness with one seeded task'
         def tracker = new InMemoryTracker()

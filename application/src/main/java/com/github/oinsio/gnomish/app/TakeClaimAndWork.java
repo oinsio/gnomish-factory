@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
-import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
+import com.github.oinsio.gnomish.app.take.TakeQuarantinePark;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
@@ -126,8 +127,8 @@ public final class TakeClaimAndWork {
      * protocol as an engine {@code Aborted} via {@link TakeCrashAbort} (FR14 "Runner crash is an
      * abort", D16 "an uncaught exception runs the abort protocol and exits 12 or 13, never a bare
      * 1"). Deliberate, dedicated-exit-code control flow is exempt and rethrown unchanged: {@link
-     * UsageException} keeps exit 2 and {@link DivergedBranchException} keeps exit 5 (D16: codes
-     * shared with {@code run} keep their meaning) — but the claim is still dropped first (see
+     * UsageException} keeps exit 2 (D16: codes shared with {@code run} keep their meaning) — but
+     * the claim is still dropped first (see
      * {@link #releaseBestEffort}), so a refusal never leaves the task hanging {@code Working}. A
      * claim that never succeeds is a pre-claim failure handled one layer up (exit 1) and never
      * reaches this method.
@@ -140,8 +141,14 @@ public final class TakeClaimAndWork {
      * terminal result, exception, or crash-abort. A path that never holds a claim (a lost race,
      * an empty queue) never reaches this method, so it never beats.
      *
+     * <p>One classified failure leaves before the crash arm: a branch that classifies to a
+     * non-recoverable shape stops at {@link TakeQuarantinePark} instead, parking the task for a
+     * human on the first classification and spending no attempt of the unified recovery accounting
+     * — retrying a branch whose next read is identical only buries the diagnosis under K aborts
+     * (FR15 of harden-task-branch-contract).
+     *
      * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port; FR1 of add-claim-heartbeat; FR1
-     * of add-factory-serve.
+     * of add-factory-serve; FR15 of harden-task-branch-contract.
      */
     public TakeResult dispatchAfterClaim(
             Path cloneDir,
@@ -157,9 +164,11 @@ public final class TakeClaimAndWork {
         try {
             return TakeWorkRouter.locateAndWork(
                     this, cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
-        } catch (UsageException | DivergedBranchException deliberate) {
+        } catch (UsageException deliberate) {
             releaseBestEffort(tracker, ref, deliberate);
             throw deliberate;
+        } catch (BranchQuarantineException quarantine) {
+            return TakeQuarantinePark.onQuarantine(definition, trackerTask, tracker, quarantine);
         } catch (RuntimeException crash) {
             return crashAbort.onCrash(definition, trackerTask, tracker, instanceId, crash);
         } finally {

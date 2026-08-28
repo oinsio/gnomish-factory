@@ -14,7 +14,9 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -55,6 +57,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
         worktree = worktreesRoot.resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        branches.classifyShape(_, _) >> new BranchShape.InProgress()
         worktrees.ensureWorktree(_, _, _, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_, _) >> lifecycleStore
@@ -85,7 +88,8 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     }
 
     private TakeResult resume(TakeDispositionResume chain) {
-        chain.resumeExisting(CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+        chain.resumeExisting(
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
     }
 
     // FR3: resume start is a touchpoint — after the worktree's own divergence reconcile pulls local
@@ -128,7 +132,10 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
         when:
         resume(parkingChain())
 
-        then: 'the fence is asked first'
+        then: 'FR10: the park\'s durable intent — the outcome commit — is recorded first of all'
+        1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Escalated)
+
+        then: 'the fence is asked next'
         1 * branches.fenceParkDelivery(CLONE_DIR, 'PROJ-1') >> new ParkDeliveryVerdict.Delivered()
 
         then: 'and only then does the tracker learn about the park'

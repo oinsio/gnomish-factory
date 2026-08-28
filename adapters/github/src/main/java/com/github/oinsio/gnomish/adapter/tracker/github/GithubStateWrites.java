@@ -4,9 +4,9 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Instant;
 import java.util.Locale;
 
 /**
@@ -37,8 +37,19 @@ import java.util.Locale;
  * {@code note}-kind marker explaining the decline, only after the transition
  * succeeds, and is a silent no-op when the issue is already terminal.
  *
+ * <p>Every marker here is written through {@link GithubMarkerWriter} — one renderer, find-then-
+ * upsert, stamped with the tenure's claim epoch (FR11, FR13) — so a crash-retry of any of these
+ * writes updates its own comment instead of appending a duplicate report (UX3).
+ *
+ * <p>Write order is contract (FR12 of harden-task-branch-contract): for {@code park}, {@code
+ * finish} and {@code recordAbort} the structural marker posts BEFORE the label flip that indexes
+ * it — markers are the truth, labels the index — so a kill between the two freezes a lagging index
+ * the sweep repairs, never a recorded fact lost with an unflipped label. {@code declineFinished}
+ * keeps the opposite order on purpose: its NOTE marker carries no derivation weight, so posting it
+ * behind a failed transition would be pure noise (design D5 of enforce-finish-terminality).
+ *
  * <p>Implements FR14, FR18 of add-tracker-port, FR1, FR2, FR4, NFR-R1, UX2 of
- * enforce-finish-terminality.
+ * enforce-finish-terminality; FR12 of harden-task-branch-contract.
  */
 // Not a record: this is a behavior-bearing state-write service (a collaborator holding an HTTP
 // client and label ops, not immutable data), kept as a plain final class.
@@ -47,7 +58,7 @@ public final class GithubStateWrites {
 
     private final GithubHttpClient httpClient;
     private final GithubLabelOps labelOps;
-    private final String instanceId;
+    private final GithubMarkerWriter markerWriter;
     private final String workingLabel;
     private final String needsHumanLabel;
     private final String deliveredLabel;
@@ -56,48 +67,73 @@ public final class GithubStateWrites {
     public GithubStateWrites(
             GithubHttpClient httpClient,
             GithubLabelOps labelOps,
-            String instanceId,
+            GithubMarkerWriter markerWriter,
             String workingLabel,
             String needsHumanLabel,
             String deliveredLabel,
             String readyLabel) {
         this.httpClient = httpClient;
         this.labelOps = labelOps;
-        this.instanceId = instanceId;
+        this.markerWriter = markerWriter;
         this.workingLabel = workingLabel;
         this.needsHumanLabel = needsHumanLabel;
         this.deliveredLabel = deliveredLabel;
         this.readyLabel = readyLabel;
     }
 
-    /** Implements {@code Tracker.park} for GitHub (FR13, FR14 context, UX3). */
+    /**
+     * Implements {@code Tracker.park} for GitHub (FR13, FR14 context, UX3). The marker is the truth
+     * and the label is its index (FR12 of harden-task-branch-contract), so the marker posts first: a
+     * kill between the two freezes an issue whose park report is on the thread while its labels
+     * still say working — a lagging index the sweep completes — rather than a needs-human issue
+     * whose report was lost with the instance that never posted it.
+     */
     public void park(TaskRef ref, ParkReason reason, String report) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
+        markerWriter.write(id, GithubMarkerKind.PARK, report, reason.name().toLowerCase(Locale.ROOT));
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, needsHumanLabel);
-        String body = GithubMarker.render(
-                GithubMarkerKind.PARK,
-                instanceId,
-                Instant.now(),
-                report,
-                reason.name().toLowerCase(Locale.ROOT));
-        postComment(id, body);
     }
 
-    /** Implements {@code Tracker.finish} for GitHub (FR18). */
+    /**
+     * Implements {@code Tracker.finish} for GitHub (FR18). Marker before the delivered flip (FR12 of
+     * harden-task-branch-contract): a kill between the two leaves the finished fact derivable from
+     * the thread, so the sweep completes the flip and the delivered work is never re-executed —
+     * where flipping first could mark a task delivered with no record of what was delivered.
+     */
     public void finish(TaskRef ref, String summary) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
+        markerWriter.write(id, GithubMarkerKind.FINISH, summary, null);
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, deliveredLabel);
-        String body = GithubMarker.render(GithubMarkerKind.FINISH, instanceId, Instant.now(), summary);
-        postComment(id, body);
     }
 
-    /** Implements {@code Tracker.recordAbort} for GitHub (FR14, NFR-R3). */
+    /**
+     * Implements {@code Tracker.recordAbort} for GitHub (FR14, NFR-R3). Marker before the ready flip
+     * (FR12 of harden-task-branch-contract). The trade is deliberate: a kill between the two counts
+     * an abort whose flip never happened — an over-count, which pushes the task toward parking for a
+     * human. Flipping first would trade the other way and lose an abort from the count, letting a
+     * task loop past its fuse.
+     */
     public void recordAbort(TaskRef ref, AbortRecord record) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
+        // Scoped by the tenure being aborted, and authored by the instance the record names: at
+        // most one abort ends a tenure, so one abort comment per tenure keeps the count honest
+        // while a crash-retry of this same abort updates it in place.
+        ClaimEpoch tenure = markerWriter.tenureOf(id).orElse(null);
+        String scope = tenure == null ? Long.toString(record.at().toEpochMilli()) : Long.toString(tenure.token());
+        markerWriter.write(
+                id,
+                GithubMarkerKind.ABORT,
+                scope,
+                "🤖 gnomish: aborted: " + record.cause(),
+                // The marker's reason field carries the recovery category, so the fold reads the
+                // two shares of the unified accounting back off the thread (FR14 of
+                // harden-task-branch-contract); a pre-categorization marker has none and reads as
+                // the crash category it meant.
+                record.category().wireValue(),
+                tenure,
+                record.instance(),
+                record.at());
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, readyLabel);
-        String body = GithubMarker.render(
-                GithubMarkerKind.ABORT, record.instance(), record.at(), "🤖 gnomish: aborted: " + record.cause());
-        postComment(id, body);
     }
 
     /**
@@ -109,9 +145,7 @@ public final class GithubStateWrites {
      */
     public void recordProgress(TaskRef ref) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
-        String body = GithubMarker.render(
-                GithubMarkerKind.PROGRESS, instanceId, Instant.now(), "🤖 gnomish: progress recorded");
-        postComment(id, body);
+        markerWriter.write(id, GithubMarkerKind.PROGRESS, "🤖 gnomish: progress recorded", null);
     }
 
     /**
@@ -133,8 +167,7 @@ public final class GithubStateWrites {
             return;
         }
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), readyLabel, deliveredLabel);
-        String body = GithubMarker.render(GithubMarkerKind.NOTE, instanceId, Instant.now(), message);
-        postComment(id, body);
+        markerWriter.write(id, GithubMarkerKind.NOTE, message, null);
     }
 
     private boolean isAlreadyTerminal(GithubTaskId id) {
@@ -147,19 +180,5 @@ public final class GithubStateWrites {
         }
         GithubIssueDetail detail = GithubIssueDetailParser.parse(response.body());
         return detail.labelNames().contains(deliveredLabel);
-    }
-
-    private void postComment(GithubTaskId id, String body) {
-        String path = "/repos/%s/%s/issues/%d/comments".formatted(id.owner(), id.repo(), id.issueNumber());
-        HttpRequest.Builder request = httpClient
-                .newRequest(path)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(GithubCommentBody.toJson(body)));
-
-        HttpResponse<String> response = httpClient.send(request);
-        if (response.statusCode() / 100 != 2) {
-            throw new GithubStateWriteException("Failed to post structural comment on %s/%s#%d: HTTP %d"
-                    .formatted(id.owner(), id.repo(), id.issueNumber(), response.statusCode()));
-        }
     }
 }

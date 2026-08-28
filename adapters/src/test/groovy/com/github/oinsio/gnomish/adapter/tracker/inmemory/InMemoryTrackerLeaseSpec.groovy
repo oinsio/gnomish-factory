@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -128,9 +129,9 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         def ref = new TaskRef('fixture:remove-after-beat')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
         tracker.heartbeat(ref, 'stage=build')
-        ClaimVersion live = claimVersionOf(ref)
+        def live = claimFactsOf(ref)
 
-        when: 'a reaper removes against the live post-beat version'
+        when: 'a reaper removes against the live post-beat footprint'
         def result = tracker.removeStaleClaim(ref, live)
 
         then: 'the removal succeeds, returns the task to Ready, and narrates the dead holder'
@@ -148,7 +149,7 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         given: 'a Working task whose claim a reaper has already removed'
         def ref = new TaskRef('fixture:double-remove')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
-        ClaimVersion observed = claimVersionOf(ref)
+        def observed = claimFactsOf(ref)
         tracker.removeStaleClaim(ref, observed)
 
         when: 'a second reaper removes against the same now-dead version'
@@ -166,7 +167,7 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         given: 'a Working task holding a live claim, its version observed by a reaper'
         def ref = new TaskRef('fixture:beat-between')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
-        ClaimVersion observed = claimVersionOf(ref)
+        def observed = claimFactsOf(ref)
         harness.armRemoveStaleClaimGate {
             tracker.heartbeat(ref, 'sneaky beat')
         }
@@ -186,7 +187,7 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         given: 'a Working task holding a live claim, observed by both reapers'
         def ref = new TaskRef('fixture:remove-race')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
-        ClaimVersion observed = claimVersionOf(ref)
+        def observed = claimFactsOf(ref)
         def firstResult = null
         harness.armRemoveStaleClaimGate {
             harness.disarmRemoveStaleClaimGate()
@@ -207,7 +208,7 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         given: 'a Working task holding a live claim and an armed removal gate'
         def ref = new TaskRef('fixture:remove-gate')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
-        ClaimVersion observed = claimVersionOf(ref)
+        def observed = claimFactsOf(ref)
         boolean gateRan = false
         harness.armRemoveStaleClaimGate { gateRan = true }
 
@@ -222,7 +223,7 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         given: 'a Working task with a removal gate armed then disarmed'
         def ref = new TaskRef('fixture:remove-gate-disarm')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
-        ClaimVersion observed = claimVersionOf(ref)
+        def observed = claimFactsOf(ref)
         boolean gateRan = false
         harness.armRemoveStaleClaimGate { gateRan = true }
         harness.disarmRemoveStaleClaimGate()
@@ -262,13 +263,19 @@ class InMemoryTrackerLeaseSpec extends AbstractInMemoryTrackerSpec {
         given: 'a Working task holding a live claim'
         def ref = new TaskRef('fixture:remove-unlock')
         harness.seedWorkingWithClaim(tracker, ref, 'instance-a')
-        ClaimVersion observed = claimVersionOf(ref)
+        def observed = claimFactsOf(ref)
 
         when: 'removeStaleClaim returns'
         tracker.removeStaleClaim(ref, observed)
 
         then: 'a different thread can immediately acquire the lock, proving it was released'
         lockIsFreeFromAnotherThread(tracker)
+    }
+
+    private ClaimFacts claimFactsOf(TaskRef ref) {
+        def entry = tracker.listOpen().find { it.ref() == ref }
+        assert entry != null
+        entry.facts().claim()
     }
 
     private ClaimVersion claimVersionOf(TaskRef ref) {

@@ -48,12 +48,22 @@ class DiscoveredRegistryOnlySpec extends Specification {
     // M1, FR1: the structural form of the claim. Every discovered factory is built reflectively by
     //     ServiceLoader, which ArchUnit cannot see — so a production `new SomeCheckClientFactory()`
     //     is, by construction, someone assembling a registry by hand.
+    //
+    //     One shape is not: a DECORATOR, which takes the SPI as a constructor parameter and can
+    //     therefore only ever wrap a provider it was handed — it invents no provider and names no
+    //     discriminator, so a registry cannot be assembled out of decorators alone. The carve-out
+    //     is evidence-based rather than a name allowlist: taking the SPI in is what proves the
+    //     class wraps rather than invents, and the behavioural property below still holds — hide
+    //     every service registration and the registry comes back empty, decorators included.
+    //     Introduced by harden-task-branch-contract, whose EpochRecordingTrackerFactory wraps each
+    //     discovered provider so the trackers it builds record their claim epochs (FR13).
     def "no production class constructs a #spi.simpleName"() {
         when:
         def offenders = productionClasses.collectMany { javaClass ->
             javaClass.constructorCallsFromSelf
             .findAll { call ->
-                call.targetOwner != javaClass && call.targetOwner.isAssignableTo(spi)
+                call.targetOwner != javaClass && call.targetOwner.isAssignableTo(spi) &&
+                !wrapsTheSpi(call.targetOwner, spi)
             }
             .collect { call ->
                 javaClass.name + ' -> new ' + call.targetOwner.name + '()'
@@ -71,6 +81,18 @@ class DiscoveredRegistryOnlySpec extends Specification {
             TrackerAdapterFactory,
             CheckClientFactory
         ]
+    }
+
+    /**
+     * Whether {@code candidate} is a decorator over {@code spi}: some constructor of it takes the
+     * SPI itself, so every instance is built around a provider the caller already had.
+     */
+    private static boolean wrapsTheSpi(candidate, Class<?> spi) {
+        candidate.constructors.any { constructor ->
+            constructor.rawParameterTypes.any { parameter ->
+                parameter.isAssignableTo(spi)
+            }
+        }
     }
 
     // M1: the behavioural form, and the sharpest of the three. Hide every registration of one port's

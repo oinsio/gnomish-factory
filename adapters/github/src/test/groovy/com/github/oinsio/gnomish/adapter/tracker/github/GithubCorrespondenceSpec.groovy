@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -31,6 +32,11 @@ class GithubCorrespondenceSpec extends Specification {
     def setup() {
         wireMock = new WireMockServer(0)
         wireMock.start()
+        // The find half of the FR11 find-then-upsert primitive: every factory comment write reads
+        // the thread first. Specs that need a populated thread add their own, more recent stub.
+        wireMock.stubFor(WireMock.get(urlMatching('.*/comments\\?per_page=100'))
+                .willReturn(aResponse()
+                .withStatus(200).withBody('[]')))
     }
 
     def cleanup() {
@@ -52,7 +58,7 @@ class GithubCorrespondenceSpec extends Specification {
 
     private GithubCorrespondence newCorrespondence(String instanceId = 'gnomish-factory-x7k2q1') {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        new GithubCorrespondence(httpClient, instanceId)
+        new GithubCorrespondence(markerWriter(httpClient, instanceId))
     }
 
     private TaskRef refFor(int issueNumber) {
@@ -98,5 +104,9 @@ class GithubCorrespondenceSpec extends Specification {
 
         then:
         wireMock.verify(0, anyRequestedFor(urlMatching('.*')))
+    }
+
+    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

@@ -87,14 +87,49 @@ public interface SandboxRunSupport {
      */
     void restoreDenialCursor();
 
-    /** Completed terminal boundary (D19): dispose, then record the outcome and cleanup commits. */
+    /**
+     * Completed terminal boundary (D19): dispose the box, then record the {@code Completed} outcome
+     * commit — the durable intent of the completion sequence. The cleanup commit is NOT part of it:
+     * it is the destructive last step, run through {@link #finishCleanup()} once the terminal
+     * tracker write has landed (FR10 of harden-task-branch-contract). A run with no tracker to write
+     * to calls the two back to back.
+     */
     void completeAndDispose(TaskState finalState);
+
+    /**
+     * The {@code Completed} cleanup commit, removing {@code .gnomish-task/} from the branch tip —
+     * the destructive last step of the completion sequence, built factory-side from bare objects
+     * with no live box required (FR15, D19 of add-sandbox-core; FR10 of
+     * harden-task-branch-contract). Idempotent: an already-cleaned tip is left alone.
+     */
+    void finishCleanup();
+
+    /**
+     * Clears the branch's durable "terminal write pending" marker once the outcome's tracker write
+     * has confirmed (FR10 of harden-task-branch-contract) — the container twin of the host park's
+     * receipt, so a container park settles instead of reading as orphaned on every later resume.
+     */
+    void confirmTerminalWrite();
 
     /** Aborted terminal boundary (D19): record on the last harvested tip; the box is kept as evidence. */
     void recordAborted(TaskOutcome.Aborted outcome);
 
     /** Keep semantics for a run that ended without disposing: stop the box, retain volume and network. */
     void keepStopped();
+
+    /**
+     * Records a park ({@code Escalated} or {@code Paused}) on the task branch, factory-side over bare
+     * objects, carrying the durable "terminal write pending" marker — the park's intent, written
+     * before the tracker write it precedes (FR10, design D12 of harden-task-branch-contract).
+     *
+     * <p>Before this existed a container park recorded nothing at all, so the human's escalation
+     * answer was read against a branch with no park on it and every return re-parked the task. The
+     * kept box is stopped by then, so this commit is the last factory-side commit until that box is
+     * disposed (FR17 of harden-task-branch-contract).
+     *
+     * @param outcome the park to record; {@code Escalated} or {@code Paused}
+     */
+    void recordPark(TaskOutcome outcome);
 
     /** The last durably committed state on the task branch (FR17). */
     TaskState readFinalState();

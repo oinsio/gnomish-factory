@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -30,7 +31,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
     Path tempDir
 
     def runner = new GitProcessRunner()
-    def store = new GitTaskStore(runner)
+    def store = new GitTaskStore(runner, ClaimEpochSource.NONE)
     Path cloneDir
     Path worktreesRoot
 
@@ -46,12 +47,12 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
     }
 
     private TaskState seedTask(String taskId) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot).createTask(new TaskContext(taskId, 'Fix it', 'B', []), null)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'Fix it', 'B', []), null, TaskState.atStageStart('implement'))
         def state = TaskState.atStageStart('implement')
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId).persist(taskId, state, trace)
+        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
         state
     }
 
@@ -60,7 +61,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
         TaskLifecycleStore repository = store.taskRepository(cloneDir, worktreesRoot)
 
         then: 'it is bound, not merely non-null: creating a task through it lands on this clone'
-        repository.createTask(new TaskContext('PROJ-1', 'T', 'B', []), null)
+        repository.createTask(new TaskContext('PROJ-1', 'T', 'B', []), null, TaskState.atStageStart('implement'))
         runner.run(cloneDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/gnomish/PROJ-1').exitCode() == 0
     }
 
@@ -70,7 +71,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
         addRemote(cloneDir, 'origin', origin.toString())
 
         when:
-        store.taskRepository(cloneDir, worktreesRoot).createTask(new TaskContext('PROJ-9', 'T', 'B', []), null)
+        store.taskRepository(cloneDir, worktreesRoot).createTask(new TaskContext('PROJ-9', 'T', 'B', []), null, TaskState.atStageStart('implement'))
 
         then:
         new RemoteBranchTip(runner).read(cloneDir, 'gnomish/PROJ-9')

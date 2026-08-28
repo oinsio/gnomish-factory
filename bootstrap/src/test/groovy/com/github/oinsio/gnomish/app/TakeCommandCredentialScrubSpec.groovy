@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -174,7 +175,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         given: 'a Ready task, claimable, with no branch yet — a genuine fresh TakeFreshClaim run'
         String claimedBy = null
         tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
-            claimedBy = instanceId; new ClaimResult.Acquired()
+            claimedBy = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         tracker.fetchTask(_) >> {
             new TrackerTask(
@@ -206,7 +207,7 @@ exec sh '${FakeAgentBinary.commandPrefix()[1]}' "\$@"
         given:
         String claimedBy = null
         tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
-            claimedBy = instanceId; new ClaimResult.Acquired()
+            claimedBy = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         tracker.fetchTask(_) >> {
             new TrackerTask(

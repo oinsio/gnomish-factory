@@ -73,7 +73,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     localTips[taskId] = runner.run(worktree, 'rev-parse', 'HEAD').stdout().trim()
 
                     // Exercises a mutating fetch issued with cwd INSIDE the worktree (like
-                    // WorktreeDivergenceCheck/TaskBranchLocator do) — the branch is not yet on the
+                    // the replica-pair reconciler/TaskBranchLocator do) — the branch is not yet on the
                     // remote at this point, so this is expected to fail harmlessly; the point here
                     // is only that it participates in the same clone's mutation lock without
                     // corrupting anything.

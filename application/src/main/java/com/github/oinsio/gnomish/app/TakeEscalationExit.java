@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.GuardedPark;
+import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeOutcomeMapper;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
@@ -68,7 +70,16 @@ final class TakeEscalationExit {
      * @return the {@link TakeResult.AwaitingHuman} the park call was made with; never null
      */
     static TakeResult exit(TaskOutcome.Escalated escalated, Tracker tracker, TaskRef ref, InstanceId instanceId) {
-        return exit(escalated, tracker, ref, instanceId, TerminalWriteRetry.system(), () -> {}, "");
+        return exit(
+                escalated,
+                tracker,
+                ref,
+                instanceId,
+                TerminalWriteRetry.system(),
+                // The caller of this convenience overload has already recorded the outcome commit, so
+                // the intent here is only the delivery verdict it fenced with — a fresh write either
+                // way, which is what keeps it from spending a probe read (FR10).
+                new ParkTransition.Fresh(ParkDeliveryVerdict.Delivered::new, () -> {}));
     }
 
     /**
@@ -90,9 +101,10 @@ final class TakeEscalationExit {
      * reading it learns that the remote does not yet carry the branch they are being asked to look at.
      *
      * @param retry the bounded terminal-write retry the park is made through; never null
-     * @param onConfirmed cleared-marker action run once the park confirms landed; never null
-     * @param replicationNote the delivery fence's one-line note, or empty when origin carries the
-     *     park (or there is no origin at all); never null
+     * @param transition the park's branch-side steps (FR10 of harden-task-branch-contract): a fresh
+     *     park records its outcome commit and fences its delivery here; a recovered one carries the
+     *     verdict its caller's fence already produced and probes the tracker before re-driving the
+     *     write. Either way the receipt clears the branch's pending marker once the park lands
      */
     static TakeResult exit(
             TaskOutcome.Escalated escalated,
@@ -100,16 +112,23 @@ final class TakeEscalationExit {
             TaskRef ref,
             InstanceId instanceId,
             TerminalWriteRetry retry,
-            Runnable onConfirmed,
-            String replicationNote) {
+            ParkTransition transition) {
         var mapped = (TakeResult.AwaitingHuman) TakeOutcomeMapper.map(escalated);
         ParkReason reason = mapped.reason();
 
         String rendered = EscalationResumeDialog.renderEscalation(escalated.report());
         String returnPath = reason == ParkReason.ESCALATION ? ESCALATION_RETURN_PATH : INFRA_RETURN_PATH;
-        String report = rendered + "\n\n" + returnPath + (replicationNote.isEmpty() ? "" : "\n" + replicationNote);
 
-        GuardedPark.attempt(tracker, ref, instanceId, reason, report, retry, onConfirmed, log, "park");
+        String report = GuardedPark.attempt(
+                tracker,
+                ref,
+                instanceId,
+                reason,
+                note -> rendered + "\n\n" + returnPath + (note.isEmpty() ? "" : "\n" + note),
+                retry,
+                transition,
+                log,
+                "park");
         return new TakeResult.AwaitingHuman(escalated.finalState(), reason, report);
     }
 }

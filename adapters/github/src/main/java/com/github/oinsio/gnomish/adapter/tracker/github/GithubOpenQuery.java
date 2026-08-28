@@ -1,17 +1,15 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Implements {@code Tracker.listOpen} for the GitHub adapter (github-tracker
@@ -33,21 +31,21 @@ import org.jspecify.annotations.Nullable;
  * anchor {@code heartbeat} beats), read through the same {@code comments:…}
  * cache key {@link GithubTaskFetcher} uses so both share the thread's ETag.
  * Unlike {@code fetchTask}, a {@code Working}-labeled issue whose live claim is
- * MISSING is never an error here: the spec requires it be reported with an
- * absent (null) claim, so core policy can decide what that means. The holder is
- * then recovered from the last claim marker still visible in the thread — the
- * last instance to have claimed the task; an issue with the working label but
- * no claim footprint at all (a human mislabel, outside the factory's
- * coordination) has no holder to name and no version to reap, so it is omitted
- * rather than reported with an invented holder.
+ * MISSING is never an error here, and never an omission either (FR19 of
+ * harden-task-branch-contract): every entry is reported with the raw {@link TrackerFacts} it
+ * observed — the labels present, the claim footprint (live, dead, or none), and the newest boundary
+ * marker after that footprint — and the core classifier alone decides what the combination means.
+ * The earlier rule that dropped a working-labeled issue with no claim footprint as a human mislabel
+ * is exactly what hid the claim sequence's own kill window from every sweep.
  *
- * <p>Implements FR5, NFR-P1 of add-claim-heartbeat.
+ * <p>Implements FR5, NFR-P1 of add-claim-heartbeat; FR19 of harden-task-branch-contract.
  */
 public final class GithubOpenQuery {
 
     private final GithubConditionalRequestCache cache;
     private final String owner;
     private final String repo;
+    private final GithubStateLabels labels;
     private final String workingLabel;
     private final String needsHumanLabel;
     private final String apiUrl;
@@ -57,20 +55,15 @@ public final class GithubOpenQuery {
      *     ETag survives between calls (NFR-P1)
      * @param owner the configured repository owner
      * @param repo the configured repository name
-     * @param workingLabel the configured working-label name (e.g. {@code gnomish:working})
-     * @param needsHumanLabel the configured needs-human-label name (e.g. {@code gnomish:needs-human})
+     * @param labels the four configured label names, for the presence facts each entry reports
      */
-    public GithubOpenQuery(
-            GithubConditionalRequestCache cache,
-            String owner,
-            String repo,
-            String workingLabel,
-            String needsHumanLabel) {
+    public GithubOpenQuery(GithubConditionalRequestCache cache, String owner, String repo, GithubStateLabels labels) {
         this.cache = cache;
         this.owner = owner;
         this.repo = repo;
-        this.workingLabel = workingLabel;
-        this.needsHumanLabel = needsHumanLabel;
+        this.labels = labels;
+        this.workingLabel = labels.working();
+        this.needsHumanLabel = labels.needsHuman();
         this.apiUrl = cache.httpClient().apiUrl();
     }
 
@@ -78,13 +71,10 @@ public final class GithubOpenQuery {
     public List<OpenTask> listOpen() {
         List<OpenTask> open = new ArrayList<>();
         for (GithubIssueFeedParser.IssueRef issue : issueRefs(workingLabel, "open-working")) {
-            OpenTask task = workingTask(issue.number(), issue.title());
-            if (task != null) {
-                open.add(task);
-            }
+            open.add(workingTask(issue));
         }
         for (GithubIssueFeedParser.IssueRef issue : issueRefs(needsHumanLabel, "open-needs-human")) {
-            open.add(awaitingHumanTask(issue.number(), issue.title()));
+            open.add(awaitingHumanTask(issue));
         }
         return List.copyOf(open);
     }
@@ -109,38 +99,35 @@ public final class GithubOpenQuery {
 
     // FR7, NFR-P1 of add-board-command: title rides the same list-issues response that named this
     //     issue's number — no per-task fetchTask fan-out.
-    private @Nullable OpenTask workingTask(int issueNumber, String title) {
-        TaskRef ref = refFor(issueNumber);
-        List<GithubClaimComment.Candidate> candidates = GithubClaimComment.parse(fetchComments(issueNumber));
-        Optional<GithubClaimComment.Candidate> live = GithubClaimComment.resolve(candidates);
-        if (live.isPresent()) {
-            GithubClaimComment.Candidate claim = live.get();
-            return new OpenTask(
-                    ref,
-                    new TrackerTaskState.Working(claim.marker().instance()),
-                    new ClaimVersion(Long.toString(claim.id()), claim.updatedAt()),
-                    title);
-        }
-        return lastClaimHolder(candidates)
-                .map(holder -> new OpenTask(ref, new TrackerTaskState.Working(holder), null, title))
-                .orElse(null);
+    private OpenTask workingTask(GithubIssueFeedParser.IssueRef issue) {
+        TaskRef ref = refFor(issue.number());
+        List<GithubClaimComment.Candidate> candidates = GithubClaimComment.parse(fetchComments(issue.number()));
+        TrackerFacts facts = GithubTrackerFacts.of(labels.observed(issue.labels()), candidates);
+        // A working-labeled issue with no live claim is reported, never omitted (FR19): the holder
+        // named on the entry is the footprint's own — the live claim's, or the last-known one of a
+        // dead footprint — and an absent footprint yields no holder at all rather than an invented
+        // one. The core classifier alone decides what each combination means.
+        String holder = facts.claim().holder();
+        return new OpenTask(
+                ref,
+                new TrackerTaskState.Working(holder == null ? GithubTrackerFacts.UNKNOWN_HOLDER : holder),
+                facts.claim().liveVersion(),
+                issue.title(),
+                facts);
     }
 
-    private OpenTask awaitingHumanTask(int issueNumber, String title) {
-        List<ParsedMarker> markers = GithubCommentParser.parseMarkers(fetchComments(issueNumber));
+    private OpenTask awaitingHumanTask(GithubIssueFeedParser.IssueRef issue) {
+        List<GithubClaimComment.Candidate> candidates = GithubClaimComment.parse(fetchComments(issue.number()));
+        List<ParsedMarker> markers =
+                candidates.stream().map(GithubClaimComment.Candidate::marker).toList();
         ParkReason reason = GithubParkReason.latest(markers);
-        return new OpenTask(refFor(issueNumber), new TrackerTaskState.AwaitingHuman(reason), null, title);
-    }
-
-    /** The instance of the last claim marker still visible in the thread, or empty when none exists. */
-    private static Optional<String> lastClaimHolder(List<GithubClaimComment.Candidate> candidates) {
-        for (int i = candidates.size() - 1; i >= 0; i--) {
-            GithubClaimComment.Candidate candidate = candidates.get(i);
-            if (candidate.marker().kind() == GithubMarkerKind.CLAIM) {
-                return Optional.of(candidate.marker().instance());
-            }
-        }
-        return Optional.empty();
+        TrackerFacts facts = GithubTrackerFacts.of(labels.observed(issue.labels()), candidates);
+        return new OpenTask(
+                refFor(issue.number()),
+                new TrackerTaskState.AwaitingHuman(reason),
+                facts.claim().liveVersion(),
+                issue.title(),
+                facts);
     }
 
     private String fetchComments(int issueNumber) {

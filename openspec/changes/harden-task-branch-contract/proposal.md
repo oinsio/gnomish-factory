@@ -333,4 +333,6 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
 - Q3: recovery-budget threshold and backoff defaults — start with the existing crash-fuse K
   and tune from operator experience.
 - Q4: does the kill-point harness run in the default `check` or a nightly lane if wall-clock
-  cost proves high? Decide from runtime measured against the NFR-P1 budget during implementation.
+  cost proves high? Decide from runtime measured against the NFR-P1 budget during implementation
+  (resolved in implementation: ~7 s measured against a ~5 min budget, so the default `check` —
+  recorded in ADR 0003).

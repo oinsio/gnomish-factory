@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -61,6 +62,28 @@ public interface TrackerAdapterFactory {
      *     markers by adapters that need it at construction time; never null
      */
     Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId);
+
+    /**
+     * Returns a live {@link Tracker} that can stamp the claim epoch of the tenure it is writing
+     * under into its own tracker writes (FR13 of harden-task-branch-contract).
+     *
+     * <p>This is the form the composition root calls. The default ignores {@code epochs} and falls
+     * back to {@link #create(SecretsProvider, TrackerConfig, String)}, because epoch stamping is
+     * adapter-optional: a tracker whose writes are already atomic (the in-memory reference) has no
+     * frozen intermediate state to attribute, and a tracker with its own monotonic source may
+     * choose to carry the epoch differently. An adapter whose writes are physically non-atomic —
+     * the GitHub adapter — overrides this method and stamps every marker it writes, so a reader can
+     * classify an artifact of a superseded tenure as stale rather than as current truth.
+     *
+     * <p>Implementations override <em>this</em> method, never both: the three-argument form stays
+     * the caller-facing entry point and always routes here.
+     *
+     * @param epochs this instance's tenure record — which epoch it holds on a given task right now;
+     *     {@link ClaimEpochSource#NONE} for a caller that never claims; never null
+     */
+    default Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId, ClaimEpochSource epochs) {
+        return create(secrets, config, instanceId);
+    }
 
     /**
      * Expands a recognized short ref (a bare or {@code #}-prefixed non-negative integer, e.g.

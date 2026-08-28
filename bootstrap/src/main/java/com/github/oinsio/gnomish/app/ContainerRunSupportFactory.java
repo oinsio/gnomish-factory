@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.OriginRemote;
 import com.github.oinsio.gnomish.app.git.ProjectIdentity;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
@@ -52,6 +53,9 @@ final class ContainerRunSupportFactory {
      *     add-serve-sandbox-lifecycle): {@code MANUAL} for {@code gnomish run}, {@code TRACKED}
      *     for {@code take}/{@code serve} — the caller's lambda closes over its own constant, this
      *     factory never decides it
+     * @param epochs the tenure this run's commits are stamped with (FR13 of
+     *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} for plain {@code gnomish run},
+     *     which holds no claim
      */
     static ContainerRunSupport create(
             Path cloneDir,
@@ -61,7 +65,8 @@ final class ContainerRunSupportFactory {
             FactoryProperties factoryProperties,
             List<String> checkCredentialEnvVars,
             List<String> credentialEnvVarsToScrub,
-            OwnershipMode ownershipMode) {
+            OwnershipMode ownershipMode,
+            ClaimEpochSource epochs) {
         var runner = new GitProcessRunner(factoryProperties.gitNetworkTimeout());
         List<String> credentials = new ArrayList<>(credentialEnvVarsToScrub);
         credentials.addAll(checkCredentialEnvVars);
@@ -85,6 +90,6 @@ final class ContainerRunSupportFactory {
                 factoryProperties.dockerCommandTimeout());
         var sandboxLifecyclePass =
                 SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, Clock.systemUTC());
-        return new ContainerRunSupport(runner, cloneDir, taskId, environments, segments, sandboxLifecyclePass);
+        return new ContainerRunSupport(runner, cloneDir, taskId, environments, segments, sandboxLifecyclePass, epochs);
     }
 }

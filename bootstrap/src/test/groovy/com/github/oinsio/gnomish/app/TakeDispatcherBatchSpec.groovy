@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
@@ -20,6 +19,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -64,14 +64,12 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
 
     Path cloneDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
     Tracker tracker = Mock()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
         tracker.listOpen() >> []
     }
@@ -141,7 +139,7 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
         tracker.fetchTask(WORKING_REF) >> trackerTask(WORKING_REF, new TrackerTaskState.Working('someone-else'), 'PROJ-2')
         tracker.fetchTask(FINISHED_REF) >> trackerTask(FINISHED_REF, new TrackerTaskState.Finished(), 'PROJ-3')
         tracker.claim(READY_REF, INSTANCE.value()) >> {
-            readyClaimed = true; new ClaimResult.Acquired()
+            readyClaimed = true; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def dispatcher = newDispatcher()
         def refs = [

@@ -45,6 +45,8 @@ final class RunExceptionReporting {
             throw ex;
         } catch (TaskNotFoundException ex) { // UX3, D15: calm message already on System.out
             throw ex;
+        } catch (BranchShapeRefusedException ex) { // FR16: diagnosis already on System.out
+            throw ex;
         } catch (UnsupportedStateFileVersionException ex) { // FR4: clean refusal, no WARN/stack trace
             System.err.println(ex.getMessage());
             throw ex;

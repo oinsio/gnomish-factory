@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
@@ -20,7 +20,8 @@ import org.jspecify.annotations.Nullable;
  * unchanged and {@link TakeClaimAndWork} is passed whole as the parameter object, the same shape
  * {@code ContainerRunTermination} uses for {@code ContainerRunSupport}.
  *
- * <p>Implements FR9, FR10, D3 of add-tracker-port; FR1, FR14 of add-serve-sandbox-lifecycle.
+ * <p>Implements FR9, FR10, D3 of add-tracker-port; FR1, FR14 of add-serve-sandbox-lifecycle;
+ * FR6 of harden-task-branch-contract.
  */
 final class TakeWorkRouter {
 
@@ -38,11 +39,16 @@ final class TakeWorkRouter {
             InstanceId instanceId) {
         TaskRef ref = trackerTask.ref();
         String taskId = trackerTask.snapshot().id();
-        BranchLocation location = w.git.branches().locate(cloneDir, taskId);
-        if (location instanceof BranchLocation.NotFound) {
+        // One classification decides the route (FR2 of harden-task-branch-contract): the branch is
+        // read once, named once, and every path below — fresh, resume, reconcile — is a case of
+        // that one name rather than a predicate of its own. A lookup that could not reach origin
+        // throws from here (FR6), aborting the take through the crash-abort protocol, which
+        // releases the claim rather than forking a second branch for a task that already has one.
+        BranchShape shape = w.git.branches().classifyShape(cloneDir, taskId);
+        if (shape instanceof BranchShape.Bare) {
             return freshClaim(w, cloneDir, base, definition, interactiveMode, trackerTask, tracker, instanceId);
         }
-        return resume(w, cloneDir, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+        return resume(w, cloneDir, shape, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
     }
 
     /**
@@ -106,6 +112,7 @@ final class TakeWorkRouter {
     private static TakeResult resume(
             TakeClaimAndWork w,
             Path cloneDir,
+            BranchShape shape,
             PipelineDefinition definition,
             RunArguments.InteractiveMode interactiveMode,
             boolean discardWork,
@@ -121,7 +128,7 @@ final class TakeWorkRouter {
                         new ContainerResumeMechanics(w.containerResumeRunner, plan.segments(), definition);
                 };
         return routingTable(mechanics, w.git)
-                .resumeExisting(cloneDir, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
+                .resumeExisting(cloneDir, shape, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
     }
 
     private static <B extends ResumedBranch> TakeDispositionResume<B> routingTable(

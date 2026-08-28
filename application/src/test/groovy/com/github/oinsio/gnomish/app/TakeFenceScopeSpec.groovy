@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -52,6 +53,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         worktree = worktreesRoot.resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        branches.classifyShape(_, _) >> new BranchShape.InProgress()
         worktrees.ensureWorktree(_, _, _, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_, _) >> lifecycleStore
@@ -75,7 +77,8 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         journal = roundJournal
 
         when:
-        def result = chain().resumeExisting(CLONE_DIR, RunArguments.InteractiveMode.NONE, false,
+        def result = chain().resumeExisting(
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false,
                 'PROJ-1', tracker, REF, INSTANCE)
 
         then:

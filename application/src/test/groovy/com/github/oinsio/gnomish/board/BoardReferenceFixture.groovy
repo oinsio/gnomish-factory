@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.BackoffPolicy
-
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import java.time.Instant
 
@@ -61,7 +61,7 @@ final class BoardReferenceFixture {
 
         def open = [
             new OpenTask(new TaskRef('github:g/w#1'), new TrackerTaskState.Working('factory-a-1b2c'),
-            new ClaimVersion('marker-1', WORKING_CLAIM_UPDATED_AT), 'Refactor retry module'),
+            new ClaimVersion('marker-1', WORKING_CLAIM_UPDATED_AT, new ClaimEpoch(1)), 'Refactor retry module'),
             new OpenTask(new TaskRef('github:g/w#2'), new TrackerTaskState.Working('factory-b-9f00'), null, 'Update operator docs'),
             new OpenTask(new TaskRef('github:h/1'), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'Needs operator decision'),
             new OpenTask(new TaskRef('github:h/2'), new TrackerTaskState.AwaitingHuman(ParkReason.INFRA), null, 'Environment broken'),

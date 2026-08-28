@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
@@ -18,7 +20,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
  * exits 12 or 13 rather than a bare 1 leaving a hanging {@code Working} claim.
  *
  * <p>Only genuinely unexpected failures reach here: deliberate, dedicated-exit-code control flow
- * ({@code UsageException} &rarr; 2, {@code DivergedBranchException} &rarr; 5) is rethrown by the
+ * ({@code UsageException} &rarr; 2) is rethrown by the
  * caller ({@code TakeClaimAndWork}) and never funnels into this protocol, since D16 keeps the exit
  * codes shared with {@code run} at their own meaning.
  *
@@ -28,7 +30,12 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
  * AbortHandler}'s own {@code recordAbort} is likewise best-effort (NFR-R2). The crash's own type
  * and message are carried into the abort {@code cause}, which {@link AbortHandler} logs at ERROR.
  *
- * <p>Implements FR14, NFR-R2, D3, D16 of add-tracker-port.
+ * <p>The attempt is categorized before it is spent (FR14, design D9 of harden-task-branch-contract):
+ * a crash carrying a {@link BranchRecoveryFailedException} anywhere in its cause chain is a failed
+ * branch repair, everything else is an instance crash. Both spend from the same counter and trip
+ * the same threshold — the category only decides how the quarantine report reads.
+ *
+ * <p>Implements FR14, NFR-R2, D3, D16 of add-tracker-port; FR14 of harden-task-branch-contract.
  */
 public final class TakeCrashAbort {
 
@@ -73,7 +80,22 @@ public final class TakeCrashAbort {
         String cause = "uncaught exception during the take run: " + crash;
         AbortFacts facts = abortFactsBestEffort(tracker, ref);
         TaskState finalState = TaskState.atStageStart(definition.stages().get(0).name());
-        return abortHandler.handle(ref, finalState, cause, facts, abortThreshold, instanceId);
+        return abortHandler.handle(ref, finalState, cause, facts, abortThreshold, instanceId, categoryOf(crash));
+    }
+
+    /**
+     * Which category of the unified accounting this crash spends: a failed repair of a non-clean
+     * branch shape names itself on the way up ({@link BranchRecoveryFailedException}), possibly
+     * wrapped by a layer above it, so the whole cause chain is searched; anything else is an
+     * instance crash (FR14 of harden-task-branch-contract).
+     */
+    private static RecoveryCause categoryOf(RuntimeException crash) {
+        for (Throwable link = crash; link != null; link = link.getCause()) {
+            if (link instanceof BranchRecoveryFailedException) {
+                return RecoveryCause.RECOVERY_FAILURE;
+            }
+        }
+        return RecoveryCause.INSTANCE_CRASH;
     }
 
     /**

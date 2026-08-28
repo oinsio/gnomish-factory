@@ -49,17 +49,46 @@ final class ContainerRunTermination {
     }
 
     /**
-     * Completed terminal boundary (D19 ordering): dispose the environment first — the last
-     * in-box commit was the state commit — then record the outcome and cleanup commits
-     * factory-side. The push that follows them is the repository decorator's (FR1, FR6 of
-     * fix-lifecycle-push), not this boundary's: one code path owns the push-after-lifecycle-commit
-     * rule, and the outcome and cleanup commits share its single push of the resulting tip.
+     * Completed terminal boundary (D19 ordering): dispose the environment first — the last in-box
+     * commit was the state commit — then record the {@code Completed} outcome commit factory-side.
+     * That commit is the completion's durable intent and nothing more: the cleanup commit is the
+     * destructive last step and runs through {@code finishCleanup} once the terminal tracker write
+     * has landed (FR10 of harden-task-branch-contract). The push that follows each commit is the
+     * repository decorator's (FR1, FR6 of fix-lifecycle-push), not this boundary's.
      */
     static void completeAndDispose(ContainerRunSupport support, TaskState finalState) {
         support.judgeEnvironments.disposeCurrent();
         support.lease.dispose();
         support.taskRepository.recordOutcome(support.taskId, new TaskOutcome.Completed(finalState));
         reconcileRemote(support);
+    }
+
+    /**
+     * The park's durable intent (FR10, design D12 of harden-task-branch-contract): the outcome
+     * commit carrying the pending marker, built factory-side over bare objects and pushed by the
+     * repository decorator. The box is stopped by the time this runs, so no in-box channel is
+     * involved — and by that change's FR17 this is the last factory-side commit until the box is
+     * disposed.
+     */
+    static void recordPark(ContainerRunSupport support, TaskOutcome outcome) {
+        support.taskRepository.recordOutcome(support.taskId, outcome);
+    }
+
+    /**
+     * The terminal write's receipt (FR10 of harden-task-branch-contract): the cleared pending
+     * marker, so a later resume reads the park as settled rather than orphaned.
+     */
+    static void confirmTerminalWrite(ContainerRunSupport support) {
+        support.taskRepository.confirmTerminalWrite(support.taskId);
+    }
+
+    /**
+     * The completion's destructive last step (FR10 of harden-task-branch-contract): the cleanup
+     * commit stripping {@code .gnomish-task/} from the tip, run only once the tracker finish has
+     * landed. No live box is required — the state commit was the last in-box commit (D15, D19).
+     */
+    static void finishCleanup(ContainerRunSupport support) {
+        support.taskRepository.finishCleanup(support.taskId);
     }
 
     /**

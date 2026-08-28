@@ -29,7 +29,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Two resume entry points mirror {@link TakeResumeRunner}'s own two shapes (design D3): {@link
  * #resumeWithoutDecision} for a {@code null}/{@code CHECKPOINT}/{@code INFRA} return, no decision
- * involved; {@link #resumeWithDecision} for an {@code ESCALATION} return.
+ * involved; {@link #resumeDecided} for an {@code ESCALATION} return, from a context {@link
+ * #appendDecision} has already committed when there was a reply to commit.
  *
  * <p>Implements FR1, NFR-R4 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port.
  */
@@ -121,25 +122,21 @@ final class TakeContainerResumeRunner {
      * before any environment materializes (FR25, D19 of add-sandbox-core — mirroring {@link
      * ContainerResumeOutcomes#resumeEscalated}'s decision commit) before running the engine once.
      */
-    TakeResult resumeWithDecision(
+    TakeResult resumeDecided(
             Path cloneDir,
             ContainerResumeBootstrap bootstrap,
             PipelineDefinition definition,
-            TaskState finalState,
-            @Nullable String decisionText,
+            TaskContext context,
+            TaskState resetState,
             RunArguments.InteractiveMode interactiveMode,
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        var resetState = new TaskState(finalState.position(), 0, List.of(), finalState.totals());
-        var resumedContext = decisionText == null || decisionText.isBlank()
-                ? bootstrap.context()
-                : appendDecision(bootstrap, finalState, decisionText);
         return newExecution(cloneDir)
                 .run(
                         bootstrap.support(),
                         definition,
-                        resumedContext,
+                        context,
                         resetState,
                         interactiveMode,
                         tracker,
@@ -149,10 +146,19 @@ final class TakeContainerResumeRunner {
                         null);
     }
 
-    private TaskContext appendDecision(ContainerResumeBootstrap bootstrap, TaskState finalState, String text) {
+    /**
+     * Commits the human's decision to the branch — the durable intent the tracker acknowledge
+     * follows (FR12 of harden-task-branch-contract) — after disposing the kept box that carried the
+     * park (FR17, design D12 of harden-task-branch-contract): the box's clone cannot learn of this commit, so a later harvest from
+     * it would diverge, and the next round's box is materialized from a tip that already contains
+     * the decision.
+     */
+    TaskContext appendDecision(
+            ContainerResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
         String stage = finalState.position() instanceof Position.AtStage(String name) ? name : null;
         var decision = new Decision(text, stage, "tracker", Clock.systemUTC().instant());
-        bootstrap.support().taskRepository().appendDecision(bootstrap.taskId(), decision);
+        bootstrap.support().disposeExistingEnvironment();
+        bootstrap.support().taskRepository().appendDecision(bootstrap.taskId(), decision, resetState);
         var decisions = new ArrayList<>(bootstrap.context().decisions());
         decisions.add(decision);
         var context = bootstrap.context();

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import java.io.IOException;
@@ -30,13 +31,18 @@ public final class GitTaskStore implements TaskStoreGit {
 
     private final GitProcessRunner runner;
     private final UsageHistoryWalker usageWalker;
+    private final ClaimEpochSource epochs;
 
     /**
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
+     * @param epochs the tenure the collaborators this facade hands out stamp their commits with
+     *     (FR13 of harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is
+     *     held — {@code status} and {@code usage} read a branch without one
      */
-    public GitTaskStore(GitProcessRunner runner) {
+    public GitTaskStore(GitProcessRunner runner, ClaimEpochSource epochs) {
         this.runner = runner;
         this.usageWalker = new UsageHistoryWalker(runner);
+        this.epochs = epochs;
     }
 
     /**
@@ -47,12 +53,12 @@ public final class GitTaskStore implements TaskStoreGit {
     @Override
     public TaskLifecycleStore taskRepository(Path cloneDir, Path worktreesRoot) {
         return new PushBestEffortTaskLifecycleStore(
-                new GitTaskRepository(runner, cloneDir, worktreesRoot), runner, cloneDir);
+                new GitTaskRepository(runner, cloneDir, worktreesRoot, epochs), runner, cloneDir);
     }
 
     @Override
     public AttemptPersistence attemptPersistence(Path worktree, String taskId) {
-        return new GitAttemptPersistence(runner, worktree, taskId);
+        return new GitAttemptPersistence(runner, worktree, taskId, epochs);
     }
 
     @Override

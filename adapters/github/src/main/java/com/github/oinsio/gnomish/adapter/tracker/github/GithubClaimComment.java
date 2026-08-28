@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +73,22 @@ final class GithubClaimComment {
         } catch (JsonProcessingException e) {
             throw new GithubClaimException("Failed to parse comments response while resolving the claim comment");
         }
+    }
+
+    /**
+     * The port-level {@link ClaimVersion} of a claim comment: on GitHub one number answers both
+     * questions the version asks — the comment id is the marker's identity AND, because GitHub
+     * assigns comment ids in increasing order, the tenure's monotonic claim epoch (design D6, FR13
+     * of harden-task-branch-contract). Minting both from the one number in one place is what keeps
+     * them from ever disagreeing; the three callers that report a claim version — {@code
+     * heartbeat}, {@code listOpen}, and {@code removeStaleClaim} — all come through here.
+     *
+     * @param commentId the claim comment's GitHub id
+     * @param updatedAt the comment's last-update fact
+     * @return the version to report over the port; never null
+     */
+    static ClaimVersion versionOf(long commentId, Instant updatedAt) {
+        return new ClaimVersion(Long.toString(commentId), updatedAt, new ClaimEpoch(commentId));
     }
 
     /**

@@ -1,13 +1,16 @@
 package com.github.oinsio.gnomish.app.take
 
+import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -92,6 +95,34 @@ class TakeCrashAbortSpec extends Specification {
         })
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
+    }
+
+    // FR14 of harden-task-branch-contract: the two categories of the unified accounting are
+    // separated at the crash boundary — a failed branch repair names itself on the way up, even
+    // wrapped by a layer above it, and everything else is an instance crash
+    def "a crash carrying a failed branch repair spends the recovery category (#description)"() {
+        given:
+        tracker.fetchTask(REF) >> claimedTask(AbortFacts.none())
+        def repairFailure = new BranchRecoveryFailedException(
+                'PROJ-1', new BranchShape.Parked(), new IllegalStateException('park write failed'))
+
+        when:
+        crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE, crash(repairFailure))
+
+        then:
+        1 * tracker.recordAbort(REF, { it.category() == expected })
+
+        where:
+        description | crash | expected
+        'thrown directly' | {
+            it
+        } | RecoveryCause.RECOVERY_FAILURE
+        'wrapped by a layer' | {
+            new RuntimeException('while resuming', it)
+        } | RecoveryCause.RECOVERY_FAILURE
+        'an ordinary crash' | {
+            new IllegalStateException('worktree exploded')
+        } | RecoveryCause.INSTANCE_CRASH
     }
 
     // NFR-R2: a dead tracker is itself a plausible crash cause and must never turn the abort into a

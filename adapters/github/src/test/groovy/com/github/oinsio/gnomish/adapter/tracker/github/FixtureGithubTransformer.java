@@ -121,17 +121,20 @@ record FixtureGithubTransformer(FixtureIssueRegistry registry) implements Respon
                     .append(candidate.number())
                     .append(",\"title\":")
                     .append(quote(candidate.title()))
+                    // Faithful to the List Issues response, which carries every label the issue
+                    // wears: the adapter reports those as the port's label presence facts (FR19 of
+                    // harden-task-branch-contract), so a feed without them would hide the very
+                    // combination the sweep classifies.
+                    .append(",\"labels\":")
+                    .append(labelsJson(candidate))
                     .append('}');
         }
         body.append(']');
         return json(200, body.toString());
     }
 
-    private ResponseDefinition issueResponse(int number) {
-        if (registry.isUnknown(number)) {
-            return json(404, "{\"message\":\"Not Found\"}");
-        }
-        FixtureIssue fixtureIssue = registry.issueFor(number);
+    /** The {@code labels} array of one fixture issue, in the wire shape both list calls use. */
+    private static String labelsJson(FixtureIssue fixtureIssue) {
         StringBuilder labelsJson = new StringBuilder("[");
         List<String> labels = fixtureIssue.labels();
         for (int i = 0; i < labels.size(); i++) {
@@ -140,7 +143,15 @@ record FixtureGithubTransformer(FixtureIssueRegistry registry) implements Respon
             }
             labelsJson.append("{\"name\":").append(quote(labels.get(i))).append('}');
         }
-        labelsJson.append(']');
+        return labelsJson.append(']').toString();
+    }
+
+    private ResponseDefinition issueResponse(int number) {
+        if (registry.isUnknown(number)) {
+            return json(404, "{\"message\":\"Not Found\"}");
+        }
+        FixtureIssue fixtureIssue = registry.issueFor(number);
+        String labelsJson = labelsJson(fixtureIssue);
         String state = fixtureIssue.isClosed() ? "closed" : "open";
         String body = "{\"number\":%d,\"title\":%s,\"body\":%s,\"state\":%s,\"labels\":%s}"
                 .formatted(number, quote(fixtureIssue.title()), quote(fixtureIssue.body()), quote(state), labelsJson);

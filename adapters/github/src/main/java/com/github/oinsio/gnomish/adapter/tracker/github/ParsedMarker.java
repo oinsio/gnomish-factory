@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -29,6 +30,12 @@ import org.jspecify.annotations.Nullable;
  * @param humanText the human-readable text following the structural comment line
  * @param reason the wire value of the park reason for a {@code PARK} marker,
  *     or {@code null} for every other marker
+ * @param identity the content identity keying the find-then-upsert primitive
+ *     (FR11 of harden-task-branch-contract), or {@code null} for a marker
+ *     written before that contract or outside the upsert protocol
+ * @param epoch the tenure's claim epoch the write was stamped with (FR13), or
+ *     {@code null} when the writer held no tenure — and on a {@code claim}
+ *     marker, whose own comment id is the epoch
  */
 public record ParsedMarker(
         GithubMarkerKind kind,
@@ -36,4 +43,6 @@ public record ParsedMarker(
         Instant at,
         int version,
         String humanText,
-        @Nullable String reason) {}
+        @Nullable String reason,
+        @Nullable GithubCommentIdentity identity,
+        @Nullable ClaimEpoch epoch) {}

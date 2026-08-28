@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -8,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.ParkTransition
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -47,7 +49,16 @@ class TakePauseExitSpec extends Specification {
 
         when:
         def result = TakePauseExit.finish(
-                paused, CONTEXT, BRANCH, tracker, REF, INSTANCE, TerminalWriteRetry.system(), {}, replicationNote)
+                paused,
+                CONTEXT,
+                BRANCH,
+                tracker,
+                REF,
+                INSTANCE,
+                TerminalWriteRetry.system(),
+                new ParkTransition.Fresh({
+                    verdict
+                } as ParkTransition.ParkIntent, {}))
 
         then:
         1 * tracker.park(REF, ParkReason.CHECKPOINT, { String report ->
@@ -56,10 +67,11 @@ class TakePauseExitSpec extends Specification {
         (result as TakeResult.AwaitingHuman).report().endsWith(expectedTail)
 
         where:
-        replicationNote | expectedTail
-        'Note: origin is behind this park — branch gnomish/PROJ-1 could not be pushed.' |
+        verdict | expectedTail
+        new ParkDeliveryVerdict.Undelivered(
+                'Note: origin is behind this park — branch gnomish/PROJ-1 could not be pushed.') |
                 'Note: origin is behind this park — branch gnomish/PROJ-1 could not be pushed.'
-        '' |
+        new ParkDeliveryVerdict.Delivered() |
                 'Review the work, then move the task back to ready to continue.'
     }
 

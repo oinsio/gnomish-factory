@@ -52,7 +52,9 @@ class StatusReconstructionSpec extends StatusReconstructionSpecBase {
         view.attemptsUsed == truth.attemptsUsed()
         view.attemptsUsed == 0
 
-        and: 'NFR-O2: the retry burn stays visible in the stream — the last stage state before advancement burned one'
+        and: 'NFR-O2: the retry burn stays visible in the stream — the failing round\'s state burned one'
+        // FR4 of harden-task-branch-contract: the PASSING round's state already carries the
+        // advance and the counter reset, so the burn is read as the stream's high-water mark.
         view.lastStageAttemptsUsed == 1
 
         and: 'NFR-O2: per-round check verdicts rebuilt from CheckFinished match — Fail then Pass'

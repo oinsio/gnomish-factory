@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
@@ -94,7 +95,7 @@ class FeedCycleSpec extends Specification {
         ledger.acquire()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
 
@@ -123,7 +124,7 @@ class FeedCycleSpec extends Specification {
         Tracker tracker = [
             listOpen: { -> [new Object(), new Object()] },
             claim : { TaskRef ref, String instance ->
-                claimCalls.incrementAndGet(); new ClaimResult.Acquired()
+                claimCalls.incrementAndGet(); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def fresh = new ReadyTask(new TaskRef('github:o/r#1'), AbortFacts.none(), false, false, 'fixture title')
@@ -154,7 +155,7 @@ class FeedCycleSpec extends Specification {
         def claimedRefs = new CopyOnWriteArrayList<String>()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->
-                claimedRefs.add(ref.id()); new ClaimResult.Acquired()
+                claimedRefs.add(ref.id()); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
 
@@ -196,7 +197,7 @@ class FeedCycleSpec extends Specification {
         def claimCalls = new AtomicInteger()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->
-                claimCalls.incrementAndGet(); new ClaimResult.Acquired()
+                claimCalls.incrementAndGet(); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
 
@@ -223,7 +224,7 @@ class FeedCycleSpec extends Specification {
         def claimedRefs = new CopyOnWriteArrayList<String>()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->
-                claimedRefs.add(ref.id()); new ClaimResult.Acquired()
+                claimedRefs.add(ref.id()); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
 
@@ -250,7 +251,7 @@ class FeedCycleSpec extends Specification {
         ledger.acquire()
         Tracker tracker = [
             claim: { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def started = new CopyOnWriteArrayList<TaskRef>()

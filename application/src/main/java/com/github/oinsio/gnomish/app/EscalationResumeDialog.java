@@ -11,8 +11,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.time.Clock;
 import java.util.ArrayList;
-import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Handles an {@code Escalated} outcome on behalf of {@link RunnerOutcomeLoop} (task 7.5,
@@ -62,7 +60,7 @@ final class EscalationResumeDialog {
      * @param escalated the escalated outcome to resolve; never null
      * @return the context/state pair to resume the engine with
      */
-    RunnerOutcomeLoop.@Nullable Resumption handle(TaskContext context, TaskOutcome.Escalated escalated) {
+    RunnerOutcomeLoop.Resumption handle(TaskContext context, TaskOutcome.Escalated escalated) {
         String rendered = renderEscalation(escalated.report());
         if (escalated.report() instanceof EscalationReport.PipelineMismatch) {
             throw new InternalErrorException(rendered);
@@ -131,7 +129,7 @@ final class EscalationResumeDialog {
         }
 
         var finalState = escalated.finalState();
-        var resetState = new TaskState(finalState.position(), 0, List.of(), finalState.totals());
+        var resetState = finalState.resetAttempts();
         var resumedContext = answer.isBlank() ? context : appendDecision(context, finalState.position(), answer);
 
         return new RunnerOutcomeLoop.Resumption(resumedContext, resetState);
@@ -145,7 +143,7 @@ final class EscalationResumeDialog {
      * point and never leaves {@code AtStage}).
      */
     private TaskContext appendDecision(TaskContext context, Position position, String answer) {
-        String stage = position instanceof Position.AtStage atStage ? atStage.name() : null;
+        String stage = position instanceof Position.AtStage(String name) ? name : null;
         var decisions = new ArrayList<>(context.decisions());
         decisions.add(new Decision(answer, stage, "operator", clock.instant()));
         return new TaskContext(context.taskId(), context.title(), context.body(), decisions);

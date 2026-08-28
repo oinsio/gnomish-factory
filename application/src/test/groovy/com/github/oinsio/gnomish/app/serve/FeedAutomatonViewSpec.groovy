@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
@@ -90,7 +91,7 @@ class FeedAutomatonViewSpec extends Specification {
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> openFronts },
             claim : { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def a = automaton(tracker, new SlotLedger(1))
@@ -139,7 +140,7 @@ class FeedAutomatonViewSpec extends Specification {
             },
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
-                fillingCounter++; new ClaimResult.Acquired()
+                fillingCounter++; new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def a = automaton(tracker, new SlotLedger(2))

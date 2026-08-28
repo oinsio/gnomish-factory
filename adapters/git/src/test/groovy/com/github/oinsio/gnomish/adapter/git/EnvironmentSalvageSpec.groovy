@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -42,12 +43,12 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(box.workingCopy.toFile(), 'work.txt').text = 'interrupted round'
 
         expect:
-        new EnvironmentSalvage(box).hasLeftovers()
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).hasLeftovers()
     }
 
     def "FR6: a clean in-box working copy has no leftovers"() {
         expect:
-        !new EnvironmentSalvage(materializedBox()).hasLeftovers()
+        !new EnvironmentSalvage(materializedBox(), ClaimEpochSource.NONE).hasLeftovers()
     }
 
     def "FR6: a dead environment probes as having nothing reachable to salvage"() {
@@ -57,7 +58,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
             }] as TaskExecutionEnvironment
 
         expect: 'the probe degrades to false — resume continues from the last harvested state'
-        !new EnvironmentSalvage(dead).hasLeftovers()
+        !new EnvironmentSalvage(dead, ClaimEpochSource.NONE).hasLeftovers()
     }
 
     def "FR6: salvage() commits and harvests a leftover into the factory clone"() {
@@ -67,7 +68,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def tipBefore = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
 
         when:
-        new EnvironmentSalvage(box).salvage('SALV-1')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-1')
 
         then: 'the leftover is committed in-box and harvested to the factory clone'
         def tipAfter = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
@@ -76,7 +77,37 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         gitOutput(cloneDir, 'show', tipAfter + ':work.txt') == 'interrupted round'
 
         and: 'the box is clean afterwards'
-        !new EnvironmentSalvage(box).hasLeftovers()
+        !new EnvironmentSalvage(box, ClaimEpochSource.NONE).hasLeftovers()
+    }
+
+    // FR5, design D11 of harden-task-branch-contract: the in-box salvage applies the SAME
+    // ownership policy as the host worktree salvage — factory-owned .gnomish-task/ paths come
+    // from the in-box HEAD, only gnome-owned work files ride the salvage commit.
+    def "FR5: salvage() restores factory-owned files from the in-box tip instead of committing them"() {
+        given: 'a box whose HEAD carries a recorded state.json'
+        def box = materializedBox()
+        def work = box.workingCopy
+        Files.createDirectories(work.resolve('.gnomish-task/decisions'))
+        Files.writeString(work.resolve('.gnomish-task/state.json'), '{"recorded":true}')
+        gitOutput(work, 'add', '-A')
+        gitOutput(work, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-STATE')
+
+        and: 'a dying round left a truncated state.json, gnome work and a decision file behind'
+        Files.writeString(work.resolve('.gnomish-task/state.json'), '{ truncated')
+        Files.writeString(work.resolve('.gnomish-task/decisions/build-a0.json'), '{"asked":true}')
+        new File(work.toFile(), 'work.txt').text = 'interrupted round'
+
+        when:
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-4')
+
+        then: 'the harvested tip carries the gnome work and the tip\'s state.json, not the dirty one'
+        def tip = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
+        gitOutput(cloneDir, 'show', tip + ':work.txt') == 'interrupted round'
+        gitOutput(cloneDir, 'show', tip + ':.gnomish-task/state.json') == '{"recorded":true}'
+
+        and: 'the gnome-writable decisions path is salvaged like any work file'
+        gitOutput(cloneDir, 'show', tip + ':.gnomish-task/decisions/build-a0.json') == '{"asked":true}'
     }
 
     def "FR6: salvage() is a no-op on a clean box — no commit, no harvest"() {
@@ -85,7 +116,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def tipBefore = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
 
         when:
-        new EnvironmentSalvage(box).salvage('SALV-2')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-2')
 
         then:
         gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH) == tipBefore
@@ -99,7 +130,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(box.workingCopy.toFile(), '.git/index.lock').text = 'held by another process'
 
         when:
-        new EnvironmentSalvage(box).salvage('SALV-3')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-3')
 
         then:
         def ex = thrown(GitSalvageFailedException)
@@ -125,13 +156,13 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(flakyBox.workingCopy.toFile(), 'work.txt').text = 'interrupted round'
 
         when:
-        new EnvironmentSalvage(flakyBox).salvage('SALV-4')
+        new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE).salvage('SALV-4')
 
         then: 'no exception propagates — the WARN path is taken and resume continues from the last harvested state'
         noExceptionThrown()
 
         and: 'the in-box commit did land even though the harvest afterward failed'
-        !new EnvironmentSalvage(flakyBox).hasLeftovers()
+        !new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE).hasLeftovers()
 
         and: 'but the factory clone never saw it, since the harvest failed'
         gitOutput(cloneDir, 'log', '--format=%s', 'refs/heads/' + BRANCH) == 'init'

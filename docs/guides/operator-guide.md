@@ -280,6 +280,45 @@ non-fast-forward fence still protects the branch: a stale instance that thaws
 and tries to push is refused and aborts, so the worst case is a wasted round,
 never corruption.
 
+## Automatic Retry Budget and Quarantine
+
+Everything the factory retries by itself spends from **one** per-task counter,
+reconstructed from the tracker thread rather than kept in any instance's memory.
+Two kinds of failure spend it:
+
+- **crashed runs** — the take run died with an uncaught exception, or a round
+  could not be persisted durably;
+- **failed branch repairs** — the pickup found the task branch in a state that
+  needed converging (a park whose tracker write never landed, a stale-epoch tip,
+  a completed-but-uncleaned tip) and the repair itself failed.
+
+Both trip the same threshold; the split exists so the park report can tell you
+*which* kind keeps happening. Stage verification failures are a different count
+entirely (the stage attempt limit) and never touch this one.
+
+| Setting                              | Default | Meaning                                                                 |
+|--------------------------------------|---------|-------------------------------------------------------------------------|
+| `tracker.abort-threshold`            | `3`     | K: attempts, both categories together, before the task parks for a human |
+| `factory.tracker.abort-backoff-base` | `2m`    | delay before an attempt-carrying task is offered to bare `take` again    |
+| `factory.tracker.abort-backoff-cap`  | `1h`    | ceiling on that exponential backoff (`base × 2^(n-1)`)                   |
+
+Below K, the task returns to `gnomish:ready` with an abort marker and waits out
+its backoff. At K it parks `needs-human` (`infra`) with a report naming the
+totals per category, the most recent cause and its category, and the time of the
+previous attempt. A durably persisted round resets the counter to zero — real
+progress ends the streak.
+
+**Quarantine: the branch the factory will not retry.** Three branch states are
+not retryable at all — unreadable content, an envelope version this factory does
+not support, and a combination the branch contract does not recognize. Reading
+such a branch a second time produces the same bytes, so the factory parks the
+task on the **first** classification instead of burning K pickups to arrive at
+the same place with the diagnosis buried under K aborts. The park report names
+what was found (the offending file, and for a version mismatch the observed and
+supported versions), states how many attempts the task had already consumed —
+this quarantine spends none — and tells you what to do: fix or remove the file
+on the task branch, then move the task back to `gnomish:ready`.
+
 ## Running Continuously: serve, Batch, and Drain
 
 <!-- implements NFR-P2, UX1, UX2, UX4 of add-factory-serve -->

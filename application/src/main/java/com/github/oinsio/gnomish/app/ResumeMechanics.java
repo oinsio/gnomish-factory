@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
@@ -50,6 +51,13 @@ public interface ResumeMechanics<B extends ResumedBranch> {
     void confirmTerminalWrite(Path cloneDir, B branch);
 
     /**
+     * Runs the destructive tail of a completion whose finish this pickup delivered: the cleanup
+     * commit removing {@code .gnomish-task/} from the tip, and the workspace disposal behind it
+     * (FR9, FR10 of harden-task-branch-contract). Idempotent — an already-cleaned tip is left alone.
+     */
+    void finishCleanup(Path cloneDir, B branch);
+
+    /**
      * Resumes a {@code null} (process died mid-visit), {@code CHECKPOINT}, or {@code INFRA} park:
      * salvages the interrupted round's leftovers — or discards them under {@code discardWork} — and
      * runs the engine once from {@code finalState}.
@@ -65,14 +73,27 @@ public interface ResumeMechanics<B extends ResumedBranch> {
             InstanceId instanceId);
 
     /**
-     * Resumes an {@code ESCALATION} park: resets the attempt counter, appends {@code decisionText}
-     * as a decision when one is present, and runs the engine once.
+     * Appends {@code decisionText} to the branch as a human decision, in one commit with the
+     * attempt-counter reset it implies (FR4) — the durable intent the tracker acknowledge must never
+     * precede (FR12 of harden-task-branch-contract). In container mode the kept box is disposed
+     * first, so no factory-side commit lands behind a surviving box's back (FR17, design D12 of
+     * the same change).
+     *
+     * @return the task context including the appended decision; never null
      */
-    TakeResult resumeWithDecision(
+    TaskContext appendDecision(
+            Path cloneDir, B branch, TaskState finalState, TaskState resetState, String decisionText);
+
+    /**
+     * Resumes an {@code ESCALATION} park from a context and state that already reflect the human's
+     * answer — or from the branch's own context when the return itself was the answer: runs the
+     * engine once, appending nothing.
+     */
+    TakeResult resumeDecided(
             Path cloneDir,
             B branch,
-            TaskState finalState,
-            @Nullable String decisionText,
+            TaskContext context,
+            TaskState resetState,
             RunArguments.InteractiveMode interactiveMode,
             Tracker tracker,
             TaskRef ref,

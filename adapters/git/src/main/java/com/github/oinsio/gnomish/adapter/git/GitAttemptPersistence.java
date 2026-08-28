@@ -4,12 +4,13 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -35,7 +36,16 @@ import java.nio.file.Path;
  * {@code previousTip} this method captured before the round commit — the tip {@link
  * RoundBoundaryCheck#verify} already confirmed HEAD descends from.
  *
- * <p>Implements FR2, FR11, FR12, NFR-R1, NFR-S1 of add-git-workflow.
+ * <p>{@code state.json} is written through the shared {@link AtomicFileWriter} (design D10 of
+ * harden-task-branch-contract): a kill mid-write leaves the complete previous content, never a
+ * half-written file the next resume would have to parse.
+ *
+ * <p>Every round commit carries the tenure's claim epoch as a trailer ({@link ClaimEpochTrailer},
+ * FR13): a reader can then tell a round this instance wrote under its live claim from one a
+ * superseded holder wrote before it was reaped.
+ *
+ * <p>Implements FR2, FR11, FR12, NFR-R1, NFR-S1 of add-git-workflow; FR5, FR13 of
+ * harden-task-branch-contract.
  */
 public final class GitAttemptPersistence implements AttemptPersistence {
 
@@ -44,6 +54,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
     private final String branch;
     private final RoundBoundaryCheck roundBoundaryCheck;
     private final BestEffortPush bestEffortPush;
+    private final ClaimEpochSource epochs;
     private String previousTip;
 
     /**
@@ -52,9 +63,12 @@ public final class GitAttemptPersistence implements AttemptPersistence {
      *     at its root and git commands run with this path as {@code cwd}
      * @param taskId the tracker's original taskId; sanitized into the expected task branch name
      *     (FR12) checked at every round boundary and used as the push target (FR11)
+     * @param epochs the tenure the round commits are stamped with (FR13); {@link
+     *     ClaimEpochSource#NONE} where no claim is held
      */
-    public GitAttemptPersistence(GitProcessRunner runner, Path worktreeRoot, String taskId) {
+    public GitAttemptPersistence(GitProcessRunner runner, Path worktreeRoot, String taskId, ClaimEpochSource epochs) {
         this.runner = runner;
+        this.epochs = epochs;
         this.worktreeRoot = worktreeRoot;
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.roundBoundaryCheck = new RoundBoundaryCheck(runner, worktreeRoot, branch);
@@ -87,7 +101,9 @@ public final class GitAttemptPersistence implements AttemptPersistence {
             throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "git add -A", add.stderr());
         }
 
-        String message = ServiceCommitMessages.round(key.stage(), key.attempt());
+        String message = ClaimEpochTrailer.stamp(
+                ServiceCommitMessages.round(key.stage(), key.attempt()),
+                epochs.epochFor(taskId).orElse(null));
         GitCommandResult commit = runner.run(worktreeRoot, "commit", "-m", message);
         if (commit.exitCode() != 0) {
             throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "git commit", commit.stderr());
@@ -101,9 +117,8 @@ public final class GitAttemptPersistence implements AttemptPersistence {
 
     private void writeStateJson(String taskId, AttemptKey key, TaskState state, Path gnomishTaskRoot) {
         try {
-            Files.createDirectories(gnomishTaskRoot);
             String json = TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state));
-            Files.writeString(gnomishTaskRoot.resolve("state.json"), json);
+            AtomicFileWriter.write(gnomishTaskRoot.resolve("state.json"), json);
         } catch (IOException e) {
             throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "writing state.json", e);
         }

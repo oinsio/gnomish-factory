@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.StatePositionDto;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
 import com.github.oinsio.gnomish.app.port.git.UsageTotals;
@@ -13,6 +14,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reconstructs {@code gnomish usage}'s per-round history by walking {@code state.json} itself,
@@ -38,11 +41,20 @@ import org.jspecify.annotations.Nullable;
  * read-only, no-worktree, no-checkout idiom {@link BranchStateReader} and {@link TaskBranchLister}
  * already rely on (design D13).
  *
- * <p>Implements FR14, NFR-C1 of add-git-workflow.
+ * <p>A historical commit whose {@code state.json} cannot be read — an unsupported envelope version,
+ * a half-written or hand-edited document — is skipped with a warning naming the commit, and the
+ * walk continues (FR16 of harden-task-branch-contract): a broken commit in the middle of history
+ * costs its own row, never the whole report. The next readable commit is diffed against the last
+ * readable one, so the rounds recorded across the gap are still attributed, and only the rounds the
+ * unreadable commit itself would have contributed are lost.
+ *
+ * <p>Implements FR14, NFR-C1 of add-git-workflow; FR16 of harden-task-branch-contract.
  */
 public final class UsageHistoryWalker {
 
-    private static final String STATE_JSON_PATH = ".gnomish-task/state.json";
+    private static final Logger log = LoggerFactory.getLogger(UsageHistoryWalker.class);
+
+    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
 
     private final GitProcessRunner runner;
     private final TaskBranchLocator locator;
@@ -60,14 +72,14 @@ public final class UsageHistoryWalker {
      * @param taskId the tracker's original taskId
      * @return {@link UsageHistoryResult.Found} with every detected round and its totals, or
      *     {@link UsageHistoryResult.NotFound} when no branch exists anywhere for this task
-     * @throws com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException if
-     *     any visited {@code state.json} carries an unsupported {@code "version"}
      */
     public UsageHistoryResult walk(Path cloneDir, String taskId) {
         BranchLocation location = locator.locate(cloneDir, taskId);
         String ref =
                 switch (location) {
                     case BranchLocation.NotFound ignored -> null;
+                    case BranchLocation.Unavailable(String reason) ->
+                        throw new BranchLocationUnavailableException(taskId, reason);
                     case BranchLocation.Local local -> local.ref();
                     case BranchLocation.RemoteTracking tracking -> tracking.ref();
                 };
@@ -85,9 +97,10 @@ public final class UsageHistoryWalker {
         for (String commit : stateTouchingCommits(cloneDir, ref)) {
             StateJsonDto current = readStateAt(cloneDir, commit);
             if (current == null) {
-                // The cleanup commit (FR15) removes .gnomish-task/ entirely, so it is itself a
-                // "commit touching state.json" (a deletion) that git log's pathspec still reports
-                // — but there is no state to diff against here, so it contributes no row.
+                // Two cases, both contributing no row: the cleanup commit (FR15) removes
+                // .gnomish-task/ entirely, so it is itself a "commit touching state.json" (a
+                // deletion) that git log's pathspec still reports; and an unreadable state file,
+                // already warned about, which the walk steps over rather than failing on (FR16).
                 continue;
             }
             UsageRow row = detectNewRound(previous, current);
@@ -130,52 +143,76 @@ public final class UsageHistoryWalker {
     }
 
     /**
-     * Reads {@code state.json} at {@code commit}, or {@code null} if it is absent at that commit
-     * — the cleanup commit's tree (FR15), the one case where a path-filtered {@code git log} entry
-     * has nothing to show.
+     * Reads {@code state.json} at {@code commit}, or {@code null} when this commit contributes no
+     * state: the file is absent at its tree (the cleanup commit, FR15 — the one case where a
+     * path-filtered {@code git log} entry has nothing to show), or it is present but unreadable, in
+     * which case the commit is named in a warning and skipped rather than failing the walk (FR16 of
+     * harden-task-branch-contract).
      */
     private @Nullable StateJsonDto readStateAt(Path cloneDir, String commit) {
         GitCommandResult show = runner.run(cloneDir, "show", commit + ":" + STATE_JSON_PATH);
         if (show.exitCode() != 0) {
             return null;
         }
-        return StateJsonMapper.readDto(show.stdout());
+        try {
+            return StateJsonMapper.readDto(show.stdout());
+        } catch (RuntimeException failure) {
+            log.warn(
+                    "usage: skipping commit {} — its {} could not be read: {}",
+                    commit,
+                    STATE_JSON_PATH,
+                    failure.getMessage());
+            return null;
+        }
     }
 
     /**
      * The heart of D14's algorithm: {@code current}'s new round, if any, relative to {@code
      * previous} — the previous state read on this walk, or {@code null} for the very first
-     * state.json commit encountered (whose whole {@code attempts} list is new by definition; every
-     * production state.json carries at most one attempt at its very first commit, per {@link
-     * com.github.oinsio.gnomish.domain.engine.TaskState#atStageStart}).
+     * state.json commit encountered.
      *
-     * <p>Same stage as {@code previous} (list grew by exactly one): the newly appended tail
-     * element is the round. Different stage (advancement reset the list): the new state's own
-     * {@code attempts} list holds exactly the fresh stage's first recorded round. Either way the
-     * new round is simply {@code current.attempts()}' last element, once {@code current} carries
-     * more information than {@code previous} for its stage.
+     * <p>A round is new when {@code current}'s newest recorded attempt is not the one {@code
+     * previous} ended with; the same newest attempt means this commit recorded no round (a
+     * decision's attempt-counter reset, say, which rewrites the file without running anything).
+     *
+     * <p>Which stage the round is billed to is decided by the list, not by the position. A list
+     * that grew by one is another round of the stage {@code previous} was at — and that includes
+     * the PASSING round, whose commit already carries the advanced position (FR4 of
+     * harden-task-branch-contract). A list that reset instead holds the first round of the stage
+     * {@code current} names.
      */
     private @Nullable UsageRow detectNewRound(@Nullable StateJsonDto previous, StateJsonDto current) {
         List<StateAttemptDto> attempts = current.attempts();
         if (attempts.isEmpty()) {
             return null;
         }
-        if (previous != null
-                && samePosition(previous.position(), current.position())
-                && attempts.size() <= previous.attempts().size()) {
+        StateAttemptDto newest = attempts.getLast();
+        if (previous == null) {
+            return new UsageRow(stageName(current.position()), StateJsonMapper.fromAttempt(newest));
+        }
+        if (newest.equals(newestOf(previous))) {
             return null;
         }
-        StateAttemptDto newest = attempts.get(attempts.size() - 1);
-        return new UsageRow(stageName(current.position()), StateJsonMapper.fromAttempt(newest));
+        StatePositionDto ranAt = grewFrom(previous, current) ? previous.position() : current.position();
+        return new UsageRow(stageName(ranAt), StateJsonMapper.fromAttempt(newest));
     }
 
-    private static boolean samePosition(StatePositionDto left, StatePositionDto right) {
-        return switch (left) {
-            case StatePositionDto.AtStage a
-            when right instanceof StatePositionDto.AtStage b -> a.stage().equals(b.stage());
-            case StatePositionDto.PipelineEnd ignored -> right instanceof StatePositionDto.PipelineEnd;
-            default -> false;
-        };
+    /** The last attempt {@code state} records, or {@code null} when it records none. */
+    private static @Nullable StateAttemptDto newestOf(StateJsonDto state) {
+        List<StateAttemptDto> attempts = state.attempts();
+        return attempts.isEmpty() ? null : attempts.getLast();
+    }
+
+    /**
+     * Whether {@code current}'s attempt list is {@code previous}' list with one round appended —
+     * the shape of "another round of the stage {@code previous} was at", including the passing
+     * round whose commit also advanced the position (FR4 of harden-task-branch-contract). A list
+     * that instead RESET — the next stage's first round, recorded after a list of one or more —
+     * does not grow by one, so it fails this test and its round is attributed to the position it
+     * is recorded at.
+     */
+    private static boolean grewFrom(StateJsonDto previous, StateJsonDto current) {
+        return current.attempts().size() == previous.attempts().size() + 1;
     }
 
     private static String stageName(StatePositionDto position) {

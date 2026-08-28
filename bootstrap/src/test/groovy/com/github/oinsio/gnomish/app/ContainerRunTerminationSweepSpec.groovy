@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
@@ -35,7 +36,7 @@ class ContainerRunTerminationSweepSpec extends Specification {
             calls << [cloneDir, liveness]
             'sweep: 1 checked-alive'
         }
-        def support = new ContainerRunSupport(new GitProcessRunner(), tempDir, 'T-1', environments, [], pass)
+        def support = new ContainerRunSupport(new GitProcessRunner(), tempDir, 'T-1', environments, [], pass, ClaimEpochSource.NONE)
 
         when:
         ContainerRunTermination.sweepOrphans(support)
@@ -51,7 +52,7 @@ class ContainerRunTerminationSweepSpec extends Specification {
         given:
         def environments = docker.environments('k1', tempDir, sandbox, tempDir.resolve('guard'))
         def support = new ContainerRunSupport(
-                new GitProcessRunner(), tempDir, 'T-1', environments, [], SandboxLifecyclePass.NONE)
+                new GitProcessRunner(), tempDir, 'T-1', environments, [], SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
 
         when:
         ContainerRunTermination.sweepOrphans(support)
@@ -68,7 +69,7 @@ class ContainerRunTerminationSweepSpec extends Specification {
             calls << cloneDir
             ''
         }
-        def support = new ContainerRunSupport(new GitProcessRunner(), tempDir, 'T-1', environments, [], pass)
+        def support = new ContainerRunSupport(new GitProcessRunner(), tempDir, 'T-1', environments, [], pass, ClaimEpochSource.NONE)
 
         when:
         support.sweepOrphans()
@@ -81,7 +82,7 @@ class ContainerRunTerminationSweepSpec extends Specification {
         given:
         def environments = docker.environments('k1', tempDir, sandbox, tempDir.resolve('guard'))
         SandboxLifecyclePass pass = { cloneDir, liveness -> summary }
-        def support = new ContainerRunSupport(new GitProcessRunner(), tempDir, 'T-1', environments, [], pass)
+        def support = new ContainerRunSupport(new GitProcessRunner(), tempDir, 'T-1', environments, [], pass, ClaimEpochSource.NONE)
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(ContainerRunTermination)
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
         appender.start()

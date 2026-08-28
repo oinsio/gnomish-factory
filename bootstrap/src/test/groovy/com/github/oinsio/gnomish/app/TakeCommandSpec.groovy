@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -162,7 +163,7 @@ tracker:
         // here since TakeCommand mints a fresh InstanceId per invocation).
         String claimedBy = null
         tracker.claim(_, _) >> { TaskRef ref, String instanceId ->
-            claimedBy = instanceId; new ClaimResult.Acquired()
+            claimedBy = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         tracker.fetchTask(_) >> {
             new TrackerTask(

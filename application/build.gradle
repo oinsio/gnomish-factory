@@ -49,12 +49,14 @@ dependencies {
     // attributed to the calling class rather than the shared helper.
     api libs.slf4j.api
 
-    // The shared subprocess wait/kill/drain discipline (FR9, FR14, design D9/D14 of
-    // bound-subprocess-commands): `RealProcessTreeKiller` runs the daemon's exit
-    // kill on it instead of its own destroy-sleep-force copy. `implementation` —
-    // the supervisor is held in a private field and nothing of `:subprocess`
-    // appears on this module's api surface.
+    // The two dependency-free leaves, both `implementation` because neither appears
+    // on this module's api surface: the shared subprocess wait/kill/drain discipline
+    // `RealProcessTreeKiller` runs the daemon's exit kill on (FR9, FR14, design
+    // D9/D14 of bound-subprocess-commands), and the shared atomic file-write
+    // discipline the snapshot and dashboard writers rename through, which this
+    // module used to own privately (FR5, design D10 of harden-task-branch-contract).
     implementation project(':subprocess')
+    implementation project(':atomicfile')
 
     // Annotations only — never a running context, which is the composition
     // root's concern (design D3): `@Component` on the startup collaborators and
@@ -187,13 +189,12 @@ pitest {
 // `ApplicationLayeringSpec`'s package-level rule.
 layering {
     allowedProjects = [
+        ':atomicfile',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',
         ':sandbox:core',
-        // The dependency-free supervision leaf, reached directly by
-        // `RealProcessTreeKiller` and transitively through `:gitobjects`
-        // (design D9/D13/D14 of bound-subprocess-commands).
+        // The supervision leaf, also reached transitively through `:gitobjects`.
         ':subprocess',
     ]
 }

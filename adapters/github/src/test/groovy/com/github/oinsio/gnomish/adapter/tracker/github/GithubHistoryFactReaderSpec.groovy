@@ -15,7 +15,7 @@ import spock.lang.Specification
 class GithubHistoryFactReaderSpec extends Specification {
 
     private static ParsedMarker marker(GithubMarkerKind kind) {
-        new ParsedMarker(kind, 'gnomish-factory-a1', Instant.parse('2026-07-20T11:00:00Z'), 1, '', null)
+        new ParsedMarker(kind, 'gnomish-factory-a1', Instant.parse('2026-07-20T11:00:00Z'), 1, '', null, null, null)
     }
 
     def "an empty marker list yields both facts false"() {

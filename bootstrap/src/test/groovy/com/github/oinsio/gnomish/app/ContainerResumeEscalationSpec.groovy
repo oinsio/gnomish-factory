@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
+import com.github.oinsio.gnomish.domain.engine.TaskState
 
 /**
  * FR6, FR25, D19, UX2 of add-sandbox-core: {@link ContainerResumeRunner}'s escalated-outcome
@@ -12,7 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
 
     private void recordEscalated(String taskId) {
-        repository.createTask(context(taskId), 'HEAD')
+        repository.createTask(context(taskId), 'HEAD', TaskState.atStageStart('build'))
         repository.recordOutcome(taskId,
                 new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded('how?', ['a'])))
         commitStateAtPipelineEnd(taskId)
@@ -51,7 +52,7 @@ class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
     // an internal error naming the task, never a dialog over a missing report.
     def "an escalated outcome without a recorded escalation is an internal error"() {
         given:
-        repository.createTask(context('T-NOREP'), 'HEAD')
+        repository.createTask(context('T-NOREP'), 'HEAD', TaskState.atStageStart('build'))
         commitTaskJson('T-NOREP',
                 new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded('q', ['a'])),
                 null)

@@ -8,7 +8,8 @@ import java.util.Optional;
 /**
  * Facade for reading and writing git objects over a bare repository — no working copy, no checkout,
  * no hooks (design D19). {@link #resolveRef} peels a ref to its commit, {@link #readBlob} reads a
- * file's bytes at a commit under a size cap, and {@link #commit} builds a plumbing commit and
+ * file's bytes at a commit under a size cap, {@link #historyContains} asks whether a message is
+ * reachable, and {@link #commit} builds a plumbing commit and
  * advances a ref with an atomic compare-and-swap. Deterministic by construction: the caller supplies
  * all commit metadata, so fixed inputs yield a fixed commit id.
  *
@@ -74,6 +75,40 @@ public final class GitObjects {
     public boolean exists(ObjectId commit, String path) {
         TreePaths.validate(path);
         return exec.run(List.of("cat-file", "-e", commit.hex() + ":" + path)).exitCode() == 0;
+    }
+
+    /**
+     * True when a commit whose message carries {@code messageFragment} verbatim is reachable from
+     * {@code commit} — the bare-objects answer to a history question a working copy would answer
+     * with {@code git log}. The fragment is matched as a fixed string, never as a pattern, and the
+     * walk stops at the first match.
+     *
+     * @param commit the commit to walk back from
+     * @param messageFragment the literal text to look for in each commit message; never blank
+     * @return {@code true} when at least one reachable commit carries the fragment
+     */
+    public boolean historyContains(ObjectId commit, String messageFragment) {
+        if (messageFragment.isBlank()) {
+            throw new IllegalArgumentException("messageFragment must not be blank");
+        }
+        GitExec.Result result = exec.run(
+                List.of("rev-list", "--max-count=1", "--fixed-strings", "--grep=" + messageFragment, commit.hex()));
+        // "a commit id was printed": rev-list writes its diagnostics to stderr, so an
+        // unresolvable commit leaves stdout empty exactly as a clean no-match does.
+        return !result.stdoutText().isBlank();
+    }
+
+    /**
+     * The full commit message — subject and body — of one commit, as the trailers a reader parses
+     * out of it need (FR13 of harden-task-branch-contract). Empty when the commit does not resolve,
+     * so an unreadable tip is a missing message rather than a thrown failure.
+     *
+     * @param commit the commit whose message is read
+     * @return the raw message, or empty when the commit does not resolve
+     */
+    public Optional<String> commitMessage(ObjectId commit) {
+        GitExec.Result result = exec.run(List.of("log", "-1", "--format=%B", commit.hex()));
+        return result.exitCode() == 0 ? Optional.of(result.stdoutText()) : Optional.empty();
     }
 
     /**

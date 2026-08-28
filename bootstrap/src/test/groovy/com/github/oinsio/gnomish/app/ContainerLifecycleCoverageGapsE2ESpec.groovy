@@ -10,9 +10,12 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -149,7 +152,8 @@ advancement: auto
                 [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null))
+                new ServeProperties(0, null, null, null, null, null, null),
+                new ClaimEpochBook())
 
         when:
         taskId = 'ct-manual-1'
@@ -185,8 +189,8 @@ advancement: auto
                 'instructions.md', [], new AutonomyLimits(3),
                 AdvancementMode.AUTO)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(stage), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('build'))
         def environment = support.lease().environmentFor('work')
         def handle = environment.exec(new ExecCommand(
                         [

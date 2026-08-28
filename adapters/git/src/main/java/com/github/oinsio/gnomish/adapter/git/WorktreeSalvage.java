@@ -2,7 +2,10 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Reconciles uncommitted leftovers found in a resumed task worktree after divergence
@@ -23,9 +26,18 @@ import java.nio.file.Path;
  * the engine loop replays the interrupted round from a clean base. Never restarts the whole task:
  * only the one round in flight when the process died is replayed.
  *
- * <p>Implements FR10 of add-git-workflow.
+ * <p>Either way, the factory's own {@code .gnomish-task/} files come from the branch tip and
+ * never from the dirty worktree, per the shared ownership policy in {@link FactoryOwnedPaths}
+ * (FR5, design D11 of harden-task-branch-contract) — the same policy the in-box {@link
+ * EnvironmentSalvage} applies.
+ *
+ * <p>Kept in sync with {@link EnvironmentSalvage}: both must produce a salvage commit carrying the
+ * claim-epoch trailer and restore factory-owned paths.
+ *
+ * <p>Implements FR10 of add-git-workflow; FR5 of harden-task-branch-contract.
  */
-public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot) implements WorktreeSalvager {
+public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimEpochSource epochs)
+        implements WorktreeSalvager {
 
     /**
      * True iff the worktree has any uncommitted change (staged, unstaged, or untracked) relative
@@ -44,6 +56,7 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot) implem
      */
     @Override
     public void salvage(String taskId) {
+        restoreFactoryFiles();
         if (!hasLeftovers()) {
             return;
         }
@@ -51,10 +64,43 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot) implem
         if (add.exitCode() != 0) {
             throw new GitSalvageFailedException(taskId, "git add -A", add.stderr());
         }
-        GitCommandResult commit = runner.run(worktreeRoot, "commit", "-m", ServiceCommitMessages.salvage());
+        GitCommandResult commit = runner.run(
+                worktreeRoot,
+                "commit",
+                "-m",
+                ClaimEpochTrailer.stamp(
+                        ServiceCommitMessages.salvage(), epochs.epochFor(taskId).orElse(null)));
         if (commit.exitCode() != 0) {
             throw new GitSalvageFailedException(taskId, "git commit", commit.stderr());
         }
+    }
+
+    /**
+     * Puts every factory-owned {@code .gnomish-task/} path back the way the branch tip has it,
+     * before anything is staged (FR5, design D11 of harden-task-branch-contract): tracked files
+     * are checked out from {@code HEAD}, untracked ones are cleaned away, and the gnome-writable
+     * {@code decisions/} subtree is excluded from both. A dying process may have left a partial or
+     * stale {@code state.json} behind; salvage contributes the gnome's work files and never lets
+     * that file overwrite what the recorded rounds say.
+     *
+     * <p>A no-op on a tip that carries no state directory at all — the {@code Completed} cleanup
+     * commit removes it, and nothing there is the factory's to restore.
+     */
+    private void restoreFactoryFiles() {
+        if (runner.run(worktreeRoot, "cat-file", "-e", "HEAD:" + FactoryOwnedPaths.STATE_DIR)
+                        .exitCode()
+                != 0) {
+            return;
+        }
+        runner.run(worktreeRoot, args("checkout", "HEAD", "--"));
+        runner.run(worktreeRoot, args("clean", "-fd", "--"));
+    }
+
+    /** {@code prefix} followed by the factory-owned pathspec, as one argv array. */
+    private static String[] args(String... prefix) {
+        List<String> argv = new ArrayList<>(List.of(prefix));
+        argv.addAll(FactoryOwnedPaths.pathspec());
+        return argv.toArray(new String[0]);
     }
 
     /**

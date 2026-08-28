@@ -111,7 +111,7 @@ sync_checklist() {
 next_item() {
   [[ -f "$CHECKLIST" ]] || { echo "No checklist — run 'sync' first." >&2; exit 1; }
   local path
-  path="$(sed -n 's/^[0-9]*\. \[ \] \(.*\)$/\1/p' "$CHECKLIST" | head -1)"
+  path="$(sed -n '/^[0-9]*\. \[ \] /{s/^[0-9]*\. \[ \] \(.*\)$/\1/p;q;}' "$CHECKLIST")"
   [[ -n "$path" ]] && echo "$path" || echo "ALL DONE"
 }
 

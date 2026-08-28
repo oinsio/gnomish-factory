@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.EnvironmentSalvage
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.HarvestRefusedException
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -169,7 +170,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         when: 'a second adapter instance reattaches and salvages through the port'
         def e2 = env(source, key)
         e2.materialize(BRANCH, null)
-        new EnvironmentSalvage(e2).salvage('mech-task')
+        new EnvironmentSalvage(e2, ClaimEpochSource.NONE).salvage('mech-task')
 
         then: 'the salvage commit reached the factory branch with the interrupted tail'
         gitOutput(source, 'show', BRANCH + ':tail.txt') == 'half-done'
@@ -188,7 +189,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         assert new ProcessBuilder('docker', 'rm', '-f', 'gnomish-box-' + key).start().waitFor() == 0
 
         when: 'salvage runs against the dead box'
-        new EnvironmentSalvage(e1).salvage('mech-task')
+        new EnvironmentSalvage(e1, ClaimEpochSource.NONE).salvage('mech-task')
 
         then: 'nothing thrown, at most the uncommitted tail is lost, recorded rounds intact'
         noExceptionThrown()

@@ -21,7 +21,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome null continues from the recorded position and records Completed"() {
         given: 'a task with one persisted round but no recorded outcome — the process died mid-visit'
         def taskId = 'PROJ-10'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
 
         when: 'resuming drives one more round to completion (a bare Enter via the interactive executor)'
@@ -29,7 +29,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
                 .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
 
         then: 'the branch records a Completed outcome and the worktree is removed'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
         !Files.exists(expectedWorktree(taskId))
     }
 
@@ -39,7 +39,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() without --discard-work salvages an interrupted round's uncommitted leftovers as a service commit"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-30'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
@@ -49,11 +49,11 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
                 .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
 
         then: 'the branch history contains a distinct salvage commit ahead of the round commit'
-        def subjects = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%s').stdout()
+        def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
         subjects.contains('gnomish: salvage')
 
         and: 'the task still reached completion afterward'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
     }
 
     // FR10, D10: --discard-work resets the worktree to the last recorded round instead of
@@ -61,7 +61,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with --discard-work discards an interrupted round's uncommitted leftovers, no salvage commit"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-31'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
@@ -71,11 +71,11 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
                 .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, true)
 
         then: 'no salvage commit landed on the branch — the leftovers were discarded, not committed'
-        def subjects = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%s').stdout()
+        def subjects = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%s')
         !subjects.contains('gnomish: salvage')
 
         and: 'the task still reached completion afterward'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
     }
 
     // FR10, D10: --discard-work actually calls WorktreeSalvage#discard — proven directly against a
@@ -84,7 +84,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with --discard-work removes uncommitted leftovers from the worktree before continuing"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-32'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
@@ -103,7 +103,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome escalated drives the decision dialog then continues to completion"() {
         given: 'a task escalated after one persisted round'
         def taskId = 'PROJ-11'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -123,18 +123,20 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         printed.contains('Decision (empty to resume without one)')
 
         and: 'the branch records the appended decision and a new terminal outcome'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
         !Files.exists(expectedWorktree(taskId))
 
         and: 'the answered decision text was actually committed via GitTaskRepository#appendDecision — proven'
         // by finding it in some historical task.json blob on the branch, since the FR15 cleanup
         // commit at Completed removes the tip's .gnomish-task/ entirely.
-        def historicalTaskJsons = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%H').stdout()
-                .lines().collect {
-                    gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+        def historicalTaskJsons = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%H')
+                .lines().collect { it as String }
+                .findAll {
+                    gitExitCode(cloneDir, 'show', "${it}:.gnomish-task/task.json") == 0
                 }
-                .findAll { it.exitCode() == 0 }
-                .collect { it.stdout() }
+                .collect {
+                    gitOutput(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+                }
         historicalTaskJsons.any { it.contains('go ahead') }
     }
 
@@ -143,7 +145,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome paused confirms then continues to completion"() {
         given: 'a task paused after "build" passed — its recorded position already advanced to PipelineEnd'
         def taskId = 'PROJ-12'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def endState = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
         persistOneRound(taskId, endState)
         repository().recordOutcome(taskId, new TaskOutcome.Paused(endState, 'build'))
@@ -161,7 +163,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         printed.contains('Press Enter to continue')
 
         and: 'the branch records a fresh Completed outcome (the engine reaches PipelineEnd immediately)'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
         !Files.exists(expectedWorktree(taskId))
     }
 
@@ -178,11 +180,11 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome completed reports and exits without further touching the worktree or branch"() {
         given: 'a task whose task.json already records Completed, before FR15 cleanup ran'
         def taskId = 'PROJ-13'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def finalState = TaskState.atStageStart('build')
         persistOneRound(taskId, finalState)
         writeCompletedTaskJson(taskId)
-        def tipBefore = gitRunner.run(cloneDir, 'rev-parse', "gnomish/${taskId}").stdout().trim()
+        def tipBefore = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
 
         and: 'reportCompleted prints via System.out directly, mirroring the GitModeRunner banner'
         def originalOut = System.out
@@ -197,7 +199,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         out.toString('UTF-8').contains(taskId)
 
         and: 'no new commit landed on the branch beyond bootstrap materializing a worktree'
-        gitRunner.run(cloneDir, 'rev-parse', "gnomish/${taskId}").stdout().trim() == tipBefore
+        gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}") == tipBefore
 
         cleanup:
         System.out = originalOut
@@ -210,16 +212,16 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome null records an Aborted outcome and keeps the worktree when the round-boundary protocol is violated"() {
         given: 'a task with one persisted round, resumed onto a worktree checked out to the wrong branch'
         def taskId = 'PROJ-33'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
-        gitRunner.run(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
+        gitExitCode(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
 
         // The worktree at the deterministic path must still carry the task's own real
         // .gnomish-task/ files (bootstrap reads task.json/state.json straight off disk there) —
         // so the decoy branch is created off the real task branch's tip, just under a different
         // name, rather than off HEAD (which would leave no .gnomish-task/ at all).
-        gitRunner.run(cloneDir, 'worktree', 'add', '-b', 'not-the-task-branch', worktree.toString(),
+        gitExitCode(cloneDir, 'worktree', 'add', '-b', 'not-the-task-branch', worktree.toString(),
                 "gnomish/${taskId}")
 
         when:
@@ -231,7 +233,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         ex.outcome() != null
 
         and: 'the aborted outcome is durably recorded in the worktree HEAD via GitOutcomeRecorder'
-        def taskJson = gitRunner.run(worktree, 'show', 'HEAD:.gnomish-task/task.json').stdout()
+        def taskJson = gitOutput(worktree, 'show', 'HEAD:.gnomish-task/task.json')
         taskJson.contains('"aborted"')
 
         and: 'the worktree is kept, unconditionally, for forensics'

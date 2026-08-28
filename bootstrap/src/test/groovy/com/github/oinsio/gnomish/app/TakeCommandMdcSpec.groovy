@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import java.nio.file.Files
 import java.nio.file.Path
@@ -228,7 +229,7 @@ tracker:
         tracker.listReady(_) >> [
             new ReadyTask(REF, AbortFacts.none(), false, false, 'fixture title')
         ]
-        tracker.claim(_, _) >> new ClaimResult.Acquired()
+        tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         tracker.fetchTask(_) >> {
             mdcDuringFetch = MDC.get(TASK_ID_KEY)
             new TrackerTask(
@@ -256,7 +257,7 @@ tracker:
         String claimedBy = null
         List<String> mdcDuringFetch = []
         tracker.claim(_, _) >> { ref, instanceId ->
-            claimedBy = instanceId; new ClaimResult.Acquired()
+            claimedBy = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         tracker.fetchTask(_) >> {
             mdcDuringFetch << MDC.get(TASK_ID_KEY)

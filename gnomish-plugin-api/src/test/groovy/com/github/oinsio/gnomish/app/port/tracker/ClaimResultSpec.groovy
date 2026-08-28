@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import spock.lang.Specification
 
 /**
@@ -34,14 +35,27 @@ class ClaimResultSpec extends Specification {
 
         where:
         result | expected
-        new ClaimResult.Acquired() | 'acquired'
+        new ClaimResult.Acquired(new ClaimEpoch(1)) | 'acquired'
         new ClaimResult.Held('gnomish-factory-x7k2') | 'held: gnomish-factory-x7k2'
+    }
+
+    // FR13 of harden-task-branch-contract: an acquired claim carries the tenure's epoch,
+    // the token the holder stamps into every commit and tracker write until the tenure ends
+    def "Acquired exposes the epoch it was issued"() {
+        expect:
+        new ClaimResult.Acquired(new ClaimEpoch(4711)).epoch() == new ClaimEpoch(4711)
+    }
+
+    // FR13 of harden-task-branch-contract: two tenures of one task are distinguished by epoch alone
+    def "two acquisitions differing only in epoch are different results"() {
+        expect:
+        new ClaimResult.Acquired(new ClaimEpoch(1)) != new ClaimResult.Acquired(new ClaimEpoch(2))
     }
 
     // FR1: results are values — equal content means equal results
     def "results with the same components are equal values"() {
         expect:
-        new ClaimResult.Acquired() == new ClaimResult.Acquired()
+        new ClaimResult.Acquired(new ClaimEpoch(1)) == new ClaimResult.Acquired(new ClaimEpoch(1))
         new ClaimResult.Held('a') == new ClaimResult.Held('a')
         new ClaimResult.Held('a') != new ClaimResult.Held('b')
     }

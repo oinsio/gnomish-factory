@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -62,6 +63,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         worktree = TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        branches.classifyShape(_, _) >> new BranchShape.InProgress()
         worktrees.ensureWorktree(_, _, _, _) >> worktree
         worktrees.salvage(_) >> salvager
         store.taskRepository(_, _) >> lifecycleStore
@@ -145,7 +147,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         then:
         1 * lifecycleStore.appendDecision('PROJ-1', {
             it.body() == 'use postgres'
-        })
+        }, _)
 
         and: 'and the run continued to its terminal boundary'
         executor.requests.size() == 1
@@ -163,7 +165,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         resume([''])
 
         then:
-        0 * lifecycleStore.appendDecision(_, _)
+        0 * lifecycleStore.appendDecision(_, _, _)
         executor.requests.size() == 1
     }
 
@@ -196,7 +198,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         }
 
         and:
-        0 * lifecycleStore.appendDecision(_, _)
+        0 * lifecycleStore.appendDecision(_, _, _)
         executor.requests.size() == 1
     }
 

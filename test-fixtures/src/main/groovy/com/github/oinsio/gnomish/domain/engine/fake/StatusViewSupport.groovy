@@ -26,8 +26,10 @@ class StatusViewSupport {
         // the authoritative live counter from the terminal final state (reset to 0 after a
         // completing advancement — the fresh next-stage state)
         int attemptsUsed
-        // the burned-attempt count of the last stage that actually ran, read from the LAST
-        // AttemptFinished.newState() BEFORE advancement — this is where a retry's burn stays visible
+        // the burned-attempt count the last stage that ran actually reached — the high-water mark
+        // over the recorded AttemptFinished states. Not simply the last one: a PASSING round's
+        // state is already advanced and its counter reset (FR4 of harden-task-branch-contract),
+        // so the burn of a retry survives in the failing round's event, not the passing one
         int lastStageAttemptsUsed
         int rounds
         // per round, in order: the AttemptKey the round's events shared
@@ -69,11 +71,14 @@ class StatusViewSupport {
         }
         view.rounds = finishedEvents.size()
 
-        // the last-executed stage's burned count, from the LAST AttemptFinished's recorded
-        // state (pre-advancement) — where a retry's burn stays visible after completion resets it.
-        if (!finishedEvents.isEmpty()) {
-            view.lastStageAttemptsUsed = (finishedEvents.last() as EngineEvent.AttemptFinished).newState().attemptsUsed()
-        }
+        // the burn the stage reached, as the high-water mark over the recorded states: the
+        // passing round's own state already carries the advance and its reset counter (FR4 of
+        // harden-task-branch-contract), so reading only the last event would report zero.
+        view.lastStageAttemptsUsed = finishedEvents
+                .collect {
+                    (it as EngineEvent.AttemptFinished).newState().attemptsUsed()
+                }
+                .max() ?: 0
 
         // per round, ordered by AttemptFinished, collect the shared key, the check
         // results (from CheckFinished with the same key) and the executor usage.

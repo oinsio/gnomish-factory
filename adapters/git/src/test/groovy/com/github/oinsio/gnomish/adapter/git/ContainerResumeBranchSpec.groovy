@@ -1,18 +1,19 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
  * FR6, FR17 of add-sandbox-core, "Resume from the recorded branch" of
- * git-task-persistence: {@link ContainerResumeBranch} reconciles the local task
- * branch on refs alone — a remote-tracking-only branch becomes a local ref, a
- * branch behind origin is fast-forwarded, ahead is kept, diverged throws with
- * both tips named, and a branch that exists nowhere reports false. Runs on real
- * local repositories — no git mocking, no checkout of the task branch.
+ * git-task-persistence, and FR8 of harden-task-branch-contract: {@link
+ * ContainerResumeBranch} reconciles the local task branch on refs alone — a
+ * remote-tracking-only branch becomes a local ref, a branch behind origin is
+ * fast-forwarded, ahead is kept, diverged discards the local line and
+ * continues from the origin tip, and a branch that exists nowhere reports
+ * false. Runs on real local repositories — no git mocking, no checkout of the
+ * task branch.
  */
 class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixture {
 
@@ -96,7 +97,10 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
         localTip() == ahead
     }
 
-    def "FR6: diverged local and origin tips throw, naming both tips for the operator"() {
+    // FR8 of harden-task-branch-contract: container mode runs the same replica-pair policy host
+    // mode does, so divergence resolves under the claim instead of stopping the run. The rule it
+    // replaces — throw and let a human reconcile — left a claimed boxed task frozen.
+    def "FR8: diverged local and origin tips discard the local line and continue from origin"() {
         given: 'local and origin each carry their own child of the base'
         def localSide = plumbCommit(base, 'local line')
         def originSide = plumbCommit(base, 'origin line')
@@ -104,14 +108,11 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
         setOriginBranch(originSide)
 
         when:
-        resume().ensureLocalBranch(clone, TASK)
+        def located = resume().ensureLocalBranch(clone, TASK)
 
-        then: 'never a force update — the operator gets both real tips to reconcile'
-        def ex = thrown(DivergedBranchException)
-        ex.message.contains(localSide)
-        ex.message.contains(originSide)
-
-        and: 'the local tip is untouched'
-        localTip() == localSide
+        then: 'the run continues, on what origin holds'
+        noExceptionThrown()
+        located
+        localTip() == originSide
     }
 }

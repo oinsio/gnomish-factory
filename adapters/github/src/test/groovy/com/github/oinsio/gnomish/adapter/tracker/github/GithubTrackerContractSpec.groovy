@@ -3,12 +3,14 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerFinishContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerEpochContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerShapeFactsContract
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
@@ -21,7 +23,7 @@ import java.net.http.HttpResponse
  * {@link GithubStateWrites}, {@link GithubCorrespondence}, {@link
  * GithubDecisions} — every one of them unmodified) against a WireMock server
  * into the full port contract suite (task 4.16 / task 3.5 / 1.2 of
- * add-factory-serve, FR4, M1, M2): {@link TrackerFinishContract} — the
+ * add-factory-serve, FR4, M1, M2): {@link TrackerEpochContract} — the
  * most-derived link in the chain — transitively runs every property from
  * {@code TrackerContract}, {@code TrackerMarkerContract}, {@code
  * TrackerFetchContract}, {@code TrackerLeaseContract}, {@code
@@ -70,7 +72,7 @@ import java.net.http.HttpResponse
  * <p>Implements FR4, NFR-R1 of add-tracker-port; FR1, FR4, FR5, FR8, NFR-R2,
  * M1 of add-claim-heartbeat (the extended contract passes on the GitHub adapter).
  */
-class GithubTrackerContractSpec extends TrackerFinishContract {
+class GithubTrackerContractSpec extends TrackerShapeFactsContract {
 
     private static final String OWNER = 'acme'
     private static final String REPO = 'widgets'
@@ -81,6 +83,8 @@ class GithubTrackerContractSpec extends TrackerFinishContract {
     private GithubTrackerFixtureAdapter fixtureAdapter
 
     def setup() {
+        def LABELS = new GithubStateLabels(FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL,
+                FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL)
         def registry = new FixtureIssueRegistry()
         wireMock = new WireMockServer(WireMockConfiguration.options()
                 .dynamicPort()
@@ -95,15 +99,16 @@ class GithubTrackerContractSpec extends TrackerFinishContract {
                 new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
                 new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL),
                 new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL),
-                new GithubStateWrites(httpClient, labelOps, INSTANCE_ID,
+                new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID),
                 FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
                 FixtureSeeder.DELIVERED_LABEL, FixtureSeeder.READY_LABEL),
-                new GithubCorrespondence(httpClient, INSTANCE_ID),
-                new GithubDecisions(httpClient, INSTANCE_ID),
+                new GithubCorrespondence(markerWriter(httpClient, INSTANCE_ID)),
+                new GithubDecisions(httpClient, markerWriter(httpClient, INSTANCE_ID)),
                 new GithubHeartbeat(httpClient, HOLDER_INSTANCE_ID),
-                new GithubOpenQuery(cache, OWNER, REPO, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL),
-                new GithubStaleClaimRemoval(httpClient, labelOps, INSTANCE_ID,
-                FixtureSeeder.WORKING_LABEL, FixtureSeeder.READY_LABEL))
+                new GithubOpenQuery(cache, OWNER, REPO, LABELS),
+                new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID),
+                FixtureSeeder.WORKING_LABEL, FixtureSeeder.READY_LABEL),
+                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID), LABELS))
 
         fixtureAdapter = new GithubTrackerFixtureAdapter(
                 realTracker, registry, wireMock.baseUrl(), OWNER, REPO, INSTANCE_ID)
@@ -147,6 +152,11 @@ class GithubTrackerContractSpec extends TrackerFinishContract {
     }
 
     @Override
+    protected void seedWorkingWithoutClaim(Tracker adapter, TaskRef ref) {
+        fixtureAdapter.seedWorkingWithoutClaim(ref)
+    }
+
+    @Override
     protected void returnToReady(Tracker adapter, TaskRef ref) {
         fixtureAdapter.returnToReady(ref)
     }
@@ -159,5 +169,9 @@ class GithubTrackerContractSpec extends TrackerFinishContract {
     @Override
     protected List<String> postedTexts(Tracker adapter, TaskRef ref) {
         fixtureAdapter.postedTexts(ref)
+    }
+
+    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

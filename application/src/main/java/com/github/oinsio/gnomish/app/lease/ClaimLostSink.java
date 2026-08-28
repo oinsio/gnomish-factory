@@ -16,7 +16,14 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
  * identical to a revocation — via {@code RevocationHandler} (task 6.1/6.3). {@link #IGNORE}
  * is the no-op sink for wiring and tests that do not exercise the claim-loss path.
  *
- * <p>Implements FR1, FR8 of add-claim-heartbeat.
+ * <p>The same seam carries the weaker signal self-fencing needs (FR13 of
+ * harden-task-branch-contract): {@link #claimUnconfirmed} says the holder can no longer confirm
+ * its claim is live — beats have failed past the lost-detection threshold — and {@link
+ * #claimConfirmed} says a beat proved it live again. "Unconfirmed" is not "lost": it is
+ * reversible, and it freezes writes rather than ending the run. Both are default no-ops so a
+ * sink that only cares about a lost claim stays a lambda.
+ *
+ * <p>Implements FR1, FR8 of add-claim-heartbeat. Implements FR13 of harden-task-branch-contract.
  */
 @FunctionalInterface
 public interface ClaimLostSink {
@@ -34,4 +41,26 @@ public interface ClaimLostSink {
      * @param ref the task whose claim was lost; never null
      */
     void claimLost(TaskRef ref);
+
+    /**
+     * Notifies that {@code ref}'s claim can no longer be confirmed: beats have been failing long
+     * enough that this holder no longer knows the claim is live. The run must stop writing at its
+     * next boundary until it re-verifies (FR13) — this is a freeze, not an ending, and a later
+     * {@link #claimConfirmed} lifts it.
+     *
+     * <p>Implements FR13 of harden-task-branch-contract.
+     *
+     * @param ref the task whose claim is unconfirmed; never null
+     */
+    default void claimUnconfirmed(TaskRef ref) {}
+
+    /**
+     * Notifies that {@code ref}'s claim is confirmed live again — a beat landed. Lifts a freeze
+     * {@link #claimUnconfirmed} set; a no-op when none was set.
+     *
+     * <p>Implements FR13 of harden-task-branch-contract.
+     *
+     * @param ref the task whose claim is confirmed; never null
+     */
+    default void claimConfirmed(TaskRef ref) {}
 }

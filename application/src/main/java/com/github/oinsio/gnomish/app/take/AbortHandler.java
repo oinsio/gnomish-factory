@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -28,6 +29,11 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The K-fuse decision is a pure threshold comparison over already-fetched
  * {@link AbortFacts} (design D10): {@code facts.count() + 1 >= threshold}.
+ * That count is the unified recovery accounting, not a fuse of its own (FR14,
+ * design D9 of harden-task-branch-contract): an instance crash and a failed
+ * branch repair spend from the same counter and trip the same threshold, and
+ * the {@link RecoveryCause} the caller names only decides which share of the
+ * history the quarantine report attributes the attempt to.
  * Fetching the current facts, computing backoff delay, and resetting the
  * counter on durable progress are NOT this class's job (tasks 5.4-5.6) — it
  * only receives facts and decides/acts on the single abort at hand.
@@ -67,22 +73,40 @@ public record AbortHandler(Tracker tracker, Clock clock) {
      *     caller; never null
      * @param threshold the configured abort-fuse threshold (K); positive
      * @param instanceId this factory instance's identity; never null
+     * @param category which category of the unified accounting this attempt
+     *     spends — a crashed run or a failed branch repair; never null
      * @return {@link TakeResult.Aborted} below the fuse, {@link
      *     TakeResult.AwaitingHuman} with {@link ParkReason#INFRA} at the fuse
      */
     public TakeResult handle(
-            TaskRef ref, TaskState finalState, String cause, AbortFacts facts, int threshold, InstanceId instanceId) {
-        log.error("Infrastructure abort on task {}: {}", ref.id(), cause);
+            TaskRef ref,
+            TaskState finalState,
+            String cause,
+            AbortFacts facts,
+            int threshold,
+            InstanceId instanceId,
+            RecoveryCause category) {
+        log.error("Infrastructure abort on task {} ({}): {}", ref.id(), category.wireValue(), cause);
 
         var nextCount = facts.count() + 1;
         if (nextCount >= threshold) {
-            var report = AbortReportBuilder.build(cause, nextCount, threshold, facts.lastAbortAt());
+            var report = AbortReportBuilder.build(cause, category, facts, threshold);
             parkBestEffort(ref, report);
             return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, report);
         }
 
-        recordAbortBestEffort(ref, cause, instanceId);
+        recordAbortBestEffort(ref, cause, instanceId, category);
         return new TakeResult.Aborted(finalState, cause);
+    }
+
+    /**
+     * The crash-category entry point kept for the callers whose attempt can only be an instance
+     * crash — an engine {@code Aborted} outcome, whose durable persist failed inside a running
+     * round.
+     */
+    public TakeResult handle(
+            TaskRef ref, TaskState finalState, String cause, AbortFacts facts, int threshold, InstanceId instanceId) {
+        return handle(ref, finalState, cause, facts, threshold, instanceId, RecoveryCause.INSTANCE_CRASH);
     }
 
     /**
@@ -107,9 +131,9 @@ public record AbortHandler(Tracker tracker, Clock clock) {
      * the abort protocol itself, since the caller still needs a {@link
      * TakeResult} back regardless of whether the tracker write landed.
      */
-    private void recordAbortBestEffort(TaskRef ref, String cause, InstanceId instanceId) {
+    private void recordAbortBestEffort(TaskRef ref, String cause, InstanceId instanceId, RecoveryCause category) {
         try {
-            tracker.recordAbort(ref, new AbortRecord(cause, instanceId.value(), clock.instant()));
+            tracker.recordAbort(ref, new AbortRecord(cause, instanceId.value(), clock.instant(), category));
         } catch (RuntimeException e) {
             log.error("recordAbort failed for task {}; proceeding with the abort anyway", ref.id(), e);
         }

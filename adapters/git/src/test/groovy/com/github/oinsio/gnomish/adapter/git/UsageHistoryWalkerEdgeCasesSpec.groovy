@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -34,14 +35,14 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
 
     def "FR14: service commits are not rounds — a salvage commit and a cleanup commit produce no usage rows"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-3', 'T', 'B', []), null)
+        taskRepository().createTask(new TaskContext('PROJ-3', 'T', 'B', []), null, TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-3', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
 
         and: 'an uncommitted leftover gets salvaged into a service commit, not a round'
         def worktree = worktreeFor('PROJ-3')
         new File(worktree.toFile(), 'leftover.txt').text = 'half-done work'
-        new WorktreeSalvage(runner, worktree).salvage('PROJ-3')
+        new WorktreeSalvage(runner, worktree, ClaimEpochSource.NONE).salvage('PROJ-3')
 
         and: 'the task then completes, triggering the cleanup commit that removes .gnomish-task/'
         taskRepository().recordOutcome('PROJ-3',
@@ -60,7 +61,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
     // NOT be seen as a new round — proving the boundary is <=, not <.
     def "FR14: a same-stage commit whose attempts list did not grow contributes no extra row"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-6', 'T', 'B', []), null)
+        taskRepository().createTask(new TaskContext('PROJ-6', 'T', 'B', []), null, TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-6', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
 
@@ -84,7 +85,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
     // a new row rather than being folded away as "no new round".
     def "FR14: advancing from a stage to pipeline end starts a fresh round and still yields a row for it"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-7', 'T', 'B', []), null)
+        taskRepository().createTask(new TaskContext('PROJ-7', 'T', 'B', []), null, TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-7', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
 
@@ -113,9 +114,9 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
         runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('seed-worktrees')
-        new GitTaskRepository(runner, seedClone, seedWorktrees).createTask(new TaskContext('PROJ-5', 'T', 'B', []), null)
+        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', 'T', 'B', []), null, TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-5'), 'PROJ-5')
+        new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
                 .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound),
                 new ToolTrace(new AttemptKey('PROJ-5', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
@@ -148,7 +149,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
     // other subcommand to the real git binary unchanged).
     def "FR14: a blank line in git log's output never crashes the walk nor produces a bogus row"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-8', 'T', 'B', []), null)
+        taskRepository().createTask(new TaskContext('PROJ-8', 'T', 'B', []), null, TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
         def realCommit = runner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-8').stdout().trim()

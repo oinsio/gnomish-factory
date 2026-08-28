@@ -28,6 +28,18 @@ trait TaskRecordFakes {
     }
 
     /**
+     * The {@code task.json} of an ANSWERED branch: a human decision is durable on it and no
+     * outcome is recorded, the shape whose acknowledge may still be owed (FR12 of
+     * harden-task-branch-contract).
+     */
+    TaskRecord recordWithDecision(String body, String taskId = 'PROJ-1') {
+        new TaskRecord(new TaskContext(taskId, 'title', 'body', [
+            new Decision(body, 'build', 'tracker', NOW)
+        ]),
+        'base-sha', NOW, null, null, false)
+    }
+
+    /**
      * The {@code task.json} of a branch whose last visit RECORDED how it ended, optionally with the
      * pending-terminal-write marker a park sets before the tracker write confirms.
      */

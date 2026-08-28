@@ -7,6 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -33,6 +34,12 @@ class GithubDecisionsSpec extends Specification {
     def setup() {
         wireMock = new WireMockServer(0)
         wireMock.start()
+        // The find half of the FR11 find-then-upsert primitive: every factory comment write reads
+        // the thread first. Specs that need a populated thread add their own, more recent stub.
+        wireMock.stubFor(
+                get(WireMock.urlMatching('.*/comments\\?per_page=100'))
+                .willReturn(aResponse()
+                .withStatus(200).withBody('[]')))
     }
 
     def cleanup() {
@@ -54,7 +61,7 @@ class GithubDecisionsSpec extends Specification {
 
     private GithubDecisions newDecisions(String instanceId = 'gnomish-factory-x7k2q1') {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
-        new GithubDecisions(httpClient, instanceId)
+        new GithubDecisions(httpClient, markerWriter(httpClient, instanceId))
     }
 
     private TaskRef refFor(int issueNumber) {
@@ -162,5 +169,54 @@ class GithubDecisionsSpec extends Specification {
                         '$.body', WireMock.containing('"instance":"gnomish-factory-x7k2q1"')))
                 .withRequestBody(WireMock.matchingJsonPath(
                         '$.body', WireMock.containing('acting on decision: Use approach B.'))))
+    }
+
+    def "acknowledging two different decisions posts two acks, so no answered decision is collected twice"() {
+        given: 'the thread already carries this tenure\'s ack of the first decision'
+        def existing = GithubMarker.render(GithubMarkerKind.ACK, 'gnomish-factory-x7k2q1',
+                Instant.parse('2026-07-20T09:05:00Z'),
+                '🤖 gnomish: acting on decision: Use approach B.', null,
+                GithubCommentIdentity.of(new GithubTaskId('', 'acme', 'widgets', 35),
+                'ack@none.' + Integer.toHexString('Use approach B.'.hashCode())), null)
+        stubComments(wireMock, 35, '[' + commentJson(7, existing) + ']')
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/35/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":8,"body":"whatever"}')))
+
+        when: 'a second, different decision is acknowledged in the same tenure'
+        newDecisions().acknowledgeDecision(refFor(35), 'Actually, approach C.')
+
+        then: 'it lands as its own comment rather than editing the first ack in place'
+        wireMock.verify(1, postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/35/comments')))
+        wireMock.findAll(WireMock.patchRequestedFor(
+                        urlEqualTo('/repos/acme/widgets/issues/comments/7'))).isEmpty()
+    }
+
+    def "re-driving the same acknowledgment updates its own comment instead of duplicating (UX3)"() {
+        given:
+        def identity = GithubCommentIdentity.of(new GithubTaskId('', 'acme', 'widgets', 36),
+                'ack@none.' + Integer.toHexString('Use approach B.'.hashCode()))
+        def existing = GithubMarker.render(GithubMarkerKind.ACK, 'gnomish-factory-x7k2q1',
+                Instant.parse('2026-07-20T09:05:00Z'),
+                '🤖 gnomish: acting on decision: Use approach B.', null, identity, null)
+        stubComments(wireMock, 36, '[' + commentJson(11, existing) + ']')
+        wireMock.stubFor(WireMock.patch(urlEqualTo('/repos/acme/widgets/issues/comments/11'))
+                .willReturn(aResponse().withStatus(200).withBody('{"id":11}')))
+
+        when:
+        newDecisions().acknowledgeDecision(refFor(36), 'Use approach B.')
+
+        then:
+        wireMock.verify(0, postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/36/comments')))
+        wireMock.verify(WireMock.patchRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/11')))
+    }
+
+    /** Renders one GitHub comment JSON object, JSON-escaping the marker body for embedding in a listing. */
+    private static String commentJson(long id, String body) {
+        def escaped = body.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+        "{\"id\":${id},\"created_at\":\"2026-07-20T09:00:00Z\",\"body\":\"${escaped}\"}"
+    }
+
+    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource;
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -93,16 +94,28 @@ public class ManualRunConfiguration {
     }
 
     /**
+     * The instance's record of the claim epochs its live tenures were issued (FR13 of
+     * harden-task-branch-contract): one book per process, written at the take path's claim choke
+     * point and read by every writer that stamps a commit with the tenure it belongs to. A bean
+     * rather than a per-run object because the writers and the claim path are wired independently
+     * of one another, and both must see the same book for a stamp to mean anything.
+     */
+    @Bean
+    public ClaimEpochBook claimEpochBook() {
+        return new ClaimEpochBook();
+    }
+
+    /**
      * Binds the whole task-git capability set to its git-subprocess realization (FR12b, design D12
      * of split-into-modules) — one bean, so every collaborator a run is handed necessarily comes
      * from the same backend and shares the one runner above.
      */
     @Bean
-    public TaskGit taskGit(GitProcessRunner gitProcessRunner) {
+    public TaskGit taskGit(GitProcessRunner gitProcessRunner, ClaimEpochBook claimEpochBook) {
         return new TaskGit(
-                new GitTaskStore(gitProcessRunner),
-                new GitTaskBranches(gitProcessRunner),
-                new GitTaskWorktrees(gitProcessRunner));
+                new GitTaskStore(gitProcessRunner, claimEpochBook),
+                new GitTaskBranches(gitProcessRunner, claimEpochBook),
+                new GitTaskWorktrees(gitProcessRunner, claimEpochBook));
     }
 
     /**

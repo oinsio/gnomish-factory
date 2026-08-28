@@ -13,6 +13,8 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
@@ -63,6 +65,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     private TakeDispatcher dispatcher() {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
                 ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
@@ -159,7 +162,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
 
         then:
         2 * tracker.fetchTask(REF) >> readyTask()
-        1 * tracker.claim(REF, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(REF, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
 
         and: 'the run crashes inside the claim; the abort re-reads the facts and lands on this tracker'
         1 * tracker.recordAbort(REF, _)

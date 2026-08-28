@@ -26,6 +26,7 @@ record InMemoryWriteOps(InMemoryTracker tracker) {
             TrackedTask task = tracker.requireTask(ref);
             task.state(new TrackerTaskState.AwaitingHuman(reason));
             task.clearClaim();
+            task.parkReason(reason);
             task.report(report);
             task.note(CorrespondenceEntry.Kind.PARK, "parked (" + reason + "): " + report);
         });
@@ -62,10 +63,12 @@ record InMemoryWriteOps(InMemoryTracker tracker) {
     void recordAbort(TaskRef ref, AbortRecord record) {
         runLocked(() -> {
             TrackedTask task = tracker.requireTask(ref);
-            task.recordAbort(record.at());
+            task.recordAbort(record.at(), record.category());
             task.state(new TrackerTaskState.Ready());
             task.clearClaim();
-            task.note(CorrespondenceEntry.Kind.ABORT, "abort: " + record.cause());
+            task.note(
+                    CorrespondenceEntry.Kind.ABORT,
+                    "abort (" + record.category().wireValue() + "): " + record.cause());
         });
     }
 

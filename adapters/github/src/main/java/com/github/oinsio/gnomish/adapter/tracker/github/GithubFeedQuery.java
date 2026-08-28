@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.net.URLEncoder;
@@ -93,15 +94,20 @@ public final class GithubFeedQuery {
             int issueNumber = issue.number();
             TaskRef ref = new TaskRef(
                     GithubTaskId.build(apiUrl, owner, repo, issueNumber).canonicalId());
-            // FR7, NFR-P1: one comments fetch per issue, reused for all three facts —
-            // no extra GitHub API read for the returned or finished facts.
-            List<ParsedMarker> markers = abortFactsReader.fetchMarkers(owner, repo, issueNumber);
+            // FR7, NFR-P1: one comments fetch per issue, reused for every fact below — no extra
+            // GitHub API read for the returned, finished, or claim facts.
+            String commentsBody = abortFactsReader.fetchCommentsBody(owner, repo, issueNumber);
+            List<ParsedMarker> markers = GithubCommentParser.parseMarkers(commentsBody);
             var abortFacts = GithubAbortFactsReader.foldAbortMarkers(markers);
             boolean returned = GithubHistoryFactReader.derive(markers);
             boolean finished = GithubHistoryFactReader.deriveFinished(markers);
             // FR7, NFR-P1 of add-board-command: the title rides the same list-issues response —
             // no per-task fetchTask fan-out.
-            readyTasks.add(new ReadyTask(ref, abortFacts, returned, finished, issue.title()));
+            // FR19 of harden-task-branch-contract: the claim footprint rides the same fetch, so a
+            // ready-labeled issue that still carries a claim marker is visible to the sweep instead
+            // of losing races to a ghost.
+            ClaimFacts claim = GithubTrackerFacts.claim(GithubClaimComment.parse(commentsBody));
+            readyTasks.add(new ReadyTask(ref, abortFacts, returned, finished, issue.title(), claim));
         }
         return List.copyOf(readyTasks);
     }

@@ -2,9 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
-import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Reconstructs a task's {@link AbortFacts} from its GitHub issue comments
@@ -69,37 +67,38 @@ record GithubAbortFactsReader(GithubConditionalRequestCache cache) {
      * thread is fetched only once per issue.
      */
     List<ParsedMarker> fetchMarkers(String owner, String repo, int issueNumber) {
-        String path = "/repos/%s/%s/issues/%d/comments?per_page=100".formatted(owner, repo, issueNumber);
-        String cacheKey = "comments:%s/%s#%d".formatted(owner, repo, issueNumber);
-        String body =
-                switch (cache.get(cache.httpClient().newRequest(path), cacheKey)) {
-                    case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
-                    case GithubConditionalRequestCache.Fresh fresh -> {
-                        if (fresh.statusCode() / 100 != 2) {
-                            throw new GithubFeedQueryException("Failed to fetch comments for %s/%s#%d: HTTP %d"
-                                    .formatted(owner, repo, issueNumber, fresh.statusCode()));
-                        }
-                        yield fresh.body();
-                    }
-                };
-        return GithubCommentParser.parseMarkers(body);
+        return GithubCommentParser.parseMarkers(fetchCommentsBody(owner, repo, issueNumber));
     }
 
-    static AbortFacts foldAbortMarkers(List<ParsedMarker> markers) {
-        Optional<Integer> progressIndex = GithubCommentBoundary.latestProgressIndex(markers);
-        if (progressIndex.isPresent()) {
-            return GithubCommentBoundary.foldAbortsAfter(markers, progressIndex.get());
-        }
-        int count = 0;
-        Instant lastAbortAt = null;
-        for (ParsedMarker marker : markers) {
-            if (marker.kind() == GithubMarkerKind.ABORT) {
-                count++;
-                if (lastAbortAt == null || marker.at().isAfter(lastAbortAt)) {
-                    lastAbortAt = marker.at();
+    /**
+     * The raw comments body behind {@link #fetchMarkers}, through the same cached read, for the one
+     * caller that needs more than the parsed markers: the ready feed resolves each entry's claim
+     * facts from comment ids and update times, which the marker projection drops (FR19 of
+     * harden-task-branch-contract). Still one fetch per issue — no additional API call (NFR-P1).
+     */
+    String fetchCommentsBody(String owner, String repo, int issueNumber) {
+        String path = "/repos/%s/%s/issues/%d/comments?per_page=100".formatted(owner, repo, issueNumber);
+        String cacheKey = "comments:%s/%s#%d".formatted(owner, repo, issueNumber);
+        return switch (cache.get(cache.httpClient().newRequest(path), cacheKey)) {
+            case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
+            case GithubConditionalRequestCache.Fresh fresh -> {
+                if (fresh.statusCode() / 100 != 2) {
+                    throw new GithubFeedQueryException("Failed to fetch comments for %s/%s#%d: HTTP %d"
+                            .formatted(owner, repo, issueNumber, fresh.statusCode()));
                 }
+                yield fresh.body();
             }
-        }
-        return count == 0 ? AbortFacts.none() : new AbortFacts(count, lastAbortAt);
+        };
+    }
+
+    /**
+     * Folds this issue's ABORT markers into the unified accounting: after the latest PROGRESS
+     * marker when one is present, over the whole thread otherwise — which is the same fold from an
+     * index before the first marker, so the recovery/crash categorization (FR14 of
+     * harden-task-branch-contract) has exactly one implementation for both cases.
+     */
+    static AbortFacts foldAbortMarkers(List<ParsedMarker> markers) {
+        int exclusiveFrom = GithubCommentBoundary.latestProgressIndex(markers).orElse(-1);
+        return GithubCommentBoundary.foldAbortsAfter(markers, exclusiveFrom);
     }
 }
