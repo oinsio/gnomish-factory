@@ -1,5 +1,5 @@
 ---
-description: Read-only periodic audit of the whole codebase — duplication, dead code, antipatterns, concurrency, crash-consistency, security, test quality, docs drift; changes nothing
+description: Read-only periodic audit of the whole codebase — duplication, dead code, antipatterns, concurrency, crash-consistency, security, logging, test quality, docs drift; changes nothing
 argument-hint: "[dimensions] (comma-separated, default all)"
 ---
 
@@ -25,6 +25,7 @@ The only artifact is the report in the reply; the human decides whether to save 
 | `concurrency`       | shared state, happens-before, interrupts, vthread pinning |
 | `crash-consistency` | implementation vs the `crash-consistency.md` checklist    |
 | `security`          | injection, secrets, sandbox boundaries                    |
+| `logging`           | level misuse, silent degradation, noise, MDC, log injection |
 | `test-quality`      | PIT exemption validity, traceability coverage             |
 | `docs-drift`        | glossary/ADR/guides vs actual code and CLI                |
 
@@ -76,6 +77,23 @@ Give each subagent the project context (orchestrator, ports & adapters, module l
   shell-interpolated — inspect every place a shell script is built by concatenation); refs
   and paths from task data sanitized; secrets never in logs/commits/error messages;
   credential scrub lists complete; sandbox/egress claims enforced, fail closed.
+- **logging** — audit against the logging policy (`.claude/rules/logging.md` and the
+  logging ADR where present; the checks below stand alone regardless). **Silent
+  degradation**: catch blocks that swallow and return a degraded/default value with no log;
+  subprocess/git invocations whose exit code is unchecked before the output is consumed as
+  evidence; retries/backoffs invisible in the log. **Level misuse**: WARN/ERROR on
+  normal or recovered flow (levels encode required reader reaction — the WARN+ console is
+  the operator channel); per-item or per-loop chatter at INFO+; unbounded repetition in
+  poll loops with no first-occurrence/roll-up suppression. **Throwable handling**:
+  `e.toString()`/`getMessage()` interpolated as a format argument instead of the trailing
+  throwable (stack trace amputated); `getMessage()` that can render `null`. **Log
+  injection**: untrusted text (agent/LLM output, subprocess stderr, tracker strings)
+  interpolated raw — unsanitized ANSI/control chars, interior newlines that forge log
+  records, unbounded payload length. **Context**: log statements on virtual-thread hops
+  without MDC propagation; daemon-thread lines with no component identity; per-task
+  decisions not findable by a `taskId` grep. **Lifecycle**: state transitions and
+  best-effort cleanup paths that leave no trace; one failure logged at multiple layers
+  along one call path. **Hygiene**: test suites writing to the operator's production log.
 - **test-quality** — every `@DoNotMutate`, `excludedClasses`, `excludedTestClasses` entry
   still meets its written bar in `testing.md` (the named covering suite exists and covers
   the claimed scenarios); exemption count trend; per `traceability.md`, every FR/NFR of

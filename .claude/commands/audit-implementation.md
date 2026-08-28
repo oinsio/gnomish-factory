@@ -81,6 +81,11 @@ Check the new/modified files (from the diff) against `.claude/rules/`:
   third implementation of the same rule must extract the abstraction.
 - `testing.md`: every new `@DoNotMutate` / `excludedClasses` / `excludedTestClasses` entry has
   a written rationale meeting the rule's bar; specs are Spock, one capability per spec file.
+- `logging.md` (where present; otherwise apply the same checks directly): new/modified log
+  statements use the level the policy prescribes (no WARN for normal/recovered flow, no
+  per-loop chatter at INFO+); untrusted text (agent output, subprocess stderr, tracker
+  strings) enters log lines only through the sanitizer choke point; new specs that assert
+  logging use the shared capture helper and no test writes to the operator's log.
 - `design-decisions.md` adherence: implementation matches each D/DEC decision in `design.md`;
   contradictions are ⚠️ with "fix code or revise design.md" recommendations.
 - `diagrams.md`/docs: if the change altered behavior described in `docs/` or `README.md`,
@@ -109,7 +114,16 @@ would — beyond what static analysis already gates:
   - new non-`final` non-`volatile` fields on classes reachable from concurrent slot threads,
     and any attach/set-after-construction initialization protocol;
   - new `catch (Throwable)` or `catch (Exception)` — each requires a written justification
-    for its breadth, else narrow it to the expected exception type.
+    for its breadth, else narrow it to the expected exception type;
+  - new catch blocks that swallow and return a degraded/default value with **no log line** —
+    a best-effort path must leave a trace;
+  - new log calls interpolating an exception (`e.toString()`, `getMessage()`) as a format
+    argument instead of passing the throwable as the trailing argument;
+  - new log calls interpolating untrusted text (agent/LLM output, `stderr()`, tracker
+    strings) without the sanitizer choke point — ANSI/newline/length unbounded;
+  - new poll/retry loops logging per iteration with no first-occurrence/roll-up
+    suppression;
+  - new virtual-thread spawns whose body logs, without MDC capture/apply/clear.
 
 Report each finding with file:line, severity, and a concrete fix suggestion — not applied.
 
