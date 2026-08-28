@@ -97,7 +97,10 @@ removal, index repair) and their converge-aborts; best-effort cleanup failures
 (claim-comment delete, worktree removal, environment dispose steps); fallbacks
 that fabricate defaults (abort-facts unavailable); readers that drop malformed
 or unreadable data (dashboard sources distinguishing missing from malformed,
-token-usage extraction yielding empty).
+token-usage extraction yielding empty); silent adoption of another instance's
+work (resume-branch recreation from the origin tracking ref); degradation
+warnings SHALL name their subject (check identity, secret variable name —
+never the value).
 <!-- implements FR5 of harden-logging-observability -->
 
 #### Scenario: Retry storm is visible

@@ -160,7 +160,9 @@ defect classes cannot return.
   create/reattach/dispose outcomes including per-step dispose failures with
   environment key; git lifecycle commits; worktree removal failures; dashboard
   ledger/snapshot degradations distinguishing missing from malformed; empty
-  token-usage extraction.
+  token-usage extraction; local resume-branch recreation from the origin
+  tracking ref (adopting another instance's work); env-file secret resolution
+  warnings naming the variable (never the value).
 - **FR6** Untrusted text (agent/LLM output, subprocess stderr, tracker-sourced
   strings, in-container command output) SHALL enter log lines only through the
   sanitizer choke point: control/ANSI stripping, newline flattening (no multi-line
@@ -199,7 +201,9 @@ defect classes cannot return.
   level follows category (steady-state DEBUG, actions INFO, `SKIPPED_NO_VERDICT`
   WARN); recovered transients and first-of-two-attempts demoted from WARN;
   per-tool-call and per-probe INFO demoted to DEBUG; duplicate-per-path lines
-  collapsed to one owner each.
+  collapsed to one owner each; per-poll finished-task decline INFO and reaper
+  sweep-page/convergence chatter latched (first occurrence at the site's
+  level, repeats DEBUG).
 
 ### Non-Functional Reliability
 
