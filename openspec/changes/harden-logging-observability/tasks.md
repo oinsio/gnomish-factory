@@ -74,8 +74,9 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       `serveStarted`, `serveStopping`, `taskSummary`; call it from both claim
       paths and `ServeCommand` start/stop plus startup-failure logging (the
       `System.err`-only provisioning failure gains a `log.error` with the
-      exception); verify: specs assert the claim anchor precedes engine events
-      and serve start/stop lines carry config.
+      exception); delete the unreachable `FactoryApplication` DEBUG line
+      (superseded by the serve start anchor); verify: specs assert the claim
+      anchor precedes engine events and serve start/stop lines carry config.
 - [ ] 4.2 Define `TaskSummary` and the single renderer in `AnchorLog` (D3,
       FR3); verify: renderer spec covers every outcome family incl.
       post-harden quarantine.
@@ -111,13 +112,18 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       asserts retry lines on 429/5xx sequences.
 - [ ] 5.3 Sandbox local aggregates (D4): guard-denial parse loop counts drops
       and emits one keyed WARN per read (key threaded into `GuardDenialLog`);
-      scratch-tree deletion counts failures into one WARN; verify: specs
-      assert single aggregate line for multi-failure input.
+      scratch-tree deletion counts failures into one WARN; the
+      `ContainerFileChannel` truncation WARN gains the environment key;
+      verify: specs assert single aggregate line for multi-failure input and
+      the key on the truncation line.
 - [ ] 5.4 Level demotions per audit (FR12): recovered-transient and
       first-attempt WARNs → INFO (park fence, remote attempt delivery, foreign
       repo rename), per-tool-call INFO → DEBUG, self-check per-probe INFO →
       DEBUG with enriched aggregate, reconciliation/convergence chatter →
-      DEBUG, findings-file habit WARN → DEBUG, duplicate-per-path collapses
+      DEBUG (incl. `Reaper` sweep-page-filled and its convergence-under-
+      contention lines — the stale-claim WARN stays), per-poll finished-task
+      decline latched (first INFO, repeats DEBUG), findings-file habit WARN →
+      DEBUG, duplicate-per-path collapses
       (origin reconciliation, remote delivery, first push, dispose vs verdict);
       verify: each demotion's spec updated deliberately (no blanket edits) —
       the task's diff references the audit rationale per site.
@@ -136,7 +142,8 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
 - [ ] 6.2 Guarded HTTP checks: WARN on egress refusal and redirect-bound
       refusal; command-check start failures and environment-unavailable paths
       log with the check identity; findings-reader warnings gain the check
-      identity; verify: specs assert attribution fields.
+      identity; the env-file secrets warning names the variable (never the
+      value); verify: specs assert attribution fields.
 - [ ] 6.3 Tracker degradations: abort-facts fallback WARN (fuse under-count
       consequence named), claim-comment delete failure WARN, stale-claim
       removal + index repair INFO with converge-abort DEBUG, malformed
@@ -145,7 +152,11 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       walker failures WARN/DEBUG, snapshot-tip and claim-epoch parse
       anomalies, terminal-commit idempotent skips DEBUG, retry-loop DEBUG in
       `GitInfrastructureRetry`, fetch-failure DEBUG before NotFound
-      classification, worktree removal/salvage-discard failures (mirrored
+      classification, resume-branch recreation from the origin tracking ref
+      INFO (`ContainerResumeBranch` — adopting another instance's work),
+      cleanup-commit history probe DEBUG on non-zero exit (`GitShowTip` —
+      diagnostic only per NG1, no behavior change), worktree
+      removal/salvage-discard failures (mirrored
       across the salvage pair with markers, D8); verify: specs per site; pair
       markers present at both salvage ends.
 - [ ] 6.5 Dashboard and observability readers: malformed-vs-missing
@@ -159,8 +170,10 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
 
 - [ ] 7.1 Apply `MdcAwareThread` to the logging virtual-thread hops
       (`ChildProcessStdin`, `ContainerFileChannel` pump, `ExecPipeDrain`)
-      (D10, FR8); verify: specs assert taskId on helper-thread lines
-      (`StreamDrainSpec` precedent).
+      (D10, FR8); check whether `GithubWorkflowRunPoll` lines land with empty
+      MDC and apply the same fix at that thread boundary if so; verify: specs
+      assert taskId on helper-thread lines (`StreamDrainSpec` precedent) and
+      on workflow-poll lines.
 - [ ] 7.2 Clear `stage`/`attempt` at the four thread boundaries that clear
       `taskId` (backstop to the `TaskFinished` clear); verify: MDC spec kills
       the leak scenario (run ends without `TaskFinished`).
