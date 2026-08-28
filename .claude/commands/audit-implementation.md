@@ -70,6 +70,15 @@ Check the new/modified files (from the diff) against `.claude/rules/`:
 
 - `process-invariants.md`: file size (target 100–120 lines, hard cap 200), module boundaries
   (no imports from sibling-module internals), English-only docs/comments.
+- `crash-consistency.md`: if the diff adds or modifies a transition with two or more durable
+  steps, the change's `design.md`/specs must answer every item of that rule's checklist
+  (kill windows named, shapes classified, one recovery owner each) and kill-point specs must
+  exist. A multi-step transition without these answers is ❌ CRITICAL.
+- `manual-sync-pairs.md`: for every diff file that carries a `Kept in sync with` marker or
+  appears in the rule's registry, verify the counterpart changed too — or the report states
+  why no mirrored change is needed. A new file reimplementing a rule that already exists in
+  another mode/layer must either share an abstraction or declare the pair at both ends; a
+  third implementation of the same rule must extract the abstraction.
 - `testing.md`: every new `@DoNotMutate` / `excludedClasses` / `excludedTestClasses` entry has
   a written rationale meeting the rule's bar; specs are Spock, one capability per spec file.
 - `design-decisions.md` adherence: implementation matches each D/DEC decision in `design.md`;
@@ -90,6 +99,17 @@ would — beyond what static analysis already gates:
   class), overly clever code where a plain version exists.
 - **Error reporting**: failures must name the problem and the fix (the project's fail-fast
   convention); flag messages that would leave an operator guessing.
+- **Reinvention check**: for each new private helper method, named constant, and repeated
+  string literal in the diff, grep the codebase for an existing equivalent (same name, same
+  value, or same responsibility). If one exists, the verdict is "reuse the canonical one or
+  justify the local copy in the report" — an unjustified copy is a ⚠️ finding.
+- **Mechanical risk classes** (grep the diff for each):
+  - new git/subprocess invocations (`runner.run(...)`, `exec`, `ProcessBuilder`) whose exit
+    code is not checked before the output is used;
+  - new non-`final` non-`volatile` fields on classes reachable from concurrent slot threads,
+    and any attach/set-after-construction initialization protocol;
+  - new `catch (Throwable)` or `catch (Exception)` — each requires a written justification
+    for its breadth, else narrow it to the expected exception type.
 
 Report each finding with file:line, severity, and a concrete fix suggestion — not applied.
 

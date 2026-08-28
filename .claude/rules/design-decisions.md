@@ -66,6 +66,18 @@ What drove these decisions. Reference FR/NFR from proposal.md.
 
 Each Dn must still carry its rationale and at least one rejected alternative; the shared Risks / Trade-offs section covers the negative consequences. Other artifacts reference decisions as `D1`, `D2`, ...
 
+## Mandatory decision: sync surfaces
+
+One decision category is required, not optional. If the change adds a second implementation
+of a rule/capability that already exists for another execution mode, layer, or medium — or
+touches either end of a pair declared in `manual-sync-pairs.md` — `design.md` MUST record
+the decision: **shared abstraction or declared pair**, chosen by that rule's preference
+order (a third implementation always extracts the abstraction), with rationale and the
+rejected alternative. A change with no such surface states it explicitly:
+`Sync surfaces: none — this change adds no parallel implementation and touches no declared
+pair.` Silence is a format violation — the explicit "none" is what makes the question
+checkable by `/review-artifacts` and `/audit-implementation`.
+
 ## Rules
 
 - Always reference the FR/NFR/UX from proposal.md that drove the decision

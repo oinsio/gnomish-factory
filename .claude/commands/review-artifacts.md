@@ -65,6 +65,13 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
   requirement has at least one `#### Scenario:`; scenarios are concrete enough to test.
 - **design.md** (when the change alters architecture, ports, or cross-module contracts):
   exists per `design-decisions.md`, decisions have IDs and "Context: driven by FR-X" links.
+- **Sync surfaces** (`design-decisions.md`, mandatory category): the design answers
+  "shared abstraction or declared pair", or states the explicit
+  `Sync surfaces: none` line. Verify the answer against reality: grep
+  `Kept in sync with` markers and the `manual-sync-pairs.md` registry for pairs the change
+  touches, and search for an existing same-rule implementation in another mode/layer that
+  the artifacts fail to mention. A missing answer, or a "none" contradicted by an existing
+  counterpart, is ❌ CRITICAL.
 - **tasks.md**: every FR/NFR/UX maps to at least one task; every task traces back to a
   requirement or decision; verification steps are automated (specs, gates), not manual.
 - **Coverage matrix**: for each requirement ID report proposal → delta spec → task presence;

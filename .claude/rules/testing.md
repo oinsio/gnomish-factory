@@ -81,3 +81,9 @@ The bar: excluding the suite must remove **no production line** from mutation co
 - One capability per spec file; descriptive method names in natural language (Spock convention)
 - Contract tests for every port: each adapter must pass the same port-level spec suite
 - Integration tests are the slowest — scope runs to what the change affects
+- **Every wire vocabulary has a round-trip spec.** When an enum is serialized to wire tokens
+  by one component and parsed back by another (ledger, snapshot, state files), a data-driven
+  spec must assert `fromWire(wire(e)) == e` for **every** constant — iterate `values()`, no
+  hand-listed subset — and pin the unknown-token behavior (the documented forward-compat
+  `default` arm). This is what keeps a writer/reader pair (see `manual-sync-pairs.md`) from
+  drifting silently: adding a constant mapped on only one side fails the spec, not production
