@@ -101,13 +101,14 @@ public final class GithubIndexRepair {
                         + " marker";
         markerWriter.write(
                 id,
-                GithubMarkerKind.INDEX_REPAIR,
-                shape,
-                "🤖 gnomish: index repaired — observed " + shape,
-                null,
-                null,
-                markerWriter.instanceId(),
-                Instant.now());
+                new GithubMarkerWrite(
+                        GithubMarkerKind.INDEX_REPAIR,
+                        shape,
+                        "🤖 gnomish: index repaired — observed " + shape,
+                        null,
+                        null,
+                        markerWriter.instanceId(),
+                        Instant.now()));
     }
 
     /** The label flip the observed boundary implies; no boundary at all rolls the claim back. */

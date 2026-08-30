@@ -37,10 +37,24 @@ import java.util.Optional;
  * failure by throwing" convention.
  *
  * <p>The rendered marker matches {@link GithubClaimLease}'s claim-comment shape
- * exactly ({@code CLAIM} kind, this instance's id, {@code now}), so the anchor and
- * every boundary-aware re-read stay uniform across a claim's beats.
+ * exactly ({@code CLAIM} kind, this instance's id, {@code now}, and the same
+ * {@code claim@<instanceId>} content identity, built by {@link
+ * GithubClaimLease#claimIdentityOf}), so the anchor and every boundary-aware
+ * re-read stay uniform across a claim's beats. Re-rendering the identity is what
+ * keeps a beaten comment adoptable: the lease's find is content-identity based
+ * (FR11 of harden-task-branch-contract), and a beat that dropped it would leave a
+ * live claim the lease can no longer match against its own instance.
  *
- * <p>Implements FR1, FR8 of add-claim-heartbeat.
+ * <p>A beat writes only to a claim this instance still holds (FR7): a resolved
+ * claim comment naming a different instance is the {@link
+ * HeartbeatResult.ClaimGone} signal, not something to PATCH. A reaped zombie
+ * whose beat overwrote the new holder's claim comment would rewrite the very
+ * holder the zombie fence reads — {@code ClaimGuard} and the round-boundary
+ * revocation check both decide "still ours" from that marker — inverting the
+ * fence instead of tripping it.
+ *
+ * <p>Implements FR1, FR7, FR8 of add-claim-heartbeat; FR11 of
+ * harden-task-branch-contract.
  */
 // Not a record: this is a behavior-bearing beat service (a collaborator holding an HTTP client and
 // this instance's id, not immutable data), kept as a plain final class for parity with its
@@ -66,7 +80,7 @@ public final class GithubHeartbeat {
         // PIT's null-return mutant of that branch observationally equivalent (an unkillable
         // survivor). With the branch explicit, a null from the patch step reaches the caller.
         Optional<GithubClaimComment.Candidate> claim = resolveClaim(id);
-        if (claim.isEmpty()) {
+        if (claim.isEmpty() || !instanceId.equals(claim.get().marker().instance())) {
             return new HeartbeatResult.ClaimGone();
         }
         return patchClaimComment(id, claim.get().id(), progressPayload);
@@ -95,7 +109,18 @@ public final class GithubHeartbeat {
     }
 
     private HeartbeatResult patchClaimComment(GithubTaskId id, long commentId, String progressPayload) {
-        String body = GithubMarker.render(GithubMarkerKind.CLAIM, instanceId, Instant.now(), progressPayload);
+        // The same body the claim itself was written with (FR11 of harden-task-branch-contract),
+        // identity included: a beat refreshes the claim comment, it does not replace it with a
+        // different kind of write, so the identity a reclaim adopts the comment by must survive the
+        // edit. No epoch: a claim marker never carries one — its own comment id IS the epoch.
+        String body = GithubMarker.render(
+                GithubMarkerKind.CLAIM,
+                instanceId,
+                Instant.now(),
+                progressPayload,
+                null,
+                GithubClaimLease.claimIdentityOf(id, instanceId),
+                null);
         String path = "/repos/%s/%s/issues/comments/%d".formatted(id.owner(), id.repo(), commentId);
         HttpRequest.Builder request = httpClient
                 .newRequest(path)

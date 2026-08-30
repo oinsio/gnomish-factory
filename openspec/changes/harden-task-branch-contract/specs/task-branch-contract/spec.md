@@ -10,19 +10,19 @@ Define the contract every task branch obeys between factory transitions: a total
 <!-- implements FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract -->
 A classifier SHALL map any task branch tip — its file set, envelope versions, and claim epoch — to exactly one named shape from this closed set of eleven, which is the canonical vocabulary every other artifact of this change refers to rather than restates:
 
-| Shape | Meaning |
-|---|---|
-| `Bare` | the branch ref exists but carries no STARTED commit |
-| `Created` | the STARTED commit is present and no round has completed, including a pre-contract tip carrying `task.json` without `state.json` |
-| `InProgress` | a run is underway; rounds recorded, no outcome |
-| `Parked` | an outcome is recorded and a human is awaited; the pending-write marker is a sub-state, not a separate shape |
-| `Answered` | the human's decision is appended and the outcome cleared, so the branch is resumable |
-| `CompletedUncleaned` | an outcome is recorded and cleanup is still pending |
-| `Delivered` | cleanup completed, found by searching history for the cleanup commit and tolerating post-cleanup commits |
-| `StaleEpoch` | the tip's artifacts carry a claim epoch older than the live claim |
-| `UnsupportedVersion` | an envelope declares a version this factory does not support |
-| `Corrupt(reason)` | content is unreadable or self-contradictory; the reason names the offending file and the observed versus expected content |
-| `Unknown` | a legal-but-unrecognized combination |
+| Shape                | Meaning                                                                                                                          |
+|----------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `Bare`               | the branch ref exists but carries no STARTED commit                                                                              |
+| `Created`            | the STARTED commit is present and no round has completed, including a pre-contract tip carrying `task.json` without `state.json` |
+| `InProgress`         | a run is underway; rounds recorded, no outcome                                                                                   |
+| `Parked`             | an outcome is recorded and a human is awaited; the pending-write marker is a sub-state, not a separate shape                     |
+| `Answered`           | the human's decision is appended and the outcome cleared, so the branch is resumable                                             |
+| `CompletedUncleaned` | an outcome is recorded and cleanup is still pending                                                                              |
+| `Delivered`          | cleanup completed, found by searching history for the cleanup commit and tolerating post-cleanup commits                         |
+| `StaleEpoch`         | the tip's artifacts carry a claim epoch older than the live claim                                                                |
+| `UnsupportedVersion` | an envelope declares a version this factory does not support                                                                     |
+| `Corrupt(reason)`    | content is unreadable or self-contradictory; the reason names the offending file and the observed versus expected content        |
+| `Unknown`            | a legal-but-unrecognized combination                                                                                             |
 
 The happy-path progression of the shapes, with the two groups that leave it — quarantine on first classification and the stale-epoch fence:
 
@@ -102,7 +102,7 @@ Each (re)claim SHALL be issued a monotonically increasing epoch, recorded with t
 
 ### Requirement: Replica-pair reconciliation
 <!-- implements FR8, NFR-R3 of harden-task-branch-contract -->
-Per repository, one task SHALL be one ref and one logical transition one commit; movement across repositories is reconciled, never transactional. Origin is the sole inter-instance source of truth, and the durability point of any transition is its successful push, never the local commit. When the local branch and origin differ and the instance holds a live claim: local ahead of origin keeps local; local behind fast-forwards to origin; true divergence discards local (reset to the origin tip, dropping drafts) and continues automatically, with the reset applied as an explicit compare-and-swap against the tip the decision was made on. No automatic path SHALL force-push or rewrite origin history.
+Per repository, one task SHALL be one ref and one logical transition one commit; movement across repositories is reconciled, never transactional. Origin is the sole inter-instance source of truth, and the durability point of any transition is its successful push, never the local commit. When the local branch and origin differ and the instance holds a live claim: local ahead of origin keeps local; local behind fast-forwards to origin; true divergence discards local (reset to the origin tip, dropping drafts) and continues automatically, with the reset applied as an explicit compare-and-swap against the tip the decision was made on. The discard SHALL be gated on that claim: where no claim is held, a diverged pair SHALL stop with an operator-facing report instead, while the ungated relations (equal, ahead, behind) reconcile the same way with or without one. No automatic path SHALL force-push or rewrite origin history.
 
 ```mermaid
 flowchart TD
@@ -110,13 +110,18 @@ flowchart TD
     C -->|EQUAL| K["continue"]
     C -->|AHEAD| A["keep local; push catches up"]
     C -->|BEHIND| B["fast-forward to origin tip"]
-    C -->|DIVERGED| D["CAS-reset local ref to origin tip,<br/>drop drafts, continue"]
+    C -->|DIVERGED, claim held| D["CAS-reset local ref to origin tip,<br/>drop drafts, continue"]
+    C -->|DIVERGED, no claim| S["stop and report;<br/>local line untouched"]
     D -->|tip moved, CAS fails| R["classify again"]
 ```
 
 #### Scenario: Divergence resolves automatically under the lease
 - **WHEN** the local branch and origin have truly diverged and the instance holds a live claim
 - **THEN** the local branch resets to the origin tip via compare-and-swap, drafts are dropped, and the take continues without an operator flag
+
+#### Scenario: A diverged pair with no live claim is not discarded
+- **WHEN** the local branch and origin have truly diverged and the instance holds no claim on the task — the claimless `gnomish run --resume` paths, which run no claim protocol at all
+- **THEN** the local line is left intact and the run stops with an operator-facing report naming both tips, since the automatic discard's justification is the claim protocol and nothing arbitrated this pair
 
 #### Scenario: Local-ahead is kept, local-behind fast-forwards
 - **WHEN** the local branch is strictly ahead of origin, or strictly behind it

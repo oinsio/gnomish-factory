@@ -32,4 +32,20 @@ public enum RecoveryCause {
     public String wireValue() {
         return name().toLowerCase(Locale.ROOT);
     }
+
+    /**
+     * The reader half of the wire pair: resolves a persisted token back to its category. An
+     * unrecognized token — a future category this build does not know — reads as {@link
+     * #INSTANCE_CRASH}, the same forward-compat fold the class Javadoc documents for
+     * pre-categorization markers: the crash share is the "everything not known to be a failed
+     * repair" share, so an unknown category degrades the report's split, never its total.
+     */
+    public static RecoveryCause fromWire(String wire) {
+        for (RecoveryCause cause : values()) {
+            if (cause.wireValue().equals(wire)) {
+                return cause;
+            }
+        }
+        return INSTANCE_CRASH;
+    }
 }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
@@ -64,6 +65,9 @@ final class TakeCommand {
     private final MonotonicTime heartbeatMonotonicTime;
     private final TakeoverConfirmation takeoverConfirmation;
     private final ServeProperties serveProperties;
+    // NFR-O1, FR13 of harden-task-branch-contract: this instance's tenure record, handed down to the
+    // routing point so a repair line names the claim epoch it runs under.
+    private final ClaimEpochBook epochs;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final ContainerTakeSupport containerTakeSupport;
 
@@ -111,6 +115,7 @@ final class TakeCommand {
             MonotonicTime heartbeatMonotonicTime,
             TakeoverConfirmation takeoverConfirmation,
             ServeProperties serveProperties,
+            ClaimEpochBook epochs,
             SandboxLifecyclePass sandboxLifecyclePass,
             ContainerTakeSupport containerTakeSupport) {
         this.sandboxLifecyclePass = sandboxLifecyclePass;
@@ -129,6 +134,7 @@ final class TakeCommand {
         this.heartbeatMonotonicTime = heartbeatMonotonicTime;
         this.takeoverConfirmation = takeoverConfirmation;
         this.serveProperties = serveProperties;
+        this.epochs = epochs;
     }
 
     /**
@@ -184,7 +190,8 @@ final class TakeCommand {
                         trackerAdapterRegistry,
                         secretsProvider,
                         takeoverConfirmation,
-                        containerTakeSupport);
+                        containerTakeSupport,
+                        epochs);
                 TakeRefDispatch.run(
                         dispatcher,
                         takeArguments,

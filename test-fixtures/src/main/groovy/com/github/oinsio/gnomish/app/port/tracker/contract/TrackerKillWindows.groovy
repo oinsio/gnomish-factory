@@ -30,9 +30,13 @@ final class TrackerKillWindows {
 
     /**
      * Every fact combination the five killed sequences actually freeze, recorded by {@code
-     * GithubKillWindowSpec} and classified by {@code TrackerKillWindowShapeSpec}. A window that
-     * stops appearing, or a new one, breaks one of the two — which is the point: neither half can
-     * drift from the other in silence.
+     * GithubKillWindowSpec} and classified by {@code TrackerKillWindowShapeSpec}.
+     *
+     * <p>{@code GithubKillWindowSpec} checks this list in <em>both</em> directions, which is what
+     * makes it a contract rather than a wish: each window it freezes must appear here (a new
+     * window fails), and every entry here must be one some sequence still freezes (an entry that
+     * stopped happening fails). One direction alone would let the list rot — a stale signature
+     * would go on being dutifully classified by the other half while describing nothing real.
      */
     static final List<String> SIGNATURES = [
         // The claim sequence: nothing written yet, then the label pair mid-transition.

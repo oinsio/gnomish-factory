@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import java.nio.file.Path;
 
 /**
@@ -26,21 +27,31 @@ import java.nio.file.Path;
 public final class ContainerResumeBranch {
 
     private final GitProcessRunner runner;
+    private final ClaimEpochSource epochs;
 
-    public ContainerResumeBranch(GitProcessRunner runner) {
+    /**
+     * @param runner the shared git subprocess runner; never null
+     * @param epochs the tenure the reconciler's automatic discard is gated on (FR8 of
+     *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} on the claimless {@code run
+     *     --resume} path, where a diverged branch stops the run instead of discarding the local line
+     */
+    public ContainerResumeBranch(GitProcessRunner runner, ClaimEpochSource epochs) {
         this.runner = runner;
+        this.epochs = epochs;
     }
 
     /**
      * Ensures a reconciled local branch for {@code taskId} exists in {@code cloneDir}.
      *
      * @return true when the branch exists locally after this call; false when it exists nowhere
+     * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException when the pair diverged
+     *     and this instance holds no tenure on the task (FR8 of harden-task-branch-contract)
      */
     public boolean ensureLocalBranch(Path cloneDir, String taskId) {
         String branch = TaskIdSanitizer.branchName(taskId);
         return switch (new TaskBranchLocator(runner).locate(cloneDir, taskId)) {
             case BranchLocation.Local ignored -> {
-                ReplicaPairReconciler.forClone(runner, cloneDir).reconcile(taskId, branch);
+                ReplicaPairReconciler.forClone(runner, cloneDir, epochs).reconcile(taskId, branch);
                 yield true;
             }
             case BranchLocation.RemoteTracking(String trackingRef) -> {

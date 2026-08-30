@@ -25,8 +25,25 @@ class BranchShapeReportRendererSpec extends Specification {
         where:
         shape || label
         new BranchShape.Delivered() || 'Delivered'
-        new BranchShape.Bare() || 'Bare'
         new BranchShape.Created() || 'Created'
+    }
+
+    // FR16, UX4: Bare used to sit in the table above, and that was the defect. It is the shape an
+    //     operator meets most often on a branch nothing has happened on yet, and "Shape: Bare" tells
+    //     them nothing — it reads like a fault report for what is in fact the ordinary empty state.
+    //     It is not a quarantine shape, so the old "quarantine shapes only" rule gave it no
+    //     diagnosis; the rule is now "shapes whose name is not the whole answer", which is what
+    //     BranchShapeDiagnosis.diagnosisFor owns for every renderer at once.
+    def "the Bare shape explains itself rather than reporting a bare name"() {
+        when:
+        def text = renderer.renderText('PROJ-5', new BranchShape.Bare())
+
+        then:
+        text.readLines() == [
+            'Task: PROJ-5',
+            'Shape: Bare',
+            'Diagnosis: a task branch carrying no STARTED commit — nothing of the task is recorded on it yet',
+        ]
     }
 
     def "a quarantine shape renders its diagnosis naming the file and the observed versus expected content"() {

@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -57,8 +60,16 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
         gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH)
     }
 
+    /** The take path: a tenure is held on the task, which is what authorizes the discard. */
     private ContainerResumeBranch resume() {
-        new ContainerResumeBranch(runner)
+        new ContainerResumeBranch(runner, { String taskId ->
+            Optional.of(new ClaimEpoch(3L))
+        } as ClaimEpochSource)
+    }
+
+    /** The manual container resume path: no tracker, no claim, so no tenure on anything. */
+    private ContainerResumeBranch claimlessResume() {
+        new ContainerResumeBranch(runner, ClaimEpochSource.NONE)
     }
 
     def "FR6: a branch that exists nowhere reports false, not a phantom resume"() {
@@ -114,5 +125,22 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
         noExceptionThrown()
         located
         localTip() == originSide
+    }
+
+    // FR8: the discard's justification is the claim protocol, so the claimless container resume
+    // (gnomish run --resume, which carries no tracker) stops and reports instead.
+    def "FR8: diverged tips with no tenure on the task stop the resume and keep the local line"() {
+        given:
+        def localSide = plumbCommit(base, 'local line')
+        def originSide = plumbCommit(base, 'origin line')
+        setLocalBranch(localSide)
+        setOriginBranch(originSide)
+
+        when:
+        claimlessResume().ensureLocalBranch(clone, TASK)
+
+        then:
+        thrown(DivergedBranchException)
+        localTip() == localSide
     }
 }

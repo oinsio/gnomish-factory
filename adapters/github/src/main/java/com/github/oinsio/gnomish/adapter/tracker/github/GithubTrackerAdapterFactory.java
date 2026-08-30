@@ -68,6 +68,11 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      * every structural marker this adapter writes is stamped with the tenure {@code epochs} reports
      * for the task, so a reader can tell a superseded tenure's write from the current one.
      */
+    // PIT M4 documented exception (same integration-boundary rationale as the 3-arg create above):
+    // @DoNotMutate — the body is one hand-off into requireToken plus the 4-arg assembly seam; the
+    // missing-token throw is covered by GithubTrackerAdapterFactorySpec with an empty provider, and
+    // a resolved token flows into the WireMock-backed assembly that same spec drives through the
+    // explicit-token seam. No decision lives here.
     @DoNotMutate
     @Override
     public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId, ClaimEpochSource epochs) {
@@ -104,7 +109,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         var httpClient = GithubTrackerAdapterFactorySupport.httpClientFor(subsection, token);
         var cache = new GithubConditionalRequestCache(httpClient);
         var labelOps = new GithubLabelOps(httpClient);
-        // One renderer for all eight marker kinds (FR11): every structural comment this adapter
+        // One renderer for every GithubMarkerKind (FR11): every structural comment this adapter
         // writes is stamped and upserted through it, so no write path posts blind.
         var markerWriter = new GithubMarkerWriter(new GithubCommentUpsert(httpClient), epochs, instanceId);
 

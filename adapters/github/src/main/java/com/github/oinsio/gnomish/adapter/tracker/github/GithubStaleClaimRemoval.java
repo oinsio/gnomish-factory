@@ -160,13 +160,14 @@ public final class GithubStaleClaimRemoval {
                 : Long.toString(observedVersion.epoch().token());
         markerWriter.write(
                 id,
-                GithubMarkerKind.STALE_CLAIM_REMOVED,
-                scope,
-                human,
-                null,
-                null,
-                markerWriter.instanceId(),
-                Instant.now());
+                new GithubMarkerWrite(
+                        GithubMarkerKind.STALE_CLAIM_REMOVED,
+                        scope,
+                        human,
+                        null,
+                        null,
+                        markerWriter.instanceId(),
+                        Instant.now()));
     }
 
     private void deleteClaimComment(GithubTaskId id, long commentId) {

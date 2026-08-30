@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app.branch;
 
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
+import com.github.oinsio.gnomish.domain.branch.RecoveryDisposition;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The one rendering of "what was found on the branch" in plain words, shared by everything that has
@@ -30,10 +32,14 @@ public final class BranchShapeDiagnosis {
                 file + " declaring version " + observed + " where this factory supports " + supported;
             case BranchShape.Corrupt(String reason) -> "corrupt content (" + reason + ")";
             case BranchShape.Unknown(String reason) -> "an unrecognized combination (" + reason + ")";
+            // Bare is the one non-quarantine shape whose name explains nothing to an operator: it
+            // is what `status` prints for a branch nobody has started work on, and "Bare" alone
+            // reads as a fault rather than as the ordinary empty state it is.
+            case BranchShape.Bare() ->
+                "a task branch carrying no STARTED commit — nothing of the task is recorded on it yet";
             // Every other shape has an owner that converges it, so reaching here is a routing
             // defect rather than a branch state; the name is the whole diagnosis.
-            case BranchShape.Bare(),
-                    BranchShape.Created(),
+            case BranchShape.Created(),
                     BranchShape.InProgress(),
                     BranchShape.Parked(),
                     BranchShape.Answered(),
@@ -41,5 +47,22 @@ public final class BranchShapeDiagnosis {
                     BranchShape.Delivered(),
                     BranchShape.StaleEpoch() -> shape.getClass().getSimpleName();
         };
+    }
+
+    /**
+     * The diagnosis {@code shape} carries where its name is not the whole answer, or {@code null}
+     * where it is — the one owner of that question, so the single-task renderer and the list
+     * renderer cannot disagree about which shapes explain themselves.
+     *
+     * <p>Two kinds qualify: the three {@link RecoveryDisposition#QUARANTINE} shapes, whose whole
+     * point is the observed-versus-expected detail, and {@link BranchShape.Bare}, an ordinary empty
+     * state whose bare name reads to an operator like a fault.
+     *
+     * @param shape the classifier's verdict; never null
+     * @return the phrase to show beside the shape, or {@code null} when the name suffices
+     */
+    public static @Nullable String diagnosisFor(BranchShape shape) {
+        boolean explains = shape.disposition() == RecoveryDisposition.QUARANTINE || shape instanceof BranchShape.Bare;
+        return explains ? phrase(shape) : null;
     }
 }

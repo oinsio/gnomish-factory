@@ -81,7 +81,16 @@ public final class GithubFeedQuery {
         var result = cache.get(cache.httpClient().newRequest(path), cacheKey);
         String body =
                 switch (result) {
-                    case GithubConditionalRequestCache.Fresh fresh -> fresh.body();
+                    // A non-2xx feed read is an outage, not an empty queue: parsing an error body
+                    // as a listing would report "no ready tasks" (or fail obscurely) on every
+                    // rate-limited 403 and gone repo. Same guard, same exception as listOpen's.
+                    case GithubConditionalRequestCache.Fresh fresh -> {
+                        if (fresh.statusCode() / 100 != 2) {
+                            throw new GithubFeedQueryException("Failed to fetch ready %s issues for %s/%s: HTTP %d"
+                                    .formatted(readyLabel, owner, repo, fresh.statusCode()));
+                        }
+                        yield fresh.body();
+                    }
                     case GithubConditionalRequestCache.NotModified notModified -> notModified.previousBody();
                 };
 

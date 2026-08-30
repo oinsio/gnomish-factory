@@ -2,12 +2,14 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
+import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskListRow;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,6 +77,13 @@ public final class TaskBranchLister {
 
     private List<String> listRefs(Path cloneDir, String pattern, String prefix) {
         GitCommandResult result = runner.run(cloneDir, "for-each-ref", "--format=%(refname)", pattern + "gnomish/*");
+        // An enumeration that never ran to its own exit established nothing about which branches
+        // exist, so it must not answer with an empty listing — the same non-exit-is-not-a-fact
+        // rule the tip reads apply ({@code GitShowTip}), one step earlier in the same pipeline.
+        if (result.termination() != Termination.EXITED) {
+            throw new BranchTipUnavailableException(
+                    pattern + "gnomish/*", "for-each-ref", result.termination().name());
+        }
         if (result.exitCode() != 0) {
             return List.of();
         }

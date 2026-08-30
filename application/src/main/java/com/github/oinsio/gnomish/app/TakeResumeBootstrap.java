@@ -36,6 +36,10 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
      * @param taskId the tracker's original taskId, as supplied to {@code take --resume}
      * @return the bootstrap bundle: located branch, materialized worktree, loaded task.json
      * @throws UsageException if no branch for {@code taskId} is found
+     * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException if local and origin
+     *     have truly diverged while no claim is held on the task: the automatic discard is the
+     *     claim protocol's arbitration, so the claimless {@code run --resume} caller stops and
+     *     reports instead (FR8 of harden-task-branch-contract)
      */
     ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
         // Runner-start hygiene for both resume flows: neutralize hooks on the clone before the

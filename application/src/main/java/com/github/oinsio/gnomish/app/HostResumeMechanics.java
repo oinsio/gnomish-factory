@@ -57,7 +57,7 @@ record HostResumeMechanics(
             // present — loadBranch above read it — but state.json is not, because the branch was
             // created before the STARTED commit carried the initial state. That is a legal shape,
             // not a fault: the task resumes its first stage from scratch, exactly as a branch
-            // created today would. The container twin is ContainerRunTermination#readStateOrInitial.
+            // created today would. The container twin is ContainerTipReader#readStateOrInitial.
             if (e.getCause() instanceof NoSuchFileException) {
                 return TaskState.atStageStart(definition.stages().getFirst().name());
             }
@@ -73,8 +73,12 @@ record HostResumeMechanics(
     @Override
     public void finishCleanup(Path cloneDir, ResumeBootstrap branch) {
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+        // Read before the cleanup commit: it deletes .gnomish-task/ from the worktree, and a read
+        // made after it finds nothing — which the pre-contract fallback in readFinalState would
+        // dress up as a fabricated first-stage state for a task that is already delivered.
+        var outcome = new TaskOutcome.Completed(readFinalState(branch));
         taskRepository.finishCleanup(branch.taskId());
-        git.worktrees().cleanUp(cloneDir, branch.worktreePath(), new TaskOutcome.Completed(readFinalState(branch)));
+        git.worktrees().cleanUp(cloneDir, branch.worktreePath(), outcome);
     }
 
     @Override

@@ -1,7 +1,10 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -164,8 +167,10 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
 
     // FR8, NFR-R3 of harden-task-branch-contract: diverged local/origin histories no longer stop
     // resume for a human — arbitration became decidable once the claim protocol landed, so origin
-    // wins and the unpushed local line, which was never durable for the fleet, is discarded.
-    def "FR8: bootstrap() discards a diverged local line and resumes from origin"() {
+    // wins and the unpushed local line, which was never durable for the fleet, is discarded. The
+    // arbitration is the claim protocol's, so the discard runs only where a tenure is held; manual
+    // run --resume, which claims nothing, keeps the pre-FR8 stop-and-report (see the spec below).
+    def "FR8: bootstrap() under a tenure discards a diverged local line and resumes from origin"() {
         given: 'a task branch pushed to a real origin'
         def bare = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', bare.toString())
@@ -192,7 +197,8 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         def originTip = gitOutput(bare, 'rev-parse', 'refs/heads/gnomish/PROJ-22')
 
         when:
-        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-22')
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out, TaskGitFixture.real(tenureOn('PROJ-22')))
+                .bootstrap(cloneDir, 'PROJ-22')
 
         then: 'resume continues from origin, with no exception demanding git surgery'
         noExceptionThrown()
@@ -202,5 +208,53 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         and: 'the unpushed local commit is gone and the peer work is present'
         !Files.exists(worktree.resolve('local-only.txt'))
         Files.exists(worktree.resolve('peer-only.txt'))
+    }
+
+    // FR8: the discard is justified by the claim protocol — origin advances only through
+    // legitimate lease holders — and `gnomish run --resume` runs that protocol not at all. There
+    // the local line may be the operator's only copy and nothing arbitrated it against origin, so
+    // the bootstrap fails closed with the pre-FR8 stop-and-report instead of destroying it.
+    def "FR8: bootstrap() with no claim on the task refuses a diverged branch instead of discarding it"() {
+        given: 'a task branch pushed to a real origin'
+        def bare = initBareRepo(tempDir, 'origin.git')
+        addRemote(cloneDir, 'origin', bare.toString())
+        gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        repository().createTask(context('PROJ-23'), null, TaskState.atStageStart('implement'))
+        gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-23')
+        def worktree = expectedWorktree('PROJ-23')
+
+        and: 'this worktree gains a local commit never pushed'
+        Files.writeString(worktree.resolve('local-only.txt'), 'local work')
+        commitAll(worktree, 'local work')
+        def localTipBefore = gitOutput(worktree, 'rev-parse', 'HEAD')
+
+        and: 'someone else independently pushes a different commit for the same task'
+        def peerClone = tempDir.resolve('peer-clone-23')
+        gitOutput(tempDir, 'clone', bare.toString(), peerClone.toString())
+        gitOutput(peerClone, 'fetch', 'origin', 'gnomish/PROJ-23:refs/remotes/origin/gnomish/PROJ-23')
+        gitOutput(peerClone, 'checkout', 'gnomish/PROJ-23')
+        Files.writeString(peerClone.resolve('peer-only.txt'), 'peer work')
+        commitAll(peerClone, 'peer work')
+        gitOutput(peerClone, 'push', 'origin', 'gnomish/PROJ-23')
+
+        when: 'the claimless manual-run bootstrap reaches the reconciliation'
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-23')
+
+        then: 'the operator is handed the decision, not a repaired branch'
+        def ex = thrown(DivergedBranchException)
+        ex.message.contains('PROJ-23')
+        ex.message.contains('holds no claim')
+
+        and: 'the local line is intact — nothing was reset, nothing was cleaned'
+        gitOutput(worktree, 'rev-parse', 'HEAD') == localTipBefore
+        Files.exists(worktree.resolve('local-only.txt'))
+        !Files.exists(worktree.resolve('peer-only.txt'))
+    }
+
+    /** A tenure held on {@code taskId} and nothing else — the take path's shape. */
+    private static ClaimEpochSource tenureOn(String taskId) {
+        { String asked ->
+            asked == taskId ? Optional.of(new ClaimEpoch(11L)) : Optional.empty()
+        } as ClaimEpochSource
     }
 }

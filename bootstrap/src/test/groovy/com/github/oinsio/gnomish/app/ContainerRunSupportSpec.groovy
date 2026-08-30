@@ -206,6 +206,86 @@ exit 0
         (support.readStateOrInitial('build').position() as Position.AtStage).name() == 'build'
     }
 
+    // The other half of the same distinction: "no state.json recorded yet" is a legal branch shape
+    // that degrades to the first stage, but "a state.json is recorded and will not read back" is a
+    // fault. Absorbing it would silently rewind a task with recorded rounds to its first stage and
+    // replay work the branch already holds. Mirrors the host twin
+    // HostResumeMechanics#readFinalState, which rethrows everything but NoSuchFileException.
+    def "an unreadable recorded state.json propagates instead of rewinding to the first stage"() {
+        given: 'a task branch whose committed state.json is truncated'
+        def support = support()
+        createTask(support)
+        commitStateJson('{ "position": ')
+
+        when:
+        support.readStateOrInitial('build')
+
+        then:
+        thrown(RuntimeException)
+    }
+
+    def "a branch that vanished mid-run is reported rather than read as an unstarted task"() {
+        given:
+        def support = support()
+        createTask(support)
+        gitOutput(cloneDir, 'update-ref', '-d', 'refs/heads/gnomish/T-1')
+
+        when:
+        support.readStateOrInitial('build')
+
+        then:
+        def ex = thrown(IllegalStateException)
+        ex.message.contains('gnomish/T-1')
+    }
+
+    // FR17 of harden-task-branch-contract — the half its ordering sibling cannot see. A kept box
+    //     holds a clone taken before the park, and it is stopped, not disposed: it can never learn
+    //     of a commit the factory lands afterwards. TakeContainerResumeRoutingSpec asserts the
+    //     resume side of that ("dispose the kept box BEFORE the decision commit"); nothing asserted
+    //     the other side, that until the dispose happens nothing lands at all. Both halves are
+    //     needed — an ordering rule on resume is worthless if the park window itself moves the tip,
+    //     and a spec that only mocks the repository could not tell, since the property is about the
+    //     real branch. So this one drives the real bare-objects writer and reads the ref.
+    def "FR17: the branch tip stands still while a kept box survives the park"() {
+        given: 'a created task and a materialized box, about to be parked and kept'
+        def support = support()
+        createTask(support)
+        def attemptCommit = new AttemptCommitRef()
+        attemptCommit.record(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
+        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
+        def beforePark = tipOfTaskBranch()
+
+        when: 'the park lands its durable intent, then its receipt, and the box is kept'
+        support.recordPark(new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'))
+        def afterIntent = tipOfTaskBranch()
+        support.confirmTerminalWrite()
+        def afterReceipt = tipOfTaskBranch()
+        support.keepStopped()
+
+        then: 'the park moved the tip exactly twice — the intent commit, then the receipt commit'
+        afterIntent != beforePark
+        afterReceipt != afterIntent
+
+        and: 'keeping the box moved it no further'
+        tipOfTaskBranch() == afterReceipt
+
+        and: 'and those two commits are the park record itself — no work rode the window'
+        subjectsSince(beforePark) == [
+            'gnomish: task write-confirmed',
+            'gnomish: task paused'
+        ]
+    }
+
+    /** The task branch tip, as the fleet sees it. */
+    private String tipOfTaskBranch() {
+        gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim()
+    }
+
+    /** The commit subjects added to the task branch since {@code since}, newest first. */
+    private List<String> subjectsSince(String since) {
+        gitOutput(cloneDir, 'log', '--format=%s', "${since}..${tipOfTaskBranch()}").readLines()*.trim().findAll()
+    }
+
     // FR6, D9: keep semantics — the fresh judge box holds nothing durable and is disposed; the
     // round box is stopped (never removed), keeping volume and network for salvage and resume.
     def "keepStopped disposes the materialized judge box and stops the round box"() {
@@ -337,7 +417,10 @@ exit 0
 
     /** Commits {@code state.json} on the task branch, as a finished round would have. */
     private void commitState(dto) {
-        def json = TaskStateJson.mapper().writeValueAsString(dto)
+        commitStateJson(TaskStateJson.mapper().writeValueAsString(dto))
+    }
+
+    private void commitStateJson(String json) {
         def originalBranch = gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()
         gitOutput(cloneDir, 'checkout', 'gnomish/T-1')
         Files.writeString(cloneDir.resolve('.gnomish-task/state.json'), json)

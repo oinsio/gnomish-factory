@@ -176,7 +176,8 @@ final class GithubCommentBoundary {
      * crash category, which is what every such marker meant.
      */
     private static boolean isRecoveryCategory(ParsedMarker marker) {
-        return RecoveryCause.RECOVERY_FAILURE.wireValue().equals(marker.reason());
+        String reason = marker.reason();
+        return reason != null && RecoveryCause.fromWire(reason) == RecoveryCause.RECOVERY_FAILURE;
     }
 
     /**

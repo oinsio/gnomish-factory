@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.app.killpoint
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto
 import com.github.oinsio.gnomish.app.take.FinishEffect
 import com.github.oinsio.gnomish.app.take.FinishTransition
-import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import org.slf4j.LoggerFactory
 
 /**
@@ -73,7 +73,7 @@ final class FinishKillPoints {
                 world.ref,
                 world.instanceId,
                 SUMMARY,
-                TerminalWriteRetry.system(),
+                VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered({
                     world.store.finishCleanup(world.taskId)
                 } as Runnable),

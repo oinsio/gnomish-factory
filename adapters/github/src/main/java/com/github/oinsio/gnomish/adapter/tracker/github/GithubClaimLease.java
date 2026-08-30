@@ -115,8 +115,14 @@ public final class GithubClaimLease {
         return new ClaimResult.Acquired(new ClaimEpoch(winnerId));
     }
 
-    /** The content identity every claim comment of {@code instanceId} on this task carries (FR11). */
-    private static GithubCommentIdentity claimIdentityOf(GithubTaskId id, String instanceId) {
+    /**
+     * The content identity every claim comment of {@code instanceId} on this task carries (FR11).
+     *
+     * <p>Package-private: {@link GithubHeartbeat} re-renders the same identity when it beats the
+     * comment in place, so one definition serves both the write that creates the claim comment and
+     * the write that refreshes it.
+     */
+    static GithubCommentIdentity claimIdentityOf(GithubTaskId id, String instanceId) {
         return GithubCommentIdentity.of(id, GithubMarkerKind.CLAIM.wireValue() + "@" + instanceId);
     }
 

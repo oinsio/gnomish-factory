@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -17,9 +16,10 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR1, FR5 of harden-task-branch-contract: the three media of the tip-reader seam — a worktree's
- * own {@code HEAD}, a named ref of a clone, and bare objects — answer the same two questions the
- * same way, and every one of them reads the tip rather than the files on disk.
+ * FR1, FR5 of harden-task-branch-contract: the three access paths of the tip-reader seam — a
+ * worktree's own {@code HEAD}, a named ref of a clone, and a ref of a bare repository — answer the
+ * same two questions the same way, and every one of them reads the tip rather than the files on
+ * disk.
  */
 class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
 
@@ -44,16 +44,17 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         worktreesRoot.resolve('clone').resolve(taskId)
     }
 
-    private BranchTipSource bareObjects(String taskId = 'PROJ-1') {
-        def gitObjects = GitObjects.open(cloneDir.resolve('.git'), tempDir.resolve('objtmp'))
-        new BareObjectsTipSource(gitObjects, gitObjects.resolveRef("gnomish/$taskId").orElseThrow())
-    }
-
+    /**
+     * The three access paths the factory reads a tip through, all served by the one production
+     * implementation: only the (repository, revision) pair differs. Keeping them enumerated is the
+     * point of this spec — a change to {@code git show} handling that breaks the bare-repository
+     * path while the clone path stays green is exactly the regression it exists to catch.
+     */
     private List<BranchTipSource> allSources(String taskId = 'PROJ-1') {
         [
-            new WorktreeTipSource(runner, worktree(taskId)),
+            new RefTipSource(runner, worktree(taskId), 'HEAD'),
             new RefTipSource(runner, cloneDir, "gnomish/$taskId"),
-            bareObjects(taskId)
+            new RefTipSource(runner, cloneDir.resolve('.git'), "gnomish/$taskId")
         ]
     }
 
@@ -91,7 +92,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         Files.writeString(worktree().resolve('.gnomish-task').resolve('task.json'), '{ truncated')
 
         when:
-        def read = new WorktreeTipSource(runner, worktree()).readAtTip('.gnomish-task/task.json')
+        def read = new RefTipSource(runner, worktree(), 'HEAD').readAtTip('.gnomish-task/task.json')
 
         then:
         read.orElse('').contains('PROJ-1')

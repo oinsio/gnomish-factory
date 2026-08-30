@@ -39,9 +39,4 @@ final class FactoryOwnedPaths {
     static List<String> pathspec() {
         return List.of(STATE_DIR, ":(exclude)" + GNOME_WRITABLE);
     }
-
-    /** The same pathspec as one shell-quoted argument string, for the in-box salvage script. */
-    static String shellPathspec() {
-        return "'" + STATE_DIR + "' ':(exclude)" + GNOME_WRITABLE + "'";
-    }
 }

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -128,7 +129,7 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
         new TakeSlotRunner(
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler,
                 ABORT_THRESHOLD, MDC_KEY, [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE,
-                containerTakeSupport)
+                containerTakeSupport, new ClaimEpochBook())
     }
 
     // Scenario (factory-serve): two slots hold container-bound tasks at once — each task runs in

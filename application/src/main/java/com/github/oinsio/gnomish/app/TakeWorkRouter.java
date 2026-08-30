@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.branch.BranchRepairAction;
+import com.github.oinsio.gnomish.app.branch.BranchRepairLog;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
@@ -21,9 +23,14 @@ import org.jspecify.annotations.Nullable;
  * {@code ContainerRunTermination} uses for {@code ContainerRunSupport}.
  *
  * <p>Implements FR9, FR10, D3 of add-tracker-port; FR1, FR14 of add-serve-sandbox-lifecycle;
- * FR6 of harden-task-branch-contract.
+ * FR6, NFR-O1 of harden-task-branch-contract.
  */
 final class TakeWorkRouter {
+
+    // NFR-O1: the repair line is emitted from the one place that both names the shape and decides
+    // what happens to it. Stateless — it holds a logger and nothing else — so it is built once here
+    // rather than threaded through the take wiring as a collaborator.
+    private static final BranchRepairLog REPAIR_LOG = new BranchRepairLog();
 
     private TakeWorkRouter() {}
 
@@ -48,6 +55,17 @@ final class TakeWorkRouter {
         if (shape instanceof BranchShape.Bare) {
             return freshClaim(w, cloneDir, base, definition, interactiveMode, trackerTask, tracker, instanceId);
         }
+        // NFR-O1: every pickup of an existing branch that is not the clean shape a healthy
+        // progression expects leaves one line before its recovery owner runs — the repeat judged
+        // against the task's own persisted recovery accounting (FR14), which the claim already
+        // fetched, so the line costs no extra tracker read. A clean shape logs nothing, and a Bare
+        // branch never reaches here: a first claim is not a repair.
+        REPAIR_LOG.classified(
+                taskId,
+                shape,
+                w.epochs.epochFor(taskId).orElse(null),
+                BranchRepairAction.phrase(shape),
+                trackerTask.abortFacts().recoveryCount());
         return resume(w, cloneDir, shape, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
     }
 

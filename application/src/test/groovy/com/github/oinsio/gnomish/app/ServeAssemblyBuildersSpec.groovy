@@ -1,22 +1,29 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.lease.LivenessOracle
+import com.github.oinsio.gnomish.app.lease.StalenessMemory
+import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
+import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
+import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
-import java.nio.file.Path
+import java.time.Clock
 import java.time.Duration
 import spock.lang.Specification
-
 /**
  * FR2, FR13, FR14 (design D9, D10) of add-factory-serve: {@link ServeAssembly}'s three remaining
  * leaf builders. {@code ServeAssemblySpec} covers {@code shutdown}; this covers the rest, to the
@@ -46,7 +53,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def slotRunner = ServeAssembly.slotRunner(
                 new ServeArguments(CLONE_DIR, null, false), WORKTREES_ROOT, 'taskId', pipeline(),
                 new TrackerConfig('github', 3), Stub(TrackerAdapterFactory), tracker, INSTANCE,
-                assemblyRunning(null), git, heartbeat, FIXED_CLOCK, ContainerTakeSupport.hostOnly())
+                assemblyRunning(null), git, heartbeat, FIXED_CLOCK, ContainerTakeSupport.hostOnly(),
+                new ClaimEpochBook())
 
         then:
         slotRunner != null
@@ -99,24 +107,24 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
     //     so its tick stays unobserved — no all-zero vital, no ledger line every cadence.
     def "a host-only install's tick is not observed"() {
         given:
-        def tickLog = new com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog(
-                Duration.ofDays(7), java.time.Clock.systemUTC(), 20)
+        def tickLog = new SweepTickLog(
+                Duration.ofDays(7), Clock.systemUTC(), 20)
         def ticks = []
-        def livenessOracle = new com.github.oinsio.gnomish.app.lease.LivenessOracle(
-                new com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing(),
-                new com.github.oinsio.gnomish.app.lease.StalenessMemory(
-                        new com.github.oinsio.gnomish.app.lease.SystemMonotonicTime(), Duration.ofMinutes(1)))
+        def livenessOracle = new LivenessOracle(
+                new CachedOpenTaskListing(),
+                new StalenessMemory(
+                        new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
         when:
         def tick = ServeAssembly.sandboxLifecycleTick(
                 new ServeArguments(CLONE_DIR, null, false),
                 SERVE_PROPERTIES,
-                com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass.NONE,
+                SandboxLifecyclePass.NONE,
                 livenessOracle,
                 tickLog,
-                com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener.IGNORE, { r ->
+                SweepVerdictListener.IGNORE, { r ->
                     ticks << r
-                } as com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener)
+                } as SweepTickListener)
         tick.tick()
 
         then:
@@ -129,17 +137,17 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
     def "builds a sandbox lifecycle tick wired over the caller's own pass and liveness oracle"() {
         given:
         def calls = []
-        com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass pass = { dir, liveness ->
+        SandboxLifecyclePass pass = { dir, liveness ->
             calls << dir
             ''
         }
-        def livenessOracle = new com.github.oinsio.gnomish.app.lease.LivenessOracle(
-                new com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing(),
-                new com.github.oinsio.gnomish.app.lease.StalenessMemory(
-                        new com.github.oinsio.gnomish.app.lease.SystemMonotonicTime(), Duration.ofMinutes(1)))
+        def livenessOracle = new LivenessOracle(
+                new CachedOpenTaskListing(),
+                new StalenessMemory(
+                        new SystemMonotonicTime(), Duration.ofMinutes(1)))
 
-        def realTickLog = new com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog(
-                Duration.ofDays(7), java.time.Clock.systemUTC(), 20)
+        def realTickLog = new SweepTickLog(
+                Duration.ofDays(7), Clock.systemUTC(), 20)
 
         when:
         def tick = ServeAssembly.sandboxLifecycleTick(
@@ -148,8 +156,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                 pass,
                 livenessOracle,
                 realTickLog,
-                com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener.IGNORE,
-                com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener.IGNORE)
+                SweepVerdictListener.IGNORE,
+                SweepTickListener.IGNORE)
         tick.tick()
 
         then:

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.LivenessOracle
@@ -94,7 +95,8 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
     }
 
     private TakeDispatcher newDispatcher(TakeoverConfirmation confirmation = TakeoverConfirmation.UNAVAILABLE) {
-        new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation, ContainerTakeSupport.hostOnly())
+        new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation,
+        ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
     }
 
     private static TakeHeartbeat noopHeartbeat() {

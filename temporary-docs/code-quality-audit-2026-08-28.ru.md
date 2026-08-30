@@ -708,3 +708,44 @@ ADR 0003). Проверить реализацию против его чек-л
    с рефакторингом `TakeContext`/`TakeMechanics` (п. 5 раздела 6): сегодня
    `ManualRunRunner` (27 параметров) покрасил бы сборку в красный немедленно.
    Гейт входит в тот структурный change, не раньше.
+
+
+Подтверждено, не исправлено — нужны решения
+
+- Пагинация — CONFIRMED по существу (12 call-site'ов, не 16; Link-follow нигде нет).
+  Holder-проверка heartbeat (GithubHeartbeat.java:98) читает первую = самую старую страницу
+  без sort/direction: при >100 комментариев fence ломается в обе стороны (зомби проходит
+  проверку, легитимный holder получает ложный ClaimGone). Тот же дефект у
+  GithubClaimLease:167, GithubStaleClaimRemoval:135, GithubOpenQuery:134. Это
+  change-размерная работа (общий пагинатор + WireMock-спеки с Link-заголовками) — рекомендую
+  отдельный /opsx:propose.
+- freezeUntilReverified — CONFIRMED с поправкой: сгорает не stage-attempt, а abort/crash
+  K-fuse (письменное правило формально не нарушено — оно молчит об этом счётчике).
+  Незащищённый fetchTask (RevocationCheckingAttemptPersistence.java:184) при outage бросает
+  до recordProgressOnce, аборт считается в fuse, сбрасывающий маркер не пишется, и тот же
+  outage взводит сам freeze — режимы компаундятся до infra-park за K boundary. Политика «что
+  делать при упавшем re-verification read» нигде не специфицирована — это design-решение
+  (кандидат в fix-denial-attribution-durability), чинить без спеки не стал.
+
+Опровергнуто (ничего не менялось)
+
+- Throwable-как-format-arg (4 сайта) — 0 сайтов: все log.warn("… {}", x, e) — корректная
+  SLF4J-перегрузка; кандидат AbortHandler.java:89 передаёт String, не throwable.
+- Instanceof-цепочки — ни одной цепочки 2+; sealed-диспетчеризация через pattern switch.
+- SelfFencingBoundarySpec и TrackerShapeSpec отсутствуют — обе существуют с
+  traceability-атрибуцией (application/src/test/.../take/SelfFencingBoundarySpec.groovy:23,
+  .../lease/TrackerShapeSpec.groovy:17).
+- Closure-statement kill-point таблицы — есть в delta-спеках
+  (specs/github-tracker/spec.md:299-301, specs/tracker-port/spec.md:167-169); в design.md
+  его нет, но формулировка «design.md или spec» опровергнута.
+- UX1-атрибуция — существует: TransitionKillPointSpec.groovy:8-11 цитирует UX1 в javadoc,
+  именующем change.
+- GitObjects.historyContains игнорирует exit-код — сознательный документированный идиом,
+  идентичный принятому в GitShowTip.cleanupCommitInHistory (диагностика rev-list идёт в
+  stderr); interrupt в GitExec бросает исключение, так что termination-дыры нет.
+
+Частично: BranchShape.label()
+
+Пиннинг существовал, но покрывал 6 из 11 форм и не проверял полноту. Переписал фичу: все
+11 литеральных пинов + сверка набора с permittedSubclasses — двенадцатая форма теперь
+падает в спеке.

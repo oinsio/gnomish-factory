@@ -139,19 +139,23 @@ The same best-effort push SHALL follow every task lifecycle commit a mode record
 ## REMOVED Requirements
 
 ### Requirement: Origin divergence rules
-Superseded by the ADDED requirement "Automatic origin divergence resolution": true divergence no longer stops the run with an error for the human — it resolves automatically under the live claim.
+Superseded by the ADDED requirement "Automatic origin divergence resolution": true divergence no longer stops the run with an error for the human — it resolves automatically under the live claim. Without a live claim the stop-and-report rule survives, now scoped to that case by the ADDED requirement.
 <!-- implements FR8 of harden-task-branch-contract -->
 
 ## ADDED Requirements
 
 ### Requirement: Automatic origin divergence resolution
-On resume with both local and origin branches present, the runner SHALL reconcile: equal → continue; local behind → fast-forward to origin, discarding uncommitted leftovers automatically; local ahead → continue from local (push catches up); truly diverged, under a live claim → discard the local branch automatically — reset the local ref to the origin tip, drop local drafts — and continue, with no operator flag and no exit demanding manual git surgery. Origin wins because a transition is durable across instances only once its push succeeded — a local commit that never reached origin is not durable and may be discarded. The discard reset SHALL be an explicit compare-and-swap against the local tip the discard decision was made on: a tip moved in between fails the reset and reclassification runs. No automatic path SHALL force-push or rewrite origin history; the CAS reset of the local ref is the only non-fast-forward write.
+On resume with both local and origin branches present, the runner SHALL reconcile: equal → continue; local behind → fast-forward to origin, discarding uncommitted leftovers automatically; local ahead → continue from local (push catches up); truly diverged, under a live claim → discard the local branch automatically — reset the local ref to the origin tip, drop local drafts — and continue, with no operator flag and no exit demanding manual git surgery. Origin wins because a transition is durable across instances only once its push succeeded — a local commit that never reached origin is not durable and may be discarded. That reasoning holds only where the claim protocol is in force, so the discard SHALL be gated on a live claim: a claimless resume SHALL leave the local line intact and report the divergence to the operator instead. The discard reset SHALL be an explicit compare-and-swap against the local tip the discard decision was made on: a tip moved in between fails the reset and reclassification runs. No automatic path SHALL force-push or rewrite origin history; the CAS reset of the local ref is the only non-fast-forward write.
 <!-- implements FR9, NFR-R3 of add-git-workflow -->
 <!-- implements FR8, NFR-R3 of harden-task-branch-contract -->
 
 #### Scenario: Diverged histories resolve automatically under the claim
 - **WHEN** local and origin task branches have diverged and the resuming instance holds a live claim
 - **THEN** the local ref is reset to the origin tip via compare-and-swap, local drafts are dropped, and the run continues from origin with no operator intervention
+
+#### Scenario: A claimless resume refuses the discard
+- **WHEN** local and origin have diverged during `gnomish run --resume`, which holds no claim on the task in either execution mode
+- **THEN** the local ref and working tree are left exactly as they were and the run exits with the operator-facing divergence report naming both tips, since no lease arbitrated between the two lines
 
 #### Scenario: The reset never touches origin
 - **WHEN** the discard-local reset executes

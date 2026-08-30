@@ -75,6 +75,37 @@ Two concrete failure modes, both observed in this build:
 
 The bar: excluding the suite must remove **no production line** from mutation coverage — every class it exercises is also covered by fast, in-process unit specs that already feed the gate. The exclusion is per module (each module's PIT sees only its own test tree), so it lives in the build file of the module owning the spec, with the rationale next to it. PIT's exclusion glob has no per-feature granularity, so a single offending feature costs the whole spec class.
 
+## Time is injected in tests, and the build checks it
+
+Components that retry or poll take their `Sleeper` and `Clock` as constructor arguments so a
+spec can drive them on virtual time (`VirtualClock`/`VirtualSleeper`, or the ready-made
+`VirtualTimeRetries` in `:test-fixtures`). Beside each such component sits a no-argument
+`system()` factory that wires the real `ThreadSleeper`/`SystemClock` with the production bound —
+**for the composition root, not for specs**.
+
+A spec that calls `system()` does not go red. Its collaborator never reports the failure the
+retry waits on, so it never sleeps, and the call looks correct indefinitely — until some later
+change makes that collaborator report an outage. Then the spec does not fail, it *blocks*, for
+the whole production bound, once per exercise of the path; under PIT that is the "mutant hangs
+on real I/O instead of failing fast" mode recorded above. Because there is nothing red to
+notice, review is the wrong instrument for it.
+
+So `check` asks instead: **`checkTestTimeInjection`** (registered by `test-conventions` in every
+module, and by `:test-fixtures` over its own `src/main`) fails on a `SomeType.system()` call in a
+test source. Satisfy it by building the component with virtual time — which keeps the production
+bound and elapses it instantly — or, where the call really is right (a spec asserting the
+production defaults themselves, a factory with no time in it), justify it in place:
+
+```groovy
+// real-time-wiring: the production defaults ARE the subject here — the retry is only
+//     constructed and read, never run, so no sleep can happen.
+GitInfrastructureRetry.system().attempts() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+```
+
+The marker goes on the call's own line or in the comment block directly above it, so the
+justification lives beside the call rather than in a central allowlist — the same shape
+`@DoNotMutate` uses for the mutation gate.
+
 ## Rules
 
 - Maximize automated verification in task plans — avoid manual testing steps

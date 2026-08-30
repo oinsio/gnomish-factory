@@ -119,13 +119,32 @@ public final class Reaper implements ReaperDuty {
         // version cross the TTL and reap its own live claim. Only a foreign observer may reap this
         // instance; the instance itself knows it is alive.
         Set<TaskRef> own = Set.copyOf(ownClaims);
-        List<TrackerObservation> sweep = TrackerObservation.sweep(foreign(readyTasks, own), openFacts(openTasks, own));
+        List<TrackerObservation> sweep = TrackerObservation.sweep(notOwn(readyTasks, own), openFacts(openTasks, own));
+        reportForeign(sweep);
         for (TrackerRepair repair : memory.observe(sweep)) {
             repair(repair);
         }
     }
 
-    private static List<ReadyTask> foreign(List<ReadyTask> readyTasks, Set<TaskRef> own) {
+    /**
+     * Surfaces every {@code Foreign} observation with its diagnosis (FR19). The shape has no
+     * recovery owner — no automatic repair may touch an out-of-protocol combination — so reporting
+     * it IS the sweep's whole duty for it, and the listing contract guarantees adapters really
+     * report such combinations rather than omitting what they cannot interpret. Warned once per
+     * tick per task: a foreign task that nobody fixes stays visible instead of scrolling away.
+     */
+    private static void reportForeign(List<TrackerObservation> sweep) {
+        for (TrackerObservation observation : sweep) {
+            if (observation.shape() instanceof TrackerShape.Foreign(String diagnosis)) {
+                log.warn(
+                        "{} classifies foreign; no automatic repair owns it: {}",
+                        observation.ref().id(),
+                        diagnosis);
+            }
+        }
+    }
+
+    private static List<ReadyTask> notOwn(List<ReadyTask> readyTasks, Set<TaskRef> own) {
         return readyTasks.stream().filter(task -> !own.contains(task.ref())).toList();
     }
 
@@ -147,7 +166,21 @@ public final class Reaper implements ReaperDuty {
                 case TrackerShape.ClaimAbandoned(ClaimFacts claim) -> removeClaim(repair, claim);
                 case TrackerShape.ClaimPending() -> repairIndex(repair);
                 case TrackerShape.IndexLagging ignored -> repairIndex(repair);
-                default -> log.debug("no repair owned for {}", repair.shape());
+                // The shapes no repair owns, named rather than defaulted: TrackerShape is sealed
+                // precisely so a new shape fails THIS switch until its recovery is decided here
+                // (design D16), and a `default` is what silently gives it none. Unreachable
+                // today — the memory releases only the four shapes above (StalenessMemory's
+                // timed set) — so these branches stay empty: a Foreign task is surfaced by
+                // reportForeign on the sweep itself, and the steady shapes need nothing done.
+                // One type-pattern label per shape, not one grouped record-pattern label: javac
+                // compiles the grouped form to an instanceof chain, whose conditionals PIT then
+                // reports as uncovered mutations of code no test can reach.
+                case TrackerShape.Ready ignoredReady -> {}
+                case TrackerShape.Returned ignoredReturned -> {}
+                case TrackerShape.Parked ignoredParked -> {}
+                case TrackerShape.Finished ignoredFinished -> {}
+                case TrackerShape.Revoked ignoredRevoked -> {}
+                case TrackerShape.Foreign ignoredForeign -> {}
             }
         } catch (RuntimeException e) {
             // An infrastructure failure repairing ONE task must not stop the others, and must not

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -222,6 +223,33 @@ class ReaperRepairSpec extends Specification {
         0 * tracker.repairIndex(_, _)
     }
 
+    // FR19: an adapter never omits a combination it cannot interpret, so a Foreign task really
+    //     reaches the sweep. No recovery owner claims it, which makes surfacing it the sweep's
+    //     whole duty — silence would leave an out-of-protocol task invisible to the operator.
+    def "a foreign shape is surfaced with its diagnosis, and never repaired"() {
+        given:
+        tracker.listReady(_) >> []
+        tracker.listOpen() >> [foreign()]
+
+        when:
+        def logged = capture {
+            reaper.reapOnce([])
+            time.advance(GRACE.multipliedBy(10))
+            reaper.reapOnce([])
+        }
+
+        then: 'the diagnosis reaches the operator at warn'
+        def warnings = logged.findAll { it.level == Level.WARN }
+        warnings.any {
+            it.formattedMessage.contains('T-1') && it.formattedMessage.contains('no gnomish state label present')
+        }
+
+        and: 'and no automatic repair touches it, nor is it latched as stale'
+        0 * tracker.removeStaleClaim(_, _)
+        0 * tracker.repairIndex(_, _)
+        memory.staleRefs().isEmpty()
+    }
+
     // No silent caps: a ready feed that fills the sweep's own page is logged, so a backlog deeper
     //     than one page is visible instead of looking like full coverage.
     def "a ready feed that fills the sweep page is logged"() {
@@ -315,6 +343,10 @@ class ReaperRepairSpec extends Specification {
 
     private static OpenTask parked() {
         open(TrackerFacts.of(StateLabels.needsHumanOnly(), new ClaimFacts.Dead('inst-1')))
+    }
+
+    private static OpenTask foreign() {
+        open(TrackerFacts.of(new StateLabels(false, false, false, false, false), new ClaimFacts.None()))
     }
 
     private static OpenTask lagging() {

@@ -154,12 +154,18 @@ public final class StalenessMemory {
         return timed;
     }
 
-    /** A {@code Claimed} tenure is timed against the TTL; the three window shapes, against grace. */
+    /**
+     * The shapes this memory times: the ones whose recovery the reaper owns, plus a held {@code
+     * Claimed} tenure — owned by its holder for as long as it beats, and timed here precisely to
+     * find out that it stopped. Asked of {@link TrackerShape#recoveryOwner()} rather than listed as
+     * a whitelist of {@code instanceof} tests: the owner mapping is an exhaustive switch over the
+     * sealed set, so a new shape has to name its owner there, and naming {@code REAPER} makes it
+     * timed here with no second place to remember. A shape no owner repairs — {@code Foreign} — is
+     * deliberately NOT timed: latching it would enter it into {@link #staleRefs()}, which the
+     * liveness oracle reads as "unowned", for a task no repair will ever converge.
+     */
     private static boolean isTimed(TrackerShape shape) {
-        return shape instanceof TrackerShape.Claimed
-                || shape instanceof TrackerShape.ClaimPending
-                || shape instanceof TrackerShape.ClaimAbandoned
-                || shape instanceof TrackerShape.IndexLagging;
+        return shape.recoveryOwner() == TrackerRecoveryOwner.REAPER || shape instanceof TrackerShape.Claimed;
     }
 
     private long thresholdNanos(TrackerShape shape) {

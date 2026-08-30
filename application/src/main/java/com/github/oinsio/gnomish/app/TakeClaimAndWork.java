@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
+import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -61,6 +63,10 @@ public final class TakeClaimAndWork {
     private final TakeCrashAbort crashAbort;
     final ContainerTakeSupport containerTakeSupport;
     final TakeContainerResumeRunner containerResumeRunner;
+    // NFR-O1, FR13: this instance's tenure record — read by the routing point so a repair line names
+    // the epoch it runs under, and ended here at the claim-holding choke point (see
+    // dispatchAfterClaim's finally). An empty book where no claim epoch is recorded.
+    final ClaimEpochBook epochs;
 
     TakeClaimAndWork(
             RunAssembly assembly,
@@ -73,7 +79,8 @@ public final class TakeClaimAndWork {
             ClaimBeat heartbeat,
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
-            TakeContainerResumeRunner containerResumeRunner) {
+            TakeContainerResumeRunner containerResumeRunner,
+            ClaimEpochBook epochs) {
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
@@ -86,6 +93,7 @@ public final class TakeClaimAndWork {
         this.crashAbort = new TakeCrashAbort(abortHandler, abortThreshold);
         this.containerTakeSupport = containerTakeSupport;
         this.containerResumeRunner = containerResumeRunner;
+        this.epochs = epochs;
     }
 
     /**
@@ -127,7 +135,11 @@ public final class TakeClaimAndWork {
      * protocol as an engine {@code Aborted} via {@link TakeCrashAbort} (FR14 "Runner crash is an
      * abort", D16 "an uncaught exception runs the abort protocol and exits 12 or 13, never a bare
      * 1"). Deliberate, dedicated-exit-code control flow is exempt and rethrown unchanged: {@link
-     * UsageException} keeps exit 2 (D16: codes shared with {@code run} keep their meaning) — but
+     * UsageException} keeps exit 2 and {@link DivergedBranchException} keeps exit 5 (D16: codes
+     * shared with {@code run} keep their meaning). The latter reaches here only when the tenure was
+     * dropped mid-run — a beat reported the claim gone — so the diverged branch is no longer this
+     * instance's to repair: reporting it beats spending a crash-fuse cycle on it (FR8 of
+     * harden-task-branch-contract) — but
      * the claim is still dropped first (see
      * {@link #releaseBestEffort}), so a refusal never leaves the task hanging {@code Working}. A
      * claim that never succeeds is a pre-claim failure handled one layer up (exit 1) and never
@@ -140,6 +152,15 @@ public final class TakeClaimAndWork {
      * first claim) and {@link ClaimBeat#unregister} in a {@code finally}, stopping the beats at any
      * terminal result, exception, or crash-abort. A path that never holds a claim (a lost race,
      * an empty queue) never reaches this method, so it never beats.
+     *
+     * <p>The tenure's own lifetime is anchored to the same bracket (FR13 of
+     * harden-task-branch-contract): the {@link com.github.oinsio.gnomish.app.lease.ClaimEpochBook}
+     * entry the claim recorded is forgotten in that same {@code finally}, so every commit made
+     * under the claim — including the receipt and cleanup commits that run <em>after</em> the
+     * terminal tracker write, behind a confirmed effect — carries the tenure's epoch and stays
+     * inside the fence. {@link com.github.oinsio.gnomish.app.lease.EpochRecordingTracker} still
+     * ends a tenure early on the two events that mean the claim is genuinely no longer ours: a
+     * {@code release}, and a beat reporting the claim gone.
      *
      * <p>One classified failure leaves before the crash arm: a branch that classifies to a
      * non-recoverable shape stops at {@link TakeQuarantinePark} instead, parking the task for a
@@ -164,7 +185,7 @@ public final class TakeClaimAndWork {
         try {
             return TakeWorkRouter.locateAndWork(
                     this, cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
-        } catch (UsageException deliberate) {
+        } catch (UsageException | DivergedBranchException deliberate) {
             releaseBestEffort(tracker, ref, deliberate);
             throw deliberate;
         } catch (BranchQuarantineException quarantine) {
@@ -173,6 +194,12 @@ public final class TakeClaimAndWork {
             return crashAbort.onCrash(definition, trackerTask, tracker, instanceId, crash);
         } finally {
             heartbeat.unregister(ref);
+            // FR13 of harden-task-branch-contract: the tenure ends HERE, not at the terminal
+            // tracker write, because the receipt and cleanup commits of park/finish run after that
+            // write and still belong to this tenure — forgetting the epoch earlier left the last
+            // commit of every tenure unstamped, hence outside the fence. Beats and tenure end
+            // together: past this point nothing more is written under this claim.
+            epochs.ended(ref.id());
         }
     }
 

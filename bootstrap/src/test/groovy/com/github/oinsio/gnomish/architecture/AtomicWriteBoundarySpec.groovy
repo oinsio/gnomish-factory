@@ -3,7 +3,9 @@ package com.github.oinsio.gnomish.architecture
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
+import com.tngtech.archunit.base.DescribedPredicate
 import com.tngtech.archunit.core.domain.JavaClasses
+import com.tngtech.archunit.core.domain.JavaMethodCall
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import spock.lang.Shared
@@ -13,10 +15,12 @@ import spock.lang.Specification
  * Atomic-write boundary gate (FR5, design D10 of harden-task-branch-contract): the
  * temp-file-plus-rename discipline lives in exactly one place — the dependency-free
  * {@code :atomicfile} leaf — and every host-side writer of a factory-owned file goes
- * through it. Two rules, one per half of that claim: nobody outside the leaf names
- * {@link java.nio.file.StandardCopyOption} (a private copy of the discipline has to,
- * for {@code ATOMIC_MOVE}), and each named {@code .gnomish-task/} writer really
- * depends on {@code AtomicFileWriter}.
+ * through it. Three rules: nobody outside the leaf names {@link
+ * java.nio.file.StandardCopyOption} (a private copy of the discipline has to, for
+ * {@code ATOMIC_MOVE}); each named {@code .gnomish-task/} writer really depends on
+ * {@code AtomicFileWriter}; and — the one that generalizes past the named six —
+ * <em>no</em> production class reaches a {@code Files} write method unless it lives in
+ * the leaf or carries {@code @NonAtomicWrite} with its reason.
  *
  * <p>The container-side persisters are deliberately absent from the second rule: they
  * reach durability at commit granularity, per the per-medium table of
@@ -55,6 +59,38 @@ class AtomicWriteBoundarySpec extends Specification {
                 .haveFullyQualifiedName('com.github.oinsio.gnomish.atomicfile.AtomicFileWriter')
 
         expect: 'each one writes its file through the shared atomic writer'
+        rule.check(productionClasses)
+    }
+
+    // The rule that closes the gap the one above cannot: a whitelist of named writers proves those
+    // six are wired correctly and says nothing about the seventh. A writer added tomorrow that
+    // calls Files.writeString directly appears in no list, names no StandardCopyOption, and would
+    // pass both rules above while leaving readers of its file exposed to a partial write. Stated
+    // negatively, the default flips — reaching a Files write method is the thing that fails, and
+    // an exemption has to be argued for in place with @NonAtomicWrite.
+    def "FR5: no production class reaches a file-write API outside the atomicfile leaf"() {
+        given: 'the java.nio.file.Files methods that create or overwrite file content'
+        def writeMethods = [
+            'write',
+            'writeString',
+            'newBufferedWriter',
+            'newOutputStream'
+        ] as Set
+        def filesWrite = new DescribedPredicate<JavaMethodCall>('a java.nio.file.Files write method') {
+                    @Override
+                    boolean test(JavaMethodCall call) {
+                        call.target.owner.fullName == 'java.nio.file.Files' &&
+                                writeMethods.contains(call.target.name)
+                    }
+                }
+
+        and: 'the rule: only the leaf itself, or a class that declares why it may not use it'
+        def rule = noClasses()
+                .that().resideOutsideOfPackage('com.github.oinsio.gnomish.atomicfile')
+                .and().areNotAnnotatedWith('com.github.oinsio.gnomish.atomicfile.NonAtomicWrite')
+                .should().callMethodWhere(filesWrite)
+
+        expect: 'every file write in the build goes through AtomicFileWriter or carries its reason'
         rule.check(productionClasses)
     }
 }

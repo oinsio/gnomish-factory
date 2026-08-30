@@ -60,8 +60,8 @@ class EpochRecordingTrackerSpec extends Specification {
         book.epochFor('PROJ-1').isEmpty()
     }
 
-    // FR13: every way a tenure ends forgets it, so no later write stamps an epoch we no longer
-    //     hold — and the write itself still reaches the live tracker, unchanged
+    // FR13: dropping the claim forgets it, so no later write stamps an epoch we no longer hold —
+    //     and the write itself still reaches the live tracker, unchanged
     def "forgets the tenure when the claim ends by release"() {
         given:
         holdTenure()
@@ -74,41 +74,45 @@ class EpochRecordingTrackerSpec extends Specification {
         book.epochFor('PROJ-1').isEmpty()
     }
 
-    def "forgets the tenure when the claim ends by recordAbort"() {
+    // FR13: a terminal write ends the claim on the tracker but NOT the tenure here — its receipt
+    //     and destructive-step commits run behind the confirmed write and must carry the epoch, so
+    //     the run-scoped choke point (TakeClaimAndWork#dispatchAfterClaim's finally) ends it after
+    //     those commits. Forgetting here left the last commit of every tenure outside the fence.
+    def "keeps the tenure across #operation, whose branch-side commits still belong to it"() {
+        given:
+        holdTenure()
+
+        when:
+        write.call(tracker)
+
+        then:
+        book.epochFor('PROJ-1').orElse(null) == new ClaimEpoch(42)
+
+        where:
+        operation | write
+        'recordAbort' | { Tracker t ->
+            t.recordAbort(REF, new AbortRecord('infra', 'gnomish-a-1', Instant.EPOCH))
+        }
+        'park' | { Tracker t ->
+            t.park(REF, ParkReason.ESCALATION, 'report')
+        }
+        'finish' | { Tracker t -> t.finish(REF, 'summary') }
+    }
+
+    def "forwards the terminal writes to the live tracker unchanged"() {
         given:
         holdTenure()
         def record = new AbortRecord('infra', 'gnomish-a-1', Instant.EPOCH)
 
         when:
         tracker.recordAbort(REF, record)
-
-        then:
-        1 * delegate.recordAbort(REF, record)
-        book.epochFor('PROJ-1').isEmpty()
-    }
-
-    def "forgets the tenure when the claim ends by park"() {
-        given:
-        holdTenure()
-
-        when:
         tracker.park(REF, ParkReason.ESCALATION, 'report')
-
-        then:
-        1 * delegate.park(REF, ParkReason.ESCALATION, 'report')
-        book.epochFor('PROJ-1').isEmpty()
-    }
-
-    def "forgets the tenure when the claim ends by finish"() {
-        given:
-        holdTenure()
-
-        when:
         tracker.finish(REF, 'summary')
 
         then:
+        1 * delegate.recordAbort(REF, record)
+        1 * delegate.park(REF, ParkReason.ESCALATION, 'report')
         1 * delegate.finish(REF, 'summary')
-        book.epochFor('PROJ-1').isEmpty()
     }
 
     /** Puts this instance in a live tenure on REF at epoch 42, as a successful claim would. */

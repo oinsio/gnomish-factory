@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
@@ -247,6 +248,32 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
             "register:${REF.id()}",
             "unregister:${REF.id()}"
         ]
+    }
+
+    // FR13 of harden-task-branch-contract: the tenure ends at this same choke point, not at the
+    // terminal tracker write — the receipt and cleanup commits behind a confirmed park/finish still
+    // have to carry the epoch. Past this finally nothing more is written under the claim, so the
+    // book is emptied here however the run ends.
+    def "forgets the tenure when the run scope ends, however it ends"() {
+        given:
+        def tracker = Stub(Tracker) {
+            claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        }
+        def branches = Stub(TaskBranchGit) {
+            classifyShape(_, _) >> {
+                throw new UsageException('stopped right after the claim')
+            }
+        }
+        def book = new ClaimEpochBook()
+        book.issued(REF.id(), new ClaimEpoch(1))
+
+        when:
+        claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
+                tracker, Stub(RunAssembly), ClaimBeat.NONE, new ClaimLossFlag(), WORKTREES_ROOT, book), tracker)
+
+        then:
+        thrown(UsageException)
+        book.epochFor(REF.id()).isEmpty()
     }
 
     // FR14, D16 "Runner crash is an abort": an uncaught RuntimeException of a run whose claim we

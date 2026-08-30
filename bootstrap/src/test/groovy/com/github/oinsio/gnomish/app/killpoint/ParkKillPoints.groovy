@@ -4,10 +4,10 @@ import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.GuardedPark
 import com.github.oinsio.gnomish.app.take.ParkTransition
-import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import org.slf4j.LoggerFactory
 
 /**
@@ -73,7 +73,7 @@ final class ParkKillPoints {
                 world.instanceId,
                 ParkReason.ESCALATION,
                 { String note -> REPORT },
-                TerminalWriteRetry.system(),
+                VirtualTimeRetries.terminalWrite(),
                 new ParkTransition.Recovered(
                         new ParkDeliveryVerdict.Delivered(), {
                             world.store.confirmTerminalWrite(world.taskId)

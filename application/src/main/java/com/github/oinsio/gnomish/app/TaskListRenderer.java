@@ -62,6 +62,9 @@ final class TaskListRenderer {
         if (outcome != null) {
             return outcome;
         }
+        // Deliberately the quarantine disposition rather than BranchShapeDiagnosis.diagnosisFor:
+        // this is the *outcome* column, and a bare branch has no outcome to report — its diagnosis
+        // belongs in the diagnosis field, which the JSON view fills from the shared owner.
         if (row.shape().disposition() == RecoveryDisposition.QUARANTINE) {
             return BranchShapeDiagnosis.phrase(row.shape());
         }
@@ -71,7 +74,8 @@ final class TaskListRenderer {
     /**
      * Renders {@code rows} as a pretty-printed JSON array, one object per task with fields {@code
      * taskId}, {@code shape}, {@code stage} (nullable), {@code attemptsUsed}, {@code outcome}
-     * (nullable) and {@code diagnosis} (non-null only for a quarantine shape).
+     * (nullable) and {@code diagnosis} (non-null only for a shape whose name is not the whole
+     * answer — see {@link BranchShapeDiagnosis#diagnosisFor}).
      *
      * @param rows the deduplicated per-task rows; possibly empty
      * @return the pretty-printed JSON array
@@ -110,8 +114,6 @@ final class TaskListRenderer {
 
     /** The diagnosis a row carries, or null for a shape whose name is the whole answer. */
     private static @Nullable String diagnosisOf(TaskListRow row) {
-        return row.shape().disposition() == RecoveryDisposition.QUARANTINE
-                ? BranchShapeDiagnosis.phrase(row.shape())
-                : null;
+        return BranchShapeDiagnosis.diagnosisFor(row.shape());
     }
 }

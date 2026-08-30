@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
+import com.github.oinsio.gnomish.atomicfile.NonAtomicWrite;
 import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper;
 import java.io.IOException;
@@ -28,6 +29,9 @@ import java.nio.file.StandardOpenOption;
  *
  * <p>Implements NFR-R2, NFR-R3 of add-serve-observability.
  */
+@NonAtomicWrite("append-only: the ledger grows by adding a line, and a replace-by-rename would drop"
+        + " every line already there. A torn last line after a crash is legal here by design (NFR-R2) and"
+        + " readers tolerate it.")
 public final class LedgerAppender {
 
     private final LedgerJsonMapper jsonMapper;

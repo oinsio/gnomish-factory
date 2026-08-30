@@ -75,7 +75,8 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
 - `tracker-take`: classifier-driven routing on origin-confirmed state; fetch-failure
   classification; automatic divergence resolution; deferred finishing of
   `Completed`-without-cleanup tips; first-classification quarantine for corrupt shapes.
-- `stage-engine`: persisted stage advancement — resume fast-forwards over a recorded pass.
+- `stage-engine`: persisted stage advancement — a passing round and its advancement land as
+  one durable transition, so a resume starts the following stage.
 - `github-tracker`: marker-keyed upsert comments; sweep-universe write ordering for claim,
   reap, finish, park, acknowledge, abort; facts-only listings; widened retryable-failure
   hierarchy.
@@ -89,7 +90,7 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
 
 ## Impact
 
-- `:domain` — branch-shape and tracker-shape value types, epoch types; engine resume fast-forward; recovery budget model.
+- `:domain` — branch-shape and tracker-shape value types, epoch types; single-commit pass-and-advance transition; recovery budget model.
 - `:adapters:git` — classifier tip-reading adapters (worktree, `git show`, bare objects);
   atomic writes; initial-state commit; pending-cleanup marker; CAS local-ref reset for discard; the
   divergence reconciler consolidating the host and container twins and
@@ -204,13 +205,19 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   recovery SHALL discard the local branch (reset to the origin tip, drop drafts) and
   continue — automatically, without an operator flag; the reset SHALL be an explicit
   local-ref compare-and-swap against the tip the decision was made on — no push is involved. Local-ahead keeps local;
-  local-behind fast-forwards; only true divergence discards.
+  local-behind fast-forwards; only true divergence discards. Where no live claim is held —
+  the claimless `run --resume` paths — a diverged pair SHALL stop and report instead of
+  discarding, since the discard's whole justification is the claim protocol.
 - FR9: a tip whose recorded outcome is `Completed` but whose cleanup has not happened SHALL
   be finished — cleanup committed, pushed, tracker finish delivered — and SHALL NOT re-enter
-  the engine; a resume at a recorded position whose last recorded round carries a passing
-  verdict SHALL fast-forward past that stage instead of re-executing it. FR9 is the
-  compatibility and recovery path of FR4: once FR4's single-commit transitions land, these
-  split states arise only from pre-contract history and kill windows.
+  the engine. FR9 is the recovery path of FR4's terminal half: once FR4's single-commit
+  transitions land, this split state arises only from pre-contract history and kill windows.
+  Deliberately out of scope: a pre-contract tip carrying a pass at an unadvanced position
+  (the pre-FR4 split) is NOT fast-forwarded — a recorded round carries no stage identity, so
+  no reader can distinguish that split from a normally advanced state whose history still
+  holds the finished stage's rounds; a resume re-runs the recorded stage, a bounded one-time
+  re-execution accepted for pre-contract history only, since contract-era writers cannot
+  produce the split at all.
 - FR10: every terminal transition with an external effect (host park, container park,
   completion finish, decision acknowledge, abort mark) SHALL follow one shared
   intent→effect→receipt protocol: durable intent before the effect, receipt after it, and
@@ -295,7 +302,8 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
 ### Non-Functional — Cost
 
 - NFR-C1: no recovery path re-invokes a paid executor or judge for work whose passing verdict
-  is already recorded on the branch (the FR9 guarantee stated as cost).
+  is recorded on a contract-era tip (the FR4 single-commit guarantee stated as cost); the
+  pre-FR4 split FR9 excludes may re-run one recorded stage, once, on pre-contract tips only.
 
 ## Operator Experience Criteria
 
@@ -318,7 +326,7 @@ pickup see?" — which no invariant in the codebase forces anyone to ask.
   classify to exactly one shape; no generated input throws.
 - M3: the audit's concrete scenarios each have a green spec: first-round-killed resume (host
   and container), container park decision round-trip, Completed-without-cleanup finish,
-  passed-stage fast-forward, diverged-branch automatic continuation, working-label-orphan
+  pass-persisted-state resume, diverged-branch automatic continuation, working-label-orphan
   reap, decision-before-ack ordering, status over a delivered+fresh+in-flight repository.
 - M4: build green with mutation score per `.claude/rules/testing.md` in every touched module.
 - M5: the ADR, the process-rule checklist, and the glossary entries exist and are

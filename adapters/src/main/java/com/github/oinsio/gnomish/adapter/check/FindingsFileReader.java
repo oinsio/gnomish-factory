@@ -69,7 +69,7 @@ final class FindingsFileReader {
             }
             return findings;
         } catch (IOException e) {
-            log.warn("GNOMISH_FINDINGS_FILE is malformed: {}; using synthetic finding", e.toString());
+            log.warn("GNOMISH_FINDINGS_FILE is malformed; using synthetic finding", e);
             return null;
         }
     }

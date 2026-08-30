@@ -217,4 +217,38 @@ class BranchTipFactsReaderSpec extends Specification {
         expect:
         classifier.classify(reader.read(tip([:]), null)) == new BranchShape.Bare()
     }
+
+    // NFR-S1, UX2: the Unreadable reason travels straight into the quarantine tracker report
+    //     (BranchQuarantineReport -> BranchShapeDiagnosis.phrase), and a tracker issue may be
+    //     public. The reason must therefore name the file and what went wrong and NOTHING of the
+    //     document — no offending token, no source excerpt. Today that holds because
+    //     StateFileVersionGate wraps the parser failure in an UncheckedIOException with its own
+    //     message; this spec is what stops a later change from surfacing the parser's message
+    //     (Jackson's includes an "at [Source: ...]" excerpt whenever source inclusion is on).
+    def "the #file unreadable reason never carries document content (#scenario)"() {
+        when:
+        def facts = reader.read(tip([(file): document]), null)
+        def envelope = file == 'task.json' ? facts.taskEnvelope() : facts.stateEnvelope()
+
+        then: 'the envelope is a fact, not a throw'
+        envelope instanceof EnvelopeStatus.Unreadable
+
+        and: 'it names the file and the failure'
+        def reason = (envelope as EnvelopeStatus.Unreadable).reason()
+        reason.startsWith(file + ':')
+
+        and: 'and leaks no byte of the document itself'
+        !reason.contains(SECRET)
+        !reason.contains('Source:')
+
+        where:
+        file | scenario | document
+        'task.json' | 'malformed JSON' | '{ "token": "' + SECRET + '"'
+        'state.json' | 'malformed JSON' | '{ "token": "' + SECRET + '"'
+        'task.json' | 'binds to nothing' | '{"version": 1, "decisions": "' + SECRET + '"}'
+        'state.json' | 'binds to nothing' | '{"version": 1, "attempts": "' + SECRET + '"}'
+    }
+
+    /** A token no diagnosis may echo: recognizable, and shaped like the credentials a tip could hold. */
+    private static final String SECRET = 'ghp-must-never-reach-the-tracker'
 }

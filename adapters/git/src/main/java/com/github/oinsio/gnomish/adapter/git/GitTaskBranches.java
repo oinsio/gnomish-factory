@@ -55,7 +55,7 @@ public final class GitTaskBranches implements TaskBranchGit {
      */
     public GitTaskBranches(GitProcessRunner runner, ClaimEpochSource epochs) {
         this.hardening = new FactoryCloneHardening(runner);
-        this.resumeBranch = new ContainerResumeBranch(runner);
+        this.resumeBranch = new ContainerResumeBranch(runner, epochs);
         this.locator = new TaskBranchLocator(runner);
         this.lister = new TaskBranchLister(runner);
         this.stateReader = new BranchStateReader(runner);

@@ -257,28 +257,28 @@ final class ContainerRunSupport implements SandboxRunSupport {
         ContainerRunTermination.keepStopped(this);
     }
 
-    /** Reads the last durably committed {@code state.json} (FR17). Delegated to {@link ContainerRunTermination}. */
+    /** Reads the last durably committed {@code state.json} (FR17). Delegated to {@link ContainerTipReader}. */
     @Override
     public TaskState readFinalState() {
-        return ContainerRunTermination.readFinalState(this);
+        return ContainerTipReader.readFinalState(this);
     }
 
-    /** The recorded state at the branch tip, or the initial state (FR6). Delegated to {@link ContainerRunTermination}. */
+    /** The recorded state at the branch tip, or the initial state (FR6). Delegated to {@link ContainerTipReader}. */
     @Override
     public TaskState readStateOrInitial(String firstStage) {
-        return ContainerRunTermination.readStateOrInitial(this, firstStage);
+        return ContainerTipReader.readStateOrInitial(this, firstStage);
     }
 
-    /** Reads the branch tip's {@code task.json} (FR17). Delegated to {@link ContainerRunTermination}. */
+    /** Reads the branch tip's {@code task.json} (FR17). Delegated to {@link ContainerTipReader}. */
     @Override
     public TaskRecord readTaskJson() {
-        return ContainerRunTermination.readTaskJson(this);
+        return ContainerTipReader.readTaskJson(this);
     }
 
-    /** Restores the branch tip's denial cursor (FR5). Delegated to {@link ContainerRunTermination}. */
+    /** Restores the branch tip's denial cursor (FR5). Delegated to {@link ContainerTipReader}. */
     @Override
     public void restoreDenialCursor() {
-        ContainerRunTermination.restoreDenialCursor(this);
+        ContainerTipReader.restoreDenialCursor(this);
     }
 
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */

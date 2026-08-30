@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.branch.BranchShapeDiagnosis;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
-import com.github.oinsio.gnomish.domain.branch.RecoveryDisposition;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -42,7 +41,8 @@ final class BranchShapeReportRenderer {
      * @param taskId the task the shape was classified for; never blank
      * @param shape the classifier's verdict; never null
      * @return the pretty-printed JSON object with {@code taskId}, {@code shape} and {@code
-     *     diagnosis} (null unless the shape refuses inspection)
+     *     diagnosis} (null unless the shape's name is not the whole answer — the quarantine three
+     *     and {@code Bare}; see {@link BranchShapeDiagnosis#diagnosisFor})
      */
     String renderJson(String taskId, BranchShape shape) {
         try {
@@ -56,7 +56,7 @@ final class BranchShapeReportRenderer {
 
     /** The diagnosis a shape carries, or null for a shape whose name is the whole answer. */
     private static @Nullable String diagnosisOf(BranchShape shape) {
-        return shape.disposition() == RecoveryDisposition.QUARANTINE ? BranchShapeDiagnosis.phrase(shape) : null;
+        return BranchShapeDiagnosis.diagnosisFor(shape);
     }
 
     private record ShapeJson(

@@ -4,9 +4,9 @@ import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermission
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR10 of add-git-workflow: uncommitted leftovers of an interrupted round, salvaged by default
  * (a service commit, not a round) or discarded on request, resetting to the last recorded round.
@@ -173,6 +173,41 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
 
         then:
         runner.run(repo, 'rev-parse', 'HEAD').stdout().trim() == tipBefore
+    }
+
+    // FR5: the restore is what makes the branch — not the dirty worktree — the source of truth for
+    // factory-owned files. A restore that FAILED must fail the salvage: swallowing its exit code
+    // lets the dying round's half-written state.json ride into the salvage commit, which is exactly
+    // the outcome the restore exists to prevent.
+    def "salvage() fails rather than committing a factory-owned file the restore could not put back"() {
+        given: 'a tip carrying the recorded state.json, plus a dying round\'s truncated one'
+        def repo = initWorkingRepo(tempDir, 'restore-fails')
+        Files.createDirectories(repo.resolve('.gnomish-task/decisions'))
+        Files.writeString(repo.resolve('.gnomish-task/state.json'), '{"recorded":true}')
+        Files.writeString(repo.resolve('.gnomish-task/decisions/.keep'), '')
+        runner.run(repo, 'add', '-A')
+        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
+        Files.writeString(repo.resolve('.gnomish-task/state.json'), '{ truncated')
+        Files.writeString(repo.resolve('work.txt'), 'half-done work')
+
+        and: 'the state directory is unwritable, so the checkout cannot unlink the truncated file'
+        def stateDir = repo.resolve('.gnomish-task')
+        def original = Files.getPosixFilePermissions(stateDir)
+        Files.setPosixFilePermissions(
+                stateDir, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_EXECUTE))
+
+        when:
+        new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE).salvage('PROJ-4')
+
+        then: 'the failed restore is reported, not swallowed'
+        def ex = thrown(GitSalvageFailedException)
+        ex.message.contains('PROJ-4')
+
+        and: 'and the truncated state.json never reached a commit'
+        runner.run(repo, 'show', 'HEAD:.gnomish-task/state.json').stdout().trim() == '{"recorded":true}'
+
+        cleanup:
+        Files.setPosixFilePermissions(stateDir, original)
     }
 
     def "salvage() throws GitSalvageFailedException naming the taskId when the index lock is held"() {

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,7 +42,9 @@ import org.slf4j.LoggerFactory;
  * D11 of harden-task-branch-contract): only gnome-owned work files ride a salvage commit.
  *
  * <p>Kept in sync with {@link WorktreeSalvage}: both must produce a salvage commit carrying the
- * claim-epoch trailer and restore factory-owned paths.
+ * claim-epoch trailer, restore factory-owned paths from the tip, and — past the guard that
+ * tolerates a tip with no state directory — FAIL the salvage when that restore fails, rather
+ * than letting the working copy's factory files ride into the commit.
  *
  * <p>Implements FR6 of add-sandbox-core; FR5 of harden-task-branch-contract.
  */
@@ -51,36 +54,52 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
 
     private static final String STATUS = "git status --porcelain";
 
+    // The state directory, the pathspec and the commit message travel as positional args ($1-$3),
+    // never string-interpolated into the script, so none of them can carry a shell metacharacter
+    // that alters the command — the same defense-in-depth pattern EnvironmentAttemptPersistence
+    // and EnvironmentRoundSnapshot use for factory-authored content. It also removes the last
+    // place a claim-epoch trailer's embedded newline had to survive shell quoting: a positional
+    // argument carries it verbatim with no quoting rule to get right.
+    private static final String COMMIT_SCRIPT = "if git cat-file -e \"HEAD:$1\" 2>/dev/null; then"
+            + " git -c core.hooksPath= checkout HEAD -- \"$1\" \"$2\" || exit 1;"
+            + " git clean -fd -- \"$1\" \"$2\" >/dev/null || exit 1;"
+            + " fi;"
+            + " if [ -n \"$(git status --porcelain)\" ]; then"
+            + " git add -A && git -c core.hooksPath= commit -m \"$3\"; fi";
+
     /**
      * The in-box salvage script: put the factory-owned {@code .gnomish-task/} paths back the way
      * the in-box {@code HEAD} has them, then commit whatever the gnome left (FR5, design D11 of
      * harden-task-branch-contract). The ownership policy is the same constant the host {@link
      * WorktreeSalvage} reads, so the two media cannot drift apart.
      *
-     * <p>Both restore commands are tolerated failing: a tip carrying no state directory has
-     * nothing of the factory's to restore. The leftovers are re-probed afterwards, because a
-     * working copy whose only dirt WAS a factory file has nothing left to commit — and {@code git
-     * commit} with an empty index is a failure, not a no-op.
-     *
-     * <p>Built per call rather than held as a constant: a static initializer would be attributed
-     * to whichever test happened to load the class first, which is not the test that proves the
-     * restore happens.
+     * <p>A tip carrying no state directory has nothing of the factory's to restore, so both restore
+     * commands run only behind a {@code cat-file -e} guard on the state directory — and past that
+     * guard a failing restore exits the script non-zero, failing the salvage. Swallowing it would
+     * be silent, not harmless: the {@code git add -A} below stages whatever the restore failed to
+     * put back, so a half-written {@code state.json} would ride into the salvage commit. The host
+     * twin {@link WorktreeSalvage#salvage} makes the same guarded-then-fatal distinction. The
+     * leftovers are re-probed afterwards, because a working copy whose only dirt WAS a factory file
+     * has nothing left to commit — and {@code git commit} with an empty index is a failure, not a
+     * no-op.
      *
      * <p>The commit message is stamped with the claim epoch trailer (FR13 of
-     * harden-task-branch-contract), same as the host {@link WorktreeSalvage}. The stamped message
-     * may carry a literal newline before the trailer line; POSIX single quotes preserve embedded
-     * newlines verbatim, so the quoted message survives {@code sh -c} unchanged.
+     * harden-task-branch-contract), same as the host {@link WorktreeSalvage}. Script text and data
+     * are kept apart: {@link #COMMIT_SCRIPT} is a fixed constant and the state directory, the
+     * pathspec and the stamped message reach it as {@code $1}-{@code $3}, so nothing the factory
+     * computes is ever concatenated into shell source. The host twin needs no mirrored change —
+     * it already passes the same values as argv to {@code git} directly and runs no shell at all.
+     *
+     * @return the positional arguments for {@link #COMMIT_SCRIPT}, starting with the {@code $0}
+     *     script name the shell expects before {@code $1}
      */
-    private String commitScript(String taskId) {
-        String paths = FactoryOwnedPaths.shellPathspec();
-        String message = ClaimEpochTrailer.stamp(
-                ServiceCommitMessages.salvage(), epochs.epochFor(taskId).orElse(null));
-        // The salvage message carries no shell metacharacters (ServiceCommitMessagesSpec pins its
-        // shape), so single-quoting it into the fixed script is safe.
-        return "git checkout HEAD -- " + paths + " 2>/dev/null;"
-                + " git clean -fd -- " + paths + " >/dev/null 2>&1;"
-                + " if [ -n \"$(git status --porcelain)\" ]; then"
-                + " git add -A && git -c core.hooksPath= commit -m '" + message + "'; fi";
+    private List<String> commitArguments(String taskId) {
+        List<String> arguments = new ArrayList<>();
+        arguments.add("gnomish");
+        arguments.addAll(FactoryOwnedPaths.pathspec());
+        arguments.add(ClaimEpochTrailer.stamp(
+                ServiceCommitMessages.salvage(), epochs.epochFor(taskId).orElse(null)));
+        return List.copyOf(arguments);
     }
 
     /**
@@ -103,7 +122,7 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
             if (!hasLeftovers()) {
                 return;
             }
-            InBoxGitCommand.Outcome commit = exec(commitScript(taskId));
+            InBoxGitCommand.Outcome commit = exec(COMMIT_SCRIPT, commitArguments(taskId));
             if (!commit.succeeded()) {
                 throw new GitSalvageFailedException(taskId, "in-box salvage commit", commit.output());
             }
@@ -150,6 +169,10 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
     // environment is not a termination — the command never ran — so ProcessStartException and a
     // broken stream still propagate to the degrade-and-WARN handlers above.
     private InBoxGitCommand.Outcome exec(String script) {
-        return new InBoxGitCommand(environment).run("in-box salvage command", script, List.of());
+        return exec(script, List.of());
+    }
+
+    private InBoxGitCommand.Outcome exec(String script, List<String> arguments) {
+        return new InBoxGitCommand(environment).run("in-box salvage command", script, arguments);
     }
 }

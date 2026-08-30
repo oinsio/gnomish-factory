@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.domain.engine
 import java.time.Instant
 
 /**
- * FR4, FR9, NFR-C1 of harden-task-branch-contract: a passing round and the advancement it
+ * FR4, NFR-C1 of harden-task-branch-contract: a passing round and the advancement it
  * implies are ONE transition, so they are one persisted state — and a pickup that reads that
  * state fast-forwards past the green stage instead of paying for it again.
  *
@@ -42,7 +42,7 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
         persistence.entries[1].state.position() instanceof Position.PipelineEnd
     }
 
-    // FR9, NFR-C1: the pickup after that write. Resuming from the state the passing round
+    // FR4, NFR-C1: the pickup after that write. Resuming from the state the passing round
     // persisted runs the FOLLOWING stage only — the green stage is not executed a second time.
     def "a resume from a recorded pass does not re-run the stage that passed"() {
         given: 'the state a passing round of `build` persisted — position already at `test`'

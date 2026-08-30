@@ -85,18 +85,31 @@ class BranchShapeSpec extends Specification {
     }
 
     // FR16: the closed set names itself once — a table cell, a log line and a diagnosis all read
-    // the same word for the same shape.
-    def "label() is the shape's own name"() {
-        expect:
-        shape.label() == name
+    // the same word for the same shape. Labels are load-bearing (the kill-point harness asserts on
+    // them), so every shape's label is pinned as a literal, and the pin is checked against the
+    // sealed set itself: a renamed shape fails its row, a twelfth shape fails the coverage check.
+    def "label() pins every shape of the closed set"() {
+        given: 'one instance of every shape, each with its pinned label'
+        def pinned = [
+            (new BranchShape.Bare()): 'Bare',
+            (new BranchShape.Created()): 'Created',
+            (new BranchShape.InProgress()): 'InProgress',
+            (new BranchShape.Parked()): 'Parked',
+            (new BranchShape.Answered()): 'Answered',
+            (new BranchShape.CompletedUncleaned()): 'CompletedUncleaned',
+            (new BranchShape.Delivered()): 'Delivered',
+            (new BranchShape.StaleEpoch()): 'StaleEpoch',
+            (new BranchShape.UnsupportedVersion('state.json', 2, 1)): 'UnsupportedVersion',
+            (new BranchShape.Corrupt('task.json: truncated')): 'Corrupt',
+            (new BranchShape.Unknown('state without task')): 'Unknown',
+        ]
 
-        where:
-        shape || name
-        new BranchShape.Bare() || 'Bare'
-        new BranchShape.Delivered() || 'Delivered'
-        new BranchShape.InProgress() || 'InProgress'
-        new BranchShape.UnsupportedVersion('state.json', 2, 1) || 'UnsupportedVersion'
-        new BranchShape.Corrupt('task.json: truncated') || 'Corrupt'
-        new BranchShape.Unknown('state without task') || 'Unknown'
+        expect: 'the pin covers the sealed set exactly, so a new shape cannot ship unlabeled'
+        pinned.keySet().collect {
+            it.getClass()
+        } as Set == BranchShape.permittedSubclasses as Set
+
+        and: 'each shape renders its pinned label'
+        pinned.every { shape, label -> shape.label() == label }
     }
 }

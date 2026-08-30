@@ -30,7 +30,8 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
     /**
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
      * @param epochs the tenure a salvage commit is stamped with (FR13 of
-     *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is held
+     *     harden-task-branch-contract), and the one the reconciler's automatic discard is gated on
+     *     (FR8); {@link ClaimEpochSource#NONE} where no claim is held
      */
     public GitTaskWorktrees(GitProcessRunner runner, ClaimEpochSource epochs) {
         this.runner = runner;
@@ -45,7 +46,7 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
 
     @Override
     public DivergenceOutcome reconcile(Path worktreeRoot, String taskId, String branchName) {
-        return ReplicaPairReconciler.forWorktree(runner, worktreeRoot).reconcile(taskId, branchName);
+        return ReplicaPairReconciler.forWorktree(runner, worktreeRoot, epochs).reconcile(taskId, branchName);
     }
 
     @Override

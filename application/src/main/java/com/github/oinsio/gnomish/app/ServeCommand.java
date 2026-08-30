@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
@@ -74,6 +75,9 @@ final class ServeCommand {
     private final FeedAutomatonStarter starter;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final ContainerTakeSupport containerTakeSupport;
+    // NFR-O1, FR13 of harden-task-branch-contract: the instance's tenure record, threaded to every
+    // slot so a repair line names the claim epoch its pickup runs under.
+    private final ClaimEpochBook epochs;
     /**
      * @param starter drives the assembled {@link FeedAutomaton} (task 5.1's test seam — see its
      *     Javadoc); production wiring passes {@link FeedAutomaton#run} itself
@@ -95,8 +99,10 @@ final class ServeCommand {
             PipelineSource pipelineSource,
             FeedAutomatonStarter starter,
             SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ClaimEpochBook epochs) {
         this.containerTakeSupport = containerTakeSupport;
+        this.epochs = epochs;
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
@@ -154,7 +160,8 @@ final class ServeCommand {
                 clock,
                 feedClock,
                 sandboxLifecyclePass,
-                containerTakeSupport);
+                containerTakeSupport,
+                epochs);
 
         runtime.worktreeJanitor().start();
         // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs for the daemon's whole

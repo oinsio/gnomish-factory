@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -31,7 +32,7 @@ class FinishEffectSpec extends Specification {
     }
 
     private FinishEffect effect(Runnable cleanup) {
-        new FinishEffect(tracker, REF, INSTANCE, 'all stages passed', TerminalWriteRetry.system(),
+        new FinishEffect(tracker, REF, INSTANCE, 'all stages passed', VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered(cleanup), LoggerFactory.getLogger(FinishEffectSpec))
     }
 

@@ -81,7 +81,10 @@ class GitInfrastructureRetrySpec extends Specification {
         expect:
         GitInfrastructureRetry.DEFAULT_ATTEMPTS == 3
         GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF == Duration.ofMillis(500)
+        // real-time-wiring: the production defaults ARE the subject here — the retry is only
+        //     constructed and read, never run, so no sleep can happen.
         GitInfrastructureRetry.system().attempts() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        // real-time-wiring: same — a field read of the production defaults, never a run.
         GitInfrastructureRetry.system().initialBackoff() == GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF
     }
 }

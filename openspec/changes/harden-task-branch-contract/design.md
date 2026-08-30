@@ -98,8 +98,14 @@ its own; the box↔clone harvest refusal maps to the same DIVERGED verdict (FR8)
 against the decided tip; origin history is never rewritten (NFR-R3). *Rationale:* arbitration
 became decidable when the claim protocol landed — origin advances only through legitimate
 lease holders, so unpushed local work is already "nonexistent" by NFR-R3 of the git-workflow
-change. *Alternative rejected:* an operator `--discard-local` flag — automation is safe under
-the lease, and the flag re-introduces manual surgery.
+change. The discard is gated on that lease being held for the task (the instance's own tenure record,
+`ClaimEpochBook`): the claimless `run --resume` paths keep the pre-FR8 stop-and-report, because
+there origin was never arbitrated by any lease and the local line may be the operator's only
+copy. *Alternative rejected:* an operator `--discard-local` flag — automation is safe under
+the lease, and the flag re-introduces manual surgery. *Alternative rejected:* re-reading the
+tracker immediately before the ref swap — a lease re-check just before a write buys no safety
+(the writer can be paused between check and write), and this write moves only a local ref no
+peer reads; the writes that reach shared media are fenced where they land.
 
 **D9 — One automatic-retry accounting** (FR14): the crash fuse and the recovery budget merge
 into a single persisted counter model with categorized causes (instance crash / recovery
@@ -217,6 +223,53 @@ a ready-labeled issue outside every sweep while still winning the earliest-id ra
 task-branch ref as the claim CAS — collapses the two writes into one atomic primitive but
 moves mutual exclusion into a medium a non-git tracker adapter lacks (kept as an open ADR
 question for the future).
+
+## Sync surfaces (mandatory)
+
+**D17 — Sync surfaces.** This change touches eight of the pairs the initial registry in
+`.claude/rules/manual-sync-pairs.md` listed when the change began — one of which, the salvage
+pair, ends the change carrying `Kept in sync with` markers at both ends and so leaves that
+registry — plus one undeclared pair that predates the registry entirely.
+Chosen per that rule's preference order: the undeclared pair is collapsed into a shared
+abstraction, the eight stay declared pairs — seven changed symmetrically, one deliberately
+one-sided. No third implementation of any rule is introduced, so no further extraction is
+forced.
+
+*Collapsed into a shared abstraction (preference 1):* **`WorktreeDivergenceCheck` / the
+container divergence twin → `ReplicaPairReconciler`** (D8). The EQUAL/AHEAD/BEHIND/DIVERGED
+relation, its policy and its claimless gate now live in one class both modes call through
+`TaskBranchGit.reconcileRemote`; the modes differ in exactly one step (host resyncs a working
+tree, container moves refs alone), carried by one seam inside the class. The pair was never in
+the registry and ends here rather than being declared into it.
+
+*Kept as declared pairs (preference 2) — the duplication is deliberate medium decoupling
+(a worktree with a checked-out tree versus bare objects or an in-box `sh -c` script), and the
+shared part of each rule is already extracted into a helper both ends call:*
+
+| Pair                                                      | Synchronized invariant                                                          | Extracted shared part                                                                                                                                                     |
+|-----------------------------------------------------------|---------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `WorktreeSalvage` / `EnvironmentSalvage`                  | salvage commit shape: epoch trailer + factory-path restore                      | `FactoryOwnedPaths` (D11), `ClaimEpochTrailer` — the one pair whose ends now carry the `Kept in sync with` markers, so its initial-registry row is dropped in this change |
+| `GitAttemptPersistence` / `EnvironmentAttemptPersistence` | round commit + `state.json` write sequence, epoch-stamped                       | `ClaimEpochTrailer` (the in-box end also reads `GnomishTaskPaths` for the state path)                                                                                     |
+| `GitTaskRepository` / `GitObjectsTaskRepository`          | lifecycle write protocol: one transition = one commit (FR4), epoch stamp (FR13) | `TaskLifecycleCommitWriter`, `ClaimEpochSource`                                                                                                                           |
+| `TakeFreshClaim` / `TakeContainerFreshClaim`              | fresh-claim recipe, now carrying the synthesized initial state (D2)             | `GitFreshTaskSupport.createTask`                                                                                                                                          |
+| `TakeEngineExecution` / `TakeContainerEngineExecution`    | terminal-boundary wiring: intent → effect → receipt for park and finish (D5)    | `ParkTransition`, `FinishTransition`                                                                                                                                      |
+| `TakeResumeRunner` / `TakeContainerResumeRunner`          | resume-with-decision recipe: commit the decision, then acknowledge (FR12)       | `TaskRepository.appendDecision(taskId, decision, resetState)`                                                                                                             |
+
+`GitModeRunner` / `ContainerGitModeRunner` change symmetrically and minimally: both hand the
+synthesized initial state to `GitFreshTaskSupport.createTask` (D2). The manual-run control
+flow itself is unchanged, so the pair stays declared with nothing further to extract.
+
+*One-sided by intent:* `GitResumeRunner` documents the new divergence policy on the
+`run --resume` path; `ContainerResumeRunner` gets the mirrored javadoc sentence but no code
+change, because the behavior itself moved into the shared `ReplicaPairReconciler` both modes
+already call — there is no per-mode rule left to duplicate. Recorded here so the asymmetry is
+a decision rather than an omission.
+
+*Alternative rejected:* extracting a `ResumeMechanics`-style abstraction over the seven kept
+pairs in this change. Each spans two media with different primitives, the extraction is a
+change-sized refactoring of its own, and folding it in would push this change past the 1–4
+week scope invariant. The rule permits a declared pair here; the abstraction becomes mandatory
+if a third medium arrives.
 
 ## Risks / Trade-offs
 

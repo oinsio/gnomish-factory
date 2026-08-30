@@ -1,23 +1,15 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.take.ParkTransition
 import com.github.oinsio.gnomish.app.take.TakeResult
-import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import spock.lang.Specification
-
 /**
  * FR13, FR18, D12 of add-tracker-port and FR7 of add-claim-heartbeat: a fresh {@code Paused}
  * checkpoint parks the task as {@code AwaitingHuman(CHECKPOINT)} — but the park is git-unfenced, so
@@ -55,7 +47,7 @@ class TakePauseExitSpec extends Specification {
                 tracker,
                 REF,
                 INSTANCE,
-                TerminalWriteRetry.system(),
+                VirtualTimeRetries.terminalWrite(),
                 new ParkTransition.Fresh({
                     verdict
                 } as ParkTransition.ParkIntent, {}))

@@ -10,6 +10,9 @@ import spock.lang.Specification
  * every multi-step transition of the branch medium, in both modes, killed after each of its durable
  * steps, picked up, and picked up again (M1, NFR-R1, UX1).
  *
+ * <p>Creation is a row like the rest rather than a premise the others start from — see {@link
+ * CreationKillPoints} for why the branch's first push earns its own windows.
+ *
  * <p>What each row asserts, per kill window: the frozen state classifies to the shape the
  * `task-branch-contract` capability names for it, the pickup converges it to the transition's
  * settled shape, and the second recovery pass changes nothing durable. The rows run against real
@@ -59,6 +62,12 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds {
             DecisionKillPoints.transition('host', { hostWorld(nextRoot()) }),
             DecisionKillPoints.transition('container', {
                 containerWorld(nextRoot())
+            }),
+            // One row, not a host/container pair: creation's windows are about publication to
+            // origin, and both media publish the same way — a branch nobody but its author can see
+            // is the same fact whichever writer built the STARTED commit.
+            CreationKillPoints.transition('shared', {
+                creationWorld(nextRoot())
             }),
         ]
     }

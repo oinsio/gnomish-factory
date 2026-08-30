@@ -227,7 +227,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                 boardCommand,
                 dashboardCommand,
                 SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, javaTimeClock),
-                containerTakeSupport);
+                containerTakeSupport,
+                claimEpochBook);
     }
 
     /**

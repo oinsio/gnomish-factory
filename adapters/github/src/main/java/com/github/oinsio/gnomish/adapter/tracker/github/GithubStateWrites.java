@@ -122,17 +122,18 @@ public final class GithubStateWrites {
         String scope = tenure == null ? Long.toString(record.at().toEpochMilli()) : Long.toString(tenure.token());
         markerWriter.write(
                 id,
-                GithubMarkerKind.ABORT,
-                scope,
-                "🤖 gnomish: aborted: " + record.cause(),
-                // The marker's reason field carries the recovery category, so the fold reads the
-                // two shares of the unified accounting back off the thread (FR14 of
-                // harden-task-branch-contract); a pre-categorization marker has none and reads as
-                // the crash category it meant.
-                record.category().wireValue(),
-                tenure,
-                record.instance(),
-                record.at());
+                new GithubMarkerWrite(
+                        GithubMarkerKind.ABORT,
+                        scope,
+                        "🤖 gnomish: aborted: " + record.cause(),
+                        // The marker's reason field carries the recovery category, so the fold reads
+                        // the two shares of the unified accounting back off the thread (FR14 of
+                        // harden-task-branch-contract); a pre-categorization marker has none and
+                        // reads as the crash category it meant.
+                        record.category().wireValue(),
+                        tenure,
+                        record.instance(),
+                        record.at()));
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, readyLabel);
     }
 

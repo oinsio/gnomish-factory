@@ -3,9 +3,9 @@
 ## MODIFIED Requirements
 
 ### Requirement: Resume from any valid state
-The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, or post-pause. A position naming a stage absent from the pipeline SHALL escalate as PipelineMismatch before any execution or persistence port call, with observability events still emitted. A resume SHALL never re-execute a stage whose last recorded round at the recorded position carries a passing verdict: the engine fast-forwards past that stage — advancing per its advancement mode without invoking the executor or any check — so no recovery path re-invokes a paid executor or judge for work whose passing verdict is already recorded.
+The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, or post-pause. A position naming a stage absent from the pipeline SHALL escalate as PipelineMismatch before any execution or persistence port call, with observability events still emitted. A resume from the state a passing round persisted — the position already advanced past the passed stage, the round still in the recorded history (one durable transition per FR4) — SHALL start the following stage with a fresh attempt history, never re-invoking the passed stage's executor or any of its checks, so no recovery path re-pays for work whose passing verdict a contract-era tip already records.
 <!-- implements FR9 of add-stage-engine -->
-<!-- implements FR9, NFR-C1 of harden-task-branch-contract -->
+<!-- implements FR4, NFR-C1 of harden-task-branch-contract -->
 
 #### Scenario: Mid-retry resume
 - **WHEN** a run starts from a state recorded after two quality failures
@@ -15,13 +15,9 @@ The engine SHALL resume at attempt-boundary granularity from any valid recorded 
 - **WHEN** the state references a stage no longer in the pipeline
 - **THEN** the outcome is Escalated(PipelineMismatch), no execution or persistence port was invoked, and RunStarted and TaskFinished were emitted
 
-#### Scenario: Recorded pass is never re-executed
-- **WHEN** a run starts from a state whose last recorded round at the recorded position carries a passing verdict, on a stage with `auto` advancement
-- **THEN** the engine advances past that stage without invoking the executor or any check for it, and execution continues at the following stage
-
-#### Scenario: Recorded pass on the final stage completes without re-running it
-- **WHEN** the recorded position is the final stage, its advancement is `auto`, and its last recorded round carries a passing verdict
-- **THEN** the run reaches Completed without re-executing the stage or re-invoking any judge
+#### Scenario: Resume from a recorded pass starts the following stage
+- **WHEN** a run starts from the state a passing round persisted on a stage with `auto` advancement — the position already at the following stage, the passing round still in the recorded history
+- **THEN** the engine executes only the following stage, starting it at round zero with an empty attempt history, and never re-invokes the passed stage's executor or any of its checks
 
 ### Requirement: Strict attempt persistence
 The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchronously after every executed round — including rounds ending in CannotVerify or DecisionNeeded — before the AttemptFinished event and before any next attempt. A persistence failure SHALL end the run as Aborted with the in-memory final state, the failed round key, and the cause. An unpersisted round SHALL be safe to lose: a new run from the last persisted state re-executes it. A passing round SHALL become durable together with its consequence in one persist call: the state handed to persistence for a round that passed verification already carries the advanced pipeline position, so the pass and the advancement land as a single durable transition — never split across two persistence calls.

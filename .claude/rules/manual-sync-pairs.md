@@ -61,7 +61,6 @@ audits treat these rows as if the markers were present.
 | End A                                            | End B                                                            | Synchronized invariant                                                 |
 |--------------------------------------------------|------------------------------------------------------------------|------------------------------------------------------------------------|
 | `adapters/git/.../RoundBoundaryCheck`            | `adapters/git/.../HarvestedBoundaryCheck`                        | `.gnomish-task/` boundary rule (allowed paths, exit-code handling)     |
-| `adapters/git/.../WorktreeSalvage`               | `adapters/git/.../EnvironmentSalvage`                            | salvage commit shape: epoch trailer, factory-path restore              |
 | `adapters/git/.../GitAttemptPersistence`         | `adapters/git/.../EnvironmentAttemptPersistence`                 | attempt commit + state-file write sequence                             |
 | `adapters/git/.../GitTaskRepository`             | `adapters/git/.../GitObjectsTaskRepository`                      | task lifecycle write protocol                                          |
 | `adapters/agent/.../DecisionFileTransport`       | `adapters/git/.../BranchDecisionFile`                            | `GNOMISH_DECISION_FILE` env var name, read semantics, size cap         |

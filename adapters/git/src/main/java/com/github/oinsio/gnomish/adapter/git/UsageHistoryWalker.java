@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.StatePositionDto;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
+import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
 import com.github.oinsio.gnomish.app.port.git.UsageTotals;
@@ -120,11 +121,28 @@ public final class UsageHistoryWalker {
      * pathspec too), handled by {@link #readStateAt} returning {@code null} for it.
      */
     private List<String> stateTouchingCommits(Path cloneDir, String ref) {
-        GitCommandResult log = runner.run(cloneDir, "log", "--reverse", "--format=%H", ref, "--", STATE_JSON_PATH);
+        GitCommandResult log = answered(
+                ref, "log", runner.run(cloneDir, "log", "--reverse", "--format=%H", ref, "--", STATE_JSON_PATH));
         if (log.exitCode() != 0) {
             return List.of();
         }
         return log.stdout().lines().filter(UsageHistoryWalker::isNonBlank).toList();
+    }
+
+    /**
+     * The gate both history reads pass through, same rule as {@link GitShowTip}: a result is a fact
+     * about the branch only when the invocation ran to its own exit. An interrupted {@code git log}
+     * hands back a prefix of the commit list — a report silently missing its newest rounds — and an
+     * interrupted {@code git show} reads as the absent-state case, silently dropping a commit's
+     * rounds; both must surface as unavailability instead.
+     */
+    private static GitCommandResult answered(String revision, String command, GitCommandResult result) {
+        return switch (result.termination()) {
+            case EXITED -> result;
+            case TIMED_OUT, INTERRUPTED ->
+                throw new BranchTipUnavailableException(
+                        revision, command, result.termination().name());
+        };
     }
 
     /**
@@ -150,7 +168,7 @@ public final class UsageHistoryWalker {
      * harden-task-branch-contract).
      */
     private @Nullable StateJsonDto readStateAt(Path cloneDir, String commit) {
-        GitCommandResult show = runner.run(cloneDir, "show", commit + ":" + STATE_JSON_PATH);
+        GitCommandResult show = answered(commit, "show", runner.run(cloneDir, "show", commit + ":" + STATE_JSON_PATH));
         if (show.exitCode() != 0) {
             return null;
         }

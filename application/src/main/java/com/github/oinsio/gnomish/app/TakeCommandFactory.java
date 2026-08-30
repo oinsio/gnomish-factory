@@ -78,6 +78,7 @@ final class TakeCommandFactory {
                 seams.heartbeatMonotonicTime(),
                 seams.takeoverConfirmation(),
                 seams.serveProperties(),
+                seams.epochs(),
                 sandboxLifecyclePass,
                 containerTakeSupport);
     }

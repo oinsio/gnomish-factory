@@ -39,6 +39,9 @@ public interface TaskBranchGit {
      * @return {@code true} when the branch exists locally after this call; {@code false} when it
      *     exists nowhere
      * @throws BranchLocationUnavailableException if the lookup could not reach origin
+     * @throws DivergedBranchException if the local and delivered tips share no ancestry
+     *     relationship and no claim is held on the task — the discard that resolves divergence is
+     *     the claim protocol's arbitration (FR8 of harden-task-branch-contract)
      */
     boolean ensureLocalTaskBranch(Path cloneDir, String taskId);
 
@@ -64,6 +67,8 @@ public interface TaskBranchGit {
      * @return the tip's shape; never null and never a thrown content failure
      * @throws BranchLocationUnavailableException when the lookup could not establish whether the
      *     branch exists at all (FR6)
+     * @throws BranchTipUnavailableException when the branch was located but a read of its tip did
+     *     not run to its own exit, so no fact about the tip was established (FR6)
      */
     BranchShape classifyShape(Path cloneDir, String taskId);
 
