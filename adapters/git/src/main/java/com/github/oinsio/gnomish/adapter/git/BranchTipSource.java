@@ -5,10 +5,15 @@ import java.util.Optional;
 
 /**
  * The narrow media seam the branch-shape classification reads through (design D3): "read this file
- * at the tip", plus the one history question delivery detection needs. Three media implement it —
- * a worktree's own tip ({@link WorktreeTipSource}), any ref in a clone ({@link RefTipSource}), and
- * bare objects in the factory clone ({@link BareObjectsTipSource}) — so three access paths share
- * one classifier instead of growing three.
+ * at the tip", plus the one history question delivery detection needs. {@link RefTipSource} is the
+ * production implementation, and one is enough for all three access paths the factory has — a
+ * worktree's own {@code HEAD}, a named ref of a clone, and a ref of the container medium's bare
+ * repository are the same {@code git show} read pointed at different revisions, which {@code
+ * BranchTipSourceSpec} pins medium by medium.
+ *
+ * <p>The seam stays an interface rather than collapsing into that class: it is what keeps {@link
+ * BranchTipFactsReader} — and through it the domain classifier — independent of git, and what lets
+ * a spec hand the reader a tip built in memory instead of a repository.
  *
  * <p>Every implementation reads the <em>tip</em>, never the working copy: a dirty worktree's
  * {@code .gnomish-task/} files are precisely what a crashed instance may have left half-written,

@@ -1,14 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
-import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
+import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
@@ -20,10 +13,10 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR2, FR9, FR10 of harden-task-branch-contract: every recoverable shape reaches the loaded-branch
  * table, and the one shape that is already delivered — {@code CompletedUncleaned} — finishes through
@@ -55,6 +48,9 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     /** The round journal the store hands the run; reassigned by the scenario that aborts. */
     AttemptPersistence journal = new InMemoryAttemptPersistence()
 
+    /** What the worktree's state.json read answers; reassigned by the scenario that deletes it. */
+    Closure<TaskState> recordedState = { TaskState.atStageStart('build') }
+
     def setup() {
         worktreesRoot = tempDir.resolve('worktrees')
         worktree = worktreesRoot.resolve('PROJ-1')
@@ -64,7 +60,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_, _) >> lifecycleStore
         store.attemptPersistence(_, _) >> { journal }
-        store.readRecordedState(_) >> TaskState.atStageStart('build')
+        store.readRecordedState(_) >> { recordedState() }
         store.readTaskRecord(_) >> { record }
         tracker.fetchTask(_) >> heldByUs()
     }
@@ -126,6 +122,30 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         and: 'no paid round was re-run'
         result instanceof TakeResult.Delivered
         executor.requests.isEmpty()
+    }
+
+    // FR9, FR15: the cleanup commit deletes .gnomish-task/ from the worktree, so the final state
+    // must be read BEFORE it — a read after the delete finds nothing and falls back to the
+    // pre-contract fabrication, handing disposal a first-stage state for a delivered task.
+    def "FR9: the disposal outcome carries the state recorded on the tip, read before cleanup deletes it"() {
+        given: 'a tip whose recorded state is past the first stage, and a store that loses it on cleanup'
+        record = recordWith(new RecordedOutcome.Completed())
+        def cleaned = false
+        lifecycleStore.finishCleanup('PROJ-1') >> { cleaned = true }
+        recordedState = {
+            if (cleaned) {
+                throw new UncheckedIOException(new NoSuchFileException(worktree.resolve('.gnomish-task').toString()))
+            }
+            TaskState.atStageStart('deploy')
+        }
+
+        when:
+        resume(new BranchShape.CompletedUncleaned())
+
+        then: 'disposal received the recorded state, not a fabricated first-stage one'
+        1 * worktrees.cleanUp(CLONE_DIR, worktree, { TaskOutcome.Completed outcome ->
+            outcome.finalState() == TaskState.atStageStart('deploy')
+        })
     }
 
     // FR10: an Aborted run has no external effect to sequence around — its tracker write is

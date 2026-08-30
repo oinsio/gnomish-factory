@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
@@ -226,7 +227,7 @@ class TakeFinishReportSpec extends Specification {
         when:
         def result = TakeFinishReport.finish(
                 new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, tracker, REF, INSTANCE,
-                TerminalWriteRetry.system(),
+                VirtualTimeRetries.terminalWrite(),
                 new FinishTransition.Recovered({ cleaned.incrementAndGet() }))
 
         then: 'no duplicate finish — the probe found the effect at the target'

@@ -11,9 +11,13 @@ import org.jspecify.annotations.Nullable;
  * (FR11, FR13, UX3 of harden-task-branch-contract): it resolves the tenure this
  * instance holds on the task, stamps that claim epoch into the marker, derives
  * the write's content identity, and hands the body to {@link
- * GithubCommentUpsert}. All eight marker kinds — claim, abort, ack, note, park,
- * finish, progress, stale-claim removal — come through here, so no write path
- * posts blind and no second place decides how a marker is stamped.
+ * GithubCommentUpsert}. Every {@link GithubMarkerKind} except the claim comes
+ * through here — abort, ack, note, park, finish, progress, stale-claim removal and
+ * index repair — so no ordinary write path posts blind and no second place decides
+ * how a marker is stamped. The one exception is deliberate: the claim marker mints
+ * the epoch this writer stamps, so {@link GithubClaimLease} posts it raw (the
+ * find-then-upsert fused into its verify-read) and {@link GithubHeartbeat} patches
+ * it in place — its own comment id is its identity.
  *
  * <h2>How a write scopes its identity</h2>
  *
@@ -86,33 +90,31 @@ public final class GithubMarkerWriter {
     public long write(GithubTaskId id, GithubMarkerKind kind, String humanText, @Nullable String reason) {
         Optional<ClaimEpoch> tenure = epochs.epochFor(id.canonicalId());
         String scope = tenure.map(epoch -> Long.toString(epoch.token())).orElseGet(() -> digestOf(humanText));
-        return write(id, kind, scope, humanText, reason, tenure.orElse(null), instanceId, Instant.now());
+        return write(
+                id,
+                new GithubMarkerWrite(kind, scope, humanText, reason, tenure.orElse(null), instanceId, Instant.now()));
     }
 
     /**
-     * Writes a marker under an explicitly named scope and author — the claim and
-     * the stale-claim removal (see the class Javadoc), plus {@code recordAbort},
-     * whose {@code AbortRecord} names the instance that actually aborted.
+     * Writes a marker under an explicitly named scope and author — the stale-claim
+     * removal (see the class Javadoc), the index repair, plus {@code recordAbort}
+     * and the decision ack, whose scope or author is the caller's fact rather than
+     * this writer's tenure.
      *
-     * @param scope the occurrence this write belongs to, appended to the kind
-     * @param author the instance to record as the marker's author
-     * @param epoch the tenure to stamp, or {@code null} to stamp none
-     * @param at the marker's own timestamp — the recorded fact's time where the caller has one
-     *     (an {@code AbortRecord}'s {@code at}, which the abort-facts fold reads back), not the
-     *     moment the write happens to be re-driven
+     * @param marker the write's full content (see {@link GithubMarkerWrite})
      * @return the GitHub comment id the write landed on
      */
-    public long write(
-            GithubTaskId id,
-            GithubMarkerKind kind,
-            String scope,
-            String humanText,
-            @Nullable String reason,
-            @Nullable ClaimEpoch epoch,
-            String author,
-            Instant at) {
-        GithubCommentIdentity identity = GithubCommentIdentity.of(id, kind.wireValue() + "@" + scope);
-        String body = GithubMarker.render(kind, author, at, humanText, reason, identity, epoch);
+    public long write(GithubTaskId id, GithubMarkerWrite marker) {
+        GithubCommentIdentity identity =
+                GithubCommentIdentity.of(id, marker.kind().wireValue() + "@" + marker.scope());
+        String body = GithubMarker.render(
+                marker.kind(),
+                marker.author(),
+                marker.at(),
+                marker.humanText(),
+                marker.reason(),
+                identity,
+                marker.epoch());
         return upsert.upsert(id, identity, body);
     }
 

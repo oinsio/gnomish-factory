@@ -72,7 +72,11 @@ class GithubHeartbeatSpec extends Specification {
     }
 
     private static String claimComment(long id, String updatedAt) {
-        """{"id":${id},"updated_at":"${updatedAt}","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-x7k2q1\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}"""
+        claimComment(id, updatedAt, INSTANCE_ID)
+    }
+
+    private static String claimComment(long id, String updatedAt, String holder) {
+        """{"id":${id},"updated_at":"${updatedAt}","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"${holder}\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}"""
     }
 
     def "FR1: beat PATCHes the resolved claim comment in place and reports the refreshed version"() {
@@ -245,6 +249,40 @@ class GithubHeartbeatSpec extends Specification {
 
         then:
         thrown(GithubHeartbeatException)
+    }
+
+    def "FR7: a live claim held by another instance is ClaimGone and is never overwritten"() {
+        given: 'this instance was reaped and a new holder claimed the task (comment 900)'
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/71/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200)
+                .withBody('[' + claimComment(900, '2026-07-23T10:00:00Z', 'gnomish-factory-other1') + ']')))
+
+        when:
+        def result = newHeartbeat().heartbeat(refFor(71), 'progress')
+
+        then: 'the zombie learns its claim is gone instead of silently taking over the winner comment'
+        result == new HeartbeatResult.ClaimGone()
+
+        and: 'no write touches the new holder`s claim comment'
+        wireMock.findAll(patchRequestedFor(urlPathEqualTo('/repos/acme/widgets/issues/comments/900'))).isEmpty()
+    }
+
+    def "FR11: the beat re-renders the claim comment`s content identity"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/72/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200)
+                .withBody('[' + claimComment(508, '2026-07-23T10:00:00Z') + ']')))
+        wireMock.stubFor(patch(urlPathEqualTo('/repos/acme/widgets/issues/comments/508'))
+                .willReturn(aResponse().withStatus(200)
+                .withBody('{"id":508,"updated_at":"2026-07-23T10:05:00Z","body":"refreshed"}')))
+
+        when:
+        newHeartbeat().heartbeat(refFor(72), 'progress')
+
+        then: 'the beaten body still carries the claim identity a reclaim adopts the comment by'
+        wireMock.verify(1, patchRequestedFor(urlPathEqualTo('/repos/acme/widgets/issues/comments/508'))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"task":"acme/widgets#72"')))
+                .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"intent":"claim@' + INSTANCE_ID + '"'))))
     }
 
     def "a beat response body with no updated_at surfaces as GithubHeartbeatException (not NPE)"() {

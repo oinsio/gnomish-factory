@@ -170,8 +170,8 @@ class GithubMarkerWriterSpec extends Specification {
         def abortedAt = Instant.parse('2026-07-19T08:00:00Z')
 
         when:
-        writerHolding(new ClaimEpoch(1234)).write(taskId(), GithubMarkerKind.ABORT, '1234',
-                '🤖 gnomish: aborted: build failed', null, new ClaimEpoch(1234), 'gnomish-factory-other', abortedAt)
+        writerHolding(new ClaimEpoch(1234)).write(taskId(), new GithubMarkerWrite(GithubMarkerKind.ABORT, '1234',
+                '🤖 gnomish: aborted: build failed', null, new ClaimEpoch(1234), 'gnomish-factory-other', abortedAt))
 
         then:
         def parsed = GithubMarker.parse(postedBody(wireMock, COMMENTS)).get()

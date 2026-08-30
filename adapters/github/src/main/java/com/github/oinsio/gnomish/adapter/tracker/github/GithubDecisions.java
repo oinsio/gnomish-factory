@@ -70,13 +70,14 @@ public final class GithubDecisions {
                 + Integer.toHexString(decisionText.hashCode());
         markerWriter.write(
                 id,
-                GithubMarkerKind.ACK,
-                scope,
-                "🤖 gnomish: acting on decision: " + decisionText,
-                null,
-                tenure,
-                markerWriter.instanceId(),
-                Instant.now());
+                new GithubMarkerWrite(
+                        GithubMarkerKind.ACK,
+                        scope,
+                        "🤖 gnomish: acting on decision: " + decisionText,
+                        null,
+                        tenure,
+                        markerWriter.instanceId(),
+                        Instant.now()));
     }
 
     /** Returns the index (in comment order) of the latest ACK-kind marker, or empty if none is present. */

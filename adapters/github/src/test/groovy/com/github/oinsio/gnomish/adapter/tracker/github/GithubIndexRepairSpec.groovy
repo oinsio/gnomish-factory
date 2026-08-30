@@ -69,6 +69,13 @@ class GithubIndexRepairSpec extends Specification {
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/7/labels'))
                 .withRequestBody(WireMock.containing('gnomish:ready')))
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/7/labels/gnomish%3Aworking')))
+
+        and: 'and the marker really landed FIRST — both label writes come after it, in that order'
+        mutationsInOrder() == [
+            'POST /repos/acme/widgets/issues/7/comments',
+            'POST /repos/acme/widgets/issues/7/labels',
+            'DELETE /repos/acme/widgets/issues/7/labels/gnomish%3Aworking',
+        ]
     }
 
     // FR12: a finish marker under a still-working label completes its own flip to delivered, and
@@ -88,6 +95,9 @@ class GithubIndexRepairSpec extends Specification {
         result instanceof RepairIndexResult.Repaired
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/8/labels'))
                 .withRequestBody(WireMock.containing('gnomish:delivered')))
+
+        and: 'the repair marker precedes the flip it completes'
+        mutationsInOrder().first() == 'POST /repos/acme/widgets/issues/8/comments'
     }
 
     def "a #kind marker's flip is completed to #target"() {
@@ -105,6 +115,9 @@ class GithubIndexRepairSpec extends Specification {
         result instanceof RepairIndexResult.Repaired
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/9/labels'))
                 .withRequestBody(WireMock.containing(target)))
+
+        and: 'every kind posts its marker before touching a label'
+        mutationsInOrder().first() == 'POST /repos/acme/widgets/issues/9/comments'
 
         where:
         kind | boundary || target
@@ -159,6 +172,27 @@ class GithubIndexRepairSpec extends Specification {
 
         then:
         thrown(GithubIndexRepairException)
+    }
+
+    /**
+     * Every mutating request the repair made, oldest first, as {@code "METHOD /path"}. WireMock
+     * reports serve events newest first, so the reverse is chronological order.
+     *
+     * <p>This is what makes "marker first" an assertion rather than a comment: three independent
+     * {@code verify} calls prove each request happened and say nothing about the order they
+     * happened in, yet the order is the whole crash-consistency property — the repair marker is the
+     * durable record of the intent, and a label flip that lands before it leaves a window where the
+     * labels moved with nothing on the issue explaining why (constructive before destructive,
+     * `.claude/rules/crash-consistency.md`).
+     */
+    private List<String> mutationsInOrder() {
+        wireMock.allServeEvents.reverse()
+                .findAll {
+                    String.valueOf(it.request.method) in ['POST', 'DELETE']
+                }
+                .collect {
+                    "${String.valueOf(it.request.method)} ${it.request.url}".toString()
+                }
     }
 
     private GithubIndexRepair newRepair() {

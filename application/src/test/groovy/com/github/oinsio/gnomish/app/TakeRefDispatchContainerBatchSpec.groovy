@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
@@ -19,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -27,6 +30,8 @@ import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxBindingProvider
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.sandbox.Segment
+import java.nio.file.Path
 import java.time.Duration
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -86,7 +91,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         def registry = AdapterBindingRegistry.ratified([containerProvider()], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(null, [:])
         def sandbox = new SandboxProperties('an-image', null, null, null, [], [], false, null, null, null, null)
-        ContainerSupportFactory containerSupport = { clone, id, segments, sandboxProps, factoryProps, definition, creds ->
+        ContainerSupportFactory containerSupport = { Path clone, String id, List<Segment> segments, SandboxProperties sandboxProps, FactoryProperties factoryProps, PipelineDefinition definition, List<String> creds ->
             stubSupport(repositories[id])
         }
         new ContainerTakeSupport(testProperties(), bindings, sandbox, registry, {
@@ -101,7 +106,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         }, Stub(TaskWorktreeGit))
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
                 ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
-                containerTakeSupport(repositories))
+                containerTakeSupport(repositories), new ClaimEpochBook())
     }
 
     private void dispatch(List<String> refs, Map<String, TaskRepository> repositories) {

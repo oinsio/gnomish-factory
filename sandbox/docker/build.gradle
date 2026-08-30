@@ -64,6 +64,12 @@ dependencies {
     implementation libs.jackson.core
     implementation libs.jackson.databind
 
+    // `@NonAtomicWrite`: the two classes here that write files without the atomic-rename
+    // discipline declare why in place, which is what the negative half of the atomic-write
+    // boundary gate reads (FR5, design D10 of harden-task-branch-contract). Marker only — no
+    // code in this module calls `AtomicFileWriter`.
+    implementation project(':atomicfile')
+
     // Shared fakes (FR7, design D8), test scope only: RecordingDockerCli /
     // ScriptedSandboxDocker and the TaskExecutionEnvironment port-contract
     // suite the host backend's spec runs.
@@ -80,9 +86,9 @@ dependencies {
 layering {
     allowedProjects = [
         ':application',
-        // Transitive via `:application`, which renames its snapshot and dashboard writes
-        // through the dependency-free atomic-write leaf (design D10 of
-        // harden-task-branch-contract); no source in this module names it.
+        // The dependency-free atomic-write leaf (design D10 of harden-task-branch-contract).
+        // Reached here only for its `@NonAtomicWrite` marker; the writer itself is used by
+        // `:application`, which renames its snapshot and dashboard writes through it.
         ':atomicfile',
         ':domain',
         ':gitobjects',

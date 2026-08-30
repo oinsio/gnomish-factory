@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
@@ -111,7 +112,8 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeSlotRunner(
                 newAssembly(), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, 3, 'taskId',
-                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly())
+                [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
+                new ClaimEpochBook())
     }
 
     /** A real, quick-to-drain automaton: the mocked tracker reports nothing eligible. */

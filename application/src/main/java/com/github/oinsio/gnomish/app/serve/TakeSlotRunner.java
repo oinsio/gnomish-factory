@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.RunAssembly;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
 import com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -77,6 +78,8 @@ public final class TakeSlotRunner implements SlotRunner {
      * @param claimLossFlag the per-run heartbeat claim-loss flag; never null
      * @param tracker the tracker port every slot fetches and dispatches through; never null
      * @param instanceId this factory instance's identity; never null
+     * @param epochs this instance's tenure record, read by the routing point for the repair line it
+     *     leaves on a non-clean pickup (NFR-O1 of harden-task-branch-contract); never null
      */
     public TakeSlotRunner(
             RunAssembly assembly,
@@ -92,7 +95,8 @@ public final class TakeSlotRunner implements SlotRunner {
             ClaimLossFlag claimLossFlag,
             Tracker tracker,
             InstanceId instanceId,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ClaimEpochBook epochs) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -103,7 +107,8 @@ public final class TakeSlotRunner implements SlotRunner {
                 credentialEnvVarsToScrub,
                 heartbeat,
                 claimLossFlag,
-                containerTakeSupport);
+                containerTakeSupport,
+                epochs);
         this.cloneDir = cloneDir;
         this.definition = definition;
         this.tracker = tracker;

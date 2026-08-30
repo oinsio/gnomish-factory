@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
@@ -46,7 +47,7 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
                 new AbortHandler(tracker, FIXED_CLOCK), 3, 'taskId', [], ClaimBeat.NONE, false, { _ref, _holder, _age ->
                     TakeoverConfirmation.Decision.DECLINED
                 } as TakeoverConfirmation,
-                FIXED_CLOCK, new ClaimLossFlag(), ContainerTakeSupport.hostOnly())
+                FIXED_CLOCK, new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
     }
 
     private TakeResult dispose(TrackerTask task) {

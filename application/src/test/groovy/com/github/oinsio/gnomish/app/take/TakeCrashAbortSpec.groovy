@@ -1,5 +1,9 @@
 package com.github.oinsio.gnomish.app.take
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -12,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
@@ -19,6 +24,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
@@ -46,7 +52,7 @@ class TakeCrashAbortSpec extends Specification {
                 'build', 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md', [],
-                new AutonomyLimits(3), com.github.oinsio.gnomish.domain.pipeline.AdvancementMode.AUTO)
+                new AutonomyLimits(3), AdvancementMode.AUTO)
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
     }
 
@@ -114,13 +120,13 @@ class TakeCrashAbortSpec extends Specification {
 
         where:
         description | crash | expected
-        'thrown directly' | {
-            it
+        'thrown directly' | { Throwable cause ->
+            cause
         } | RecoveryCause.RECOVERY_FAILURE
-        'wrapped by a layer' | {
-            new RuntimeException('while resuming', it)
+        'wrapped by a layer' | { Throwable cause ->
+            new RuntimeException('while resuming', cause)
         } | RecoveryCause.RECOVERY_FAILURE
-        'an ordinary crash' | {
+        'an ordinary crash' | { Throwable cause ->
             new IllegalStateException('worktree exploded')
         } | RecoveryCause.INSTANCE_CRASH
     }
@@ -134,13 +140,38 @@ class TakeCrashAbortSpec extends Specification {
         }
 
         when:
-        def result = crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE,
-                new RuntimeException('boom'))
+        def result = null
+        def events = capture {
+            result = crashAbort.onCrash(pipeline(), claimedTask(AbortFacts.none()), tracker, INSTANCE,
+            new RuntimeException('boom'))
+        }
 
         then: 'with no facts to read the fuse counts the first abort and records it'
         noExceptionThrown()
         1 * tracker.recordAbort(REF, _)
         0 * tracker.park(*_)
         result instanceof TakeResult.Aborted
+
+        and: 'the degrade is not silent: the reset streak is named at WARN with the failure attached'
+        def warn = events.find { it.level == Level.WARN }
+        warn != null
+        warn.formattedMessage.contains('PROJ-1')
+        warn.formattedMessage.contains('first abort in the streak')
+        warn.throwableProxy.message == 'tracker unreachable'
+    }
+
+    /** Runs {@code emit} with a {@link ListAppender} attached to TakeCrashAbort's own logger. */
+    private static List<ILoggingEvent> capture(Closure<?> emit) {
+        Logger logbackLogger = (Logger) LoggerFactory.getLogger(TakeCrashAbort)
+        ListAppender<ILoggingEvent> appender = new ListAppender<>()
+        appender.start()
+        logbackLogger.addAppender(appender)
+        try {
+            emit()
+        } finally {
+            logbackLogger.detachAppender(appender)
+            appender.stop()
+        }
+        return appender.list
     }
 }

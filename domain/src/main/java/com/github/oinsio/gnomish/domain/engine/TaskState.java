@@ -130,7 +130,7 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
      * arrives from the branch instead of from memory, which is why it is idempotent and a no-op for
      * every state whose last recorded round did not pass.
      *
-     * <p>Implements FR4, FR9 of harden-task-branch-contract.
+     * <p>Implements FR4, NFR-C1 of harden-task-branch-contract.
      *
      * @return this state with a finished stage's attempts dropped; never null
      */

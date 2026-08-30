@@ -374,4 +374,20 @@ class GithubFeedQuerySpec extends Specification {
                         '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .withHeader('If-None-Match', equalTo('"v1"')))
     }
+
+    def "a non-2xx feed response is an infrastructure failure, never an empty queue (HTTP #status)"() {
+        given: 'the feed read comes back non-2xx — a rate-limited 403, a gone repo, an exhausted 5xx'
+        wireMock.stubFor(get(urlEqualTo(
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(status).withBody('{"message":"nope"}')))
+
+        when:
+        newFeedQuery().listReady(10)
+
+        then: 'surfaced the same way listOpen surfaces it — an outage is never read as "no ready tasks"'
+        thrown(GithubFeedQueryException)
+
+        where:
+        status << [403, 404, 500]
+    }
 }

@@ -101,3 +101,22 @@ dependencies {
     // a test-only classpath (buildHealth advice).
     runtimeOnly libs.junit.platform.engine
 }
+
+// The time-injection gate `test-conventions` gives every other module (task 9.1 of
+// harden-task-branch-contract). This module never applies that plugin — its specs' shared fakes
+// live in `src/main`, not `src/test` — but it is exactly where a fixture handed to every other
+// module would wire a real sleeper, so it registers the same check over its own sources.
+def testTimeInjection = tasks.register('checkTestTimeInjection',
+        com.github.oinsio.gnomish.build.TestTimeInjectionCheck) {
+    group = 'verification'
+    description = 'Fails when a shared fixture wires production real time instead of injecting it.'
+    testSources.from(fileTree('src/main') {
+        include '**/*.groovy'
+        include '**/*.java'
+    })
+    report = layout.buildDirectory.file('reports/test-time-injection.txt')
+}
+
+tasks.named('check') {
+    dependsOn testTimeInjection
+}

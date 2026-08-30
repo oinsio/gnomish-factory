@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -72,6 +73,8 @@ final class TakeDisposition {
      * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
      *     add-claim-heartbeat), threaded down to every {@link TakeEngineExecution} this disposition
      *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
+     * @param epochs this instance's tenure record, read by the routing point for the repair line it
+     *     leaves on a non-clean pickup (NFR-O1 of harden-task-branch-contract); never null
      */
     TakeDisposition(
             RunAssembly assembly,
@@ -86,7 +89,8 @@ final class TakeDisposition {
             TakeoverConfirmation confirmation,
             Clock clock,
             ClaimLossFlag claimLossFlag,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ClaimEpochBook epochs) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -97,7 +101,8 @@ final class TakeDisposition {
                 credentialEnvVarsToScrub,
                 heartbeat,
                 claimLossFlag,
-                containerTakeSupport);
+                containerTakeSupport,
+                epochs);
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
     }
 
@@ -129,7 +134,8 @@ final class TakeDisposition {
                 TakeoverConfirmation.UNAVAILABLE,
                 Clock.systemUTC(),
                 new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly());
+                ContainerTakeSupport.hostOnly(),
+                new ClaimEpochBook());
     }
 
     /**

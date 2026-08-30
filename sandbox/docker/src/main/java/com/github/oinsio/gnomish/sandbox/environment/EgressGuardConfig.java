@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.atomicfile.NonAtomicWrite;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -32,6 +33,9 @@ import java.util.stream.Collectors;
  *
  * <p>Implements FR7, NFR-O1, NFR-S2 of add-sandbox-core.
  */
+@NonAtomicWrite("factory-private guard configuration mounted read-only into a container that is started"
+        + " only after render() returns; no factory instance ever reads it back as durable state, so a torn"
+        + " read has no reader to mislead.")
 final class EgressGuardConfig {
 
     /** The addon script's file name under the guard's config mount. */

@@ -27,4 +27,21 @@ class RecoveryCauseSpec extends Specification {
         RecoveryCause.INSTANCE_CRASH | 'instance_crash'
         RecoveryCause.RECOVERY_FAILURE | 'recovery_failure'
     }
+
+    // FR14, testing.md "Every wire vocabulary has a round-trip spec": iterated over values(), so a
+    // constant added on the writer side without a reader mapping fails here, not in production.
+    def "#cause survives the wire round-trip"() {
+        expect:
+        RecoveryCause.fromWire(cause.wireValue()) == cause
+
+        where:
+        cause << RecoveryCause.values()
+    }
+
+    // FR14: the forward-compat default — an unknown future category degrades the report's split
+    // into the crash share, never its total, same as a pre-categorization marker with no token.
+    def "an unknown wire token reads as the crash category"() {
+        expect:
+        RecoveryCause.fromWire('some_future_category') == RecoveryCause.INSTANCE_CRASH
+    }
 }

@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The crash arm of the infrastructure-abort protocol (FR14 "Runner crash is an abort", D3, D16):
@@ -38,6 +40,8 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
  * <p>Implements FR14, NFR-R2, D3, D16 of add-tracker-port; FR14 of harden-task-branch-contract.
  */
 public final class TakeCrashAbort {
+
+    private static final Logger log = LoggerFactory.getLogger(TakeCrashAbort.class);
 
     private final AbortHandler abortHandler;
     private final int abortThreshold;
@@ -109,6 +113,15 @@ public final class TakeCrashAbort {
         try {
             return tracker.fetchTask(ref).abortFacts();
         } catch (RuntimeException unreadable) {
+            // Loud on the way past (NFR-O1): the degrade RESETS the streak this crash is counted
+            // into, so a tracker that is merely flaky — readable when the fuse is written, not when
+            // it is read — keeps every crash looking like the first one and the K fuse never trips.
+            // An operator seeing repeated aborts on one task needs this line to tell "K is too high"
+            // from "the count never accumulated".
+            log.warn(
+                    "abort facts unreadable for task {}; counting this crash as the first abort in the streak",
+                    ref.id(),
+                    unreadable);
             return AbortFacts.none();
         }
     }

@@ -40,6 +40,11 @@ class StalenessMemorySpec extends Specification {
         TrackerObservation.of(new TaskRef(ref), TrackerFacts.of(StateLabels.needsHumanOnly()))
     }
 
+    private static TrackerObservation foreign(String ref) {
+        TrackerObservation.of(
+                new TaskRef(ref), TrackerFacts.of(new StateLabels(false, false, false, false, false)))
+    }
+
     private static ClaimVersion version(String updatedAt = ANCIENT.toString()) {
         new ClaimVersion('marker-1', Instant.parse(updatedAt), new ClaimEpoch(1))
     }
@@ -217,6 +222,24 @@ class StalenessMemorySpec extends Specification {
 
         then: 'the released shape is not re-emitted and the parked task is still untouched'
         memory.observe(entries) == []
+    }
+
+    // FR19: a Foreign shape is not steady, but no owner repairs it either, so the memory does not
+    //     time it: latching it would enter it into staleRefs — which the liveness oracle reads as
+    //     "unowned" — for a task no repair will ever converge.
+    def "a foreign shape is never timed, however long it stands"() {
+        given: 'an open task wearing no gnomish state label at all'
+        def entries = [foreign('T-alien')]
+
+        expect:
+        memory.observe(entries) == []
+
+        when:
+        time.advance(TTL.multipliedBy(10))
+
+        then: 'nothing is released and nothing is latched'
+        memory.observe(entries) == []
+        memory.staleRefs().isEmpty()
     }
 
     // FR2, FR4: eligible claims are judged even when mixed with ineligible entries, and

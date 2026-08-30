@@ -4,10 +4,12 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.sandbox.ExecCommand
+import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermission
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -108,6 +110,119 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
 
         and: 'the gnome-writable decisions path is salvaged like any work file'
         gitOutput(cloneDir, 'show', tip + ':.gnomish-task/decisions/build-a0.json') == '{"asked":true}'
+    }
+
+    // FR5, the container half of WorktreeSalvageSpec's twin scenario: a restore that FAILED must
+    // fail the salvage. Tolerating its exit status lets the `git add -A` below stage the dying
+    // round's half-written state.json into the salvage commit — the exact outcome the restore
+    // exists to prevent. Only "the tip carries no state directory" is tolerated, and that is
+    // guarded, not swallowed.
+    def "FR5: salvage() fails rather than committing a factory-owned file the in-box restore could not put back"() {
+        given: 'a box whose HEAD carries a recorded state.json, plus a dying round\'s truncated one'
+        def box = materializedBox()
+        def work = box.workingCopy
+        Files.createDirectories(work.resolve('.gnomish-task/decisions'))
+        Files.writeString(work.resolve('.gnomish-task/state.json'), '{"recorded":true}')
+        Files.writeString(work.resolve('.gnomish-task/decisions/.keep'), '')
+        gitOutput(work, 'add', '-A')
+        gitOutput(work, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
+        Files.writeString(work.resolve('.gnomish-task/state.json'), '{ truncated')
+        new File(work.toFile(), 'work.txt').text = 'interrupted round'
+
+        and: 'the state directory is unwritable, so the in-box checkout cannot unlink the truncated file'
+        def stateDir = work.resolve('.gnomish-task')
+        def original = Files.getPosixFilePermissions(stateDir)
+        Files.setPosixFilePermissions(
+                stateDir, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_EXECUTE))
+
+        when:
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-5')
+
+        then: 'the failed restore is reported, not absorbed into a salvage commit'
+        def ex = thrown(GitSalvageFailedException)
+        ex.message.contains('SALV-5')
+
+        and: 'and the truncated state.json never reached the in-box tip'
+        gitOutput(work, 'show', 'HEAD:.gnomish-task/state.json') == '{"recorded":true}'
+
+        cleanup:
+        Files.setPosixFilePermissions(stateDir, original)
+    }
+
+    // FR5, design D16 of harden-task-branch-contract: factory-invoked in-box git runs with hooks
+    // disabled at argv level. `git checkout HEAD -- <paths>` invokes post-checkout (flag=0, a file
+    // checkout), so without `-c core.hooksPath=` a gnome-planted hook would execute inside the box
+    // during the factory's own salvage restore.
+    def "FR5: the salvage restore checkout runs no gnome-planted hook"() {
+        given: 'a box whose HEAD carries a recorded state.json'
+        def box = materializedBox()
+        def work = box.workingCopy
+        Files.createDirectories(work.resolve('.gnomish-task'))
+        Files.writeString(work.resolve('.gnomish-task/state.json'), '{"recorded":true}')
+        gitOutput(work, 'add', '-A')
+        gitOutput(work, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
+
+        and: 'a gnome-planted post-checkout hook that would betray itself outside the working copy'
+        def marker = tempDir.resolve('hook-ran')
+        def hook = work.resolve('.git/hooks/post-checkout')
+        Files.writeString(hook, "#!/bin/sh\ntouch '" + marker + "'\n")
+        Files.setPosixFilePermissions(hook, EnumSet.of(
+                        PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE))
+
+        and: 'a dying round left a dirty state.json and gnome work behind, so the restore checkout runs'
+        Files.writeString(work.resolve('.gnomish-task/state.json'), '{ truncated')
+        new File(work.toFile(), 'work.txt').text = 'interrupted round'
+
+        when:
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-HOOK')
+
+        then: 'the salvage succeeded without ever running the hook'
+        Files.notExists(marker)
+        gitOutput(cloneDir, 'show', 'refs/heads/' + BRANCH + ':work.txt') == 'interrupted round'
+    }
+
+    // NFR-S1, FR6: script text and data stay apart. The salvage script is a fixed constant and the
+    // state directory, the pathspec and the stamped commit message reach it as positional
+    // arguments, so nothing the factory computes is ever concatenated into shell source running
+    // inside the box. Pinning it here rather than trusting the message's shape: the message gains
+    // a claim-epoch trailer (FR13) and could gain more, and the moment a dynamic value is quoted
+    // into the script instead, a metacharacter in it changes the command that runs.
+    def "NFR-S1: the salvage commit passes its paths and message as arguments, never inside the script"() {
+        given: 'a box that records every exec argv on its way through to the real one'
+        cloneDir = initWorkingRepo(tempDir, 'factory-clone-argv')
+        new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
+        commitAll(cloneDir)
+        gitOutput(cloneDir, 'branch', BRANCH)
+        List<ExecCommand> seen = []
+        def box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('argv-box'))) {
+                    @Override
+                    ExecHandle exec(ExecCommand command) {
+                        seen << command
+                        super.exec(command)
+                    }
+                }
+        box.materialize(BRANCH, null)
+        new File(box.workingCopy.toFile(), 'work.txt').text = 'interrupted round'
+
+        when:
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-ARGV')
+
+        then: 'the commit ran through sh -c with a script that names none of them'
+        ExecCommand commit = seen.find { it.command()[2].contains('commit -m') }
+        commit != null
+        commit.command()[0] == 'sh'
+        commit.command()[1] == '-c'
+        !commit.command()[2].contains('gnomish: salvage')
+        !commit.command()[2].contains('.gnomish-task')
+
+        and: 'each of them arrived as its own positional argument instead'
+        def positional = commit.command().drop(3)
+        positional.contains('gnomish: salvage')
+        positional.contains('.gnomish-task')
+        positional.contains(':(exclude).gnomish-task/decisions')
+
+        and: 'and the salvage still did its job'
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', 'refs/heads/' + BRANCH) == 'gnomish: salvage'
     }
 
     def "FR6: salvage() is a no-op on a clean box — no commit, no harvest"() {

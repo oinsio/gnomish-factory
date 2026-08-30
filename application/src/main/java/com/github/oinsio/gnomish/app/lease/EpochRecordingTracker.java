@@ -21,11 +21,22 @@ import java.util.List;
  * the one place a tenure can begin or end: the tracker port itself (FR13).
  *
  * <p>A tenure begins when {@code claim} answers {@link ClaimResult.Acquired} — the epoch is recorded
- * before the caller can make its first write, so no commit of the tenure goes out unstamped. It ends
- * at whichever comes first: the caller drops the claim ({@code release}), returns the task ({@code
- * recordAbort}), writes a terminal state ({@code park}, {@code finish}), or a beat reports the claim
- * gone. Recording the end is what stops a superseded holder from stamping an epoch it no longer
- * owns, which is the very write the fence exists to catch.
+ * before the caller can make its first write, so no commit of the tenure goes out unstamped.
+ *
+ * <p>It ends at whichever comes first: the caller drops the claim ({@code release}), or a beat
+ * reports the claim gone. Both mean the same thing — this instance no longer holds the task — and
+ * recording it is what stops a superseded holder from stamping an epoch it no longer owns, the very
+ * write the fence exists to catch.
+ *
+ * <p>A terminal write — {@code recordAbort}, {@code park}, {@code finish} — deliberately does NOT
+ * end the tenure here, even though it ends the claim on the tracker. Those transitions still have
+ * branch work behind them: the intent→effect→receipt protocol runs its receipt and its destructive
+ * step (the park receipt commit, the finish cleanup commit) only once the tracker write has
+ * confirmed, and those commits belong to the tenure that made them. Forgetting the epoch at the
+ * tracker write left them unstamped — outside the fence, so a zombie's late cleanup commit could
+ * not classify as {@code StaleEpoch}. The run-scoped end is where the tenure actually finishes:
+ * {@code TakeClaimAndWork.dispatchAfterClaim}'s {@code finally}, the single claim-holding choke
+ * point, which forgets it in the same breath that stops the beats.
  *
  * <p>Wrapped around the live tracker at the two commands that claim — {@code take} and {@code serve}
  * — rather than threaded down to each writer: every claim of a run necessarily passes through this
@@ -63,22 +74,21 @@ public final class EpochRecordingTracker implements Tracker {
         book.ended(ref.id());
     }
 
+    // The three terminal writes keep the tenure recorded on purpose — their receipt and cleanup
+    // commits still have to carry it. See the class javadoc.
     @Override
     public void recordAbort(TaskRef ref, AbortRecord record) {
         delegate.recordAbort(ref, record);
-        book.ended(ref.id());
     }
 
     @Override
     public void park(TaskRef ref, ParkReason reason, String report) {
         delegate.park(ref, reason, report);
-        book.ended(ref.id());
     }
 
     @Override
     public void finish(TaskRef ref, String summary) {
         delegate.finish(ref, summary);
-        book.ended(ref.id());
     }
 
     @Override

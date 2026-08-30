@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.lease.EpochRecordingTracker
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
@@ -37,11 +39,20 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // older, so the takeover facts render the age as "47m".
     private static final Instant NOW = Instant.parse('2026-07-29T12:00:00Z')
 
+    /**
+     * The instance's tenure record, as production wires it: one book shared by the disposition and
+     * by every git writer it hands work to. Filled at the claim by {@code EpochRecordingTracker},
+     * which this spec's mock tracker stands in for — a feature that needs a held tenure records it
+     * with {@link ClaimEpochBook#issued} in its given block.
+     */
+    def claimEpochBook = new ClaimEpochBook()
+
     private TakeDisposition newDisposition() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
-        new TakeDisposition(newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
-        ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
-        ContainerTakeSupport.hostOnly())
+        new TakeDisposition(newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler,
+                ABORT_THRESHOLD, 'taskId', [],
+                ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
+                ContainerTakeSupport.hostOnly(), claimEpochBook)
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
@@ -49,9 +60,10 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     private TakeDisposition newTakeoverDisposition(TakeoverConfirmation confirmation, boolean takeoverFlag) {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeDisposition(
-                newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
+                newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler, ABORT_THRESHOLD,
+                'taskId', [],
                 ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly())
+                ContainerTakeSupport.hostOnly(), claimEpochBook)
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
@@ -83,6 +95,34 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         then:
         result instanceof TakeResult.Delivered
         gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1') == 0
+    }
+
+    // FR13 of harden-task-branch-contract: the completion's cleanup commit — the destructive step
+    // that strips .gnomish-task/ — runs AFTER tracker.finish, behind the confirmed effect, and is
+    // still a commit of this tenure, so it must carry the epoch trailer. Ending the tenure at the
+    // terminal tracker write left it unstamped, i.e. outside the fence a zombie's late cleanup
+    // commit is supposed to be caught by. The tracker is wrapped exactly as production wraps it
+    // (EpochRecordingTracker over the live port), so the book follows the claim on its own.
+    def "FR13: the cleanup commit behind a confirmed finish carries the tenure's epoch"() {
+        given:
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(7))
+        def recording = new EpochRecordingTracker(tracker, claimEpochBook)
+        def disposition = newDisposition()
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Ready()), recording, INSTANCE)
+
+        then:
+        result instanceof TakeResult.Delivered
+
+        and: 'the branch tip is the cleanup commit, and it is inside the fence'
+        def tip = gitOutput(cloneDir, 'log', '-1', '--format=%B', 'gnomish/PROJ-1')
+        tip.contains('Gnomish-Claim-Epoch: 7')
+
+        and: 'the tenure is forgotten once the run scope ends — nothing may stamp it afterwards'
+        claimEpochBook.epochFor('PROJ-1').isEmpty()
     }
 
     // FR6 of add-git-workflow, reused here: a fresh claim also prunes stale worktree
@@ -173,7 +213,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def disposition = new TakeDisposition(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
                 beat, false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC),
-                new ClaimLossFlag(), ContainerTakeSupport.hostOnly())
+                new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
 
         when:
         disposition.dispose(
@@ -247,8 +287,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         commitAll(peerClone, 'peer work')
         gitOutput(peerClone, 'push', 'origin', 'gnomish/PROJ-22')
 
-        and:
+        and: 'the claim is acquired, so this instance holds a tenure on the task'
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        claimEpochBook.issued(taskId, new ClaimEpoch(1))
         def disposition = newDisposition()
 
         and: 'what origin ends up holding is the peer line'
