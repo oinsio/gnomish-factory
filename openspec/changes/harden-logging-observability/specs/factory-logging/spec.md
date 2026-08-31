@@ -125,9 +125,12 @@ Text from outside the factory's trust boundary — agent/LLM output, subprocess
 stderr, tracker-sourced strings, in-container command output — SHALL enter log
 lines only through a sanitizing choke point that strips control and ANSI
 sequences, flattens newlines so one event renders as one log line, and caps
-length. The choke point SHALL share its stripping primitives with the existing
-findings sanitizer rather than duplicating them. No secret values appear in
-any log line.
+length. The choke point and the plugin-boundary findings sanitizer — a
+distinct control at a distinct trust boundary, which deliberately preserves
+line structure — SHALL keep their shared character-stripping vocabulary (the
+ANSI/control table and cap semantics) in step as a declared pair verified by
+an executable equivalence spec over a common adversarial corpus. No secret
+values appear in any log line.
 <!-- implements FR6, NFR-S1 of harden-logging-observability -->
 
 #### Scenario: Newline forgery is neutralized

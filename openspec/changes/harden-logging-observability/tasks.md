@@ -14,17 +14,33 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       rule, untrusted-text rule, suppression rule, MDC rule.
 - [ ] 1.3 Add glossary entries (anchor line, canonical task summary, repeat
       suppression / edge logging, log text sanitization) to `docs/glossary.md`;
-      verify: each term used by later code/javadoc matches the entry.
+      the canonical-task-summary entry distinguishes the log-plane summary
+      line from the ledger's `runSummary` record (D3 naming note); the
+      log-text-sanitization entry distinguishes the log-line choke point
+      from the plugin-boundary findings sanitizer (D5 — two trust
+      boundaries, one shared character vocabulary); verify:
+      each term used by later code/javadoc matches the entry.
 - [ ] 1.4 Create the `:logtext` leaf module (D5, module-layering delta):
-      `LogText` (control/ANSI strip, newline flattening, length cap),
-      `RepeatSuppressor` (keyed edge state, D4 API), `MdcAwareThread` helper
-      (D10); slf4j-api only; unit specs for each incl. newline-forgery and cap
-      scenarios; verify: `./gradlew :logtext:check` green, dependency gates
-      pass with the new module in every consumer's allowed list.
-- [ ] 1.5 Re-point `FindingsSanitizer` stripping primitives at `LogText`
-      (shared abstraction, D8) without changing its public API; verify:
-      existing sanitizer specs green, no duplicated strip logic remains
-      (grep for the CSI/OSC regexes finds one owner).
+      `LogText` (control/ANSI strip, newline flattening incl. `U+2028`/
+      `U+2029`, length cap), `RepeatSuppressor` (keyed edge state, D4 API),
+      `MdcAwareThread` helper (D10); slf4j-api only; unit specs for each
+      incl. newline-forgery and cap scenarios; verify:
+      `./gradlew :logtext:check` green, dependency gates pass with the new
+      module in every consumer's allowed list.
+- [ ] 1.5 Declare the sanitizer pair (D5, D8): `Kept in sync with` markers on
+      `LogText` and `FindingsSanitizer` (which stays self-contained in
+      `gnomish-plugin-api` — its production code, public API, and japicmp
+      baseline untouched), a registry row in
+      `.claude/rules/manual-sync-pairs.md` naming the narrow invariant
+      (ANSI/control stripping table + tail-cap semantics; newline handling
+      deliberately differs), and a data-driven equivalence spec feeding one
+      adversarial corpus (CR/LF, `U+2028`/`U+2029`, ANSI CSI/OSC, NUL, DEL,
+      C1 range, overlong input) to both sanitizers, asserting equivalent
+      neutralization of the shared subset (test scope only — no production
+      edge); migrate `StatusLineFormatter`'s hand-rolled
+      `strip(...)`-plus-flatten to `LogText` as its first in-place consumer;
+      verify: corpus spec green against both ends, markers greppable at both
+      ends, `gnomish-plugin-api` dependency set unchanged.
 
 ## 2. Logback configuration and test isolation
 
@@ -74,9 +90,16 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       `serveStarted`, `serveStopping`, `taskSummary`; call it from both claim
       paths and `ServeCommand` start/stop plus startup-failure logging (the
       `System.err`-only provisioning failure gains a `log.error` with the
-      exception); delete the unreachable `FactoryApplication` DEBUG line
-      (superseded by the serve start anchor); verify: specs assert the claim
-      anchor precedes engine events and serve start/stop lines carry config.
+      exception); retire the `FactoryApplication` boot DEBUG line — it is
+      intentional, not dead: the documented production exercise of the
+      SLF4J-to-Logback stack (FR4 of add-manual-run), asserted by
+      `LoggingLevelSpec` — so removing it means migrating that role: the
+      level-override assertion moves onto the `${GNOMISH_LOG_LEVEL}`
+      mechanism from task 2.1, `LoggingLevelSpec` is rewritten/replaced
+      accordingly, and the class javadoc's FR4 rationale is updated; verify:
+      specs assert the claim anchor precedes engine events and serve
+      start/stop lines carry config; the rewritten level-override spec is
+      green with the boot DEBUG line gone.
 - [ ] 4.2 Define `TaskSummary` and the single renderer in `AnchorLog` (D3,
       FR3); verify: renderer spec covers every outcome family incl.
       post-harden quarantine.
@@ -180,10 +203,11 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
 - [ ] 7.3 Reaper/janitor per-task work wrapped in
       `MDC.putCloseable("taskId", …)` (FR8, UX2); verify: spec asserts a
       taskId grep finds reap decisions.
-- [ ] 7.4 Fix all 26 exception-interpolation sites to trailing-throwable form
-      (including the three `getMessage()` sites and the sole eager-render
-      `log.info(render(...))` site) (FR7); verify: gate task 8.1 passes with
-      zero exemptions for these.
+- [ ] 7.4 Fix all exception-interpolation sites to trailing-throwable form —
+      23 at the August 2026 audit; the gate, not the count, is normative
+      (including the two `getMessage()` sites that can print `null` and the
+      sole eager-render `log.info(render(...))` site) (FR7); verify: gate
+      task 8.1 passes with zero exemptions for these.
 - [ ] 7.5 Route the ~12 untrusted-text log sites through `LogText` (FR6):
       decision-file raw content (capped), stream-json raw-event DEBUG
       (bounded shape), git/docker stderr sites, in-container self-check

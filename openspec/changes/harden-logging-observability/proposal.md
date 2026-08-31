@@ -69,7 +69,8 @@ defect classes cannot return.
 - Logback config hardening: async FILE appender (no-discard) with owned flush at
   shutdown, UTF-8 charset pinned, runtime log-level override without rebuild,
   `logback-test.xml` so test runs stop writing to the operator's log.
-- Mechanical conventions: throwable as trailing argument everywhere (26 sites),
+- Mechanical conventions: throwable as trailing argument everywhere (23 sites
+  at the August 2026 audit),
   MDC propagation to virtual threads, `stage`/`attempt` cleared at thread
   boundaries, `component` MDC key for daemon threads — each backed by a build gate
   or contract spec so it stays fixed.
@@ -166,11 +167,15 @@ defect classes cannot return.
 - **FR6** Untrusted text (agent/LLM output, subprocess stderr, tracker-sourced
   strings, in-container command output) SHALL enter log lines only through the
   sanitizer choke point: control/ANSI stripping, newline flattening (no multi-line
-  forgery), and a length cap. The choke point builds on the existing
-  `FindingsSanitizer` primitives (shared abstraction, not a second sanitizer).
+  forgery), and a length cap. The existing `FindingsSanitizer` guards a
+  different boundary (plugin findings, line structure preserved) and stays
+  self-contained in the published plugin API; the two sanitizers keep their
+  shared character-stripping vocabulary in step as a declared pair backed by
+  an executable equivalence spec.
 - **FR7** Every log call site carrying an exception SHALL pass it as the trailing
-  throwable argument (26 interpolating sites fixed; the 3 `getMessage()` sites that
-  can print `null` included), enforced by a build gate.
+  throwable argument — every interpolating site fixed (23 at the August 2026
+  audit, including the 2 `getMessage()` sites that can print `null`; the gate,
+  not the count, is normative), enforced by a build gate.
 - **FR8** MDC context SHALL be complete and leak-free: the capture/apply/clear
   pattern applied to every logging virtual-thread hop; `stage`/`attempt` cleared at
   the same thread boundaries that clear `taskId` (not only on `TaskFinished`); a
@@ -250,7 +255,7 @@ defect classes cannot return.
 - **M1** Zero WARN/ERROR lines during a healthy end-to-end serve cycle (E2E
   asserted); today's baseline is dozens per hour from sweep and poll chatter.
 - **M2** 100% of exception-carrying log sites pass the throwable gate (build
-  fails otherwise); baseline: 26 violations.
+  fails otherwise); baseline: 23 violations at the August 2026 audit.
 - **M3** 100% of the audit's silent-degradation list emits a log line, each backed
   by a spec (grep-verifiable against the FR5 enumeration).
 - **M4** Zero factory log lines written by a full `./gradlew check` run to
@@ -285,6 +290,10 @@ defect classes cannot return.
 - **Sequencing**: starts after `harden-task-branch-contract` archives (same-file
   overlap in `adapters/git` and take routing; the summary's outcome vocabulary is
   defined against post-harden `TakeResult`). Independent of
-  `fix-denial-attribution-durability` except trivial overlap.
-- **Existing sync pairs touched** (mirrored edits in scope): salvage twins,
-  attempt-persistence twins, resume-runner twins, round-environment-source twins.
+  `fix-denial-attribution-durability` except trivial overlap. Coordinate with
+  `add-stage-finished-event` (adds an `EngineEvent` variant): whichever change
+  lands second adds the new switch arm in the event listeners this change
+  touches or introduces.
+- **Existing sync pairs touched** (mirrored edits in scope): boundary-check
+  twins, salvage twins, attempt-persistence twins, resume-runner twins,
+  round-environment-source twins.

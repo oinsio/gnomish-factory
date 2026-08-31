@@ -19,9 +19,16 @@ See proposal.md — Why. Current state that shapes the approach:
   `harden-task-branch-contract`): `application` cannot be seen from
   `sandbox:*`; `adapters` sees `application`; the only precedent for a shared
   dependency-free leaf is `atomicfile`.
-- `FindingsSanitizer` (ANSI/control stripping, tail cap) lives in the adapters
-  module and is applied at exactly one log site.
-- 51 Spock specs already assert log output; `LogCaptureSupport` exists but is
+- `FindingsSanitizer` (ANSI/control stripping preserving `\n`/`\t`, tail cap)
+  lives in `gnomish-plugin-api` as part of the published plugin contract
+  (moved there by `close-plugin-api-compilability-gap`; the module's gate
+  pins `allowedProjects = [':domain']` — a plugin compiles against one
+  declared dependency). Its `forLog` is applied at exactly one log site;
+  `application` and `adapters` reach it through their allowed plugin-api
+  dependency, the sandbox modules cannot. `StatusLineFormatter` already
+  hand-rolls `strip(...)` plus newline flattening — an ad-hoc preview of
+  `LogText`.
+- 57 Spock specs already assert log output; `LogCaptureSupport` exists but is
   used by 2 of them.
 
 Constraints: crash-consistency rule (multi-step transitions need named
@@ -59,8 +66,11 @@ in design.md would archive and govern nothing. Context: driven by FR1.
 
 ### D2. Anchor vocabulary: one `AnchorLog` class, not an event bus
 
-`AnchorLog` (application, package `status`) owns the operator-plane anchor
-forms: `claimAcquired(ref, freeSlots, wip)`, `serveStarted(config…)`,
+`AnchorLog` (application, package `status` — note the package
+`com.github.oinsio.gnomish.status` sits outside the component-scan root
+`com.github.oinsio.gnomish.app`, so `AnchorLog` is wired explicitly, like its
+package neighbors `LoggingEventListener`/`MdcEventListener`) owns the
+operator-plane anchor forms: `claimAcquired(ref, freeSlots, wip)`, `serveStarted(config…)`,
 `serveStopping(reason)`, `taskSummary(TaskSummary)`. Both claim paths
 (`FeedCycle.claimOrAbandon`, `BareTakeClaimWalk`) call the same method.
 *Alternative rejected:* an application-level lifecycle event bus mirroring
@@ -111,25 +121,46 @@ no expiry, no recovery line, config-global blast radius. Context: FR4.
 
 ### D5. Shared leaf module `:logtext` for sanitization (and the suppressor's home)
 
-`LogText` (strip control/ANSI, flatten newlines to a visible escape, cap
-length) must be reachable from `adapters`, `sandbox:docker`, and
-`application`; the layering allows no existing common home (`application` is
-invisible to sandbox; `sandbox:core` is invisible to nothing that matters but
-owning log utilities there is a wrong responsibility). A new dependency-free
-leaf module `:logtext` (precedent: `atomicfile`) holds `LogText` and
-`RepeatSuppressor` (pure logic, `slf4j-api` only, no internal deps).
-`FindingsSanitizer` keeps its adapters home and API but delegates its
-stripping primitives to `LogText` — shared abstraction, not a second
-sanitizer (manual-sync-pairs preference order, rule 1). The module-layering
-delta admits `:logtext` alongside `atomicfile` in every consumer's allowed
-list. *Alternative rejected:* duplicating a 30-line sanitizer per module —
-exactly the divergence class the pairs rule exists to prevent, already at
-three consumers, which mandates the abstraction. Context: FR6, proposal Q1 —
-resolved.
+`LogText` (strip control/ANSI, flatten newlines — including the Unicode line
+separators `U+2028`/`U+2029` — to a visible escape, cap length) must be
+reachable from
+`adapters`, `sandbox:docker`, and `application`; the layering allows no
+existing common home (`application` is invisible to sandbox; `sandbox:core`
+is invisible to nothing that matters but owning log utilities there is a
+wrong responsibility). A new dependency-free leaf module `:logtext`
+(precedent: `atomicfile`) holds `LogText` and `RepeatSuppressor` (pure
+logic, `slf4j-api` only, no internal deps). The module-layering delta admits
+`:logtext` alongside `atomicfile` in every consumer's allowed list.
+
+`FindingsSanitizer` stays self-contained in `gnomish-plugin-api` — it guards
+a *different trust boundary* with a *different contract*: a plugin sanitizes
+untrusted machine output entering findings and deliberately preserves line
+structure, while `LogText` sanitizes text entering a log line and
+deliberately destroys it (one event = one line). One choke point per
+boundary is the canonical shape (OWASP logging guidance; Logback/kubectl
+both sanitize at the writing layer). What the two genuinely share is the
+character vocabulary — the ANSI/control stripping table and the tail-cap
+semantics, ~25 lines — kept in step as a **declared pair** (see D8) backed
+by an executable equivalence spec, not by a production dependency.
+
+*Alternative rejected:* the original plan — `FindingsSanitizer` delegates
+its stripping primitives to `LogText`. It was written against a stale module
+map (the sanitizer's adapters home predates
+`close-plugin-api-compilability-gap`) and would give the published API
+module an internal dependency: `:logtext` would enter the published POM
+(even `implementation` scope publishes as runtime), become a
+coordinates-bearing artifact whose semver couples into the API's japicmp
+contract, and break the build-enforced one-declared-dependency promise —
+all to deduplicate ~25 stable lines whose divergence the pair spec catches
+mechanically ("a little copying is better than a little dependency"; the
+rule of three extracts a shared core only when a third implementation
+appears). Context: FR6, proposal Q1 — resolved.
 
 ### D6. Shutdown: one owned sequence; Spring's auto hook disabled
 
-`FactoryApplication` calls `SpringApplication.setRegisterShutdownHook(false)`;
+`FactoryApplication` calls `SpringApplication.setRegisterShutdownHook(false)`
+(its `main` currently uses the static `SpringApplication.run(...)`, so it
+switches to a constructed `SpringApplication` instance to have a receiver);
 the serve hook (both drain and forever paths) owns the full order:
 drain slots → close the application context → stop the logging system
 (flushing the async FILE appender). Logback's own `<shutdownHook>` stays
@@ -165,10 +196,10 @@ makes it the documented idiom. Context: FR10, FR11, NFR-P1, M4.
 Declared pairs this change touches — mirrored edits are in scope, and both
 ends receive `Kept in sync with` markers where they are edited:
 
-| Pair (registry row)                                                                                                     | Mirrored edit here                                                                                                       |
+| Pair (registry row unless noted)                                                                                        | Mirrored edit here                                                                                                       |
 |-------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | `RoundBoundaryCheck` ↔ `HarvestedBoundaryCheck`                                                                         | three-outcome boundary rule (D11) implemented at both ends; invariant text updated                                       |
-| `WorktreeSalvage` ↔ `EnvironmentSalvage`                                                                                | degrade-path logs get task context on both ends; discard/restore failures logged symmetrically                           |
+| `WorktreeSalvage` ↔ `EnvironmentSalvage` (marker-declared; already removed from the registry)                           | degrade-path logs get task context on both ends; discard/restore failures logged symmetrically                           |
 | `GitAttemptPersistence` ↔ `EnvironmentAttemptPersistence`                                                               | lifecycle-commit anchor and level fixes applied to both write sequences; verified tip resolution (D11) confirmed on both |
 | `TakeResumeRunner` ↔ `TakeContainerResumeRunner` (and the fresh-claim / engine-execution / manual-run rows they anchor) | claim/summary anchor calls added symmetrically per mode                                                                  |
 | `HostRoundEnvironmentSource` ↔ `SandboxRoundEnvironmentSource`                                                          | harvest-poll suppression applied to the polling twin; host twin verified for the same flood shape                        |
@@ -180,9 +211,23 @@ New parallel implementations introduced, decided by the preference order:
   `TaskSummary` vocabulary for every terminal outcome family. Markers at both
   ends + a registry row; a data-driven spec asserts equivalent summaries from
   equivalent facts. Abstraction rejected for now (two genuinely different fact
-  sources); a third assembler mandates extraction.
-- **Sanitizer (D5): shared abstraction**, not a pair — `LogText` is the single
-  implementation; `FindingsSanitizer` delegates.
+  sources); a third assembler mandates extraction. Naming: the new types must
+stay distinguishable from the existing ledger-plane
+`serveobservability.RunSummaryAccumulator`/`RunSummaryLine` (different role:
+drain-run `runSummary` ledger lines, untouched here) — prefer names carrying
+"task summary" and let the glossary entry *canonical task summary* draw the
+distinction from the ledger's `runSummary`.
+- **Sanitizer (D5): declared pair**, not a shared abstraction —
+  `LogText` (`:logtext`, internal log-line boundary) ↔ `FindingsSanitizer`
+  (`gnomish-plugin-api`, plugin findings boundary). Invariant: the
+  ANSI/control character-stripping table and the tail-cap semantics — and
+  only those; newline handling deliberately differs (findings preserve line
+  structure, log lines flatten). Markers at both ends + a registry row; a
+  data-driven equivalence spec feeds one adversarial corpus (CR/LF,
+  `U+2028`/`U+2029`, ANSI CSI/OSC, NUL, DEL, C1 range, overlong input) to
+  both and asserts equivalent neutralization of the shared subset —
+  test-scope coupling only, no production edge. A third implementation of
+  the stripping table mandates extraction.
 - **Suppression (D4): single owner** + local aggregate counters in sandbox,
   which implement a different invariant (documented at those sites); not a
   pair.
@@ -249,6 +294,11 @@ resume/abort specs cover the changed classification.
 - [Async FILE loses the last instants on `kill -9`] → accepted and documented
   in the ADR: durable truth lives in ledger/branch/tracker; SIGTERM/Ctrl+C
   tails are protected by D6's owned flush.
+- [Overlap with `add-stage-finished-event` on the sealed `EngineEvent`: that
+  change adds a variant, and this change adds `SummaryAccumulatorListener`
+  plus touches other exhaustive-switch listeners] → whichever change lands
+  second adds the new switch arm in the affected listeners; no other coupling,
+  no ordering constraint.
 - [Overlap with `fix-denial-attribution-durability` in guard-denial code
   (`GuardDenialLog`/`GuardDenialReads`)] → this change's edits there are
   small (aggregate counter, key threading); sequence after harden archives
