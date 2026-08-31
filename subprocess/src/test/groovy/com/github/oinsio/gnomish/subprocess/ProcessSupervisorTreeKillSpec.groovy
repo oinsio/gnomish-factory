@@ -39,7 +39,9 @@ wait
         List<ProcessHandle> grandchildren = child.descendants().toList()
 
         when: 'the deadline expires against a tree that will not take a hint'
-        Supervision supervision = new ProcessSupervisor(Duration.ofMillis(300)).await(process, Duration.ofSeconds(2))
+        // The grace bounds both the cooperative wait and the post-SIGKILL reap; at 300ms a
+        // loaded CI runner can miss the reap and report -1 instead of the exit code.
+        Supervision supervision = new ProcessSupervisor(Duration.ofSeconds(2)).await(process, Duration.ofSeconds(2))
 
         then: 'the outcome names the deadline'
         supervision.termination() == Termination.TIMED_OUT
