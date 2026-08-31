@@ -293,9 +293,10 @@ tracker:
                         // A concurrent flush/teardown removed it first — it is gone, which is the goal.
                     }
                 }
-            } catch (IOException ignored) {
+            } catch (IOException | UncheckedIOException ignored) {
                 // The walk itself raced a concurrent deletion; a fresh walk next attempt sees a
-                // settled tree.
+                // settled tree. Files.walk reports that race lazily, DURING traversal, as an
+                // UncheckedIOException wrapping NoSuchFileException — so both must be caught here.
             }
             if (Files.notExists(root)) {
                 return
