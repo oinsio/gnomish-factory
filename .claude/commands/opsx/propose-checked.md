@@ -35,6 +35,11 @@ following additional constraints injected into the execution:
      implementation and touches no declared pair.` An absent answer is a format violation —
      silence is not an acceptable "none".
 
+   If the schema's conditional skip omits `design.md`, the Sync surfaces decision goes into
+   `proposal.md` instead — and a change that touches a declared pair or adds a parallel
+   implementation disqualifies the design skip: create `design.md` and record the decision
+   there.
+
 3. **Pairs become tasks.** When the decision is a declared pair, `tasks.md` must include
    placing the `Kept in sync with` markers at both ends (or updating the registry) in the
    same change. When the decision is an abstraction, the extraction is a task, not a hope.
