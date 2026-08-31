@@ -18,8 +18,8 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
-import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -104,7 +104,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then:
         1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> true
@@ -134,7 +134,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then: 'the finish is posted from branch history, and no box is reattached or salvaged'
         1 * tracker.finish(REF, _)
@@ -159,7 +159,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then:
         def ex = thrown(IllegalStateException)
@@ -186,7 +186,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then:
         1 * branches.harden(CLONE_DIR)
@@ -214,7 +214,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, true, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, true, 'PROJ-1', tracker, REF, INSTANCE)
 
         then:
         1 * builtSupport.disposeExistingEnvironment()
@@ -242,14 +242,53 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then:
         0 * builtSupport.reattachFor(_)
         0 * builtSupport.salvageLeftovers(_)
         0 * builtSupport.sweepOrphans()
         1 * tracker.park(REF, ParkReason.ESCALATION, _)
+
+        then: 'FR10 of harden-task-branch-contract: the receipt clears the pending marker in-box'
+        1 * builtSupport.confirmTerminalWrite()
+
+        and:
         result instanceof TakeResult.AwaitingHuman
+    }
+
+    // FR9, FR10, NFR-C1 of harden-task-branch-contract: the container twin of the host
+    // CompletedUncleaned route (`TakeResumeShapeTailSpec`). The tip records Completed with its
+    // envelope intact — the kill window between the outcome commit and the tracker finish — so the
+    // deferred finish is written and the in-box cleanup commit follows it, with no engine round and
+    // no environment reattached.
+    def "FR9: a CompletedUncleaned tip finishes in-box without re-entering the engine"() {
+        given:
+        def branches = Mock(TaskBranchGit) {
+            ensureLocalTaskBranch(_, _) >> true
+        }
+        builtSupport = Mock(SandboxRunSupport) {
+            readTaskJson() >> new TaskRecord(
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Completed(), null, false)
+            readFinalState() >> TaskState.atStageStart('build')
+        }
+        tracker.fetchTask(_) >> heldByUs()
+
+        when:
+        def result = disposition(gitWith(branches)).resumeExisting(
+                CLONE_DIR, new BranchShape.CompletedUncleaned(), RunArguments.InteractiveMode.NONE, false,
+                'PROJ-1', tracker, REF, INSTANCE)
+
+        then: 'the deferred finish is written, and only then is the envelope stripped'
+        1 * tracker.finish(REF, _)
+
+        then:
+        1 * builtSupport.finishCleanup()
+
+        and: 'no paid round, no environment touched'
+        0 * builtSupport.reattachFor(_)
+        0 * builtSupport.salvageLeftovers(_)
+        result instanceof TakeResult.Delivered
     }
 
     // FR10, D10, NFR-C1 of add-claim-heartbeat: the Paused twin of the Escalated orphaned-park
@@ -271,7 +310,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then:
         0 * builtSupport.reattachFor(_)
@@ -302,7 +341,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then: 'no reattach/salvage — resumeWithDecision skips the null-outcome salvage step entirely'
         0 * builtSupport.reattachFor(_)
@@ -335,13 +374,18 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+
+        then: 'FR17, D12 of harden-task-branch-contract: the kept box goes first — its clone could never learn of the decision commit'
+        1 * builtSupport.disposeExistingEnvironment()
+
+        then: 'FR12: the decision is durable on the branch before the acknowledge posts'
+        1 * repository.appendDecision('PROJ-1', {
+            it.body() == 'go left' && it.stage() == 'build'
+        }, _)
 
         then:
         1 * tracker.acknowledgeDecision(REF, 'go left')
-        1 * repository.appendDecision('PROJ-1', {
-            it.body() == 'go left' && it.stage() == 'build'
-        })
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
     }
@@ -364,7 +408,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
         when:
         def result = disposition(gitWith(branches)).resumeExisting(
-                CLONE_DIR, RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, {

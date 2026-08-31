@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
@@ -34,17 +35,24 @@ final class InMemoryTrackerSeeding {
             TrackedTask task = new TrackedTask(snapshot, state);
             // recordAbort increments by exactly one per call (production semantics), so an arbitrary
             // seeded count is replayed that many times; every call after the first reuses the same
-            // timestamp, leaving lastAbortAt equal to abortFacts.lastAbortAt().
+            // timestamp, leaving lastAbortAt equal to abortFacts.lastAbortAt(). The seeded recovery
+            // share is replayed first, so the categorized counters come back as seeded (FR14 of
+            // harden-task-branch-contract).
             Instant lastAbortAt = abortFacts.lastAbortAt();
             if (hasAborts(abortFacts) && lastAbortAt != null) {
                 for (int i = 0; i < abortFacts.count(); i++) {
-                    task.recordAbort(lastAbortAt);
+                    task.recordAbort(lastAbortAt, categoryOf(i, abortFacts.recoveryCount()));
                 }
             }
             adapter.store.put(ref, task);
         } finally {
             adapter.lock.unlock();
         }
+    }
+
+    /** The first {@code recoveryCount} replayed attempts are the recovery share; the rest are crashes. */
+    private static RecoveryCause categoryOf(int index, int recoveryCount) {
+        return index < recoveryCount ? RecoveryCause.RECOVERY_FAILURE : RecoveryCause.INSTANCE_CRASH;
     }
 
     /** Injects a pending human reply directly, as if a human had just replied in the tracker (FR12). */

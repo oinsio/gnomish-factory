@@ -135,12 +135,17 @@ An executor SHALL be able to return DecisionNeeded (question, free-text options)
 - **THEN** the outcome is Escalated(DecisionNeeded) and `attemptsUsed` is unchanged
 
 ### Requirement: Human decisions as pass-through context
-`TaskContext.decisions` SHALL be a chronological list of free-text decisions (optional stage/author/time) passed verbatim to executor and judge requests; the engine SHALL never interpret them. Resume adjustments (attempt reset, position moves) are the caller's state manipulation.
+`TaskContext.decisions` SHALL be a chronological list of free-text decisions (optional stage/author/time) passed verbatim to executor and judge requests; the engine SHALL never interpret them. Resume adjustments (attempt reset, position moves) are the caller's state manipulation. The appended decision and the attempt-counter reset it implies SHALL become durable together as one transition: a resumed run never observes a state carrying the decision without the reset, or the reset without the decision.
 <!-- implements FR7 of add-stage-engine -->
+<!-- implements FR4 of harden-task-branch-contract -->
 
 #### Scenario: Decision-carrying resume
 - **WHEN** a run starts with a decision appended and `attemptsUsed` reset by the caller
 - **THEN** the executor request contains all decisions and execution proceeds from the recorded stage
+
+#### Scenario: Decision and reset are inseparable
+- **WHEN** a crash freezes state between a human decision being recorded and the next run starting
+- **THEN** the recorded state carries the decision and the attempt-counter reset together, and the resumed run sees both or neither
 
 ### Requirement: Advancement modes
 After verification passes, `auto` SHALL proceed to the next stage (Completed after the last); `manual` SHALL return Paused with the position already advanced past the paused stage. A manual pause on the final stage SHALL park the position at the explicit pipeline end; a run starting there SHALL return Completed immediately, emitting RunStarted and TaskFinished and invoking no execution or persistence port.
@@ -155,8 +160,9 @@ After verification passes, `auto` SHALL proceed to the next stage (Completed aft
 - **THEN** the outcome is Paused with the position at pipeline end, and a subsequent run from that state returns Completed without invoking execution or persistence ports
 
 ### Requirement: Resume from any valid state
-The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, or post-pause. A position naming a stage absent from the pipeline SHALL escalate as PipelineMismatch before any execution or persistence port call, with observability events still emitted.
+The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, or post-pause. A position naming a stage absent from the pipeline SHALL escalate as PipelineMismatch before any execution or persistence port call, with observability events still emitted. A resume from the state a passing round persisted — the position already advanced past the passed stage, the round still in the recorded history (one durable transition per FR4) — SHALL start the following stage with a fresh attempt history, never re-invoking the passed stage's executor or any of its checks, so no recovery path re-pays for work whose passing verdict a contract-era tip already records.
 <!-- implements FR9 of add-stage-engine -->
+<!-- implements FR4, NFR-C1 of harden-task-branch-contract -->
 
 #### Scenario: Mid-retry resume
 - **WHEN** a run starts from a state recorded after two quality failures
@@ -165,6 +171,10 @@ The engine SHALL resume at attempt-boundary granularity from any valid recorded 
 #### Scenario: Stale position
 - **WHEN** the state references a stage no longer in the pipeline
 - **THEN** the outcome is Escalated(PipelineMismatch), no execution or persistence port was invoked, and RunStarted and TaskFinished were emitted
+
+#### Scenario: Resume from a recorded pass starts the following stage
+- **WHEN** a run starts from the state a passing round persisted on a stage with `auto` advancement — the position already at the following stage, the passing round still in the recorded history
+- **THEN** the engine executes only the following stage, starting it at round zero with an empty attempt history, and never re-invokes the passed stage's executor or any of its checks
 
 ### Requirement: Outcome and report model
 `TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (executor infrastructure failure — no attempt burned, no round recorded). Engine-internal errors SHALL propagate as exceptions, never as outcomes. An escalation SHALL be renderable from the outcome and its final state alone.
@@ -179,8 +189,9 @@ The engine SHALL resume at attempt-boundary granularity from any valid recorded 
 - **THEN** the stage, the limit, and every recorded round's check results and findings are available without any other source
 
 ### Requirement: Strict attempt persistence
-The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchronously after every executed round — including rounds ending in CannotVerify or DecisionNeeded — before the AttemptFinished event and before any next attempt. A persistence failure SHALL end the run as Aborted with the in-memory final state, the failed round key, and the cause. An unpersisted round SHALL be safe to lose: a new run from the last persisted state re-executes it.
+The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchronously after every executed round — including rounds ending in CannotVerify or DecisionNeeded — before the AttemptFinished event and before any next attempt. A persistence failure SHALL end the run as Aborted with the in-memory final state, the failed round key, and the cause. An unpersisted round SHALL be safe to lose: a new run from the last persisted state re-executes it. A passing round SHALL become durable together with its consequence in one persist call: the state handed to persistence for a round that passed verification already carries the advanced pipeline position, so the pass and the advancement land as a single durable transition — never split across two persistence calls.
 <!-- implements FR11, NFR-R4 of add-stage-engine -->
+<!-- implements FR4 of harden-task-branch-contract -->
 
 #### Scenario: Ordering invariant
 - **WHEN** a round completes
@@ -193,6 +204,10 @@ The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchro
 #### Scenario: Unpersisted round is safe to lose
 - **WHEN** a run aborted on persisting round N is followed by a new run from the last persisted state
 - **THEN** round N is re-executed and the task proceeds as if the aborted round never happened
+
+#### Scenario: Pass and advancement are one durable transition
+- **WHEN** a round passes verification on a stage with `auto` advancement
+- **THEN** the single persist call for that round receives a state already positioned past the passed stage, and a resume from that persisted state starts at the next stage
 
 ### Requirement: Engine events
 The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFinished, CheckStarted, CheckFinished, AttemptFinished (new state + trace), TaskFinished — each self-contained with the (taskId, stage, attempt) key shared with logs and telemetry, delivered synchronously; every run, including pre-flight escalations, emits at least RunStarted and TaskFinished; listener exceptions SHALL be logged and swallowed. The stream SHALL suffice to reconstruct a status view (position, attempt, per-check results, aggregate metrics).

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.EnvironmentRoundSnapshot
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -186,8 +187,8 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         // No check provider is configured in this spec, so the SPI-declared check-credential set
         // the composition root resolves (FR17, D11 of add-plugin-architecture) is empty.
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.MANUAL)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.MANUAL, ClaimEpochSource.NONE)
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('work'))
 
         and: 'the interrupted round: work written and snapshot-committed in-box, then the factory died'
         def environment = support.lease().environmentFor('work')

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
@@ -25,7 +26,10 @@ public final class TakeClaimAndWorkFactory {
     /**
      * Wires the resume chain and returns a {@link TakeClaimAndWork} bound to it (see class javadoc).
      *
-     * <p>Implements FR1, M2 of add-factory-serve.
+     * <p>Implements FR1, M2 of add-factory-serve; NFR-O1 of harden-task-branch-contract.
+     *
+     * @param epochs this instance's tenure record, so the routing point's repair line (NFR-O1) can
+     *     name the claim epoch it runs under; an empty book where none is recorded
      */
     public static TakeClaimAndWork forSlot(
             RunAssembly assembly,
@@ -37,7 +41,8 @@ public final class TakeClaimAndWorkFactory {
             List<String> credentialEnvVarsToScrub,
             ClaimBeat heartbeat,
             ClaimLossFlag claimLossFlag,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ClaimEpochBook epochs) {
         var resumeRunner = new TakeResumeRunner(
                 assembly,
                 git,
@@ -67,6 +72,7 @@ public final class TakeClaimAndWorkFactory {
                 heartbeat,
                 claimLossFlag,
                 containerTakeSupport,
-                containerResumeRunner);
+                containerResumeRunner,
+                epochs);
     }
 }

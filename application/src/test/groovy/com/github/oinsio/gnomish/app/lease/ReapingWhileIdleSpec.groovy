@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.claimBy
 import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.version
 import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.workingBy
 
@@ -28,7 +29,7 @@ class ReapingWhileIdleSpec extends Specification {
     private static final Duration TTL = Duration.ofMinutes(15)
     private static final TaskRef FOREIGN = new TaskRef('github:o/r#foreign')
 
-    private final Tracker tracker = Mock()
+    private final Tracker tracker = Mock(Tracker) { listReady(_) >> [] }
     private final VirtualMonotonicTime monotonic = new VirtualMonotonicTime()
     private final StalenessMemory staleness = new StalenessMemory(monotonic, TTL)
     private final Reaper reaper = new Reaper(tracker, staleness)
@@ -68,7 +69,7 @@ class ReapingWhileIdleSpec extends Specification {
         1 * tracker.listOpen() >> [
             workingBy(FOREIGN, 'gnomish-other', foreignVersion)
         ]
-        1 * tracker.removeStaleClaim(FOREIGN, foreignVersion) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(FOREIGN, claimBy('gnomish-other', foreignVersion)) >> new RemoveStaleClaimResult.Removed()
 
         and: 'this instance never held or claimed anything at any point'
         heartbeat.liveClaimsSnapshot().isEmpty()

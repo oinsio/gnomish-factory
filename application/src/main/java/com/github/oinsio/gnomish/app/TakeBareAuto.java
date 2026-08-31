@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -84,7 +85,8 @@ public final class TakeBareAuto {
             ClaimLossFlag claimLossFlag,
             int wipLimit,
             Random random,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ClaimEpochBook epochs) {
         var claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -95,7 +97,8 @@ public final class TakeBareAuto {
                 credentialEnvVarsToScrub,
                 heartbeat,
                 claimLossFlag,
-                containerTakeSupport);
+                containerTakeSupport,
+                epochs);
         this.walk = new BareTakeClaimWalk(claimAndWork, taskIdMdcKey, backoffBase, backoffCap, clock, wipLimit, random);
     }
 
@@ -132,7 +135,8 @@ public final class TakeBareAuto {
                 new ClaimLossFlag(),
                 wipLimit,
                 random,
-                ContainerTakeSupport.hostOnly());
+                ContainerTakeSupport.hostOnly(),
+                new ClaimEpochBook());
     }
 
     /**

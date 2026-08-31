@@ -6,7 +6,9 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,8 +32,17 @@ import org.slf4j.LoggerFactory;
  * (never held across a network write); a claim {@link HeartbeatBeater} reports gone is surfaced
  * through the {@link ClaimLostSink} and dropped without stopping the thread.
  *
+ * <p><b>Self-fencing (FR13 of harden-task-branch-contract).</b> Each held claim carries the instant
+ * of its last <i>confirmed</i> beat. When that instant falls further behind than the lost-detection
+ * threshold, the claim is surfaced as unconfirmed through the same {@link ClaimLostSink}, and the
+ * run freezes its writes at the next boundary until it re-verifies. The threshold is strictly
+ * earlier than the reaper's reassignment threshold, so a holder stops writing before any other
+ * instance can be handed the task. A beat that lands confirms the claim again and lifts the freeze;
+ * the thread keeps beating throughout, since an outage that ends is not a lost claim.
+ *
  * <p>Implements FR1, FR8 of add-claim-heartbeat. Implements FR7 of add-serve-observability (the
  * {@link HeartbeatVitals} read-model and the {@link HeartbeatStateListener} state trigger).
+ * Implements FR13 of harden-task-branch-contract.
  */
 public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
 
@@ -44,6 +55,8 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     private final Clock clock;
     private final HeartbeatStateListener stateListener;
     private final HeldClaims claims = new HeldClaims();
+    private final Duration lostDetection;
+    private final Map<TaskRef, Instant> lastConfirmedAt = new ConcurrentHashMap<>();
     private volatile Instant lastTickAt;
 
     /**
@@ -61,6 +74,23 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     }
 
     /**
+     * Equivalent to the {@link HeartbeatStateListener}-taking constructor with the lost-detection
+     * threshold defaulted to {@code interval} — the shape every caller that predates self-fencing
+     * keeps. Production wiring supplies the threshold explicitly, derived from the same config the
+     * reaper's TTL is (see {@code TakeHeartbeat}), so the two stay in their required order.
+     */
+    public InstanceHeartbeat(
+            Tracker tracker,
+            HeartbeatProgress progress,
+            Sleeper sleeper,
+            Clock clock,
+            Duration interval,
+            ClaimLostSink claimLostSink,
+            HeartbeatStateListener stateListener) {
+        this(tracker, progress, sleeper, clock, interval, claimLostSink, stateListener, interval);
+    }
+
+    /**
      * Wires the collaborators the beat thread reads each tick.
      *
      * @param tracker the port the beat writes through; never null
@@ -71,6 +101,9 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
      * @param claimLostSink the seam a lost claim is surfaced through
      * @param stateListener woken after every {@link #state()} transition (FR7, design D4); {@link
      *     HeartbeatStateListener#IGNORE} absent a writer to wake
+     * @param lostDetection how far a claim's last confirmed beat may fall behind before the holder
+     *     stops writing at its next boundary (FR13); strictly shorter than the reaper's
+     *     reassignment threshold, which is what leaves the holder a grace window to recover in
      */
     public InstanceHeartbeat(
             Tracker tracker,
@@ -79,7 +112,9 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             Clock clock,
             Duration interval,
             ClaimLostSink claimLostSink,
-            HeartbeatStateListener stateListener) {
+            HeartbeatStateListener stateListener,
+            Duration lostDetection) {
+        this.lostDetection = lostDetection;
         this.beater = new HeartbeatBeater(tracker, progress, clock);
         this.sleeper = sleeper;
         this.interval = interval;
@@ -97,6 +132,9 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
      */
     @Override
     public void register(TaskRef ref) {
+        // A tenure starts confirmed: the claim was just acquired, so its liveness is known now and
+        // the lost-detection clock runs from here rather than from some earlier tenure's beat.
+        lastConfirmedAt.put(ref, clock.now());
         // IDLE/DIED → RUNNING is the FR7 trigger; a register onto a running worker fires nothing.
         if (claims.registerAndMaybeStart(ref, this::loop, this::onWorkerDeath)) {
             notifyStateChanged();
@@ -121,6 +159,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     @Override
     public void unregister(TaskRef ref) {
         claims.remove(ref);
+        lastConfirmedAt.remove(ref);
     }
 
     // Package-private so a spec drives the loop synchronously (seeded via seedHeldForTest, with a
@@ -157,13 +196,38 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
 
     // Package-private: the deterministic beat specs drive one tick directly.
     void tick() {
-        lastTickAt = clock.now();
+        Instant now = clock.now();
+        lastTickAt = now;
         for (TaskRef ref : claims.snapshot()) {
-            if (beater.beat(ref)) {
-                claimLostSink.claimLost(ref);
-                unregister(ref);
+            switch (beater.beat(ref)) {
+                case CLAIM_GONE -> {
+                    claimLostSink.claimLost(ref);
+                    unregister(ref);
+                }
+                case BEATEN -> {
+                    lastConfirmedAt.put(ref, now);
+                    claimLostSink.claimConfirmed(ref);
+                }
+                case UNCONFIRMED -> fenceIfOverdue(ref, now);
             }
         }
+    }
+
+    /**
+     * Surfaces {@code ref} as unconfirmed once its last confirmed beat is older than the
+     * lost-detection threshold (FR13). Called on every unconfirmed beat rather than once, so the
+     * signal survives a sink that was wired later, and because repeating it is idempotent.
+     */
+    private void fenceIfOverdue(TaskRef ref, Instant now) {
+        Instant confirmed = lastConfirmedAt.get(ref);
+        if (confirmed == null || Duration.between(confirmed, now).compareTo(lostDetection) < 0) {
+            return;
+        }
+        log.warn(
+                "claim for {} unconfirmed for longer than {}; freezing writes until it is re-verified",
+                ref.id(),
+                lostDetection);
+        claimLostSink.claimUnconfirmed(ref);
     }
 
     @Nullable

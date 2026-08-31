@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -180,7 +181,7 @@ class FeedAutomatonSpec extends Specification {
             },
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def claimed = new CopyOnWriteArrayList<TaskRef>()
@@ -210,7 +211,7 @@ class FeedAutomatonSpec extends Specification {
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
                 claimCalls.add(ref)
-                ref == lost.ref() ? new ClaimResult.Held('other-instance') : new ClaimResult.Acquired()
+                ref == lost.ref() ? new ClaimResult.Held('other-instance') : new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def claimed = new CopyOnWriteArrayList<TaskRef>()
@@ -310,7 +311,7 @@ class FeedAutomatonSpec extends Specification {
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
                 remaining.remove(ref.id().replace('github:o/r#', ''))
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def claimed = new CopyOnWriteArrayList<TaskRef>()
@@ -341,7 +342,7 @@ class FeedAutomatonSpec extends Specification {
             listReady: { int limit -> [] },
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
-                claimCalls.incrementAndGet(); new ClaimResult.Acquired()
+                claimCalls.incrementAndGet(); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def automaton = automaton(tracker, ledger, capturing([]), new FixedRandom())
@@ -473,7 +474,7 @@ class FeedAutomatonSpec extends Specification {
             listOpen : { -> fillingCounter.get() == 0 ? [] : openFronts },
             claim : { TaskRef ref, String instance ->
                 fillingCounter.incrementAndGet()
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def automaton = automaton(tracker, ledger, capturing([]), new FixedRandom())
@@ -561,7 +562,7 @@ class FeedAutomatonSpec extends Specification {
                 if (claimCalls.incrementAndGet() <= 2) {
                     throw new RuntimeException('tracker down')
                 }
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def claimed = new CopyOnWriteArrayList<TaskRef>()
@@ -622,7 +623,7 @@ class FeedAutomatonSpec extends Specification {
                     throw new RuntimeException('tracker down')
                 }
                 remaining.remove(ref.id().replace('github:o/r#', ''))
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def claimed = new CopyOnWriteArrayList<TaskRef>()
@@ -648,7 +649,7 @@ class FeedAutomatonSpec extends Specification {
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def automaton = automaton(tracker, ledger, capturing([]), new FixedRandom())
@@ -710,7 +711,7 @@ class FeedAutomatonSpec extends Specification {
             listReady: { int limit -> [fresh('github:o/r#1')] },
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def automaton = automaton(tracker, ledger, capturing([]), new FixedRandom())

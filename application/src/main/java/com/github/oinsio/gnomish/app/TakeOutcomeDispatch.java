@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.app.take.FinishTransition;
+import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -39,16 +40,16 @@ final class TakeOutcomeDispatch {
      * @param ref the task's tracker identity; never null
      * @param instanceId this factory instance's identity; never null
      * @param retry the bounded retry policy for the tracker's terminal write; never null
-     * @param clearMarker clears the durable "tracker-write pending" marker once a park's write
-     *     confirms; a no-op where the caller has no such marker
+     * @param park the park's branch-side steps (FR10 of harden-task-branch-contract): the outcome
+     *     commit and its delivery fence as the durable intent, the pending-marker clear as the
+     *     receipt
      * @param abortHandler the infrastructure-abort protocol (task 5.3), applied when {@code outcome}
      *     is {@code Aborted}; never null
      * @param abortThreshold the configured abort-fuse threshold (K) passed to {@code abortHandler};
      *     positive
-     * @param parkDelivery the verdict of the pre-park delivery fence (FR4, FR5 of
-     *     fix-lifecycle-push): {@code Undelivered} appends its one-line note to the park report the
-     *     human reads, {@code Delivered} adds nothing. Container mode records no park lifecycle
-     *     commit, so it always passes {@code Delivered} (design D4, NG1)
+     * @param finish the completion's branch-side steps (FR10 of harden-task-branch-contract): the
+     *     {@code Completed} outcome commit as the durable intent, and the cleanup commit plus
+     *     workspace disposal as the destructive tail behind the confirmed finish
      * @return the {@link TakeResult} the terminal outcome maps to
      */
     static TakeResult dispatch(
@@ -59,11 +60,10 @@ final class TakeOutcomeDispatch {
             TaskRef ref,
             InstanceId instanceId,
             TerminalWriteRetry retry,
-            Runnable clearMarker,
+            ParkTransition park,
             AbortHandler abortHandler,
             int abortThreshold,
-            ParkDeliveryVerdict parkDelivery) {
-        String replicationNote = parkDelivery.reportNote();
+            FinishTransition finish) {
         return switch (outcome) {
             case TaskOutcome.Aborted aborted -> {
                 var facts = tracker.fetchTask(ref).abortFacts();
@@ -71,12 +71,11 @@ final class TakeOutcomeDispatch {
                         ref, aborted.finalState(), aborted.cause(), facts, abortThreshold, instanceId);
             }
             case TaskOutcome.Escalated escalated ->
-                TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, clearMarker, replicationNote);
+                TakeEscalationExit.exit(escalated, tracker, ref, instanceId, retry, park);
             case TaskOutcome.Completed completed ->
-                TakeFinishReport.finish(completed, context, branchName, tracker, ref, instanceId, retry);
+                TakeFinishReport.finish(completed, context, branchName, tracker, ref, instanceId, retry, finish);
             case TaskOutcome.Paused paused ->
-                TakePauseExit.finish(
-                        paused, context, branchName, tracker, ref, instanceId, retry, clearMarker, replicationNote);
+                TakePauseExit.finish(paused, context, branchName, tracker, ref, instanceId, retry, park);
         };
     }
 }

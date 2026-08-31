@@ -1,0 +1,34 @@
+// Build script for the `:atomicfile` module (FR5, design D10 of
+// harden-task-branch-contract): the factory's one atomic file-write discipline
+// — full content to a temp file in the target's own directory, then an atomic
+// rename onto the target — so no reader ever observes a half-written file.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no
+// logging backend, no Jackson. That emptiness is what lets every layer consume
+// it without acquiring transitive coupling: the host-side `.gnomish-task/`
+// writers live in `:adapters:git`, the dashboard and snapshot writers in
+// `:application`, and a shared writer whose module dragged a dependency behind
+// it would push that dependency into both. There is no production-scope
+// declaration below because there is nothing to declare, and the layering gate
+// proves it stays that way.
+//
+// The container-side persisters consume no writer at all: they reach durability
+// at commit granularity (round state committed in-box, lifecycle commits built
+// from bare objects), per the crash-consistency ADR's per-medium table.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and
+// the PIT mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — none —
+    // is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Atomic file writes: temp file plus atomic rename, so no reader observes a partial write.'
+
+// `:atomicfile` is a dependency-free leaf: it reaches no other project at all.
+// This is the same gate `:domain`, `:gitobjects` and `:subprocess` carry.
+layering {
+    allowedProjects = []
+}

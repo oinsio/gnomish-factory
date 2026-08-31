@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
@@ -47,7 +48,7 @@ class FeedAutomatonDirtyNotifierSpec extends Specification {
             },
             listOpen : { -> [] },
             claim : { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
         def automaton = new FeedAutomaton(tracker, INSTANCE, new SlotLedger(1), noop(), sleeper, clock,

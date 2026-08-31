@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -20,7 +22,14 @@ import org.jspecify.annotations.Nullable;
  * reader there for the full per-abort detail rather than passing off this single
  * triggering cause as the complete history.
  *
- * <p>Implements FR14, NFR-C1 of add-tracker-port.
+ * <p>The history is categorized (FR14, NFR-O2 of harden-task-branch-contract):
+ * the one counter behind the threshold is split into the runs that crashed and
+ * the branch repairs that failed, so an operator reading the park report alone
+ * can tell "this task keeps dying mid-round" from "this task cannot be
+ * repaired" without opening factory logs.
+ *
+ * <p>Implements FR14, NFR-C1 of add-tracker-port; FR14, NFR-O2 of
+ * harden-task-branch-contract.
  */
 final class AbortReportBuilder {
 
@@ -36,26 +45,40 @@ final class AbortReportBuilder {
      *
      * @param cause free-text description of the abort that tripped the fuse;
      *     never blank
-     * @param count the abort count including this abort; positive
+     * @param category which category the tripping attempt belongs to; never null
+     * @param facts the accounting as it stood BEFORE this attempt — the tripping
+     *     attempt is added to its own category here; never null
      * @param threshold the configured abort-fuse threshold (K); positive
-     * @param lastAbortAt when the previous abort in the streak was recorded, or
-     *     {@code null} if none is on record (structurally, a fuse trip implies a
-     *     prior abort, but the count/timestamp pairing is an adapter guarantee,
-     *     not enforced on the read side)
      * @return finished report text; never blank
      */
-    static String build(String cause, int count, int threshold, @Nullable Instant lastAbortAt) {
-        var priorAbort = lastAbortAt == null ? "" : " The previous abort was recorded at " + lastAbortAt + ".";
+    static String build(String cause, RecoveryCause category, AbortFacts facts, int threshold) {
+        int crashes = facts.crashCount() + (category == RecoveryCause.INSTANCE_CRASH ? 1 : 0);
+        int repairs = facts.recoveryCount() + (category == RecoveryCause.RECOVERY_FAILURE ? 1 : 0);
         return "Infrastructure abort fuse tripped: "
-                + count
-                + " consecutive aborts reached the configured threshold of "
+                + (crashes + repairs)
+                + " consecutive automatic attempts reached the configured threshold of "
                 + threshold
-                + ". Most recent cause: "
+                + " ("
+                + crashes
+                + " crashed runs, "
+                + repairs
+                + " failed branch repairs). Most recent cause ("
+                + category.wireValue()
+                + "): "
                 + cause
                 + "."
-                + priorAbort
+                + priorAttempt(facts.lastAbortAt())
                 + " Each abort's own cause and instance are recorded in this task's abort entries;"
                 + " review them for the full history across the streak."
                 + " A human fix is needed before this task can resume.";
+    }
+
+    /**
+     * Names when the previous attempt in the streak was recorded, or nothing when none is on record
+     * — structurally a fuse trip implies a prior attempt, but the count/timestamp pairing is an
+     * adapter guarantee, not enforced on the read side.
+     */
+    private static String priorAttempt(@Nullable Instant lastAbortAt) {
+        return lastAbortAt == null ? "" : " The previous attempt was recorded at " + lastAbortAt + ".";
     }
 }

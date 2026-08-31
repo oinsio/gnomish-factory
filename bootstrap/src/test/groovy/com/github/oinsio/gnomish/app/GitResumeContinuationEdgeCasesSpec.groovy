@@ -1,29 +1,9 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolCall
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import java.nio.file.Files
-import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
-import org.slf4j.MDC
-import spock.lang.Specification
-import spock.lang.TempDir
 
 /**
  * FR5, FR8, FR10, D1, D10 of add-git-workflow: two {@link GitResumeContinuation} scenarios not
@@ -33,8 +13,9 @@ import spock.lang.TempDir
  * (.claude/rules/process-invariants.md):
  *
  * <ul>
- *   <li>{@link GitResumeContinuation#recordDecisionIfAppended} only appends a {@link Decision}
- *       through {@link GitTaskRepository#appendDecision} when the escalation dialog actually grew
+ *   <li>{@link GitResumeContinuation#recordDecisionIfAppended} only appends a
+ *       {@link com.github.oinsio.gnomish.domain.engine.Decision} through
+ *       {@link com.github.oinsio.gnomish.adapter.git.GitTaskRepository#appendDecision} when the escalation dialog actually grew
  *       the context's decision list — a blank (bare Enter) answer resumes without one (FR9 of
  *       add-manual-run). PIT: ConditionalsBoundaryMutator on the {@code after > before} comparison
  *       — this is the one scenario in the suite where no decision is appended at all.
@@ -47,61 +28,7 @@ import spock.lang.TempDir
  *       through the branch's own commit history, which a removed worktree does not erase.
  * </ul>
  */
-class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
-
-    @TempDir
-    Path tempDir
-
-    Path cloneDir
-    Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
-
-    def setup() {
-        cloneDir = initWorkingRepo(tempDir, 'my-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees-root')
-    }
-
-    def cleanup() {
-        MDC.remove('taskId')
-    }
-
-    private static TaskContext context(String taskId = 'PROJ-1') {
-        new TaskContext(taskId, 'title', 'body', List.<Decision> of())
-    }
-
-    private GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot)
-    }
-
-    private Path expectedWorktree(String taskDir) {
-        worktreesRoot.resolve('my-project').resolve(taskDir)
-    }
-
-    private static PipelineDefinition pipeline() {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new PipelineDefinition('1', new AutonomyLimits(3), [stage])
-    }
-
-    private GitResumeRunner newResumeRunner(InputStream input, PrintStream output) {
-        new GitResumeRunner(newAssembly(input, output), TaskGitFixture.real(), worktreesRoot, 'taskId')
-    }
-
-    private void persistOneRound(String taskId, TaskState state) {
-        def worktree = expectedWorktree(taskId)
-        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId)
-        def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
-                [
-                    new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
-                ])
-        persistence.persist(taskId, state, trace)
-    }
+class GitResumeContinuationEdgeCasesSpec extends GitResumeSpecBase {
 
     // FR5, FR8, D1, PIT ConditionalsBoundaryMutator: a blank decision answer must NOT append a
     // Decision — proven by the historical task.json blobs never carrying a second decision entry,
@@ -110,7 +37,7 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
     def "run() with outcome escalated and a blank decision answer resumes without appending a decision"() {
         given: 'a task escalated after one persisted round'
         def taskId = 'PROJ-40'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -125,16 +52,18 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
                 .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
 
         then: 'the task still reaches completion'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
         !Files.exists(expectedWorktree(taskId))
 
         and: 'no decision was ever appended — every historical task.json still carries an empty decisions list'
-        def historicalTaskJsons = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%H').stdout()
-                .lines().collect {
-                    gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+        def historicalTaskJsons = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%H')
+                .lines().collect { it as String }
+                .findAll {
+                    gitExitCode(cloneDir, 'show', "${it}:.gnomish-task/task.json") == 0
                 }
-                .findAll { it.exitCode() == 0 }
-                .collect { it.stdout() }
+                .collect {
+                    gitOutput(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+                }
         historicalTaskJsons.every { !it.contains('"decisions":[{') }
     }
 
@@ -145,7 +74,7 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
     def "run() with --discard-work never commits the discarded leftover to branch history"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-41'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
@@ -155,7 +84,7 @@ class GitResumeContinuationEdgeCasesSpec extends Specification implements BareGi
                 .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, true)
 
         then: 'half-done.txt never appears in any commit on the branch, even though the worktree itself was later removed'
-        def allBlobPaths = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--name-only', '--format=').stdout()
+        def allBlobPaths = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--name-only', '--format=')
         !allBlobPaths.contains('half-done.txt')
     }
 }

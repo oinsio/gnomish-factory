@@ -3,8 +3,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,14 +29,12 @@ import java.util.Optional;
  */
 public final class GithubDecisions {
 
-    private final GithubHttpClient httpClient;
     private final GithubCommentThread commentThread;
-    private final String instanceId;
+    private final GithubMarkerWriter markerWriter;
 
-    public GithubDecisions(GithubHttpClient httpClient, String instanceId) {
-        this.httpClient = httpClient;
+    public GithubDecisions(GithubHttpClient httpClient, GithubMarkerWriter markerWriter) {
         this.commentThread = new GithubCommentThread(httpClient);
-        this.instanceId = instanceId;
+        this.markerWriter = markerWriter;
     }
 
     /** Implements {@code Tracker.collectDecisions} for GitHub (FR12). */
@@ -56,22 +53,31 @@ public final class GithubDecisions {
         return List.copyOf(replies);
     }
 
-    /** Implements {@code Tracker.acknowledgeDecision} for GitHub (FR12, UX3). */
+    /**
+     * Implements {@code Tracker.acknowledgeDecision} for GitHub (FR12, UX3), through the shared
+     * marker writer (FR11).
+     *
+     * <p>The ack is scoped by the tenure <em>and</em> the decision it answers, not by the tenure
+     * alone: the ack is the boundary {@link #latestAckIndex} anchors decision collection on, and a
+     * tenure can answer more than one decision. Re-driving the same ack after a crash updates its
+     * own comment (UX3); acknowledging a second decision posts a new one, so the boundary lands
+     * where that acknowledgment actually happened and no answered decision is collected twice.
+     */
     public void acknowledgeDecision(TaskRef ref, String decisionText) {
         GithubTaskId id = GithubTaskId.parse(ref.id());
-        String body = GithubMarker.render(
-                GithubMarkerKind.ACK, instanceId, Instant.now(), "🤖 gnomish: acting on decision: " + decisionText);
-        String path = "/repos/%s/%s/issues/%d/comments".formatted(id.owner(), id.repo(), id.issueNumber());
-        HttpRequest.Builder request = httpClient
-                .newRequest(path)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(GithubCommentBody.toJson(body)));
-
-        HttpResponse<String> response = httpClient.send(request);
-        if (response.statusCode() / 100 != 2) {
-            throw new GithubFeedQueryException("Failed to post ack comment on %s/%s#%d: HTTP %d"
-                    .formatted(id.owner(), id.repo(), id.issueNumber(), response.statusCode()));
-        }
+        ClaimEpoch tenure = markerWriter.tenureOf(id).orElse(null);
+        String scope = (tenure == null ? "none" : Long.toString(tenure.token())) + "."
+                + Integer.toHexString(decisionText.hashCode());
+        markerWriter.write(
+                id,
+                new GithubMarkerWrite(
+                        GithubMarkerKind.ACK,
+                        scope,
+                        "🤖 gnomish: acting on decision: " + decisionText,
+                        null,
+                        tenure,
+                        markerWriter.instanceId(),
+                        Instant.now()));
     }
 
     /** Returns the index (in comment order) of the latest ACK-kind marker, or empty if none is present. */

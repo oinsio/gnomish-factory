@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.board
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 import spock.lang.Specification
 
@@ -44,7 +45,7 @@ class BoardLabelsSpec extends Specification {
     // unknown" when it is missing (claimVersion == null) — the single wording both surfaces share.
     def "claimFreshness renders the age when the marker is present"() {
         given:
-        def claim = new ClaimVersion('m-1', NOW.minusSeconds(180))
+        def claim = new ClaimVersion('m-1', NOW.minusSeconds(180), new ClaimEpoch(1))
 
         expect:
         BoardLabels.claimFreshness(claim, NOW) == 'updated 3m ago'

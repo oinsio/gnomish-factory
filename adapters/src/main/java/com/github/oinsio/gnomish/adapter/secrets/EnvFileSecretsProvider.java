@@ -80,8 +80,12 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
         try {
             return present(Files.readString(Path.of(path)).strip());
         } catch (IOException | InvalidPathException e) {
-            // The message carries the path, never the file's content (a secret).
-            log.warn("secret file could not be read: {}", e.toString());
+            // The message carries the path, never the file's content (a secret) — and the throwable
+            // is passed as a throwable, not as a format argument, so the WARN keeps the stack trace
+            // that says WHICH read failed and why. Neither an IOException from a file read nor an
+            // InvalidPathException carries file content, so the stack leaks nothing the message
+            // does not already say.
+            log.warn("secret file could not be read", e);
             return Optional.empty();
         }
     }

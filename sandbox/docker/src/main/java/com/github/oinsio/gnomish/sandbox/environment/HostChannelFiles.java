@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.atomicfile.NonAtomicWrite;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -16,6 +17,8 @@ import org.slf4j.Logger;
  * for file size; the behavior is unchanged, including which logger emits each
  * message (callers pass the original class's {@link Logger} through).
  */
+@NonAtomicWrite("channel scratch handed to a task subprocess, not factory-owned state: nothing under"
+        + " .gnomish-task/ passes through here and no other instance classifies a task from it.")
 final class HostChannelFiles {
 
     private HostChannelFiles() {}

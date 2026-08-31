@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.port.tracker.contract
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -50,6 +51,34 @@ abstract class TrackerMarkerContract extends TrackerContract {
 
         and: 'the task is back in Ready, as recordAbort SHALL do in the same operation'
         adapter.fetchTask(ref).state() == new TrackerTaskState.Ready()
+    }
+
+    // FR14 of harden-task-branch-contract: the two categories of the unified accounting round-trip
+    //     through the adapter's own storage — one counter, with the recovery share readable back
+    //     beside the total, so a quarantine report can name crash and repair causes distinctly
+    def "the category of each recorded attempt is readable back through fetchTask"() {
+        given: 'a tracker seeded with one Working task and no prior attempts'
+        def tracker = arrange()
+        assumeProducible(tracker, 'Tracker', 'categorized accounting fixture')
+        def adapter = tracker.get()
+        def ref = new TaskRef('fixture:abort-categories')
+        seedTask(adapter, ref, new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+
+        when: 'one failed branch repair and one crashed run are recorded, each ending its tenure'
+        adapter.recordAbort(ref, new AbortRecord('repair failed', 'instance-a',
+                Instant.parse('2026-07-20T10:00:00Z'), RecoveryCause.RECOVERY_FAILURE))
+        adapter.claim(ref, 'instance-a')
+        adapter.recordAbort(ref, new AbortRecord('worktree exploded', 'instance-a',
+                Instant.parse('2026-07-20T11:00:00Z'), RecoveryCause.INSTANCE_CRASH))
+        // The same reclaim the progress-reset scenario uses: the streak an adapter reconstructs is
+        // the one behind the current claim, so the retrying holder has to hold it to be counted.
+        adapter.claim(ref, 'instance-a')
+        def facts = adapter.fetchTask(ref).abortFacts()
+
+        then: 'both spend the one counter, and each is attributed to its own category'
+        facts.count() == 2
+        facts.recoveryCount() == 1
+        facts.crashCount() == 1
     }
 
     // FR3, FR4: recordProgress resets the abort count to zero, observed by a fresh

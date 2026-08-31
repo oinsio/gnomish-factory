@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -23,16 +24,23 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR5 of add-claim-heartbeat.
  *
+ * <p>{@code epoch} is this reference adapter's monotonic claim token (FR13 of
+ * harden-task-branch-contract), minted from the same rising sequence as {@code
+ * markerId} so a reclaim always outranks the tenure it replaced. Like {@code
+ * markerId} it is stable across beats.
+ *
  * @param markerId the lease anchor, stable across beats; never blank
  * @param updatedAt the last-update fact, advanced by every beat; never null
  * @param holder the claiming instance's identifier, named when the claim is reaped
  * @param payload the latest heartbeat progress text, or {@code null} before the first beat
+ * @param epoch the tenure's ordered claim token, stable across beats; never null
  */
 record ClaimMarker(
         String markerId,
         Instant updatedAt,
         String holder,
-        @Nullable String payload) {
+        @Nullable String payload,
+        ClaimEpoch epoch) {
 
     /**
      * The opaque port-level version of this marker: its identity paired with its last-update fact.
@@ -46,11 +54,11 @@ record ClaimMarker(
      */
     @DoNotMutate
     ClaimVersion version() {
-        return new ClaimVersion(markerId, updatedAt);
+        return new ClaimVersion(markerId, updatedAt, epoch);
     }
 
     /** A new marker with the same identity and holder but an advanced {@code updatedAt} and fresh {@code payload}. */
     ClaimMarker beat(Instant newUpdatedAt, String newPayload) {
-        return new ClaimMarker(markerId, newUpdatedAt, holder, newPayload);
+        return new ClaimMarker(markerId, newUpdatedAt, holder, newPayload, epoch);
     }
 }

@@ -65,7 +65,7 @@ final class TakeFreshClaim {
 
         var synthesized = TrackerTaskSynthesizer.synthesize(trackerTask.snapshot(), definition);
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        GitFreshTaskSupport.createTask(taskRepository, taskId, synthesized.context(), base);
+        GitFreshTaskSupport.createTask(taskRepository, taskId, synthesized.context(), base, synthesized.initialState());
 
         Path worktree = TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId);
         TaskRecord content = git.store().readTaskRecord(worktree);

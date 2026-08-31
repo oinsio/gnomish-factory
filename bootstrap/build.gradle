@@ -179,10 +179,9 @@ dependencies {
     // WireMock 4.x — see osv-scanner.toml.
 }
 
-// The composition root is the one module allowed to reach the adapters (FR2,
-// design D3) — that is what makes it the composition root. The set is still
-// stated rather than left open: `:test-fixtures` must never appear on a
-// production classpath (FR7).
+// The one module allowed to reach the adapters (FR2, design D3) — that is what makes it
+// the composition root. The set is still stated rather than left open, so `:test-fixtures`
+// never lands on a production classpath (FR7); `:atomicfile` arrives transitively.
 layering {
     allowedProjects = [
         ':adapters',
@@ -190,6 +189,7 @@ layering {
         ':adapters:git',
         ':adapters:github',
         ':application',
+        ':atomicfile',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',

@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.BackoffPolicy
 import com.github.oinsio.gnomish.board.BoardModel
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -135,7 +136,7 @@ class BoardJsonMapperSpec extends Specification {
         def updatedAt = NOW - Duration.ofMinutes(3)
         def open = [
             new OpenTask(new TaskRef('github:o/r#20'), new TrackerTaskState.Working('holder-b'),
-            new ClaimVersion('marker-1', updatedAt), 'working title')
+            new ClaimVersion('marker-1', updatedAt, new ClaimEpoch(1)), 'working title')
         ]
         def model = BoardModel.build([], open, false, NOW)
 

@@ -2,9 +2,9 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -14,9 +14,12 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -112,17 +115,18 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     def "routes a held claim with no branch to the fresh-claim path"() {
         given:
         def tracker = Stub(Tracker) {
-            claim(_, _) >> new ClaimResult.Acquired()
+            claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def store = Stub(TaskStoreGit) {
             taskRepository(_, _) >> Stub(TaskLifecycleStore) {
-                createTask(_, _) >> {
+                createTask(_, _, _) >> {
                     throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'x')
                 }
             }
         }
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }
 
         when:
@@ -133,16 +137,43 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         ex.message.startsWith('could not start git-mode task')
     }
 
+    // FR6 of harden-task-branch-contract: "origin never answered" is not "the branch is absent".
+    // Routing it to the fresh path is what forked a second branch for a task that already had one,
+    // so the take aborts instead — the crash-abort protocol releases the claim and another instance
+    // (or this one, later) picks the task up with a working network.
+    def "FR6: a lookup that could not reach origin aborts the take instead of claiming fresh"() {
+        given:
+        def tracker = Mock(Tracker)
+        def store = Mock(TaskStoreGit)
+        def worktrees = Mock(TaskWorktreeGit)
+        def branches = Stub(TaskBranchGit) {
+            locate(_, _) >> new BranchLocation.Unavailable('origin did not answer whether gnomish/PROJ-1 exists')
+        }
+
+        when:
+        def result = claim(claimAndWork(new TaskGit(store, branches, worktrees), tracker, Stub(RunAssembly)), tracker)
+
+        then: 'the take goes down the crash-abort path, which hands the claim back'
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        1 * tracker.recordAbort(REF, _)
+        result instanceof TakeResult.Aborted
+
+        and: 'neither route ran: no branch was created and no worktree was materialized'
+        0 * store.taskRepository(_, _)
+        0 * worktrees.ensureWorktree(_, _, _, _)
+    }
+
     // FR9, D3: a held claim with an EXISTING branch is a resume — the disposition-resume chain
     // bootstraps the branch (harden, locate, materialize the worktree, reconcile) instead of
     // creating anything. Stopped at the task.json read, the bootstrap's last step.
     def "routes a held claim with an existing branch to the resume path"() {
         given:
         def tracker = Stub(Tracker) {
-            claim(_, _) >> new ClaimResult.Acquired()
+            claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+            classifyShape(_, _) >> new BranchShape.InProgress()
         }
         def worktrees = Mock(TaskWorktreeGit)
         def store = Stub(TaskStoreGit) {
@@ -163,16 +194,45 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         ex.message == 'stopped at the resume bootstrap'
     }
 
+    // FR15 of harden-task-branch-contract: a branch no automatic recovery can converge is NOT the
+    // crash arm. The choke point routes the quarantine verdict to its own park, so the task stops
+    // for a human on the FIRST classification with the diagnosis in the report — rather than
+    // burning the recovery fuse one identical pickup at a time.
+    def "FR15: a quarantined branch parks for a human instead of taking the crash arm"() {
+        given:
+        def tracker = Mock(Tracker)
+        tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        def branches = Stub(TaskBranchGit) {
+            locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+            classifyShape(_, _) >> new BranchShape.Corrupt('task.json: bad json')
+        }
+
+        when:
+        def result = claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
+                tracker, Stub(RunAssembly)), tracker)
+
+        then: 'the park carries the diagnosis, and no abort was recorded against the task'
+        1 * tracker.park(REF, ParkReason.INFRA, {
+            it.contains('corrupt content')
+        })
+        0 * tracker.recordAbort(*_)
+
+        and:
+        def parked = result as TakeResult.AwaitingHuman
+        parked.reason() == ParkReason.INFRA
+        parked.report().contains('corrupt content')
+    }
+
     // FR1 of add-claim-heartbeat: the heartbeat is anchored at THIS choke point — registered the
     // instant the claim is held and unregistered in a finally, so it stops at any terminal result,
     // exception or crash-abort. A path that never holds a claim never beats (first scenario above).
     def "registers the heartbeat on a held claim and unregisters it however the run ends"() {
         given:
         def tracker = Stub(Tracker) {
-            claim(_, _) >> new ClaimResult.Acquired()
+            claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> {
+            classifyShape(_, _) >> {
                 throw new UsageException('stopped right after the claim')
             }
         }
@@ -190,6 +250,32 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         ]
     }
 
+    // FR13 of harden-task-branch-contract: the tenure ends at this same choke point, not at the
+    // terminal tracker write — the receipt and cleanup commits behind a confirmed park/finish still
+    // have to carry the epoch. Past this finally nothing more is written under the claim, so the
+    // book is emptied here however the run ends.
+    def "forgets the tenure when the run scope ends, however it ends"() {
+        given:
+        def tracker = Stub(Tracker) {
+            claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        }
+        def branches = Stub(TaskBranchGit) {
+            classifyShape(_, _) >> {
+                throw new UsageException('stopped right after the claim')
+            }
+        }
+        def book = new ClaimEpochBook()
+        book.issued(REF.id(), new ClaimEpoch(1))
+
+        when:
+        claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
+                tracker, Stub(RunAssembly), ClaimBeat.NONE, new ClaimLossFlag(), WORKTREES_ROOT, book), tracker)
+
+        then:
+        thrown(UsageException)
+        book.epochFor(REF.id()).isEmpty()
+    }
+
     // FR14, D16 "Runner crash is an abort": an uncaught RuntimeException of a run whose claim we
     // HOLD is not a bare failure — it runs the best-effort abort protocol against the tracker, so
     // the task never stays stuck Working behind a dead runner.
@@ -197,7 +283,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         given:
         def tracker = Mock(Tracker)
         def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> {
+            classifyShape(_, _) >> {
                 throw new IllegalStateException('the runner blew up')
             }
         }
@@ -208,7 +294,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 tracker, Stub(RunAssembly), beat), tracker)
 
         then:
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * tracker.recordAbort(REF, _)
 
         and: 'the crash is reported as an abort result, not rethrown as a bare exception'
@@ -229,7 +315,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         given:
         def tracker = Mock(Tracker)
         def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> { throw failure() }
+            classifyShape(_, _) >> { throw failure() }
         }
 
         when:
@@ -237,7 +323,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 tracker, Stub(RunAssembly)), tracker)
 
         then:
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * tracker.release(REF)
 
         and: 'and the exception still propagates unchanged, keeping its own exit code'
@@ -252,9 +338,6 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         'usage error' | {
             new UsageException('unmet container prerequisite')
         } | UsageException
-        'diverged-branch refusal' | {
-            new DivergedBranchException('PROJ-1', 'gnomish/PROJ-1', 'aaa', 'bbb')
-        } | DivergedBranchException
     }
 
     // NFR-R2 in spirit: the release is best-effort. A tracker that is itself the reason the run is
@@ -263,7 +346,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         given:
         def tracker = Mock(Tracker)
         def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> {
+            classifyShape(_, _) >> {
                 throw new UsageException('unmet container prerequisite')
             }
         }
@@ -273,7 +356,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 tracker, Stub(RunAssembly)), tracker)
 
         then:
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * tracker.release(REF) >> {
             throw new IllegalStateException('tracker is down')
         }
@@ -300,6 +383,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }
         def beat = new RecordingBeat()
 
@@ -309,7 +393,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 new ClaimLossFlag(), worktreesRoot), tracker)
 
         then:
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         tracker.fetchTask(_) >> heldByUs()
         1 * tracker.finish(REF, _)
 
@@ -347,13 +431,15 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
                 new ClaimLossFlag(), worktreesRoot), tracker)
 
         then: 'the branch is located and bootstrapped, never created'
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired()
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * branches.harden(CLONE_DIR)
-        // Twice by design: once by the routing decision here, once by the resume bootstrap itself.
-        2 * branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        // The routing decision is one classification (FR2 of harden-task-branch-contract); the
+        // resume bootstrap then locates the ref it materializes the worktree from.
+        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.InProgress()
+        1 * branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
         1 * worktrees.ensureWorktree(CLONE_DIR, worktreesRoot, 'PROJ-1', 'gnomish/PROJ-1') >> resumedWorktree
         1 * worktrees.reconcile(resumedWorktree, 'PROJ-1', 'gnomish/PROJ-1')
-        0 * lifecycleStore.createTask(_, _)
+        0 * lifecycleStore.createTask(_, _, _)
 
         and: 'the resume checks the working copy for leftovers of the interrupted attempt'
         worktrees.salvage(resumedWorktree) >> Stub(WorktreeSalvager)

@@ -17,6 +17,12 @@ import java.nio.file.Path
  * without racing.
  *
  * <p>Supports FR7, FR8 of bound-subprocess-commands.
+ *
+ * <p>Kept in sync with {@link StallingReadGitFixture}: both must strip a leading {@code -c}
+ * option pair, hold {@code STALL_SECONDS} long enough that only an interrupt (never the
+ * stand-in itself) can end the stall, and expose an {@code await*Started} poll loop with the
+ * same 20s deadline / 20ms interval shape so a spec can block until the stand-in is in flight
+ * before it interrupts.
  */
 trait StallingGitFixture {
 

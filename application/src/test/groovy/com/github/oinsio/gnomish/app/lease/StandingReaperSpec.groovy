@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.app.lease
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import java.time.Duration
 import java.time.Instant
@@ -29,7 +31,7 @@ class StandingReaperSpec extends Specification {
     private static final Instant ANCIENT = Instant.parse('2000-01-01T00:00:00Z')
     private static final TaskRef FOREIGN = new TaskRef('T-foreign')
 
-    private final Tracker tracker = Mock()
+    private final Tracker tracker = Mock(Tracker) { listReady(_) >> [] }
     private final VirtualMonotonicTime time = new VirtualMonotonicTime()
     private final StalenessMemory memory = new StalenessMemory(time, TTL)
     private final Reaper reaper = new Reaper(tracker, memory)
@@ -47,7 +49,7 @@ class StandingReaperSpec extends Specification {
     }
 
     private static ClaimVersion version() {
-        new ClaimVersion('m1', ANCIENT)
+        new ClaimVersion('m1', ANCIENT, new ClaimEpoch(1))
     }
 
     // FR1, FR2, D1: with an empty live-claims snapshot (this instance holds no claim), a single
@@ -72,7 +74,7 @@ class StandingReaperSpec extends Specification {
 
         then: 'the stale claim is removed with its observed version, returning the task to Ready'
         1 * tracker.listOpen() >> open
-        1 * tracker.removeStaleClaim(new TaskRef('T-foreign'), v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-foreign'), new ClaimFacts.Live('other-instance', v)) >> new RemoveStaleClaimResult.Removed()
         0 * tracker.claim(FOREIGN, _)
     }
 }

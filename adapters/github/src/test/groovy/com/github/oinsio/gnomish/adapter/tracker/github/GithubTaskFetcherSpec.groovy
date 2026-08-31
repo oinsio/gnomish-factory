@@ -171,7 +171,11 @@ class GithubTaskFetcherSpec extends Specification {
         result.abortFacts().count() == 0
     }
 
-    def "throws when the issue carries the working label but no active claim marker exists"() {
+    // FR19 of harden-task-branch-contract: the working label with no active claim marker is the
+    //     claim sequence's own kill window — a swept, repairable shape. Reporting it as a fact beats
+    //     throwing: a fetch that crashed on it took down every reader's path over a state the reaper
+    //     converges on its own.
+    def "FR19: reports a working label with no active claim marker instead of throwing"() {
         given: 'an issue with the working label but no claim comment at all'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/17'))
                 .willReturn(aResponse().withStatus(200).withBody('''
@@ -183,10 +187,34 @@ class GithubTaskFetcherSpec extends Specification {
         def fetcher = newFetcher()
 
         when:
-        fetcher.fetchTask(refFor(17))
+        def result = fetcher.fetchTask(refFor(17))
 
-        then: 'the missing-claim-marker inconsistency surfaces as an infrastructure failure, not a wrong holder'
-        thrown(GithubFeedQueryException)
+        then: 'the state is reported, naming no instance the thread does not name'
+        result.state() == new TrackerTaskState.Working('unknown')
+    }
+
+    // FR19: when the thread does name a former holder, that is the instance reported — the last one
+    //     to have claimed the task, exactly as the open listing's dead footprint reports it.
+    def "FR19: a working label whose claim marker is gone reports the last-known holder"() {
+        given: 'the claim was aborted by another instance, but the thread still names the claim holder'
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/18'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        {"number":18,"title":"t","body":"b","state":"open",
+                         "labels":[{"name":"gnomish:working"}]}
+                        ''')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/18/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-dead\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n claimed"},
+                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-reaper\\",\\"at\\":\\"2026-07-23T10:05:00Z\\",\\"version\\":1} -->\\n aborted"}
+                        ]
+                        ''')))
+
+        when:
+        def result = newFetcher().fetchTask(refFor(18))
+
+        then:
+        result.state() == new TrackerTaskState.Working('gnomish-factory-dead')
     }
 
     def "reports AwaitingHuman with the reason from the latest park marker"() {

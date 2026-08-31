@@ -70,8 +70,22 @@ Check the new/modified files (from the diff) against `.claude/rules/`:
 
 - `process-invariants.md`: file size (target 100–120 lines, hard cap 200), module boundaries
   (no imports from sibling-module internals), English-only docs/comments.
+- `crash-consistency.md`: if the diff adds or modifies a transition with two or more durable
+  steps, the change's `design.md`/specs must answer every item of that rule's checklist
+  (kill windows named, shapes classified, one recovery owner each) and kill-point specs must
+  exist. A multi-step transition without these answers is ❌ CRITICAL.
+- `manual-sync-pairs.md`: for every diff file that carries a `Kept in sync with` marker or
+  appears in the rule's registry, verify the counterpart changed too — or the report states
+  why no mirrored change is needed. A new file reimplementing a rule that already exists in
+  another mode/layer must either share an abstraction or declare the pair at both ends; a
+  third implementation of the same rule must extract the abstraction.
 - `testing.md`: every new `@DoNotMutate` / `excludedClasses` / `excludedTestClasses` entry has
   a written rationale meeting the rule's bar; specs are Spock, one capability per spec file.
+- `logging.md` (where present; otherwise apply the same checks directly): new/modified log
+  statements use the level the policy prescribes (no WARN for normal/recovered flow, no
+  per-loop chatter at INFO+); untrusted text (agent output, subprocess stderr, tracker
+  strings) enters log lines only through the sanitizer choke point; new specs that assert
+  logging use the shared capture helper and no test writes to the operator's log.
 - `design-decisions.md` adherence: implementation matches each D/DEC decision in `design.md`;
   contradictions are ⚠️ with "fix code or revise design.md" recommendations.
 - `diagrams.md`/docs: if the change altered behavior described in `docs/` or `README.md`,
@@ -90,6 +104,26 @@ would — beyond what static analysis already gates:
   class), overly clever code where a plain version exists.
 - **Error reporting**: failures must name the problem and the fix (the project's fail-fast
   convention); flag messages that would leave an operator guessing.
+- **Reinvention check**: for each new private helper method, named constant, and repeated
+  string literal in the diff, grep the codebase for an existing equivalent (same name, same
+  value, or same responsibility). If one exists, the verdict is "reuse the canonical one or
+  justify the local copy in the report" — an unjustified copy is a ⚠️ finding.
+- **Mechanical risk classes** (grep the diff for each):
+  - new git/subprocess invocations (`runner.run(...)`, `exec`, `ProcessBuilder`) whose exit
+    code is not checked before the output is used;
+  - new non-`final` non-`volatile` fields on classes reachable from concurrent slot threads,
+    and any attach/set-after-construction initialization protocol;
+  - new `catch (Throwable)` or `catch (Exception)` — each requires a written justification
+    for its breadth, else narrow it to the expected exception type;
+  - new catch blocks that swallow and return a degraded/default value with **no log line** —
+    a best-effort path must leave a trace;
+  - new log calls interpolating an exception (`e.toString()`, `getMessage()`) as a format
+    argument instead of passing the throwable as the trailing argument;
+  - new log calls interpolating untrusted text (agent/LLM output, `stderr()`, tracker
+    strings) without the sanitizer choke point — ANSI/newline/length unbounded;
+  - new poll/retry loops logging per iteration with no first-occurrence/roll-up
+    suppression;
+  - new virtual-thread spawns whose body logs, without MDC capture/apply/clear.
 
 Report each finding with file:line, severity, and a concrete fix suggestion — not applied.
 

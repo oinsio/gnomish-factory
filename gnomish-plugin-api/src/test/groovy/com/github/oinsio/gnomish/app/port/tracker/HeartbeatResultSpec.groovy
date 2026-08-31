@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 import spock.lang.Specification
 
@@ -14,7 +15,7 @@ class HeartbeatResultSpec extends Specification {
     // FR5: a successful beat carries the refreshed claim version
     def "Beaten exposes the refreshed claim version exactly as constructed"() {
         given:
-        def version = new ClaimVersion('claim-comment-991', Instant.parse('2026-07-29T10:15:30Z'))
+        def version = new ClaimVersion('claim-comment-991', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1))
 
         expect:
         new HeartbeatResult.Beaten(version).version() == version
@@ -27,7 +28,7 @@ class HeartbeatResultSpec extends Specification {
 
         where:
         result | expected
-        new HeartbeatResult.Beaten(new ClaimVersion('m1', Instant.parse('2026-07-29T10:15:30Z'))) | 'beaten: m1'
+        new HeartbeatResult.Beaten(new ClaimVersion('m1', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1))) | 'beaten: m1'
         new HeartbeatResult.ClaimGone() | 'gone'
     }
 
@@ -38,8 +39,8 @@ class HeartbeatResultSpec extends Specification {
 
         expect:
         new HeartbeatResult.ClaimGone() == new HeartbeatResult.ClaimGone()
-        new HeartbeatResult.Beaten(new ClaimVersion('m1', at)) == new HeartbeatResult.Beaten(new ClaimVersion('m1', at))
-        new HeartbeatResult.Beaten(new ClaimVersion('m1', at)) != new HeartbeatResult.Beaten(new ClaimVersion('m2', at))
+        new HeartbeatResult.Beaten(new ClaimVersion('m1', at, new ClaimEpoch(1))) == new HeartbeatResult.Beaten(new ClaimVersion('m1', at, new ClaimEpoch(1)))
+        new HeartbeatResult.Beaten(new ClaimVersion('m1', at, new ClaimEpoch(1))) != new HeartbeatResult.Beaten(new ClaimVersion('m2', at, new ClaimEpoch(1)))
     }
 
     private static String describe(HeartbeatResult result) {

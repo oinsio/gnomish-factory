@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckResult
@@ -68,8 +69,8 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
 
     /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway worktree root of its own. */
     private void buildTaskBranch(Path repo, Path taskWorktrees, String taskId) {
-        new GitTaskRepository(runner, repo, taskWorktrees).createTask(
-                new TaskContext(taskId, 'Fix the thing', 'Body', []), null)
+        new GitTaskRepository(runner, repo, taskWorktrees, ClaimEpochSource.NONE).createTask(
+                new TaskContext(taskId, 'Fix the thing', 'Body', []), null, TaskState.atStageStart('implement'))
         def worktree = taskWorktrees.resolve(repo.fileName.toString()).resolve(taskId)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
@@ -80,7 +81,7 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
                 new ExecutorUsage(Duration.ofMillis(500), [], ['claude-x': new TokenUsage(100, 10, 0, 0)]),
                 JudgeUsage.none(), [])
         def state = TaskState.atStageStart('implement').recordUnburnedRound(passed)
-        new GitAttemptPersistence(runner, worktree, taskId).persist(taskId, state, trace)
+        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
     }
 
     private Map snapshot() {

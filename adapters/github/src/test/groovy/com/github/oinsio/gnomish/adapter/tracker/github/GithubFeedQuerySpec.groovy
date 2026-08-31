@@ -109,9 +109,9 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/7/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
-                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 aborted: network error"},
-                          {"id":3,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T12:30:00Z\\",\\"version\\":1} -->\\n🤖 aborted: network error again"}
+                          {"id":1,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 aborted: network error"},
+                          {"id":3,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T12:30:00Z\\",\\"version\\":1} -->\\n🤖 aborted: network error again"}
                         ]
                         ''')))
         def feedQuery = newFeedQuery()
@@ -136,10 +136,10 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/8/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
-                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T08:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T08:30:00Z\\",\\"version\\":1} -->\\n🤖 aborted: before progress"},
-                          {"id":3,"body":"<!-- gnomish {\\"kind\\":\\"progress\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"version\\":1} -->\\n🤖 progressed"},
-                          {"id":4,"body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 aborted: after progress"}
+                          {"id":1,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T08:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T08:30:00Z\\",\\"version\\":1} -->\\n🤖 aborted: before progress"},
+                          {"id":3,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"progress\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T09:00:00Z\\",\\"version\\":1} -->\\n🤖 progressed"},
+                          {"id":4,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 aborted: after progress"}
                         ]
                         ''')))
         def feedQuery = newFeedQuery()
@@ -179,8 +179,8 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/11/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
-                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 stuck: needs a human decision"}
+                          {"id":1,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"escalation\\"} -->\\n🤖 stuck: needs a human decision"}
                         ]
                         ''')))
         def feedQuery = newFeedQuery()
@@ -203,8 +203,8 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
-                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"stale_claim_removed\\",\\"instance\\":\\"reaper\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 stale claim removed"}
+                          {"id":1,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"stale_claim_removed\\",\\"instance\\":\\"reaper\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 stale claim removed"}
                         ]
                         ''')))
         def feedQuery = newFeedQuery()
@@ -246,8 +246,8 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/14/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
-                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"finish\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 delivered"}
+                          {"id":1,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"finish\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1} -->\\n🤖 delivered"}
                         ]
                         ''')))
         def feedQuery = newFeedQuery()
@@ -270,8 +270,8 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/15/comments?per_page=100'))
                 .willReturn(aResponse().withStatus(200).withBody('''
                         [
-                          {"id":1,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
-                          {"id":2,"body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"checkpoint\\"} -->\\n🤖 parked"}
+                          {"id":1,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":2,"updated_at":"2026-07-20T10:00:00Z","body":"<!-- gnomish {\\"kind\\":\\"park\\",\\"instance\\":\\"gnomish-factory-a1\\",\\"at\\":\\"2026-07-20T11:00:00Z\\",\\"version\\":1,\\"reason\\":\\"checkpoint\\"} -->\\n🤖 parked"}
                         ]
                         ''')))
         def feedQuery = newFeedQuery()
@@ -373,5 +373,21 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.verify(getRequestedFor(urlEqualTo(
                         '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
                 .withHeader('If-None-Match', equalTo('"v1"')))
+    }
+
+    def "a non-2xx feed response is an infrastructure failure, never an empty queue (HTTP #status)"() {
+        given: 'the feed read comes back non-2xx — a rate-limited 403, a gone repo, an exhausted 5xx'
+        wireMock.stubFor(get(urlEqualTo(
+                        '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100'))
+                .willReturn(aResponse().withStatus(status).withBody('{"message":"nope"}')))
+
+        when:
+        newFeedQuery().listReady(10)
+
+        then: 'surfaced the same way listOpen surfaces it — an outage is never read as "no ready tasks"'
+        thrown(GithubFeedQueryException)
+
+        where:
+        status << [403, 404, 500]
     }
 }

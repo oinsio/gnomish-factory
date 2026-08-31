@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -50,7 +51,7 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
         runner.run(repo, 'push', 'origin', "${BRANCH}:${BRANCH}")
 
-        worktreeSalvage = new WorktreeSalvage(runner, repo)
+        worktreeSalvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
         branchPush = new GitTaskBranches(runner)
         handler = new RevocationHandler(tracker, worktreeSalvage, branchPush)
     }

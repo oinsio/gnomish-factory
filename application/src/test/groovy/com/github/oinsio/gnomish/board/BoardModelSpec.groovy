@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 import spock.lang.Specification
 
@@ -116,7 +117,7 @@ class BoardModelSpec extends Specification {
     // FR4: a Working row carries the holder and the claim version through unchanged, including a null (missing marker) version
     def "carries holder and claim version through on a Working row"() {
         given: 'a Working task with a live claim version'
-        def version = new ClaimVersion('marker-1', Instant.parse('2026-08-05T08:30:00Z'))
+        def version = new ClaimVersion('marker-1', Instant.parse('2026-08-05T08:30:00Z'), new ClaimEpoch(1))
         def openTasks = [
             working('github:o/r#1', 'factory-a', version)
         ]

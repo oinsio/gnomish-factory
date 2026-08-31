@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
@@ -74,14 +75,15 @@ final class TakeTakeover {
             InstanceId instanceId,
             String holder) {
         TaskRef ref = trackerTask.ref();
-        ClaimVersion observed = observedVersion(tracker, ref);
+        ClaimFacts observed = observedClaim(tracker, ref);
         if (!takeoverFlag) {
-            TakeoverConfirmation.Decision decision = confirmation.confirm(ref, holder, lastBeatAge(observed));
+            TakeoverConfirmation.Decision decision =
+                    confirmation.confirm(ref, holder, lastBeatAge(observed.liveVersion()));
             if (decision != TakeoverConfirmation.Decision.CONFIRMED) {
                 return refuse(decision, holder);
             }
         }
-        if (observed != null) {
+        if (!(observed instanceof ClaimFacts.None)) {
             // Removed flips the task to Ready; Mismatch is a safe no-op leaving it Working — either
             // way the ordinary claim below re-reads live state and decides (resume, or refuse Held).
             tracker.removeStaleClaim(ref, observed);
@@ -90,14 +92,14 @@ final class TakeTakeover {
                 cloneDir, base, definition, interactiveMode, discardWork, trackerTask, tracker, instanceId);
     }
 
-    /** The live claim version for {@code ref} from {@code listOpen}, or {@code null} when none is observable. */
-    private static @Nullable ClaimVersion observedVersion(Tracker tracker, TaskRef ref) {
+    /** The claim footprint {@code listOpen} reports for {@code ref}, or none when it lists no such task. */
+    private static ClaimFacts observedClaim(Tracker tracker, TaskRef ref) {
         for (OpenTask open : tracker.listOpen()) {
             if (open.ref().equals(ref)) {
-                return open.claimVersion();
+                return open.facts().claim();
             }
         }
-        return null;
+        return new ClaimFacts.None();
     }
 
     /**

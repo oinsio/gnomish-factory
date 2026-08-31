@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.app.lease
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
-import com.github.oinsio.gnomish.app.port.tracker.OpenTask
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -12,10 +13,10 @@ import spock.lang.Specification
 /**
  * StalenessMemory: the core staleness policy (design D2) under a controlled monotonic
  * clock — the fresh-observer grace period, the beaten-claim-never-stale property, the
- * exact TTL boundary, eligibility, forgetting on disappearance, and once-per-version
- * emission.
+ * exact TTL boundary, forgetting on disappearance, and once-per-shape emission — plus the window
+ * grace the FR19 generalization added, and the eligibility filter it removed.
  *
- * FR2, NFR-R1 of add-claim-heartbeat.
+ * FR2, NFR-R1 of add-claim-heartbeat; FR19 of harden-task-branch-contract.
  */
 class StalenessMemorySpec extends Specification {
 
@@ -26,20 +27,36 @@ class StalenessMemorySpec extends Specification {
     private final VirtualMonotonicTime time = new VirtualMonotonicTime()
     private final StalenessMemory memory = new StalenessMemory(time, TTL)
 
-    private static OpenTask working(String ref, ClaimVersion version) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.Working('inst-1'), version, 'fixture title')
+    private static TrackerObservation working(String ref, ClaimVersion version) {
+        TrackerObservation.of(new TaskRef(ref), workingFacts(version))
     }
 
-    private static OpenTask awaitingHuman(String ref) {
-        new OpenTask(new TaskRef(ref), new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION), null, 'fixture title')
+    private static TrackerFacts workingFacts(ClaimVersion version) {
+        def claim = version == null ? new ClaimFacts.None() : new ClaimFacts.Live('inst-1', version)
+        TrackerFacts.of(StateLabels.workingOnly(), claim)
+    }
+
+    private static TrackerObservation awaitingHuman(String ref) {
+        TrackerObservation.of(new TaskRef(ref), TrackerFacts.of(StateLabels.needsHumanOnly()))
+    }
+
+    private static TrackerObservation foreign(String ref) {
+        TrackerObservation.of(
+                new TaskRef(ref), TrackerFacts.of(new StateLabels(false, false, false, false, false)))
     }
 
     private static ClaimVersion version(String updatedAt = ANCIENT.toString()) {
-        new ClaimVersion('marker-1', Instant.parse(updatedAt))
+        new ClaimVersion('marker-1', Instant.parse(updatedAt), new ClaimEpoch(1))
     }
 
-    private static StaleClaim stale(String ref, ClaimVersion version) {
-        new StaleClaim(new TaskRef(ref), version)
+    private static TrackerRepair stale(String ref, ClaimVersion version) {
+        def facts = workingFacts(version)
+        new TrackerRepair(new TaskRef(ref), facts, new TrackerShape.Claimed(facts.claim()))
+    }
+
+    private static TrackerRepair pending(String ref) {
+        def facts = workingFacts(null)
+        new TrackerRepair(new TaskRef(ref), facts, new TrackerShape.ClaimPending())
     }
 
     // FR2 grace period by construction: a fresh observer meeting a claim whose SERVER
@@ -97,7 +114,7 @@ class StalenessMemorySpec extends Specification {
         when:
         (1..12).each { beat ->
             // each beat refreshes updatedAt -> a new version the observer reads
-            def beaten = new ClaimVersion('marker-1', ANCIENT.plusSeconds(beat))
+            def beaten = new ClaimVersion('marker-1', ANCIENT.plusSeconds(beat), new ClaimEpoch(1))
             time.advance(interval)
             stales += memory.observe([working('T-1', beaten)])
         }
@@ -117,7 +134,7 @@ class StalenessMemorySpec extends Specification {
         time.advance(TTL.minusNanos(1))
 
         when: 'a beat lands: a new version is observed'
-        def v2 = new ClaimVersion('marker-1', ANCIENT.plusSeconds(1))
+        def v2 = new ClaimVersion('marker-1', ANCIENT.plusSeconds(1), new ClaimEpoch(1))
         def afterBeat = memory.observe([working('T-1', v2)])
 
         and: 'then almost a full new TTL passes but not quite'
@@ -181,28 +198,53 @@ class StalenessMemorySpec extends Specification {
         memory.observe([working('T-1', v)]) == [stale('T-1', v)]
     }
 
-    // FR2, FR4: only Working entries with a non-null claim version are eligible;
-    //     AwaitingHuman and absent-claim (null version) entries are never stale.
-    def "AwaitingHuman and absent-claim entries are never stale"() {
-        given: 'an AwaitingHuman task and a Working task whose claim marker is absent'
+    // FR19 of harden-task-branch-contract: the eligibility filter is gone. A parked task is a
+    //     steady shape and is never released; a working task with no claim footprint is the claim
+    //     sequence's own frozen window, released for repair once its grace has stood.
+    def "a parked task is never released while a claimless working task is, after its grace"() {
+        given: 'a parked task and a working task whose claim marker never landed'
         def entries = [
             awaitingHuman('T-await'),
             working('T-noclaim', null)
         ]
 
+        expect: 'neither is released on first sighting'
+        memory.observe(entries) == []
+
+        when: 'the grace window stands'
+        time.advance(TTL)
+
+        then: 'only the frozen claim window is released, and the parked task never is'
+        memory.observe(entries) == [pending('T-noclaim')]
+
+        when: 'far past any window'
+        time.advance(TTL.multipliedBy(10))
+
+        then: 'the released shape is not re-emitted and the parked task is still untouched'
+        memory.observe(entries) == []
+    }
+
+    // FR19: a Foreign shape is not steady, but no owner repairs it either, so the memory does not
+    //     time it: latching it would enter it into staleRefs — which the liveness oracle reads as
+    //     "unowned" — for a task no repair will ever converge.
+    def "a foreign shape is never timed, however long it stands"() {
+        given: 'an open task wearing no gnomish state label at all'
+        def entries = [foreign('T-alien')]
+
         expect:
         memory.observe(entries) == []
 
-        when: 'far past any TTL'
+        when:
         time.advance(TTL.multipliedBy(10))
 
-        then: 'still never stale - neither is an eligible claim'
+        then: 'nothing is released and nothing is latched'
         memory.observe(entries) == []
+        memory.staleRefs().isEmpty()
     }
 
     // FR2, FR4: eligible claims are judged even when mixed with ineligible entries, and
     //     multiple stale claims come back in listOpen order.
-    def "multiple stale Working claims are returned in listOpen order, ineligible entries ignored"() {
+    def "multiple stale Working claims are returned in sweep order, steady entries ignored"() {
         given:
         def v1 = version()
         def v2 = version()
@@ -216,7 +258,7 @@ class StalenessMemorySpec extends Specification {
         when:
         time.advance(TTL)
 
-        then: 'both Working claims stale, in order; the AwaitingHuman entry absent'
+        then: 'both Working claims stale, in order; the parked entry absent'
         memory.observe(listing) == [
             stale('T-1', v1),
             stale('T-2', v2)
@@ -352,7 +394,7 @@ class StalenessMemorySpec extends Specification {
         memory.staleRefs() == [new TaskRef('T-1')] as Set
 
         when: 'a fresh beat lands with a new version'
-        def v2 = new ClaimVersion('marker-1', ANCIENT.plusSeconds(1))
+        def v2 = new ClaimVersion('marker-1', ANCIENT.plusSeconds(1), new ClaimEpoch(1))
         memory.observe([working('T-1', v2)])
 
         then:
@@ -370,7 +412,7 @@ class StalenessMemorySpec extends Specification {
         memory.observe([working('T-1', v1)])
 
         and: 'a beat brings v2, which also goes stale and is emitted'
-        def v2 = new ClaimVersion('marker-1', ANCIENT.plusSeconds(1))
+        def v2 = new ClaimVersion('marker-1', ANCIENT.plusSeconds(1), new ClaimEpoch(1))
         memory.observe([working('T-1', v2)])
         time.advance(TTL)
         def v2Emitted = memory.observe([working('T-1', v2)])

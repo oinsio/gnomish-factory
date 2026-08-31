@@ -3,7 +3,8 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -55,14 +56,14 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
      * GitTaskStore} hands a run out, sandbox is bare-object writes plus the same lifecycle
      * decorator {@code ContainerRunSupport} wraps them in.
      */
-    private TaskRepository repositoryFor(String mode, Path clone) {
+    private TaskLifecycleStore repositoryFor(String mode, Path clone) {
         if (mode == 'host') {
-            return new GitTaskStore(runner).taskRepository(clone, tempDir.resolve("worktrees-${clone.fileName}"))
+            return new GitTaskStore(runner, ClaimEpochSource.NONE).taskRepository(clone, tempDir.resolve("worktrees-${clone.fileName}"))
         }
         Path indexDir = tempDir.resolve("index-${clone.fileName}")
         Files.createDirectories(indexDir)
-        def bare = new GitObjectsTaskRepository(GitObjects.open(clone.resolve('.git'), indexDir))
-        new PushBestEffortTaskRepository(bare, runner, clone)
+        def bare = new GitObjectsTaskRepository(GitObjects.open(clone.resolve('.git'), indexDir), ClaimEpochSource.NONE)
+        new PushBestEffortTaskLifecycleStore(bare, runner, clone)
     }
 
     def "M1: a task driven to Completed in #mode mode leaves origin at the local tip, with no manual push"() {
@@ -70,9 +71,10 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
         def repository = repositoryFor(mode, cloneDir)
 
         when: 'the whole lifecycle runs — creation, then the terminal outcome and its cleanup commit'
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD')
+        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', TaskState.atStageStart('implement'))
         def tipAfterStart = originTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.finishCleanup(TASK_ID)
 
         then: 'the creation commit was already on origin before the task ever ended'
         tipAfterStart.isPresent()
@@ -97,8 +99,9 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
 
         when:
         List<ILoggingEvent> events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD')
+            repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', TaskState.atStageStart('implement'))
             repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+            repository.finishCleanup(TASK_ID)
         }
 
         then:

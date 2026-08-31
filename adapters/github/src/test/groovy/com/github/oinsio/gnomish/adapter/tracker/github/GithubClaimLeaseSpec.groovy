@@ -4,6 +4,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.delete
 import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
@@ -13,6 +14,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -80,6 +82,58 @@ class GithubClaimLeaseSpec extends Specification {
                 .willReturn(aResponse().withStatus(200).withBody('[]')))
     }
 
+    // FR12 of harden-task-branch-contract, the sweep-universe rule: the working label goes on
+    //     FIRST — it is the write that admits the task into the sweep's own listing — then the claim
+    //     comment, then the verify-read. Any other order leaves a kill window outside the sweep.
+    def "FR12: the working label is written before the claim comment, and the verify-read comes last"() {
+        given:
+        stubLabelCalls(wireMock, 40)
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/40/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":700,"body":"whatever"}')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/40/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody(
+                        '[{"id":700,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-order\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n claimed"}]')))
+
+        when:
+        newLease().claim(refFor(40), 'gnomish-factory-order')
+
+        then: 'the three writes happened in the sweep-universe order'
+        def urls = wireMock.allServeEvents.reverse().collect {
+            it.request.method.value() + ' ' + it.request.url
+        }
+        urls.findIndexOf { it == 'POST /repos/acme/widgets/issues/40/labels' } <
+        urls.findIndexOf {
+            it == 'POST /repos/acme/widgets/issues/40/comments'
+        }
+        urls.findIndexOf {
+            it == 'POST /repos/acme/widgets/issues/40/comments'
+        } <
+        urls.findIndexOf {
+            it == 'GET /repos/acme/widgets/issues/40/comments?per_page=100'
+        }
+    }
+
+    // FR12: the kill window between the two writes freezes a task wearing the working label with no
+    //     claim footprint at all — the ClaimPending shape the sweep enumerates and the reaper rolls
+    //     back — never a state outside the sweep's own listing.
+    def "FR12: a claim killed before its comment leaves the working label on and no claim footprint"() {
+        given: 'the claim comment POST fails after the label transition already landed'
+        stubLabelCalls(wireMock, 41)
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/41/comments'))
+                .willReturn(aResponse().withStatus(422)))
+
+        when:
+        newLease().claim(refFor(41), 'gnomish-factory-killed')
+
+        then: 'the claim fails, having already admitted the task into the sweep universe'
+        thrown(GithubClaimException)
+        wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/41/labels'))
+                .withRequestBody(WireMock.equalToJson('{"labels":["gnomish:working"]}')))
+
+        and: 'and no verify-read ran, so no claim footprint was left to mistake for a live tenure'
+        wireMock.findAll(getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/41/comments?per_page=100'))).isEmpty()
+    }
+
     def "solo claim: posts the claim comment, sees only its own marker, and reports Acquired"() {
         given:
         stubLabelCalls(wireMock, 20)
@@ -97,7 +151,7 @@ class GithubClaimLeaseSpec extends Specification {
         def result = lease.claim(refFor(20), 'gnomish-factory-solo')
 
         then:
-        result == new ClaimResult.Acquired()
+        result == new ClaimResult.Acquired(new ClaimEpoch(501))
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/20/labels'))
                 .withRequestBody(WireMock.equalToJson('{"labels":["gnomish:working"]}')))
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/20/labels/gnomish%3Aready')))
@@ -138,7 +192,7 @@ class GithubClaimLeaseSpec extends Specification {
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/601')))
 
         and: 'B wins, being the earliest id among the boundary-anchored claim markers'
-        resultB == new ClaimResult.Acquired()
+        resultB == new ClaimResult.Acquired(new ClaimEpoch(600))
     }
 
     def "loser leaves labels as they stand (does not revert the working-label add)"() {
@@ -242,7 +296,7 @@ class GithubClaimLeaseSpec extends Specification {
         def result = lease.claim(refFor(23), 'gnomish-factory-fresh')
 
         then: 'the stale pre-abort claim (id 1) is ignored; the caller is the only post-boundary claim, so it wins'
-        result == new ClaimResult.Acquired()
+        result == new ClaimResult.Acquired(new ClaimEpoch(900))
     }
 
     def "boundary-anchors the race past a park marker so a returned task can be re-claimed (FR6, D13)"() {
@@ -264,7 +318,7 @@ class GithubClaimLeaseSpec extends Specification {
         def result = lease.claim(refFor(27), 'gnomish-factory-fresh')
 
         then: 'the pre-park claim (id 1) is voided by the park boundary; the fresh claim wins instead of Held(old)'
-        result == new ClaimResult.Acquired()
+        result == new ClaimResult.Acquired(new ClaimEpoch(910))
     }
 
     def "boundary-anchors the race past a finish marker so a reopened task can be re-claimed (FR6, D13)"() {
@@ -286,7 +340,7 @@ class GithubClaimLeaseSpec extends Specification {
         def result = lease.claim(refFor(28), 'gnomish-factory-fresh')
 
         then: 'the pre-finish claim (id 1) is voided by the finish boundary; the fresh claim wins'
-        result == new ClaimResult.Acquired()
+        result == new ClaimResult.Acquired(new ClaimEpoch(920))
     }
 
     def "FR4: boundary-anchors the re-claim past a stale-claim-removed marker so the dead holder's pre-removal claim is ignored (D5)"() {
@@ -308,6 +362,111 @@ class GithubClaimLeaseSpec extends Specification {
         def result = lease.claim(refFor(29), 'gnomish-factory-fresh')
 
         then: 'the dead holder pre-removal claim (id 1) is voided by the removal boundary; the caller is the only post-boundary claim, so it wins instead of Held(dead)'
-        result == new ClaimResult.Acquired()
+        result == new ClaimResult.Acquired(new ClaimEpoch(930))
+    }
+
+    def "a crashed attempt's duplicate claim is adopted and the retry's own comment is deleted (FR11, UX3)"() {
+        given: 'a prior attempt of this same instance already left a claim comment in the window'
+        stubLabelCalls(wireMock, 24)
+        def identity = GithubCommentIdentity.of(
+                new GithubTaskId('', 'acme', 'widgets', 24), 'claim@gnomish-factory-x7k2q1')
+        def own = { long id ->
+            commentJson(id, GithubMarker.render(GithubMarkerKind.CLAIM,
+            'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:00:00Z'),
+            'claimed', null, identity, null))
+        }
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/24/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":620,"body":"whatever"}')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/24/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[' + own(600) + ',' + own(620) + ']')))
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/620'))
+                .willReturn(aResponse().withStatus(204)))
+
+        when:
+        def result = newLease().claim(refFor(24), 'gnomish-factory-x7k2q1')
+
+        then: 'the earlier comment holds the lease and becomes the tenure epoch'
+        result == new ClaimResult.Acquired(new ClaimEpoch(600))
+
+        and: 'the retry\'s own duplicate is deleted, the winner is kept'
+        wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/620')))
+        wireMock.findAll(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/600'))).isEmpty()
+    }
+
+    def "a reclaim past a boundary posts a new comment and mints a strictly greater epoch (FR13)"() {
+        given: 'the same instance claimed before, then the task was returned by an abort'
+        stubLabelCalls(wireMock, 25)
+        def identity = GithubCommentIdentity.of(
+                new GithubTaskId('', 'acme', 'widgets', 25), 'claim@gnomish-factory-x7k2q1')
+        def oldClaim = commentJson(700, GithubMarker.render(GithubMarkerKind.CLAIM,
+                'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:00:00Z'),
+                'claimed', null, identity, null))
+        def abort = commentJson(710, GithubMarker.render(GithubMarkerKind.ABORT,
+                'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:30:00Z'), 'aborted'))
+        def newClaim = commentJson(720, GithubMarker.render(GithubMarkerKind.CLAIM,
+                'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T11:00:00Z'),
+                'claimed', null, identity, null))
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/25/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":720,"body":"whatever"}')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/25/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200)
+                .withBody('[' + oldClaim + ',' + abort + ',' + newClaim + ']')))
+
+        when:
+        def result = newLease().claim(refFor(25), 'gnomish-factory-x7k2q1')
+
+        then: 'the pre-boundary claim of the same identity is outside the window, so the new one wins'
+        result == new ClaimResult.Acquired(new ClaimEpoch(720))
+        wireMock.findAll(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/700'))).isEmpty()
+    }
+
+    def "the claim marker carries its content identity and no epoch stamp"() {
+        given:
+        stubLabelCalls(wireMock, 26)
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/26/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":800,"body":"whatever"}')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/26/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+
+        when:
+        newLease().claim(refFor(26), 'gnomish-factory-x7k2q1')
+
+        then:
+        def posted = wireMock.findAll(postRequestedFor(
+                        urlEqualTo('/repos/acme/widgets/issues/26/comments'))).first().bodyAsString
+        def body = new com.fasterxml.jackson.databind.ObjectMapper().readTree(posted).get('body').asText()
+        def parsed = GithubMarker.parse(body).get()
+        parsed.identity() == GithubCommentIdentity.of(
+                new GithubTaskId('', 'acme', 'widgets', 26), 'claim@gnomish-factory-x7k2q1')
+        parsed.epoch() == null
+    }
+
+    def "losing the race reads the winner's identity, not some other comment's"() {
+        given: 'a foreign instance wins by earliest id while this instance\'s own claim also sits in the window'
+        stubLabelCalls(wireMock, 27)
+        def ownIdentity = GithubCommentIdentity.of(
+                new GithubTaskId('', 'acme', 'widgets', 27), 'claim@gnomish-factory-x7k2q1')
+        def own = commentJson(620, GithubMarker.render(GithubMarkerKind.CLAIM,
+                'gnomish-factory-x7k2q1', Instant.parse('2026-07-23T10:01:00Z'),
+                'claimed', null, ownIdentity, null))
+        def foreign = commentJson(600, GithubMarker.render(GithubMarkerKind.CLAIM,
+                'gnomish-factory-rival', Instant.parse('2026-07-23T10:00:00Z'), 'claimed', null,
+                GithubCommentIdentity.of(new GithubTaskId('', 'acme', 'widgets', 27),
+                'claim@gnomish-factory-rival'), null))
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/27/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":620,"body":"whatever"}')))
+        // Own comment listed FIRST so a scan that stops at the wrong entry would read this
+        // instance's own identity instead of the winner's.
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/27/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[' + own + ',' + foreign + ']')))
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/620'))
+                .willReturn(aResponse().withStatus(204)))
+
+        when:
+        def result = newLease().claim(refFor(27), 'gnomish-factory-x7k2q1')
+
+        then: 'the rival holds it and this instance backs out'
+        result == new ClaimResult.Held('gnomish-factory-rival')
+        wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/620')))
     }
 }

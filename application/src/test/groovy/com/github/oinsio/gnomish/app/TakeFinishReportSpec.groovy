@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
+import com.github.oinsio.gnomish.app.take.FinishTransition
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -20,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
@@ -197,5 +199,59 @@ class TakeFinishReportSpec extends Specification {
         errors[0].formattedMessage.contains('PROJ-1')
         errors[0].formattedMessage.contains('could not be written before the retry bound')
         errors[0].formattedMessage.contains('reconcile')
+    }
+
+    /** A retry whose clock self-advances past the bound, so a persistent outage gives up promptly. */
+    private static TerminalWriteRetry givingUpRetry() {
+        def ticking = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
+        Clock clock = {
+            ->
+            def t = ticking.get()
+            ticking.set(t.plus(Duration.ofMinutes(2)))
+            t
+        } as Clock
+        Sleeper sleeper = { Duration d -> } as Sleeper
+        new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
+    }
+
+    // FR10 of harden-task-branch-contract: a recovered completion probes the tracker before
+    // re-driving the write — a task already finished there needs no second finish, only the
+    // destructive last step it still owes.
+    def "a recovered completion whose finish already landed runs only the cleanup"() {
+        given:
+        def cleaned = new AtomicInteger()
+        tracker.fetchTask(REF) >> new TrackerTask(
+                REF, new TaskSnapshot(REF.id(), 'title', 'body'),
+                new TrackerTaskState.Finished(), AbortFacts.none(), true)
+
+        when:
+        def result = TakeFinishReport.finish(
+                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, tracker, REF, INSTANCE,
+                VirtualTimeRetries.terminalWrite(),
+                new FinishTransition.Recovered({ cleaned.incrementAndGet() }))
+
+        then: 'no duplicate finish — the probe found the effect at the target'
+        0 * tracker.finish(*_)
+        cleaned.get() == 1
+        result instanceof TakeResult.Delivered
+    }
+
+    // FR10: the destructive step runs only behind a confirmed effect — an unconfirmed finish leaves
+    // the envelope in place, which is the CompletedUncleaned shape the next pickup recovers.
+    def "an unconfirmed finish leaves the cleanup undone"() {
+        given:
+        def cleaned = new AtomicInteger()
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.finish(REF, _ as String) >> {
+            throw new TrackerUnavailableException('tracker down')
+        }
+
+        when:
+        TakeFinishReport.finish(
+                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, tracker, REF, INSTANCE, givingUpRetry(),
+                new FinishTransition.Fresh({}, { cleaned.incrementAndGet() }))
+
+        then:
+        cleaned.get() == 0
     }
 }

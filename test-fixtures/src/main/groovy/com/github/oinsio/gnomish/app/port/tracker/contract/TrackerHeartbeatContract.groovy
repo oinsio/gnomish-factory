@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker.contract
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -77,7 +78,7 @@ abstract class TrackerHeartbeatContract extends TrackerLeaseContract {
         def adapter = tracker.get()
         def ref = new TaskRef('fixture:heartbeat-gone')
         seedWorkingWithClaim(adapter, ref, 'instance-a')
-        adapter.removeStaleClaim(ref, versionOf(adapter, ref))
+        adapter.removeStaleClaim(ref, claimFactsOf(adapter, ref))
 
         when: 'the former holder beats a claim that no longer exists'
         def result = adapter.heartbeat(ref, 'stage=build attempt=1 alive-at=now')
@@ -116,5 +117,17 @@ abstract class TrackerHeartbeatContract extends TrackerLeaseContract {
         OpenTask entry = adapter.listOpen().find { it.ref() == ref }
         assert entry?.claimVersion() != null
         entry.claimVersion()
+    }
+
+    /**
+     * Reads the current {@link ClaimFacts} footprint of {@code ref} from {@code listOpen} — the
+     * observation a reaper acts on, and the guard {@code removeStaleClaim} re-checks (FR19 of
+     * harden-task-branch-contract). Protected so the reap and returned-fact links reuse the one
+     * reader rather than each constructing a footprint literal.
+     */
+    protected static ClaimFacts claimFactsOf(Tracker adapter, TaskRef ref) {
+        OpenTask entry = adapter.listOpen().find { it.ref() == ref }
+        assert entry != null
+        entry.facts().claim()
     }
 }

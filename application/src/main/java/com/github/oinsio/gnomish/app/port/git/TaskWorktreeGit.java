@@ -36,6 +36,10 @@ public interface TaskWorktreeGit {
      * @param taskId the tracker's original taskId; never null
      * @param branchName the task branch name; never null
      * @return how local and remote relate; never null
+     * @throws DivergedBranchException if the two tips share no ancestry relationship and no claim
+     *     is held on the task — the discard that resolves divergence is the claim protocol's
+     *     arbitration, so a claimless caller is handed the decision (FR8 of
+     *     harden-task-branch-contract)
      */
     DivergenceOutcome reconcile(Path worktreeRoot, String taskId, String branchName);
 

@@ -45,16 +45,22 @@ the per-stage `roundTimeout` of the executor, not by this protocol.
   comment's body has changed
 
 ### Requirement: Staleness by local observation of claim versions
-A claim SHALL be considered stale only when its version — the pair
+A live claim SHALL be considered stale only when its version — the pair
 (claim-comment identity, last-update time) reported by the adapter — has not
 changed for TTL measured on the observer's monotonic clock since the
 observer's own first observation of that version. Instance and server clocks
 SHALL never be compared and no `now − updated_at` arithmetic is allowed.
-TTL = multiplier × beat interval, both shared protocol constants. Observation
-memory and the TTL policy SHALL live in core; adapters only report version
-facts.
+TTL = multiplier × beat interval, both shared protocol constants. The
+observation memory SHALL admit every enumerated task regardless of its claim
+facts — a dead footprint or an absent claim is never filtered out for lacking
+a live version; the graced window shapes (`ClaimPending`, `ClaimAbandoned`)
+are timed by the window grace under the same first-observation monotonic
+discipline before the reaper repairs them, while `IndexLagging` is repaired on
+classification — its marker is already the truth. Observation memory, the TTL
+policy, and the window grace SHALL live in core; adapters only report facts.
 <!-- implements FR2 of add-claim-heartbeat -->
 <!-- implements NFR-R1 of add-claim-heartbeat -->
+<!-- implements FR19, FR12 of harden-task-branch-contract -->
 
 #### Scenario: Grace period by construction
 - **WHEN** a fresh instance starts and observes a claim whose last update is
@@ -68,39 +74,58 @@ facts.
 - **THEN** the observer sees the version change within every TTL window and
   never classifies the claim as stale
 
-### Requirement: Reaper returns stale claims to circulation
-Stale-claim detection SHALL be a standing duty running for the whole run's
-lifetime — a `take` invocation or the `serve` daemon — on its own thread,
-independent of how many claims the instance currently holds, including zero. It
-SHALL NOT be gated on the beat thread: an instance with no held claim still
-lists open tasks with claim versions on each tick, updates its observation
-memory, and for every stale `Working` claim invokes the port's stale-claim
-removal — recording the holder-transition audit marker, removing the dead
-claim, and returning the task to `Ready`. The reaper SHALL NOT claim the task
-for itself; the task re-enters the ordinary queue. Two instances reaping the
-same stale claim SHALL converge safely: the removal is idempotent in effect and
-subsequent claiming follows the ordinary lease. The heartbeat thread SHALL NOT
-run the reaper duty in any mode; its sole duty is beating the instance's own
-held claims. The reaper SHALL tick on the heartbeat's beat interval; the
-interval and TTL keep coming only from the factory's own clone of
-`.gnomish/config.yaml` — this change introduces no new gnome-writable input.
+#### Scenario: Absent version does not hide a task from observation
+- **WHEN** a listing reports a working-labeled task with a dead claim
+  footprint (no live version) or no claim footprint at all
+- **THEN** the task enters observation memory, its window grace is timed from
+  the observer's first observation of that fact combination, and after the
+  grace it is eligible for repair — never invisible to the sweep
 
-The reaper SHALL NEVER remove a claim currently held **and actively beaten** by
-its own instance: before judging staleness it excludes a live snapshot of the
-claims its heartbeat is beating (empty when the heartbeat is not running), so a
-run whose beats are failing while its `listOpen` still succeeds can never reap
-its own live claim — only a foreign observer may (a running instance knows it is
-alive; a bare "version unchanged" cannot mean "holder dead" for the holder
-itself). When the heartbeat is not beating a claim — a fresh instance holding
-nothing, or one whose beat thread has died — that claim is excluded from nothing
-and is reaped once its TTL elapses like any other stale claim. A
-`removeStaleClaim` that fails with an infrastructure error SHALL re-arm that
-claim for retry on a later tick, so an attempted-but-failed removal never leaves
-a stale claim silently un-reaped until its version changes.
+### Requirement: Reaper returns stale claims to circulation
+The reaper's standing duty SHALL generalize from stale-claim removal to
+tracker-shape repair, running for the whole run's lifetime — a `take`
+invocation or the `serve` daemon — on its own thread, independent of how many
+claims the instance currently holds, including zero. It SHALL NOT be gated on
+the beat thread. Its sweep SHALL enumerate the union of both listings — every
+open task carrying any state label, `listReady` plus `listOpen` — so no kill
+window's frozen state is filtered out by the very label its sequence had not
+written yet. On each tick the reaper updates its observation memory,
+classifies every enumerated task, and repairs every non-steady shape by that
+shape's recovery in the classification table: a stale `Working` claim and a
+graced `ClaimAbandoned` footprint through the port's stale-claim removal, a
+graced `ClaimPending` and an `IndexLagging` disagreement through the port's
+index repair. A late claim comment that lands after its incomplete claim was
+rolled back to ready (a ready-labeled task with a live claim footprint) SHALL
+be enumerated by the same sweep and repaired, never left to win claim races
+as a ghost. A killed reap SHALL remain repairable by any later tick: an
+interrupted stale-claim removal freezes `ClaimAbandoned` or `IndexLagging`,
+both swept. The reaper SHALL NOT claim a task for itself; a repaired task
+re-enters the ordinary queue. Two instances repairing the same shape SHALL
+converge safely: each repair is idempotent in effect and subsequent claiming
+follows the ordinary lease. The heartbeat thread SHALL NOT run the reaper
+duty in any mode; its sole duty is beating the instance's own held claims.
+The reaper SHALL tick on the heartbeat's beat interval; the interval, TTL,
+and window grace keep coming only from the factory's own clone of
+`.gnomish/config.yaml` — no new gnome-writable input.
+
+The reaper SHALL NEVER remove a claim currently held **and actively beaten**
+by its own instance: before judging staleness it excludes a live snapshot of
+the claims its heartbeat is beating (empty when the heartbeat is not
+running), so a run whose beats are failing while its `listOpen` still
+succeeds can never reap its own live claim — only a foreign observer may (a
+running instance knows it is alive; a bare "version unchanged" cannot mean
+"holder dead" for the holder itself). When the heartbeat is not beating a
+claim — a fresh instance holding nothing, or one whose beat thread has died —
+that claim is excluded from nothing and is reaped once its TTL elapses like
+any other stale claim. A repair that fails with an infrastructure error SHALL
+re-arm that shape for retry on a later tick, so an attempted-but-failed
+repair never leaves a non-steady shape silently unrepaired until its facts
+change.
 <!-- implements FR4 of add-claim-heartbeat -->
 <!-- implements NFR-R2 of add-claim-heartbeat -->
 <!-- implements FR1, FR2, FR5 of fix-reaper-idle-liveness -->
 <!-- implements NFR-R1, NFR-S1 of fix-reaper-idle-liveness -->
+<!-- implements FR19, FR12 of harden-task-branch-contract -->
 
 #### Scenario: Reaping continues while the instance holds no claim
 - **WHEN** an instance holds and beats no claim of its own while a foreign
@@ -149,6 +174,19 @@ a stale claim silently un-reaped until its version changes.
 - **THEN** the task ends in `Ready` exactly once — no error, no duplicate
   state transition, and at most one set of audit artifacts the thread can
   carry coherently
+
+#### Scenario: Killed reap leaves a shape the next tick resolves
+- **WHEN** a reaper posts the removal boundary or deletes a dead claim comment
+  and dies before flipping the working label back to ready
+- **THEN** a later tick classifies the frozen state and returns the task to
+  `Ready` — the kill costs one grace window, never a stuck task
+
+#### Scenario: Suspension leftover is swept off a ready task
+- **WHEN** a delayed claim comment lands on a ready-labeled task after the
+  reaper rolled its incomplete claim back
+- **THEN** the sweep enumerates the task through the feed's claim facts,
+  classifies the mismatch, and repairs it — no permanently race-winning claim
+  survives on a ready task
 
 ### Requirement: The reaper thread survives abnormal faults
 The standing reaper SHALL keep reaping for the whole life of the process after
@@ -211,7 +249,13 @@ WARN and work continues — the next round boundary resolves the situation; a
 "claim marker gone" answer means the claim is lost — at the nearest round
 boundary the run SHALL stop, salvage-push best-effort (the fence arbitrates),
 free the slot, and write no tracker state for the task that is no longer ours.
+A holder that cannot confirm its own heartbeat — its beats have failed long
+enough that it no longer knows its claim is live — SHALL stop writing at the
+next boundary: no push and no tracker write until it re-verifies the claim.
+Re-verification confirming the claim resumes writing; a gone claim follows the
+lost-claim path above (self-fencing).
 <!-- implements FR8 of add-claim-heartbeat -->
+<!-- implements FR13 of harden-task-branch-contract -->
 
 #### Scenario: Transient outage does not stop work
 - **WHEN** three consecutive beats fail with 5xx while the gnome works
@@ -222,6 +266,13 @@ free the slot, and write no tracker state for the task that is no longer ours.
 - **WHEN** a beat reports the claim marker gone (task reaped or taken over)
 - **THEN** at the next round boundary the run stops, pushes best-effort, and
   performs no tracker transition for the lost task
+
+#### Scenario: Unconfirmed heartbeat freezes writes at the boundary
+- **WHEN** every beat has failed for longer than the lost-detection threshold
+  and the round reaches its boundary
+- **THEN** the holder writes nothing — no push, no tracker write — until a
+  re-verification confirms the claim is still its own; a confirmed claim
+  resumes the run, a gone claim follows the lost-claim path
 
 ### Requirement: Tracker outage causes no false reaping
 While the tracker is unreachable no staleness progress SHALL accrue: TTL is
@@ -275,3 +326,139 @@ MUST NOT be able to extend its own TTL or slow its holder's beat.
   a round
 - **THEN** the instance's beat interval and TTL are unaffected for the whole
   run
+
+### Requirement: Total tracker-shape classification with one recovery owner
+The tracker-side state of a task SHALL classify totally, in core, over
+adapter-reported facts — the state labels present, the claim footprint (a live
+claim, a dead footprint, or none), and the boundary markers — into this closed
+set of named shapes, each with exactly one recovery owner:
+
+| Shape | Observation | Owner → recovery |
+|---|---|---|
+| `Ready` | ready label, no live claim | queue |
+| `Claimed` | working label, live claim | holder beats; reaper reaps on TTL |
+| `Parked` | needs-human label, park marker latest | human |
+| `Finished` | delivered label, finish marker present | terminal |
+| `Returned` | ready label with park/finish history | queue; a finished return routes to decline |
+| `Revoked` | issue closed | terminal |
+| `ClaimPending` | working label (ready may linger), no claim footprint | reaper: grace, then restore ready |
+| `ClaimAbandoned` | a claim footprint no working tenure backs: a working label with a footprint carrying no live version, or a ready label still carrying a live claim marker (the suspension leftover) | reaper: grace, then stale-claim removal |
+| `IndexLagging` | a boundary marker newer than the labels it implies | reaper: complete the label flip toward the marker |
+| `Foreign` | any other combination | none — surfaced with a diagnosis, never auto-repaired |
+
+Rows are made disjoint by a fixed classification precedence: a closed issue
+classifies `Revoked` over every other fact; otherwise a boundary marker newer
+than the labels it implies classifies `IndexLagging` before any label-derived
+shape; among the label-derived shapes the claim footprint separates `Claimed`,
+`ClaimPending`, and `ClaimAbandoned`; a ready-labeled task carrying a live
+claim footprint classifies `ClaimAbandoned` before any other ready-labeled
+shape, and a dead footprint on a ready task is merely the history of the
+tenure its boundary already ended; recorded park/finish history separates
+`Returned` from `Ready`; only a combination matching no row above classifies
+`Foreign`.
+
+A boundary marker counts as newer than the labels it implies exactly when it
+was recorded after the task's newest claim marker and the task still wears the
+working label: a boundary that ended an earlier tenure says nothing about the
+current one, and a boundary the human has already acted on — a park marker on
+a task they returned to ready — is `Returned`, not a lagging index.
+
+Markers are the truth; labels are the index the listing queries filter on. The
+three window shapes — `ClaimPending`, `ClaimAbandoned`, `IndexLagging` — are
+exactly the states the FR12 write order can freeze, and each keeps an
+open-state label on the issue, so the sweep enumerates it. An adapter SHALL
+NOT omit or reinterpret any combination — the classifier decides, and no
+factory-reachable shape is ever attributed to human mislabeling. Time
+judgments — the staleness TTL and the window grace — stay with core's
+observation memory, never re-derived by the classifier or an adapter. The
+shape set SHALL be a sealed hierarchy; readers switch without a default
+branch.
+
+The steady progression, driven by factory writes and human transitions:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ready
+    Ready --> Claimed: claim
+    Claimed --> Ready: abort / reap
+    Claimed --> Parked: park
+    Claimed --> Finished: finish
+    Parked --> Returned: human returns
+    Finished --> Returned: human reopens
+    Returned --> Claimed: claim
+    Returned --> Finished: decline
+```
+
+Any open shape may become `Revoked` (issue closed) by a human at any time.
+The window shapes and their repair, all inside the sweep universe:
+
+```mermaid
+flowchart LR
+    CP["ClaimPending<br/>(working, no claim)"] -->|grace| S["Reaper sweep<br/>(listReady + listOpen)"]
+    CA["ClaimAbandoned<br/>(working, dead claim)"] -->|grace / TTL| S
+    IL["IndexLagging<br/>(marker newer than labels)"] --> S
+    S -->|roll back| RD["Ready"]
+    S -->|complete the flip| TG["marker's target state"]
+```
+<!-- implements FR19, FR12 of harden-task-branch-contract -->
+
+#### Scenario: Every fact combination yields exactly one shape
+- **WHEN** tracker facts are generated over arbitrary label sets, claim
+  footprints, and marker histories
+- **THEN** each combination classifies to exactly one named shape — `Foreign`
+  included — and no combination throws or is silently dropped
+
+#### Scenario: Kill between claim label and claim comment is repaired
+- **WHEN** an instance dies after the working-label transition but before its
+  claim comment posts
+- **THEN** the sweep classifies the frozen state as `ClaimPending` and, after
+  the grace period, restores the task to `Ready` — never treating the shape
+  as a human mislabel
+
+#### Scenario: A boundary marker completes its own flip
+- **WHEN** an instance dies after posting the finish marker but before the
+  delivered-label flip
+- **THEN** the sweep classifies `IndexLagging`, completes the flip to
+  delivered, and no path re-executes the finished task
+
+### Requirement: Every (re)claim issues a monotonically increasing epoch
+Each successful claim or reclaim of a task SHALL be issued an epoch strictly
+greater than every epoch previously issued for that task; the epoch SHALL be
+recorded with the claim and SHALL be available to the holder for stamping into
+every commit and tracker write of that tenure, so readers can classify
+artifacts carrying an older epoch than the current claim as stale-epoch.
+<!-- implements FR13 of harden-task-branch-contract -->
+
+#### Scenario: Reclaim after a reap advances the epoch
+- **WHEN** a task claimed at epoch N is reaped and later claimed again by any
+  instance
+- **THEN** the new claim carries an epoch strictly greater than N, and any
+  instance reading the claim can obtain that epoch
+
+#### Scenario: Epoch is available for stamping
+- **WHEN** a holder performs a commit or tracker write during its tenure
+- **THEN** the epoch recorded with its claim is available to stamp into that
+  write, unchanged for the whole tenure
+
+### Requirement: Lost-detection strictly precedes reassignment
+Reap timing SHALL keep two distinct thresholds: the holder's lost-detection
+threshold (after which it self-fences) SHALL be strictly earlier than the
+reaper's reassignment threshold, leaving a grace window during which the
+original holder may re-verify and reclaim its own claim before the task is
+returned to `Ready`. A self-fenced holder therefore stops writing before any
+reaper can hand the task to another instance.
+<!-- implements FR13 of harden-task-branch-contract -->
+
+#### Scenario: Holder recovers within the grace window
+- **WHEN** a holder's beats fail past the lost-detection threshold, it
+  self-fences at the boundary, and connectivity returns before the
+  reassignment threshold elapses
+- **THEN** the holder re-verifies its still-live claim, resumes writing, and
+  the task is never reaped
+
+#### Scenario: Fencing wins the race against reassignment
+- **WHEN** a holder's heartbeat is unconfirmed and the reassignment threshold
+  is approaching
+- **THEN** the holder has already stopped writing at its earlier lost-detection
+  threshold, so no write of the old tenure lands after the reaper returns the
+  task to `Ready`

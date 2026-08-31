@@ -1,16 +1,18 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 
 /**
@@ -110,7 +112,12 @@ class RecordingReadOnlyTracker implements Tracker {
     }
 
     @Override
-    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
+    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
         throw notReadOnly('removeStaleClaim')
+    }
+
+    @Override
+    RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        throw notReadOnly('repairIndex')
     }
 }

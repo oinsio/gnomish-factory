@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -84,11 +85,11 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
 
         then:
-        1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         0 * tracker.claim(new TaskRef('PROJ-2'), _)
         0 * tracker.claim(new TaskRef('PROJ-3'), _)
         result instanceof TakeResult.Delivered
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1').exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1') == 0
     }
 
     // Scenario: Backoff hides a recently aborted task — the head is backed off (recent abort,
@@ -108,7 +109,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
 
         then:
         0 * tracker.claim(new TaskRef('PROJ-1'), _)
-        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         result instanceof TakeResult.Delivered
     }
 
@@ -160,7 +161,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
 
         then:
         1 * tracker.claim(new TaskRef('PROJ-1'), INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-x1y2z3')
-        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         result instanceof TakeResult.Delivered
     }
 
@@ -201,7 +202,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
 
         then:
-        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         0 * tracker.claim(new TaskRef('PROJ-1'), _)
         result instanceof TakeResult.Delivered
     }
@@ -273,7 +274,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         then:
         1 * tracker.declineFinished(new TaskRef('PROJ-1'), _)
         0 * tracker.claim(new TaskRef('PROJ-1'), _)
-        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.claim(new TaskRef('PROJ-2'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         result instanceof TakeResult.Delivered
     }
 
@@ -295,7 +296,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         def result = bareAuto.run(cloneDir, pipeline(), RunArguments.InteractiveMode.ALL, tracker, INSTANCE)
 
         then:
-        1 * tracker.claim(new TaskRef('PROJ-3'), INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.claim(new TaskRef('PROJ-3'), INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         0 * tracker.claim(new TaskRef('PROJ-1'), _)
         0 * tracker.claim(new TaskRef('PROJ-2'), _)
         result instanceof TakeResult.Delivered

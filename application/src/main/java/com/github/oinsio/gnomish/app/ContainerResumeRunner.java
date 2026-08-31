@@ -17,7 +17,11 @@ import org.slf4j.MDC;
  * The container-mode counterpart of {@link GitResumeRunner} (FR6, the
  * integration pass of add-sandbox-core): {@code --resume} of a sandboxed task
  * from the branch alone — no worktree exists or is created. Bootstrap locates
- * and reconciles the local branch on refs (the task-branch port),
+ * and reconciles the local branch on refs (the task-branch port) through the same replica-pair
+ * reconciler host mode uses — including its claimless gate: {@code run --resume} carries no
+ * tracker and so no claim, so a truly diverged pair stops with {@link
+ * com.github.oinsio.gnomish.app.port.git.DivergedBranchException} instead of discarding the local
+ * line (FR8 of harden-task-branch-contract), exactly as {@link GitResumeRunner#bootstrap} does,
  * reads {@code task.json}/{@code state.json} as bare git objects (FR17), and
  * the outcome switch mirrors the host continuation byte-for-byte (UX2): {@code
  * escalated} runs the same {@link EscalationResumeDialog}; {@code paused} the

@@ -5,11 +5,13 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.git.ProjectIdentity
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -96,8 +98,15 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
     private String materializeRunningBox(Path cloneDir, String taskId, SandboxProperties sandboxProps) {
         taskIds << taskId
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
-                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD')
+                new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
+        // These specs point origin at an unreachable host on purpose — the URL is what project
+        // identity is derived from, and nothing here pushes. The branch's own first push is
+        // load-bearing now (FR7 of harden-task-branch-contract), so it is created while the clone
+        // has no origin at all and the remote is restored right after.
+        def originUrl = gitOutput(cloneDir, 'remote', 'get-url', 'origin').trim()
+        assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('build'))
+        addRemote(cloneDir, 'origin', originUrl)
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
         assert ContainerE2eDocker.containerRunning(boxName)

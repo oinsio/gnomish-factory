@@ -8,37 +8,55 @@ Defines the layered Gradle module tree of the factory — which modules exist, t
 
 ### Requirement: Layered Gradle module tree
 The build SHALL be organized into layered Gradle modules by hexagonal layer:
-`domain`, `subprocess`, `gitobjects`, `gnomish-plugin-api`, `application`, one
-or more `adapters` modules, `sandbox` modules, and `bootstrap`.
-<!-- implements FR1 of split-into-modules; implements FR9 of bound-subprocess-commands -->
+`domain`, `subprocess`, `atomicfile`, `gitobjects`, `gnomish-plugin-api`,
+`application`, one or more `adapters` modules, `sandbox` modules, and
+`bootstrap`. `atomicfile` is the dependency-free leaf holding the shared
+atomic file writer (temp file + atomic rename) consumed by the host-side
+`.gnomish-task/` writers and the dashboard writer; the container-side
+persisters reach durability at commit granularity — round state committed
+in-box, lifecycle commits built from bare objects — so neither consumes the
+writer.
+<!-- implements FR9 of bound-subprocess-commands; originally FR1 of split-into-modules -->
+<!-- implements FR5 of harden-task-branch-contract -->
 
 #### Scenario: Modules resolve as distinct Gradle projects
 - **WHEN** `./gradlew projects` is run
-- **THEN** `:domain`, `:subprocess`, `:gitobjects`, `:gnomish-plugin-api`,
-  `:application`, the adapter module(s), `:sandbox:core`, `:sandbox:docker`,
-  and `:bootstrap` each appear as a separate project
+- **THEN** `:domain`, `:subprocess`, `:atomicfile`, `:gitobjects`,
+  `:gnomish-plugin-api`, `:application`, the adapter module(s),
+  `:sandbox:core`, `:sandbox:docker`, and `:bootstrap` each appear as a
+  separate project
 - **AND** no production Java class remains in the former single root module
 
 ### Requirement: Enforced acyclic dependency direction
 The module dependency direction SHALL be acyclic and enforced by the build:
-`domain` and `subprocess` depend on nothing internal; `gitobjects` depends only
-on `subprocess`; `gnomish-plugin-api` depends only on `domain`; `:sandbox:core`
-depends only on `domain` / `gitobjects`; `application` depends only on
-`domain`, `subprocess`, `gitobjects`, `gnomish-plugin-api`, and
-`:sandbox:core`; each adapter module depends on `gnomish-plugin-api` and
-`application` (plus `subprocess` where it launches OS processes,
-`:sandbox:core` where it bridges to the execution environment, and a sandbox
-backend module where it drives that backend) but never on a sibling adapter's
-internals — with one declared exception: `:adapters:agent` depends on the
-coarse `:adapters` remainder for the shared pipeline-law and briefing packages,
-narrowed to exactly those packages by a named ArchUnit rule; sandbox backend
-modules depend on `:sandbox:core` and `subprocess`, plus `application` where
-the backend realizes an application-owned port; no production module depends
-on the test-fixtures module; `bootstrap` is the only module that wires
-adapters together and the only one that reaches every adapter. `subprocess`
-SHALL never acquire a dependency — its emptiness is what keeps `gitobjects`
-domain-independent while depending on it.
-<!-- implements FR2 of split-into-modules; implements FR9, NFR-S3 of bound-subprocess-commands -->
+`domain`, `subprocess`, and `atomicfile` depend on nothing internal;
+`gitobjects` depends only on `subprocess`; `gnomish-plugin-api` depends only
+on `domain`; `:sandbox:core` depends only on `domain` / `gitobjects`;
+`application` depends only on `domain`, `subprocess`, `atomicfile`,
+`gitobjects`, `gnomish-plugin-api`, and `:sandbox:core`; each adapter module
+depends on `gnomish-plugin-api` and `application` (plus `subprocess` where it
+launches OS processes, `atomicfile` where it writes factory-owned files
+atomically, `:sandbox:core` where it bridges to the execution environment,
+and a sandbox backend module where it drives that backend) but never on a
+sibling adapter's internals — with one declared exception: `:adapters:agent`
+depends on the coarse `:adapters` remainder for the shared pipeline-law and
+briefing packages, narrowed to exactly those packages by a named ArchUnit
+rule; sandbox backend modules depend on `:sandbox:core` and `subprocess`,
+plus `application` where the backend realizes an application-owned port; no
+production module depends on the test-fixtures module; `bootstrap` is the
+only module that wires adapters together and the only one that reaches every
+adapter. `subprocess` and `atomicfile` SHALL never acquire a dependency —
+their emptiness is what keeps their consumers free of transitive coupling.
+<!-- implements FR9, NFR-S3 of bound-subprocess-commands; originally FR2 of split-into-modules -->
+<!-- implements FR5 of harden-task-branch-contract -->
+
+#### Scenario: A vendor adapter reaches the tenure record through the contract
+- **WHEN** a vendor adapter module stamps its writes with the claim epoch of
+  the tenure it is writing under
+- **THEN** it reads that tenure through the published contract module, not
+  through `application` — the read-only seam lives beside the tracker port so
+  a bundle a third party could build reaches it, and no adapter keeps a
+  tenure record of its own
 
 #### Scenario: Port-layer modules stay below the adapters
 - **WHEN** the boundary rules run against `:sandbox:core` and
@@ -62,6 +80,18 @@ domain-independent while depending on it.
 #### Scenario: The subprocess leaf stays empty of dependencies
 - **WHEN** the dependency gates run against `:subprocess`
 - **THEN** it declares no internal module, framework, or logging dependency
+
+#### Scenario: The atomicfile leaf stays empty of dependencies
+- **WHEN** the dependency gates run against `:atomicfile`
+- **THEN** it declares no internal module or framework dependency
+
+#### Scenario: Host-side writers and the dashboard writer share one atomic writer
+- **WHEN** the host persister and the dashboard writer perform an atomic file
+  write
+- **THEN** each consumes the `:atomicfile` writer — no module keeps a private
+  copy of the temp-file-plus-rename discipline — while the container-side
+  persisters reach durability at commit granularity and consume no host
+  filesystem writer
 
 ### Requirement: Composition root isolated in bootstrap
 `app` SHALL be split into `application` (use cases and ports, adapter-free) and

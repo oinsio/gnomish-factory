@@ -110,7 +110,7 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
         printBanner(branchName, worktree);
 
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        GitFreshTaskSupport.createTask(taskRepository, taskId, context, base);
+        GitFreshTaskSupport.createTask(taskRepository, taskId, context, base, initialState);
 
         var persistence = git.store().attemptPersistence(worktree, taskId);
         var workspace = new DirectoryWorkspace(worktree);

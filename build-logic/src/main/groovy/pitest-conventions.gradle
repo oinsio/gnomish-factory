@@ -96,13 +96,17 @@ pitest {
     targetTests = ['com.github.oinsio.gnomish.*']
     mutationThreshold = 100 // 100% mutation score gate (FR6)
     // Per-mutation timeout budget (allowed = recorded test time × factor + const).
-    // PIT records test times during the single-threaded coverage pass, but the
-    // mutation phase runs `threads` minions at once and the same tests then run 2–3×
-    // slower. The raised budget removes load-induced false positives only — TIMED_OUT
-    // never counts as a kill (pitestVerifyAllKilled fails on it), so a genuinely
-    // hanging mutant still reds the build.
+    // The factor absorbs load: times are recorded in the single-threaded coverage
+    // pass, but the mutation phase runs `threads` minions at once, 2–3× slower. The
+    // constant absorbs the freshly forked minion's cold start (Groovy/Spock class
+    // loading before the covering test runs), which the factor barely multiplies for
+    // a millisecond-scale test — observed to overrun a 20 s budget alone on a 4-core
+    // GitHub runner (UsageHistoryWalker.answered, NullReturnValsMutator, TIMED_OUT
+    // there, KILLED locally by a sub-second spec). TIMED_OUT never counts as a kill
+    // (pitestVerifyAllKilled fails on it), so a genuinely hanging mutant still reds
+    // the build; the cost is 40 s more per true offender in a multi-minute run.
     timeoutFactor = 3.0
-    timeoutConstInMillis = 20000
+    timeoutConstInMillis = 60000
     // Deliberately NO -Xmx for the minions. Bounding it looks like the fix for the
     // "Minion did not start or died during analysis ... insufficient memory" deaths
     // this build hit, but it trades them for a worse failure: some mutants only die

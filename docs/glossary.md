@@ -39,8 +39,12 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Zombie** — a former claim holder whose lease went stale (or was reaped)
   while its process may still be running; its writes are stopped by the fence,
   not by asking it to stop.
-- **Fence** — the mechanism that stops a stale holder's writes: the task
-  branch's non-fast-forward push. The task branch is never force-pushed.
+- **Fence** — a mechanism that stops a stale holder's writes. Two of them: the
+  task branch's non-fast-forward push (the task branch is never force-pushed),
+  and the **claim epoch** — a holder that cannot confirm its own heartbeat
+  self-fences, writing nothing past the next round boundary until it
+  re-verifies its claim, and any artifact carrying an older epoch than the
+  live claim is classified as stale rather than obeyed.
 - **Delivery fence** — the check that the task branch tip is on `origin`
   before a signal that depends on it is sent: verify the remote tip, push,
   one bounded re-attempt, then a delivered/undelivered verdict. Used before a
@@ -65,6 +69,57 @@ terms) live in `.claude/rules/process-invariants.md`.
   branch after every attempt.
 - **Round** — one iteration of the factory's execution loop for a task; round
   boundaries are where claim-loss and staleness decisions take effect.
+
+## Crash consistency
+
+The vocabulary of recovery from a crash inside a multi-step transition. The
+principle and the mechanisms live in `docs/adr/0003-crash-consistency.md`; the
+checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
+
+- **Branch shape** — the classification of a task branch tip: its file set,
+  envelope versions, and claim epoch mapped to exactly one name from a closed
+  set. Total by construction — every combination classifies, `Unknown`
+  included, and classification never throws on content. The closed set and the
+  meaning of each name are owned by the `task-branch-contract` capability, in
+  its "Total branch-shape classification" requirement
+  (`openspec/specs/task-branch-contract/spec.md`); it is the only place the
+  table lives. Recovery owner and roll-forward/discard disposition per shape
+  live in `docs/adr/0003-crash-consistency.md`. *Never:* `Escalated` for the
+  `Parked` shape (that name belongs to a `TaskOutcome` variant), `Decision`
+  for the `Answered` shape (that name belongs to the human's answer record).
+- **Tracker shape** — the same total classification applied to the tracker
+  medium: state labels, claim footprint, and boundary markers mapped to
+  exactly one name, `Foreign` included for out-of-protocol combinations.
+  Adapters report facts; the classification happens in core. The closed set and
+  its table are owned by the `claim-heartbeat` capability, in its "Total
+  tracker-shape classification with one recovery owner" requirement
+  (`openspec/specs/claim-heartbeat/spec.md`).
+- **Sweep universe** — the set of tasks a sweep's own listing queries
+  enumerate (the union of the ready and open listings). The ordering rule that
+  keeps every kill window inside it: the label write admitting a task into the
+  universe comes first in its sequence, the label write removing it comes
+  last, truth markers land in between. Markers are the truth; labels are the
+  index. *Not:* the **Sweep** of Sandbox lifecycle below, which enumerates
+  Docker objects; this universe is a set of tracker tasks.
+- **Recovery owner** — the single component responsible for converging one
+  shape to a clean state, and whether it rolls the transition forward or
+  discards back to a known-good tip. Exactly one per shape; two owners for one
+  shape is a bug.
+- **Claim epoch** — the monotonically increasing token issued with every
+  (re)claim (the tracker-assigned claim comment id), recorded with the claim
+  and stamped into every commit and tracker write of that tenure. It carries
+  only task identity and counters. It makes a zombie's writes detectable and
+  classifiable, not impossible — see **Fence**.
+- **Intent / receipt** — the two durable records bracketing an external
+  effect: the intent is written before the effect, the receipt after it.
+  Recovery finding an intent without a receipt probes the target to see
+  whether the effect happened before re-driving it.
+- **Quarantine** — the automatic-recovery kind of **park**: a task moved to
+  the needs-human status because recovery cannot proceed — a non-recoverable
+  shape on first classification, or an exhausted recovery budget. Its report
+  names the shape, the diagnosis, and the attempts consumed. *Not:* an
+  escalation raised by the gnome's own work, which reports findings rather
+  than a shape.
 
 ## Pipeline execution
 
@@ -217,31 +272,31 @@ terms) live in `.claude/rules/process-invariants.md`.
 
 ## Abbreviations
 
-| Abbreviation | Meaning                                                                    |
-|--------------|----------------------------------------------------------------------------|
-| ADR          | Architecture Decision Record (`docs/adr/`)                                 |
-| AI           | artificial intelligence                                                    |
-| API          | application programming interface                                          |
-| cgroups      | Linux control groups — kernel mechanism for resource limits                |
-| CI           | continuous integration                                                     |
-| CRI          | Container Runtime Interface (how Kubernetes drives containers on a node)   |
-| CVE          | Common Vulnerabilities and Exposures — public vulnerability identifier     |
-| DinD         | Docker-in-Docker                                                           |
-| DNS          | Domain Name System                                                         |
+| Abbreviation | Meaning                                                                       |
+|--------------|-------------------------------------------------------------------------------|
+| ADR          | Architecture Decision Record (`docs/adr/`)                                    |
+| AI           | artificial intelligence                                                       |
+| API          | application programming interface                                             |
+| cgroups      | Linux control groups — kernel mechanism for resource limits                   |
+| CI           | continuous integration                                                        |
+| CRI          | Container Runtime Interface (how Kubernetes drives containers on a node)      |
+| CVE          | Common Vulnerabilities and Exposures — public vulnerability identifier        |
+| DinD         | Docker-in-Docker                                                              |
+| DNS          | Domain Name System                                                            |
 | FR / NFR     | functional / non-functional requirement (see `.claude/rules/traceability.md`) |
-| GHA          | GitHub Actions                                                             |
-| ICOM         | Input, Control, Output, Mechanism — the IDEF0 box interfaces               |
-| IDEF0        | Integration Definition for Function Modeling — the stage-description model |
-| k8s          | Kubernetes                                                                 |
-| L7           | network layer 7, the application layer (HTTP methods, paths)               |
-| MITM         | man-in-the-middle — an intermediary that decrypts and re-encrypts traffic  |
-| OSS          | open-source software                                                       |
-| PRD          | Product Requirements Document (a change's `proposal.md`)                   |
-| QEMU         | Quick Emulator — software virtualization backend, weaker isolation than vz |
-| RCE          | remote code execution                                                      |
-| SSRF         | server-side request forgery                                                |
-| TLS          | Transport Layer Security                                                   |
-| TOCTOU       | time-of-check to time-of-use — a race between a check and the acting on it |
-| TTL          | time to live — the staleness threshold of a lease                          |
-| VM           | virtual machine                                                            |
-| vz           | Apple Virtualization.framework backend — hardware virtualization on macOS  |
+| GHA          | GitHub Actions                                                                |
+| ICOM         | Input, Control, Output, Mechanism — the IDEF0 box interfaces                  |
+| IDEF0        | Integration Definition for Function Modeling — the stage-description model    |
+| k8s          | Kubernetes                                                                    |
+| L7           | network layer 7, the application layer (HTTP methods, paths)                  |
+| MITM         | man-in-the-middle — an intermediary that decrypts and re-encrypts traffic     |
+| OSS          | open-source software                                                          |
+| PRD          | Product Requirements Document (a change's `proposal.md`)                      |
+| QEMU         | Quick Emulator — software virtualization backend, weaker isolation than vz    |
+| RCE          | remote code execution                                                         |
+| SSRF         | server-side request forgery                                                   |
+| TLS          | Transport Layer Security                                                      |
+| TOCTOU       | time-of-check to time-of-use — a race between a check and the acting on it    |
+| TTL          | time to live — the staleness threshold of a lease                             |
+| VM           | virtual machine                                                               |
+| vz           | Apple Virtualization.framework backend — hardware virtualization on macOS     |

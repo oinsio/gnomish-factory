@@ -79,7 +79,9 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         write.call(store)
 
         then: 'the write reached THAT delegate method — named per row, not one of three'
-        1 * delegate."$delegated"(_, _) >> {
+        // `*_` rather than a fixed arity: createTask takes three arguments (context, base ref and
+        // the initial state the STARTED commit carries, FR3), the other two take two.
+        1 * delegate."$delegated"(*_) >> {
             recorded = commitOnTaskBranch(label)
         }
         remoteTip() == Optional.of(recorded)
@@ -87,10 +89,10 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         where:
         label | delegated | write
         'started' | 'createTask' | { TaskLifecycleStore s ->
-            s.createTask(new TaskContext(TASK_ID, 't', 'b', []), 'HEAD')
+            s.createTask(new TaskContext(TASK_ID, 't', 'b', []), 'HEAD', TaskState.atStageStart('work'))
         }
         'resumed' | 'appendDecision' | { TaskLifecycleStore s ->
-            s.appendDecision(TASK_ID, new Decision('go', null, null, Instant.EPOCH))
+            s.appendDecision(TASK_ID, new Decision('go', null, null, Instant.EPOCH), TaskState.atStageStart('work'))
         }
         'paused' | 'recordOutcome' | { TaskLifecycleStore s ->
             s.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('work'), 'work'))

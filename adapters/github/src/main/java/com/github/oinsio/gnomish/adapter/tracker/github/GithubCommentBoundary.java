@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -150,6 +151,7 @@ final class GithubCommentBoundary {
      */
     static AbortFacts foldAbortsAfter(List<ParsedMarker> markers, int exclusiveFromIndex) {
         int count = 0;
+        int recoveryCount = 0;
         Instant lastAbortAt = null;
         for (int i = exclusiveFromIndex + 1; i < markers.size(); i++) {
             ParsedMarker marker = markers.get(i);
@@ -157,11 +159,25 @@ final class GithubCommentBoundary {
                 continue;
             }
             count++;
+            if (isRecoveryCategory(marker)) {
+                recoveryCount++;
+            }
             if (lastAbortAt == null || marker.at().isAfter(lastAbortAt)) {
                 lastAbortAt = marker.at();
             }
         }
-        return count == 0 ? AbortFacts.none() : new AbortFacts(count, lastAbortAt);
+        return count == 0 ? AbortFacts.none() : new AbortFacts(count, lastAbortAt, recoveryCount);
+    }
+
+    /**
+     * Whether an ABORT marker was recorded as a failed branch repair rather than an instance crash
+     * (FR14 of harden-task-branch-contract). The category rides in the marker's {@code reason}
+     * field; a marker written before the categorization existed carries none and counts as the
+     * crash category, which is what every such marker meant.
+     */
+    private static boolean isRecoveryCategory(ParsedMarker marker) {
+        String reason = marker.reason();
+        return reason != null && RecoveryCause.fromWire(reason) == RecoveryCause.RECOVERY_FAILURE;
     }
 
     /**
@@ -176,6 +192,7 @@ final class GithubCommentBoundary {
     private static AbortFacts foldAbortStreakBeforeClaim(
             List<ParsedMarker> markers, int claimIndex, String claimHolder) {
         int count = 0;
+        int recoveryCount = 0;
         Instant lastAbortAt = null;
         for (int i = claimIndex - 1; i >= 0; i--) {
             ParsedMarker marker = markers.get(i);
@@ -189,10 +206,13 @@ final class GithubCommentBoundary {
                 break;
             }
             count++;
+            if (isRecoveryCategory(marker)) {
+                recoveryCount++;
+            }
             if (lastAbortAt == null || marker.at().isAfter(lastAbortAt)) {
                 lastAbortAt = marker.at();
             }
         }
-        return count == 0 ? AbortFacts.none() : new AbortFacts(count, lastAbortAt);
+        return count == 0 ? AbortFacts.none() : new AbortFacts(count, lastAbortAt, recoveryCount);
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
@@ -26,7 +27,7 @@ trait UsageHistoryFixture implements SeededCloneFixture {
     }
 
     GitTaskRepository taskRepository() {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
     }
 
     Path worktreeFor(String taskId) {
@@ -34,7 +35,7 @@ trait UsageHistoryFixture implements SeededCloneFixture {
     }
 
     GitAttemptPersistence persistenceFor(String taskId) {
-        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId)
+        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE)
     }
 
     void persistRound(String taskId, TaskState state, String stage, int round) {

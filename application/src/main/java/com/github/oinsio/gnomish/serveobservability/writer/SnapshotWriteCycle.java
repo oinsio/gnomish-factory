@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
+import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import java.io.IOException;

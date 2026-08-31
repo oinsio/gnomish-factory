@@ -65,5 +65,9 @@ final class ContainerTerminalDrive {
         }
 
         support.completeAndDispose(support.readFinalState());
+        // A manual run has no tracker to write to, so the completion's destructive last step follows
+        // its intent immediately — there is no external effect between them to wait on (FR10 of
+        // harden-task-branch-contract).
+        support.finishCleanup();
     }
 }

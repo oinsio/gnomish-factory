@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.domain.branch.BranchShape;
+import com.github.oinsio.gnomish.domain.branch.RecoveryDisposition;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper;
@@ -28,7 +30,12 @@ import org.springframework.stereotype.Component;
  * to settle on its own exit code (6), distinct from a clean report (0) and from the generic
  * internal-error fallback (1).
  *
- * <p>Implements FR13, FR6, UX3 of add-git-workflow.
+ * <p>Every legal shape renders (FR16, UX4 of harden-task-branch-contract): a branch whose tip
+ * carries no report — delivered, bare, pre-contract — prints its shape through {@link
+ * BranchShapeReportRenderer}, and a quarantine shape prints its diagnosis and then signals {@link
+ * BranchShapeRefusedException} for exit code 7, the same calm protocol "task not found" follows.
+ *
+ * <p>Implements FR13, FR6, UX3 of add-git-workflow; FR16, UX4 of harden-task-branch-contract.
  */
 @Component
 final class StatusCommand {
@@ -38,6 +45,7 @@ final class StatusCommand {
     private final StatusTextRenderer textRenderer = new StatusTextRenderer();
     private final StatusReportJsonMapper jsonMapper = new StatusReportJsonMapper();
     private final TaskListRenderer taskListRenderer = new TaskListRenderer();
+    private final BranchShapeReportRenderer shapeRenderer = new BranchShapeReportRenderer();
     private final Path worktreesRoot;
 
     StatusCommand(TaskGit git, Path worktreesRoot) {
@@ -50,6 +58,8 @@ final class StatusCommand {
      * @throws UsageException if {@code --dir} is missing or malformed
      * @throws TaskNotFoundException if a task id was given and no {@code gnomish/<task>} branch
      *     exists anywhere (FR13, UX3) — printed calmly to {@link System#out} first
+     * @throws BranchShapeRefusedException if the branch classifies as a quarantine shape (FR16) —
+     *     its diagnosis printed calmly to {@link System#out} first
      */
     void run(ApplicationArguments args) {
         StatusArguments statusArguments = argumentsParser.parse(args);
@@ -71,6 +81,7 @@ final class StatusCommand {
         switch (result) {
             case BranchStateResult.NotFound ignored -> reportNotFound(taskId);
             case BranchStateResult.Found found -> printFound(dir, taskId, found.report(), json);
+            case BranchStateResult.Shaped(BranchShape shape) -> printShape(taskId, shape, json);
         }
     }
 
@@ -81,6 +92,18 @@ final class StatusCommand {
     private void reportNotFound(String taskId) {
         System.out.println("task not found: " + taskId);
         throw new TaskNotFoundException(taskId);
+    }
+
+    /**
+     * Renders a branch that carries no report at its tip (FR16): every legal shape prints calmly,
+     * and the three quarantine shapes additionally refuse inspection with their diagnosis — nothing
+     * is mutated either way.
+     */
+    private void printShape(String taskId, BranchShape shape, boolean json) {
+        System.out.println(json ? shapeRenderer.renderJson(taskId, shape) : shapeRenderer.renderText(taskId, shape));
+        if (shape.disposition() == RecoveryDisposition.QUARANTINE) {
+            throw new BranchShapeRefusedException(taskId, shape);
+        }
     }
 
     private void printFound(Path dir, String taskId, StatusReport report, boolean json) {

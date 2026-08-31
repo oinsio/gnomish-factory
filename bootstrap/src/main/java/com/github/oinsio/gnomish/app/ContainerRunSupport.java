@@ -10,7 +10,7 @@ import com.github.oinsio.gnomish.adapter.git.EnvironmentSalvage;
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence;
-import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository;
+import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskLifecycleStore;
 import com.github.oinsio.gnomish.adapter.git.RemoteAttemptDelivery;
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck;
@@ -18,9 +18,11 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -64,10 +66,11 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final EnvironmentLease lease;
     final AttemptCommitRef attemptCommit = new AttemptCommitRef();
     final GitObjects gitObjects;
-    final TaskRepository taskRepository;
+    final TaskLifecycleStore taskRepository;
     final FreshJudgeEnvironments judgeEnvironments;
     final BranchPush push;
     final SandboxLifecyclePass sandboxLifecyclePass;
+    final ClaimEpochSource epochs;
 
     /**
      * Canonical wiring over an already-built environments seam. Package-private (not {@code
@@ -81,20 +84,22 @@ final class ContainerRunSupport implements SandboxRunSupport {
             String taskId,
             ContainerEnvironments environments,
             List<Segment> segments,
-            SandboxLifecyclePass sandboxLifecyclePass) {
+            SandboxLifecyclePass sandboxLifecyclePass,
+            ClaimEpochSource epochs) {
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.taskId = taskId;
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.environments = environments;
+        this.epochs = epochs;
         this.lease = new EnvironmentLease(environments::roundEnvironment, branch, segments);
         this.gitObjects = GitObjects.open(
                 cloneDir.resolve(".git"), Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir"))));
         // The lifecycle push belongs to the adapter, not to this bundle's terminal boundaries
         // (FR1, FR6, design D1 of fix-lifecycle-push): every write through this repository is
         // replicated best-effort before it returns, so no caller here pushes by hand.
-        this.taskRepository =
-                new PushBestEffortTaskRepository(new GitObjectsTaskRepository(gitObjects), runner, cloneDir);
+        this.taskRepository = new PushBestEffortTaskLifecycleStore(
+                new GitObjectsTaskRepository(gitObjects, epochs), runner, cloneDir);
         this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BranchPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
@@ -114,7 +119,8 @@ final class ContainerRunSupport implements SandboxRunSupport {
             FactoryProperties factoryProperties,
             List<String> checkCredentialEnvVars,
             List<String> credentialEnvVarsToScrub,
-            com.github.oinsio.gnomish.sandbox.environment.OwnershipMode ownershipMode) {
+            com.github.oinsio.gnomish.sandbox.environment.OwnershipMode ownershipMode,
+            ClaimEpochSource epochs) {
         return ContainerRunSupportFactory.create(
                 cloneDir,
                 taskId,
@@ -123,14 +129,15 @@ final class ContainerRunSupport implements SandboxRunSupport {
                 factoryProperties,
                 checkCredentialEnvVars,
                 credentialEnvVarsToScrub,
-                ownershipMode);
+                ownershipMode,
+                epochs);
     }
 
     /** The strict sandboxed persistence with the best-effort post-round push (FR5, FR21, FR22). */
     @Override
     public AttemptPersistence persistence() {
         var strict = new EnvironmentAttemptPersistence(
-                new LeasedEnvironment(lease::current), runner, cloneDir, gitObjects, taskId, attemptCommit);
+                new LeasedEnvironment(lease::current), runner, cloneDir, gitObjects, taskId, attemptCommit, epochs);
         return new PushBestEffortAttemptPersistence(strict, push, cloneDir, branch);
     }
 
@@ -174,7 +181,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
 
     /** The sandboxed salvage over the leased environment (FR6); see {@link #lease()} on visibility. */
     EnvironmentSalvage salvage() {
-        return new EnvironmentSalvage(new LeasedEnvironment(lease::current));
+        return new EnvironmentSalvage(new LeasedEnvironment(lease::current), epochs);
     }
 
     /** The snapshot-without-state classifier of resume (FR21, D15); see {@link #lease()} on visibility. */
@@ -220,6 +227,24 @@ final class ContainerRunSupport implements SandboxRunSupport {
         ContainerRunTermination.completeAndDispose(this, finalState);
     }
 
+    /** The completion's destructive last step (FR10). Delegated to {@link ContainerRunTermination}. */
+    @Override
+    public void finishCleanup() {
+        ContainerRunTermination.finishCleanup(this);
+    }
+
+    /** The park's durable intent (FR10, D12). Delegated to {@link ContainerRunTermination}. */
+    @Override
+    public void recordPark(TaskOutcome outcome) {
+        ContainerRunTermination.recordPark(this, outcome);
+    }
+
+    /** The terminal write's receipt (FR10). Delegated to {@link ContainerRunTermination}. */
+    @Override
+    public void confirmTerminalWrite() {
+        ContainerRunTermination.confirmTerminalWrite(this);
+    }
+
     /** Aborted terminal boundary (D19). Delegated to {@link ContainerRunTermination}. */
     @Override
     public void recordAborted(TaskOutcome.Aborted outcome) {
@@ -232,28 +257,28 @@ final class ContainerRunSupport implements SandboxRunSupport {
         ContainerRunTermination.keepStopped(this);
     }
 
-    /** Reads the last durably committed {@code state.json} (FR17). Delegated to {@link ContainerRunTermination}. */
+    /** Reads the last durably committed {@code state.json} (FR17). Delegated to {@link ContainerTipReader}. */
     @Override
     public TaskState readFinalState() {
-        return ContainerRunTermination.readFinalState(this);
+        return ContainerTipReader.readFinalState(this);
     }
 
-    /** The recorded state at the branch tip, or the initial state (FR6). Delegated to {@link ContainerRunTermination}. */
+    /** The recorded state at the branch tip, or the initial state (FR6). Delegated to {@link ContainerTipReader}. */
     @Override
     public TaskState readStateOrInitial(String firstStage) {
-        return ContainerRunTermination.readStateOrInitial(this, firstStage);
+        return ContainerTipReader.readStateOrInitial(this, firstStage);
     }
 
-    /** Reads the branch tip's {@code task.json} (FR17). Delegated to {@link ContainerRunTermination}. */
+    /** Reads the branch tip's {@code task.json} (FR17). Delegated to {@link ContainerTipReader}. */
     @Override
     public TaskRecord readTaskJson() {
-        return ContainerRunTermination.readTaskJson(this);
+        return ContainerTipReader.readTaskJson(this);
     }
 
-    /** Restores the branch tip's denial cursor (FR5). Delegated to {@link ContainerRunTermination}. */
+    /** Restores the branch tip's denial cursor (FR5). Delegated to {@link ContainerTipReader}. */
     @Override
     public void restoreDenialCursor() {
-        ContainerRunTermination.restoreDenialCursor(this);
+        ContainerTipReader.restoreDenialCursor(this);
     }
 
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -111,7 +112,8 @@ tracker:
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                     automaton.run()
-                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                new ClaimEpochBook())
         def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-restart-integration-under-test').start {
             try {

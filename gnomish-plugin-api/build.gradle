@@ -33,13 +33,31 @@ plugins {
 // growth is additive for every pre-existing type, so no pre-1.0 version bump is
 // owed and `japicmpApiGate` stays green against the committed jars.
 //
+// FR19 of harden-task-branch-contract: 0.3.0 -> 0.4.0, the third BREAKING move. The tracker
+// medium joined the branch medium in classifying totally, which the port surface had to carry:
+// `Tracker` gained `repairIndex` and its `removeStaleClaim` now takes the observed `ClaimFacts`
+// footprint rather than a live `ClaimVersion` (a dead footprint is an eligible input, and a
+// version cannot express one); `OpenTask` and `ReadyTask` gained the raw `TrackerFacts` /
+// `ClaimFacts` the core classifier reads, so both lose their old canonical constructors — each
+// keeps a delegating constructor of the previous shape, so a reader that carries no observation
+// of its own still compiles. Pre-1.0, a breaking change is a MINOR bump; `compat-baseline/` was
+// regenerated in the same commit so a reviewer sees the break and the bump that accepts it in
+// one diff.
+//
+// FR13 of harden-task-branch-contract: 0.2.0 -> 0.3.0, the second BREAKING move.
+// `ClaimResult.Acquired` gained the claim epoch the tracker issues with a claim and
+// `ClaimVersion` gained the same epoch beside its marker identity, so both lose their
+// old canonical constructors. Pre-1.0, a breaking change is a MINOR bump;
+// `compat-baseline/` was regenerated in the same commit so a reviewer sees the break
+// and the bump that accepts it in one diff.
+//
 // FR2 of fix-denial-report-attachment: 0.1.0 -> 0.2.0, the first BREAKING move of
 // the surface. `AttemptRecord` and both `ExecutionResult` variants — re-exposed
 // `:domain` types, so inside the semver promise — gained a `denials` component,
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.2.0'
+version = '0.4.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 

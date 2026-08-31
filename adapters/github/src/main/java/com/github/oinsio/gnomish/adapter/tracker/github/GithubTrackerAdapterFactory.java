@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -59,7 +60,23 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     @DoNotMutate
     @Override
     public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
-        return create(config, instanceId, requireToken(secrets, config));
+        return create(secrets, config, instanceId, ClaimEpochSource.NONE);
+    }
+
+    /**
+     * The epoch-aware entry point the composition root calls (FR13 of harden-task-branch-contract):
+     * every structural marker this adapter writes is stamped with the tenure {@code epochs} reports
+     * for the task, so a reader can tell a superseded tenure's write from the current one.
+     */
+    // PIT M4 documented exception (same integration-boundary rationale as the 3-arg create above):
+    // @DoNotMutate — the body is one hand-off into requireToken plus the 4-arg assembly seam; the
+    // missing-token throw is covered by GithubTrackerAdapterFactorySpec with an empty provider, and
+    // a resolved token flows into the WireMock-backed assembly that same spec drives through the
+    // explicit-token seam. No decision lives here.
+    @DoNotMutate
+    @Override
+    public Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId, ClaimEpochSource epochs) {
+        return create(config, instanceId, requireToken(secrets, config), epochs);
     }
 
     /**
@@ -71,6 +88,10 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
      * entry point and always resolves the token from the environment (NFR-S1).
      */
     Tracker create(TrackerConfig config, String instanceId, String token) {
+        return create(config, instanceId, token, ClaimEpochSource.NONE);
+    }
+
+    Tracker create(TrackerConfig config, String instanceId, String token, ClaimEpochSource epochs) {
         Map<String, Object> subsection = config.subsection();
         GithubRepoRef repoRef = GithubTrackerAdapterFactorySupport.requireRepoRef(subsection);
         String owner = repoRef.owner();
@@ -88,6 +109,12 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         var httpClient = GithubTrackerAdapterFactorySupport.httpClientFor(subsection, token);
         var cache = new GithubConditionalRequestCache(httpClient);
         var labelOps = new GithubLabelOps(httpClient);
+        // One renderer for every GithubMarkerKind (FR11): every structural comment this adapter
+        // writes is stamped and upserted through it, so no write path posts blind.
+        var markerWriter = new GithubMarkerWriter(new GithubCommentUpsert(httpClient), epochs, instanceId);
+
+        var stateLabels = new GithubStateLabels(
+                readyLabel.name(), workingLabel.name(), needsHumanLabel.name(), deliveredLabel.name());
 
         new GithubLabelProvisioner(httpClient)
                 .provision(owner, repo, List.of(readyLabel, workingLabel, needsHumanLabel, deliveredLabel));
@@ -99,16 +126,17 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
                 new GithubStateWrites(
                         httpClient,
                         labelOps,
-                        instanceId,
+                        markerWriter,
                         workingLabel.name(),
                         needsHumanLabel.name(),
                         deliveredLabel.name(),
                         readyLabel.name()),
-                new GithubCorrespondence(httpClient, instanceId),
-                new GithubDecisions(httpClient, instanceId),
+                new GithubCorrespondence(markerWriter),
+                new GithubDecisions(httpClient, markerWriter),
                 new GithubHeartbeat(httpClient, instanceId),
-                new GithubOpenQuery(cache, owner, repo, workingLabel.name(), needsHumanLabel.name()),
-                new GithubStaleClaimRemoval(httpClient, labelOps, instanceId, workingLabel.name(), readyLabel.name()));
+                new GithubOpenQuery(cache, owner, repo, stateLabels),
+                new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter, workingLabel.name(), readyLabel.name()),
+                new GithubIndexRepair(httpClient, labelOps, markerWriter, stateLabels));
     }
 
     @Override

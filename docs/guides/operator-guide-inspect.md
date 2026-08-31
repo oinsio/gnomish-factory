@@ -23,14 +23,38 @@ gnomish status --dir=<clone-dir> [<task>] [--json]
 
 - **List mode** (`<task>` omitted): prints a table over all `gnomish/*` branches, local and remote-tracking alike, deduplicated per task (the local tip wins when both exist).
 
-  | Column   | Meaning                  |
-  |----------|--------------------------|
-  | task     | task id                  |
-  | stage    | current pipeline stage   |
-  | attempts | attempts recorded so far |
-  | outcome  | last recorded outcome    |
+  | Column   | Meaning                                                   |
+  |----------|-----------------------------------------------------------|
+  | task     | task id (the branch name for a branch with no readable id) |
+  | shape    | the branch's classified shape (see below)                  |
+  | stage    | current pipeline stage                                     |
+  | attempts | attempts recorded so far                                   |
+  | outcome  | last recorded outcome, or the diagnosis of a bad branch     |
+
+  Every `gnomish/*` branch produces exactly one row whatever state it is in — a
+  delivered branch whose cleanup commit stripped `.gnomish-task/`, a freshly
+  created one with no round yet, an in-flight one, a parked one, and a branch
+  whose files cannot be read. One unreadable branch degrades to its own
+  diagnostic row naming its shape; it never fails the listing of the others.
 
 - **Single-task mode** (`<task>` given): reads `.gnomish-task/` straight off `gnomish/<task>` via `git show` — no worktree is materialized, no checkout happens, no local branch is created. If the branch isn't already known locally or as a remote-tracking ref, `status` falls back to a narrow fetch of exactly `gnomish/<task>`. Output is the same StatusReport `"version": 1` contract used by the live in-process `status`/`status --json` prompt commands (see [`operator-guide-run.md`](operator-guide-run.md)), plus the task's worktree path if one currently exists.
+- **Every shape renders**: the branch's shape is classified before anything is read from it, so `status` reports a delivered branch as delivered and a freshly created one as pending instead of failing on state files that shape does not have. For those branches the output is the shape itself:
+
+  ```
+  Task: PROJ-1
+  Shape: Delivered
+  ```
+
+- **A branch that refuses inspection**: the three quarantine shapes — `Corrupt`, `UnsupportedVersion`, `Unknown` — print a `Diagnosis:` line naming the offending file and the observed versus expected content (for `UnsupportedVersion`, the observed and supported versions) and exit with code 7. No stack trace, and nothing in the clone is mutated. Example:
+
+  ```
+  Task: PROJ-1
+  Shape: UnsupportedVersion
+  Diagnosis: state.json declaring version 2 where this factory supports 1
+  ```
+
+  Exit code 7 means "the branch is there but this factory cannot read it" — distinct from code 6 ("no such branch") and code 1 (the tool itself broke).
+
 - **Task not found**: if no `gnomish/<task>` branch exists — typically because its PR was already squash-merged and the branch deleted, see [Merging a gnome's task branch](operator-guide-run.md#merging-a-gnomes-task-branch) — `status` prints `task not found: <task>` and exits with code 6. This is a normal, expected outcome of a task's lifecycle, not an error to investigate.
 
 ## `gnomish usage`
@@ -79,5 +103,7 @@ Unlike `status`, `<task>` is mandatory here — there is no list mode.
 ```
 
 `totals.byTool` is always empty — totals aggregate executor usage only, not a per-tool breakdown.
+
+**Unreadable history**: a historical commit whose `state.json` cannot be read — an unsupported envelope version, a half-written or hand-edited document — is skipped with a WARN naming the commit, and the walk continues. The table and totals render from the readable commits; only the rounds that broken commit itself would have contributed are missing.
 
 **Task not found**: same as `status` — `usage` prints `task not found: <task>` and exits with code 6 when the branch is gone, which is normal after a squash-merged PR, not a bug.

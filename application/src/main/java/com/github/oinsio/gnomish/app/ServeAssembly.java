@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.LivenessOracle;
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
@@ -55,7 +56,8 @@ final class ServeAssembly {
             TaskGit git,
             TakeHeartbeat heartbeat,
             Clock clock,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ClaimEpochBook epochs) {
         AbortHandler abortHandler = new AbortHandler(tracker, clock);
         return new TakeSlotRunner(
                 serveAssembly,
@@ -71,7 +73,8 @@ final class ServeAssembly {
                 heartbeat.flag(),
                 tracker,
                 instanceId,
-                containerTakeSupport);
+                containerTakeSupport,
+                epochs);
     }
 
     static FeedAutomaton feedAutomaton(

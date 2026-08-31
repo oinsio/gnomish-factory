@@ -60,6 +60,9 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
         0 * support.keepStopped()
         0 * support.recordAborted(_)
         executor.requests.size() == 1
+
+        then: 'FR10: the completion\'s destructive last step follows — a manual run has no tracker write between them'
+        1 * support.finishCleanup()
     }
 
     // FR5 of fix-denial-report-attachment: the denial source outlives the process that created it,

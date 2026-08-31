@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
+import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,7 +22,11 @@ import java.nio.file.Path;
  * rebuilding a domain outcome (which would need {@code state.json}'s finalState
  * unavailable at confirm time).
  *
- * <p>Implements FR10, D10 of add-claim-heartbeat.
+ * <p>The rewrite goes through the shared {@link AtomicFileWriter} (design D10 of
+ * harden-task-branch-contract): a kill between the read and the rename leaves the marker set,
+ * which the pending-write recovery already handles — never a truncated {@code task.json}.
+ *
+ * <p>Implements FR10, D10 of add-claim-heartbeat; FR5 of harden-task-branch-contract.
  */
 final class TerminalWriteMarker {
 
@@ -56,7 +61,7 @@ final class TerminalWriteMarker {
                 current.lastEscalation(),
                 null);
         try {
-            Files.writeString(taskJson, TaskStateJson.mapper().writeValueAsString(cleared));
+            AtomicFileWriter.write(taskJson, TaskStateJson.mapper().writeValueAsString(cleared));
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, TaskLifecycleEvent.RESUMED, "writing task.json", e);
         }

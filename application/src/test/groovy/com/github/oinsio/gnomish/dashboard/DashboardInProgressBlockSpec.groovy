@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.board.EligibilityReason
 import com.github.oinsio.gnomish.board.ReadyRow
 import com.github.oinsio.gnomish.board.ReadySummary
 import com.github.oinsio.gnomish.board.WorkingRow
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 import spock.lang.Specification
 
@@ -31,7 +32,7 @@ class DashboardInProgressBlockSpec extends Specification {
         given:
         def workingRows = [
             new WorkingRow(new TaskRef('task-2'), 'Working title', 'gnome-1',
-            new ClaimVersion('m-1', GENERATED_AT.minusSeconds(180)))
+            new ClaimVersion('m-1', GENERATED_AT.minusSeconds(180), new ClaimEpoch(1)))
         ]
         def backoff = new EligibilityReason.InBackoff(Instant.parse('2026-08-06T10:00:00Z'))
         def readyRows = [

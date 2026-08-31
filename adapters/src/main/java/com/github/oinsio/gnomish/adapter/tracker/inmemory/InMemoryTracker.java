@@ -2,17 +2,19 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.util.LinkedHashMap;
@@ -61,7 +63,8 @@ public class InMemoryTracker implements Tracker {
                         entry.getValue().abortFacts(),
                         TrackedTaskFacts.returned(entry.getValue()),
                         TrackedTaskFacts.finished(entry.getValue()),
-                        entry.getValue().snapshot().title()))
+                        entry.getValue().snapshot().title(),
+                        TrackedTaskFacts.claim(entry.getValue())))
                 .toList());
     }
 
@@ -95,9 +98,10 @@ public class InMemoryTracker implements Tracker {
                 return new ClaimResult.Held(holder);
             }
             task.state(new TrackerTaskState.Working(instanceId));
-            task.establishClaim(claimClock.mint(instanceId));
+            ClaimMarker marker = claimClock.mint(instanceId);
+            task.establishClaim(marker);
             task.note(CorrespondenceEntry.Kind.CLAIM, "claimed by " + instanceId);
-            return new ClaimResult.Acquired();
+            return new ClaimResult.Acquired(marker.epoch());
         });
     }
 
@@ -152,8 +156,13 @@ public class InMemoryTracker implements Tracker {
     }
 
     @Override
-    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
-        return leaseOps.removeStaleClaim(ref, observedVersion);
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
+        return leaseOps.removeStaleClaim(ref, observedClaim);
+    }
+
+    @Override
+    public RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        return leaseOps.repairIndex(ref, observedFacts);
     }
 
     <T> T withLock(Supplier<T> body) {

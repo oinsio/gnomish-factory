@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -36,7 +37,8 @@ record TakeDispatcher(
         Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
         SecretsProvider secretsProvider,
         TakeoverConfirmation takeoverConfirmation,
-        ContainerTakeSupport containerTakeSupport) {
+        ContainerTakeSupport containerTakeSupport,
+        ClaimEpochBook epochs) {
 
     TakeResult runExplicit(
             TakeArguments takeArguments,
@@ -109,7 +111,8 @@ record TakeDispatcher(
                 confirmation,
                 clock,
                 heartbeat.flag(),
-                containerTakeSupport);
+                containerTakeSupport,
+                epochs);
         return disposition.dispose(
                 takeArguments.dir(),
                 takeArguments.base(),
@@ -146,7 +149,8 @@ record TakeDispatcher(
                 heartbeat.flag(),
                 trackerConfig.wipLimit(),
                 new Random(),
-                containerTakeSupport);
+                containerTakeSupport,
+                epochs);
         return bareAuto.run(takeArguments.dir(), definition, takeArguments.interactiveMode(), tracker, instanceId);
     }
 

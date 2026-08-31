@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import spock.lang.Specification
 
 /**
@@ -23,6 +24,7 @@ class RunExitCodeMapperSpec extends Specification {
         new InputExhaustedException() | 4
         new DivergedBranchException('PROJ-1', 'gnomish/PROJ-1', 'aaa', 'bbb') | 5
         new TaskNotFoundException('PROJ-1') | 6
+        new BranchShapeRefusedException('PROJ-1', new BranchShape.Corrupt('state.json: truncated')) | 7
         new EscalationEofException(new ConsoleClosedException()) | 10
         new CheckpointEofException(new ConsoleClosedException()) | 11
         new AbortedException('persist failed') | 12

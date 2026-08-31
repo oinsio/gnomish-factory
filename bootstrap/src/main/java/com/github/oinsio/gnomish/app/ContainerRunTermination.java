@@ -1,32 +1,21 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.git.OriginReconciliation;
-import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto;
-import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
-import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
-import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
-import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.gitobjects.ObjectId;
-import com.github.oinsio.gnomish.sandbox.DenialCursor;
-import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The terminal-boundary and branch-tip-reading operations of {@link ContainerRunSupport} (FR6,
- * FR11, FR17, FR21, FR22, NFR-R2 of add-sandbox-core): the sweep, completion, abort, and keep
- * paths, plus reading the last durably committed state back from bare git objects. Extracted from
- * {@link ContainerRunSupport} for file size; the behavior is unchanged.
+ * The terminal-boundary operations of {@link ContainerRunSupport} (FR6, FR11, FR21, FR22, NFR-R2
+ * of add-sandbox-core): the sweep, completion, park, abort and keep paths — every write that closes
+ * a container run. Reading the branch back is the opposite direction and belongs to {@link
+ * ContainerTipReader}.
  */
 final class ContainerRunTermination {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerRunTermination.class);
-
-    /** Factory-authored state files are small; a 1&nbsp;MiB read cap is generous (NFR-S3). */
-    private static final long FILE_READ_CAP = 1L << 20;
 
     private ContainerRunTermination() {}
 
@@ -49,17 +38,46 @@ final class ContainerRunTermination {
     }
 
     /**
-     * Completed terminal boundary (D19 ordering): dispose the environment first — the last
-     * in-box commit was the state commit — then record the outcome and cleanup commits
-     * factory-side. The push that follows them is the repository decorator's (FR1, FR6 of
-     * fix-lifecycle-push), not this boundary's: one code path owns the push-after-lifecycle-commit
-     * rule, and the outcome and cleanup commits share its single push of the resulting tip.
+     * Completed terminal boundary (D19 ordering): dispose the environment first — the last in-box
+     * commit was the state commit — then record the {@code Completed} outcome commit factory-side.
+     * That commit is the completion's durable intent and nothing more: the cleanup commit is the
+     * destructive last step and runs through {@code finishCleanup} once the terminal tracker write
+     * has landed (FR10 of harden-task-branch-contract). The push that follows each commit is the
+     * repository decorator's (FR1, FR6 of fix-lifecycle-push), not this boundary's.
      */
     static void completeAndDispose(ContainerRunSupport support, TaskState finalState) {
         support.judgeEnvironments.disposeCurrent();
         support.lease.dispose();
         support.taskRepository.recordOutcome(support.taskId, new TaskOutcome.Completed(finalState));
         reconcileRemote(support);
+    }
+
+    /**
+     * The park's durable intent (FR10, design D12 of harden-task-branch-contract): the outcome
+     * commit carrying the pending marker, built factory-side over bare objects and pushed by the
+     * repository decorator. The box is stopped by the time this runs, so no in-box channel is
+     * involved — and by that change's FR17 this is the last factory-side commit until the box is
+     * disposed.
+     */
+    static void recordPark(ContainerRunSupport support, TaskOutcome outcome) {
+        support.taskRepository.recordOutcome(support.taskId, outcome);
+    }
+
+    /**
+     * The terminal write's receipt (FR10 of harden-task-branch-contract): the cleared pending
+     * marker, so a later resume reads the park as settled rather than orphaned.
+     */
+    static void confirmTerminalWrite(ContainerRunSupport support) {
+        support.taskRepository.confirmTerminalWrite(support.taskId);
+    }
+
+    /**
+     * The completion's destructive last step (FR10 of harden-task-branch-contract): the cleanup
+     * commit stripping {@code .gnomish-task/} from the tip, run only once the tracker finish has
+     * landed. No live box is required — the state commit was the last in-box commit (D15, D19).
+     */
+    static void finishCleanup(ContainerRunSupport support) {
+        support.taskRepository.finishCleanup(support.taskId);
     }
 
     /**
@@ -106,64 +124,8 @@ final class ContainerRunTermination {
         reconcileRemote(support);
     }
 
-    /** Reads the last durably committed {@code state.json} from the branch tip as bare objects (FR17). */
-    static TaskState readFinalState(ContainerRunSupport support) {
-        return StateJsonMapper.fromDto(readStateDto(support));
-    }
-
-    /** The branch tip's {@code state.json} as its wire DTO — the domain state plus what it omits. */
-    private static StateJsonDto readStateDto(ContainerRunSupport support) {
-        byte[] bytes = support.gitObjects.readBlob(tip(support), ".gnomish-task/state.json", FILE_READ_CAP);
-        return StateJsonMapper.readDto(new String(bytes, StandardCharsets.UTF_8));
-    }
-
-    /**
-     * The recorded state at the branch tip, or the initial state at {@code firstStage} when no
-     * round ever persisted one — a task killed during its very first round has only the creation
-     * commit's {@code task.json} on the branch (FR6).
-     */
-    static TaskState readStateOrInitial(ContainerRunSupport support, String firstStage) {
-        try {
-            return readFinalState(support);
-        } catch (RuntimeException e) {
-            return TaskState.atStageStart(firstStage);
-        }
-    }
-
-    /** Reads the branch tip's {@code task.json} as bare objects — context, outcome, escalation (FR17). */
-    static TaskRecord readTaskJson(ContainerRunSupport support) {
-        byte[] bytes = support.gitObjects.readBlob(tip(support), ".gnomish-task/task.json", FILE_READ_CAP);
-        return TaskJsonMapper.fromDto(TaskJsonMapper.readDto(new String(bytes, StandardCharsets.UTF_8)));
-    }
-
-    /**
-     * Hands the run's environments the denial cursor the branch tip's {@code state.json} recorded
-     * (FR5 of fix-denial-report-attachment). Best-effort by design: a branch with no state file,
-     * no cursor in it, or an unreadable tip leaves the environments reading their denial source
-     * from its start — the behavior of every run before the cursor existed, and correct whenever
-     * the source is new. A cursor naming a different source is dropped by the environment itself.
-     */
-    static void restoreDenialCursor(ContainerRunSupport support) {
-        StateEgressCursorDto cursor;
-        try {
-            cursor = readStateDto(support).egressCursor();
-        } catch (RuntimeException e) {
-            log.debug("no recorded denial cursor to restore: {}", e.toString());
-            return;
-        }
-        if (cursor != null) {
-            support.environments.restoreDenialCursor(new DenialCursor(cursor.source(), cursor.position()));
-        }
-    }
-
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */
     static void disposeExistingEnvironment(ContainerRunSupport support) {
         support.environments.disposeExisting();
-    }
-
-    private static ObjectId tip(ContainerRunSupport support) {
-        return support.gitObjects
-                .resolveRef("refs/heads/" + support.branch)
-                .orElseThrow(() -> new IllegalStateException("task branch \"" + support.branch + "\" disappeared"));
     }
 }

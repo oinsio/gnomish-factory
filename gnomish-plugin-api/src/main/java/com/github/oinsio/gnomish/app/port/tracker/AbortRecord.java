@@ -22,19 +22,38 @@ import java.time.Instant;
  * {@link InstanceId} type — an abort marker only needs an attributable label
  * (FR14), so the port stays agnostic to the composite's structure.
  *
+ * <p>{@code category} places the marker in the unified recovery accounting (FR14 of
+ * harden-task-branch-contract): a run that died is an {@link RecoveryCause#INSTANCE_CRASH}, a
+ * repair of a non-clean branch shape that failed is a {@link RecoveryCause#RECOVERY_FAILURE}. Both
+ * spend from the same counter; the category is what lets the quarantine report tell an operator
+ * which kind of failure keeps happening.
+ *
  * <p>Inert value data compared by content.
  *
- * <p>Implements FR14 of add-tracker-port.
+ * <p>Implements FR14 of add-tracker-port; the category is FR14 of harden-task-branch-contract.
  *
  * @param cause free-text description of what went wrong; never blank
  * @param instance the identifier of the instance recording the abort; never blank
  * @param at when the abort happened; never null
+ * @param category which category of the unified accounting this attempt spends; never null
  */
-public record AbortRecord(String cause, String instance, Instant at) {
+public record AbortRecord(String cause, String instance, Instant at, RecoveryCause category) {
 
     public AbortRecord {
         cause = requireNonBlank(cause, "cause");
         instance = requireNonBlank(instance, "instance");
+    }
+
+    /**
+     * The pre-categorization shape: an attempt recorded with no category stated is the category
+     * every such marker meant, {@link RecoveryCause#INSTANCE_CRASH}.
+     *
+     * @param cause free-text description of what went wrong; never blank
+     * @param instance the identifier of the instance recording the abort; never blank
+     * @param at when the abort happened; never null
+     */
+    public AbortRecord(String cause, String instance, Instant at) {
+        this(cause, instance, at, RecoveryCause.INSTANCE_CRASH);
     }
 
     /**

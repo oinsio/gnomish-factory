@@ -3,10 +3,11 @@ package com.github.oinsio.gnomish.app.port.tracker;
 import java.util.List;
 
 /**
- * The application layer's single abstraction over any task tracker: fifteen operations of
+ * The application layer's single abstraction over any task tracker: sixteen operations of
  * feed, coordination, and correspondence (design D1 of add-tracker-port; the lease-maintenance
  * trio {@link #listOpen()}, {@link #heartbeat(TaskRef, String)}, {@link
- * #removeStaleClaim(TaskRef, ClaimVersion)} added by add-claim-heartbeat). Speaks only the
+ * #removeStaleClaim(TaskRef, ClaimFacts)} added by add-claim-heartbeat, the index repair
+ * {@link #repairIndex(TaskRef, TrackerFacts)} by harden-task-branch-contract). Speaks only the
  * factory's own vocabulary — tasks, states, decisions, abort facts, claim versions — never a
  * tracker-specific concept; mapping is confined to adapters under {@code adapter.tracker.*}.
  * Transitions between {@link TrackerTaskState}s are initiated only by the factory or by a human
@@ -154,8 +155,10 @@ public interface Tracker {
     /**
      * Returns the open tasks — {@link TrackerTaskState.Working} or {@link
      * TrackerTaskState.AwaitingHuman} — each with its state, title and, for a {@code Working}
-     * task carrying a live claim marker, its opaque {@link ClaimVersion}. {@code
-     * Ready}/{@code Finished}/{@code Gone} never appear. Unlike {@link #listReady(int)} this
+     * task carrying a live claim marker, its opaque {@link ClaimVersion}; every entry additionally
+     * carries the raw {@link TrackerFacts} the core classifier maps to a tracker shape, and an
+     * adapter never omits a combination it cannot interpret (FR19 of harden-task-branch-contract).
+     * {@code Ready}/{@code Finished}/{@code Gone} never appear. Unlike {@link #listReady(int)} this
      * takes no limit: the reaper needs the full open set. Adapters report version facts only;
      * TTL policy and staleness judgment live in core (FR5, design D2, D4). The title comes from
      * data the list call already receives — never a per-task {@code fetchTask} fan-out (FR7,
@@ -182,18 +185,47 @@ public interface Tracker {
 
     /**
      * Returns a stale claim to circulation as one operation, given {@code ref} and the {@code
-     * observedVersion} judged stale: records a structural holder-transition marker naming the
-     * dead holder, removes the dead marker, and transitions {@code ref} back to {@link
-     * TrackerTaskState.Ready}. Never claims for the caller (design D5, D9, FR4). {@code
-     * observedVersion} is a guard: a mismatch against the live claim is a safe no-op returning
-     * {@link RemoveStaleClaimResult.Mismatch} with the current version (NFR-R2); a match yields
-     * {@link RemoveStaleClaimResult.Removed}. The marker SHALL be reconstructable from the
-     * tracker alone.
-     * <p>Implements FR4, FR5 of add-claim-heartbeat.
+     * observedClaim} the caller judged dead: records a structural holder-transition marker naming
+     * the dead (or last-known) holder, removes the dead marker, and transitions {@code ref} back to
+     * {@link TrackerTaskState.Ready}. Never claims for the caller (design D5, D9, FR4).
+     *
+     * <p>{@code observedClaim} is the guard, and both fact shapes are eligible inputs (FR19 of
+     * harden-task-branch-contract): a {@link ClaimFacts.Live} observation compares by version, a
+     * {@link ClaimFacts.Dead} footprint — the {@code ClaimAbandoned} repair — compares by the
+     * footprint's own identity and no-ops once a live claim has appeared since. A mismatch is a
+     * safe no-op returning {@link RemoveStaleClaimResult.Mismatch} with the current version
+     * (NFR-R2); a match yields {@link RemoveStaleClaimResult.Removed}. The marker SHALL be
+     * reconstructable from the tracker alone.
+     *
+     * <p>Implements FR4, FR5 of add-claim-heartbeat; FR19, FR12 of harden-task-branch-contract.
+     *
      * @param ref the task's canonical identity; never null
-     * @param observedVersion the stale claim version the caller observed; never null
+     * @param observedClaim the claim footprint the caller observed and judged dead; never null,
+     *     never {@link ClaimFacts.None} — there is nothing to remove without a footprint
      * @return {@link RemoveStaleClaimResult.Removed} on cleanup, or {@link
-     *     RemoveStaleClaimResult.Mismatch} when the version no longer matched; never null
+     *     RemoveStaleClaimResult.Mismatch} when the facts no longer matched; never null
      */
-    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion);
+    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim);
+
+    /**
+     * Brings {@code ref}'s indexed state — its state labels — to the state its recorded truth
+     * implies, given the caller's {@code observedFacts}: restoring {@code Ready} for a
+     * working-labeled task carrying no claim footprint ({@code ClaimPending}), or completing the
+     * transition the newest boundary marker implies ({@code IndexLagging}). Records a structural
+     * repair marker naming the observed shape before the flips, so its own kill window freezes a
+     * shape the sweep still enumerates.
+     *
+     * <p>Re-checks the facts before acting and is a safe no-op reporting the current facts when
+     * they no longer match the observation, so concurrent repairs converge ({@link
+     * RepairIndexResult.Unchanged}). Never claims the task for the caller, and never re-executes
+     * work the markers record as done.
+     *
+     * <p>Implements FR19, FR12 of harden-task-branch-contract.
+     *
+     * @param ref the task's canonical identity; never null
+     * @param observedFacts the tracker facts the caller classified; never null
+     * @return {@link RepairIndexResult.Repaired} when the labels were flipped, else {@link
+     *     RepairIndexResult.Unchanged}; never null
+     */
+    RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts);
 }

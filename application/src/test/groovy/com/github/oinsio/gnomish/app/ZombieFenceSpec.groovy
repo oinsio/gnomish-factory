@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.BestEffortPush
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
@@ -89,7 +90,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
 
     /** A round-boundary persist for {@code holder} over {@code worktree}, wrapping the real git persistence. */
     private RevocationCheckingAttemptPersistence persistenceFor(Path worktree, InstanceId holder, Tracker tracker) {
-        def git = new GitAttemptPersistence(runner, worktree, 'PROJ-1')
+        def git = new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
         new RevocationCheckingAttemptPersistence(git, tracker, REF, holder)
     }
 
@@ -98,7 +99,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
     }
 
     private static List<ILoggingEvent> capturePushWarns(Closure<?> emit) {
-        Logger logger = (Logger) LoggerFactory.getLogger(BestEffortPush)
+        Logger logger = (Logger) LoggerFactory.getLogger('com.github.oinsio.gnomish.adapter.git.BestEffortPush')
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
         appender.start()
         logger.addAppender(appender)

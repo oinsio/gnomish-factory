@@ -6,23 +6,22 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
-import com.github.oinsio.gnomish.gitobjects.CommitMetadata;
-import com.github.oinsio.gnomish.gitobjects.CommitRequest;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
-import com.github.oinsio.gnomish.gitobjects.TreeEdit;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * The sandboxed-mode realization of {@link TaskRepository} (design D19): the same four lifecycle
@@ -50,7 +49,7 @@ import java.util.Optional;
  * GitTaskRepositoryException}, matching {@link GitTaskRepository}. Implements FR25 of
  * add-sandbox-core.
  */
-public final class GitObjectsTaskRepository implements TaskRepository {
+public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
     private static final String REF_PREFIX = "refs/heads/";
 
@@ -61,13 +60,16 @@ public final class GitObjectsTaskRepository implements TaskRepository {
     private final GitObjects gitObjects;
     private final CommitIdentity identity;
     private final Clock clock;
+    private final ClaimEpochSource epochs;
 
     /**
      * @param gitObjects the bare-object facade opened against the factory clone (git dir + a
      *     factory-private temp dir for indexes)
+     * @param epochs the tenure every lifecycle commit is stamped with (FR13 of
+     *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is held
      */
-    public GitObjectsTaskRepository(GitObjects gitObjects) {
-        this(gitObjects, DEFAULT_IDENTITY, Clock.systemUTC());
+    public GitObjectsTaskRepository(GitObjects gitObjects, ClaimEpochSource epochs) {
+        this(gitObjects, DEFAULT_IDENTITY, Clock.systemUTC(), epochs);
     }
 
     /**
@@ -75,15 +77,18 @@ public final class GitObjectsTaskRepository implements TaskRepository {
      * @param identity the name/email git records as author and committer of lifecycle commits
      * @param clock the source of commit timestamps and {@code createdAt} — injectable so specs pin
      *     deterministic commit ids (design D19)
+     * @param epochs the tenure every lifecycle commit is stamped with (FR13)
      */
-    public GitObjectsTaskRepository(GitObjects gitObjects, CommitIdentity identity, Clock clock) {
+    public GitObjectsTaskRepository(
+            GitObjects gitObjects, CommitIdentity identity, Clock clock, ClaimEpochSource epochs) {
         this.gitObjects = gitObjects;
         this.identity = identity;
         this.clock = clock;
+        this.epochs = epochs;
     }
 
     @Override
-    public void createTask(TaskContext context, String baseRef) {
+    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
         String taskId = context.taskId();
         String ref = refFor(taskId);
         if (gitObjects.resolveRef(ref).isPresent()) {
@@ -99,15 +104,16 @@ public final class GitObjectsTaskRepository implements TaskRepository {
                         "base ref \"" + baseRef + "\" did not resolve"));
 
         Instant now = Instant.now(clock);
-        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, now);
+        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, now, epochs);
         TaskJsonDto dto = TaskJsonMapper.toDto(context, base.hex(), now, null, null, false);
-        writer.commit(taskId, ref, true, base, writer.putTaskJson(taskId, dto), TaskLifecycleEvent.STARTED);
+        writer.commit(
+                taskId, ref, true, base, writer.putTaskAndState(taskId, dto, initialState), TaskLifecycleEvent.STARTED);
     }
 
     @Override
-    public void appendDecision(String taskId, Decision decision) {
+    public void appendDecision(String taskId, Decision decision, TaskState resetState) {
         String ref = refFor(taskId);
-        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock));
+        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
         TaskRecord current = writer.readCurrent(taskId, tip, TaskLifecycleEvent.RESUMED);
 
@@ -122,43 +128,62 @@ public final class GitObjectsTaskRepository implements TaskRepository {
         // Appending the resume decision resets outcome to null in the same commit (FR5/D9 contract).
         TaskJsonDto dto = TaskJsonMapper.toDto(
                 updated, current.baseCommit(), current.createdAt(), null, current.lastEscalation(), false);
-        writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto), TaskLifecycleEvent.RESUMED);
+        // One transition, one commit (FR4): the decision and its attempt-counter reset are two
+        // tree edits of a single bare-object commit, never two tips.
+        writer.commit(
+                taskId, ref, false, tip, writer.putTaskAndState(taskId, dto, resetState), TaskLifecycleEvent.RESUMED);
     }
 
     @Override
     public void recordOutcome(String taskId, TaskOutcome outcome) {
         TaskLifecycleEvent event = eventFor(outcome);
         String ref = refFor(taskId);
-        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock));
+        var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
         ObjectId tip = writer.requireTip(taskId, ref, event);
         TaskRecord current = writer.readCurrent(taskId, tip, event);
 
         EscalationReport lastEscalation =
                 outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : current.lastEscalation();
-        // A terminal PARK (Escalated/Paused) sets the durable "tracker-write pending" marker before
-        // its git-unfenced tracker write, exactly as GitTaskRepository does (FR10/D10 of
-        // add-claim-heartbeat); Completed reconciles via cleanup detection, Aborted's write is
-        // best-effort.
-        boolean pending = outcome instanceof TaskOutcome.Escalated || outcome instanceof TaskOutcome.Paused;
+        // The durable "terminal write pending" marker, exactly as GitTaskRepository sets it (FR10,
+        // D10 of add-claim-heartbeat; FR10 of harden-task-branch-contract): every terminal outcome
+        // whose external effect is still owed carries it, and this commit is the durable intent the
+        // tracker write follows. Aborted's tracker write is best-effort and carries no marker.
+        boolean pending = !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
                 current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending);
-        ObjectId outcomeCommit = writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto), event);
+        writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto), event);
+    }
 
-        if (outcome instanceof TaskOutcome.Completed) {
-            // The cleanup commit removes .gnomish-task/ from the tip; prior commits stay reachable as
-            // the audit trail (FR15/M4). No live environment is required — the state commit was the
-            // last in-box commit (D15/D19).
-            CommitMetadata cleanupMeta = writer.metadata(ServiceCommitMessages.cleanup());
-            writer.build(
-                    taskId,
-                    new CommitRequest(
-                            ref,
-                            Optional.of(outcomeCommit),
-                            outcomeCommit,
-                            List.of(new TreeEdit.DeletePath(TaskLifecycleCommitWriter.stateDir())),
-                            cleanupMeta),
-                    TaskLifecycleEvent.COMPLETED);
-        }
+    /**
+     * Clears the durable "terminal write pending" marker once the outcome's tracker write has
+     * confirmed (FR10 of harden-task-branch-contract) — the receipt a later pickup reads instead of
+     * re-driving the transition. The bare-object twin of {@link
+     * GitTaskRepository#confirmTerminalWrite}: same marker, same meaning, built factory-side with no
+     * environment involved, so a container park settles exactly as a host park does.
+     *
+     * @param taskId the task whose pending marker is cleared; never blank
+     */
+    @Override
+    public void confirmTerminalWrite(String taskId) {
+        GitObjectsTerminalCommits.clearPending(gitObjects, writerFor(), taskId, refFor(taskId));
+    }
+
+    /**
+     * The {@code Completed} cleanup commit — the destructive last step of the completion sequence,
+     * run only behind the confirmed tracker finish (FR10 of harden-task-branch-contract). It removes
+     * {@code .gnomish-task/} from the tip; prior commits stay reachable as the audit trail (FR15,
+     * M4). No live environment is required: the state commit was the last in-box commit (D15, D19),
+     * so the box may already be disposed.
+     *
+     * @param taskId the completed task whose envelope is removed from the branch tip; never blank
+     */
+    @Override
+    public void finishCleanup(String taskId) {
+        GitObjectsTerminalCommits.cleanUp(gitObjects, writerFor(), taskId, refFor(taskId));
+    }
+
+    private TaskLifecycleCommitWriter writerFor() {
+        return new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
     }
 
     private static String refFor(String taskId) {

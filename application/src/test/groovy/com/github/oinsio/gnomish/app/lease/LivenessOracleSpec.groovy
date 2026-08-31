@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -7,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -25,7 +27,7 @@ class LivenessOracleSpec extends Specification {
     private static final Duration TTL = Duration.ofMinutes(15)
     private static final Instant ANCIENT = Instant.parse('2000-01-01T00:00:00Z')
 
-    private final Tracker tracker = Mock()
+    private final Tracker tracker = Mock(Tracker) { listReady(_) >> [] }
     private final VirtualMonotonicTime time = new VirtualMonotonicTime()
     private final StalenessMemory memory = new StalenessMemory(time, TTL)
     private final CachedOpenTaskListing cache = new CachedOpenTaskListing()
@@ -41,7 +43,7 @@ class LivenessOracleSpec extends Specification {
     }
 
     private static ClaimVersion version(String marker = 'm1') {
-        new ClaimVersion(marker, ANCIENT)
+        new ClaimVersion(marker, ANCIENT, new ClaimEpoch(1))
     }
 
     // Task 2.1: the live key set is computed FORWARD via TaskIdSanitizer, recomputed every call
@@ -154,7 +156,7 @@ class LivenessOracleSpec extends Specification {
 
         then:
         1 * tracker.listOpen() >> [working('T-1', v)]
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), new ClaimFacts.Live('inst-1', v)) >> new RemoveStaleClaimResult.Removed()
 
         and: 'the SAME tick, the oracle already classifies it unowned — takeover and unowned agree'
         ((LivenessVerdict.Live) oracle.evaluate()).environmentKeys() == [] as Set
@@ -186,7 +188,7 @@ class LivenessOracleSpec extends Specification {
         reaper.reapOnce([])
 
         then:
-        1 * tracker.removeStaleClaim(new TaskRef('T-1'), v) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(new TaskRef('T-1'), new ClaimFacts.Live('inst-1', v)) >> new RemoveStaleClaimResult.Removed()
         ((LivenessVerdict.Live) oracle.evaluate()).environmentKeys() == [] as Set
     }
 

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 
 /**
@@ -25,16 +26,17 @@ import java.nio.file.Path;
  * <p>Only a delegate write that succeeded is pushed: a throwing lifecycle write propagates
  * untouched and pushes nothing — durability is the recorded branch state.
  *
- * <p>Implements FR1, FR2, FR6, NFR-O1, NFR-R1 of fix-lifecycle-push.
+ * <p>Implements FR1, FR2, FR6, NFR-O1, NFR-R1 of fix-lifecycle-push; FR7 of
+ * harden-task-branch-contract.
  */
 // Not a record: this is a behavior-bearing decorator (the constructor synthesizes the LifecyclePush
 // seam from the runner argument rather than passing it through), not immutable data, kept as a plain
 // final class for parity with its documented sibling PushBestEffortAttemptPersistence.
-@SuppressWarnings("ClassCanBeRecord")
 public final class PushBestEffortTaskRepository implements TaskRepository {
 
     private final TaskRepository delegate;
     private final LifecyclePush push;
+    private final FirstPush firstPush;
     private final Path cloneDir;
 
     /**
@@ -46,18 +48,25 @@ public final class PushBestEffortTaskRepository implements TaskRepository {
     public PushBestEffortTaskRepository(TaskRepository delegate, GitProcessRunner runner, Path cloneDir) {
         this.delegate = delegate;
         this.push = new LifecyclePush(runner);
+        this.firstPush = new FirstPush(runner);
         this.cloneDir = cloneDir;
     }
 
+    /**
+     * The one carve-out from best-effort (FR7 of harden-task-branch-contract): the branch's first
+     * push retries within a bound and throws on exhaustion, so the take aborts before any round
+     * runs rather than working on a branch origin has never seen. Every other method below keeps
+     * the best-effort discipline.
+     */
     @Override
-    public void createTask(TaskContext context, String baseRef) {
-        delegate.createTask(context, baseRef);
-        pushFor(context.taskId(), TaskLifecycleEvent.STARTED.name());
+    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
+        delegate.createTask(context, baseRef, initialState);
+        firstPush.deliver(context.taskId(), cloneDir, TaskIdSanitizer.branchName(context.taskId()));
     }
 
     @Override
-    public void appendDecision(String taskId, Decision decision) {
-        delegate.appendDecision(taskId, decision);
+    public void appendDecision(String taskId, Decision decision, TaskState resetState) {
+        delegate.appendDecision(taskId, decision, resetState);
         pushFor(taskId, TaskLifecycleEvent.RESUMED.name());
     }
 

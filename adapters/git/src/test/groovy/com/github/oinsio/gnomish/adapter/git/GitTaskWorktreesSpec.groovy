@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -26,7 +27,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
     Path tempDir
 
     def runner = new GitProcessRunner()
-    def worktrees = new GitTaskWorktrees(runner)
+    def worktrees = new GitTaskWorktrees(runner, ClaimEpochSource.NONE)
     Path cloneDir
     Path worktreesRoot
 
@@ -54,7 +55,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
         Files.isDirectory(path)
     }
 
-    def "reconcile delegates to WorktreeDivergenceCheck and returns its verdict"() {
+    def "reconcile delegates to the replica-pair reconciler and returns its verdict"() {
         given:
         def branch = createTaskBranch('PROJ-2')
         def worktree = worktrees.ensureWorktree(cloneDir, worktreesRoot, 'PROJ-2', branch)

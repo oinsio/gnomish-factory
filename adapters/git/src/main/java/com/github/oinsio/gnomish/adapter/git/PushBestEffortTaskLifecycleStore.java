@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 
 /**
@@ -28,6 +29,15 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
      */
     private static final String TRACKER_WRITE_CONFIRMED = "TRACKER_WRITE_CONFIRMED";
 
+    /**
+     * The WARN label for the {@code Completed} cleanup commit, a lifecycle write of its own now that
+     * it is the destructive last step of the completion sequence rather than a tail of {@code
+     * recordOutcome} (FR10 of harden-task-branch-contract). Not a {@code TaskLifecycleEvent} for the
+     * same reason as above: the cleanup commit carries its own fixed message from {@code
+     * ServiceCommitMessages}, not an event's.
+     */
+    private static final String CLEANUP = "CLEANUP";
+
     private final TaskLifecycleStore delegate;
     private final PushBestEffortTaskRepository base;
     private final LifecyclePush push;
@@ -46,13 +56,13 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
     }
 
     @Override
-    public void createTask(TaskContext context, String baseRef) {
-        base.createTask(context, baseRef);
+    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
+        base.createTask(context, baseRef, initialState);
     }
 
     @Override
-    public void appendDecision(String taskId, Decision decision) {
-        base.appendDecision(taskId, decision);
+    public void appendDecision(String taskId, Decision decision, TaskState resetState) {
+        base.appendDecision(taskId, decision, resetState);
     }
 
     @Override
@@ -64,5 +74,11 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
     public void confirmTerminalWrite(String taskId) {
         delegate.confirmTerminalWrite(taskId);
         push.pushAfter(taskId, TRACKER_WRITE_CONFIRMED, cloneDir, TaskIdSanitizer.branchName(taskId));
+    }
+
+    @Override
+    public void finishCleanup(String taskId) {
+        delegate.finishCleanup(taskId);
+        push.pushAfter(taskId, CLEANUP, cloneDir, TaskIdSanitizer.branchName(taskId));
     }
 }

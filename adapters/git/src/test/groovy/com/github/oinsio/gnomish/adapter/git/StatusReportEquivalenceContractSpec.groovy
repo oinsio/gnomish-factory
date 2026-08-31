@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -77,17 +78,20 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def liveReport = StatusReport.build(context, state, 3, liveActivity)
 
         and: 'the equivalent task.json + state.json content, committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot)
-        taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), null)
+        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), null, TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
-        def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 1), [
-            new ToolCall(0, 'Edit', Instant.parse('2026-07-16T14:35:10Z'), Duration.ofMillis(2100))
-        ])
-        new GitAttemptPersistence(runner, worktree, taskId).persist(taskId, state, trace)
 
         and: 'the task escalated (recording lastEscalation durably, FR5) and was then resumed with the decision — outcome resets to null while lastEscalation is retained, exactly like the reference fixture (outcome: null, lastEscalation populated)'
         taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
-        taskRepository.appendDecision(taskId, context.decisions().first())
+        // FR4 of harden-task-branch-contract: the decision's own commit carries the attempt-counter
+        // reset, so the round the answered stage then runs is what puts the reference state back on
+        // the branch — the same order a real resume writes these commits in.
+        taskRepository.appendDecision(taskId, context.decisions().first(), state.resetAttempts())
+        def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 1), [
+            new ToolCall(0, 'Edit', Instant.parse('2026-07-16T14:35:10Z'), Duration.ofMillis(2100))
+        ])
+        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
 
         when: 'both are rendered through the same JSON mapper'
         def fullLiveJson = mapper.serialize(liveReport)
@@ -122,10 +126,10 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def liveReport = StatusReport.build(context, state, 3, LiveActivity.idle())
 
         and: 'the round committed to the task branch exactly as the git adapters would'
-        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot)
-        taskRepository.createTask(context, null)
+        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        taskRepository.createTask(context, null, TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
-        new GitAttemptPersistence(runner, worktree, taskId)
+        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
                 .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
 
         when: 'the branch is read back and both renderings go through the same mapper'

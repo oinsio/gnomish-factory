@@ -41,11 +41,11 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
 
         when:
         def events = capture {
-            repository.appendDecision(TASK_ID, new Decision('go', null, null, Instant.EPOCH))
+            repository.appendDecision(TASK_ID, new Decision('go', null, null, Instant.EPOCH), TaskState.atStageStart('work'))
         }
 
         then:
-        1 * delegate.appendDecision(TASK_ID, _) >> {
+        1 * delegate.appendDecision(TASK_ID, _, _) >> {
             commitOnTaskBranch('resumed')
         }
         noExceptionThrown()
@@ -98,11 +98,11 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
 
         when:
         def events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD')
+            repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD', TaskState.atStageStart('work'))
         }
 
         then:
-        1 * delegate.createTask(_, _)
+        1 * delegate.createTask(_, _, _)
         noExceptionThrown()
         events.isEmpty()
     }

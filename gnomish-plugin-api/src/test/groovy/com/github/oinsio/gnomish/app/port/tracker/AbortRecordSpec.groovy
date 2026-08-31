@@ -24,6 +24,20 @@ class AbortRecordSpec extends Specification {
         record.at() == at
     }
 
+    // FR14 of harden-task-branch-contract: the category places the attempt in the unified
+    // accounting, and a record written without one is the category every such marker meant
+    def "carries the recovery category, defaulting to an instance crash"() {
+        given:
+        def at = Instant.parse('2026-07-20T10:00:00Z')
+
+        expect: 'an explicitly categorized record keeps its category'
+        new AbortRecord('repair failed', 'instance-a', at, RecoveryCause.RECOVERY_FAILURE).category() ==
+                RecoveryCause.RECOVERY_FAILURE
+
+        and: 'one written without a category reads as a crashed run'
+        new AbortRecord('build failed', 'instance-a', at).category() == RecoveryCause.INSTANCE_CRASH
+    }
+
     // FR14: an abort marker with no explanation or no attributable instance cannot be
     //     reconstructed usefully by another instance
     def "blank #component is rejected with the component name in the message"() {

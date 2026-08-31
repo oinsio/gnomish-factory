@@ -46,16 +46,16 @@ class StatusReconstructionMultiStageSpec extends StatusReconstructionSpecBase {
         ]
 
         and: 'FR14: the per-round new states show the position advancing build -> test -> end'
-        // AttemptFinished carries the recorded state BEFORE advancement, so the build round\'s
-        // state is still AtStage(build) and the test round\'s state is AtStage(test); the final
-        // state is parked past the last stage at PipelineEnd (advancement happens after the loop).
+        // FR4 of harden-task-branch-contract: a passing round's recorded state already carries the
+        // advancement its pass implies, so the build round's state names `test` and the test
+        // round's state names the pipeline end — one commit per transition, no window in between.
         def finished = listener.events.findAll {
             it instanceof EngineEvent.AttemptFinished
         }
         def state0 = (finished[0] as EngineEvent.AttemptFinished).newState()
         def state1 = (finished[1] as EngineEvent.AttemptFinished).newState()
-        state0.position() == new Position.AtStage('build')
-        state1.position() == new Position.AtStage('test')
+        state0.position() == new Position.AtStage('test')
+        state1.position() instanceof Position.PipelineEnd
         truth.position() instanceof Position.PipelineEnd
 
         and: 'FR14: the history reset is visible per event — each stage\'s state history is scoped to that stage alone'

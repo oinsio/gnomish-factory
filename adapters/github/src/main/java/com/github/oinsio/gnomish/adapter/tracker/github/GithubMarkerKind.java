@@ -14,7 +14,10 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
  * progress} (a durable-progress marker that anchors abort-count
  * reconstruction without itself acting as a claim boundary; design D3 of
  * fix-abort-progress-reset), and {@code stale_claim_removed} (a reaper's
- * stale-claim-removal boundary marker; design D12 of add-claim-heartbeat).
+ * stale-claim-removal boundary marker; design D12 of add-claim-heartbeat), and {@code
+ * index_repair} (a reaper's record that it brought a task's labels back to what its recorded truth
+ * implies — deliberately NOT a claim boundary, since it implies no state of its own and must never
+ * displace the boundary whose flip it completes; FR19 of harden-task-branch-contract).
  *
  * <p>{@code park} and {@code finish} are structurally distinct kinds rather
  * than a single dual-use marker discriminated by an optional field, because
@@ -43,7 +46,8 @@ public enum GithubMarkerKind {
     PARK,
     FINISH,
     PROGRESS,
-    STALE_CLAIM_REMOVED;
+    STALE_CLAIM_REMOVED,
+    INDEX_REPAIR;
 
     /** The lowercase wire value used in the structural JSON's {@code kind} field. */
     String wireValue() {

@@ -9,19 +9,22 @@ import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -115,7 +118,8 @@ tracker:
                 [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null))
+                new ServeProperties(0, null, null, null, null, null, null),
+                new ClaimEpochBook())
     }
 
     // NFR-R1: the tracker outage message ("gnomish run failed: <adapter message>") reaches stderr
@@ -238,8 +242,12 @@ class OutageTracker implements Tracker {
     }
 
     @Override
-    RemoveStaleClaimResult removeStaleClaim(
-            TaskRef ref, ClaimVersion observedVersion) {
+    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
+        throw new UnsupportedOperationException('not used by this fixture')
+    }
+
+    @Override
+    RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
         throw new UnsupportedOperationException('not used by this fixture')
     }
 }

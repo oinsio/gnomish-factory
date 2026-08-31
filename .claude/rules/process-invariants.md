@@ -10,6 +10,32 @@ Never edit files in `openspec/changes/archive/`. If a change needs correction, c
 
 Target 100–120 lines per file; 200 is a hard cap, used only when splitting would hurt clarity. Long files degrade AI context quality. One file = one thing.
 
+The limit is a proxy for low coupling, not a goal: **splitting a file must split a
+responsibility**. A split that leaves the halves reaching into each other's fields, passing
+20-parameter bundles, or delegating in a circle has made coupling worse while satisfying the
+number — that is a violation of this rule, not compliance ("extracted for file size" with no
+ownership transfer is the tell). If no responsibility boundary exists, reduce the class's
+responsibilities first; the line count follows.
+
+## Parameter count limit
+
+A constructor or method with **more than 7 parameters** must take a parameter object instead
+(precedent: `EnginePorts`, `TakeClaimAndWork`). Two adjacent parameters of the same type
+(`Path, Path`; `String taskId, String branch`) are a transposition hazard at any count —
+prefer distinct value types or a parameter object. A mechanical build gate for this limit
+should land together with the refactoring that brings existing offenders under it — turning
+it on earlier just paints the build red.
+
+## Immutable after construction
+
+An object is fully initialized by its constructor: no `init()`, `start()`-before-use without
+a guard, no `attach*`/setter that completes wiring afterwards. When an assembly cycle
+genuinely forces post-construction injection, the field is `volatile` (or otherwise safely
+published), the reader handles the not-yet-attached state explicitly, and a comment names the
+cycle that forced it. Rationale: the factory runs work on concurrently started virtual
+threads; an unpublished write to a plain field is a silent data race, and "constructed but
+not started" is a silent no-op.
+
 ## Module boundaries
 
 Modules expose an explicit public API; never import from internal files of a sibling module. (Concrete mechanism depends on the tech stack — to be refined once the stack is chosen.)

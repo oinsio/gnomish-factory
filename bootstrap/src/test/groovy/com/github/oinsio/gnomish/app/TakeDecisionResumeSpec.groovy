@@ -33,7 +33,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "DecisionNeeded with empty replies re-parks restating the question, no engine run"() {
         given:
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -66,7 +66,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "DecisionNeeded with one pending reply acks before acting, then resumes"() {
         given:
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -107,7 +107,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "DecisionNeeded with multiple pending replies acts on the freshest one"() {
         given:
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -138,7 +138,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "AttemptsExhausted with no pending reply resumes without ack, attempt counter reset applies"() {
         given: 'attempt limit 1, already exhausted before resume'
         def taskId = 'PROJ-4'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
@@ -167,7 +167,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "AttemptsExhausted with a pending reply acks and appends it, then resumes"() {
         given:
         def taskId = 'PROJ-5'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
@@ -206,7 +206,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "an INFRA-kind lastEscalation throws IllegalStateException"() {
         given:
         def taskId = 'PROJ-6'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())

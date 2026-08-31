@@ -8,9 +8,13 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
@@ -63,7 +67,7 @@ class GithubOpenQuerySpec extends Specification {
     private GithubOpenQuery newOpenQuery() {
         def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
         def cache = new GithubConditionalRequestCache(httpClient)
-        new GithubOpenQuery(cache, 'acme', 'widgets', 'gnomish:working', 'gnomish:needs-human')
+        new GithubOpenQuery(cache, 'acme', 'widgets', new GithubStateLabels('gnomish:ready', 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered'))
     }
 
     private void stubWorkingFeed(String body) {
@@ -109,7 +113,7 @@ class GithubOpenQuerySpec extends Specification {
         result.size() == 1
         result[0].ref().id() == 'github:localhost/acme/widgets#7'
         result[0].state() == new TrackerTaskState.Working('gnomish-factory-a1')
-        result[0].claimVersion() == new ClaimVersion('501', Instant.parse('2026-07-23T10:00:00Z'))
+        result[0].claimVersion() == new ClaimVersion('501', Instant.parse('2026-07-23T10:00:00Z'), new ClaimEpoch(501))
     }
 
     def "FR5: reports a needs-human task as AwaitingHuman with the park reason and an absent claim"() {
@@ -129,6 +133,10 @@ class GithubOpenQuerySpec extends Specification {
         result.size() == 1
         result[0].state() == new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
         result[0].claimVersion() == null
+
+        and: 'the park marker is reported as the boundary even as the thread\'s very first comment'
+        result[0].facts().latestBoundary() == BoundaryKind.PARK
+        result[0].facts().claim() instanceof ClaimFacts.None
     }
 
     def "FR5: listing spans both open states, excluding a ready issue and an open PR labeled working"() {
@@ -159,7 +167,7 @@ class GithubOpenQuerySpec extends Specification {
             it.ref().id() == 'github:localhost/acme/widgets#7'
         }
         working.state() == new TrackerTaskState.Working('gnomish-factory-a1')
-        working.claimVersion() == new ClaimVersion('501', Instant.parse('2026-07-23T10:00:00Z'))
+        working.claimVersion() == new ClaimVersion('501', Instant.parse('2026-07-23T10:00:00Z'), new ClaimEpoch(501))
     }
 
     def "FR5: a Working issue whose live claim comment is missing is reported with an absent claim and the last-known holder"() {
@@ -202,17 +210,24 @@ class GithubOpenQuerySpec extends Specification {
         result[0].claimVersion() == null
     }
 
-    def "FR5: a working-labeled issue with no claim footprint at all is not listed (no holder to name)"() {
+    // FR19 of harden-task-branch-contract: the omission rule is gone. A working-labeled issue with
+    //     no claim footprint at all is REPORTED with its facts — it is the claim sequence's own kill
+    //     window, and dropping it as a human mislabel is what hid that window from every sweep.
+    def "FR19: a working-labeled issue with no claim footprint at all is reported, not omitted"() {
         given:
-        stubWorkingFeed('[{"number":7}]')
+        stubWorkingFeed('[{"number":7,"labels":[{"name":"gnomish:working"}]}]')
         stubNeedsHumanFeed('[]')
         stubComments(7, '[]')
 
         when:
         def result = newOpenQuery().listOpen()
 
-        then:
-        result.isEmpty()
+        then: 'the entry is present, wearing the working label with an absent claim footprint'
+        result.size() == 1
+        result[0].facts().labels() == new StateLabels(false, true, false, false, false)
+        result[0].facts().claim() instanceof ClaimFacts.None
+        result[0].facts().latestBoundary() == null
+        result[0].claimVersion() == null
     }
 
     // FR7, NFR-P1, M2 of add-board-command: the title rides the SAME List Issues response body

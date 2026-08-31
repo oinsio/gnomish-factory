@@ -2,9 +2,12 @@ package com.github.oinsio.gnomish.app.port.git;
 
 /**
  * The relationship between a worktree's local branch tip and its {@code origin/<branch>}
- * remote-tracking ref, as classified by {@link WorktreeDivergenceCheck} (FR9, design D9).
+ * remote-tracking ref — the replica pair every execution mode reconciles before it resumes.
  *
- * <p>Implements FR9, NFR-R3 of add-git-workflow.
+ * <p>{@link #NO_REMOTE_TRACKING_REF} covers either side being missing: with only one replica there
+ * is no pair, and nothing to reconcile.
+ *
+ * <p>Implements FR9, NFR-R3 of add-git-workflow; FR8 of harden-task-branch-contract.
  */
 public enum DivergenceOutcome {
 

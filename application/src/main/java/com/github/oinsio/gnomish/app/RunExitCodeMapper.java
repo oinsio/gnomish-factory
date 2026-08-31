@@ -20,9 +20,13 @@ import org.springframework.stereotype.Component;
  *   <tr><td>{@link UsageException}</td><td>2</td><td>usage error</td></tr>
  *   <tr><td>{@link PipelineLoadFailedException}</td><td>3</td><td>pipeline load failure</td></tr>
  *   <tr><td>{@link InputExhaustedException}</td><td>4</td><td>stdin exhausted mid-stage</td></tr>
- *   <tr><td>{@link DivergedBranchException}</td><td>5</td><td>local/origin branch divergence (FR9)</td></tr>
+ *   <tr><td>{@link com.github.oinsio.gnomish.app.port.git.DivergedBranchException}</td><td>5</td>
+ *       <td>local/origin branch divergence on a claimless run, which FR8's automatic discard
+ *       deliberately does not cover</td></tr>
  *   <tr><td>{@link TaskNotFoundException}</td><td>6</td><td>{@code status}/{@code usage}: no task
  *       branch found (FR13, UX3) — a normal outcome, not a crash</td></tr>
+ *   <tr><td>{@link BranchShapeRefusedException}</td><td>7</td><td>{@code status}: the branch
+ *       classifies as a quarantine shape and refuses inspection (FR16)</td></tr>
  *   <tr><td>{@link EscalationEofException}</td><td>10</td><td>Ctrl-D at the escalation resume prompt</td></tr>
  *   <tr><td>{@link CheckpointEofException}</td><td>11</td><td>Ctrl-D at the manual checkpoint prompt</td></tr>
  *   <tr><td>{@link AbortedException}</td><td>12</td><td>persistence failed</td></tr>
@@ -30,7 +34,8 @@ import org.springframework.stereotype.Component;
  *   <tr><td>anything else</td><td>1</td><td>generic internal-error fallback</td></tr>
  * </table>
  *
- * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run.
+ * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run; FR8, FR16 of
+ * harden-task-branch-contract.
  */
 @Component
 public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
@@ -48,6 +53,7 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
             case InputExhaustedException ignored -> 4;
             case DivergedBranchException ignored -> 5;
             case TaskNotFoundException ignored -> 6;
+            case BranchShapeRefusedException ignored -> 7;
             case EscalationEofException ignored -> 10;
             case CheckpointEofException ignored -> 11;
             case AbortedException ignored -> 12;

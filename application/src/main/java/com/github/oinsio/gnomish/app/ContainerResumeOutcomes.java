@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.StatusReport;
 import java.nio.file.Path;
 import java.time.Clock;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The per-outcome resume flows of {@link ContainerResumeRunner} — {@code null} (interrupted
@@ -44,7 +43,7 @@ final class ContainerResumeOutcomes {
             RunArguments.InteractiveMode interactiveMode,
             boolean discardWork,
             Path cloneDir) {
-        @Nullable PendingVerification pending = support.pendingVerification().orElse(null);
+        PendingVerification pending = support.pendingVerification().orElse(null);
         if (discardWork) {
             support.disposeExistingEnvironment();
         } else if (state.position() instanceof Position.AtStage(String stage)) {
@@ -78,9 +77,6 @@ final class ContainerResumeOutcomes {
         var console = runner.assembly.dialogConsole(taskJson.context(), state);
         var dialog = new EscalationResumeDialog(console, Clock.systemUTC());
         RunnerOutcomeLoop.Resumption resumption = dialog.handle(taskJson.context(), escalated);
-        if (resumption == null) {
-            return;
-        }
 
         int before = taskJson.context().decisions().size();
         int after = resumption.context().decisions().size();
@@ -90,7 +86,8 @@ final class ContainerResumeOutcomes {
             support.taskRepository()
                     .appendDecision(
                             taskJson.context().taskId(),
-                            resumption.context().decisions().get(after - 1));
+                            resumption.context().decisions().get(after - 1),
+                            resumption.state());
         }
         ContainerTerminalDrive.run(
                 runner.assembly,

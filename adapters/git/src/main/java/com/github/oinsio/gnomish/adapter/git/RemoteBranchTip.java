@@ -23,7 +23,8 @@ import java.util.Optional;
  * apart is exactly what stops a killed push from being reported as {@code origin is behind}
  * (design D7 of bound-subprocess-commands).
  *
- * <p>Implements FR3, FR4 of fix-lifecycle-push; FR7 of bound-subprocess-commands.
+ * <p>Implements FR3, FR4 of fix-lifecycle-push; FR7 of bound-subprocess-commands; FR6 of
+ * harden-task-branch-contract.
  */
 // Not a record: this is a behavior-bearing reader over the git seam (a collaborator, not immutable
 // data), kept as a plain final class for parity with its siblings in this package.
@@ -100,6 +101,25 @@ final class RemoteBranchTip {
             case 1 -> Carriage.ABSENT;
             default -> Carriage.UNKNOWN;
         };
+    }
+
+    /**
+     * The three-way presence question about the branch itself, as opposed to {@link #confirm}'s
+     * question about one commit: only a remote that actually answered can put a branch's absence
+     * on the record, and absence is what routes a take to a fresh claim (FR6 of
+     * harden-task-branch-contract).
+     *
+     * @param repo the clone the read runs from; never null
+     * @param branch the task branch name; never blank
+     * @return {@link Carriage#CARRIES} when origin holds the branch, {@link Carriage#ABSENT} when
+     *     it answered and holds no such ref, {@link Carriage#UNKNOWN} when it did not answer
+     */
+    Carriage confirmBranch(Path repo, String branch) {
+        GitCommandResult lsRemote = lsRemote(repo, branch);
+        if (lsRemote.termination() != Termination.EXITED || lsRemote.exitCode() != 0) {
+            return Carriage.UNKNOWN;
+        }
+        return lsRemote.stdout().isBlank() ? Carriage.ABSENT : Carriage.CARRIES;
     }
 
     private GitCommandResult lsRemote(Path repo, String branch) {

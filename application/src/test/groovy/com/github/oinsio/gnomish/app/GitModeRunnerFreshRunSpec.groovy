@@ -109,7 +109,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         1 * branches.harden(cloneDir)
 
         then:
-        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD')
+        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
         1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
         1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Completed)
 
@@ -124,7 +124,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         runCapturingStdout(base)
 
         then:
-        1 * lifecycleStore.createTask(_, expected)
+        1 * lifecycleStore.createTask(_, expected, _)
 
         where:
         base || expected

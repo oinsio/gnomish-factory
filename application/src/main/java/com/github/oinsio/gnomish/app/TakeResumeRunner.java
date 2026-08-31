@@ -16,12 +16,12 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Resume wiring for {@code take} over the existing git-protocol machinery (design D3, FR9,
- * FR12): reuses {@link TaskBranchLocator}/{@link TaskWorktreeManager}/{@link
- * WorktreeDivergenceCheck} for {@link #bootstrap} — the same branch-locate/narrow-fetch/
+ * FR12): reuses {@code TaskBranchLocator}/{@code TaskWorktreeManager}/{@code
+ * ReplicaPairReconciler} (adapter-module collaborators, reached only through the {@link TaskGit}
+ * port from here) for {@link #bootstrap} — the same branch-locate/narrow-fetch/
  * worktree-materialize/divergence-reconcile steps {@link GitResumeRunner#bootstrap} performs for
  * manual-run {@code --resume} — then drives the engine directly through {@link
  * TakeEngineExecution} instead of {@link RunnerOutcomeLoop}: {@code take} never opens a console
@@ -29,8 +29,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Two resume entry points mirror the two shapes a park can be resumed from (design D3): {@link
  * #resumeWithoutDecision} for a {@code null}/{@code CHECKPOINT}/{@code INFRA} return, no decision
- * involved; {@link #resumeWithDecision} for an {@code ESCALATION} return, with an optional
- * already-collected human reply (task 5.7's job to collect), mirroring {@code
+ * involved; {@link #resumeDecided} for an {@code ESCALATION} return, from a context the caller's
+ * {@link #appendDecision} has already committed when there was a reply to commit — mirroring {@code
  * EscalationResumeDialog#handleResumable}'s exact reset formula.
  *
  * <p>Implements FR9, FR12, D3 of add-tracker-port.
@@ -99,8 +99,6 @@ final class TakeResumeRunner {
      * @param taskId the tracker's original taskId, as supplied to {@code take --resume}
      * @return the bootstrap bundle: located branch, materialized worktree, loaded task.json
      * @throws UsageException if no branch for {@code taskId} is found
-     * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException if local and origin
-     *     history diverged (no bypass exists today)
      */
     public ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
         return resumeBootstrap.bootstrap(cloneDir, taskId);
@@ -164,38 +162,40 @@ final class TakeResumeRunner {
      * @param cloneDir the project clone; never mutated
      * @param bootstrap the located/materialized bundle from {@link #bootstrap}
      * @param definition the pipeline the run advances through
-     * @param finalState the escalated state the park was produced from
-     * @param decisionText the already-collected human reply, or {@code null}/blank when resuming
-     *     on the return alone (design D12)
+     * @param context the task context the run continues from — the human's decision included when
+     *     one was committed, the branch's own otherwise (design D12)
+     * @param resetState the escalated state with its attempt counter reset
      * @param interactiveMode which role(s) use the interactive adapter
      * @param tracker the tracker port, for the revocation check wrapped around persistence
      * @param ref the task's tracker identity
      * @param instanceId this factory instance's identity
      * @return the mapped {@link TakeResult} for the engine run
      */
-    public TakeResult resumeWithDecision(
+    public TakeResult resumeDecided(
             Path cloneDir,
             ResumeBootstrap bootstrap,
             PipelineDefinition definition,
-            TaskState finalState,
-            @Nullable String decisionText,
+            TaskContext context,
+            TaskState resetState,
             RunArguments.InteractiveMode interactiveMode,
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        var resetState = new TaskState(finalState.position(), 0, List.of(), finalState.totals());
-        var resumedContext = decisionText == null || decisionText.isBlank()
-                ? bootstrap.context()
-                : appendDecision(cloneDir, bootstrap, finalState, decisionText);
         return newExecution(cloneDir)
-                .run(definition, bootstrap, resumedContext, resetState, interactiveMode, tracker, ref, instanceId);
+                .run(definition, bootstrap, context, resetState, interactiveMode, tracker, ref, instanceId);
     }
 
-    private TaskContext appendDecision(Path cloneDir, ResumeBootstrap bootstrap, TaskState finalState, String text) {
+    /**
+     * Commits the human's decision to the branch — the durable intent the tracker acknowledge
+     * follows (FR12 of harden-task-branch-contract), landing in one commit with the attempt-counter
+     * reset it implies (FR4).
+     */
+    TaskContext appendDecision(
+            Path cloneDir, ResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
         String stage = finalState.position() instanceof Position.AtStage(String name) ? name : null;
         var decision = new Decision(text, stage, "tracker", Clock.systemUTC().instant());
-        taskRepository.appendDecision(bootstrap.taskId(), decision);
+        taskRepository.appendDecision(bootstrap.taskId(), decision, resetState);
         var decisions = new ArrayList<>(bootstrap.context().decisions());
         decisions.add(decision);
         var context = bootstrap.context();

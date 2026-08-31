@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker;
 
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.time.Instant;
 
 /**
@@ -24,14 +25,27 @@ import java.time.Instant;
  * rule above; the rule still forbids deriving a staleness *verdict* from this field anywhere in
  * core.
  *
+ * <p><b>The epoch.</b> {@code epoch} is the same lease, expressed as an ordered
+ * token rather than an identity: {@code markerId} answers "which marker is the
+ * anchor", {@code epoch} answers "which tenure is newer". Core needs both and can
+ * derive neither from the other — {@code markerId} is an opaque string a tracker
+ * may format however it likes, so ordering it is not core's business. Like
+ * {@code markerId} the epoch is stable across beats and changes only when a new
+ * tenure begins; it is the token {@link ClaimResult.Acquired#epoch()} issued to
+ * whoever holds the claim this version describes, so an observer reads the very
+ * epoch the holder is stamping into its commits (FR13 of
+ * harden-task-branch-contract).
+ *
  * <p>Inert value data compared by content.
  *
- * <p>Implements FR5 of add-claim-heartbeat.
+ * <p>Implements FR5 of add-claim-heartbeat. Implements FR13 of
+ * harden-task-branch-contract.
  *
  * @param markerId the claim-marker identity, stable across beats; never blank
  * @param updatedAt the marker's last-update fact, refreshed by every beat; never null
+ * @param epoch the tenure's ordered claim token, stable across beats; never null
  */
-public record ClaimVersion(String markerId, Instant updatedAt) {
+public record ClaimVersion(String markerId, Instant updatedAt, ClaimEpoch epoch) {
 
     public ClaimVersion {
         markerId = requireNonBlank(markerId);

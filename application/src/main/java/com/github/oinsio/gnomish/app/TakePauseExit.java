@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.GuardedPark;
+import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeOutcomeMapper;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
@@ -75,7 +77,18 @@ final class TakePauseExit {
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        return finish(paused, context, branchName, tracker, ref, instanceId, TerminalWriteRetry.system(), () -> {}, "");
+        return finish(
+                paused,
+                context,
+                branchName,
+                tracker,
+                ref,
+                instanceId,
+                TerminalWriteRetry.system(),
+                // The caller of this convenience overload has already recorded the outcome commit, so
+                // the intent here is only the delivery verdict it fenced with — a fresh write either
+                // way, which is what keeps it from spending a probe read (FR10).
+                new ParkTransition.Fresh(ParkDeliveryVerdict.Delivered::new, () -> {}));
     }
 
     /**
@@ -95,9 +108,10 @@ final class TakePauseExit {
      * human reading it learns the remote does not yet carry the branch named above it.
      *
      * @param retry the bounded terminal-write retry the park is made through; never null
-     * @param onConfirmed cleared-marker action run once the park confirms landed; never null
-     * @param replicationNote the delivery fence's one-line note, or empty when origin carries the
-     *     park (or there is no origin at all); never null
+     * @param transition the park's branch-side steps (FR10 of harden-task-branch-contract): a fresh
+     *     checkpoint park records its outcome commit and fences its delivery here; a recovered one
+     *     carries the verdict its caller's fence already produced and probes the tracker before
+     *     re-driving the write. Either way the receipt clears the branch's pending marker
      */
     static TakeResult finish(
             TaskOutcome.Paused paused,
@@ -107,22 +121,20 @@ final class TakePauseExit {
             TaskRef ref,
             InstanceId instanceId,
             TerminalWriteRetry retry,
-            Runnable onConfirmed,
-            String replicationNote) {
+            ParkTransition transition) {
         var report = StatusReport.build(context, paused.finalState(), null, LiveActivity.idle());
         String rendered = new StatusTextRenderer().renderFull(report);
         String checkpoint = "Stage '" + paused.passedStage() + "' passed. Manual checkpoint reached.";
-        String reportText = rendered + "\n" + "Branch: " + branchName + "\n\n" + checkpoint + "\n"
-                + CHECKPOINT_RETURN_PATH + (replicationNote.isEmpty() ? "" : "\n" + replicationNote);
+        String head = rendered + "\n" + "Branch: " + branchName + "\n\n" + checkpoint + "\n" + CHECKPOINT_RETURN_PATH;
 
-        GuardedPark.attempt(
+        String reportText = GuardedPark.attempt(
                 tracker,
                 ref,
                 instanceId,
                 ParkReason.CHECKPOINT,
-                reportText,
+                note -> head + (note.isEmpty() ? "" : "\n" + note),
                 retry,
-                onConfirmed,
+                transition,
                 log,
                 "checkpoint park");
         return new TakeResult.AwaitingHuman(paused.finalState(), ParkReason.CHECKPOINT, reportText);

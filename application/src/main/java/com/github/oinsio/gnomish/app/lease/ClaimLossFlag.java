@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.lease;
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -35,7 +36,22 @@ import java.util.concurrent.ConcurrentHashMap;
  * wires the boundary consult and the {@code RevocationHandler} hand-off in the take command,
  * leaving {@code RevocationCheckingAttemptPersistence} and {@code TakeCommand} untouched here.
  *
- * <p>Implements FR8 of add-claim-heartbeat.
+ * <p><b>The second, weaker state: unconfirmed (FR13 of harden-task-branch-contract).</b> A claim
+ * whose beats have been failing past the lost-detection threshold is not known to be lost — the
+ * tracker may simply be unreachable — but it is no longer known to be held either. That claim is
+ * marked <i>unconfirmed</i> here, and the run freezes its writes at the next boundary until it
+ * re-verifies the claim: no round commit, no push, no tracker write. Unlike a lost claim this state
+ * is reversible in both directions — a beat that lands clears it, and a boundary re-verification
+ * that finds the claim still ours clears it too — so it is held in its own set rather than in the
+ * latching map above. The two never contradict each other: a claim proved gone is lost, and the
+ * lost path already ends the run at the same boundary the freeze would have held it at.
+ *
+ * <p>Freezing before the reaper can reassign is what makes the fence useful: the lost-detection
+ * threshold that sets this state is strictly earlier than the reaper's reassignment threshold
+ * (claim-heartbeat "Lost-detection strictly precedes reassignment"), so a holder has already
+ * stopped writing by the time any other instance could be handed the task.
+ *
+ * <p>Implements FR8 of add-claim-heartbeat. Implements FR13 of harden-task-branch-contract.
  */
 public final class ClaimLossFlag implements ClaimLostSink {
 
@@ -47,6 +63,7 @@ public final class ClaimLossFlag implements ClaimLostSink {
     static final String DEFAULT_REASON = "claim marker gone (heartbeat reported loss)";
 
     private final Map<TaskRef, String> lost = new ConcurrentHashMap<>();
+    private final Set<TaskRef> unconfirmed = ConcurrentHashMap.newKeySet();
 
     /**
      * Records that {@code ref}'s claim is lost, called by the beat thread when a beat
@@ -110,5 +127,59 @@ public final class ClaimLossFlag implements ClaimLostSink {
      */
     public String reason(TaskRef ref) {
         return lost.getOrDefault(ref, DEFAULT_REASON);
+    }
+
+    /**
+     * Records that {@code ref}'s claim can no longer be confirmed, freezing the run's writes at its
+     * next boundary until it re-verifies (FR13). Idempotent, and reversible by {@link
+     * #claimConfirmed(TaskRef)} or {@link #confirmedByReverification(TaskRef)}.
+     *
+     * <p>Implements FR13 of harden-task-branch-contract.
+     *
+     * @param ref the task whose claim is unconfirmed; never null
+     */
+    @Override
+    public void claimUnconfirmed(TaskRef ref) {
+        unconfirmed.add(ref);
+    }
+
+    /**
+     * Records that a beat confirmed {@code ref}'s claim live again, lifting the freeze (FR13).
+     *
+     * <p>Implements FR13 of harden-task-branch-contract.
+     *
+     * @param ref the task whose claim is confirmed; never null
+     */
+    @Override
+    public void claimConfirmed(TaskRef ref) {
+        unconfirmed.remove(ref);
+    }
+
+    /**
+     * Lifts the freeze after the run's own boundary re-verification found the claim still ours —
+     * the second way out of the frozen state, and the one that matters when the beats are still
+     * failing but a single conditional read got through (FR13). Named apart from {@link
+     * #claimConfirmed(TaskRef)} so the two callers stay visible: the beat thread confirms through
+     * the sink, the run confirms through this.
+     *
+     * <p>Implements FR13 of harden-task-branch-contract.
+     *
+     * @param ref the task whose claim was re-verified; never null
+     */
+    public void confirmedByReverification(TaskRef ref) {
+        unconfirmed.remove(ref);
+    }
+
+    /**
+     * Reports whether {@code ref}'s claim is currently unconfirmed, for the round boundary to
+     * consult before it writes anything (FR13).
+     *
+     * <p>Implements FR13 of harden-task-branch-contract.
+     *
+     * @param ref the task to test; never null
+     * @return {@code true} while the holder cannot confirm the claim is live
+     */
+    public boolean isUnconfirmed(TaskRef ref) {
+        return unconfirmed.contains(ref);
     }
 }

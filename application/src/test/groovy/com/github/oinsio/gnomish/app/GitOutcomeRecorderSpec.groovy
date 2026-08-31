@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -13,7 +13,8 @@ import java.nio.file.Path
 import spock.lang.Specification
 
 /**
- * FR6, FR8 of add-git-workflow: the "record + cleanup" pair both git-mode terminal boundaries (a
+ * FR6, FR8 of add-git-workflow, FR10 of harden-task-branch-contract: the "record + cleanup" pair
+ * both git-mode terminal boundaries (a
  * fresh {@code GitModeRunner} and a resumed {@code GitResumeRunner}) reach the end of a task
  * through. The pairing exists so the ORDER is stated in one place — a task must be durably
  * recorded before its worktree is judged safe to remove — which is exactly what this spec pins.
@@ -31,7 +32,7 @@ class GitOutcomeRecorderSpec extends Specification {
     // the outcome was recorded could remove the working copy of a task whose result was then lost.
     def "records the outcome durably before disposing of the worktree"() {
         given:
-        def taskRepository = Mock(TaskRepository)
+        def taskRepository = Mock(TaskLifecycleStore)
         def worktrees = Mock(TaskWorktreeGit)
         def branches = Mock(TaskBranchGit)
         def git = new TaskGit(Stub(TaskStoreGit), branches, worktrees)
@@ -43,11 +44,14 @@ class GitOutcomeRecorderSpec extends Specification {
         then: 'the outcome is recorded for this task first'
         1 * taskRepository.recordOutcome('PROJ-1', outcome)
 
-        then: 'and only then is the worktree handed to the outcome-driven disposal'
-        1 * worktrees.cleanUp(CLONE_DIR, WORKTREE, outcome)
-
         then: 'FR3 of fix-lifecycle-push: the terminal boundary closes with the reconciliation check'
         1 * branches.reconcileRemote(CLONE_DIR, 'PROJ-1', 'terminal-boundary')
+
+        then: 'FR10 of harden-task-branch-contract: the destructive steps come last — cleanup commit, then disposal'
+        1 * taskRepository.finishCleanup('PROJ-1')
+
+        then:
+        1 * worktrees.cleanUp(CLONE_DIR, WORKTREE, outcome)
         0 * _
     }
 
@@ -59,7 +63,7 @@ class GitOutcomeRecorderSpec extends Specification {
     // reconciling first would buy nothing and cost a second round-trip.
     def "passes the terminal outcome through to both ports unchanged"() {
         given:
-        def taskRepository = Mock(TaskRepository)
+        def taskRepository = Mock(TaskLifecycleStore)
         def worktrees = Mock(TaskWorktreeGit)
         def branches = Mock(TaskBranchGit)
         def git = new TaskGit(Stub(TaskStoreGit), branches, worktrees)
@@ -70,6 +74,7 @@ class GitOutcomeRecorderSpec extends Specification {
         then:
         1 * taskRepository.recordOutcome('PROJ-2', outcome)
         1 * worktrees.cleanUp(CLONE_DIR, WORKTREE, outcome)
+        (outcome instanceof TaskOutcome.Completed ? 1 : 0) * taskRepository.finishCleanup('PROJ-2')
 
         and: 'FR3, NFR-C1: the reconciliation closes every NON-park boundary; a park is left to its fence'
         reconciliations * branches.reconcileRemote(CLONE_DIR, 'PROJ-2', 'terminal-boundary')

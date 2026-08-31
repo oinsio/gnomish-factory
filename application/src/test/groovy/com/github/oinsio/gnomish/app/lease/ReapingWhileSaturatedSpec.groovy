@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.claimBy
 import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.version
 import static com.github.oinsio.gnomish.app.lease.ClaimFixtures.workingBy
 
@@ -38,7 +39,7 @@ class ReapingWhileSaturatedSpec extends Specification {
     private static final TaskRef OWN_B = new TaskRef('github:o/r#own-b')
     private static final TaskRef FOREIGN = new TaskRef('github:o/r#foreign')
 
-    private final Tracker tracker = Mock()
+    private final Tracker tracker = Mock(Tracker) { listReady(_) >> [] }
     private final VirtualClock clock = new VirtualClock()
     private final VirtualMonotonicTime monotonic = new VirtualMonotonicTime()
     private final StalenessMemory staleness = new StalenessMemory(monotonic, TTL)
@@ -98,7 +99,7 @@ class ReapingWhileSaturatedSpec extends Specification {
         1 * tracker.listOpen() >> [
             workingBy(FOREIGN, 'gnomish-other', foreignVersion)
         ]
-        1 * tracker.removeStaleClaim(FOREIGN, foreignVersion) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(FOREIGN, claimBy('gnomish-other', foreignVersion)) >> new RemoveStaleClaimResult.Removed()
 
         and: "this instance's own busy claims are never reaped, saturated or not"
         0 * tracker.removeStaleClaim(OWN_A, _)
@@ -137,6 +138,6 @@ class ReapingWhileSaturatedSpec extends Specification {
         1 * tracker.listOpen() >> [
             workingBy(FOREIGN, 'gnomish-other', foreignVersion)
         ]
-        1 * tracker.removeStaleClaim(FOREIGN, foreignVersion) >> new RemoveStaleClaimResult.Removed()
+        1 * tracker.removeStaleClaim(FOREIGN, claimBy('gnomish-other', foreignVersion)) >> new RemoveStaleClaimResult.Removed()
     }
 }

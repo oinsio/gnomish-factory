@@ -1,9 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
@@ -14,8 +11,10 @@ import org.jspecify.annotations.Nullable;
 /**
  * Encodes and decodes the GitHub adapter's structural comment shape (design
  * D9): a leading hidden HTML comment carrying one-line JSON — {@code kind},
- * {@code instance}, {@code at}, format version {@code version} — followed by
- * whatever human-readable text the caller supplies, e.g.:
+ * {@code instance}, {@code at}, format version {@code version}, plus the
+ * optional {@code reason} and the {@code task}/{@code intent} content
+ * identity — followed by whatever human-readable text the caller supplies,
+ * e.g.:
  *
  * <pre>{@code
  * <!-- gnomish {"kind":"claim","instance":"gnomish-factory-x7k2q1","at":"2026-07-20T12:00:00Z","version":1} -->
@@ -25,18 +24,20 @@ import org.jspecify.annotations.Nullable;
  * <p>The structural JSON line carries only coordination metadata — never the
  * human message itself, which is a separate line the caller composes freely.
  * GitHub renders HTML comments invisibly, so a human reading the issue thread
- * sees only the human-readable line, while a fresh adapter instance parses
- * kind/instance/at/version back out of the raw comment body (the "Markers are
+ * sees only the human-readable line, while a fresh adapter instance parses the
+ * structural fields back out of the raw comment body (the "Markers are
  * invisible to humans, visible to machines" scenario of the github-tracker
  * spec).
  *
  * <p>This class is purely string encode/decode: it never posts or reads
- * comments over HTTP (that is tasks 4.11–4.14) and carries no kind-specific
- * payload beyond the four fixed structural fields — kind-specific content
- * (a cause, a decision text, a report body) is carried entirely in the
- * human-readable text, which the caller controls.
+ * comments over HTTP — {@link GithubCommentUpsert} owns that — and carries no
+ * kind-specific payload beyond the fixed structural fields; kind-specific
+ * content (a cause, a decision text, a report body) is carried entirely in the
+ * human-readable text, which the caller controls. The JSON codec itself lives
+ * in {@link GithubMarkerJson}.
  *
- * <p>Implements FR7 of add-tracker-port, design D9, NFR-O1 of add-tracker-port.
+ * <p>Implements FR7 of add-tracker-port, design D9, NFR-O1 of add-tracker-port,
+ * FR11 of harden-task-branch-contract.
  */
 public final class GithubMarker {
 
@@ -45,7 +46,6 @@ public final class GithubMarker {
 
     private static final String COMMENT_PREFIX = "<!-- gnomish ";
     private static final String COMMENT_SUFFIX = " -->";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     // Matches the first line only; DOTALL not needed since '.' already excludes '\n'.
     private static final Pattern MARKER_LINE =
@@ -70,17 +70,15 @@ public final class GithubMarker {
 
     /**
      * Renders a structural comment body carrying an optional {@code reason}
-     * field alongside kind/instance/at/version. This is used by {@link
-     * GithubMarkerKind#PARK} markers to carry the wire value of a {@link
-     * com.github.oinsio.gnomish.app.port.tracker.ParkReason}, so a fresh
-     * instance's {@code fetchTask} recovers the reason from the marker kind
-     * without inferring it from free-text human wording. {@link
-     * GithubStateWrites#park} posts this field when it writes a {@code PARK}
-     * marker; {@link GithubStateWrites#finish} writes a {@code FINISH} marker
-     * carrying no reason. The dedicated {@code park}/{@code finish} kinds
-     * replaced the earlier dual-use {@code report} kind (enforce-finish-terminality
-     * design D1), so the distinction is structural rather than inferred from
-     * whether {@code reason} happens to be present.
+     * field. This is used by {@link GithubMarkerKind#PARK} markers to carry the
+     * wire value of a {@link com.github.oinsio.gnomish.app.port.tracker.ParkReason},
+     * so a fresh instance's {@code fetchTask} recovers the reason from the
+     * marker without inferring it from free-text human wording; {@link
+     * GithubStateWrites#finish} writes a {@code FINISH} marker carrying no
+     * reason. The dedicated {@code park}/{@code finish} kinds replaced the
+     * earlier dual-use {@code report} kind (enforce-finish-terminality design
+     * D1), so the distinction is structural rather than inferred from whether
+     * {@code reason} happens to be present.
      *
      * @param reason the wire value of the park reason (e.g. {@code
      *     "escalation"}, {@code "checkpoint"}, {@code "infra"}), or {@code
@@ -90,8 +88,45 @@ public final class GithubMarker {
      */
     public static String render(
             GithubMarkerKind kind, String instanceId, Instant at, String humanText, @Nullable String reason) {
-        String json = writeStructuralJson(kind, instanceId, at, reason);
-        return COMMENT_PREFIX + json + COMMENT_SUFFIX + "\n" + humanText;
+        return render(kind, instanceId, at, humanText, reason, null, null);
+    }
+
+    /**
+     * Renders a structural comment body stamped with its content identity
+     * (FR11): the {@code task}/{@code intent} pair {@link GithubCommentUpsert}
+     * finds the comment by when the same logical write is re-driven after a
+     * crash. Every other {@code render} overload delegates here, so there is
+     * exactly one place the wire shape is built.
+     *
+     * <p>The tenure's claim {@code epoch} is stamped alongside it (FR13), so a
+     * reader can tell which tenure authored the write and classify an older
+     * one as stale. A {@code claim} marker carries none: its own comment id
+     * <em>is</em> the epoch, and it is not assigned until the comment exists.
+     *
+     * @param identity the content identity to stamp, or {@code null} for a
+     *     marker written outside the upsert protocol
+     * @param epoch the tenure this write belongs to, or {@code null} when the
+     *     writer holds none
+     * @return the full comment body ready to post
+     */
+    public static String render(
+            GithubMarkerKind kind,
+            String instanceId,
+            Instant at,
+            String humanText,
+            @Nullable String reason,
+            @Nullable GithubCommentIdentity identity,
+            @Nullable ClaimEpoch epoch) {
+        var fields = new GithubMarkerJson(
+                kind.wireValue(),
+                instanceId,
+                at.toString(),
+                FORMAT_VERSION,
+                reason,
+                identity == null ? null : identity.task(),
+                identity == null ? null : identity.intent(),
+                epoch == null ? null : epoch.token());
+        return COMMENT_PREFIX + fields.serialize() + COMMENT_SUFFIX + "\n" + humanText;
     }
 
     /**
@@ -112,12 +147,11 @@ public final class GithubMarker {
         if (!matcher.matches()) {
             return Optional.empty();
         }
-        StructuralFields fields;
-        try {
-            fields = MAPPER.readValue(matcher.group("json"), StructuralFields.class);
-        } catch (JsonProcessingException e) {
+        Optional<GithubMarkerJson> parsed = GithubMarkerJson.deserialize(matcher.group("json"));
+        if (parsed.isEmpty()) {
             return Optional.empty();
         }
+        GithubMarkerJson fields = parsed.get();
         if (fields.kind() == null || fields.instance() == null || fields.at() == null) {
             return Optional.empty();
         }
@@ -131,30 +165,14 @@ public final class GithubMarker {
         }
         String rest = matcher.group("rest");
         String humanText = rest == null ? "" : rest;
-        return Optional.of(new ParsedMarker(kind, fields.instance(), at, fields.version(), humanText, fields.reason()));
+        return Optional.of(new ParsedMarker(
+                kind,
+                fields.instance(),
+                at,
+                fields.version(),
+                humanText,
+                fields.reason(),
+                fields.identity().orElse(null),
+                fields.epoch() == null ? null : new ClaimEpoch(fields.epoch())));
     }
-
-    private static String writeStructuralJson(
-            GithubMarkerKind kind, String instanceId, Instant at, @Nullable String reason) {
-        try {
-            var fields = new StructuralFields(kind.wireValue(), instanceId, at.toString(), FORMAT_VERSION, reason);
-            return MAPPER.writeValueAsString(fields);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize gnomish structural marker JSON", e);
-        }
-    }
-
-    /**
-     * Jackson-bound carrier for the structural JSON; field declaration order
-     * fixes wire-key order. {@code reason} is omitted from the rendered JSON
-     * entirely when {@code null} (via {@link JsonInclude}), so every marker
-     * kind other than a {@code PARK} marker keeps the original four-field shape.
-     */
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    private record StructuralFields(
-            @Nullable @JsonProperty("kind") String kind,
-            @Nullable @JsonProperty("instance") String instance,
-            @Nullable @JsonProperty("at") String at,
-            @JsonProperty("version") int version,
-            @Nullable @JsonProperty("reason") String reason) {}
 }

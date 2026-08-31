@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -52,8 +53,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir, 'init')
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 
@@ -78,7 +78,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     }
 
     private GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot)
+        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
     }
 
     private Path expectedWorktree(String taskId) {
@@ -92,7 +92,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
     private void persistOneRound(String taskId, TaskState state) {
         def worktree = expectedWorktree(taskId)
-        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId)
+        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
@@ -106,49 +106,49 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     def "M1: interrupted round is salvaged (not counted as a round) then the task completes"() {
         given: 'a task with one durably committed round, as a live run would leave it'
         def taskId = 'PROJ-100'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         def stateBeforeKill = StateJsonMapper.fromDto(
-                StateJsonMapper.readDto(gitRunner.run(worktree, 'show', 'HEAD:.gnomish-task/state.json').stdout()))
-        def branchTipAfterFirstRound = gitRunner.run(cloneDir, 'rev-parse', "gnomish/${taskId}").stdout().trim()
+                StateJsonMapper.readDto(gitOutput(worktree, 'show', 'HEAD:.gnomish-task/state.json')))
+        def branchTipAfterFirstRound = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
 
         and: 'the process dies mid-round: gnome work sits uncommitted, no round-closing persist ran'
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
-        assert gitRunner.run(worktree, 'status', '--porcelain').stdout().trim() != ''
+        assert gitOutput(worktree, 'status', '--porcelain') != ''
 
         when: 'a fresh process resumes via the same --resume code path, salvaging by default'
         newResumeRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
                 .run(cloneDir, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
 
         then: 'a salvage commit landed directly on top of the first round, ahead of the next round commit'
-        def subjects = gitRunner.run(cloneDir, 'log', '--format=%s', "${branchTipAfterFirstRound}..gnomish/${taskId}")
-                .stdout().readLines()
+        def subjects = gitOutput(cloneDir, 'log', '--format=%s', "${branchTipAfterFirstRound}..gnomish/${taskId}")
+                .readLines()
         subjects.contains(ServiceCommitMessages.salvage())
 
         and: 'the salvage commit is the very first new commit after the interrupted round'
         subjects.last() == ServiceCommitMessages.salvage()
 
         and: 'the salvage commit carries the leftover file'
-        def salvageSha = gitRunner.run(cloneDir, 'log', '--format=%H', "${branchTipAfterFirstRound}..gnomish/${taskId}")
-                .stdout().readLines().last()
-        def salvageStat = gitRunner.run(cloneDir, 'show', '--stat', salvageSha).stdout()
+        def salvageSha = gitOutput(cloneDir, 'log', '--format=%H', "${branchTipAfterFirstRound}..gnomish/${taskId}")
+                .readLines().last()
+        def salvageStat = gitOutput(cloneDir, 'show', '--stat', salvageSha)
         salvageStat.contains('half-done.txt')
 
         and: 'the salvage commit is NOT a round: it carries no state.json change at all'
         !salvageStat.contains('.gnomish-task/state.json')
 
         and: 'the task went on to complete a further round: the branch records a Completed outcome'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}").exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', "gnomish/${taskId}") == 0
         !Files.exists(worktree)
 
         and: 'the completion round is a genuinely new round on top of the salvage commit, not a re-run of the first'
-        def completedTaskJson = gitRunner.run(cloneDir, 'show', "gnomish/${taskId}~1:.gnomish-task/task.json").stdout()
+        def completedTaskJson = gitOutput(cloneDir, 'show', "gnomish/${taskId}~1:.gnomish-task/task.json")
         TaskJsonMapper.fromDto(TaskJsonMapper.readDto(completedTaskJson)).outcome() instanceof RecordedOutcome.Completed
 
         and: 'the round recorded by that completion is the only round.json attempt beyond the pre-kill one — the'
         and: 'salvage commit itself never appears as an AttemptRecord in any state.json on the branch'
-        def finalRoundStateJson = gitRunner.run(cloneDir, 'show', "gnomish/${taskId}~2:.gnomish-task/state.json").stdout()
+        def finalRoundStateJson = gitOutput(cloneDir, 'show', "gnomish/${taskId}~2:.gnomish-task/state.json")
         def finalRoundState = StateJsonMapper.fromDto(StateJsonMapper.readDto(finalRoundStateJson))
         finalRoundState.attempts().size() == stateBeforeKill.attempts().size() + 1
     }

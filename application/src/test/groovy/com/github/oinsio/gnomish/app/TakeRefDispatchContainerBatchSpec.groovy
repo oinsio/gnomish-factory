@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
@@ -13,9 +15,13 @@ import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.engine.port.Workspace
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -24,7 +30,10 @@ import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxBindingProvider
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.sandbox.Segment
+import java.nio.file.Path
 import java.time.Duration
+import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
 
@@ -71,7 +80,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         Stub(SandboxRunSupport) {
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
-            workspace() >> ({} as com.github.oinsio.gnomish.domain.engine.port.Workspace)
+            workspace() >> ({} as Workspace)
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
     }
@@ -82,7 +91,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         def registry = AdapterBindingRegistry.ratified([containerProvider()], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(null, [:])
         def sandbox = new SandboxProperties('an-image', null, null, null, [], [], false, null, null, null, null)
-        ContainerSupportFactory containerSupport = { clone, id, segments, sandboxProps, factoryProps, definition, creds ->
+        ContainerSupportFactory containerSupport = { Path clone, String id, List<Segment> segments, SandboxProperties sandboxProps, FactoryProperties factoryProps, PipelineDefinition definition, List<String> creds ->
             stubSupport(repositories[id])
         }
         new ContainerTakeSupport(testProperties(), bindings, sandbox, registry, {
@@ -93,10 +102,11 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
     private TakeDispatcher dispatcher(Map<String, TaskRepository> repositories) {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
                 ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
-                containerTakeSupport(repositories))
+                containerTakeSupport(repositories), new ClaimEpochBook())
     }
 
     private void dispatch(List<String> refs, Map<String, TaskRepository> repositories) {
@@ -108,7 +118,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
                     completedRound('PROJ-1'),
                     completedRound('PROJ-2')
                 ])),
-                heartbeat, SERVE_PROPERTIES, org.slf4j.LoggerFactory.getLogger(TakeRefDispatchContainerBatchSpec))
+                heartbeat, SERVE_PROPERTIES, LoggerFactory.getLogger(TakeRefDispatchContainerBatchSpec))
     }
 
     // FR1: two fresh Ready tasks, both bound to the container adapter (the default), reach the
@@ -127,9 +137,9 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         then:
         1 * tracker.fetchTask(new TaskRef('PROJ-1')) >> readyTask('PROJ-1')
         1 * tracker.fetchTask(new TaskRef('PROJ-2')) >> readyTask('PROJ-2')
-        2 * tracker.claim(_, _) >> new ClaimResult.Acquired()
-        1 * repoOne.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD')
-        1 * repoTwo.createTask({ it.taskId() == 'PROJ-2' }, 'HEAD')
+        2 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        1 * repoOne.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
+        1 * repoTwo.createTask({ it.taskId() == 'PROJ-2' }, 'HEAD', _)
 
         and:
         thrown(TakeExitCodeException)

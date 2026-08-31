@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -22,7 +23,8 @@ import org.slf4j.LoggerFactory;
  * <p>Never blocks and never throws: no {@code origin} is a silent no-op, an unreachable origin or a
  * failed catch-up push is one WARN, and the run proceeds either way (NFR-R1).
  *
- * <p>Implements FR3, NFR-R1, NFR-O1, NFR-C1 of fix-lifecycle-push.
+ * <p>Implements FR3, NFR-R1, NFR-O1, NFR-C1 of fix-lifecycle-push; FR8 of
+ * harden-task-branch-contract.
  */
 public final class OriginReconciliation {
 
@@ -57,20 +59,28 @@ public final class OriginReconciliation {
             return;
         }
         Optional<String> remote = remoteTip.read(repo, branch);
-        if (remote.filter(localTip::equals).isPresent()) {
+        // The relation is computed in one place for all three of its askers (design D8): this
+        // touchpoint keeps its own cheap ls-remote read — one round trip, no fetch — and hands the
+        // two tips it already holds to the shared classifier instead of re-deriving the verdict.
+        DivergenceOutcome relation = ReplicaRelation.of(
+                localTip,
+                remote.orElse(null),
+                (candidate, descendant) -> remoteTip.isAncestor(repo, candidate, descendant));
+        if (relation == DivergenceOutcome.EQUAL) {
             return;
         }
-        if (remote.isPresent() && !remoteTip.isAncestor(repo, remote.get(), localTip)) {
-            // Origin holds something the local tip does not descend from — ahead, diverged, or
-            // simply unknown to this clone. A fast-forward push cannot fix that, and this change
-            // repairs no history (NG4): leave it to the operator, and do not burn a failed push on it.
+        if (relation == DivergenceOutcome.BEHIND || relation == DivergenceOutcome.DIVERGED) {
+            // Origin holds something the local tip does not descend from — its own line, or one
+            // simply unknown to this clone. A fast-forward push cannot fix that, and no touchpoint
+            // repairs history (NG4): the resume-time reconciler owns discard-under-lease, this
+            // read-only touchpoint does not, so it declines the push and says why.
             log.warn(
                     "origin reconciliation skipped: taskId={}, branch={}, touchpoint={}, reason=origin tip {} is not"
                             + " an ancestor of the local tip {}",
                     taskId,
                     branch,
                     touchpoint,
-                    remote.get(),
+                    remote.orElse("(unknown)"),
                     localTip);
             return;
         }

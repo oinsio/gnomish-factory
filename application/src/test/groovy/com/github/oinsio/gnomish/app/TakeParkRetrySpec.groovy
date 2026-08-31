@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -13,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
+import com.github.oinsio.gnomish.app.take.ParkTransition
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -92,6 +94,79 @@ class TakeParkRetrySpec extends Specification {
         new TerminalWriteRetry(noop, advancingClock, Duration.ofMinutes(10))
     }
 
+    /**
+     * A fresh park whose intent is already recorded by the caller and whose fence saw origin holding
+     * the park (FR10 of harden-task-branch-contract): what remains under test is the receipt.
+     */
+    private static ParkTransition freshPark(Runnable receipt) {
+        new ParkTransition.Fresh({
+            new ParkDeliveryVerdict.Delivered()
+        } as ParkTransition.ParkIntent, receipt)
+    }
+
+    // FR10 of harden-task-branch-contract: recovery verifies the effect at the target before
+    // re-driving it — a tracker already awaiting a human carries this park, so no second write goes
+    // out and only the owed receipt is recorded.
+    def "a recovered park whose write already landed records the receipt without re-parking"() {
+        given:
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION))
+
+        when:
+        def result = TakeEscalationExit.exit(
+                escalated(), tracker, REF, INSTANCE, retry,
+                new ParkTransition.Recovered(new ParkDeliveryVerdict.Delivered(), {
+                    confirmed.incrementAndGet()
+                }))
+
+        then: 'no duplicate park artifact — the probe found the effect at the target'
+        0 * tracker.park(*_)
+        confirmed.get() == 1
+        (result as TakeResult.AwaitingHuman).reason() == ParkReason.ESCALATION
+    }
+
+    // FR10: an intent whose effect is genuinely absent is re-driven, then receipted.
+    def "a recovered park whose write never landed is re-driven and receipted"() {
+        given:
+        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+
+        when:
+        TakeEscalationExit.exit(
+                escalated(), tracker, REF, INSTANCE, retry,
+                new ParkTransition.Recovered(new ParkDeliveryVerdict.Delivered(), {
+                    confirmed.incrementAndGet()
+                }))
+
+        then:
+        1 * tracker.park(REF, ParkReason.ESCALATION, _ as String)
+        confirmed.get() == 1
+    }
+
+    // FR10: an unaskable tracker reads as "not there" — the park is re-driven, which the
+    // find-then-upsert write (FR11) makes safe, while skipping one that never landed would strand
+    // the task nobody is waiting on.
+    def "a recovered park whose probe cannot be answered is re-driven rather than skipped"() {
+        given: 'the probe throws; the claim check behind it finds the claim still ours'
+        def probed = false
+        tracker.fetchTask(REF) >> {
+            if (!probed) {
+                probed = true
+                throw new TrackerUnavailableException('tracker unreachable')
+            }
+            taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        }
+
+        when:
+        TakeEscalationExit.exit(
+                escalated(), tracker, REF, INSTANCE, retry,
+                new ParkTransition.Recovered(new ParkDeliveryVerdict.Delivered(), {
+                    confirmed.incrementAndGet()
+                }))
+
+        then:
+        1 * tracker.park(REF, ParkReason.ESCALATION, _ as String)
+        confirmed.get() == 1
+    }
+
     // FR10, D10: an escalation park that lands clears the pending marker exactly once.
     def "escalation park that lands runs the marker-clear callback once"() {
         given:
@@ -99,9 +174,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, {
+                escalated(), tracker, REF, INSTANCE, retry, freshPark {
                     confirmed.incrementAndGet()
-                }, '')
+                })
 
         then:
         1 * tracker.park(REF, ParkReason.ESCALATION, _ as String)
@@ -122,9 +197,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, {
+                escalated(), tracker, REF, INSTANCE, retry, freshPark {
                     confirmed.incrementAndGet()
-                }, '')
+                })
 
         then:
         attempts.get() == 3
@@ -148,9 +223,9 @@ class TakeParkRetrySpec extends Specification {
         when:
         def events = capture(TakeEscalationExit) {
             result = TakeEscalationExit.exit(
-            escalated(), tracker, REF, INSTANCE, givingUpRetry(), {
+            escalated(), tracker, REF, INSTANCE, givingUpRetry(), freshPark {
                 confirmed.incrementAndGet()
-            }, '')
+            })
         }
 
         then: 'the marker-clear callback never runs, so the branch keeps the pending marker'
@@ -174,9 +249,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakeEscalationExit.exit(
-                escalated(), tracker, REF, INSTANCE, retry, {
+                escalated(), tracker, REF, INSTANCE, retry, freshPark {
                     confirmed.incrementAndGet()
-                }, '')
+                })
 
         then:
         0 * tracker.park(*_)
@@ -192,9 +267,9 @@ class TakeParkRetrySpec extends Specification {
 
         when:
         def result = TakePauseExit.finish(
-                paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, retry, {
+                paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, retry, freshPark {
                     confirmed.incrementAndGet()
-                }, '')
+                })
 
         then:
         1 * tracker.park(REF, ParkReason.CHECKPOINT, _ as String)
@@ -217,9 +292,9 @@ class TakeParkRetrySpec extends Specification {
         when:
         def events = capture(TakePauseExit) {
             result = TakePauseExit.finish(
-            paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, givingUpRetry(), {
+            paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, givingUpRetry(), freshPark {
                 confirmed.incrementAndGet()
-            }, '')
+            })
         }
 
         then:

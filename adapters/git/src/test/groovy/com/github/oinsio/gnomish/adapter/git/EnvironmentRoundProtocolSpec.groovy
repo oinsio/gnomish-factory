@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
@@ -49,7 +50,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         box.materialize(BRANCH, null)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
         snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, attemptRef)
-        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef)
+        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
     }
 
     private void gnomeWork(String file = 'work.txt', String content = 'gnome work') {
@@ -182,7 +183,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         tamperingBox.materialize(BRANCH, null)
         def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, TASK, attemptRef)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp2')))
-        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, attemptRef)
+        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
@@ -210,7 +211,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         tamperingBox.materialize(BRANCH, null)
         def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, TASK, attemptRef)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp3')))
-        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, attemptRef)
+        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, attemptRef, ClaimEpochSource.NONE)
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:

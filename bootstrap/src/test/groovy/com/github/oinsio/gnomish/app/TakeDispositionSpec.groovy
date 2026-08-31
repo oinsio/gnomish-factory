@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
+import com.github.oinsio.gnomish.app.lease.EpochRecordingTracker
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -15,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -36,11 +39,20 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // older, so the takeover facts render the age as "47m".
     private static final Instant NOW = Instant.parse('2026-07-29T12:00:00Z')
 
+    /**
+     * The instance's tenure record, as production wires it: one book shared by the disposition and
+     * by every git writer it hands work to. Filled at the claim by {@code EpochRecordingTracker},
+     * which this spec's mock tracker stands in for — a feature that needs a held tenure records it
+     * with {@link ClaimEpochBook#issued} in its given block.
+     */
+    def claimEpochBook = new ClaimEpochBook()
+
     private TakeDisposition newDisposition() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
-        new TakeDisposition(newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
-        ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
-        ContainerTakeSupport.hostOnly())
+        new TakeDisposition(newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler,
+                ABORT_THRESHOLD, 'taskId', [],
+                ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
+                ContainerTakeSupport.hostOnly(), claimEpochBook)
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
@@ -48,13 +60,14 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     private TakeDisposition newTakeoverDisposition(TakeoverConfirmation confirmation, boolean takeoverFlag) {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeDisposition(
-                newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
+                newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler, ABORT_THRESHOLD,
+                'taskId', [],
                 ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly())
+                ContainerTakeSupport.hostOnly(), claimEpochBook)
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
-        new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt), 'fixture title')
+        new OpenTask(REF, new TrackerTaskState.Working(holder), new ClaimVersion('claim-comment-1', beatAt, new ClaimEpoch(1)), 'fixture title')
     }
 
     private static TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
@@ -71,7 +84,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // is ever consulted on this path.
     def "Ready with no existing branch claims and works the task from scratch, delivering it"() {
         given:
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 
         when:
@@ -81,7 +94,35 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
         then:
         result instanceof TakeResult.Delivered
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1').exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1') == 0
+    }
+
+    // FR13 of harden-task-branch-contract: the completion's cleanup commit — the destructive step
+    // that strips .gnomish-task/ — runs AFTER tracker.finish, behind the confirmed effect, and is
+    // still a commit of this tenure, so it must carry the epoch trailer. Ending the tenure at the
+    // terminal tracker write left it unstamped, i.e. outside the fence a zombie's late cleanup
+    // commit is supposed to be caught by. The tracker is wrapped exactly as production wraps it
+    // (EpochRecordingTracker over the live port), so the book follows the claim on its own.
+    def "FR13: the cleanup commit behind a confirmed finish carries the tenure's epoch"() {
+        given:
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(7))
+        def recording = new EpochRecordingTracker(tracker, claimEpochBook)
+        def disposition = newDisposition()
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Ready()), recording, INSTANCE)
+
+        then:
+        result instanceof TakeResult.Delivered
+
+        and: 'the branch tip is the cleanup commit, and it is inside the fence'
+        def tip = gitOutput(cloneDir, 'log', '-1', '--format=%B', 'gnomish/PROJ-1')
+        tip.contains('Gnomish-Claim-Epoch: 7')
+
+        and: 'the tenure is forgotten once the run scope ends — nothing may stamp it afterwards'
+        claimEpochBook.epochFor('PROJ-1').isEmpty()
     }
 
     // FR6 of add-git-workflow, reused here: a fresh claim also prunes stale worktree
@@ -92,13 +133,13 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with no existing branch prunes stale worktree registrations before claiming"() {
         given: 'a worktree directory registered then deleted outside git, leaving a stale registration'
         def staleWorktree = worktreesRoot.resolve('my-project').resolve('STALE-1')
-        gitRunner.run(cloneDir, 'worktree', 'add', staleWorktree.toString(), '-b', 'stale-branch')
+        addWorktree(cloneDir, staleWorktree, 'stale-branch')
         staleWorktree.toFile().deleteDir()
-        def before = gitRunner.run(cloneDir, 'worktree', 'list', '--porcelain')
-        assert before.stdout().contains(staleWorktree.toString())
+        def before = gitOutput(cloneDir, 'worktree', 'list', '--porcelain')
+        assert before.contains(staleWorktree.toString())
 
         and:
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 
         when:
@@ -107,8 +148,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
                 trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
 
         then: 'the stale registration is gone — pruneWorktrees ran as part of the fresh claim'
-        def after = gitRunner.run(cloneDir, 'worktree', 'list', '--porcelain')
-        !after.stdout().contains(staleWorktree.toString())
+        def after = gitOutput(cloneDir, 'worktree', 'list', '--porcelain')
+        !after.contains(staleWorktree.toString())
     }
 
     // FR14 "Runner crash is an abort", D16 "an uncaught exception runs the abort protocol and exits
@@ -117,7 +158,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // so the abort is recorded (claim released back to Ready) and the run exits 12.
     def "an uncaught exception during the claimed run aborts and exits 12, not a bare 1"() {
         given: 'a fresh Ready claim whose terminal tracker write blows up mid-run'
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         tracker.finish(*_) >> {
             throw new RuntimeException('github 500 on finish')
         }
@@ -141,7 +182,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // unchanged and is never folded into the abort protocol.
     def "a UsageException during the claimed run propagates as exit 2, never converted to an abort"() {
         given: 'a fresh Ready claim with an unresolvable --base'
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 
         when:
@@ -167,12 +208,12 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "the beat lifecycle brackets a claimed run even when it exits via deliberate control flow"() {
         given: 'a fresh Ready claim whose post-claim work exits via a deliberate UsageException'
         def beat = Mock(ClaimBeat)
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         def disposition = new TakeDisposition(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
                 beat, false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC),
-                new ClaimLossFlag(), ContainerTakeSupport.hostOnly())
+                new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
 
         when:
         disposition.dispose(
@@ -187,47 +228,85 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         1 * beat.unregister(REF)
     }
 
-    // D16: a DivergedBranchException on resume (local/origin divergence, exit 5) is likewise a
-    // deliberate, operator-actionable outcome — it propagates unchanged rather than becoming an
-    // abort.
-    def "a DivergedBranchException during a resumed run propagates as exit 5, never an abort"() {
+    // FR15, UX2 of harden-task-branch-contract: a branch whose state envelope cannot be read is
+    // parked for a human on the FIRST classification — with the diagnosis in the report and no
+    // abort recorded, so the task never returns to Ready to be claimed and re-read identically.
+    def "FR15: an unreadable state envelope parks the task once, burning no attempt"() {
+        given: 'a claimed task whose branch carries an unreadable state.json'
+        def taskId = 'PROJ-23'
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        def worktree = expectedWorktree(taskId)
+        Files.writeString(worktree.resolve('.gnomish-task/state.json'), 'not json at all')
+        commitAll(worktree, 'corrupt state')
+
+        and:
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        def disposition = newDisposition()
+
+        when:
+        def result = disposition.dispose(
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
+                trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
+
+        then: 'the task parks needs-human with the offending file named in the report'
+        1 * tracker.park(REF, ParkReason.INFRA, { String report ->
+            report.contains('state.json') && report.contains('spent none')
+        })
+
+        and: 'no attempt of the unified recovery accounting is spent'
+        0 * tracker.recordAbort(*_)
+
+        and:
+        result instanceof TakeResult.AwaitingHuman
+        (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
+    }
+
+    // FR8 of harden-task-branch-contract: divergence on a claimed resume is no longer an
+    // operator-actionable outcome at all — the reconciler discards the local line under the claim
+    // and the run proceeds, so nothing is aborted and nothing is parked for a human.
+    def "FR8: divergence during a resumed run resolves under the claim instead of stopping it"() {
         given: 'a task branch pushed to a real origin, then diverged from a peer push'
         def bare = initBareRepo(tempDir, 'origin.git')
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
-        gitRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        addRemote(cloneDir, 'origin', bare.toString())
+        gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
         def taskId = 'PROJ-22'
-        repository().createTask(context(taskId), null)
-        gitRunner.run(cloneDir, 'push', 'origin', 'gnomish/PROJ-22')
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-22')
         def worktree = expectedWorktree(taskId)
 
         and: 'this worktree gains a local commit never pushed'
         Files.writeString(worktree.resolve('local-only.txt'), 'local work')
-        gitRunner.run(worktree, 'add', 'local-only.txt')
-        gitRunner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'local work')
+        commitAll(worktree, 'local work')
 
         and: 'a peer independently pushes a different commit for the same task branch'
         def peerClone = tempDir.resolve('peer-clone-22')
-        gitRunner.run(tempDir, 'clone', bare.toString(), peerClone.toString())
-        gitRunner.run(peerClone, 'fetch', 'origin', 'gnomish/PROJ-22:refs/remotes/origin/gnomish/PROJ-22')
-        gitRunner.run(peerClone, 'checkout', 'gnomish/PROJ-22')
+        gitOutput(tempDir, 'clone', bare.toString(), peerClone.toString())
+        gitOutput(peerClone, 'fetch', 'origin', 'gnomish/PROJ-22:refs/remotes/origin/gnomish/PROJ-22')
+        gitOutput(peerClone, 'checkout', 'gnomish/PROJ-22')
         Files.writeString(peerClone.resolve('peer-only.txt'), 'peer work')
-        gitRunner.run(peerClone, 'add', 'peer-only.txt')
-        gitRunner.run(peerClone, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'peer work')
-        gitRunner.run(peerClone, 'push', 'origin', 'gnomish/PROJ-22')
+        commitAll(peerClone, 'peer work')
+        gitOutput(peerClone, 'push', 'origin', 'gnomish/PROJ-22')
 
-        and:
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        and: 'the claim is acquired, so this instance holds a tenure on the task'
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        claimEpochBook.issued(taskId, new ClaimEpoch(1))
         def disposition = newDisposition()
+
+        and: 'what origin ends up holding is the peer line'
+        def originTip = gitOutput(bare, 'rev-parse', 'refs/heads/gnomish/PROJ-22')
 
         when:
         disposition.dispose(
                 cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
                 trackerTask(new TrackerTaskState.Ready(), taskId), tracker, INSTANCE)
 
-        then:
-        thrown(DivergedBranchException)
+        then: 'the local line is discarded and the run goes on — no abort, no park'
+        noExceptionThrown()
         0 * tracker.recordAbort(*_)
         0 * tracker.park(*_)
+
+        and: 'the branch the run continued on descends from origin, not from the discarded local commit'
+        gitExitCode(cloneDir, 'merge-base', '--is-ancestor', originTip, 'refs/heads/gnomish/PROJ-22') == 0
     }
 
     // Scenario: resuming from the branch outcome when one is recorded — Ready, but a branch
@@ -236,11 +315,11 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch resumes it instead of creating a new one"() {
         given:
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def disposition = newDisposition()
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
 
         when:
         def result = disposition.dispose(
@@ -256,13 +335,13 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch and a DecisionNeeded outcome re-parks restating the question"() {
         given:
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report))
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         tracker.collectDecisions(REF) >> []
         def disposition = newDisposition()
 
@@ -290,15 +369,18 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // Zero rounds is proven by the task branch tip commit being unchanged across the run (an engine
     // round would add commits); the deferred finish is proven to come from the branch-recorded
     // delivery (not a fresh render) by naming the task and its branch.
+    // FR9, FR10 of harden-task-branch-contract: the CompletedUncleaned shape — the outcome commit
+    // landed, the tracker finish did not, so the envelope is still at the tip. The pickup finishes
+    // what is left (probe, write, cleanup commit) and never re-enters the engine.
     def "Ready with an existing branch recorded Completed reconciles the deferred finish, zero engine rounds"() {
         given: 'a delivered branch whose finish never reached the tracker'
         def taskId = 'PROJ-4'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(taskId, new TaskOutcome.Completed(state))
-        def tipBefore = gitRunner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-4').stdout().strip()
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        def tipBefore = gitOutput(cloneDir, 'rev-parse', 'gnomish/PROJ-4')
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 
         when:
@@ -312,8 +394,11 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
             it.contains('PROJ-4') && it.contains('Branch: gnomish/PROJ-4')
         })
 
-        and: 'no engine round ran — the task branch tip is unchanged (M4: zero rounds, no new commits)'
-        gitRunner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-4').stdout().strip() == tipBefore
+        and: 'no engine round ran: the only commit added is the completion sequence\'s destructive last step'
+        gitOutput(cloneDir, 'rev-parse', 'gnomish/PROJ-4^') == tipBefore
+
+        and: 'that step is the cleanup commit — the tip carries no .gnomish-task/ any more'
+        gitOutput(cloneDir, 'ls-tree', 'gnomish/PROJ-4', '--', '.gnomish-task') == ''
     }
 
     // Ready + existing branch + a recorded Aborted outcome: the abort protocol (FR14) returns a
@@ -324,12 +409,12 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch recorded Aborted resumes it on the return alone"() {
         given:
         def taskId = 'PROJ-5'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(
                 taskId, new TaskOutcome.Aborted(state, new AttemptKey(taskId, 'build', 0), 'disk full'))
-        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 
         when:
@@ -355,7 +440,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         then:
         result instanceof TakeResult.Skipped
         (result as TakeResult.Skipped).reason().contains('gnomish-other-x1y2z3')
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1').exitCode() != 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1') != 0
     }
 
     // Scenario "Held task shows facts and asks" (FR6, D9): a Working task with a TTY attached prints
@@ -460,9 +545,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working confirmed via TTY removes the stale claim, claims ordinarily, and resumes to Delivered"() {
         given: 'an existing branch for the held task, resumable from its last durable round'
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
-        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
+        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]
@@ -477,8 +562,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
                 trackerTask(new TrackerTaskState.Working('gnomish-dead-x1'), taskId), tracker, INSTANCE)
 
         then: 'the old claim was removed with the observed version, then the ordinary lease claimed it'
-        1 * tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Removed()
-        1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.removeStaleClaim(REF, new ClaimFacts.Live('gnomish-dead-x1', observed)) >>
+                new RemoveStaleClaimResult.Removed()
+        1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
 
         and: 'the run resumed from the branch and delivered'
         result instanceof TakeResult.Delivered
@@ -490,9 +576,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working headless with --takeover proceeds as a confirmed takeover, bypassing the seam"() {
         given:
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null)
+        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
-        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
+        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]
@@ -508,8 +594,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         0 * confirmation.confirm(*_)
 
         and: 'it still removes the stale claim, claims ordinarily, and resumes to Delivered'
-        1 * tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Removed()
-        1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired()
+        1 * tracker.removeStaleClaim(REF, new ClaimFacts.Live('gnomish-dead-x1', observed)) >>
+                new RemoveStaleClaimResult.Removed()
+        1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         result instanceof TakeResult.Delivered
     }
 
@@ -538,7 +625,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // Held — the run refuses naming the current holder, tracker converges (NFR-R2).
     def "Working confirmed but the takeover loses the race refuses naming the current holder"() {
         given:
-        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60))
+        def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]

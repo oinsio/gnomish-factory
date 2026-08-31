@@ -96,12 +96,26 @@ public record GithubTaskFetcher(
         return new TrackerTask(ref, snapshot, state, abortFacts, finished);
     }
 
+    /** The instance of the last claim marker in the thread, or the placeholder when there is none. */
+    private static String lastClaimHolder(List<ParsedMarker> markers) {
+        for (int i = markers.size() - 1; i >= 0; i--) {
+            if (markers.get(i).kind() == GithubMarkerKind.CLAIM) {
+                return markers.get(i).instance();
+            }
+        }
+        return GithubTrackerFacts.UNKNOWN_HOLDER;
+    }
+
     private TrackerTaskState stateFrom(GithubIssueDetail detail, List<ParsedMarker> markers) {
         if (detail.labelNames().contains(workingLabel)) {
+            // FR19 of harden-task-branch-contract: a working label with no active claim marker is a
+            // fact, not an error — it is the claim sequence's own kill window, and a fetch that
+            // threw on it turned a swept, repairable shape into a crash on every reader's path.
+            // The state names the last instance to have claimed the task, or the placeholder when
+            // the thread names none; the sweep classifies the same issue off its listing facts.
             String holder = GithubCommentBoundary.activeClaim(markers)
                     .map(ParsedMarker::instance)
-                    .orElseThrow(() -> new GithubFeedQueryException(
-                            "issue carries the working label but no active claim marker was found"));
+                    .orElseGet(() -> lastClaimHolder(markers));
             return new TrackerTaskState.Working(holder);
         }
         if (detail.labelNames().contains(needsHumanLabel)) {

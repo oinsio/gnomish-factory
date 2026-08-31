@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import java.nio.file.Path;
@@ -14,7 +15,7 @@ import org.slf4j.MDC;
  * reimplemented. Extracted from {@link TakeResumeRunner} purely to keep both files within the
  * project's file-size guidance (`.claude/rules/process-invariants.md`).
  *
- * <p>Implements FR9 of add-tracker-port.
+ * <p>Implements FR9 of add-tracker-port; FR6 of harden-task-branch-contract.
  *
  * @param git the task-git capability set: clone hardening, branch lookup, worktree
  *     materialization and divergence reconciliation; never null
@@ -36,7 +37,9 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
      * @return the bootstrap bundle: located branch, materialized worktree, loaded task.json
      * @throws UsageException if no branch for {@code taskId} is found
      * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException if local and origin
-     *     history diverged (no bypass exists today)
+     *     have truly diverged while no claim is held on the task: the automatic discard is the
+     *     claim protocol's arbitration, so the claimless {@code run --resume} caller stops and
+     *     reports instead (FR8 of harden-task-branch-contract)
      */
     ResumeBootstrap bootstrap(Path cloneDir, String taskId) {
         // Runner-start hygiene for both resume flows: neutralize hooks on the clone before the
@@ -44,6 +47,12 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
         // (FR17, design D11) — the config-write twin of the fresh path's pruneWorktrees hardening.
         git.branches().harden(cloneDir);
         BranchLocation location = git.branches().locate(cloneDir, taskId);
+        // "Origin could not be asked" is not "no such branch" (FR6 of harden-task-branch-contract):
+        // reporting it as a usage error would tell the operator to check their taskId when the
+        // network is what failed.
+        if (location instanceof BranchLocation.Unavailable(String reason)) {
+            throw new BranchLocationUnavailableException(taskId, reason);
+        }
         if (location instanceof BranchLocation.NotFound) {
             throw UsageException.branchNotFound(taskId);
         }

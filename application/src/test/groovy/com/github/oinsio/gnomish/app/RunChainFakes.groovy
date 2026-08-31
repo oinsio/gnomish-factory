@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -164,9 +165,10 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     TakeClaimAndWork claimAndWork(TaskGit git, Tracker tracker, RunAssembly assembly,
             ClaimBeat beat = ClaimBeat.NONE, ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
-            Path root = WORKTREES_ROOT) {
+            Path root = WORKTREES_ROOT, ClaimEpochBook epochs = new ClaimEpochBook()) {
         TakeClaimAndWorkFactory.forSlot(
                 assembly, git, root, 'taskId',
-                new AbortHandler(tracker, FIXED_CLOCK), 3, [], beat, claimLossFlag, ContainerTakeSupport.hostOnly())
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [], beat, claimLossFlag, ContainerTakeSupport.hostOnly(),
+                epochs)
     }
 }

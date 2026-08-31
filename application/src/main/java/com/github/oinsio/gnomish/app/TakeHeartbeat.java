@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.lease.HeartbeatStateListener;
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
+import com.github.oinsio.gnomish.app.lease.LeaseThresholds;
 import com.github.oinsio.gnomish.app.lease.LivenessOracle;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.lease.Reaper;
@@ -172,14 +173,19 @@ record TakeHeartbeat(
             MonotonicTime monotonicTime,
             HeartbeatStateListener stateListener) {
         Duration interval = config.heartbeatInterval();
-        Duration ttl = interval.multipliedBy(config.heartbeatTtlMultiplier());
+        // FR13 of harden-task-branch-contract: the reaper's reassignment deadline and the holder's
+        // own lost-detection deadline come from LeaseThresholds, which is where their required
+        // order is stated and tested — never re-derived here.
+        Duration ttl = LeaseThresholds.reassignment(config);
+        Duration lostDetection = LeaseThresholds.lostDetection(config);
+        Duration windowGrace = LeaseThresholds.windowGrace(config);
         var progress = new HeartbeatProgress();
         var flag = new ClaimLossFlag();
-        var staleness = new StalenessMemory(monotonicTime, ttl);
+        var staleness = new StalenessMemory(monotonicTime, ttl, windowGrace);
         var listing = new CachedOpenTaskListing();
         var reaper = new Reaper(tracker, staleness, listing);
-        var heartbeat =
-                new InstanceHeartbeat(tracker, progress, sleeper, new SystemClock(), interval, flag, stateListener);
+        var heartbeat = new InstanceHeartbeat(
+                tracker, progress, sleeper, new SystemClock(), interval, flag, stateListener, lostDetection);
         var standingReaper =
                 new StandingReaper(reaper, reaperSleeper, interval, heartbeat::liveClaimsSnapshot, new SystemClock());
         var livenessOracle = new LivenessOracle(listing, staleness);

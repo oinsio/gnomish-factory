@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -102,12 +103,9 @@ autonomy:
      * requires at least one commit to resolve.
      */
     private void makeProjectRootAGitClone() {
-        def runner = new GitProcessRunner()
-        assert runner.run(projectRoot, 'init').exitCode() == 0
+        assert gitExitCode(projectRoot, 'init') == 0
         Files.writeString(projectRoot.resolve('README.md'), 'seed\n')
-        runner.run(projectRoot, 'add', 'README.md')
-        assert runner.run(projectRoot, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        .exitCode() == 0
+        commitAll(projectRoot, 'init')
     }
 
     // FR12: no relevant flag present -> no-op, untouched no-args behavior
@@ -459,8 +457,7 @@ advancement: auto
         given:
         makeProjectRootAGitClone()
         writeOneStagePipeline()
-        def gitRunner = new GitProcessRunner()
-        def cloneStatusBefore = gitRunner.run(projectRoot, 'status', '--porcelain').stdout()
+        def cloneStatusBefore = gitOutput(projectRoot, 'status', '--porcelain')
         def originalIn = System.in
         def originalOut = System.out
         System.in = new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))
@@ -478,7 +475,7 @@ advancement: auto
 
         then:
         noExceptionThrown()
-        gitRunner.run(projectRoot, 'status', '--porcelain').stdout() == cloneStatusBefore
+        gitOutput(projectRoot, 'status', '--porcelain') == cloneStatusBefore
 
         cleanup:
         System.in = originalIn
@@ -512,8 +509,7 @@ advancement: auto
         !Files.exists(worktree)
 
         and: 'the branch still exists in the clone, with completed task.json reachable in history'
-        def gitRunner = new GitProcessRunner()
-        gitRunner.run(projectRoot, 'rev-parse', '--verify', 'gnomish/manual-test-git-complete').exitCode() == 0
+        gitExitCode(projectRoot, 'rev-parse', '--verify', 'gnomish/manual-test-git-complete') == 0
 
         cleanup:
         System.in = originalIn
@@ -526,8 +522,7 @@ advancement: auto
         given:
         makeProjectRootAGitClone()
         writeOneStagePipeline()
-        def gitRunner = new GitProcessRunner()
-        assert gitRunner.run(projectRoot, 'branch', 'gnomish/manual-test-git-dup', 'HEAD').exitCode() == 0
+        assert gitExitCode(projectRoot, 'branch', 'gnomish/manual-test-git-dup', 'HEAD') == 0
         def runner = newRunner()
         def args = new DefaultApplicationArguments(
                 "--dir=${projectRoot}".toString(),
@@ -563,11 +558,11 @@ advancement: auto
     /** Bootstraps a real git task branch directly (no full fresh run), as a crashed run would leave it. */
     private void bootstrapGitTask(String taskId) {
         def gitRunner = new GitProcessRunner()
-        def repository = new GitTaskRepository(gitRunner, projectRoot, worktreesRoot)
+        def repository = new GitTaskRepository(gitRunner, projectRoot, worktreesRoot, ClaimEpochSource.NONE)
         def context = new TaskContext(taskId, 'title', 'body', List.<Decision> of())
-        repository.createTask(context, null)
+        repository.createTask(context, null, TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve(taskId)
-        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId)
+        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
         def state = TaskState.atStageStart('build')
         def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
                 [
@@ -609,8 +604,7 @@ advancement: auto
         capturedOut.toString('UTF-8').contains('=== Task goal ===')
 
         and: 'the task reached completion, and the worktree was cleaned up'
-        def gitRunner = new GitProcessRunner()
-        gitRunner.run(projectRoot, 'rev-parse', '--verify', 'gnomish/manual-test-resume').exitCode() == 0
+        gitExitCode(projectRoot, 'rev-parse', '--verify', 'gnomish/manual-test-resume') == 0
         def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve('manual-test-resume')
         !Files.exists(worktree)
     }
@@ -623,13 +617,11 @@ advancement: auto
         makeProjectRootAGitClone()
         writeOneStagePipeline()
         bootstrapGitTask('manual-test-badversion')
-        def gitRunner = new GitProcessRunner()
         def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve('manual-test-badversion')
         def taskJson = worktree.resolve('.gnomish-task').resolve('task.json')
         def rewritten = Files.readString(taskJson).replaceFirst(/"version"\s*:\s*1/, '"version":2')
         Files.writeString(taskJson, rewritten)
-        gitRunner.run(worktree, 'add', '-A')
-        gitRunner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'bump version')
+        commitAll(worktree, 'bump version')
 
         def originalErr = System.err
         def capturedErr = new ByteArrayOutputStream()

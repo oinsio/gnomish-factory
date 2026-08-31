@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
@@ -37,8 +38,8 @@ import java.nio.file.Path;
  */
 public final class DeliveredBranchReader {
 
-    private static final String TASK_JSON_PATH = ".gnomish-task/task.json";
-    private static final String STATE_JSON_PATH = ".gnomish-task/state.json";
+    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
+    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
 
     private final GitProcessRunner runner;
     private final TaskBranchLocator locator;
@@ -74,6 +75,8 @@ public final class DeliveredBranchReader {
                 switch (location) {
                     case BranchLocation.Local local -> local.ref();
                     case BranchLocation.RemoteTracking tracking -> tracking.ref();
+                    case BranchLocation.Unavailable(String reason) ->
+                        throw new BranchLocationUnavailableException(taskId, reason);
                     case BranchLocation.NotFound ignored ->
                         throw new GitTaskRepositoryException(
                                 taskId,

@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -59,7 +61,19 @@ final class InMemoryLeaseOps {
         });
     }
 
-    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
+    RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        return tracker.withLock(() -> {
+            TrackedTask task = tracker.store.get(ref);
+            if (task == null) {
+                // A task the tracker no longer holds has no index to repair: report the observation
+                // back unchanged, converging exactly as removeStaleClaim does for a vanished task.
+                return new RepairIndexResult.Unchanged(observedFacts);
+            }
+            return ClaimLeases.repairIndex(task, observedFacts);
+        });
+    }
+
+    RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
         Runnable gate = removeStaleClaimGate;
         if (gate != null) {
             gate.run();
@@ -73,7 +87,7 @@ final class InMemoryLeaseOps {
                 // vanished task converges rather than mistaking it for infrastructure (NFR-R2, D5).
                 return new RemoveStaleClaimResult.Mismatch(null);
             }
-            return ClaimLeases.removeIfMatches(task, observedVersion);
+            return ClaimLeases.removeIfMatches(task, observedClaim);
         });
     }
 }

@@ -1,12 +1,13 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
-import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.app.take.FinishTransition;
+import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
 import com.github.oinsio.gnomish.app.take.RevocationDetectedException;
 import com.github.oinsio.gnomish.app.take.RevocationHandler;
@@ -23,7 +24,7 @@ import java.util.List;
 
 /**
  * The shared "run the engine exactly once, no dialog" tail both {@link
- * TakeResumeRunner#resumeWithoutDecision} and {@link TakeResumeRunner#resumeWithDecision} call
+ * TakeResumeRunner#resumeWithoutDecision} and {@link TakeResumeRunner#resumeDecided} call
  * into (design D2, D3): assembles the same {@code EnginePorts} bundle manual-run uses via {@link
  * RunAssembly#assemble}, but drives {@link Engine#run} directly instead of {@link
  * RunnerOutcomeLoop} — {@code take} must behave identically with or without a TTY (design D12),
@@ -141,23 +142,38 @@ record TakeEngineExecution(
                     RevocationDetectedException.reasonFor(revoked));
         }
 
-        GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, outcome);
-        // The durable "tracker-write pending" marker recordOutcome set for a park (Escalated/Paused)
-        // is cleared only once its git-unfenced tracker write confirms — clearTerminalMarker is the
-        // onConfirmed callback the park exits run (FR10, D10 of add-claim-heartbeat). A give-up leaves
-        // the marker set for reconcile-on-resume; a finish uses no marker (cleanup-detection reconcile).
-        // The delivery fence (FR4, FR5 of fix-lifecycle-push): a park's outcome commit and its
-        // pending marker must be on origin BEFORE the tracker announces the park to every instance,
-        // or a reconcile-on-resume from another machine reads stale state. Verify, push, one bounded
-        // re-attempt — and if that still fails, the park proceeds carrying a note instead of blocking.
-        // Only marker-bearing parks are fenced; Completed/Aborted stay purely best-effort (NG6) and
-        // keep the terminal-boundary reconciliation GitOutcomeRecorder skips for a park (FR3).
-        ParkDeliveryVerdict parkDelivery = TerminalPark.isPark(outcome)
-                ? git.branches().fenceParkDelivery(cloneDir, taskId)
-                : new ParkDeliveryVerdict.Delivered();
+        // An Aborted run has no intent→effect→receipt sequence to drive: its tracker write is
+        // best-effort and carries no marker, so the whole record-then-dispose pairing runs here as
+        // it always has. A park and a completion instead hand their durable steps to the protocol
+        // below, which owns the order they run in (FR10, design D5 of harden-task-branch-contract).
+        if (outcome instanceof TaskOutcome.Aborted) {
+            GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, outcome);
+        }
+
+        // The park's durable intent: the outcome commit carrying the pending marker, then the
+        // delivery fence (FR4, FR5 of fix-lifecycle-push) — the commit must be on origin BEFORE the
+        // tracker announces the park to every instance, or a reconcile-on-resume from another
+        // machine reads stale state. Verify, push, one bounded re-attempt; if that still fails the
+        // park proceeds carrying a note instead of blocking. The receipt clears the marker once the
+        // park lands; a give-up leaves it set for reconcile-on-resume.
+        var park = new ParkTransition.Fresh(
+                () -> {
+                    GitOutcomeRecorder.recordIntent(git, taskRepository, cloneDir, taskId, outcome);
+                    return git.branches().fenceParkDelivery(cloneDir, taskId);
+                },
+                // A park keeps its worktree by definition (FR6 of add-git-workflow), so the
+                // sequence has no destructive step at all — only the receipt.
+                () -> taskRepository.confirmTerminalWrite(taskId));
+        // The completion's durable intent is its outcome commit; the cleanup commit that strips
+        // .gnomish-task/ from the tip — and the worktree disposal behind it — is the destructive
+        // last step, run only once the tracker finish has landed (FR9, FR10).
+        var finish = new FinishTransition.Fresh(
+                () -> GitOutcomeRecorder.recordIntent(git, taskRepository, cloneDir, taskId, outcome), () -> {
+                    taskRepository.finishCleanup(taskId);
+                    GitOutcomeRecorder.disposeWorkspace(git, cloneDir, worktree, outcome);
+                });
 
         var retry = TerminalWriteRetry.system();
-        Runnable clearMarker = () -> taskRepository.confirmTerminalWrite(taskId);
         return TakeOutcomeDispatch.dispatch(
                 outcome,
                 context,
@@ -166,9 +182,9 @@ record TakeEngineExecution(
                 ref,
                 instanceId,
                 retry,
-                clearMarker,
+                park,
                 abortHandler,
                 abortThreshold,
-                parkDelivery);
+                finish);
     }
 }

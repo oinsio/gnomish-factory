@@ -5,43 +5,15 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
-import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Engine
-import com.github.oinsio.gnomish.domain.engine.EnginePorts
-import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
-import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
-import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import com.github.oinsio.gnomish.status.StatusSnapshotHolder
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -114,10 +86,13 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         1 * branches.harden(cloneDir)
 
         then: 'the branch is created once, then the run reaches its terminal boundary'
-        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD')
+        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
         1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
-        1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Completed)
         1 * tracker.finish(REF, _)
+
+        then: 'FR10: the destructive tail — cleanup commit, then worktree disposal — follows the write'
+        1 * lifecycleStore.finishCleanup('PROJ-1')
+        1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Completed)
 
         and: 'the engine really ran the stage, and the result is a delivery'
         executor.requests.size() == 1
@@ -151,7 +126,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         then: 'the explicit --base is passed through, and the context carries the tracker taskId'
         1 * lifecycleStore.createTask({
             it.taskId() == 'PROJ-9'
-        }, 'release/1.2')
+        }, 'release/1.2', _)
         1 * tracker.finish(REF, _)
     }
 }

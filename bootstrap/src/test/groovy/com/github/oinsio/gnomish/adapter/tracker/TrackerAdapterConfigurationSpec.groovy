@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerSubsectionValidator
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerAdapterFactory
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import java.nio.file.Files
@@ -40,12 +41,18 @@ class TrackerAdapterConfigurationSpec extends Specification {
         def configuration = new TrackerAdapterConfiguration()
 
         when:
-        def registry = configuration.trackerAdapterRegistry()
+        def registry = configuration.trackerAdapterRegistry(new ClaimEpochBook())
 
         then:
         registry.keySet() == ['github', 'inmemory'] as Set
-        registry['github'] instanceof GithubTrackerAdapterFactory
-        registry['inmemory'] instanceof InMemoryTrackerAdapterFactory
+
+        // FR13 of harden-task-branch-contract: each discovered provider is wrapped so the
+        // trackers it builds record their claim epochs; the provider beneath is unchanged.
+        and: 'the wrapper carries the discovered provider and its type'
+        registry['github'].delegate() instanceof GithubTrackerAdapterFactory
+        registry['inmemory'].delegate() instanceof InMemoryTrackerAdapterFactory
+        registry['github'].type() == 'github'
+        registry['inmemory'].type() == 'inmemory'
     }
 
     // FR1, design D1/D3: the validator registry is derived from the discovered factories rather than
@@ -56,7 +63,7 @@ class TrackerAdapterConfigurationSpec extends Specification {
         def configuration = new TrackerAdapterConfiguration()
 
         when:
-        def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry())
+        def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry(new ClaimEpochBook()))
 
         then:
         registry.keySet() == ['github'] as Set
@@ -96,7 +103,7 @@ advancement: auto
 
         when:
         def configuration = new TrackerAdapterConfiguration()
-        def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry())
+        def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry(new ClaimEpochBook()))
         def outcome = PipelineLoader.load(gnomishRoot, registry, [:])
 
         then: 'one Invalid outcome carries both the bad-color adapter error and the core error'

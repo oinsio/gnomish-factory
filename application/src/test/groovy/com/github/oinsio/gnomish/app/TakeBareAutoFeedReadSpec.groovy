@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import java.time.Duration
 import java.util.Random
 import spock.lang.Specification
@@ -35,6 +36,7 @@ class TakeBareAutoFeedReadSpec extends Specification implements RunChainFakes {
     private TakeBareAuto bareAuto() {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         new TakeBareAuto(Stub(RunAssembly), git, WORKTREES_ROOT, new AbortHandler(tracker, FIXED_CLOCK),
                 3, 'taskId', Duration.ofMinutes(1), Duration.ofHours(1), FIXED_CLOCK, [], 10, new Random(1))

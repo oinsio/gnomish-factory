@@ -3,14 +3,18 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
+import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
+import com.github.oinsio.gnomish.domain.branch.BranchShape;
+import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
 import java.nio.file.Path;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -20,12 +24,15 @@ import org.jspecify.annotations.Nullable;
  * remote-tracking → narrow fetch of exactly {@code gnomish/<task>} → not found, the only
  * permitted side effect (M3).
  *
- * <p>{@code task.json} and {@code state.json} are version-gated by the same mechanism resume uses
- * ({@link TaskJsonMapper#readDto}/{@link StateJsonMapper#readDto}, both built on the shared
- * version gate of task 1.4): an unknown {@code "version"} throws {@code
- * UnsupportedStateFileVersionException} naming the file and version, propagated to this reader's
- * caller rather than caught here — the same "let it reach the CLI boundary" idiom the gate's own
- * javadoc documents.
+ * <p>What the tip holds is decided by the shape classifier before anything is rendered (FR16 of
+ * harden-task-branch-contract): the located ref is read through {@link RefTipSource} into {@link
+ * BranchTipFactsReader}'s facts, and the resulting {@link BranchShape} says whether a report can be
+ * built at all. A shape whose tip carries no readable envelopes — delivered, bare, or one of the
+ * three quarantine shapes — comes back as {@link BranchStateResult.Shaped} for the caller to render
+ * calmly, so an unknown {@code "version"} or an unparseable {@code state.json} is a named shape
+ * here rather than a thrown {@code UnsupportedStateFileVersionException} (NFR-R2). The classifier
+ * holds no claim on this path — {@code status} is a reader, never a tenure — so the epoch fence is
+ * inert and {@link BranchShape.StaleEpoch} never arises from it.
  *
  * <p>The resulting {@link StatusReport} is built by the same pure function ({@link
  * StatusReport#build}) manual-run's live status uses, reused verbatim per FR13. Two of its
@@ -39,15 +46,18 @@ import org.jspecify.annotations.Nullable;
  * as in-progress/interrupted per the task-inspection spec's "Interrupted task reported honestly"
  * scenario) and the recorded terminal outcome once finished/paused/escalated.
  *
- * <p>Implements FR13, NFR-O1, NFR-R2 of add-git-workflow.
+ * <p>Implements FR13, NFR-O1, NFR-R2 of add-git-workflow; FR16 of
+ * harden-task-branch-contract.
  */
 public final class BranchStateReader {
 
-    private static final String TASK_JSON_PATH = ".gnomish-task/task.json";
-    private static final String STATE_JSON_PATH = ".gnomish-task/state.json";
+    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
+    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
 
     private final GitProcessRunner runner;
     private final TaskBranchLocator locator;
+    private final BranchTipFactsReader facts = new BranchTipFactsReader();
+    private final BranchShapeClassifier classifier = new BranchShapeClassifier();
 
     public BranchStateReader(GitProcessRunner runner) {
         this.runner = runner;
@@ -60,38 +70,53 @@ public final class BranchStateReader {
      *
      * @param cloneDir the working directory of an existing git clone (the {@code --dir} target)
      * @param taskId the tracker's original taskId
-     * @return {@link BranchStateResult.Found} with the rendered report, or {@link
-     *     BranchStateResult.NotFound} when no branch exists anywhere for this task
-     * @throws com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException if
-     *     either state file carries an unsupported {@code "version"}
-     * @throws BranchStateFileMissingException if the branch was found but a state file is absent
-     *     at its tip (e.g. a {@code Completed} task's cleanup commit already removed {@code
-     *     .gnomish-task/})
+     * @return {@link BranchStateResult.Found} with the rendered report, {@link
+     *     BranchStateResult.Shaped} when the tip carries no renderable state (delivered, bare,
+     *     pre-contract, or a quarantine shape), or {@link BranchStateResult.NotFound} when no
+     *     branch exists anywhere for this task
+     * @throws BranchLocationUnavailableException if origin could not be asked whether the branch
+     *     exists — unavailability is never reported as absence (FR6)
      */
     public BranchStateResult read(Path cloneDir, String taskId) {
         BranchLocation location = locator.locate(cloneDir, taskId);
         return switch (location) {
             case BranchLocation.NotFound ignored -> new BranchStateResult.NotFound();
-            case BranchLocation.Local local -> new BranchStateResult.Found(readReport(cloneDir, local.ref()));
-            case BranchLocation.RemoteTracking tracking ->
-                new BranchStateResult.Found(readReport(cloneDir, tracking.ref()));
+            // Inspection reports what it knows, never a guess: "origin could not be asked" is not
+            // "no such task", and answering NotFound here would tell an operator their branch is
+            // gone because their network blinked (FR6).
+            case BranchLocation.Unavailable(String reason) ->
+                throw new BranchLocationUnavailableException(taskId, reason);
+            case BranchLocation.Local local -> readAt(cloneDir, local.ref());
+            case BranchLocation.RemoteTracking tracking -> readAt(cloneDir, tracking.ref());
         };
     }
 
-    private StatusReport readReport(Path cloneDir, String ref) {
-        TaskRecord taskContent = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(show(cloneDir, ref, TASK_JSON_PATH)));
-        TaskState state = StateJsonMapper.fromDto(StateJsonMapper.readDto(show(cloneDir, ref, STATE_JSON_PATH)));
+    /**
+     * Classifies the tip at {@code ref} and renders it, or answers with the shape when the tip
+     * carries nothing to render (FR16).
+     */
+    private BranchStateResult readAt(Path cloneDir, String ref) {
+        BranchTipSource source = new RefTipSource(runner, cloneDir, ref);
+        BranchShape shape = classifier.classify(facts.read(source, null));
+        if (!shape.tipCarriesState()) {
+            return new BranchStateResult.Shaped(shape);
+        }
+        Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
+        Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
+        if (taskJson.isEmpty() || stateJson.isEmpty()) {
+            // A pre-contract Created tip: identity recorded without state (FR3). Pending is the
+            // honest answer, not a missing-file failure.
+            return new BranchStateResult.Shaped(shape);
+        }
+        return new BranchStateResult.Found(readReport(taskJson.get(), stateJson.get()));
+    }
+
+    private StatusReport readReport(String taskJson, String stateJson) {
+        TaskRecord taskContent = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(taskJson));
+        TaskState state = StateJsonMapper.fromDto(StateJsonMapper.readDto(stateJson));
 
         LiveActivity liveActivity = new LiveActivity(null, taskContent.lastEscalation(), toReportOutcome(taskContent));
         return StatusReport.build(taskContent.context(), state, null, liveActivity);
-    }
-
-    private String show(Path cloneDir, String ref, String filePath) {
-        GitCommandResult result = runner.run(cloneDir, "show", ref + ":" + filePath);
-        if (result.exitCode() != 0) {
-            throw new BranchStateFileMissingException(ref, filePath, result.stderr());
-        }
-        return result.stdout();
     }
 
     /**

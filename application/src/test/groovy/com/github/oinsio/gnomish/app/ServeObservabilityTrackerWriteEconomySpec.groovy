@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -11,8 +11,10 @@ import com.github.oinsio.gnomish.app.port.tracker.OpenTask
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
@@ -20,6 +22,7 @@ import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.SlotRunner
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -104,7 +107,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
 
         ClaimResult claim(TaskRef ref, String instanceId) {
             calls << "claim(${ref.id()})".toString()
-            new ClaimResult.Acquired()
+            new ClaimResult.Acquired(new ClaimEpoch(1))
         }
 
         TrackerTask fetchTask(TaskRef ref) {
@@ -132,8 +135,11 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
             null
         }
 
-        RemoveStaleClaimResult removeStaleClaim(
-                TaskRef ref, ClaimVersion v) {
+        RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
+            null
+        }
+
+        RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
             null
         }
     }

@@ -1,4 +1,5 @@
 import com.github.oinsio.gnomish.build.HardwareSpec
+import com.github.oinsio.gnomish.build.TestTimeInjectionCheck
 import com.github.oinsio.gnomish.build.HeavyJvmBudget
 import org.gradle.api.artifacts.VersionCatalogsExtension
 
@@ -119,6 +120,33 @@ tasks.named('test') {
     // Generate coverage reports whenever tests run, so `check` produces them
     // as part of the single-command verification (FR5 of add-project-skeleton).
     finalizedBy tasks.named('jacocoTestReport')
+}
+
+// --- Time injection in tests (harden-task-branch-contract, task 9.1) ---
+//
+// Every module gets this gate, because every module can grow a spec that calls a
+// production `system()` factory and thereby wires a real sleeper with a production
+// bound. The failure that costs is latent — such a spec sleeps only once some
+// collaborator starts reporting the outage the retry waits on — so it is worth
+// asking at write time rather than hoping a review notices code that is currently
+// green. See TestTimeInjectionCheck for the rule and how to satisfy it.
+def testTimeInjection = tasks.register('checkTestTimeInjection', TestTimeInjectionCheck) {
+    group = 'verification'
+    description = 'Fails when a test source wires production real time instead of injecting it.'
+    testSources.from(fileTree('src/test') {
+        include '**/*.groovy'
+        include '**/*.java'
+    })
+    // `:test-fixtures` keeps its shared fakes in `src/main`, so scan that too where it exists.
+    testSources.from(fileTree('src/main') {
+        include '**/fake/**/*.groovy'
+        include '**/killpoint/**/*.groovy'
+    })
+    report = layout.buildDirectory.file('reports/test-time-injection.txt')
+}
+
+tasks.named('check') {
+    dependsOn testTimeInjection
 }
 
 tasks.named('jacocoTestReport') {

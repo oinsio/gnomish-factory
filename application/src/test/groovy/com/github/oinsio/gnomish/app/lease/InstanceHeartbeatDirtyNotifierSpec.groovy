@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import java.time.Duration
@@ -30,7 +31,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     private static final Duration INTERVAL = Duration.ofMinutes(5)
     private static final TaskRef A = new TaskRef('github:o/r#1')
     private static final TaskRef B = new TaskRef('github:o/r#2')
-    private static final HeartbeatResult BEATEN = new HeartbeatResult.Beaten(new ClaimVersion('m', Instant.EPOCH))
+    private static final HeartbeatResult BEATEN = new HeartbeatResult.Beaten(new ClaimVersion('m', Instant.EPOCH, new ClaimEpoch(1)))
 
     private final Tracker tracker = Stub(Tracker) {
         heartbeat(_, _) >> BEATEN

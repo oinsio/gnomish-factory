@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
@@ -85,6 +86,9 @@ class AbortHandlerSpec extends Specification {
         handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
 
         then: 'the report carries the streak count, the threshold, the prior abort time, and points to the per-abort entries'
+        captured.contains('3 consecutive automatic attempts')
+        captured.contains('3 crashed runs')
+        captured.contains('0 failed branch repairs')
         captured.contains("$THRESHOLD")
         captured.toLowerCase().contains('threshold')
         captured.contains(previousAbortAt.toString())
@@ -111,6 +115,40 @@ class AbortHandlerSpec extends Specification {
         captured.contains("$THRESHOLD")
         captured.toLowerCase().contains('threshold')
         captured.contains('disk full')
+    }
+
+    // FR14, NFR-O2 of harden-task-branch-contract: both categories spend the one counter and trip
+    // the one threshold, and the report attributes the streak to the two causes distinctly
+    def "a failed repair spends the same counter and is reported as its own category"() {
+        given: 'two crashes already on record, so this attempt reaches the threshold'
+        def facts = new AbortFacts(THRESHOLD - 1, Instant.parse('2026-07-17T09:00:00Z'), 0)
+        String captured = null
+        tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report ->
+            captured = report
+        }
+
+        when:
+        def result = handler.handle(REF, STATE, 'reconcile failed', facts, THRESHOLD, INSTANCE,
+                RecoveryCause.RECOVERY_FAILURE)
+
+        then: 'the same threshold trips, and the report splits the streak by cause'
+        result instanceof TakeResult.AwaitingHuman
+        captured.contains('3 consecutive automatic attempts')
+        captured.contains('2 crashed runs')
+        captured.contains('1 failed branch repairs')
+        captured.contains('recovery_failure')
+    }
+
+    // FR14 of harden-task-branch-contract: below the fuse, the category rides into the marker so
+    // the next instance reconstructs the streak with its causes intact
+    def "a failed repair below the fuse records its category on the marker"() {
+        when:
+        handler.handle(REF, STATE, 'reconcile failed', AbortFacts.none(), THRESHOLD, INSTANCE,
+                RecoveryCause.RECOVERY_FAILURE)
+
+        then:
+        1 * tracker.recordAbort(REF, new AbortRecord(
+                        'reconcile failed', INSTANCE.value(), CLOCK.instant(), RecoveryCause.RECOVERY_FAILURE))
     }
 
     // NFR-R2: "a dead tracker never blocks the abort itself" applies at the fuse

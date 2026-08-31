@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
@@ -37,7 +38,7 @@ final class ContainerSupportFixture {
             // provider, so the declared set is empty.
             ContainerRunSupport.create(
             cloneDir, taskId, segments, sandbox, factory,
-            List.<String> of(), credentialEnvVarsToScrub, ownershipMode)
+            List.<String> of(), credentialEnvVarsToScrub, ownershipMode, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
     }
 }

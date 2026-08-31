@@ -2,19 +2,22 @@ package com.github.oinsio.gnomish.sample;
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord;
+import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult;
+import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.util.List;
 
 /**
@@ -42,7 +45,7 @@ final class SampleTracker implements Tracker {
 
     @Override
     public ClaimResult claim(TaskRef ref, String instanceId) {
-        return new ClaimResult.Acquired();
+        return new ClaimResult.Acquired(new ClaimEpoch(1));
     }
 
     @Override
@@ -80,7 +83,12 @@ final class SampleTracker implements Tracker {
     }
 
     @Override
-    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimVersion observedVersion) {
+    public RemoveStaleClaimResult removeStaleClaim(TaskRef ref, ClaimFacts observedClaim) {
         return new RemoveStaleClaimResult.Removed();
+    }
+
+    @Override
+    public RepairIndexResult repairIndex(TaskRef ref, TrackerFacts observedFacts) {
+        return new RepairIndexResult.Unchanged(observedFacts);
     }
 }

@@ -39,6 +39,13 @@ include 'domain'
 // Deliberately dependency-free (JDK only), which is what lets `:gitobjects`
 // depend on it without acquiring a dependency on the factory or its domain.
 include 'subprocess'
+// The atomic-file-write leaf (FR5, design D10 of harden-task-branch-contract):
+// the factory's one temp-file-plus-rename discipline, consumed by the host-side
+// `.gnomish-task/` writers in `:adapters:git` and by the dashboard and snapshot
+// writers in `:application`. Dependency-free for the same reason `:subprocess`
+// is: a shared writer that dragged a dependency behind it would push that
+// dependency into every layer that writes a file.
+include 'atomicfile'
 include 'gitobjects'
 include 'gnomish-plugin-api'
 // Not a layer of the factory: a stand-in third-party adapter that keeps the

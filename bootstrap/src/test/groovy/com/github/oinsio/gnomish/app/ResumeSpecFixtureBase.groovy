@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -44,8 +45,7 @@ abstract class ResumeSpecFixtureBase extends Specification implements BareGitRep
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
         Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        commitAll(cloneDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 
@@ -58,7 +58,7 @@ abstract class ResumeSpecFixtureBase extends Specification implements BareGitRep
     }
 
     protected GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot)
+        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
     }
 
     protected Path expectedWorktree(String taskDir) {
@@ -80,7 +80,7 @@ abstract class ResumeSpecFixtureBase extends Specification implements BareGitRep
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
     protected void persistOneRound(String taskId, TaskState state) {
         def worktree = expectedWorktree(taskId)
-        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId)
+        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))

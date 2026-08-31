@@ -1,10 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Instant;
 
 /**
  * Implements the two comment-only {@code Tracker} write operations for the
@@ -28,36 +24,28 @@ import java.time.Instant;
  * GitHub adapter therefore implements {@code release} as an explicit no-op:
  * no HTTP call, documented here rather than left as a silent gap.
  *
- * <p>Implements FR1, FR14 of add-tracker-port.
+ * <p>Implements FR1, FR14 of add-tracker-port; FR11 of harden-task-branch-contract.
  */
-// Not a record: this is a behavior-bearing correspondence service (a collaborator wrapping an
-// HTTP client, not immutable data), kept as a plain final class.
+// Not a record: this is a behavior-bearing correspondence service (a collaborator wrapping the
+// shared marker writer, not immutable data), kept as a plain final class.
 @SuppressWarnings("ClassCanBeRecord")
 public final class GithubCorrespondence {
 
-    private final GithubHttpClient httpClient;
-    private final String instanceId;
+    private final GithubMarkerWriter markerWriter;
 
-    public GithubCorrespondence(GithubHttpClient httpClient, String instanceId) {
-        this.httpClient = httpClient;
-        this.instanceId = instanceId;
+    public GithubCorrespondence(GithubMarkerWriter markerWriter) {
+        this.markerWriter = markerWriter;
     }
 
-    /** Implements {@code Tracker.postNote} for GitHub (NFR-O1). */
+    /**
+     * Implements {@code Tracker.postNote} for GitHub (NFR-O1), through the shared marker writer
+     * (FR11). A note is the claimless correspondence path — the revocation salvage posts one after
+     * the claim was already dropped — so its identity is scoped by the note's own text rather than
+     * by a tenure it does not have: re-driving the same note updates it, a different note is a
+     * different comment.
+     */
     public void postNote(TaskRef ref, String text) {
-        GithubTaskId id = GithubTaskId.parse(ref.id());
-        String body = GithubMarker.render(GithubMarkerKind.NOTE, instanceId, Instant.now(), text);
-        String path = "/repos/%s/%s/issues/%d/comments".formatted(id.owner(), id.repo(), id.issueNumber());
-        HttpRequest.Builder request = httpClient
-                .newRequest(path)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(GithubCommentBody.toJson(body)));
-
-        HttpResponse<String> response = httpClient.send(request);
-        if (response.statusCode() / 100 != 2) {
-            throw new GithubStateWriteException("Failed to post note comment on %s/%s#%d: HTTP %d"
-                    .formatted(id.owner(), id.repo(), id.issueNumber(), response.statusCode()));
-        }
+        markerWriter.write(GithubTaskId.parse(ref.id()), GithubMarkerKind.NOTE, text, null);
     }
 
     /**

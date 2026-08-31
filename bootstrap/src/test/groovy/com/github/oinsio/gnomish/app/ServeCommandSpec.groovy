@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -156,7 +157,8 @@ tracker:
                 registry,
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                new ClaimEpochBook())
     }
 
     // Non-termination guard: run() assembles a REAL FeedAutomaton whose outage retry (NFR-R3)
@@ -395,7 +397,8 @@ tracker:
                 [github: factory],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                new ClaimEpochBook())
 
         when:
         runsToCompletion { command.run(args('serve', "--dir=$projectDir")) }

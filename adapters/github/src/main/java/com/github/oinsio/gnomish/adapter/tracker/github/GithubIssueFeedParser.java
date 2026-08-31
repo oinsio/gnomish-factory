@@ -38,8 +38,20 @@ final class GithubIssueFeedParser {
      *
      * @param number the issue number
      * @param title the issue title, verbatim from the list response; never null
+     * @param labels the names of the labels the entry wears, verbatim from the list response — the
+     *     presence facts a reader reports without interpreting them (FR19 of
+     *     harden-task-branch-contract); never null
      */
-    record IssueRef(int number, String title) {}
+    record IssueRef(int number, String title, List<String> labels) {}
+
+    /** The label names on one List Issues entry, in wire order; empty when it wears none. */
+    private static List<String> labelNames(JsonNode entry) {
+        List<String> names = new ArrayList<>();
+        for (JsonNode label : entry.path("labels")) {
+            names.add(label.path("name").asText(""));
+        }
+        return List.copyOf(names);
+    }
 
     /**
      * Parses {@code responseBody} (a JSON array from the List Issues
@@ -58,7 +70,7 @@ final class GithubIssueFeedParser {
                     continue;
                 }
                 issues.add(new IssueRef(
-                        entry.get("number").asInt(), entry.path("title").asText("")));
+                        entry.get("number").asInt(), entry.path("title").asText(""), labelNames(entry)));
             }
             return issues;
         } catch (JsonProcessingException e) {

@@ -53,8 +53,15 @@ public final class Engine {
             Workspace workspace,
             EnginePorts ports) {
         var listener = ports.listener();
-        Events.emit(listener, new EngineEvent.RunStarted(context.taskId(), state.position(), state.attemptsUsed()));
-        var outcome = preflight(definition, context, state, workspace, ports);
+        // A state read back from the branch may carry the attempts of a stage that already passed:
+        // its pass and the advance it implied landed in one commit (FR4 of
+        // harden-task-branch-contract), so the position names the next stage while the list still
+        // describes the finished one. Normalizing here keeps the resumed stage's first round at
+        // round zero and its attempt history its own. A no-op within a live run, where the engine's
+        // own advance already emptied the list.
+        var resumed = state.startOfStage();
+        Events.emit(listener, new EngineEvent.RunStarted(context.taskId(), resumed.position(), resumed.attemptsUsed()));
+        var outcome = preflight(definition, context, resumed, workspace, ports);
         Events.emit(listener, new EngineEvent.TaskFinished(context.taskId(), outcome));
         return outcome;
     }
@@ -132,7 +139,9 @@ public final class Engine {
      * attempt history (FR14) — or, past the last stage, completes at {@link Position.PipelineEnd}
      * (design D4). {@code MANUAL} pauses with the position already advanced past the paused stage,
      * naming the stage that just passed (FR8). The advanced state is the returned outcome — the
-     * passing round was already persisted by the loop, so no extra persist happens here.
+     * passing round was already persisted by the loop — with this very position already recorded
+     * (FR4 of harden-task-branch-contract) — so no extra persist happens here and the advance
+     * below only resets the in-memory attempt history for the stage about to run.
      *
      * <p>Implements FR8, FR14 of add-stage-engine.
      */
@@ -150,7 +159,7 @@ public final class Engine {
                 new JudgeVoting(ports.judgeVoter()),
                 ports.clock(),
                 ports.listener());
-        var loop = new StageAttemptLoop(ports, verifyOrchestrator);
+        var loop = new StageAttemptLoop(ports, verifyOrchestrator, definition);
         var currentState = state;
         var currentStage = stage;
         while (true) {

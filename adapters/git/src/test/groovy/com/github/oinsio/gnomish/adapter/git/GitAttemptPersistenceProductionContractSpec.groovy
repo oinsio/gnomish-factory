@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.port.contract.AttemptPersistenceContract
@@ -38,11 +39,11 @@ class GitAttemptPersistenceProductionContractSpec extends AttemptPersistenceCont
         runner.run(repo, 'add', 'seed.txt')
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         runner.run(repo, 'checkout', '-q', '-b', 'gnomish/TASK-1')
-        Optional.of(new GitAttemptPersistence(runner, repo, 'TASK-1'))
+        Optional.of(new GitAttemptPersistence(runner, repo, 'TASK-1', ClaimEpochSource.NONE))
     }
 
     @Override
-    protected List<AttemptPersistenceContract.PersistedEntry> retained(Object adapter) {
+    protected List<PersistedEntry> retained(Object adapter) {
         List<String> shas = runner.run(repo, 'log', '--reverse', '--format=%H').stdout().trim().readLines()
         // Drop the initial seed commit made in arrange(): only round commits remain.
         shas = shas.drop(1)
@@ -51,7 +52,7 @@ class GitAttemptPersistenceProductionContractSpec extends AttemptPersistenceCont
             def stateJson = runner.run(repo, 'show', "${sha}:.gnomish-task/state.json").stdout()
             def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(stateJson))
             def key = new AttemptKey('TASK-1', 'build', round)
-            new AttemptPersistenceContract.PersistedEntry('TASK-1', state, new ToolTrace(key, []))
+            new PersistedEntry('TASK-1', state, new ToolTrace(key, []))
         }
     }
 }

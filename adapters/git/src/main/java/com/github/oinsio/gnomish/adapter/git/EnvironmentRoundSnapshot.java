@@ -2,13 +2,9 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
-import com.github.oinsio.gnomish.sandbox.CapturedExec;
-import com.github.oinsio.gnomish.sandbox.ExecCommand;
-import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Closes the gnome half of a sandboxed round (FR21, design D15): a snapshot
@@ -75,11 +71,12 @@ public final class EnvironmentRoundSnapshot {
      */
     public String snapshot(String taskId, String stage, int round) {
         String message = ServiceCommitMessages.snapshot(stage, round);
-        List<String> argv = List.of("sh", "-c", SNAPSHOT_SCRIPT, "gnomish", message);
-        ExecHandle handle = environment.exec(new ExecCommand(argv, Map.of(), null, true));
-        // Drained concurrently with the supervised wait (FR2, FR11 of bound-subprocess-commands).
-        CapturedExec commit = CapturedExec.of(handle, "in-box snapshot commit");
-        if (commit.exitCode() != 0) {
+        // Run through the medium's one outcome seam (D14): the wait is drained concurrently
+        // (FR2, FR11 of bound-subprocess-commands) and an interrupted wait comes back named
+        // rather than as an exception this site would have to classify itself.
+        InBoxGitCommand.Outcome commit = new InBoxGitCommand(environment)
+                .run("in-box snapshot commit", SNAPSHOT_SCRIPT, List.of("gnomish", message));
+        if (!commit.succeeded()) {
             throw new GitPersistFailedException(taskId, stage, round, "in-box snapshot commit", commit.output());
         }
 

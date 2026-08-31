@@ -7,14 +7,14 @@ import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
-import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
@@ -58,8 +58,8 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
-            workspace() >> ({} as com.github.oinsio.gnomish.domain.engine.port.Workspace)
-            pieces(_) >> new com.github.oinsio.gnomish.app.port.run.SandboxRunPieces(null, null, null, null, null, null, null)
+            workspace() >> ({} as Workspace)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         tracker.fetchTask(_) >> heldByUs()
 
@@ -74,7 +74,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         1 * branches.harden(CLONE_DIR)
 
         then:
-        1 * repository.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD')
+        1 * repository.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
 
         and: 'the engine really ran the stage, and the run finished on the tracker'
         1 * tracker.finish(_, _)
@@ -91,8 +91,8 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
-            workspace() >> ({} as com.github.oinsio.gnomish.domain.engine.port.Workspace)
-            pieces(_) >> new com.github.oinsio.gnomish.app.port.run.SandboxRunPieces(null, null, null, null, null, null, null)
+            workspace() >> ({} as Workspace)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         tracker.fetchTask(_) >> heldByUs('PROJ-9')
 
@@ -104,7 +104,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
                 new ClaimLossFlag())
 
         then:
-        1 * repository.createTask({ it.taskId() == 'PROJ-9' }, 'release/1.2')
+        1 * repository.createTask({ it.taskId() == 'PROJ-9' }, 'release/1.2', _)
         1 * tracker.finish(_, _)
     }
 }

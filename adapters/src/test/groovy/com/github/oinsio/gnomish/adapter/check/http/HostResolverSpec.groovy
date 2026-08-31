@@ -11,6 +11,7 @@ class HostResolverSpec extends Specification {
 
     def "the system resolver answers with the platform's own addresses"() {
         when:
+        // real-time-wiring: HostResolver carries no clock or sleeper — the production factory here is real DNS, which is what these three cases assert against.
         def addresses = HostResolver.system().resolve('localhost')
 
         then:
@@ -20,6 +21,7 @@ class HostResolverSpec extends Specification {
 
     def "a literal address resolves to itself"() {
         expect:
+        // real-time-wiring: HostResolver carries no clock or sleeper — the production factory here is real DNS, which is what these three cases assert against.
         HostResolver.system().resolve('127.0.0.1')*.hostAddress == ['127.0.0.1']
     }
 
@@ -27,6 +29,7 @@ class HostResolverSpec extends Specification {
     //     that into a refusal, never into a permitted target.
     def "an unresolvable name raises"() {
         when:
+        // real-time-wiring: HostResolver carries no clock or sleeper — the production factory here is real DNS, which is what these three cases assert against.
         HostResolver.system().resolve('nothing.invalid')
 
         then:

@@ -71,7 +71,7 @@ record ContainerGitModeRunner(
 
         var support = supportFactory.create(
                 cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());
-        GitFreshTaskSupport.createTask(support.taskRepository(), taskId, context, base);
+        GitFreshTaskSupport.createTask(support.taskRepository(), taskId, context, base, initialState);
 
         ContainerTerminalDrive.run(
                 assembly, support, definition, context, initialState, interactiveMode, cloneDir, null);

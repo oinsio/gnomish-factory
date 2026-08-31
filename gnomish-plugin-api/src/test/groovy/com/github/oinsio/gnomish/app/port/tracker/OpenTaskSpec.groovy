@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.tracker
 
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Instant
 import spock.lang.Specification
 
@@ -16,7 +17,7 @@ class OpenTaskSpec extends Specification {
     def "exposes ref, state and claim version for a working task"() {
         given:
         def state = new TrackerTaskState.Working('gnomish-factory-x7k2q1')
-        def version = new ClaimVersion('claim-comment-991', Instant.parse('2026-07-29T10:15:30Z'))
+        def version = new ClaimVersion('claim-comment-991', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1))
 
         when:
         def entry = new OpenTask(REF, state, version, 'fixture title')
@@ -53,14 +54,14 @@ class OpenTaskSpec extends Specification {
     def "entries with the same components are equal values"() {
         given:
         def state = new TrackerTaskState.Working('a')
-        def version = new ClaimVersion('m1', Instant.parse('2026-07-29T10:15:30Z'))
+        def version = new ClaimVersion('m1', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1))
 
         expect:
         new OpenTask(REF, state, version, 'fixture title') == new OpenTask(REF, state, version, 'fixture title')
 
         and: 'a differing version makes them unequal'
         new OpenTask(REF, state, version, 'fixture title') !=
-                new OpenTask(REF, state, new ClaimVersion('m2', Instant.parse('2026-07-29T10:15:30Z')), 'fixture title')
+                new OpenTask(REF, state, new ClaimVersion('m2', Instant.parse('2026-07-29T10:15:30Z'), new ClaimEpoch(1)), 'fixture title')
 
         and: 'a present versus absent version makes them unequal'
         new OpenTask(REF, state, version, 'fixture title') != new OpenTask(REF, state, null, 'fixture title')
