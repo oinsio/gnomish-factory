@@ -8,6 +8,10 @@ openspec/changes/archive/YYYY/MM/YYYY-MM-DD-<change-name>
 
 Instead of the default flat structure `openspec/changes/archive/YYYY-MM-DD-<change-name>`.
 
+If the change name already starts with a `YYYY-MM-DD-` prefix, use it as-is — never stack
+a second date (same rule as `openspec archive`); the year/month directories come from that
+existing prefix.
+
 Example for a change archived on 2026-07-14:
 
 ```bash

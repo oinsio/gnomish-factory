@@ -15,7 +15,7 @@ Review the **artifacts** of an OpenSpec change — `proposal.md`, `design.md`, d
 3. **Consistency** — the artifacts do not contradict each other, the stable specs, the
    already-implemented functionality, other active changes, or the project rules.
 
-Differs from `/audit-implementation` and `/opsx:verify`: those judge the *implementation* against the
+Differs from `/audit-implementation`: that judges the *implementation* against the
 change; this command judges the *change itself* — typically before or during implementation.
 **Strictly read-only**: no file edits, no git state changes. The only artifact is the report.
 

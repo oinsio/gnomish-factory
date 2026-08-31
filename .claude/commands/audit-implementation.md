@@ -10,7 +10,7 @@ verdict and a recommendation **for every item** — every task in `tasks.md`, ev
 every quality rule. **Strictly read-only**: no file edits, no `git` state changes, no commits,
 no checkbox updates. The only artifact of this command is the report in the reply.
 
-Differs from `/opsx:verify`: that command trusts checkboxes and samples requirements; this one
+Unlike a checkbox-trusting verification pass, this command
 re-verifies each item against the actual code, applies the project's own quality rules
 (`.claude/rules/`) including build/test/mutation gates, and reviews code quality, test quality
 and security readiness.
