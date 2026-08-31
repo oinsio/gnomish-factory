@@ -93,6 +93,6 @@ rules:
     - Include verification tasks (automated tests preferred over manual steps)
     - Break tasks into chunks of max 2 hours
   specs:
-    - Use delta format: ADDED/MODIFIED/REMOVED
+    - "Use delta format: ADDED/MODIFIED/REMOVED"
     - Mark invariants with "# implements FR-X of <change-name>"
     - Include use cases with inputs, effects, and errors

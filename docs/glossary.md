@@ -82,7 +82,7 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   included, and classification never throws on content. The closed set and the
   meaning of each name are owned by the `task-branch-contract` capability, in
   its "Total branch-shape classification" requirement
-  (`openspec/specs/task-branch-contract/spec.md`); it is the only place the
+  (`openspec/specs/lifecycle/task-branch-contract/spec.md`); it is the only place the
   table lives. Recovery owner and roll-forward/discard disposition per shape
   live in `docs/adr/0003-crash-consistency.md`. *Never:* `Escalated` for the
   `Parked` shape (that name belongs to a `TaskOutcome` variant), `Decision`
@@ -93,7 +93,7 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   Adapters report facts; the classification happens in core. The closed set and
   its table are owned by the `claim-heartbeat` capability, in its "Total
   tracker-shape classification with one recovery owner" requirement
-  (`openspec/specs/claim-heartbeat/spec.md`).
+  (`openspec/specs/lifecycle/claim-heartbeat/spec.md`).
 - **Sweep universe** — the set of tasks a sweep's own listing queries
   enumerate (the union of the ready and open listings). The ordering rule that
   keeps every kill window inside it: the label write admitting a task into the
