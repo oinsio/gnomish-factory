@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.lease;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
@@ -155,7 +156,7 @@ public final class StandingReaper {
         return Thread.ofVirtual()
                 .name("gnomish-standing-reaper")
                 .uncaughtExceptionHandler(this::onWorkerDeath)
-                .start(this::loop);
+                .start(DaemonComponent.REAPER.framing(this::loop));
     }
 
     @Nullable

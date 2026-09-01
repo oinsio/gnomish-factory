@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import java.nio.file.Path;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Locates and reconciles the local task branch for a container-mode resume
@@ -25,6 +27,8 @@ import java.nio.file.Path;
 // data), kept as a plain final class for parity with its siblings in this package.
 @SuppressWarnings("ClassCanBeRecord")
 public final class ContainerResumeBranch {
+
+    private static final Logger log = LoggerFactory.getLogger(ContainerResumeBranch.class);
 
     private final GitProcessRunner runner;
     private final ClaimEpochSource epochs;
@@ -60,6 +64,14 @@ public final class ContainerResumeBranch {
                     throw new IllegalStateException("could not create local branch " + branch + " from " + trackingRef
                             + ": " + create.stderr());
                 }
+                // An anchor, not chatter: this instance is adopting work another instance pushed,
+                // and nothing else in the log says the local line was recreated rather than
+                // continued (FR5 of harden-logging-observability).
+                log.info(
+                        "recreated local branch {} for task {} from {} — adopting work pushed by another instance",
+                        branch,
+                        taskId,
+                        trackingRef);
                 yield true;
             }
             case BranchLocation.NotFound ignored -> false;

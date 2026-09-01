@@ -8,6 +8,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
+import com.github.oinsio.gnomish.logtext.MdcAwareThread;
+import com.github.oinsio.gnomish.status.AnchorLog;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -23,7 +25,8 @@ import org.slf4j.LoggerFactory;
  * on a lost race or a per-candidate {@link OpenFrontGate} rejection — shared verbatim by {@link
  * FeedAutomaton#step()} and {@link FeedAutomaton#drain()}. Extracted only to keep {@link
  * FeedAutomaton} within the file-size limit (process-invariants.md); holds no state of its own
- * beyond its collaborators.
+ * beyond its collaborators — two of which, {@link FeedStateLogger} and {@link FinishedDecline},
+ * carry the log-plane latches that keep a repeating poll from repeating its lines.
  *
  * <p>Both {@link #poll} and {@link #claimOrAbandon} run their tracker calls through {@link
  * FeedOutageRetry} (NFR-R3): a sustained tracker outage is caught, logged, and retried with
@@ -49,7 +52,8 @@ record FeedCycle(
         int wipLimit,
         Random random,
         FeedStateLogger stateLogger,
-        FeedOutageRetry outageRetry) {
+        FeedOutageRetry outageRetry,
+        FinishedDecline finishedDecline) {
 
     private static final Logger log = LoggerFactory.getLogger(FeedCycle.class);
 
@@ -72,7 +76,7 @@ record FeedCycle(
     Poll poll(Instant now) throws InterruptedException {
         return outageRetry.run("feed poll", () -> {
             List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
-            FinishedDecline.declineObserved(tracker, readyTasks);
+            finishedDecline.declineObserved(tracker, readyTasks);
             int openFrontCount = tracker.listOpen().size();
             List<ReadyTask> candidates = FeedPolicy.selectClaimCandidates(
                     readyTasks, backoffBase, backoffCap, now, openFrontCount, wipLimit, random);
@@ -103,6 +107,18 @@ record FeedCycle(
             slotLedger.abandon();
         } else {
             slotLedger.assign(claimed);
+            // FR2 of harden-logging-observability: the claim anchor is emitted before the slot
+            // thread starts, so it precedes every engine event of that task in the file — the
+            // "claim is the first correlated line" scenario. Both claim paths call the same
+            // AnchorLog method, so the two never word the same event differently.
+            // Under the task's own MDC (FR8): the anchor is written on the feed thread, which owns
+            // no task, so without the scope the very first line of a task's story is the one line a
+            // `grep taskId=<id>` misses (UX2). The scope closes before the slot starts — the slot
+            // thread sets the key itself, and a context left open across the launch would leak the
+            // finished task's id into the feed thread's next cycle.
+            try (var taskScope = MdcAwareThread.taskScope(claimed.id())) {
+                AnchorLog.claimAcquired(claimed.id(), slotLedger.freeSlots(), slotLedger.totalSlots());
+            }
             startSlot(claimed);
             stateLogger.onSlotFilled(slotLedger.freeSlots(), wipLimit);
         }

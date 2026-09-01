@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.writer;
 
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
+import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -74,7 +75,7 @@ public final class SnapshotWriter {
     /** Starts the writer thread: an immediate first write, then timer/dirty-flag wakes. */
     public void start() {
         running = true;
-        worker = Thread.ofVirtual().name("gnomish-snapshot-writer").start(this::loop);
+        worker = Thread.ofVirtual().name("gnomish-snapshot-writer").start(DaemonComponent.SNAPSHOT.framing(this::loop));
     }
 
     /** Stops the writer thread after its current or next wake completes, waking it immediately. */
@@ -147,6 +148,9 @@ public final class SnapshotWriter {
     // wake after THAT blocks for the full interval again.
     private void awaitNextWake() {
         try {
+            // Return value (acquired vs. timed out) is deliberately unused: both outcomes take the
+            // same next step (drainPermits below), so there is no decision to make on it.
+            //noinspection ResultOfMethodCallIgnored
             wakeSignal.tryAcquire(interval.toNanos(), TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

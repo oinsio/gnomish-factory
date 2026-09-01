@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -49,6 +50,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
     private final List<InstanceHeartbeat> started = [hb]
 
     def setup() {
+        ShutdownPhase.reset()
         progress.onEvent(new EngineEvent.AttemptStarted(new AttemptKey(REF.id(), 'plan', 0)))
     }
 

@@ -15,18 +15,14 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR11 of add-sandbox-core.
  */
-public final class ContainerEnvironmentKeeper {
+record ContainerEnvironmentKeeper(DockerCli docker) {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerEnvironmentKeeper.class);
-
-    private final DockerCli docker;
 
     /**
      * @param docker the docker subprocess seam; never null
      */
-    public ContainerEnvironmentKeeper(DockerCli docker) {
-        this.docker = docker;
-    }
+    ContainerEnvironmentKeeper {}
 
     /**
      * Stops the container of the ended task {@code environmentKey}, retaining its
@@ -35,11 +31,11 @@ public final class ContainerEnvironmentKeeper {
      *
      * @param environmentKey the sanitized environment key of the ended task; never blank
      */
-    public void stopKeeping(String environmentKey) {
+    void stopKeeping(String environmentKey) {
         try {
             docker.run(DockerCommands.stop(FactoryDockerLabels.containerName(environmentKey)));
         } catch (RuntimeException e) {
-            log.debug("best-effort stop of {} failed: {}", environmentKey, e.toString());
+            log.debug("best-effort stop of {} failed", environmentKey, e);
         }
     }
 }

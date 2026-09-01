@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.TaskListRow
+import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -141,6 +142,24 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
 
         and: 'REMOTE-ONLY is read from the remote-tracking ref, the only place it exists'
         rows.find { it.taskId() == 'REMOTE-ONLY' }.stage() == 'implement'
+    }
+
+    // FR13 of harden-logging-observability: an enumeration git refused established nothing about
+    // which branches exist, so it must not render as "no tasks" — the empty table is a positive
+    // claim, and printing it for a listing that never ran is the most misleading answer this
+    // read-only command can give.
+    def "FR13: a refused enumeration is a command failure, not an empty table"() {
+        given: 'a directory that is not a git repository at all, so for-each-ref exits non-zero'
+        def notARepo = Files.createDirectory(tempDir.resolve('not-a-repo'))
+
+        when:
+        lister.list(notARepo)
+
+        then: 'the command fails, naming the git failure'
+        def failure = thrown(TaskListingFailedException)
+        failure.message.contains('could not enumerate')
+        failure.message.contains('gnomish/*')
+        !failure.message.isBlank()
     }
 
     def "FR13: no gnomish/* branches anywhere returns an empty list without crashing"() {

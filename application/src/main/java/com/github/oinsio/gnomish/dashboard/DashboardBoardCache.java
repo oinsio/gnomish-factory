@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The board section's fetch cache (task 4.4): holds the last successfully fetched {@link
@@ -22,6 +24,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR3, FR9, NFR-P1 of add-dashboard-page (design D9).
  */
 public final class DashboardBoardCache {
+
+    private static final Logger log = LoggerFactory.getLogger(DashboardBoardCache.class);
 
     private @Nullable BoardModel lastModel;
     private @Nullable Instant lastFetchedAt;
@@ -57,6 +61,11 @@ public final class DashboardBoardCache {
             lastFetchedAt = now;
             return new BoardSectionView(model, now, null);
         } catch (RuntimeException fetchFailure) {
+            // The view already carries the failure's message to the operator, so this is diagnosis
+            // only — but the message alone amputates the stack, and a board that quietly serves a
+            // stale model is exactly what someone debugging "why is this number old" is chasing
+            // (FR5, FR7 of harden-logging-observability).
+            log.debug("board refresh failed; serving the last good model", fetchFailure);
             return new BoardSectionView(lastModel, lastFetchedAt, failureMessage(fetchFailure));
         }
     }

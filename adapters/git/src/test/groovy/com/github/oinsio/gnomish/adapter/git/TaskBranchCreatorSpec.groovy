@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -17,7 +16,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
     def runner = new GitProcessRunner()
     def creator = new TaskBranchCreator(runner)
 
-    private String commit(Path repo, String fileName, String content) {
+    private String commitAndGetSha(Path repo, String fileName, String content) {
         new File(repo.toFile(), fileName).text = content
         runner.run(repo, 'add', fileName)
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
@@ -27,7 +26,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
     def "FR7: branch created from current HEAD when no base ref is given"() {
         given:
         def repo = initWorkingRepo(tempDir)
-        def head = commit(repo, 'a.txt', 'first')
+        def head = commitAndGetSha(repo, 'a.txt', 'first')
 
         when:
         def result = creator.createBranch(repo, 'PROJ-1', null)
@@ -40,9 +39,9 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
     def "FR7: branch created from an explicit --base ref, not HEAD"() {
         given:
         def repo = initWorkingRepo(tempDir)
-        def older = commit(repo, 'a.txt', 'first')
+        def older = commitAndGetSha(repo, 'a.txt', 'first')
         runner.run(repo, 'tag', 'version-old', older)
-        commit(repo, 'b.txt', 'second')
+        commitAndGetSha(repo, 'b.txt', 'second')
 
         when:
         def result = creator.createBranch(repo, 'PROJ-2', 'version-old')
@@ -55,7 +54,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
     def "FR2: branch name is sanitized via TaskIdSanitizer"() {
         given:
         def repo = initWorkingRepo(tempDir)
-        commit(repo, 'a.txt', 'first')
+        commitAndGetSha(repo, 'a.txt', 'first')
 
         when:
         creator.createBranch(repo, 'PROJ 42: fix/it', null)
@@ -68,7 +67,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
     def "FR7: branch-already-exists is reported as a deterministic result, not a crash"() {
         given:
         def repo = initWorkingRepo(tempDir)
-        commit(repo, 'a.txt', 'first')
+        commitAndGetSha(repo, 'a.txt', 'first')
         creator.createBranch(repo, 'PROJ-3', null)
 
         when:
@@ -83,7 +82,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
     def "FR7: an unresolvable --base ref is reported as a deterministic result, not a crash"() {
         given:
         def repo = initWorkingRepo(tempDir)
-        commit(repo, 'a.txt', 'first')
+        commitAndGetSha(repo, 'a.txt', 'first')
 
         when:
         def result = creator.createBranch(repo, 'PROJ-4', 'does-not-resolve')
@@ -97,7 +96,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
     def "FR7: creating the branch does not alter the clone's current branch, HEAD, or working tree"() {
         given:
         def repo = initWorkingRepo(tempDir)
-        commit(repo, 'a.txt', 'first')
+        commitAndGetSha(repo, 'a.txt', 'first')
         def branchBefore = runner.run(repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().trim()
         def headBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
 

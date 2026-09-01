@@ -21,7 +21,12 @@ import org.slf4j.LoggerFactory;
  * content read back through the task environment's {@code readFile} (FR1, NFR-S3 of
  * add-sandbox-core) — this class never touches the filesystem.
  *
- * <p>Implements FR8, NFR-R2 of add-manual-run; NFR-S3 of add-sandbox-core.
+ * <p>Every line names the check whose channel was read: one run verifies through many command
+ * checks, so an unattributed "the findings file is malformed" sends the operator hunting through
+ * the manifest for which one wrote it (FR5 of harden-logging-observability).
+ *
+ * <p>Implements FR8, NFR-R2 of add-manual-run; NFR-S3 of add-sandbox-core; FR5 of
+ * harden-logging-observability.
  */
 final class FindingsFileReader {
 
@@ -33,21 +38,32 @@ final class FindingsFileReader {
     private FindingsFileReader() {}
 
     /**
-     * Logs a warning if the findings channel carried content despite the command exiting 0
+     * Notes, at DEBUG, that the findings channel carried content despite the command exiting 0
      * (Pass): the content is otherwise ignored per FR8.
+     *
+     * <p>DEBUG, not WARN (FR12 of harden-logging-observability): a check that writes its findings
+     * unconditionally is a habit of the check's author, not a degradation of this run — nothing
+     * about the verdict is worse for it, and the operator has nothing to act on. It stays on the
+     * record because it is exactly what someone debugging "why were my findings ignored" needs.
      */
-    static void warnIfIgnoredOnPass(byte @Nullable [] content) {
+    static void noteIgnoredOnPass(String checkIdentity, byte @Nullable [] content) {
         if (!asText(content).isBlank()) {
-            log.warn("GNOMISH_FINDINGS_FILE has content but the command exited 0 (Pass); ignoring it per FR8");
+            log.debug(
+                    "GNOMISH_FINDINGS_FILE of check '{}' has content but the command exited 0 (Pass);"
+                            + " ignoring it per FR8",
+                    checkIdentity);
         }
     }
 
     /**
      * Parses {@code content} into a validated, non-empty list of {@link Finding}s, or {@code
      * null} if the content is absent, empty, or malformed in any way.
+     *
+     * @param checkIdentity the check whose channel this is, for the degradation warnings (FR5)
+     * @param content the size-capped bytes read back from the channel, or {@code null} if absent
      */
     @Nullable
-    static List<Finding> read(byte @Nullable [] content) {
+    static List<Finding> read(String checkIdentity, byte @Nullable [] content) {
         String text = asText(content);
         if (text.isBlank()) {
             return null;
@@ -55,21 +71,26 @@ final class FindingsFileReader {
         try {
             FindingsFile wire = FINDINGS_MAPPER.readValue(text, FindingsFile.class);
             if (wire.findings() == null) {
-                log.warn("GNOMISH_FINDINGS_FILE is malformed: missing 'findings' array; using synthetic finding");
+                log.warn(
+                        "GNOMISH_FINDINGS_FILE of check '{}' is malformed: missing 'findings' array;"
+                                + " using synthetic finding",
+                        checkIdentity);
                 return null;
             }
             List<Finding> findings = new ArrayList<>();
             for (FindingWire entry : wire.findings()) {
                 if (entry.message() == null || entry.message().isBlank()) {
-                    log.warn("GNOMISH_FINDINGS_FILE is malformed: an entry has a blank/missing 'message'; using"
-                            + " synthetic finding");
+                    log.warn(
+                            "GNOMISH_FINDINGS_FILE of check '{}' is malformed: an entry has a blank/missing"
+                                    + " 'message'; using synthetic finding",
+                            checkIdentity);
                     return null;
                 }
                 findings.add(new Finding(entry.message(), entry.location(), entry.details()));
             }
             return findings;
         } catch (IOException e) {
-            log.warn("GNOMISH_FINDINGS_FILE is malformed; using synthetic finding", e);
+            log.warn("GNOMISH_FINDINGS_FILE of check '{}' is malformed; using synthetic finding", checkIdentity, e);
             return null;
         }
     }

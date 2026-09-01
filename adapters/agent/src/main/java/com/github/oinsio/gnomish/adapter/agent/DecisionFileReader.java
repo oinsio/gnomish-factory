@@ -3,8 +3,10 @@ package com.github.oinsio.gnomish.adapter.agent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +45,14 @@ public final class DecisionFileReader {
 
     private static final String FALLBACK_QUESTION = "agent requested a decision but wrote no content";
 
+    /**
+     * How much of an unparseable decision file reaches the log line (FR6). Well below {@link
+     * LogText#DEFAULT_CAP_CHARS}: the point of the line is to show enough of the content to
+     * recognize what the agent wrote instead of JSON, not to reproduce the file — the file's real
+     * consumer is the {@link Decision} the same method returns, uncapped.
+     */
+    private static final int RAW_CONTENT_CAP_CHARS = 500;
+
     private static final ObjectMapper MAPPER =
             new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -73,7 +83,12 @@ public final class DecisionFileReader {
             List<String> options = payload.options() == null ? List.of() : List.copyOf(payload.options());
             return Optional.of(new Decision(payload.question(), options));
         } catch (JsonProcessingException | IllegalArgumentException e) {
-            log.warn("decision file was not valid decision JSON; using raw content as the question: {}", raw);
+            // FR6: the decision file is written by the agent, so its raw content is attacker-influenced
+            // — capped and neutralized before it reaches the line, while the Decision itself still
+            // carries the content verbatim for the human who answers the question.
+            log.warn(
+                    "decision file was not valid decision JSON; using raw content as the question: {}",
+                    LogText.forLog(raw, RAW_CONTENT_CAP_CHARS));
             return Optional.of(new Decision(raw, List.of()));
         }
     }
@@ -88,6 +103,12 @@ public final class DecisionFileReader {
      */
     public record Decision(String question, List<String> options) {}
 
-    /** The strict {@code {"question": ..., "options": [...]}} wire shape. */
-    private record Payload(String question, List<String> options) {}
+    /**
+     * The strict {@code {"question": ..., "options": [...]}} wire shape. Both components are
+     * declared {@link Nullable}: Jackson populates them from whatever JSON the agent wrote, so a
+     * missing field lands as {@code null} here regardless of the record's own type — the {@code
+     * null} checks below are the guard against exactly that, not dead code.
+     */
+    private record Payload(
+            @Nullable String question, @Nullable List<String> options) {}
 }

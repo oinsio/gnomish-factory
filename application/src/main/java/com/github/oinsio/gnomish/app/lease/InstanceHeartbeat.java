@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -26,7 +27,9 @@ import org.slf4j.LoggerFactory;
  * lock (in {@link HeldClaims}), so a claim registered exactly as the thread stops is never lost. An
  * <i>abnormal</i> death (an {@code Error} or a throwing sleeper) is not resurrected — the designed
  * degradation (design D3): beats stop, the claim goes stale, a reaper returns it. {@link
- * #onWorkerDeath} only makes it loud (ERROR), clears {@code running} so a later {@link #register}
+ * #onWorkerDeath} only makes it loud — ERROR normally, WARN without a stack once {@link
+ * ShutdownPhase} says the stop caused it (FR9 of harden-logging-observability) — clears {@code
+ * running} so a later {@link #register}
  * starts a fresh thread, and fires the {@link HeartbeatStateListener} so {@code died} reaches the
  * snapshot immediately (FR7). Each tick beats a lock-taken snapshot of this instance's own claims
  * (never held across a network write); a claim {@link HeartbeatBeater} reports gone is surfaced
@@ -144,7 +147,17 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     // The worker's UncaughtExceptionHandler; runs only on the abnormal exit (a normal loop() return
     // clears running without throwing). Not resurrected (design D3), only made loud and restart-safe.
     private void onWorkerDeath(Thread dead, Throwable e) {
-        log.error("heartbeat thread {} died; held claims will go stale and be reaped", dead.getName(), e);
+        if (ShutdownPhase.inProgress()) {
+            // FR9 of harden-logging-observability: the stop interrupted this worker on purpose, so
+            // the held claims going stale is the designed outcome, not lost work.
+            // throwable-not-subject: an interrupt's stack describes the stop, not a defect.
+            log.warn(
+                    "heartbeat thread {} stopped by the daemon shutdown ({}); held claims fall back to the lease TTL",
+                    dead.getName(),
+                    e.getClass().getSimpleName());
+        } else {
+            log.error("heartbeat thread {} died; held claims will go stale and be reaped", dead.getName(), e);
+        }
         claims.markDied();
         // RUNNING → DIED, the FR7 trigger: wakes the writer so `died` lands immediately (design D4).
         notifyStateChanged();

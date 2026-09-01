@@ -30,6 +30,14 @@ import org.slf4j.MDC;
  * into any logging that happens after the run ends (task 8.2's explicit "cleared on {@code
  * TaskFinished}").
  *
+ * <p>The {@code TaskFinished} clear is eager, not sufficient: a run that ends without that event
+ * — an abort thrown out of the engine, a slot crash, a resume that never reaches a terminal —
+ * would leave both keys on the carrier thread for whatever runs there next. {@link
+ * #clearAttemptScope()} is the backstop the thread boundaries that clear {@code taskId} call in
+ * their own {@code finally} (FR8, design D10 of harden-logging-observability); it is exposed
+ * here rather than as a bare {@code MDC.remove} at each boundary so this class stays the one
+ * owner of the {@code stage}/{@code attempt} vocabulary.
+ *
  * <p>Every branch here is a plain {@link MDC} map mutation with no I/O, so this class naturally
  * satisfies the port's "never throw past {@code onEvent}" contract without defensive exception
  * handling — the same reasoning {@link StatusEventListener} documents for its own plain field
@@ -58,7 +66,7 @@ public final class MdcEventListener implements EngineEventListener {
             case EngineEvent.CheckFinished finished -> put(finished.key());
             case EngineEvent.AttemptFinished finished -> put(finished.key());
             case EngineEvent.RunStarted started -> onRunStarted(started.position());
-            case EngineEvent.TaskFinished ignored -> clear();
+            case EngineEvent.TaskFinished ignored -> clearAttemptScope();
         }
     }
 
@@ -73,7 +81,15 @@ public final class MdcEventListener implements EngineEventListener {
         MDC.put(ATTEMPT_KEY, String.valueOf(key.attempt()));
     }
 
-    private void clear() {
+    /**
+     * Removes the {@code stage}/{@code attempt} keys from the calling thread's MDC — the backstop
+     * for a run that ends without a {@code TaskFinished} event, called from the same {@code
+     * finally} blocks that clear {@code taskId}. Idempotent: clearing keys that are already absent
+     * is a no-op, so a normal run (cleared eagerly on {@code TaskFinished}) pays nothing.
+     *
+     * <p>Implements FR8 of harden-logging-observability.
+     */
+    public static void clearAttemptScope() {
         MDC.remove(STAGE_KEY);
         MDC.remove(ATTEMPT_KEY);
     }

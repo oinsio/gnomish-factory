@@ -110,7 +110,6 @@ final class TakeBatch {
      */
     static List<TakeBatchOutcome> dispatch(
             TakeDispatcher dispatcher,
-            String taskIdMdcKey,
             TakeArguments takeArguments,
             PipelineDefinition definition,
             TrackerConfig trackerConfig,
@@ -137,10 +136,12 @@ final class TakeBatch {
                         heartbeat,
                         TakeoverConfirmation.UNAVAILABLE);
             } finally {
-                // Each ref runs on its own dedicated virtual thread (this class's run loop), so
-                // this clears only that thread's own MDC entry, mirroring TakeSlotRunner's
-                // per-slot clear — never the invoking thread's.
-                MDC.remove(taskIdMdcKey);
+                // FR8: the whole context map, not the three keys by name. Each ref runs on its own
+                // dedicated virtual thread (this class's run loop) whose entire context belongs to
+                // that ref, so the boundary clears the map the way MdcAwareThread's framed bodies
+                // do — which also covers whatever key a ref's run left behind that this class has
+                // never heard of. It touches only that thread's context, never the invoking one's.
+                MDC.clear();
             }
         });
     }

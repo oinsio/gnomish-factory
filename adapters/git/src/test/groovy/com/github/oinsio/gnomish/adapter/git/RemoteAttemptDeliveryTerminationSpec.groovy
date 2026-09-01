@@ -1,15 +1,13 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,11 +36,15 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
             outcome = delivery(Duration.ofSeconds(2)).ensureDelivered(workspace())
         }
 
-        then: 'NFR-O2: the one WARN says the remote never answered, never that the push failed'
-        def warnings = events.findAll { it.level == Level.WARN }
-        warnings.size() == 1
-        warnings[0].formattedMessage.contains('delivery push timed out')
-        !warnings[0].formattedMessage.contains('interrupted')
+        // FR12 of harden-logging-observability: the Undeliverable outcome below carries this same
+        //     fact into the check's CannotVerify verdict, which the engine reports — so the line
+        //     here is diagnosis, not a second operator-facing report of one fault.
+        then: 'NFR-O2: the one line says the remote never answered, never that the push failed'
+        events.findAll { it.level == Level.WARN }.isEmpty()
+        def notes = events.findAll { it.level == Level.DEBUG }
+        notes.size() == 1
+        notes[0].formattedMessage.contains('delivery push timed out')
+        !notes[0].formattedMessage.contains('interrupted')
 
         and: 'CannotVerify territory — the reason says nobody knows, not that the push was refused'
         outcome instanceof AttemptDelivery.Outcome.Undeliverable
@@ -73,10 +75,11 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
         }
 
         then: 'NFR-O2: the same line, in the words of the other outcome'
-        def warnings = events.findAll { it.level == Level.WARN }
-        warnings.size() == 1
-        warnings[0].formattedMessage.contains('delivery push was interrupted')
-        !warnings[0].formattedMessage.contains('timed out')
+        events.findAll { it.level == Level.WARN }.isEmpty()
+        def notes = events.findAll { it.level == Level.DEBUG }
+        notes.size() == 1
+        notes[0].formattedMessage.contains('delivery push was interrupted')
+        !notes[0].formattedMessage.contains('timed out')
 
         and:
         outcome instanceof AttemptDelivery.Outcome.Undeliverable
@@ -88,18 +91,15 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification implements Stal
         pushAttempts(tempDir).toFile().readLines().size() == 1
     }
 
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
     private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(RemoteAttemptDelivery)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(RemoteAttemptDelivery, Level.DEBUG)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        appender.list
     }
 
     private RemoteAttemptDelivery delivery(Duration deadline) {

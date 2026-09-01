@@ -3,9 +3,12 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reconciles uncommitted leftovers found in a resumed task worktree after divergence
@@ -34,12 +37,16 @@ import java.util.List;
  * <p>Kept in sync with {@link EnvironmentSalvage}: both must produce a salvage commit carrying the
  * claim-epoch trailer, restore factory-owned paths from the tip, and — past the guard that
  * tolerates a tip with no state directory — FAIL the salvage when that restore fails, rather
- * than letting the working copy's factory files ride into the commit.
+ * than letting the working copy's factory files ride into the commit. Their degrade paths are
+ * symmetric too: a discard that cannot reach or reset its working copy leaves the leftovers in
+ * place, and both ends say so at WARN (FR5 of harden-logging-observability).
  *
  * <p>Implements FR10 of add-git-workflow; FR5 of harden-task-branch-contract.
  */
 public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimEpochSource epochs)
         implements WorktreeSalvager {
+
+    private static final Logger log = LoggerFactory.getLogger(WorktreeSalvage.class);
 
     /**
      * True iff the worktree has any uncommitted change (staged, unstaged, or untracked) relative
@@ -128,7 +135,23 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimE
         if (!hasLeftovers()) {
             return;
         }
-        runner.run(worktreeRoot, "reset", "--hard", "HEAD");
-        runner.run(worktreeRoot, "clean", "-fd");
+        discardStep("reset --hard HEAD", runner.run(worktreeRoot, "reset", "--hard", "HEAD"));
+        discardStep("clean -fd", runner.run(worktreeRoot, "clean", "-fd"));
+    }
+
+    /**
+     * One discard step's outcome. Best effort — a discard that fails never fails the run — but a
+     * step that did not run leaves the very leftovers the discard exists to remove, so the next
+     * round starts on a working copy nobody expects (FR5 of harden-logging-observability).
+     */
+    private void discardStep(String step, GitCommandResult result) {
+        if (result.exitCode() != 0) {
+            // throwable-not-subject: git reported a status, not a thrown fault.
+            log.warn(
+                    "discard step 'git {}' exited {}; uncommitted leftovers stay in the worktree: {}",
+                    step,
+                    result.exitCode(),
+                    LogText.forLog(result.stderr()));
+        }
     }
 }

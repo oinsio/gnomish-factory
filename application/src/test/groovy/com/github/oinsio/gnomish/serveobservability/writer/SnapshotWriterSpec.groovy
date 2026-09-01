@@ -309,7 +309,7 @@ class SnapshotWriterSpec extends Specification {
     static Snapshot stoppedSnapshot() {
         def base = fixtureSnapshot()
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                new LifecycleState.Stopped('sigterm'), base.feed(), base.slots(), base.vitals(), base.tracker())
+                new LifecycleState.Stopped('signal'), base.feed(), base.slots(), base.vitals(), base.tracker())
     }
 
     static Snapshot fixtureSnapshot() {

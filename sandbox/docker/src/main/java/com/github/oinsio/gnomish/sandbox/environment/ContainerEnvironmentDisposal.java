@@ -32,18 +32,41 @@ record ContainerEnvironmentDisposal(DockerCli docker) implements TaskEnvironment
 
     @Override
     public void dispose(String environmentKey) {
-        bestEffort(DockerCommands.removeContainer(FactoryDockerLabels.containerName(environmentKey)));
+        bestEffort(
+                environmentKey,
+                "remove container",
+                DockerCommands.removeContainer(FactoryDockerLabels.containerName(environmentKey)));
         // The guard goes before the network: a network with a live endpoint cannot be removed (FR7).
-        bestEffort(GuardCommands.removeGuard(environmentKey));
-        bestEffort(DockerCommands.removeVolume(FactoryDockerLabels.volumeName(environmentKey)));
-        bestEffort(DockerCommands.removeNetwork(FactoryDockerLabels.networkName(environmentKey)));
+        bestEffort(environmentKey, "remove guard", GuardCommands.removeGuard(environmentKey));
+        bestEffort(
+                environmentKey,
+                "remove volume",
+                DockerCommands.removeVolume(FactoryDockerLabels.volumeName(environmentKey)));
+        bestEffort(
+                environmentKey,
+                "remove network",
+                DockerCommands.removeNetwork(FactoryDockerLabels.networkName(environmentKey)));
+        // FR2 of harden-logging-observability: the disposal anchor, closing the lifecycle the
+        // create/reattach anchors opened. Logged unconditionally after the four steps because
+        // disposal is best-effort by contract: the environment is gone as far as the factory is
+        // concerned whether or not every object went with it, and any step that did not is
+        // already named on its own line above.
+        log.info("container environment {} disposed", environmentKey);
     }
 
-    private void bestEffort(List<String> argv) {
+    /**
+     * Runs one teardown step, swallowing its failure per the best-effort contract — but never
+     * silently: FR5 of harden-logging-observability requires a degraded result to leave a trace an
+     * operator can attribute. The line names both the step and the environment key, because "a
+     * dispose step failed" without either is unactionable when a sweep is disposing many
+     * environments at once. DEBUG, not WARN: a racing or repeated disposal for the same key is the
+     * expected case, and the leftover objects are picked up by the aged-environment sweep.
+     */
+    private void bestEffort(String environmentKey, String step, List<String> argv) {
         try {
             docker.run(argv);
         } catch (RuntimeException e) {
-            log.debug("best-effort dispose step failed: {}", e.toString());
+            log.debug("best-effort dispose step '{}' failed for environment {}", step, environmentKey, e);
         }
     }
 }

@@ -45,12 +45,19 @@ import java.util.List;
  *       putFile} and the commit aborts.
  * </ul>
  *
+ * <p>The branch tip this class resolves — the baseline for the next round's
+ * boundary check and the commit the read-back reads from — is verified before
+ * use ({@link VerifiedTip}): a failed or blank resolution fails the persist with
+ * the git evidence rather than being recorded, the same rule its host twin
+ * {@link GitAttemptPersistence} applies to its own round baseline.
+ *
  * <p>Any mismatch throws {@link RoundBoundaryViolationException}; the engine
  * turns a thrown persist into {@code Aborted}, the branch keeps the evidence,
  * and the environment is kept untouched. This is a strict port: any failure to
  * durably commit throws, never returns.
  *
- * <p>Implements FR21, FR22, FR23 of add-sandbox-core.
+ * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of
+ * harden-logging-observability.
  */
 public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
@@ -202,9 +209,14 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         return content.toString().getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * The harvested branch tip, verified before it is used (FR13 of harden-logging-observability):
+     * this value becomes the previous tip the next round's boundary check compares against and the
+     * commit the read-back reads its blobs from, so a failed resolution must fail the persist
+     * rather than travel on as the empty string.
+     */
     private String currentTip() {
-        return runner.run(cloneDir, "rev-parse", "refs/heads/" + branch)
-                .stdout()
-                .trim();
+        String revision = "refs/heads/" + branch;
+        return VerifiedTip.required(revision, "rev-parse", runner.run(cloneDir, "rev-parse", revision));
     }
 }

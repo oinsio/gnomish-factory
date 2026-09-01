@@ -7,10 +7,10 @@ import spock.lang.Specification
 /**
  * {@link GithubRetryConfig} (NFR-R2 of add-tracker-port): direct unit coverage of the retry
  * predicates themselves. {@code GithubHttpClientSpec} exercises retry BEHAVIOR end to end against
- * WireMock, but through its own {@code fastRetryConfig()} test double (a faster interval function
- * over an equivalent policy) — never {@link GithubRetryConfig#build()} itself — so the exact
- * boundary of {@code retryOnResult} (>= 500) and the type-check of {@code retryOnException} are
- * covered here directly against the real policy object.
+ * WireMock, but through {@code GithubFastRetryConfig} (a faster interval function over an
+ * equivalent policy) — never {@link GithubRetryConfig#build()} itself — so the exact boundary of
+ * {@code retryOnResult} (>= 500) and the type-check of {@code retryOnException} are covered here
+ * directly against the real policy object.
  *
  * <p>Implements NFR-R2 of add-tracker-port.
  */

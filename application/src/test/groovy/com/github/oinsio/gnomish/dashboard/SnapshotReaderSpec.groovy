@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.dashboard
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapperSpec
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -35,20 +37,48 @@ class SnapshotReaderSpec extends Specification {
     private static final Instant FRESH_NOW = WRITTEN_AT.plusSeconds(60)
     private static final Instant STALE_NOW = WRITTEN_AT.plusSeconds(91)
 
-    def "a missing snapshot file degrades to Absent without throwing"() {
+    // FR5 of harden-logging-observability: missing and malformed render identically, which is
+    // exactly why they must not read alike in the log — a daemon that IS writing a snapshot this
+    // reader cannot parse is a defect; a snapshot that was never written usually is not.
+    def "a missing snapshot file degrades to Absent without throwing, at DEBUG"() {
         given:
         def missing = tempDir.resolve('snapshot.json')
+        def logs = LogCaptureSupport.attach(SnapshotReader, Level.DEBUG)
 
-        expect:
-        reader.read(missing, FRESH_NOW) == new DaemonSnapshotView.Absent()
+        when:
+        def view = reader.read(missing, FRESH_NOW)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        view == new DaemonSnapshotView.Absent()
+
+        and:
+        events.size() == 1
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.contains('no daemon snapshot at')
     }
 
-    def "malformed JSON degrades to Absent without throwing"() {
+    def "malformed JSON degrades to Absent without throwing, at WARN"() {
         given:
         def file = writeText(tempDir, '{not valid json')
+        def logs = LogCaptureSupport.attach(SnapshotReader, Level.DEBUG)
 
-        expect:
-        reader.read(file, FRESH_NOW) == new DaemonSnapshotView.Absent()
+        when:
+        def view = reader.read(file, FRESH_NOW)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        view == new DaemonSnapshotView.Absent()
+
+        and:
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.contains('present but unreadable')
+
+        and: 'the parse failure keeps its stack'
+        warnings[0].throwableProxy != null
     }
 
     def "a fresh snapshot within k x intervalSeconds renders Fresh regardless of lifecycle"() {

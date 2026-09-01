@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -79,7 +77,11 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         then: 'origin itself answers that it carries the park, so the park report says nothing'
         verdict instanceof ParkDeliveryVerdict.Delivered
         pushAttempts(tempDir).toFile().readLines().size() == 1
-        events.findAll { it.level == Level.WARN }*.formattedMessage.any {
+
+        and: 'FR12 of harden-logging-observability: a recovered transient is INFO, not a WARN —'
+        // the delivery happened; there is nothing here for an operator to act on.
+        events.findAll { it.level == Level.WARN }.isEmpty()
+        events.findAll { it.level == Level.INFO }*.formattedMessage.any {
             it.startsWith('park delivery push timed out, but origin carries the park')
         }
     }
@@ -132,17 +134,14 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         new ParkDeliveryFence(new GitProcessRunner(stallingGit(tempDir).toString(), Duration.ofSeconds(2)))
     }
 
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
     private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(ParkDeliveryFence)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(ParkDeliveryFence, Level.INFO)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        appender.list
     }
 }

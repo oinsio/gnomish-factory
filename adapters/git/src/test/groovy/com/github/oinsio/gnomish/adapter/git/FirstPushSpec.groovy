@@ -1,10 +1,15 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.FirstPushFailedException
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -22,11 +27,10 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
 
     def runner = new GitProcessRunner()
 
-    private void commit(Path repo, String fileName, String content) {
-        new File(repo.toFile(), fileName).text = content
-        runner.run(repo, 'add', fileName)
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
-    }
+    /** Virtual time: the suppressor's roll-up interval is minutes long and no spec may sleep. */
+    MovableClock clock = new MovableClock(Instant.parse('2026-08-31T10:00:00Z'))
+
+    RepeatSuppressor suppressor = new RepeatSuppressor(clock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)
 
     /** The production budget with its sleeps virtualized, so exhaustion is instant under test. */
     private static GitInfrastructureRetry instantRetry() {
@@ -43,7 +47,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         runner.run(clone, 'branch', 'gnomish/PROJ-1')
 
         when:
-        new FirstPush(runner, instantRetry()).deliver('PROJ-1', clone, 'gnomish/PROJ-1')
+        new FirstPush(runner, instantRetry(), suppressor).deliver('PROJ-1', clone, 'gnomish/PROJ-1')
 
         then:
         noExceptionThrown()
@@ -57,7 +61,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         runner.run(clone, 'branch', 'gnomish/PROJ-2')
 
         when:
-        new FirstPush(runner, instantRetry()).deliver('PROJ-2', clone, 'gnomish/PROJ-2')
+        new FirstPush(runner, instantRetry(), suppressor).deliver('PROJ-2', clone, 'gnomish/PROJ-2')
 
         then:
         noExceptionThrown()
@@ -70,7 +74,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         commit(clone, 'a.txt', 'first')
 
         when:
-        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry())
+        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
                 .deliver('PROJ-3', clone, 'gnomish/PROJ-3')
 
         then:
@@ -82,6 +86,87 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         Files.readAllLines(tempDir.resolve('push-count.txt')).size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
     }
 
+    def "FR4, FR12: an origin that stays down never reaches the console — the abort is the report"() {
+        given: 'a git whose pushes fail and whose origin demonstrably lacks the branch'
+        def gitBinary = dispatchingGit('')
+        def clone = initWorkingRepo(tempDir, 'clone-flooding')
+        commit(clone, 'a.txt', 'first')
+        def logs = LogCaptureSupport.attach(FirstPush, Level.DEBUG)
+
+        when: 'the whole retry budget is spent against it'
+        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
+                .deliver('PROJ-6', clone, 'gnomish/PROJ-6')
+
+        then: 'the exception is what the run reports; the attempts say nothing at WARN'
+        thrown(FirstPushFailedException)
+        logs.list.every { it.level == Level.DEBUG }
+
+        and: 'one attempt line names the fault, and the rest are counted rather than repeated'
+        def attempts = logs.list.findAll {
+            it.formattedMessage.contains('re-checking the remote tip')
+        }
+        attempts.size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        attempts[0].formattedMessage.contains('taskId=PROJ-6')
+        attempts.last().formattedMessage.contains("${GitInfrastructureRetry.DEFAULT_ATTEMPTS}x")
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR4: the suppressor outlives one delivery, so the streak key must namespace by branch —
+    // otherwise two tasks pushing against the same down origin share one count, and the second
+    // task's first failure reads as a continuation of a streak that is not its own.
+    def "FR4: two branches failing against the same origin keep separate streaks"() {
+        given: 'a git whose pushes fail, and two tasks delivered through one shared suppressor'
+        def gitBinary = dispatchingGit('')
+        def clone = initWorkingRepo(tempDir, 'clone-two-branches')
+        commit(clone, 'a.txt', 'first')
+        def push = new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
+
+        when: 'the first task spends its whole budget'
+        try {
+            push.deliver('PROJ-A', clone, 'gnomish/PROJ-A')
+        } catch (FirstPushFailedException ignored) {
+        }
+
+        and: 'then a second, unrelated task does the same'
+        def logs = LogCaptureSupport.attach(FirstPush, Level.DEBUG)
+        try {
+            push.deliver('PROJ-B', clone, 'gnomish/PROJ-B')
+        } catch (FirstPushFailedException ignored) {
+        }
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'the second task counts its own attempts from one, not from where the first left off'
+        def attempts = events.findAll {
+            it.formattedMessage.contains('re-checking the remote tip')
+        }
+        attempts.size() == GitInfrastructureRetry.DEFAULT_ATTEMPTS
+        attempts.last().formattedMessage.contains("${GitInfrastructureRetry.DEFAULT_ATTEMPTS}x")
+        attempts.every { it.formattedMessage.contains('taskId=PROJ-B') }
+    }
+
+    def "FR4: a push that lands after a failed streak announces the recovery"() {
+        given: 'an origin that refuses the first attempt and carries the tip on the re-check'
+        def gitBinary = dispatchingGit("${SHA}\trefs/heads/gnomish/PROJ-7")
+        def clone = initWorkingRepo(tempDir, 'clone-recovering')
+        commit(clone, 'a.txt', 'first')
+        def logs = LogCaptureSupport.attach(FirstPush)
+
+        when:
+        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
+                .deliver('PROJ-7', clone, 'gnomish/PROJ-7')
+
+        then: 'the console does not end on the failure: one INFO says the branch got there'
+        def recovery = logs.list.find { it.level == Level.INFO }
+        recovery.formattedMessage.contains('first push landed after 1 failed attempt(s)')
+        recovery.formattedMessage.contains('taskId=PROJ-7')
+
+        cleanup:
+        logs.detach()
+    }
+
     def "FR7: a push whose outcome was never established but which landed is success, not a re-push"() {
         given: 'a git whose push reports failure while origin already carries the local tip'
         def gitBinary = dispatchingGit("${SHA}\trefs/heads/gnomish/PROJ-4")
@@ -89,7 +174,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         commit(clone, 'a.txt', 'first')
 
         when:
-        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry())
+        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
                 .deliver('PROJ-4', clone, 'gnomish/PROJ-4')
 
         then: 'the re-check settled it: no abort, and the budget stopped at the first attempt'
@@ -104,7 +189,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         commit(clone, 'a.txt', 'first')
 
         when:
-        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry())
+        new FirstPush(new GitProcessRunner(gitBinary.toString()), instantRetry(), suppressor)
                 .deliver('PROJ-5', clone, 'gnomish/PROJ-5')
 
         then: 'the abort says the branch is missing locally, not that origin refused it'

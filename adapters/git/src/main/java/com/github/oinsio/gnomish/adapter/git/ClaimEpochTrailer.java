@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The claim epoch as it lives in a commit message: a git trailer line appended to the service
@@ -22,6 +25,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR13 of harden-task-branch-contract.
  */
 public final class ClaimEpochTrailer {
+
+    private static final Logger log = LoggerFactory.getLogger(ClaimEpochTrailer.class);
 
     /** The trailer key; namespaced so a project's own trailers never collide with the factory's. */
     static final String KEY = "Gnomish-Claim-Epoch";
@@ -71,8 +76,16 @@ public final class ClaimEpochTrailer {
     private static @Nullable ClaimEpoch epochOf(String value) {
         try {
             long token = Long.parseLong(value);
-            return token < 0 ? null : new ClaimEpoch(token);
+            if (token < 0) {
+                // throwable-not-subject: the value parsed fine; it is simply not an epoch.
+                log.debug("claim-epoch trailer carries a negative value, ignoring it: {}", LogText.forLog(value));
+                return null;
+            }
+            return new ClaimEpoch(token);
         } catch (NumberFormatException unreadable) {
+            // DEBUG, not WARN: an unreadable trailer is classified, not a degradation — the tip
+            // simply stays outside the fence, which is the documented reading (NFR-R2).
+            log.debug("claim-epoch trailer carries an unreadable value: {}", LogText.forLog(value), unreadable);
             return null;
         }
     }

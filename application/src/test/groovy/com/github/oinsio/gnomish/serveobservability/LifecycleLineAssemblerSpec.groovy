@@ -31,11 +31,11 @@ class LifecycleLineAssemblerSpec extends Specification {
         def at = Instant.parse('2026-08-03T12:00:00Z')
 
         when:
-        def line = LifecycleLineAssembler.stopped(INSTANCE, at, 'sigterm')
+        def line = LifecycleLineAssembler.stopped(INSTANCE, at, 'signal')
 
         then:
         line.instance() == INSTANCE
         line.at() == at
-        line.event() == new LedgerLifecycleEvent.Stopped('sigterm')
+        line.event() == new LedgerLifecycleEvent.Stopped('signal')
     }
 }

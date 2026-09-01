@@ -85,7 +85,7 @@ final class ContainerTipReader {
         try {
             cursor = readStateDto(support).egressCursor();
         } catch (RuntimeException e) {
-            log.debug("no recorded denial cursor to restore: {}", e.toString());
+            log.debug("no recorded denial cursor to restore", e);
             return;
         }
         if (cursor != null) {

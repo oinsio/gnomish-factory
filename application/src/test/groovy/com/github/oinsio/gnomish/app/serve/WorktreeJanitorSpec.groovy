@@ -3,11 +3,13 @@ package com.github.oinsio.gnomish.app.serve
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Duration
 import java.time.Instant
+import org.slf4j.MDC
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -65,6 +67,41 @@ class WorktreeJanitorSpec extends Specification {
 
         then:
         disposed == ['task-a']
+    }
+
+    // FR8, UX2 of harden-logging-observability: the janitor's loop belongs to no task, so its one
+    //     per-task decision — and everything the disposal seam logs beneath it — names the task in
+    //     the MDC. Without it a disposal is invisible to `grep taskId=<id>`, the filter an operator
+    //     uses to ask what happened to a task.
+    def "FR8: a disposal decision is findable by taskId, and its scope covers the disposal itself"() {
+        given:
+        environment('task-a', NOW - AGE_THRESHOLD - Duration.ofDays(1))
+        def logs = LogCaptureSupport.attach(WorktreeJanitor)
+        String scopeInsideDisposal = null
+        def scopedDisposal = { String key ->
+            scopeInsideDisposal = MDC.get('taskId')
+            disposed << key
+        } as TaskEnvironmentDisposal
+
+        when:
+        new WorktreeJanitor(worktreesRoot, cloneDir, AGE_THRESHOLD, scopedDisposal, clock, sleeper, {
+            -> Set.of()
+        }).tick()
+
+        then:
+        logs.list.find {
+            it.formattedMessage.contains('disposing aged environment')
+        }.MDCPropertyMap['taskId'] == 'task-a'
+
+        and: 'the seam runs inside the same scope, so its own lines are findable too'
+        scopeInsideDisposal == 'task-a'
+
+        and: 'and the tick leaves nothing behind for the next environment it judges'
+        MDC.get('taskId') == null
+
+        cleanup:
+        logs.detach()
+        MDC.clear()
     }
 
     // FR14, D10: an environment younger than the threshold is left alone.

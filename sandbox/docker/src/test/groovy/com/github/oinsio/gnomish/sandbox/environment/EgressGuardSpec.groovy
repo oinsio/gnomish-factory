@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -116,6 +117,68 @@ class EgressGuardSpec extends Specification {
         then: 'the broken guard was removed and a fresh one created with its bridge leg'
         docker.runs.contains(GuardCommands.removeGuard('k1'))
         docker.runs.contains(GuardCommands.connectBridge('k1'))
+    }
+
+    // FR5 of harden-logging-observability: the repair pass verifies its own result, so a refused
+    // sub-step is not itself a failure — but when the verification then fails, this DEBUG line is
+    // the only record of which step did not take.
+    def "FR5: a repair sub-step the daemon refuses leaves a DEBUG trace"() {
+        given: 'the guard exists but start is refused; only the recreated container runs'
+        def recreated = false
+        docker.onRun = { List<String> args ->
+            if (args[0] == 'run') {
+                recreated = true
+                return ok()
+            }
+            if (args == GuardCommands.startGuard('k1')) {
+                return failed('Error response from daemon: no such container')
+            }
+            args == GuardCommands.inspectGuardRunning('k1') ? ok(recreated ? 'true\n' : 'false\n') : ok()
+        }
+
+        when:
+        def logged = captureDebug(EgressGuard) { guard().ensureRunning() }
+
+        then: 'the pass still converges by recreating'
+        docker.runs.contains(GuardCommands.removeGuard('k1'))
+
+        and: 'and names the step that did not take'
+        def traces = logged.findAll {
+            it.formattedMessage.contains("repair step 'start'")
+        }
+        traces.size() == 1
+        traces[0].level == Level.DEBUG
+        traces[0].formattedMessage.contains('no such container')
+    }
+
+    // FR5: the same trace for the other repair sub-step — the removal before a recreate.
+    def "FR5: a refused removal before the recreate leaves a DEBUG trace"() {
+        given: 'the guard exists, start does nothing, removal is refused, and only the recreate runs'
+        def recreated = false
+        docker.onRun = { List<String> args ->
+            if (args[0] == 'run') {
+                recreated = true
+                return ok()
+            }
+            if (args == GuardCommands.removeGuard('k1')) {
+                return failed('Error response from daemon: removal already in progress')
+            }
+            args == GuardCommands.inspectGuardRunning('k1') ? ok(recreated ? 'true\n' : 'false\n') : ok()
+        }
+
+        when:
+        def logged = captureDebug(EgressGuard) { guard().ensureRunning() }
+
+        then: 'the pass still converges'
+        docker.runs.any { it[0] == 'run' }
+
+        and:
+        def traces = logged.findAll {
+            it.formattedMessage.contains("repair step 'remove'")
+        }
+        traces.size() == 1
+        traces[0].level == Level.DEBUG
+        traces[0].formattedMessage.contains('removal already in progress')
     }
 
     def "NFR-R1: a guard nothing can bring up is an infrastructure failure"() {
@@ -357,10 +420,19 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when:
-        g.denialFindings()
+        def cursor = null
+        def logged = captureDebug(GuardDenialReads) {
+            g.denialFindings()
+            cursor = g.denialCursor()
+        }
 
         then: 'a position with no identifiable source is one a later lease must not apply'
-        g.denialCursor().isEmpty()
+        cursor.isEmpty()
+
+        and: 'FR5 of harden-logging-observability: the lost cursor is traced, not silently dropped'
+        logged.any {
+            it.level == Level.DEBUG && it.formattedMessage.contains('came back empty')
+        }
     }
 
     def "FR5: the identity of the guard container is probed once and reused"() {
@@ -452,11 +524,22 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when:
-        g.denialFindings()
+        def cursor = null
+        def logged = captureDebug(GuardDenialReads) {
+            g.denialFindings()
+            cursor = g.denialCursor()
+        }
 
         then: 'no source to pair the position with, and no exception out of an observability read'
         noExceptionThrown()
-        g.denialCursor().isEmpty()
+        cursor.isEmpty()
+
+        and: 'FR5: the outage that cost this attempt its cursor is traced, with its cause'
+        def traces = logged.findAll {
+            it.level == Level.DEBUG && it.formattedMessage.contains('is unreadable')
+        }
+        traces.size() == 1
+        traces[0].throwableProxy != null
     }
 
     /** A daemon that answers the running probe, the identity probe, and --since-filtered logs. */
@@ -501,6 +584,17 @@ class EgressGuardSpec extends Specification {
         (0..<count).collect {
             "2026-08-19T10:00:00.00000000${it % 10}Z guard chatter ${it}\n"
         }.join('')
+    }
+
+    /** Captures a logger's DEBUG-and-above events through the shared helper (`.claude/rules/logging.md`). */
+    private static List<ILoggingEvent> captureDebug(Class<?> owner, Closure emit) {
+        def logs = LogCaptureSupport.attach(owner, Level.DEBUG)
+        try {
+            emit()
+            return List.copyOf(logs.list)
+        } finally {
+            logs.detach()
+        }
     }
 
     /** Captures what the denial read logs — the reads live in {@link GuardDenialReads}, not the guard. */

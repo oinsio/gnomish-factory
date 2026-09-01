@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
@@ -17,6 +18,8 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.status.AnchorLog
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
@@ -462,5 +465,69 @@ tracker:
         then:
         noExceptionThrown()
         starter.captured != null
+    }
+
+    // FR2 of harden-logging-observability: the start anchor states the configuration the daemon
+    // actually resolved — flags folded over properties folded over defaults — so a post-mortem
+    // reads the effective settings instead of re-deriving them from three sources.
+    def "the serve start anchor names the resolved configuration, including a --slots override"() {
+        given:
+        writeConfig(GITHUB_TRACKER_SECTION)
+        def command = newCommand([github: factoryReturning(tracker)], new CapturingStarter())
+        def capture = LogCaptureSupport.attach(AnchorLog)
+
+        when:
+        runsToCompletion {
+            command.run(args('serve', "--dir=$projectDir", '--slots=3'))
+        }
+
+        then: 'exactly one start anchor, at INFO'
+        def starts = capture.list.findAll {
+            it.formattedMessage.startsWith('serve started:')
+        }
+        starts.size() == 1
+        starts[0].level == Level.INFO
+
+        and: 'it carries the overridden slot count and every other configured value'
+        String message = starts[0].formattedMessage
+        message.contains("instance=$INSTANCE_NAME-")
+        message.contains('slots=3')
+        message.contains('wipLimit=')
+        message.contains('idlePoll=PT30S')
+        message.contains('sigtermGrace=PT30S')
+
+        cleanup:
+        capture.detach()
+    }
+
+    // FR2, FR7: a startup that dies provisioning the tracker used to leave the log file empty —
+    // the one record of why the daemon never came up went to a terminal nobody keeps. The console
+    // sentence stays; the file now also gets the failure with its stack.
+    def "a startup provisioning failure is logged with its throwable, not only printed"() {
+        given:
+        writeConfig(GITHUB_TRACKER_SECTION)
+        def failure = new IllegalStateException('connection refused')
+        def command = newCommand([github: factoryThrowingOnCreate(failure)], new CapturingStarter())
+        def capture = LogCaptureSupport.attach(ServeCommand)
+
+        when:
+        captureStderr {
+            try {
+                command.run(args('serve', "--dir=$projectDir"))
+            } catch (ServeExitCodeException ignored) {
+                // the exit code is the subject of its own feature above
+            }
+        }
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].level == Level.ERROR
+        capture.list[0].formattedMessage.contains("provisioning tracker 'github' (acme/widgets)")
+
+        and: 'the throwable rides along, so the stack and cause chain survive'
+        capture.list[0].throwableProxy.message == 'connection refused'
+
+        cleanup:
+        capture.detach()
     }
 }

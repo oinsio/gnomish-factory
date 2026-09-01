@@ -90,4 +90,24 @@ class StatusLineFormatterSpec extends Specification {
         'egress denied: paste.example.com' | null |
                 'egress denied: paste.example.com'
     }
+
+    // FR6 of harden-logging-observability: the denial's message and locator are chosen by the
+    //     gnome, so a crafted one must not be able to forge report rows of its own — the report
+    //     block is assembled by joining these lines, and one finding stays one line.
+    def "findingLine neutralizes untrusted finding text through the sanitizer choke point"() {
+        given: 'a locator carrying a line break and a terminal escape'
+        def esc = new String(Character.toChars(0x1B))
+        def finding = new Finding(
+                "egress denied${esc}[31m",
+                'paste.example.com:443/upload\nfake: allowed',
+                'kind=http method=POST')
+
+        when:
+        def line = StatusLineFormatter.findingLine(finding)
+
+        then:
+        !line.contains('\n')
+        !line.contains(esc)
+        line == 'egress denied (paste.example.com:443/upload\\nfake: allowed)'
+    }
 }

@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.app.lease
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -12,9 +10,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
@@ -53,18 +51,18 @@ class ReaperSpec extends Specification {
         new ClaimVersion(marker, Instant.parse(updatedAt), new ClaimEpoch(1))
     }
 
+    /**
+     * Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec —
+     * pinned at DEBUG, which is where the converging no-op now lives (FR12).
+     */
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(Reaper)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(Reaper, Level.DEBUG)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        return appender.list
     }
 
     // FR4: a claim whose version stood unchanged for TTL is removed with the observed
@@ -171,9 +169,11 @@ class ReaperSpec extends Specification {
         1 * tracker.removeStaleClaim(new TaskRef('T-1'), claimOf(v1)) >> new RemoveStaleClaimResult.Mismatch(null)
         1 * tracker.removeStaleClaim(new TaskRef('T-2'), claimOf(v2)) >> new RemoveStaleClaimResult.Removed()
 
-        and: 'exactly the mismatched claim logs the converging INFO line; the removed one does not'
+        // FR12 of harden-logging-observability: DEBUG, not INFO — under contention a claim another
+        //     instance already changed is the design converging, not a state change to report.
+        and: 'exactly the mismatched claim logs the converging line; the removed one does not'
         def converging = events.findAll {
-            it.level == Level.INFO && it.formattedMessage.contains('converging')
+            it.level == Level.DEBUG && it.formattedMessage.contains('converging')
         }
         converging.size() == 1
         converging[0].formattedMessage.contains('T-1')

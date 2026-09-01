@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Encodes and decodes the GitHub adapter's structural comment shape (design
@@ -40,6 +43,15 @@ import org.jspecify.annotations.Nullable;
  * FR11 of harden-task-branch-contract.
  */
 public final class GithubMarker {
+
+    private static final Logger log = LoggerFactory.getLogger(GithubMarker.class);
+
+    /**
+     * How much of an unparseable marker line reaches the warning. A comment body is
+     * tracker-sourced text an operator can write, so it goes through {@link LogText} — capped
+     * short, because the excerpt exists to identify the broken comment, not to reproduce it.
+     */
+    private static final int MALFORMED_EXCERPT_CHARS = 200;
 
     /** The structural-JSON format version this codec renders; bump on a breaking wire change. */
     static final int FORMAT_VERSION = 1;
@@ -145,14 +157,19 @@ public final class GithubMarker {
     public static Optional<ParsedMarker> parse(String commentBody) {
         Matcher matcher = MARKER_LINE.matcher(commentBody);
         if (!matcher.matches()) {
+            // Not a factory marker at all — an operator's own reply. Silence is correct: every
+            // human comment on every polled issue would otherwise produce a line.
             return Optional.empty();
         }
-        Optional<GithubMarkerJson> parsed = GithubMarkerJson.deserialize(matcher.group("json"));
+        String json = matcher.group("json");
+        Optional<GithubMarkerJson> parsed = GithubMarkerJson.deserialize(json);
         if (parsed.isEmpty()) {
+            warnDropped(json, "its structural JSON does not parse");
             return Optional.empty();
         }
         GithubMarkerJson fields = parsed.get();
         if (fields.kind() == null || fields.instance() == null || fields.at() == null) {
+            warnDropped(json, "its structural JSON is missing kind, instance or at");
             return Optional.empty();
         }
         GithubMarkerKind kind;
@@ -161,6 +178,7 @@ public final class GithubMarker {
             kind = GithubMarkerKind.fromWireValue(fields.kind());
             at = Instant.parse(fields.at());
         } catch (IllegalArgumentException | DateTimeParseException e) {
+            warnDropped(json, "its kind or timestamp is not a value this version understands");
             return Optional.empty();
         }
         String rest = matcher.group("rest");
@@ -174,5 +192,25 @@ public final class GithubMarker {
                 fields.reason(),
                 fields.identity().orElse(null),
                 fields.epoch() == null ? null : new ClaimEpoch(fields.epoch())));
+    }
+
+    /**
+     * Warns that a comment which opened with the factory's own structural prefix could not be read
+     * back, and is therefore dropped (FR5 of harden-logging-observability). This is not a human's reply
+     * being skipped: something wrote a gnomish marker this codec cannot understand, and every fold
+     * built on markers — the claim window, the abort count, the boundary anchor — silently omits
+     * it, so a claim can look absent and an abort streak can look shorter than it is.
+     *
+     * <p>Deliberately not repeat-suppressed: a malformed marker is a corrupt tracker thread rather
+     * than a flaky dependency, its expected count in a healthy factory is zero, and the repetition
+     * across polls is itself the signal that nobody has fixed the comment.
+     */
+    private static void warnDropped(String json, String why) {
+        // throwable-not-subject: the three parse failures are classified, not propagated — the
+        //     reason phrase is the whole diagnosis and two of the branches have no exception at all.
+        log.warn(
+                "dropping a gnomish marker comment because {}; the folds built on markers will not see it: {}",
+                why,
+                LogText.forLog(json, MALFORMED_EXCERPT_CHARS));
     }
 }

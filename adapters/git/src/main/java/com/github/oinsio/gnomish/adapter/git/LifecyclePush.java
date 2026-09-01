@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,7 +61,7 @@ final class LifecyclePush {
                     taskId,
                     branch,
                     event,
-                    result.stderr().trim());
+                    LogText.forLog(result.stderr()));
         }
     }
 }

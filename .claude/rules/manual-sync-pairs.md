@@ -60,8 +60,7 @@ audits treat these rows as if the markers were present.
 
 | End A                                            | End B                                                            | Synchronized invariant                                                 |
 |--------------------------------------------------|------------------------------------------------------------------|------------------------------------------------------------------------|
-| `adapters/git/.../RoundBoundaryCheck`            | `adapters/git/.../HarvestedBoundaryCheck`                        | `.gnomish-task/` boundary rule (allowed paths, exit-code handling)     |
-| `adapters/git/.../GitAttemptPersistence`         | `adapters/git/.../EnvironmentAttemptPersistence`                 | attempt commit + state-file write sequence                             |
+| `adapters/git/.../GitAttemptPersistence`         | `adapters/git/.../EnvironmentAttemptPersistence`                 | attempt commit + state-file write sequence. The tip-resolution half of it is no longer hand-synced: both media resolve through `VerifiedTip` (`harden-logging-observability` FR13), so a blank or failed resolution refuses on both by construction. |
 | `adapters/git/.../GitTaskRepository`             | `adapters/git/.../GitObjectsTaskRepository`                      | task lifecycle write protocol                                          |
 | `adapters/agent/.../DecisionFileTransport`       | `adapters/git/.../BranchDecisionFile`                            | `GNOMISH_DECISION_FILE` env var name, read semantics, size cap         |
 | `adapters/agent/.../RoundTimeout`                | `adapters/.../pipeline/AgentSettingsValidator`                   | accepted `roundTimeout` shapes                                         |
@@ -75,3 +74,14 @@ audits treat these rows as if the markers were present.
 | `serveobservability/json/SnapshotJsonMapper`     | `serveobservability/json/SnapshotJsonReader`                     | snapshot wire tokens (`FeedPhase`, `HeartbeatState`, `LifecycleState`) |
 | `application/.../app/serve/FeedState`            | `serveobservability/FeedPhase`                                   | deliberate layer decoupling: constant sets must match                  |
 | `application/.../app/serve/HeartbeatWorkerState` | `serveobservability/HeartbeatState`                              | deliberate layer decoupling: constant sets must match                  |
+
+## Declared pairs with no shared classpath
+
+Both ends carry the marker, so the rule above would have them leave the
+registry — but neither end can name the other with a resolvable `{@link}`,
+because the two deliberately share no compile edge. The registry is their only
+navigational index, so these rows stay listed for as long as the pair does.
+
+| End A                        | End B                                               | Synchronized invariant                                                                    |
+|------------------------------|-----------------------------------------------------|-------------------------------------------------------------------------------------------|
+| `logtext/.../logtext/LogText` | `gnomish-plugin-api/.../findings/FindingsSanitizer` | ANSI/control stripping table + tail-cap semantics; newline handling deliberately differs. Verified by `SanitizerPairEquivalenceSpec` over a shared adversarial corpus. |

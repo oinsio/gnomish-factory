@@ -134,7 +134,7 @@ public final class GuardedPark implements TerminalEffect {
                     ? EffectObservation.LANDED
                     : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
-            log.warn("could not verify whether the {} of {} already landed: {}", kind, ref.id(), e.toString());
+            log.warn("could not verify whether the {} of {} already landed", kind, ref.id(), e);
             return EffectObservation.UNDETERMINED;
         }
     }

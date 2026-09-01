@@ -46,6 +46,15 @@ include 'subprocess'
 // is: a shared writer that dragged a dependency behind it would push that
 // dependency into every layer that writes a file.
 include 'atomicfile'
+// The logging-support leaf (FR4, FR6, FR8, design D5/D10 of
+// harden-logging-observability): the untrusted-text sanitizer every log line
+// routes through, the repeat suppressor poll loops log their edges with, and
+// the MDC-propagation helper virtual-thread hops wrap their bodies in.
+// Dependency-free but for `slf4j-api` — every layer's emitters share it, so
+// anything it dragged behind it would land in `application`, the adapters and
+// the sandbox backends alike, which is exactly the coupling `:atomicfile` and
+// `:subprocess` are kept empty to avoid.
+include 'logtext'
 include 'gitobjects'
 include 'gnomish-plugin-api'
 // Not a layer of the factory: a stand-in third-party adapter that keeps the

@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -20,12 +22,6 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
     Path tempDir
 
     def runner = new GitProcessRunner()
-
-    private void commit(Path repo, String fileName, String content) {
-        new File(repo.toFile(), fileName).text = content
-        runner.run(repo, 'add', fileName)
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
-    }
 
     def "hasLeftovers() is false on a clean worktree"() {
         given:
@@ -159,6 +155,46 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         and: 'the untracked leftover is gone'
         !Files.exists(repo.resolve('untracked.txt'))
         !salvage.hasLeftovers()
+    }
+
+    // FR5 of harden-logging-observability, mirrored on EnvironmentSalvage's own degrade path: a
+    // discard step that did not run leaves the very leftovers it exists to remove, so the next
+    // round starts on a working copy nobody expects. Best effort, but never silent.
+    def "FR5: a discard step git refuses warns that the leftovers stay"() {
+        given:
+        def repo = initWorkingRepo(tempDir, 'refused-discard')
+        commit(repo, 'a.txt', 'first')
+        Files.writeString(repo.resolve('a.txt'), 'modified content')
+
+        and: 'a stand-in git that refuses reset and clean, delegating status unchanged'
+        def fakeGit = tempDir.resolve('refuse-discard-git.sh')
+        fakeGit.toFile().text = """#!/bin/sh
+if [ "\$1" = "reset" ] || [ "\$1" = "clean" ]; then
+  echo 'fatal: stand-in git refuses' >&2
+  exit 128
+fi
+exec git "\$@"
+"""
+        fakeGit.toFile().setExecutable(true)
+        def salvage = new WorktreeSalvage(new GitProcessRunner(fakeGit.toString()), repo, ClaimEpochSource.NONE)
+        def logs = LogCaptureSupport.attach(WorktreeSalvage)
+
+        when:
+        salvage.discard()
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'the leftovers really did stay'
+        Files.readString(repo.resolve('a.txt')) == 'modified content'
+
+        and: 'both refused steps are named'
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 2
+        warnings[0].formattedMessage.contains('reset --hard HEAD')
+        warnings[1].formattedMessage.contains('clean -fd')
+        warnings.every {
+            it.formattedMessage.contains('leftovers stay in the worktree')
+        }
     }
 
     def "discard() is a no-op on a clean worktree"() {

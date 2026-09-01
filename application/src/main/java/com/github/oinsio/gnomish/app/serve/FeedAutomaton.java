@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
+import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
@@ -121,7 +122,8 @@ public final class FeedAutomaton {
                 wipLimit,
                 random,
                 stateLogger,
-                outageRetry);
+                outageRetry,
+                new FinishedDecline());
         // FR5: a construction-time idle baseline, so a snapshot before step() reads a coherent view.
         this.viewTracker = new FeedViewTracker(FeedState.IDLE_EMPTY, clock.now(), wipLimit, dirtyNotifier);
     }

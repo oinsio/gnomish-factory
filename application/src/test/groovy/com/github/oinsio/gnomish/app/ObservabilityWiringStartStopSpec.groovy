@@ -108,7 +108,7 @@ class ObservabilityWiringStartStopSpec extends Specification {
         }
 
         when:
-        wiring.finalizeStopped('sigterm')
+        wiring.finalizeStopped('signal')
 
         then: 'the last bytes on disk reflect the stopped state this call moved the daemon into'
         lifecycleTracker.view().state() == DaemonLifecycleState.STOPPED

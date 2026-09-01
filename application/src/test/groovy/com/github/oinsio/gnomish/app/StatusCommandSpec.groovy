@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -10,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -165,6 +167,23 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         then:
         noExceptionThrown()
         output.contains('no tasks found')
+    }
+
+    // FR13 of harden-logging-observability, "A failed enumeration is an error, not an empty table":
+    // per-branch degradation stops at the branch — the listing itself failing is the command
+    // failing, because "verified: no tasks" and "could not look" are opposite answers.
+    def "FR13: a failed enumeration fails the command instead of printing an empty table"() {
+        given: 'a --dir that is not a git repository, so the ref enumeration exits non-zero'
+        def notARepo = Files.createDirectory(tempDir.resolve('not-a-repo'))
+        def args = new DefaultApplicationArguments('status', '--dir=' + notARepo)
+
+        when:
+        def printed = captureStdout { newCommand().run(args) }
+
+        then: 'the command fails naming the git failure, and prints no table at all'
+        def failure = thrown(TaskListingFailedException)
+        failure.message.contains('could not enumerate')
+        printed == null
     }
 
     def "UsageException: --dir is required"() {

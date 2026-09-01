@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -87,7 +88,10 @@ public final class OriginReconciliation {
         // An empty read is either "origin does not carry the branch" or "origin was unreachable" —
         // one refs read cannot tell them apart, and the catch-up push is the right answer to both:
         // it delivers in the first case and fails into the WARN below in the second.
-        log.info(
+        // FR12 of harden-logging-observability: the intention and the outcome of one catch-up
+        // push are two lines about one path — the failure WARN below is the one that carries the
+        // decision, so the intention stays for whoever is diagnosing, at DEBUG.
+        log.debug(
                 "origin does not hold the task branch tip, pushing: taskId={}, branch={}, touchpoint={},"
                         + " originTip={}, localTip={}",
                 taskId,
@@ -104,7 +108,7 @@ public final class OriginReconciliation {
                     taskId,
                     branch,
                     touchpoint,
-                    result.stderr().trim());
+                    LogText.forLog(result.stderr()));
         }
     }
 }

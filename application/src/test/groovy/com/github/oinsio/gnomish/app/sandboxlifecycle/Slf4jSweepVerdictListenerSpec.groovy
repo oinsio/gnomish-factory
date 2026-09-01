@@ -1,16 +1,19 @@
 package com.github.oinsio.gnomish.app.sandboxlifecycle
 
-import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
  * {@link Slf4jSweepVerdictListener}, task 4.3 of add-serve-sandbox-lifecycle (NFR-O4): the
  * structured sink `run`/`take` use, asserted on the emitted event rather than on a rendered
  * string, so the field set — not one formatter's spacing — is what the gate holds.
+ *
+ * <p>And the level grading of `sandbox-lifecycle` "Quiet tick, loud degradation" (FR12 of
+ * harden-logging-observability): a healthy tick says nothing on the operator console, while a
+ * degraded one is loud in the same tick.
  */
 class Slf4jSweepVerdictListenerSpec extends Specification {
 
@@ -28,18 +31,19 @@ class Slf4jSweepVerdictListenerSpec extends Specification {
                 age)
     }
 
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(CATEGORY)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.5 touched this spec. */
+    private static List<ILoggingEvent> capture(Level level = Level.DEBUG, Closure<Void> emit) {
+        def logs = LogCaptureSupport.attach(CATEGORY, level)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        return appender.list
+    }
+
+    private static SweepVerdict of(SweepVerdictCategory category) {
+        new SweepVerdict(category, 'gnomish-task-7-box', 'main-box', 'tracked', 'task-7', 'reason', null)
     }
 
     // NFR-O4: one line per verdict, carrying EVERY field of the event — a sink that dropped the
@@ -77,6 +81,46 @@ class Slf4jSweepVerdictListenerSpec extends Specification {
         then:
         events.size() == 1
         events[0].formattedMessage.endsWith('age=null')
+    }
+
+    // FR12: the level is the verdict's own category, decided once — a data-driven table so a new
+    //     category cannot be added without a row here saying what an operator should do about it.
+    def "FR12: #category logs at #expected"() {
+        when:
+        def events = capture {
+            new Slf4jSweepVerdictListener().onVerdict(of(category))
+        }
+
+        then:
+        events.size() == 1
+        events[0].level == expected
+
+        where:
+        category || expected
+        SweepVerdictCategory.CHECKED_ALIVE || Level.DEBUG
+        SweepVerdictCategory.KEPT_UNDER_THRESHOLD || Level.DEBUG
+        SweepVerdictCategory.STOPPED_ORPHAN || Level.INFO
+        SweepVerdictCategory.DISPOSED_AGED || Level.INFO
+        SweepVerdictCategory.DISPOSED_RECONSTRUCTIBLE || Level.INFO
+        SweepVerdictCategory.SKIPPED_NO_VERDICT || Level.WARN
+    }
+
+    // sandbox-lifecycle "Quiet tick, loud degradation": the whole point of the grading is that one
+    //     bad object in an otherwise healthy tick is the only thing the operator plane shows.
+    def "FR12: a quiet tick stays off the console while its one degradation does not"() {
+        when: 'a tick over three living, young objects and one the sweep could not read'
+        def events = capture(Level.INFO) {
+            def listener = new Slf4jSweepVerdictListener()
+            listener.onVerdict(of(SweepVerdictCategory.CHECKED_ALIVE))
+            listener.onVerdict(of(SweepVerdictCategory.KEPT_UNDER_THRESHOLD))
+            listener.onVerdict(of(SweepVerdictCategory.CHECKED_ALIVE))
+            listener.onVerdict(of(SweepVerdictCategory.SKIPPED_NO_VERDICT))
+        }
+
+        then: 'the steady-state three are below INFO entirely; the degradation is a WARN'
+        events.size() == 1
+        events[0].level == Level.WARN
+        events[0].formattedMessage.contains('SKIPPED_NO_VERDICT')
     }
 
     // NFR-O4: every entry point sinks through this one listener, so a two-object pass must read

@@ -56,9 +56,10 @@ public final class TakeQuarantinePark {
         TaskRef ref = trackerTask.ref();
         String report =
                 BranchQuarantineReport.of(trackerTask.snapshot().id(), quarantine.shape(), trackerTask.abortFacts());
-        log.error("Quarantining task {}: {}", ref.id(), quarantine.getMessage());
+        log.error("Quarantining task {}", ref.id(), quarantine);
         parkBestEffort(tracker, ref, report);
-        TaskState finalState = TaskState.atStageStart(definition.stages().get(0).name());
+        TaskState finalState =
+                TaskState.atStageStart(definition.stages().getFirst().name());
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, report);
     }
 

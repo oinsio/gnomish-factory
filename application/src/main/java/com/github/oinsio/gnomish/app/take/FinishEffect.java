@@ -72,7 +72,7 @@ public record FinishEffect(
                     ? EffectObservation.LANDED
                     : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
-            log.warn("could not verify whether the finish of {} already landed: {}", ref.id(), e.toString());
+            log.warn("could not verify whether the finish of {} already landed", ref.id(), e);
             return EffectObservation.UNDETERMINED;
         }
     }

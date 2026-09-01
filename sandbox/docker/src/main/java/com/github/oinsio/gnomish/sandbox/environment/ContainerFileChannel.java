@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
 import com.github.oinsio.gnomish.subprocess.Supervision;
 import com.github.oinsio.gnomish.subprocess.Termination;
@@ -46,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * <p>Implements FR1, NFR-S3 of add-sandbox-core; FR11 of
  * bound-subprocess-commands.
  */
-final class ContainerFileChannel {
+record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path scratch) {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerFileChannel.class);
 
@@ -62,23 +63,15 @@ final class ContainerFileChannel {
 
     private static final ProcessSupervisor SUPERVISOR = new ProcessSupervisor();
 
-    private final DockerCli docker;
-    private final String key;
-    private final Path workingCopy;
-    private final Path scratch;
-
     ContainerFileChannel(DockerCli docker, String key, String workingCopy, String scratch) {
-        this.docker = docker;
-        this.key = key;
-        this.workingCopy = Path.of(workingCopy);
-        this.scratch = Path.of(scratch);
+        this(docker, key, Path.of(workingCopy), Path.of(scratch));
     }
 
     void putFile(String path, byte[] content) {
         String resolved = validate(path);
         List<String> argv = List.of("sh", "-c", WRITE_SCRIPT, "gnomish", resolved);
         Process process = docker.start(DockerCommands.exec(key, workingCopy.toString(), Map.of(), true, argv), false);
-        Thread pump = Thread.ofVirtual().start(() -> pump(process, content));
+        Thread pump = Thread.ofVirtual().start(MdcAwareThread.inheritingContext(() -> pump(process, content)));
         ExecPipeDrain stdout = ExecPipeDrain.start(process.getInputStream(), "channel-write-stdout");
         ExecPipeDrain stderr = ExecPipeDrain.start(process.getErrorStream(), "channel-write-stderr");
         int code = completed(process, "in-box write to " + path);
@@ -110,7 +103,7 @@ final class ContainerFileChannel {
             throw new UncheckedIOException(failure("in-box read of " + path, code, errBytes));
         }
         if (bytes.length > sizeCap) {
-            log.warn("channel file {} exceeded read cap {} bytes; truncated", path, sizeCap);
+            log.warn("channel file {} in {} exceeded read cap {} bytes; truncated", path, key, sizeCap);
             byte[] capped = new byte[(int) sizeCap];
             System.arraycopy(bytes, 0, capped, 0, capped.length);
             return Optional.of(capped);
@@ -156,7 +149,7 @@ final class ContainerFileChannel {
         try (OutputStream os = process.getOutputStream()) {
             os.write(bytes);
         } catch (IOException e) {
-            log.debug("in-box writer closed stdin early: {}", e.toString());
+            log.debug("in-box writer closed stdin early", e);
         }
     }
 

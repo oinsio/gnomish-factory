@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -57,18 +55,15 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         hook.setExecutable(true)
     }
 
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(ParkDeliveryFence)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
+    private static List<ILoggingEvent> capture(Closure<?> emit) {
+        def logs = LogCaptureSupport.attach(ParkDeliveryFence, Level.INFO)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        appender.list
     }
 
     def "an undelivered park commit is pushed and reported delivered"() {
@@ -118,7 +113,10 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         originTip().isPresent()
 
         and: 'the first failure was recorded, the fence itself did not report exhaustion'
-        events.findAll { it.level == Level.WARN }.size() == 1
+        // FR12 of harden-logging-observability: the first of two bounded attempts is not
+        // operator business — only an exhausted fence is, and this one recovered.
+        events.findAll { it.level == Level.WARN }.isEmpty()
+        events[0].level == Level.INFO
         events[0].formattedMessage.startsWith('park delivery push failed, re-attempting once:')
     }
 
@@ -139,8 +137,10 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         (verdict as ParkDeliveryVerdict.Undelivered).note().contains(BRANCH)
         (verdict as ParkDeliveryVerdict.Undelivered).note().contains('origin is behind this park')
 
-        and: 'both the re-attempt and the exhaustion are visible in the log'
-        events.findAll { it.level == Level.WARN }.size() == 2
+        and: 'both the re-attempt and the exhaustion are visible, but only the exhaustion is a WARN'
+        events.findAll { it.level == Level.WARN }.size() == 1
+        events[0].level == Level.INFO
+        events[1].level == Level.WARN
         events[1].formattedMessage.startsWith('park delivery fence exhausted, parking anyway:')
     }
 

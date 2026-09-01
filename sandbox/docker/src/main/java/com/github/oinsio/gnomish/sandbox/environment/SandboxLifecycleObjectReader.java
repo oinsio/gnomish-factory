@@ -100,12 +100,17 @@ final class SandboxLifecycleObjectReader {
      * An unparseable timestamp costs the object its verdict for this pass, so it is logged rather
      * than swallowed: a silently skipped object is never reaped and never reported, the exact
      * stall {@code SKIPPED_NO_VERDICT} exists to make visible.
+     *
+     * <p>DEBUG, not WARN (FR12 of harden-logging-observability): the sweep now emits that object's
+     * {@code SKIPPED_NO_VERDICT} verdict, and the verdict sink is the one owner of the operator
+     * line for it. This one keeps the raw value the parse choked on, which the verdict does not
+     * carry.
      */
     private static @Nullable Instant parseOrNull(String name, String value) {
         try {
             return Instant.parse(unquote(value));
         } catch (DateTimeParseException e) {
-            log.warn("sandbox lifecycle sweep skipped {}: unparseable docker timestamp '{}'", name, value);
+            log.debug("sandbox lifecycle sweep skipped {}: unparseable docker timestamp '{}'", name, value);
             return null;
         }
     }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.secrets
 
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.Function
@@ -82,6 +83,36 @@ class EnvFileSecretsProviderSpec extends Specification {
 
         expect: 'find is empty — the misconfigured path fails loudly, not silently'
         provider.find('GNOMISH_GITHUB_TOKEN') == Optional.empty()
+    }
+
+    // FR5, NFR-S1 of harden-logging-observability: the warning names the variable that pointed at
+    // the unreadable file — the only fact that makes it fixable — and never the secret's value.
+    def "an unreadable secret file warns naming the variable, never the value"() {
+        given: 'a secret file that exists but whose path is a directory, so the read fails'
+        def unreadable = Files.createDirectory(tempDir.resolve('not-a-file'))
+        def provider = new EnvFileSecretsProvider(
+                envOf([GNOMISH_GITHUB_TOKEN: 'from_env',
+                    GNOMISH_GITHUB_TOKEN_FILE: unreadable.toString()]))
+
+        when:
+        def logs = LogCaptureSupport.attach(EnvFileSecretsProvider)
+        def resolved = provider.find('GNOMISH_GITHUB_TOKEN')
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'the secret fails closed'
+        resolved == Optional.empty()
+
+        and: 'exactly one warning, naming the _FILE variable'
+        def warnings = events.findAll { it.level.levelStr == 'WARN' }
+        warnings.size() == 1
+        warnings[0].formattedMessage.contains('GNOMISH_GITHUB_TOKEN_FILE')
+
+        and: 'no value the provider could have resolved appears anywhere in the line'
+        !warnings[0].formattedMessage.contains('from_env')
+
+        and: 'the read failure keeps its stack'
+        warnings[0].throwableProxy != null
     }
 
     // NFR-S1: a blank _FILE value is ignored, falling back to the direct value

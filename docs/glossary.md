@@ -270,6 +270,49 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   catchable signal. A bound on waiting, not a sleep: a tree that stops early
   returns early.
 
+## Observability
+
+- **Anchor line** — an INFO log line marking a lifecycle transition the
+  operator plane must be able to find later: claim acquired, serve
+  started/stopping, container environment created/reattached/disposed, task
+  lifecycle commit, and the canonical task summary. Anchors are what make a
+  `grep taskId=<id>` reconstruct a timeline rather than a pile of details. The
+  application-plane vocabulary has one owner, `AnchorLog`; remote modules emit
+  their own anchors at their own choke points under the same policy
+  (`docs/adr/0004-logging-policy.md`). *Not:* an event — the ledgers and
+  snapshots are the machine plane; an anchor is a text line for a human.
+- **Canonical task summary** — the single log line every task produces when it
+  leaves the factory, carrying outcome, stage, attempts used, wall time and
+  token usage by model. One renderer serves all modes; the facts are assembled
+  per mode (from the ledger's terminal line in serve/take, from engine events
+  in a manual run). *Not:* the ledger's `runSummary` line, which records a
+  whole drain run in the machine plane — the canonical task summary is one
+  task, in the log plane. *Never:* run summary (that name is taken).
+- **Repeat suppression** — the edge-logging discipline for a loop that can
+  fail on every tick: the first occurrence (or a changed reason) logs at the
+  site's level, repeats drop to DEBUG, a periodic roll-up names the count, and
+  a recovery line reports the outage. Owned by `RepeatSuppressor` in
+  `:logtext`; state is in-memory per process, so a restart may repeat the
+  first-occurrence line. *Not:* a local aggregate counter, which collapses a
+  flood *within one operation* into one summary line — a different invariant,
+  deliberately not the same mechanism. *Never:* deduplication, throttling.
+- **Log text sanitization** — the choke point every piece of untrusted text
+  passes before it becomes part of a log line: control/ANSI stripping, newline
+  flattening so one event stays one line, and a length cap. Owned by `LogText`
+  in `:logtext`. *Not:* findings sanitization — `FindingsSanitizer` guards the
+  plugin-findings boundary and deliberately *preserves* line structure; the two
+  are distinct controls at distinct trust boundaries that share only their
+  character vocabulary, kept in step as a declared pair.
+- **Shutdown phase** — the window between the moment a stop takes ownership of
+  the process and the moment it exits. Marked once, first thing in the shutdown
+  hook, and read by the sites that would otherwise report the stop's own
+  casualties as faults: a slot dying mid-round, a heartbeat worker interrupted,
+  a git or docker command whose process tree the stop killed. During the phase
+  those are logged once, at WARN, without a stack; outside it nothing changes.
+  Owned by `ShutdownPhase` in `:logtext`. *Not:* the drain — draining is the
+  work the stop does, the phase is the fact that it is happening. *Never:*
+  shutting-down flag.
+
 ## Abbreviations
 
 | Abbreviation | Meaning                                                                       |

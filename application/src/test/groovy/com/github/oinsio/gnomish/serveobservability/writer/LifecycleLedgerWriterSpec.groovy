@@ -70,7 +70,7 @@ class LifecycleLedgerWriterSpec extends Specification {
         def now = Instant.parse('2026-08-03T12:00:00Z')
 
         when:
-        writer(now).writeStopped('sigterm')
+        writer(now).writeStopped('signal')
 
         then:
         def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
@@ -80,7 +80,7 @@ class LifecycleLedgerWriterSpec extends Specification {
         def json = JSON.readTree(lines[0])
         json.get('type').asText() == 'lifecycle'
         json.get('event').asText() == 'stopped'
-        json.get('reason').asText() == 'sigterm'
+        json.get('reason').asText() == 'signal'
     }
 
     // NFR-R1: a write failure (a blocked ledger directory) must never escape writeStarted/

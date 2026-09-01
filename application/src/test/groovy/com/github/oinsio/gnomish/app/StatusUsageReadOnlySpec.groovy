@@ -61,12 +61,6 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
         assert result.exitCode() == 0: "clone failed: ${result.stderr()}"
     }
 
-    private void commit(Path repo, String fileName, String content) {
-        new File(repo.toFile(), fileName).text = content
-        runner.run(repo, 'add', fileName)
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
-    }
-
     /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway worktree root of its own. */
     private void buildTaskBranch(Path repo, Path taskWorktrees, String taskId) {
         new GitTaskRepository(runner, repo, taskWorktrees, ClaimEpochSource.NONE).createTask(

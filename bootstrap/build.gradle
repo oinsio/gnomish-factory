@@ -82,18 +82,18 @@ dependencies {
     // the run assemblies construct `ContainerEnvironments` and drive the
     // lease/self-check chain directly — composition, by D3's by-role rule.
     implementation project(':sandbox:docker')
-    // Shared fakes and port-contract suites (FR7, design D8), test scope only.
+    // Test scope only: shared fakes and port-contract suites (FR7, design D8), the github bundle
+    // the discovery/seam/dispatch specs assert on, and `:logtext` for its `ShutdownPhase` (D6).
     testImplementation project(':test-fixtures')
-    // Named by specs only (discovery/seam/dispatch assert on the bundled provider).
     testImplementation project(':adapters:github')
+    testImplementation project(':logtext')
 
     // Spring-family versions are managed by the Boot BOM (design D3).
     implementation platform(libs.spring.boot.dependencies)
     // Security override: import the Jackson BOM at the CVE-fixed version
-    // (GHSA-5jmj-h7xm-6q6v, see libs.versions.toml). Boot 4.1.0 imports
-    // jackson-bom 2.21.4 transitively; declaring 2.22.1 here wins by Gradle's
-    // highest-version conflict resolution and bumps the whole family at once.
-    // Drop once a Boot 4.1.x upgrade manages 2.22.1+.
+    // (GHSA-5jmj-h7xm-6q6v, see libs.versions.toml). Boot 4.1.0 imports jackson-bom 2.21.4
+    // transitively; declaring 2.22.1 here wins by Gradle's highest-version conflict resolution
+    // and bumps the whole family at once. Drop once a Boot 4.1.x upgrade manages 2.22.1+.
     implementation platform(libs.jackson.bom)
 
     // Security overrides on the logging stack spring-boot-starter pulls in:
@@ -110,9 +110,8 @@ dependencies {
     }
 
     implementation libs.spring.boot.starter
-    // Production code compiles against the SLF4J API directly (FR4, design
-    // D10); declared honestly per the dependency-analysis gate rather than
-    // leaning on the starter's transitive copy. Version is BOM-managed.
+    // Production code compiles against the SLF4J API directly (FR4, design D10); declared
+    // honestly per the dependency-analysis gate, not via the starter. Version is BOM-managed.
     implementation libs.slf4j.api
 
     // The Groovy/Spock/JUnit-launcher test stack and the JSpecify + Error Prone
@@ -181,7 +180,7 @@ dependencies {
 
 // The one module allowed to reach the adapters (FR2, design D3) — that is what makes it
 // the composition root. The set is still stated rather than left open, so `:test-fixtures`
-// never lands on a production classpath (FR7); `:atomicfile` arrives transitively.
+// never lands on a production classpath (FR7); `:atomicfile` and `:logtext` arrive transitively.
 layering {
     allowedProjects = [
         ':adapters',
@@ -193,6 +192,7 @@ layering {
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',
+        ':logtext',
         ':sandbox:core',
         ':sandbox:docker',
         ':subprocess',

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 
 /**
  * The {@link ExternalCheckClient} adapter for GitHub Actions: reads the attempt commit of the
@@ -18,8 +19,9 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
  * mapping, findings) for runs of exactly that commit.
  *
  * <p>Only {@link GithubHttpClient} (auth, retries), its {@link GithubConditionalRequestCache}
- * (ETag cache, an optimization only — NFR-C1), and the configured repository coordinates are held
- * across calls; {@link GithubWorkflowRunQuery} and {@link GithubWorkflowJobsFetcher} are cheap
+ * (ETag cache, an optimization only — NFR-C1), the configured repository coordinates and the
+ * cannot-verify {@link RepeatSuppressor} (log-plane only — it decides how a repeated failure is
+ * *worded*, never what this adapter answers) are held across calls; {@link GithubWorkflowRunQuery} and {@link GithubWorkflowJobsFetcher} are cheap
  * wrappers rebuilt fresh inside every {@link #poll}. No poll outcome, run identifier or verdict is
  * ever retained between calls: two independent instances polling the same {@code (owner, repo,
  * attemptCommitSha)} — e.g. before and after a crash-and-takeover — observe the same run set and
@@ -28,7 +30,8 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
  *
  * <p>Implements NFR-R2 of add-external-check-github-actions; FR26 of add-sandbox-core.
  */
-public record GithubCheckExternalClient(GithubConditionalRequestCache cache, String owner, String repo)
+public record GithubCheckExternalClient(
+        GithubConditionalRequestCache cache, String owner, String repo, RepeatSuppressor pollSuppressor)
         implements ExternalCheckClient {
 
     /**
@@ -39,7 +42,7 @@ public record GithubCheckExternalClient(GithubConditionalRequestCache cache, Str
      * @param repo the repository name the checks run in, from factory config
      */
     public GithubCheckExternalClient(GithubHttpClient httpClient, String owner, String repo) {
-        this(new GithubConditionalRequestCache(httpClient), owner, repo);
+        this(new GithubConditionalRequestCache(httpClient), owner, repo, RepeatSuppressor.system());
     }
 
     /**
@@ -63,7 +66,9 @@ public record GithubCheckExternalClient(GithubConditionalRequestCache cache, Str
                     + (workspace == null ? "null" : workspace.getClass().getName()));
         }
         GithubWorkflowRunPoll poll = new GithubWorkflowRunPoll(
-                new GithubWorkflowRunQuery(cache, owner, repo), new GithubWorkflowJobsFetcher(cache, owner, repo));
+                new GithubWorkflowRunQuery(cache, owner, repo),
+                new GithubWorkflowJobsFetcher(cache, owner, repo),
+                pollSuppressor);
         return poll.poll(check.checkId(), attemptWorkspace.attemptCommitSha());
     }
 }

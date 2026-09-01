@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.dashboard
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.board.BoardModel
 import com.github.oinsio.gnomish.board.ReadySummary
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -64,16 +66,25 @@ class DashboardBoardCacheSpec extends Specification {
     def "a first-ever fetch failure degrades to unavailable: no model, no fetch time, the failure message"() {
         given:
         def cache = new DashboardBoardCache()
+        def logs = LogCaptureSupport.attach(DashboardBoardCache, Level.DEBUG)
 
         when:
         def view = cache.refresh({
             -> throw new RuntimeException('tracker unreachable')
         }, T0)
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then:
         view.model() == null
         view.fetchedAt() == null
         view.failureMessage() == 'tracker unreachable'
+
+        and: 'FR5, FR7 of harden-logging-observability: the view carries the message, the log the stack'
+        events.size() == 1
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.contains('serving the last good model')
+        events[0].throwableProxy.message == 'tracker unreachable'
     }
 
     def "a refresh failure after a prior success keeps the cached model, fetch time, and the new failure"() {

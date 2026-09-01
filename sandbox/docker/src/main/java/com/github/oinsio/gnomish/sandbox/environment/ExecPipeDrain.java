@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,15 +46,15 @@ final class ExecPipeDrain {
     /** Starts draining {@code stream} on a named virtual thread. */
     static ExecPipeDrain start(InputStream stream, String name) {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        Thread thread = Thread.ofVirtual().name(name).start(() -> {
+        Thread thread = Thread.ofVirtual().name(name).start(MdcAwareThread.inheritingContext(() -> {
             try (stream) {
                 stream.transferTo(buffer);
             } catch (IOException broken) {
                 // A pipe that fails mid-exec keeps whatever was captured: the supervised
                 // termination, not this stream, says what happened to the invocation.
-                log.debug("in-box exec pipe {} broke mid-read: {}", name, broken.toString());
+                log.debug("in-box exec pipe {} broke mid-read", name, broken);
             }
-        });
+        }));
         return new ExecPipeDrain(thread, buffer);
     }
 

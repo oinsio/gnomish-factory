@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test-only logging configuration (task 2.3 of harden-logging-observability,
+  design D7). Implements FR11, M4.
+
+  Why it exists: `logback-spring.xml` writes to `~/.gnomish/logs/gnomish.log`,
+  the operator's own durable record. Every `@SpringBootTest` in this module
+  boots a real context, Boot applies that production configuration, and the
+  suite's output — including deliberately provoked stack traces — lands in the
+  file an operator later greps as evidence (observed live before this change).
+  Logback and Spring Boot both look for `logback-test.xml` ahead of
+  `logback-spring.xml`, so this file on the test classpath takes the whole
+  suite off the operator's file with no per-spec wiring.
+
+  This is the only module whose tests boot a Spring context; the other modules
+  put no Logback configuration on their test classpath at all, so Logback's own
+  default (console, no file) already applies there.
+
+  Where the lines go instead: a plain file under this module's build directory,
+  which `./gradlew clean` removes and no post-mortem reads, plus the same WARN+
+  stdout console the production configuration gives the operator, so a spec's
+  warnings still surface in the build output. Deliberately synchronous — a spec
+  asserting on a file wants the line written, not queued — and deliberately not
+  a rolling appender: a build directory is not a retention problem.
+
+  The out-of-process E2E layer is not covered here: `E2eProcessHarness` spawns
+  the packaged jar, which carries the production configuration by design, so it
+  is redirected by the `GNOMISH_LOG_DIR` environment variable the harness sets
+  instead. `OperatorLogIsolationSpec` guards both halves.
+-->
+<configuration>
+
+    <property name="GNOMISH_TEST_LOG_PATTERN"
+              value="%d{ISO8601} [%thread] %-5level [taskId=%X{taskId}, stage=%X{stage}, attempt=%X{attempt}, component=%X{component}] %logger{36} - %msg%n"/>
+
+    <appender name="TEST_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>build/test-logs/gnomish-test.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>${GNOMISH_TEST_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="CONSOLE_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.out</target>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder>
+            <pattern>${GNOMISH_TEST_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="${GNOMISH_LOG_LEVEL:-INFO}">
+        <appender-ref ref="TEST_FILE"/>
+        <appender-ref ref="CONSOLE_STDOUT"/>
+    </root>
+
+</configuration>

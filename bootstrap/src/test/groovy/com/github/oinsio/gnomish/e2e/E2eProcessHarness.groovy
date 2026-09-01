@@ -37,9 +37,24 @@ final class E2eProcessHarness {
     private static final String JAR_PATH_PROPERTY = 'e2e.jarPath'
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(120)
 
-    private final Path jarPath
+    /**
+     * The spawned factory's log directory, overriding the operator's own
+     * {@code ~/.gnomish/logs} for the lifetime of the build (task 2.3 of
+     * harden-logging-observability, FR11/M4). The spawned process is the packaged
+     * production binary and carries the production Logback configuration by
+     * design, so the module's {@code logback-test.xml} — a test-classpath file —
+     * cannot reach it; the configuration's documented {@code GNOMISH_LOG_DIR}
+     * variable can. One directory for the whole JVM, created on first use: the
+     * point is that it is not the operator's file, not that each spawn gets its own.
+     */
+    static final Path LOG_DIR = Files.createTempDirectory('gnomish-e2e-logs')
 
-    E2eProcessHarness() {
+    /** The environment variable {@link #LOG_DIR} is passed through. */
+    static final String LOG_DIR_VARIABLE = 'GNOMISH_LOG_DIR'
+
+    private final Path jarPath = resolveJarPath()
+
+    private static Path resolveJarPath() {
         String configured = System.getProperty(JAR_PATH_PROPERTY)
         if (configured == null || configured.isBlank()) {
             throw new IllegalStateException(
@@ -52,7 +67,7 @@ final class E2eProcessHarness {
             "'${JAR_PATH_PROPERTY}' points at a non-existent file: ${resolved}"
             + ' — has the bootJar task run?')
         }
-        jarPath = resolved
+        return resolved
     }
 
     /**
@@ -92,6 +107,8 @@ final class E2eProcessHarness {
 
         ProcessBuilder builder = new ProcessBuilder(command)
         builder.directory(workingDirectory.toFile())
+        // Before extraEnv, so a spec that wants its own log location still wins.
+        builder.environment().put(LOG_DIR_VARIABLE, LOG_DIR.toAbsolutePath().toString())
         builder.environment().putAll(extraEnv)
 
         Process process = builder.start()

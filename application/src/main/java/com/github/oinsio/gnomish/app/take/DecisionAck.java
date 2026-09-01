@@ -130,7 +130,7 @@ public final class DecisionAck implements TerminalEffect {
         try {
             return tracker.collectDecisions(ref).isEmpty() ? EffectObservation.LANDED : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
-            log.warn("could not verify whether the decision acknowledge of {} landed: {}", ref.id(), e.toString());
+            log.warn("could not verify whether the decision acknowledge of {} landed", ref.id(), e);
             return EffectObservation.UNDETERMINED;
         }
     }

@@ -4,7 +4,10 @@ import com.github.oinsio.gnomish.adapter.git.RemoteBranchTip.Carriage;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.nio.file.Path;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Locates the task branch {@code gnomish/<taskId>} in a clone, trying — in order, stopping at the
@@ -36,6 +39,8 @@ import java.nio.file.Path;
  * <p>Implements FR8, FR13 of add-git-workflow; FR6 of harden-task-branch-contract.
  */
 public final class TaskBranchLocator {
+
+    private static final Logger log = LoggerFactory.getLogger(TaskBranchLocator.class);
 
     private final GitProcessRunner runner;
     private final OriginRemote origin;
@@ -102,7 +107,17 @@ public final class TaskBranchLocator {
 
     private BranchLocation classifyFailedFetch(Path cloneDir, String branchName, GitCommandResult fetch) {
         return switch (remoteTip.confirmBranch(cloneDir, branchName)) {
-            case Carriage.ABSENT -> new BranchLocation.NotFound();
+            case Carriage.ABSENT -> {
+                // The fetch failed and origin confirms the branch does not exist, so absence is
+                // the right answer — but the failed fetch that led here is worth the trace, since
+                // this is the one arm where a failure and a fact look identical (FR5).
+                // throwable-not-subject: git reported a status; nothing was thrown.
+                log.debug(
+                        "narrow fetch of {} failed and origin confirms it is absent ({})",
+                        branchName,
+                        LogText.forLog(why(fetch)));
+                yield new BranchLocation.NotFound();
+            }
             case Carriage.CARRIES ->
                 new BranchLocation.Unavailable("origin carries " + branchName
                         + " but the narrow fetch did not deliver it (" + why(fetch) + ")");

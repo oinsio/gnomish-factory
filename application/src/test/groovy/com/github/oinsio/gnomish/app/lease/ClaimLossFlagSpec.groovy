@@ -76,32 +76,32 @@ class ClaimLossFlagSpec extends Specification {
     //     explicit, accurate reason instead of the heartbeat's generic wording.
     def "claimLost with an explicit reason records and reads it back"() {
         when:
-        flag.claimLost(A, 'daemon shutting down (SIGTERM)')
+        flag.claimLost(A, 'daemon shutting down (signal)')
 
         then:
         flag.isLost(A)
-        flag.reason(A) == 'daemon shutting down (SIGTERM)'
+        flag.reason(A) == 'daemon shutting down (signal)'
     }
 
     // FR8, FR11: the flag latches on the FIRST reason recorded — a claim once flagged never
     //     changes its cause within a run, whether the second call supplies a reason or not.
     def "the first recorded reason sticks even if a later call supplies a different one"() {
         when:
-        flag.claimLost(A, 'daemon shutting down (SIGTERM)')
+        flag.claimLost(A, 'daemon shutting down (signal)')
         flag.claimLost(A)
 
         then:
-        flag.reason(A) == 'daemon shutting down (SIGTERM)'
+        flag.reason(A) == 'daemon shutting down (signal)'
     }
 
     // FR11: an explicit-reason flag for one task never leaks its reason onto another.
     def "an explicit reason for one task does not affect another"() {
         when:
-        flag.claimLost(A, 'daemon shutting down (SIGTERM)')
+        flag.claimLost(A, 'daemon shutting down (signal)')
         flag.claimLost(B)
 
         then:
-        flag.reason(A) == 'daemon shutting down (SIGTERM)'
+        flag.reason(A) == 'daemon shutting down (signal)'
         flag.reason(B) == 'claim marker gone (heartbeat reported loss)'
     }
 

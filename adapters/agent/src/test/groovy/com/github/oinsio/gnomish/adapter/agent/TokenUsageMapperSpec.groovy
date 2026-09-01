@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -111,6 +113,49 @@ class TokenUsageMapperSpec extends Specification {
 
         then: 'the map degrades to empty, no exception'
         tokensByModel == [:]
+    }
+
+    // FR5 of harden-logging-observability: a round whose whole usage extraction comes back empty
+    // has lost its cost to the budget and the summary, and reads as "unreported" — the same as a
+    // round that genuinely spent nothing. The per-entry skips stay DEBUG; this one is a WARN.
+    def "FR5: an extraction that yields nothing at all warns that the round's cost is unreported"() {
+        given:
+        def resultEvent = new AgentEvent.ResultEvent('fake-session-empty-2', 'success', 'done', null, null)
+        def initEvent = new AgentEvent.InitEvent('fake-session-empty-2', 'claude-fake-main-1')
+        def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
+
+        when:
+        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        tokensByModel == [:]
+
+        and:
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.contains('no usable token usage')
+    }
+
+    // FR5: a round that DID report usage says nothing — a healthy round produces no console output.
+    def "FR5: a round that reported usage warns about nothing"() {
+        given:
+        def resultEvent = new AgentEvent.ResultEvent(
+                'fake-session-ok-1', 'success', 'done',
+                [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5],
+                null)
+        def initEvent = new AgentEvent.InitEvent('fake-session-ok-1', 'claude-fake-main-1')
+        def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
+
+        when:
+        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        !tokensByModel.isEmpty()
+        events.isEmpty()
     }
 
     // NFR-R2, FR4: modelUsage absent, usage present, but no init event available to key the fallback

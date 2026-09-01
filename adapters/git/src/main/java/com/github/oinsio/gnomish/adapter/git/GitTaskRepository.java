@@ -21,6 +21,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The git realization of {@link TaskRepository} (design D1): creates the task branch and worktree
@@ -51,6 +53,8 @@ import java.util.List;
  * harden-task-branch-contract.
  */
 public final class GitTaskRepository implements TaskLifecycleStore {
+
+    private static final Logger log = LoggerFactory.getLogger(GitTaskRepository.class);
 
     private final GitProcessRunner runner;
     private final Path cloneDir;
@@ -199,6 +203,18 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         commitWith(taskId, worktree, ServiceCommitMessages.taskEvent(event), event);
     }
 
+    /**
+     * The host medium's task-lifecycle commit choke point — every lifecycle transition this
+     * repository records passes through here, which is why the FR2 anchor of
+     * harden-logging-observability sits here and not at each of the callers above.
+     *
+     * <p>The line goes out after the commit succeeds: an anchor states that the transition is on
+     * the branch, and a failed commit has not put it there (its own failure travels as the thrown
+     * {@link GitTaskRepositoryException}).
+     *
+     * <p>Kept in sync with {@link TaskLifecycleCommitWriter#build}: both media log one INFO line
+     * per lifecycle transition, after the commit succeeds, naming the task and the event.
+     */
     private void commitWith(String taskId, Path worktree, String message, TaskLifecycleEvent event) {
         GitCommandResult add = runner.run(worktree, "add", "-A");
         if (add.exitCode() != 0) {
@@ -212,6 +228,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         if (commit.exitCode() != 0) {
             throw new GitTaskRepositoryException(taskId, event, "git commit", commit.stderr());
         }
+        log.info("task lifecycle commit written for task {}: event={}", taskId, event);
     }
 
     private static TaskLifecycleEvent eventFor(TaskOutcome outcome) {

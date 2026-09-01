@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -21,6 +23,10 @@ import spock.lang.TempDir
  * dead guard is restarted before any probe runs. Daemon-free: probes run
  * against a scripted environment, isolation reads against the recording docker
  * fake.
+ *
+ * <p>A passing self-check is also a quiet one (FR12 of harden-logging-observability): five probes
+ * that all pass are five facts about one healthy box, so they cost one INFO between them, and the
+ * per-probe detail lives at DEBUG for whoever is diagnosing a box that failed.
  */
 class EnvironmentSelfCheckSpec extends Specification {
 
@@ -71,6 +77,49 @@ class EnvironmentSelfCheckSpec extends Specification {
         new EnvironmentSelfCheck(environment, guard, docker, 'k1', 'runc', allowlist, { Duration d ->
             sleeps++
         } as Sleeper)
+    }
+
+    def "FR12: a healthy environment costs one INFO that still says what was verified"() {
+        given:
+        def logs = LogCaptureSupport.attach(EnvironmentSelfCheck, Level.DEBUG)
+
+        when:
+        selfCheck().verify()
+
+        then: 'one operator-facing line for the whole check'
+        def announcements = logs.list.findAll { it.level == Level.INFO }
+        announcements.size() == 1
+
+        and: 'and it names what each probe established, so the aggregate is not a bare "passed"'
+        def message = announcements[0].formattedMessage
+        message.contains('k1')
+        message.contains('in-box uid 1000')
+        message.contains('no direct route')
+        message.contains('guard denies non-allowlisted')
+        message.contains(ALLOWED)
+        message.contains('internal network, runtime runc')
+
+        and: 'the per-probe lines are still there, below the console'
+        logs.list.findAll { it.level == Level.DEBUG }.size() >= 2
+
+        cleanup:
+        logs.detach()
+    }
+
+    def "FR12: an allowlist naming no dialable host says the probe was skipped, not that it passed"() {
+        given:
+        def logs = LogCaptureSupport.attach(EnvironmentSelfCheck)
+
+        when:
+        selfCheck(['*.example.com']).verify()
+
+        then:
+        logs.list.find {
+            it.level == Level.INFO
+        }.formattedMessage.contains('allowlisted-host probe skipped')
+
+        cleanup:
+        logs.detach()
     }
 
     def "FR8: a healthy environment passes all probes"() {

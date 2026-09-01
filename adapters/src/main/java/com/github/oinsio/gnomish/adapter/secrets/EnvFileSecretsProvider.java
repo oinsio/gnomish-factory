@@ -65,7 +65,7 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
     public Optional<String> find(String name) {
         String fileRef = env.apply(name + FILE_SUFFIX);
         if (fileRef != null && !fileRef.isBlank()) {
-            return readFile(fileRef.strip());
+            return readFile(name + FILE_SUFFIX, fileRef.strip());
         }
         return present(env.apply(name));
     }
@@ -75,8 +75,12 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
      * empty when the file is absent, unreadable, or blank — the fail-closed
      * leg: a referenced file that cannot be read is an absent secret, never a
      * fall-through to the direct env value.
+     *
+     * @param variable the {@code *_FILE} variable that named {@code path}; the warning's subject,
+     *     since "a secret would not resolve" is only actionable if the operator knows which one
+     *     (FR5, NFR-S1 of harden-logging-observability — the variable, never the value)
      */
-    private static Optional<String> readFile(String path) {
+    private static Optional<String> readFile(String variable, String path) {
         try {
             return present(Files.readString(Path.of(path)).strip());
         } catch (IOException | InvalidPathException e) {
@@ -85,7 +89,7 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
             // that says WHICH read failed and why. Neither an IOException from a file read nor an
             // InvalidPathException carries file content, so the stack leaks nothing the message
             // does not already say.
-            log.warn("secret file could not be read", e);
+            log.warn("secret file named by {} could not be read; the secret resolves as absent", variable, e);
             return Optional.empty();
         }
     }

@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.status;
 
-import com.github.oinsio.gnomish.app.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.time.Duration;
 
 /**
@@ -81,15 +81,19 @@ final class StatusLineFormatter {
     }
 
     /**
-     * Neutralizes finding text for the console sink (FR15 of add-sandbox-core): a denial's
-     * host and path are chosen by the gnome, so the funnel's {@link FindingsSanitizer#strip}
-     * removes ANSI/control sequences here exactly as it does before a log line, and the
-     * line-structure characters strip deliberately keeps ({@code \n}, {@code \t}) collapse to
-     * spaces — one finding must stay one line, or a crafted path forges report rows of its own.
-     * Findings as data are untouched: {@code state.json} still carries them verbatim.
+     * Neutralizes finding text for the console sink (FR15 of add-sandbox-core): a denial's host and
+     * path are chosen by the gnome, so the text is untrusted and passes the {@link LogText} choke
+     * point — ANSI and control sequences stripped, every line break rendered as a visible escape,
+     * length capped. One finding must stay one line, or a crafted path forges report rows of its
+     * own; the cap keeps a hostile locator from owning the console. Findings as data are untouched:
+     * {@code state.json} still carries them verbatim.
+     *
+     * <p>Was a hand-rolled {@code strip(...)}-plus-flatten pair before FR6 of
+     * harden-logging-observability gave the rule one owner — this is that owner's first in-place
+     * consumer.
      */
     private static String oneLine(String text) {
-        return FindingsSanitizer.strip(text).replace('\n', ' ').replace('\t', ' ');
+        return LogText.forLog(text);
     }
 
     static String resultLabel(AttemptRecord.Result result) {

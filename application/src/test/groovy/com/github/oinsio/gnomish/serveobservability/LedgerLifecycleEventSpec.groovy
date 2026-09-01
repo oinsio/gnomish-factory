@@ -19,10 +19,10 @@ class LedgerLifecycleEventSpec extends Specification {
 
     def "Stopped exposes its reason as constructed"() {
         when:
-        def event = new LedgerLifecycleEvent.Stopped('sigterm')
+        def event = new LedgerLifecycleEvent.Stopped('signal')
 
         then:
-        event.reason() == 'sigterm'
+        event.reason() == 'signal'
     }
 
     def "Stopped rejects a blank reason"() {
@@ -39,9 +39,9 @@ class LedgerLifecycleEventSpec extends Specification {
 
     def "Stopped is value-equal by content"() {
         expect:
-        new LedgerLifecycleEvent.Stopped('sigterm') == new LedgerLifecycleEvent.Stopped('sigterm')
+        new LedgerLifecycleEvent.Stopped('signal') == new LedgerLifecycleEvent.Stopped('signal')
 
         and:
-        new LedgerLifecycleEvent.Stopped('sigterm') != new LedgerLifecycleEvent.Stopped('drainComplete')
+        new LedgerLifecycleEvent.Stopped('signal') != new LedgerLifecycleEvent.Stopped('drainComplete')
     }
 }

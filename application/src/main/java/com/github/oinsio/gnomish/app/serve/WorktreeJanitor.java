@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.MdcAwareThread;
+import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -36,6 +38,11 @@ import org.slf4j.LoggerFactory;
  * after the janitor started must still be protected.
  *
  * <p>Implements FR14 of add-factory-serve (design D10).
+ *
+ * <p>Kept in sync with {@link SandboxLifecycleTick}: both must keep the same
+ * immediate-then-cadence daemon shape — {@code start()} framing a {@code loop()} of {@code
+ * while (true) { try tick(); catch RuntimeException log.warn and retry next tick } sleeper.sleep(interval)},
+ * with a volatile {@code lastRunAt} stamped after every completed tick.
  */
 public final class WorktreeJanitor {
 
@@ -90,7 +97,7 @@ public final class WorktreeJanitor {
      * logged and never kills the thread — the next tick, an hour later, tries again.
      */
     public void start() {
-        Thread.ofVirtual().name("gnomish-worktree-janitor").start(this::loop);
+        Thread.ofVirtual().name("gnomish-worktree-janitor").start(DaemonComponent.JANITOR.framing(this::loop));
     }
 
     // Package-private: lifecycle specs drive this on their own thread with a controllable sleeper.
@@ -143,8 +150,12 @@ public final class WorktreeJanitor {
         if (age.compareTo(ageThreshold) < 0) {
             return;
         }
-        log.info("worktree janitor: disposing aged environment {} (age {})", key, age);
-        disposal.dispose(key);
+        // FR8/UX2: the loop has no task scope; the key IS the sanitized task id, and the
+        // disposal's own lines inherit this one.
+        try (var taskScope = MdcAwareThread.taskScope(key)) {
+            log.info("worktree janitor: disposing aged environment {} (age {})", key, age);
+            disposal.dispose(key);
+        }
     }
 
     private Set<String> heldEnvironmentKeys() {
@@ -155,7 +166,9 @@ public final class WorktreeJanitor {
             } catch (InvalidTaskIdException e) {
                 // A held ref that already survived worktree creation is expected to sanitize
                 // cleanly; ignored defensively rather than failing the whole tick over one ref.
-                log.warn("worktree janitor: held ref {} did not sanitize; skipping", ref.id(), e);
+                try (var taskScope = MdcAwareThread.taskScope(ref.id())) {
+                    log.warn("worktree janitor: held ref {} did not sanitize; skipping", ref.id(), e);
+                }
             }
         }
         return keys;

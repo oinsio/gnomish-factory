@@ -14,8 +14,9 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Unlike {@link com.github.oinsio.gnomish.status.CompositeEngineEventListener}, which
  * deliberately relies on its single caller's own outer try/catch ({@code Events.emit}), this
- * composite cannot: {@link AgentProgressEmitter#deliver} wraps only the <em>one</em> call it makes
- * to whichever {@link AgentProgressListener} it was given, so if that one listener is this
+ * composite cannot: {@link AgentProgressEmitter}'s private {@code deliver} method wraps only the
+ * <em>one</em> call it makes to whichever {@link AgentProgressListener} it was given, so if that
+ * one listener is this
  * composite, an unguarded loop would let a throwing child both skip every listener after it in
  * the same fan-out <em>and</em> trip {@code deliver}'s own catch, indistinguishable in the log
  * from a single misbehaving listener. Each child call is therefore individually guarded here —
@@ -49,7 +50,13 @@ public record CompositeAgentProgressListener(List<AgentProgressListener> listene
             try {
                 listener.onProgress(event);
             } catch (RuntimeException ex) {
-                log.warn("agent progress listener threw for {}", event, ex);
+                // FR6: the child that threw is the news here, not the agent's words inside the
+                // event — so the line carries the listener's identity and the variant's type name.
+                log.warn(
+                        "agent progress listener {} threw for {}",
+                        listener.getClass().getSimpleName(),
+                        event.getClass().getSimpleName(),
+                        ex);
             }
         }
     }

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RepairIndexResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
+import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -112,7 +113,11 @@ public final class Reaper implements ReaperDuty {
         // tracker call (design D1, NFR-C2 of add-serve-sandbox-lifecycle).
         listingSink.onListed(openTasks);
         if (readyTasks.size() == READY_SWEEP_LIMIT) {
-            log.info("ready feed filled the sweep page of {}; deeper entries wait for a later tick", READY_SWEEP_LIMIT);
+            // FR12 of harden-logging-observability: a full sweep page is the normal shape of a
+            // busy backlog, not a state change — every tick of a healthy busy factory would say
+            // it. Reconciliation chatter belongs to whoever is diagnosing a sweep, at DEBUG.
+            log.debug(
+                    "ready feed filled the sweep page of {}; deeper entries wait for a later tick", READY_SWEEP_LIMIT);
         }
         // Exclude the instance's own held claims BEFORE observation (design D13): a run whose beats
         // are failing while its listings still succeed would otherwise watch its own unchanged
@@ -136,10 +141,14 @@ public final class Reaper implements ReaperDuty {
     private static void reportForeign(List<TrackerObservation> sweep) {
         for (TrackerObservation observation : sweep) {
             if (observation.shape() instanceof TrackerShape.Foreign(String diagnosis)) {
-                log.warn(
-                        "{} classifies foreign; no automatic repair owns it: {}",
-                        observation.ref().id(),
-                        diagnosis);
+                // FR8/UX2: the sweep's thread carries no task scope, so each per-task line names
+                // its subject — a reap belongs to that task's `grep taskId=<id>` story.
+                try (var scope = MdcAwareThread.taskScope(observation.ref().id())) {
+                    log.warn(
+                            "{} classifies foreign; no automatic repair owns it: {}",
+                            observation.ref().id(),
+                            diagnosis);
+                }
             }
         }
     }
@@ -160,6 +169,16 @@ public final class Reaper implements ReaperDuty {
 
     /** Routes one released shape to the port operation its recovery names, converging on a no-op. */
     private void repair(TrackerRepair repair) {
+        // FR8/UX2: everything this repair decides — the convergence no-ops and the failure WARN
+        // alike — is findable by taskId. The scope must wrap the catch, so the two are nested: a
+        // try-with-resources with its own catch clause closes the resource before the catch runs.
+        try (var taskScope = MdcAwareThread.taskScope(repair.ref().id())) {
+            repairInScope(repair);
+        }
+    }
+
+    /** The repair itself, running inside {@link #repair}'s task-scoped MDC. */
+    private void repairInScope(TrackerRepair repair) {
         try {
             switch (repair.shape()) {
                 case TrackerShape.Claimed(ClaimFacts.Live claim) -> removeClaim(repair, claim);
@@ -196,8 +215,11 @@ public final class Reaper implements ReaperDuty {
 
     private void removeClaim(TrackerRepair repair, ClaimFacts claim) {
         if (tracker.removeStaleClaim(repair.ref(), claim) instanceof RemoveStaleClaimResult.Mismatch) {
-            // A racing reaper or a live beat changed the claim; a safe no-op, not an error.
-            log.info(
+            // A racing reaper or a live beat changed the claim; a safe no-op, not an error — and
+            // under contention the normal one, so it is DEBUG (FR12): convergence is the design
+            // working, and the operator plane records the removals that did happen, not the
+            // ones another instance got to first.
+            log.debug(
                     "claim on {} already changed; nothing removed, converging",
                     repair.ref().id());
         }
@@ -205,7 +227,8 @@ public final class Reaper implements ReaperDuty {
 
     private void repairIndex(TrackerRepair repair) {
         if (tracker.repairIndex(repair.ref(), repair.facts()) instanceof RepairIndexResult.Unchanged) {
-            log.info(
+            // Same convergence-under-contention shape as removeClaim, and the same level (FR12).
+            log.debug(
                     "index of {} already moved; nothing repaired, converging",
                     repair.ref().id());
         }

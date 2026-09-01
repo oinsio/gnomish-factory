@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
@@ -55,19 +56,58 @@ final class HostChannelFiles {
         }
     }
 
+    /**
+     * Removes the scratch area, deepest entry first, and reports what it could not remove as
+     * <b>one</b> line (D4 of harden-logging-observability): a scratch tree the factory cannot
+     * delete usually cannot delete any of it — a busy mount, a permission change — so a line per
+     * entry turns one fault into thousands. The count is what the operator needs; the first
+     * failing entry and its reason are what makes the count diagnosable. The aggregate is per
+     * call, which is why it is a local counter and not the cross-call {@code RepeatSuppressor}.
+     */
     static void deleteRecursively(Path root, Logger log) {
+        var failures = new DeleteFailures();
         try (Stream<Path> walk = Files.walk(root)) {
-            walk.sorted((a, b) -> b.getNameCount() - a.getNameCount()).forEach(p -> deleteQuietly(p, log));
+            walk.sorted((a, b) -> b.getNameCount() - a.getNameCount()).forEach(p -> deleteQuietly(p, failures));
         } catch (IOException e) {
-            log.warn("could not fully remove scratch area {}: {}", root, e.toString());
+            log.warn("could not fully remove scratch area {}", root, e);
+            return;
         }
+        failures.report(root, log);
     }
 
-    private static void deleteQuietly(Path path, Logger log) {
+    private static void deleteQuietly(Path path, DeleteFailures failures) {
         try {
             Files.deleteIfExists(path);
         } catch (IOException e) {
-            log.warn("could not remove scratch entry {}: {}", path, e.toString());
+            failures.record(path, e);
+        }
+    }
+
+    /** The entries one teardown could not remove, counted so the whole walk costs one line. */
+    private static final class DeleteFailures {
+
+        private int count;
+        private @Nullable Path firstPath;
+        private @Nullable IOException firstFailure;
+
+        void record(Path path, IOException failure) {
+            if (firstFailure == null) {
+                firstPath = path;
+                firstFailure = failure;
+            }
+            count++;
+        }
+
+        void report(Path root, Logger log) {
+            if (firstFailure == null) {
+                return;
+            }
+            log.warn(
+                    "could not remove {} entries under scratch area {}; the first was {}",
+                    count,
+                    root,
+                    firstPath,
+                    firstFailure);
         }
     }
 }

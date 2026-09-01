@@ -45,10 +45,18 @@ final class TokenUsageMapper {
     Map<String, TokenUsage> toTokensByModel(
             AgentEvent.ResultEvent resultEvent, AgentEvent.@Nullable InitEvent initEvent) {
         Map<String, Object> modelUsage = resultEvent.modelUsage();
-        if (modelUsage != null) {
-            return fromModelUsage(modelUsage);
+        Map<String, TokenUsage> tokensByModel =
+                modelUsage != null ? fromModelUsage(modelUsage) : fromFlatUsage(resultEvent.usage(), initEvent);
+        if (tokensByModel.isEmpty()) {
+            // The per-entry lines above are DEBUG because one skipped model says nothing about the
+            // round; an extraction that yields nothing at all is different — the round's whole cost
+            // is lost to the budget and the summary, and the operator sees "unreported" with no way
+            // to tell it from a round that genuinely spent nothing (FR5 of
+            // harden-logging-observability).
+            // throwable-not-subject: the shapes were classified above, not thrown.
+            log.warn("stream-json: the round reported no usable token usage; its cost reads as unreported");
         }
-        return fromFlatUsage(resultEvent.usage(), initEvent);
+        return tokensByModel;
     }
 
     private Map<String, TokenUsage> fromModelUsage(Map<String, Object> modelUsage) {

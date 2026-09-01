@@ -5,6 +5,8 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.Clock
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -43,9 +45,8 @@ class StreamJsonParserSpec extends Specification {
         def line = '{"type":"system","subtype":"something_else","session_id":"sess-1","model":"claude-x"}'
 
         when: 'the line is parsed'
-        def logged = null
         def events = null
-        logged = captureAll { events = parser.parse(readerOf(line)) }
+        def logged = captureAll { events = parser.parse(readerOf(line)) }
 
         then: 'no event is produced'
         events.isEmpty()
@@ -182,8 +183,8 @@ class StreamJsonParserSpec extends Specification {
         def second = '{"type":"result","subtype":"success","session_id":"sess-1","result":"done"}'
         def reader = readerOf(first, second)
         def advancingClock = new AdvancingClock([
-            java.time.Instant.ofEpochSecond(100),
-            java.time.Instant.ofEpochSecond(200)
+            Instant.ofEpochSecond(100),
+            Instant.ofEpochSecond(200)
         ])
         def advancingParser = new StreamJsonParser(advancingClock)
 
@@ -192,19 +193,19 @@ class StreamJsonParserSpec extends Specification {
 
         then: 'each event carries the instant the clock reported when its line was read'
         events.size() == 2
-        events[0].readAt() == java.time.Instant.ofEpochSecond(100)
-        events[1].readAt() == java.time.Instant.ofEpochSecond(200)
+        events[0].readAt() == Instant.ofEpochSecond(100)
+        events[1].readAt() == Instant.ofEpochSecond(200)
     }
 
-    private static final class AdvancingClock implements com.github.oinsio.gnomish.domain.engine.port.Clock {
-        private final Iterator<java.time.Instant> readings
+    private static final class AdvancingClock implements Clock {
+        private final Iterator<Instant> readings
 
-        AdvancingClock(List<java.time.Instant> readings) {
+        AdvancingClock(List<Instant> readings) {
             this.readings = readings.iterator()
         }
 
         @Override
-        java.time.Instant now() {
+        Instant now() {
             readings.next()
         }
     }
@@ -326,7 +327,66 @@ class StreamJsonParserSpec extends Specification {
         parsed.isEmpty()
     }
 
-    private static List<ILoggingEvent> captureAll(Closure<Void> emit) {
+    // FR6 of harden-logging-observability: the DEBUG raw-event line renders an event assembled
+    //     entirely from the agent's own stdout, so an agent that puts a newline and an ANSI escape
+    //     in its result text would otherwise author a second, convincing line in the operator's
+    //     log. One event, one line — and the same holds for the wire type on the skip line.
+    def "FR6: an agent payload carrying newlines and ANSI escapes renders one inert line"() {
+        given:
+        def forged = 'done\\n2026-08-31 12:00:00 ERROR factory lost the task\\u001b[31mred\\u001b[0m'
+        def line = '{"type":"result","subtype":"success","session_id":"s-1","result":"' + forged + '"}'
+
+        when:
+        def logged = captureRaw { parser.parse(readerOf(line)) }
+
+        then:
+        def raw = logged.find {
+            it.formattedMessage.startsWith('raw agent event')
+        }
+        raw != null
+        !raw.formattedMessage.contains('\n')
+        !raw.formattedMessage.contains('\r')
+        !raw.formattedMessage.contains('\u001B')
+
+        and: 'and the agent\'s words are still there, neutralized rather than dropped'
+        raw.formattedMessage.contains('factory lost the task')
+    }
+
+    // FR6: the skipped-line DEBUG names the wire type the agent chose, so it is sanitized too
+    def "FR6: a forged wire type cannot break out of the skip line"() {
+        given:
+        def line = '{"type":"syste\\nWARN forged","subtype":"init","session_id":"s-1"}'
+
+        when:
+        def logged = captureAll { parser.parse(readerOf(line)) }
+
+        then:
+        def skip = logged.find {
+            it.formattedMessage.contains('skipping line of type')
+        }
+        skip != null
+        !skip.formattedMessage.contains('\n')
+    }
+
+    /** The raw-event DEBUG is written by the parser itself, not by the mapper {@link #captureAll} taps. */
+    private static List<ILoggingEvent> captureRaw(Closure<?> emit) {
+        Logger logbackLogger = (Logger) LoggerFactory.getLogger(StreamJsonParser)
+        def previousLevel = logbackLogger.level
+        logbackLogger.level = Level.DEBUG
+        ListAppender<ILoggingEvent> appender = new ListAppender<>()
+        appender.start()
+        logbackLogger.addAppender(appender)
+        try {
+            emit()
+        } finally {
+            logbackLogger.detachAppender(appender)
+            appender.stop()
+            logbackLogger.level = previousLevel
+        }
+        return appender.list
+    }
+
+    private static List<ILoggingEvent> captureAll(Closure<?> emit) {
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(StreamJsonEventMapper)
         def previousLevel = logbackLogger.level
         logbackLogger.level = Level.DEBUG
@@ -368,7 +428,7 @@ class StreamJsonParserSpec extends Specification {
         logged[1].formattedMessage.contains('ResultEvent')
     }
 
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
+    private static List<ILoggingEvent> capture(Closure<?> emit) {
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(StreamJsonParser)
         def previousLevel = logbackLogger.level
         logbackLogger.level = Level.DEBUG

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -19,14 +20,19 @@ import org.slf4j.LoggerFactory;
  * signal an operator can tell apart from an outage at a glance.
  *
  * <p>Guard output is environment-adjacent data and is treated as inert
- * (NFR-S3): unmarked lines are skipped, a malformed marked line is dropped with
- * a warning (never a failure — losing one event must not fail a check), string
- * fields are length-capped, the path is cut at its query string, and the number
- * of parsed events is capped (NFR-C1); the findings funnel (task 8.1) applies
- * the publication-side sanitization on top.
+ * (NFR-S3): unmarked lines are skipped, a malformed marked line is dropped (never a failure —
+ * losing one event must not fail a check), string fields are length-capped, the path is cut at
+ * its query string, and the number of parsed events is capped (NFR-C1); the findings funnel
+ * (task 8.1) applies the publication-side sanitization on top.
+ *
+ * <p>Dropped lines are counted, not narrated (D4 of harden-logging-observability): a guard whose
+ * output shape the factory does not understand produces one malformed line per denied request,
+ * and one WARN each would bury the round's real findings. The parse of one read is one operation,
+ * so it aggregates locally and emits a single line naming the environment key and what it lost —
+ * the aggregate-per-call invariant, deliberately not the cross-call {@code RepeatSuppressor}.
  *
  * <p>Implements NFR-O1, NFR-C1, NFR-S3, UX3 of add-sandbox-core; NFR-S1 of
- * fix-denial-report-attachment.
+ * fix-denial-report-attachment; FR5, FR12 of harden-logging-observability.
  */
 final class GuardDenialLog {
 
@@ -44,11 +50,14 @@ final class GuardDenialLog {
      * The denial findings in {@code guardStdout}, in log order, capped at
      * {@link #MAX_EVENTS}.
      *
+     * @param key the environment key whose guard produced this output, so an aggregate warning
+     *     names the box it concerns; never blank
      * @param guardStdout the raw guard container log output; never null
      * @return one finding per parseable denial event; never null
      */
-    static List<Finding> findings(String guardStdout) {
+    static List<Finding> findings(String key, String guardStdout) {
         List<Finding> findings = new ArrayList<>();
+        var drops = new Drops();
         for (String line : guardStdout.split("\n")) {
             // The marker is matched anywhere in the line: mitmproxy forwards addon print output
             // through its own event log, which may prepend a timestamp/level prefix.
@@ -57,40 +66,87 @@ final class GuardDenialLog {
                 continue;
             }
             if (findings.size() == MAX_EVENTS) {
-                log.warn("guard denial log holds more than {} events; further denials are truncated", MAX_EVENTS);
+                log.warn(
+                        "guard denial log for {} holds more than {} events; further denials are truncated",
+                        key,
+                        MAX_EVENTS);
                 break;
             }
-            Finding finding = parse(line.substring(marker + EgressGuardConfig.DENY_MARKER.length())
-                    .strip());
+            Finding finding = parse(
+                    line.substring(marker + EgressGuardConfig.DENY_MARKER.length())
+                            .strip(),
+                    drops);
             if (finding != null) {
                 findings.add(finding);
             }
         }
+        drops.report(key);
         return List.copyOf(findings);
+    }
+
+    /**
+     * The two ways one marked line fails to become a finding, counted across a single read. One
+     * line per read, whatever the volume: the count is what tells an operator whether they are
+     * looking at one odd event or a guard whose whole output the factory no longer parses. The
+     * first malformed line's reason rides along so the aggregate is still diagnosable.
+     */
+    private static final class Drops {
+
+        private int malformed;
+        private int withoutHost;
+        private @Nullable String firstReason;
+
+        void malformed(String reason) {
+            malformed++;
+            if (firstReason == null) {
+                firstReason = reason;
+            }
+        }
+
+        void withoutHost() {
+            withoutHost++;
+        }
+
+        void report(String key) {
+            if (malformed + withoutHost == 0) {
+                return;
+            }
+            log.warn(
+                    "dropped {} unparseable guard denial event(s) for {} ({} malformed, {} without a host);"
+                            + " these denials are missing from the findings. First malformed reason: {}",
+                    malformed + withoutHost,
+                    key,
+                    malformed,
+                    withoutHost,
+                    firstReason == null ? "none" : firstReason);
+        }
     }
 
     /**
      * One denial event to one finding: message names the denied destination,
      * location carries host:port plus the path when one exists (UX3), details
-     * carry the request kind and method. Returns null (dropped, warned) for a
-     * line that is not the well-formed metadata object the addon emits.
+     * carry the request kind and method. Returns null for a line that is not the well-formed
+     * metadata object the addon emits, counting the drop in {@code drops} — the read's caller
+     * reports them together.
      *
      * <p>The path is cut at its query string first (NFR-S1 of
      * fix-denial-report-attachment): a denied {@code GET /upload?token=…} is the
      * gnome's own exfiltration payload, and the finding is committed to the task
      * branch, so only the destination-side part of the path travels.
      */
-    private static @Nullable Finding parse(String json) {
+    private static @Nullable Finding parse(String json, Drops drops) {
         JsonNode event;
         try {
             event = MAPPER.readTree(json);
         } catch (JsonProcessingException e) {
-            log.warn("dropping malformed guard denial event: {}", e.toString());
+            // throwable-not-subject: the aggregate carries the reason as text because one line
+            //     stands for many drops; a stack per malformed guard line is the flood D4 removes.
+            drops.malformed(LogText.forLog(String.valueOf(e.getOriginalMessage())));
             return null;
         }
         String host = capped(event.path("host").asText(""));
         if (host.isBlank()) {
-            log.warn("dropping guard denial event without a host");
+            drops.withoutHost();
             return null;
         }
         String destination = host + portSuffix(event);

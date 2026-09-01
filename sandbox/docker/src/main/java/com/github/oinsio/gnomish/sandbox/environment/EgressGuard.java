@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import java.nio.file.Path;
 import java.util.List;
@@ -85,7 +86,7 @@ public final class EgressGuard {
         }
         if (state.ok()) {
             log.info("egress guard for {} is stopped; restarting it (NFR-R1)", key);
-            docker.run(GuardCommands.startGuard(key));
+            repairStep("start", docker.run(GuardCommands.startGuard(key)));
         } else {
             log.info("egress guard for {} is missing; creating it", key);
             create();
@@ -95,7 +96,7 @@ public final class EgressGuard {
             return;
         }
         log.warn("egress guard for {} did not come up; recreating it once", key);
-        docker.run(GuardCommands.removeGuard(key));
+        repairStep("remove", docker.run(GuardCommands.removeGuard(key)));
         create();
         DockerResult recreated = docker.run(GuardCommands.inspectGuardRunning(key));
         if (!recreated.ok() || !running(recreated)) {
@@ -193,6 +194,22 @@ public final class EgressGuard {
         if (!bridge.ok() && !bridge.stderr().contains("already exists")) {
             throw new GuardUnavailableException("connecting the egress guard for " + key + " to the bridge failed: "
                     + bridge.stderr().strip());
+        }
+    }
+
+    /**
+     * One repair sub-step's own outcome. The pass verifies its result afterwards, so a failed
+     * sub-step is not by itself a failure — but when the verification then fails, this is the only
+     * line saying which step did not take (FR5 of harden-logging-observability).
+     */
+    private void repairStep(String step, DockerResult result) {
+        if (!result.ok()) {
+            // throwable-not-subject: docker answered with a status, not a thrown fault.
+            log.debug(
+                    "egress guard repair step '{}' for {} did not succeed: {}",
+                    step,
+                    key,
+                    LogText.forLog(result.stderr().strip()));
         }
     }
 

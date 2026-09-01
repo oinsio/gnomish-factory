@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -144,6 +146,51 @@ class GithubIndexRepairSpec extends Specification {
         (result as RepairIndexResult.Unchanged).facts().claim() instanceof ClaimFacts.Live
         wireMock.findAll(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/10/comments'))).isEmpty()
         wireMock.findAll(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/10/labels'))).isEmpty()
+    }
+
+    // FR5 of harden-logging-observability: a repair rewrites another instance's labels, so the one
+    // that happens is an INFO anchor naming the shape it corrected; a converge-abort is DEBUG.
+    def "FR5: a repair that acts is an INFO anchor naming the observed shape"() {
+        given:
+        stubIssue(11, ['gnomish:working'])
+        stubComments(11, '[]')
+        stubMarkerPost(11)
+        stubLabelTransition(11, 'gnomish%3Aworking')
+        def logs = LogCaptureSupport.attach(GithubIndexRepair, Level.DEBUG)
+
+        when:
+        newRepair().repairIndex(refFor(11), TrackerFacts.of(StateLabels.workingOnly(), new ClaimFacts.None()))
+
+        then:
+        def infos = logs.list.findAll { it.level == Level.INFO }
+        infos.size() == 1
+        infos[0].formattedMessage.contains('acme/widgets#11')
+        infos[0].formattedMessage.contains('claim pending')
+
+        cleanup:
+        logs.detach()
+    }
+
+    def "FR5: a converge-abort is DEBUG, not an anchor and not a warning"() {
+        given: 'a fresh claim comment landed since the sweep observed the frozen window'
+        stubIssue(12, ['gnomish:working'])
+        stubComments(12, '[' + claimComment(700) + ']')
+        def logs = LogCaptureSupport.attach(GithubIndexRepair, Level.DEBUG)
+
+        when:
+        def result = newRepair().repairIndex(refFor(12),
+                TrackerFacts.of(StateLabels.workingOnly(), new ClaimFacts.None()))
+
+        then:
+        result instanceof RepairIndexResult.Unchanged
+
+        and:
+        logs.list.size() == 1
+        logs.list[0].level == Level.DEBUG
+        logs.list[0].formattedMessage.contains('converged without acting')
+
+        cleanup:
+        logs.detach()
     }
 
     // FR18: a failed read of the repair sequence is a retryable tracker outage, so a later sweep

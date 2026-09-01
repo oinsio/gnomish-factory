@@ -113,5 +113,14 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         events[0].level == Level.WARN
         events[0].formattedMessage.startsWith('revocation push failed:')
         events[0].formattedMessage.contains('branch=gnomish/PROJ-1')
+
+        and: 'FR6 of harden-logging-observability: git rejects a push in several lines of prose, ' +
+        'and all of it reaches the log as one line — a subprocess stream is untrusted text ' +
+        'whose newlines would otherwise become log lines of their own'
+        !events[0].formattedMessage.contains('\n')
+        !events[0].formattedMessage.contains('\r')
+
+        and: 'and the rejection is still legible after neutralization'
+        events[0].formattedMessage.contains('rejected') || events[0].formattedMessage.contains('non-fast-forward')
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
@@ -174,8 +175,11 @@ class DockerCli {
                     commandTimeout);
             return;
         }
+        // FR9 of harden-logging-observability: same classification the git runner makes — an
+        // interrupt during the shutdown phase is the stop, not an unexplained abort.
         log.warn(
-                "docker command interrupted and its process tree was killed: subcommand={}, elapsed={}",
+                "docker command {} and its process tree was killed: subcommand={}, elapsed={}",
+                ShutdownPhase.inProgress() ? "interrupted by the daemon shutdown" : "interrupted",
                 subcommand,
                 elapsed);
     }

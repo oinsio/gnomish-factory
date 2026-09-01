@@ -15,6 +15,18 @@ import java.util.regex.Pattern;
  * terminal-escape attacks on the operator's console and log processors while keeping the
  * text's line structure readable.
  *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.logtext.LogText}: both must strip the same
+ * ANSI/control vocabulary and cap with the same tail semantics. Only that subset — newline
+ * handling deliberately differs, because findings preserve line structure and log lines destroy
+ * it. The two are separate controls at separate trust boundaries (findings entering a sink here,
+ * untrusted text entering a log line there) and deliberately share no production edge: this module
+ * publishes a one-declared-dependency contract, so a {@code :logtext} import would enter its POM
+ * and couple its japicmp baseline to another artifact's semver. What keeps the shared table from
+ * drifting is an executable equivalence spec over one adversarial corpus, not the compiler — which
+ * is why the reference above is plain text: the type is deliberately not on this module's
+ * classpath, so no javadoc link to it could resolve. See {@code .claude/rules/manual-sync-pairs.md}
+ * and design D5 of harden-logging-observability.
+ *
  * <p>Published here rather than in {@code application} because the invariant is contract-grade:
  * an external-check plugin sinks untrusted machine output (CI log tails, command stderr) into
  * findings exactly as first-party adapters do, so it must be able to apply the same hygiene with
@@ -38,7 +50,7 @@ public final class FindingsSanitizer {
      * Any ESC the pattern does not match is removed by the control-character filter.
      */
     private static final Pattern ANSI = Pattern.compile(
-            "\\u001B(?:\\[[0-9;?]*[ -/]*[@-~]|\\][^\\u0007\\u001B]*(?:\\u0007|\\u001B\\\\)?|[@-Z\\\\-_])");
+            "\\u001B(?:\\[[0-9;?]*[ -/]*[@-~]|][^\\u0007\\u001B]*(?:\\u0007|\\u001B\\\\)?|[@-Z\\\\-_])");
 
     private FindingsSanitizer() {}
 

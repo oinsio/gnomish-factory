@@ -149,7 +149,11 @@ autonomy:
 
     // FR13: the 'status' subcommand routes to StatusCommand, not the run flow
     def "run() dispatches a 'status' subcommand to StatusCommand"() {
+        // A real clone: since FR13 of harden-logging-observability a ref enumeration git refuses
+        // fails the listing rather than printing "no tasks", and an uninitialized directory is
+        // exactly such a refusal — which would make this routing spec red for the wrong reason.
         given:
+        makeProjectRootAGitClone()
         def runner = newRunner()
         def args = new DefaultApplicationArguments('status', "--dir=${projectRoot}".toString())
 

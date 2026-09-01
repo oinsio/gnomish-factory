@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.adapter.sandbox
 
-import com.github.oinsio.gnomish.adapter.plugin.LogCaptureSupport
 import com.github.oinsio.gnomish.adapter.plugin.ProviderDiscoveryReport
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.HostBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.util.function.Function
 import spock.lang.Specification
 

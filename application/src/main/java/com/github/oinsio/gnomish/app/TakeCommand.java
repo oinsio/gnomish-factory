@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.status.MdcEventListener;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -79,6 +80,7 @@ final class TakeCommand {
      * ManualRunRunner} wiring.
      *
      * @param assembly the shared engine/ports assembly, reused from the manual-run path; never null
+     * @param git the task-branch git port shared with the manual-run path; never null
      * @param worktreesRoot the root directory under which per-task worktrees are created; never null
      * @param taskIdMdcKey the MDC key set once a resume bootstrap succeeds; never null
      * @param factoryProperties supplies the instance-name half of the minted {@link InstanceId} and
@@ -99,6 +101,11 @@ final class TakeCommand {
      * @param serveProperties supplies batch mode's concurrency limit N ({@code factory.serve.slots}
      *     — FR2 of add-factory-serve: "the N limit applies to batch and serve", no separate batch
      *     flag); never null
+     * @param epochs this instance's tenure record, handed down to the routing point so a repair line
+     *     names the claim epoch it runs under (NFR-O1, FR13 of harden-task-branch-contract)
+     * @param sandboxLifecyclePass the pre-dispatch sweep-lifecycle evaluation seam (FR6, NFR-O4 of
+     *     add-serve-sandbox-lifecycle); {@code SandboxLifecyclePass.NONE} on a host-only install
+     * @param containerTakeSupport the container-mode take support handed to {@link TakeDispatcher}
      */
     TakeCommand(
             RunAssembly assembly,
@@ -210,6 +217,9 @@ final class TakeCommand {
             }
         } finally {
             MDC.remove(taskIdMdcKey);
+            // FR8: backstop — an abort thrown out of the engine skips TaskFinished, so the
+            // stage/attempt keys are cleared here alongside taskId.
+            MdcEventListener.clearAttemptScope();
         }
     }
 }

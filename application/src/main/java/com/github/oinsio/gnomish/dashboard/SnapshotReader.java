@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads the serve daemon's {@code snapshot.json} into a
@@ -25,6 +27,8 @@ import java.time.Instant;
  * <p>Implements FR3, FR4 of add-dashboard-page.
  */
 public final class SnapshotReader {
+
+    private static final Logger log = LoggerFactory.getLogger(SnapshotReader.class);
 
     /**
      * The staleness multiplier {@code k} (FR4, design D3): a snapshot is
@@ -53,6 +57,9 @@ public final class SnapshotReader {
         try {
             json = Files.readString(snapshotFile, StandardCharsets.UTF_8);
         } catch (IOException fileUnavailable) {
+            // Missing, not malformed: a daemon that has not started yet has no snapshot, which is
+            // the ordinary state of a fresh install — DEBUG, never an alarm (FR5).
+            log.debug("no daemon snapshot at {}, rendering as absent", snapshotFile, fileUnavailable);
             return new DaemonSnapshotView.Absent();
         }
 
@@ -65,6 +72,15 @@ public final class SnapshotReader {
             // enum wire value, or a DateTimeException for a malformed instant
             // string — all mean the file cannot be trusted, so degrade the same
             // as a missing file (FR3).
+            //
+            // The render is identical, which is exactly why the two must not read alike in the
+            // log: a snapshot the daemon IS writing and this reader cannot parse is a defect the
+            // operator has to act on, while an absent one usually is not (FR5 of
+            // harden-logging-observability).
+            log.warn(
+                    "daemon snapshot at {} is present but unreadable; the dashboard renders it as absent",
+                    snapshotFile,
+                    malformed);
             return new DaemonSnapshotView.Absent();
         }
 

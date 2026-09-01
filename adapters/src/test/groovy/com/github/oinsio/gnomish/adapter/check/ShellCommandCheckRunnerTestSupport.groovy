@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 
 /**
  * Shared Spock helpers for {@link ShellCommandCheckRunner} specs: a workspace rooted at the
@@ -25,17 +24,18 @@ trait ShellCommandCheckRunnerTestSupport {
         new VerifyCheck.Command(line)
     }
 
+    /**
+     * Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched these specs.
+     * Pinned at DEBUG: several of the lines under assertion here are per-item detail that the
+     * level policy puts below the console.
+     */
     static List<ILoggingEvent> capture(Class<?> loggerOwner, Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(loggerOwner)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(loggerOwner, Level.DEBUG)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        return appender.list
     }
 }

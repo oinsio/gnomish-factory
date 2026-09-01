@@ -8,6 +8,8 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.TreeEdit;
 import java.util.List;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The two tail commits of a container-mode terminal transition, built factory-side over bare
@@ -25,6 +27,8 @@ import java.util.Optional;
  */
 final class GitObjectsTerminalCommits {
 
+    private static final Logger log = LoggerFactory.getLogger(GitObjectsTerminalCommits.class);
+
     private GitObjectsTerminalCommits() {}
 
     /**
@@ -39,6 +43,7 @@ final class GitObjectsTerminalCommits {
     static void clearPending(GitObjects gitObjects, TaskLifecycleCommitWriter writer, String taskId, String ref) {
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
         if (!gitObjects.exists(tip, TaskLifecycleCommitWriter.taskJsonPath())) {
+            log.debug("pending-marker clear for task {} is a no-op: the tip carries no envelope", taskId);
             return;
         }
         TaskJsonDto current = writer.readCurrentDto(taskId, tip, TaskLifecycleEvent.RESUMED);
@@ -68,6 +73,11 @@ final class GitObjectsTerminalCommits {
      * Removes {@code .gnomish-task/} from the tip in one commit, leaving every prior commit
      * reachable as the audit trail.
      *
+     * <p>Kept in sync with {@link CleanupCommit}: both media log the FR2 anchor line ({@code
+     * task lifecycle commit written for task {}: event={}}) after the cleanup commit succeeds, via
+     * {@link TaskLifecycleCommitWriter#build} here and directly there
+     * (harden-logging-observability).
+     *
      * @param gitObjects the bare-object facade the tip is read and written through
      * @param writer the lifecycle commit builder bound to this write's timestamp and identity
      * @param taskId the completed task; for error reporting
@@ -76,6 +86,7 @@ final class GitObjectsTerminalCommits {
     static void cleanUp(GitObjects gitObjects, TaskLifecycleCommitWriter writer, String taskId, String ref) {
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.COMPLETED);
         if (!gitObjects.exists(tip, TaskLifecycleCommitWriter.taskJsonPath())) {
+            log.debug("cleanup commit for task {} is a no-op: the tip carries no envelope", taskId);
             return;
         }
         writer.build(

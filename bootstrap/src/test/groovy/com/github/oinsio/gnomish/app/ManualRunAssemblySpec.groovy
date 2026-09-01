@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.AppenderBase
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.status.Activity
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -52,18 +53,19 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         testProperties(agentCliBinary: wrapper.absolutePath, agentCliEnvPassthrough: [])
     }
 
+    /**
+     * Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec.
+     * Pinned at DEBUG: the per-tool-call line the round assertion below relies on lives there now
+     * (FR12 of harden-logging-observability).
+     */
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(LoggingAgentProgressListener)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(LoggingAgentProgressListener, Level.DEBUG)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        return appender.list
     }
 
     private static StageDefinition stage(String name) {

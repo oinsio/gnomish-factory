@@ -65,7 +65,9 @@ public final class GithubForeignRepoCheck {
         Optional<String> fullName = resolveFullName(id);
 
         if (fullName.filter(configuredFullName::equals).isPresent()) {
-            log.warn(
+            // FR12: a rename redirect that resolved is a recovered transient, not a degradation
+            //     — the verification succeeded and nothing about the run is worse for it.
+            log.info(
                     "Task id names {} which GitHub now reports as {} (rename redirect) — proceeding",
                     idRepo,
                     configuredFullName);

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -88,11 +89,14 @@ public final class ParkDeliveryFence {
 
         GitCommandResult result = push.push(cloneDir, branch);
         if (result.termination() == Termination.EXITED && result.exitCode() != 0) {
-            log.warn(
+            // FR12: the first of two bounded attempts failing is not something an operator acts
+            //     on — only an exhausted fence is. The line stays, at INFO, so a post-mortem can
+            //     still see the retry happened.
+            log.info(
                     "park delivery push failed, re-attempting once: taskId={}, branch={}, stderr={}",
                     taskId,
                     branch,
-                    result.stderr().trim());
+                    LogText.forLog(result.stderr()));
             result = push.push(cloneDir, branch);
         }
         if (result.termination() != Termination.EXITED) {
@@ -103,7 +107,7 @@ public final class ParkDeliveryFence {
                     "park delivery fence exhausted, parking anyway: taskId={}, branch={}, stderr={}",
                     taskId,
                     branch,
-                    result.stderr().trim());
+                    LogText.forLog(result.stderr()));
             return new ParkDeliveryVerdict.Undelivered(ParkDeliveryNotes.behind(branch));
         }
         return new ParkDeliveryVerdict.Delivered();
@@ -127,7 +131,9 @@ public final class ParkDeliveryFence {
         }
         RemoteBranchTip.Carriage carriage = remoteTip.confirm(cloneDir, branch, tip);
         if (carriage == RemoteBranchTip.Carriage.CARRIES) {
-            log.warn("park delivery push timed out, but origin carries the park: taskId={}, branch={}", taskId, branch);
+            // FR12: a recovered transient. The push did not report success, but origin has the
+            //     park — nothing is degraded and there is nothing to act on.
+            log.info("park delivery push timed out, but origin carries the park: taskId={}, branch={}", taskId, branch);
             return new ParkDeliveryVerdict.Delivered();
         }
         if (carriage == RemoteBranchTip.Carriage.ABSENT) {

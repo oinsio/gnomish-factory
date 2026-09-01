@@ -22,6 +22,8 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe;
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
+import com.github.oinsio.gnomish.status.MdcEventListener;
+import com.github.oinsio.gnomish.status.SummaryAccumulatorListener;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -86,6 +88,12 @@ public final class ManualRunRunner implements ApplicationRunner {
     /**
      * The MDC key this runner sets once {@code taskId} is known (design D9, task 8.2).
      * Package-private: {@link ManualRunDrive} sets it too, once the ad-hoc task is synthesized.
+     * The spelling is the one {@code MdcAwareThread.TASK_ID_KEY} (module {@code :logtext}) owns
+     * for the log pattern and for every daemon that scopes per-task work to it (FR8 of
+     * harden-logging-observability). It is repeated rather than referenced because this module
+     * reaches {@code :logtext} only through {@code :application}'s transitive edge, and the
+     * composition root taking a production dependency on a leaf for one constant is the wrong
+     * trade; {@code ManualRunRunnerMdcKeySpec} asserts the two stay equal.
      */
     static final String TASK_ID_KEY = "taskId";
     /**
@@ -162,7 +170,10 @@ public final class ManualRunRunner implements ApplicationRunner {
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
         this.inPlacePersistence = attemptPersistence;
-        this.assembly = new ManualRunAssembly(
+        // The plain assembly is what the tracker-driven subcommands (take, serve) get: those
+        // modes emit the canonical task summary from their terminal TakeResult, at the slot/take
+        // write point, so a run-level listener doing it too would state the same outcome twice.
+        ManualRunAssembly subcommandAssembly = new ManualRunAssembly(
                 systemConsoleIO,
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
@@ -172,6 +183,11 @@ public final class ManualRunRunner implements ApplicationRunner {
                 threadSleeper,
                 factoryProperties,
                 sandboxProperties);
+        // Every manual path — in-place, git, container, and both resumes — runs on the copy that
+        // also carries the summary listener (FR3, design D3 of harden-logging-observability). A
+        // manual run has no terminal TakeResult to map, so the engine's own run bookend is where
+        // its summary comes from, which is one seam rather than five entry points each remembering.
+        this.assembly = subcommandAssembly.withExtraListener(new SummaryAccumulatorListener());
         this.gitModeRunner = new GitModeRunner(assembly, git, worktreesRoot);
         this.gitResumeRunner = new GitResumeRunner(assembly, git, worktreesRoot, TASK_ID_KEY);
         // The container support seam is bound over the check providers' own credential declarations
@@ -210,7 +226,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                 dockerProbe,
                 takeContainerSupport);
         this.subcommandDispatch = SubcommandDispatchFactory.of(
-                assembly,
+                subcommandAssembly,
                 git,
                 worktreesRoot,
                 homeDir,
@@ -274,6 +290,9 @@ public final class ManualRunRunner implements ApplicationRunner {
                     log);
         } finally {
             MDC.remove(TASK_ID_KEY);
+            // FR8: backstop for a run that ended without TaskFinished (an abort thrown out of
+            // the engine), so nothing on this thread inherits a finished attempt's scope.
+            MdcEventListener.clearAttemptScope();
         }
     }
 }

@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -23,12 +25,6 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
 
     def runner = new GitProcessRunner()
     def locator = new TaskBranchLocator(runner)
-
-    private void commit(Path repo, String fileName, String content) {
-        new File(repo.toFile(), fileName).text = content
-        runner.run(repo, 'add', fileName)
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
-    }
 
     private Path initBareWithBranch(Path parent, String repoName, String branch, String fileName, String content) {
         def bare = initBareRepo(parent, repoName)
@@ -137,13 +133,24 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def clone = initWorkingRepo(tempDir, 'clone5')
         commit(clone, 'a.txt', 'first')
         runner.run(clone, 'remote', 'add', 'origin', bare.toString())
+        def logs = LogCaptureSupport.attach(TaskBranchLocator, Level.DEBUG)
 
         when:
         def location = locator.locate(clone, 'PROJ-5')
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then:
         noExceptionThrown()
         location instanceof BranchLocation.NotFound
+
+        and: 'FR5: the failed fetch behind the absence is traced — a failure and a fact answer alike here'
+        def traces = events.findAll {
+            it.formattedMessage.contains('origin confirms it is absent')
+        }
+        traces.size() == 1
+        traces[0].level == Level.DEBUG
+        traces[0].formattedMessage.contains('gnomish/PROJ-5')
     }
 
     def "FR13: no origin configured at all is also reported as not-found, not a crash"() {

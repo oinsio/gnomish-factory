@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Instance-local logging (task 8.1 of add-manual-run, design D9).
-  Implements NFR-O1, NFR-O2, NFR-S1, NFR-S2 of add-manual-run.
+  Instance-local logging (task 8.1 of add-manual-run, design D9; hardened by
+  tasks 2.1/2.2/2.5 of harden-logging-observability, design D7/D10).
+  Implements NFR-O1, NFR-O2, NFR-S1, NFR-S2 of add-manual-run and FR8, FR10,
+  NFR-P1 of harden-logging-observability.
 
   One rolling file under the operator's home directory, independent of any
   workspace (the project flag) and independent of this repository's own git
@@ -18,6 +20,18 @@
   so Logback's own OS-environment/system-property lookup is what resolves it
   here, and it works the same in a plain `logback.xml` or a `logback-spring.xml`.
 
+  Two documented overrides, both resolved by that same lookup (context property,
+  then system property, then environment variable) so an operator changes them
+  for one run with no rebuild (FR10):
+    - GNOMISH_LOG_LEVEL — the root level, default INFO. `logging.level.*` from
+      Spring Boot still applies on top of it for finer, per-logger grain.
+    - GNOMISH_LOG_DIR — the log directory, default `~/.gnomish/logs`. Its
+      operational use is test isolation (FR11, M4): the E2E layer spawns this
+      very jar as a real process, and that process's own log belongs in the
+      build's temp space, not in the operator's file. Pointing it inside a
+      workspace or a git tree gives up NFR-S1/NFR-S2, which is why the default
+      is the operator home and the override is an explicit act.
+
   Rolling policy numbers (D9: "daily/size roll, ~7 days history, total size
   cap" — no exact numbers pinned in the design, chosen here):
     - maxFileSize = 10MB: keeps individual rolled files small enough to open
@@ -30,15 +44,25 @@
       factory instance's expected log volume, while still being a fixed,
       predictable ceiling (Logback deletes oldest segments first once hit).
 
-  Pattern: ISO8601 timestamp, thread, level, taskId/stage/attempt MDC (set by
-  the runner and an event-listener adapter — tasks 8.2/8.3, not this config),
-  logger name, message — greppable by any MDC key via `grep 'taskId=<id>'`.
+  Pattern: ISO8601 timestamp, thread, level, taskId/stage/attempt/component MDC
+  (the task triple set by the runner and an event-listener adapter, `component`
+  set once at each daemon worker's start — task 2.5), logger name, message —
+  greppable by any MDC key via `grep 'taskId=<id>'`.
+
+  Charset: every encoder pins UTF-8 rather than inheriting the platform default
+  (FR10). Task text, agent output and tracker strings are arbitrary Unicode; a
+  file whose encoding depends on the host locale is a file whose evidence
+  changes meaning when it is read on another machine.
+
+  No `<shutdownHook>`: the factory owns its own stop sequence (drain → context
+  close → logging stop, design D6), and Logback's hook would be a second racer
+  for the same teardown.
 -->
 <configuration>
 
-    <property name="GNOMISH_LOG_DIR" value="${user.home}/.gnomish/logs"/>
+    <property name="GNOMISH_LOG_DIR" value="${GNOMISH_LOG_DIR:-${user.home}/.gnomish/logs}"/>
     <property name="GNOMISH_LOG_PATTERN"
-              value="%d{ISO8601} [%thread] %-5level [taskId=%X{taskId}, stage=%X{stage}, attempt=%X{attempt}] %logger{36} - %msg%n"/>
+              value="%d{ISO8601} [%thread] %-5level [taskId=%X{taskId}, stage=%X{stage}, attempt=%X{attempt}, component=%X{component}] %logger{36} - %msg%n"/>
 
     <!-- Durable diagnostic record: broad INFO level, the only consumer is a
          days-horizon post-mortem grep (D9); DEBUG has no consumer here. -->
@@ -52,11 +76,36 @@
         </rollingPolicy>
         <encoder>
             <pattern>${GNOMISH_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
         </encoder>
     </appender>
 
+    <!-- The INFO-volume plane is asynchronous so a worker (virtual) thread never
+         blocks on file I/O to record an anchor line (NFR-P1). Two settings carry
+         the contract:
+           - discardingThreshold = 0: Logback's default silently drops TRACE/DEBUG/INFO
+             once the queue is 80% full, which would make the file lossy exactly
+             during the incident that filled it. Zero means "never discard".
+           - neverBlock = false: with discarding off, a full queue must block the
+             producer rather than drop the event. Slower is acceptable; lying is not.
+         queueSize = 1024 (Logback's default is 256): four times the default costs
+         a few hundred KB of heap and absorbs the bursts this factory actually
+         produces — a serve tick fanning out across WIP slots — without ever
+         reaching the blocking edge in normal operation.
+         The flush at shutdown is not Logback's to own: the factory's stop sequence
+         stops the logging system as its last step (design D6, FR9), which drains
+         this queue before the JVM exits. -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="FILE"/>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <queueSize>1024</queueSize>
+    </appender>
+
     <!-- stdout belongs to the dialog (NFR-O2): only WARN and above reach the
-         console the operator is conversing through. -->
+         console the operator is conversing through. Deliberately synchronous:
+         after the noise cleanup this is a trickle, and an operator watching a
+         terminal wants the line now, not after a queue hop (D7). -->
     <appender name="CONSOLE_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
@@ -64,11 +113,14 @@
         </filter>
         <encoder>
             <pattern>${GNOMISH_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
         </encoder>
     </appender>
 
     <!-- ERROR is duplicated to stderr alongside the WARN+ stdout appender
-         above (NFR-O2: "ERROR duplicated to stderr" — both, not stderr-only). -->
+         above (NFR-O2: "ERROR duplicated to stderr" — both, not stderr-only).
+         Synchronous for the stronger reason: an ERROR is often the last thing a
+         dying process says, and a queued one may never be written. -->
     <appender name="CONSOLE_STDERR" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.err</target>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
@@ -76,11 +128,12 @@
         </filter>
         <encoder>
             <pattern>${GNOMISH_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
         </encoder>
     </appender>
 
-    <root level="INFO">
-        <appender-ref ref="FILE"/>
+    <root level="${GNOMISH_LOG_LEVEL:-INFO}">
+        <appender-ref ref="ASYNC_FILE"/>
         <appender-ref ref="CONSOLE_STDOUT"/>
         <appender-ref ref="CONSOLE_STDERR"/>
     </root>

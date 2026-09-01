@@ -1,12 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -54,18 +52,15 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         assert new RefspecPush(runner).push(clone, BRANCH).exitCode() == 0
     }
 
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(OriginReconciliation)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(OriginReconciliation, Level.DEBUG)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        appender.list
     }
 
     def "an origin missing the branch entirely is caught up"() {
@@ -80,9 +75,11 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         then:
         originTip() == Optional.of(local)
 
-        and: 'the catch-up is visible in the log'
+        and: 'the catch-up is visible to a diagnosis, and silent on the operator plane'
+        // FR12 of harden-logging-observability: the intention and the outcome of one push are
+        // two lines about one path; the failure WARN carries the decision, this one is DEBUG.
         events.any {
-            it.level == Level.INFO && it.formattedMessage.contains('origin does not hold the task branch tip')
+            it.level == Level.DEBUG && it.formattedMessage.contains('origin does not hold the task branch tip')
         }
         events.every { it.level != Level.WARN }
     }

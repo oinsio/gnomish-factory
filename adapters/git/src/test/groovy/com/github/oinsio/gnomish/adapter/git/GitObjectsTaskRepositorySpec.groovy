@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
@@ -18,6 +19,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -62,7 +64,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         new TaskContext(taskId, 'Fix the thing', 'Body text', decisions)
     }
 
-    private String refFor(String taskId) {
+    private static String refFor(String taskId) {
         'refs/heads/gnomish/' + taskId
     }
 
@@ -103,6 +105,32 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // FR3 of harden-task-branch-contract: the container-side STARTED commit carries both files
     // too — one bare-object commit with two tree edits, so no kill window freezes a branch
     // holding task.json without the state.json it implies.
+    // FR2 of harden-logging-observability, the bare-objects half of the declared pair: the same
+    // one-INFO-line-per-transition anchor GitTaskRepository writes on the host medium, so a
+    // container-mode task's branch story reads identically to a host-mode one's.
+    def "FR2: each bare-object lifecycle transition logs exactly one INFO anchor naming the event"() {
+        given:
+        def capture = LogCaptureSupport.attach(TaskLifecycleCommitWriter)
+
+        when:
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+
+        then:
+        def anchors = capture.list.findAll {
+            it.formattedMessage.startsWith('task lifecycle commit written')
+        }
+        anchors.size() >= 2
+        anchors.every {
+            it.level == Level.INFO && it.formattedMessage.contains('PROJ-1')
+        }
+        anchors[0].formattedMessage.contains("event=${TaskLifecycleEvent.STARTED}")
+        anchors[1].formattedMessage.contains("event=${TaskLifecycleEvent.COMPLETED}")
+
+        cleanup:
+        capture.detach()
+    }
+
     def "FR3: the bare-object STARTED commit carries the initial state.json beside task.json"() {
         when:
         repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
@@ -318,18 +346,51 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     }
 
     // FR10 of harden-task-branch-contract: running the destructive step twice equals running it once.
+    // FR5 of harden-logging-observability: the second run writes nothing, so a DEBUG line is what
+    // tells a reader the recovery ran and found the work already done rather than skipping it.
     def "FR10: finishCleanup on an already-cleaned tip changes nothing"() {
         given:
         repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('PROJ-1')
         def tip = gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
+        def logs = LogCaptureSupport.attach(GitObjectsTerminalCommits, Level.DEBUG)
 
         when:
         repository.finishCleanup('PROJ-1')
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then:
         gitOutput(bareDir, 'rev-parse', refFor('PROJ-1')) == tip
+
+        and:
+        events.size() == 1
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.contains('cleanup commit for task PROJ-1 is a no-op')
+    }
+
+    // FR10, FR5: the other idempotent tail commit — clearing a pending marker on a tip whose
+    // envelope is already gone.
+    def "FR5: confirmTerminalWrite on a cleaned tip is a no-op that says so"() {
+        given:
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+        repository.finishCleanup('PROJ-1')
+        def tip = gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
+        def logs = LogCaptureSupport.attach(GitObjectsTerminalCommits, Level.DEBUG)
+
+        when:
+        repository.confirmTerminalWrite('PROJ-1')
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        gitOutput(bareDir, 'rev-parse', refFor('PROJ-1')) == tip
+
+        and:
+        events.size() == 1
+        events[0].formattedMessage.contains('pending-marker clear for task PROJ-1 is a no-op')
     }
 
     def "FR25/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, history preserved"() {

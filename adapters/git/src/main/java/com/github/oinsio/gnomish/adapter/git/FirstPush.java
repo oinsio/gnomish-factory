@@ -2,6 +2,9 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.RemoteBranchTip.Carriage;
 import com.github.oinsio.gnomish.app.port.git.FirstPushFailedException;
+import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +24,15 @@ import org.slf4j.LoggerFactory;
  * the locate fetch uses ({@link GitInfrastructureRetry}) — never a bounded re-attempt of the kind
  * {@code bound-subprocess-commands} forbids spending on a timed-out invocation.
  *
+ * <p>The re-check-and-retry loop can run its whole budget against an origin that is simply down,
+ * so each unsuccessful attempt reports to a {@link RepeatSuppressor} keyed by the task's branch
+ * and logs the edge it gets back — first occurrence and periodic counted roll-ups, the attempts in
+ * between suppressed — all at DEBUG, because the exception this method throws on exhaustion is
+ * what reports the fault to the operator. A delivery that eventually lands closes the streak with
+ * one INFO recovery line (FR4, FR12 of harden-logging-observability). The suppressor outlives a
+ * single {@code deliver} because the same origin outage is one fault whether it spans attempts of
+ * one task or first pushes of several.
+ *
  * <p>With no {@code origin} configured the run is purely local and this is a silent no-op, exactly
  * like its best-effort siblings: there is nothing to be load-bearing about (UX3).
  *
@@ -35,17 +47,19 @@ final class FirstPush {
     private final LocalBranchTip localTip;
     private final RemoteBranchTip remoteTip;
     private final GitInfrastructureRetry retry;
+    private final RepeatSuppressor suppressor;
 
     FirstPush(GitProcessRunner runner) {
-        this(runner, GitInfrastructureRetry.system());
+        this(runner, GitInfrastructureRetry.system(), RepeatSuppressor.system());
     }
 
-    FirstPush(GitProcessRunner runner, GitInfrastructureRetry retry) {
+    FirstPush(GitProcessRunner runner, GitInfrastructureRetry retry, RepeatSuppressor suppressor) {
         this.origin = new OriginRemote(runner);
         this.push = new RefspecPush(runner);
         this.localTip = new LocalBranchTip(runner);
         this.remoteTip = new RemoteBranchTip(runner);
         this.retry = retry;
+        this.suppressor = suppressor;
     }
 
     /** What one attempt at the load-bearing push established about the branch's delivery. */
@@ -64,24 +78,71 @@ final class FirstPush {
         if (!origin.isConfigured(repo)) {
             return;
         }
-        Attempt last = retry.until(() -> attempt(repo, branch), Attempt::delivered);
+        Attempt last = retry.until(() -> attempt(taskId, repo, branch), Attempt::delivered);
         if (!last.delivered()) {
             throw new FirstPushFailedException(taskId, branch, last.reason());
         }
+        suppressor
+                .recovered(key(branch))
+                .ifPresent(recovery -> log.info(
+                        "first push landed after {} failed attempt(s) over {}: taskId={}, branch={}, last reason={}",
+                        recovery.occurrences(),
+                        recovery.outage(),
+                        taskId,
+                        branch,
+                        recovery.reason()));
     }
 
-    private Attempt attempt(Path repo, String branch) {
+    private Attempt attempt(String taskId, Path repo, String branch) {
         GitCommandResult result = push.push(repo, branch);
         String outcome = PushOutcome.describe("first push", result);
         if (outcome == null) {
             return new Attempt(true, "pushed");
         }
-        log.warn(
-                "{}, re-checking the remote tip: branch={}, stderr={}",
-                outcome,
-                branch,
-                result.stderr().trim());
+        logAttemptFailure(taskId, branch, outcome, LogText.forLog(result.stderr()));
         return confirmLanded(repo, branch, outcome);
+    }
+
+    /**
+     * The failed-attempt edge (FR4). The site's own level is DEBUG, not WARN: an exhausted budget
+     * throws {@link FirstPushFailedException} and the run's abort path is what reports it to the
+     * operator, so a WARN here would be the same fault told twice (FR12 — duplicate-per-path
+     * collapse). Suppression still earns its place, because a budget's worth of identical attempt
+     * lines is noise even in a DEBUG run. The reason keys the streak, so a push that starts
+     * failing for a *different* reason reads as news again.
+     */
+    private void logAttemptFailure(String taskId, String branch, String outcome, String stderr) {
+        switch (suppressor.failed(key(branch), outcome)) {
+            case RepeatOccurrence.First first ->
+                log.debug(
+                        "{}, re-checking the remote tip: taskId={}, branch={}, stderr={}",
+                        first.reason(),
+                        taskId,
+                        branch,
+                        stderr);
+            case RepeatOccurrence.Repeat repeat ->
+                log.debug(
+                        "{} again ({}x), re-checking the remote tip: taskId={}, branch={}, stderr={}",
+                        repeat.reason(),
+                        repeat.count(),
+                        taskId,
+                        branch,
+                        stderr);
+            case RepeatOccurrence.RollUp rollUp ->
+                log.debug(
+                        "{} {}x over {}, re-checking the remote tip: taskId={}, branch={}, stderr={}",
+                        rollUp.reason(),
+                        rollUp.count(),
+                        rollUp.elapsed(),
+                        taskId,
+                        branch,
+                        stderr);
+        }
+    }
+
+    /** Namespaces the streak key: the subject is the branch this push is load-bearing for. */
+    private static String key(String branch) {
+        return "first-push:" + branch;
     }
 
     /**

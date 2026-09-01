@@ -39,12 +39,6 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
     /** The manual-resume path: no tracker, no claim, so no tenure on anything. */
     def claimless = ClaimEpochSource.NONE
 
-    private void commit(Path repo, String fileName, String content) {
-        new File(repo.toFile(), fileName).text = content
-        runner.run(repo, 'add', fileName)
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
-    }
-
     /** A bare origin plus a clone that has the task branch checked out as a worktree. */
     private Map<String, Path> setUpClonedBranch() {
         def bare = initBareRepo(tempDir, 'origin.git')

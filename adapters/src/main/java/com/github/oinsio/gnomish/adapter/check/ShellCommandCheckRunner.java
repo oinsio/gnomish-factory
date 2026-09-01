@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
@@ -15,6 +16,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The real command check runner (design D6): runs {@code check} through a {@link
@@ -40,8 +43,13 @@ import org.jspecify.annotations.Nullable;
  * carried by {@link #childEnv} (D6, FR9); {@link #withChildEnv} threads the run's allowlist —
  * passthrough plus the active tracker adapter's declared credential names — per run.
  *
+ * <p>Both infrastructure exits that happen before any exit code exists — the environment the
+ * check needs cannot be served, and the process refuses to start — carry a WARN naming the check
+ * (FR5 of harden-logging-observability): they hand the engine a {@code CannotVerify} that looks,
+ * from the escalation report alone, exactly like an endpoint that was merely slow.
+ *
  * <p>Implements FR7, FR8, NFR-R2, NFR-S1, D6 of add-manual-run; FR1, FR4, FR9, NFR-S3 of
- * add-sandbox-core.
+ * add-sandbox-core; FR5 of harden-logging-observability.
  */
 public record ShellCommandCheckRunner(
         CommandProcessRunner processRunner,
@@ -49,6 +57,16 @@ public record ShellCommandCheckRunner(
         ChildEnvAllowlist childEnv,
         CheckEnvironmentSource environments)
         implements CommandCheckRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(ShellCommandCheckRunner.class);
+
+    /**
+     * How much of a check's command stands in for its identity in a log line. A {@code command}
+     * check is identified by nothing but its command text, which a manifest may write as a
+     * multi-line block — so the identity goes through {@link LogText} like any other text that
+     * did not come from this process.
+     */
+    private static final int IDENTITY_CAP_CHARS = 200;
 
     /**
      * The read cap applied when the findings channel is read back through the environment
@@ -124,6 +142,7 @@ public record ShellCommandCheckRunner(
         try {
             acquired = environments.acquire(check, workspace);
         } catch (CheckEnvironmentUnavailableException e) {
+            log.warn("command check '{}' cannot be verified: no environment to run it in", identityOf(check), e);
             return new Verdict.CannotVerify(e.getMessage() != null ? e.getMessage() : e.toString(), "");
         }
         try (acquired) {
@@ -131,6 +150,10 @@ public record ShellCommandCheckRunner(
             String findingsPath = environment.scratchRoot() + "/findings-" + UUID.randomUUID() + ".json";
             CommandProcessRunner.CommandOutcome outcome = processRunner.run(check, environment, findingsPath);
             if (outcome == null) {
+                // throwable-not-subject: the runner reports a failed start as a null outcome, so
+                //     there is no throwable to attach here — the cause was logged where it was
+                //     caught, and this line is the decision that turns it into CannotVerify.
+                log.warn("command check '{}' cannot be verified: the process failed to start", identityOf(check));
                 return new Verdict.CannotVerify("failed to start command: " + check.command(), "");
             }
 
@@ -143,8 +166,13 @@ public record ShellCommandCheckRunner(
             }
             byte[] findings =
                     environment.readFile(findingsPath, FINDINGS_READ_CAP_BYTES).orElse(null);
-            return classify(outcome, findings);
+            return classify(identityOf(check), outcome, findings);
         }
+    }
+
+    /** The check's log-plane identity: its command, flattened and capped so one check is one line. */
+    private static String identityOf(VerifyCheck.Command check) {
+        return LogText.forLog(check.command(), IDENTITY_CAP_CHARS);
     }
 
     /**
@@ -173,10 +201,11 @@ public record ShellCommandCheckRunner(
      * finding built from the output tail if none were written or they were malformed (FR8,
      * NFR-R2).
      */
-    private static Verdict classify(CommandProcessRunner.CommandOutcome outcome, byte @Nullable [] findingsContent) {
+    private static Verdict classify(
+            String checkIdentity, CommandProcessRunner.CommandOutcome outcome, byte @Nullable [] findingsContent) {
         int exitCode = outcome.exitCode();
         if (exitCode == 0) {
-            FindingsFileReader.warnIfIgnoredOnPass(findingsContent);
+            FindingsFileReader.noteIgnoredOnPass(checkIdentity, findingsContent);
             return new Verdict.Pass();
         }
         if (exitCode == 126 || exitCode == 127) {
@@ -184,7 +213,7 @@ public record ShellCommandCheckRunner(
             return new Verdict.CannotVerify(reason, outcome.outputTail());
         }
         Finding syntheticFinding = new Finding("command exited with status " + exitCode, null, outcome.outputTail());
-        List<Finding> parsed = FindingsFileReader.read(findingsContent);
+        List<Finding> parsed = FindingsFileReader.read(checkIdentity, findingsContent);
         return new Verdict.Fail(parsed != null ? parsed : List.of(syntheticFinding));
     }
 }

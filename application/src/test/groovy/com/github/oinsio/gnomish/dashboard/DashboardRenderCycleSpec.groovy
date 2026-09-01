@@ -1,10 +1,13 @@
 package com.github.oinsio.gnomish.dashboard
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
+import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -22,6 +25,7 @@ import spock.lang.TempDir
  */
 class DashboardRenderCycleSpec extends Specification {
 
+
     @TempDir
     Path homeDir
 
@@ -32,12 +36,17 @@ class DashboardRenderCycleSpec extends Specification {
 
     def "a malformed non-tail ledger line degrades the history section to empty rather than failing the render"() {
         given: 'a non-last line that is not valid JSON at all -- a genuine error per the reader contract'
-        def file = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, NOW.atZone(java.time.ZoneOffset.UTC).toLocalDate())
+        def file = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, NOW.atZone(ZoneOffset.UTC).toLocalDate())
         Files.createDirectories(file.parent)
         Files.writeString(file, 'not json at all\n{"version":1,"type":"taskOutcome","outcome":"delivered","tokensByModel":{}}\n', StandardCharsets.UTF_8)
 
+        and: 'FR5 of harden-logging-observability: an empty block and a healthy-quiet one render alike'
+        def logs = LogCaptureSupport.attach(DashboardRenderCycle)
+
         when:
         def html = renderCycle.render(homeDir, INSTANCE_NAME, new BoardSectionView(null, null, null), NOW, null)
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then:
         html.contains('No finished tasks yet')
@@ -45,6 +54,17 @@ class DashboardRenderCycleSpec extends Specification {
 
         and: 'NFR-O3 of add-serve-sandbox-lifecycle: the hygiene block degrades on the same file'
         html.contains('Sandbox sweep has not run yet')
+
+        and: 'both degraded blocks say so, each with the failure that caused it'
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 2
+        warnings*.formattedMessage.any {
+            it.contains('sweep-action ledger could not be aggregated')
+        }
+        warnings*.formattedMessage.any {
+            it.contains('outcome ledger could not be aggregated')
+        }
+        warnings.every { it.throwableProxy != null }
     }
 
     // NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section reads the ledger's sweep actions
@@ -52,7 +72,7 @@ class DashboardRenderCycleSpec extends Specification {
     def "sweep actions from the ledger reach the hygiene section without any snapshot"() {
         given:
         def file = ObservabilityPaths.ledgerFile(
-                homeDir, INSTANCE_NAME, NOW.atZone(java.time.ZoneOffset.UTC).toLocalDate())
+                homeDir, INSTANCE_NAME, NOW.atZone(ZoneOffset.UTC).toLocalDate())
         Files.createDirectories(file.parent)
         Files.writeString(
                 file,

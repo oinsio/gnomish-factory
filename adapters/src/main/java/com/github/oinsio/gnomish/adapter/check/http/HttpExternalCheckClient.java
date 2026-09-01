@@ -8,10 +8,13 @@ import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The generic {@link ExternalCheckClient} of the built-in {@code http} provider: one poll is one
@@ -37,7 +40,14 @@ import org.jspecify.annotations.Nullable;
  * polling the same check observe the same thing and either may resume the other's task (NFR-R2 of
  * add-external-check-github-actions, kept as a port-wide property).
  *
- * <p>Implements FR9, FR10, FR11 of add-plugin-architecture.
+ * <p>A refusal is the one degradation the operator cannot read off the endpoint: the request never
+ * left the factory, so nothing on the other side records it. Both refusal classes — a target the
+ * allowlist rejects and a redirect chain that outran its bound — are logged here, at the layer that
+ * turns them into a verdict, so the fault has exactly one line (FR5 of
+ * harden-logging-observability). The refusal's own sentence names a redirect target chosen by a
+ * remote server, so it goes through {@link LogText} like any other text from outside.
+ *
+ * <p>Implements FR9, FR10, FR11 of add-plugin-architecture; FR5 of harden-logging-observability.
  *
  * <p>Two ways a poll can fail before the network: a credential that will not resolve, and a {@code
  * ${...}} reference this run cannot supply (NFR-S2). Both are {@code CannotVerify} naming what was
@@ -51,6 +61,8 @@ import org.jspecify.annotations.Nullable;
  */
 public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets, CheckRunContext runContext)
         implements ExternalCheckClient {
+
+    private static final Logger log = LoggerFactory.getLogger(HttpExternalCheckClient.class);
 
     /** A client for a run that supplies no variables — every non-interpolating check is unaffected. */
     public HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets) {
@@ -85,8 +97,15 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
         try {
             response = exchange.send(request);
         } catch (EgressRefusedException e) {
+            EgressRefusal refusal = e.refusal();
+            // throwable-not-subject: the refusal is a guard decision, not a fault — every fact is
+            //     in its own sentence, and the exception exists only to unwind the hop.
+            log.warn(
+                    "http check '{}' refused before the request left the factory: {}",
+                    check.checkId(),
+                    LogText.forLog(refusal.describe()));
             return new PollStatus.CannotVerify(
-                    e.refusal().describe(), e.refusal().reason().label());
+                    refusal.describe(), refusal.reason().label());
         } catch (IOException e) {
             return cannotVerify(target, e);
         } catch (InterruptedException e) {

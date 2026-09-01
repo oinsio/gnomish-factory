@@ -74,7 +74,7 @@ final class TakeCommandSupport {
                 log.info("gnomish take: {}", summary);
             }
         } catch (RuntimeException e) {
-            log.info("gnomish take: sandbox lifecycle sweep skipped: {}", e.toString());
+            log.info("gnomish take: sandbox lifecycle sweep skipped", e);
         }
     }
 

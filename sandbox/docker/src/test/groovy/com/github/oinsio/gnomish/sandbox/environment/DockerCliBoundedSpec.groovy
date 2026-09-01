@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.subprocess.Termination
 import java.nio.file.Files
 import java.nio.file.Path
@@ -39,6 +40,7 @@ class DockerCliBoundedSpec extends Specification {
 
     def cleanup() {
         Thread.interrupted() // never leak an interrupt flag into the next feature
+        ShutdownPhase.reset()
     }
 
     /** The WARN lines the CLI wrote while {@code emit} ran — the operator's whole view of a bound that fired. */
@@ -169,6 +171,29 @@ exit 0
         warns[0].contains('docker command interrupted')
         warns[0].contains('subcommand=ps')
         !warns[0].contains('deadline=')
+
+        and: 'the caller up the stack still sees the interrupt'
+        Thread.interrupted()
+    }
+
+    // FR9 of harden-logging-observability: the stop interrupts every in-flight docker command, so
+    // the same line that is a fair warning outside a shutdown becomes a wall of unexplained
+    // warnings during one. It names the stop instead.
+    def "FR9: an interrupt during the shutdown phase is attributed to the stop"() {
+        given:
+        def cli = cliBackedBy("sleep ${STALL_SECONDS}", Duration.ofSeconds(60))
+        ShutdownPhase.begin()
+
+        when:
+        def result = null
+        Thread.currentThread().interrupt()
+        def warns = warnings { result = cli.run(['ps']) }
+
+        then:
+        result.termination() == Termination.INTERRUPTED
+        warns.size() == 1
+        warns[0].contains('docker command interrupted by the daemon shutdown')
+        warns[0].contains('subcommand=ps')
 
         and: 'the caller up the stack still sees the interrupt'
         Thread.interrupted()

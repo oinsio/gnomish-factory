@@ -204,7 +204,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     def "a claim-loss flag set with an explicit reason surfaces that reason in the revocation"() {
         given: 'the shutdown sequence flagged this task stopped, not the heartbeat'
         def flag = new ClaimLossFlag()
-        flag.claimLost(REF, 'daemon shutting down (SIGTERM)')
+        flag.claimLost(REF, 'daemon shutting down (signal)')
         def guarded = new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, flag)
 
         when:
@@ -214,7 +214,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         1 * delegate.persist('PROJ-1', STATE, TRACE)
         def ex = thrown(RevocationDetectedException)
         ex.message.contains('PROJ-1')
-        ex.message.contains('daemon shutting down (SIGTERM)')
+        ex.message.contains('daemon shutting down (signal)')
         !ex.message.contains('claim marker gone')
         guarded.revocation().get() == ex
     }

@@ -1,12 +1,9 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import java.io.InterruptedIOException
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
@@ -30,18 +27,15 @@ class ContainerFileChannelSpec extends Specification {
         new ContainerFileChannel(docker, 'k1', '/gnomish/work', '/gnomish/scratch')
     }
 
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.3 touched this spec. */
     private static List<ILoggingEvent> capture(Closure emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(ContainerFileChannel)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(ContainerFileChannel)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        return appender.list
     }
 
     // NFR-S3: an over-cap read is truncated to exactly the first cap bytes — the copy is real
@@ -69,6 +63,21 @@ class ContainerFileChannelSpec extends Specification {
         then:
         read.get() == bytes
         events.findAll { it.level == Level.WARN }.isEmpty()
+    }
+
+    // FR5, D4 of harden-logging-observability: a truncation is a degraded read, and an operator
+    //     running several boxes needs to know which one it happened in
+    def "FR5: the truncation warning names the environment the over-cap file was read from"() {
+        given:
+        docker.process.stdout = 'abcdefghijK'.getBytes(StandardCharsets.UTF_8)
+
+        when:
+        def events = capture { channel().readFile('note.txt', 10) }
+
+        then:
+        def warning = events.find { it.level == Level.WARN }
+        warning.formattedMessage.contains('note.txt')
+        warning.formattedMessage.contains('k1')
     }
 
     // FR1, D18: putFile returns only after the stdin pump delivered and closed the exec pipe

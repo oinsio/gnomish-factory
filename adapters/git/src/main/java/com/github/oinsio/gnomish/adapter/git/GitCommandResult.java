@@ -33,4 +33,14 @@ record GitCommandResult(int exitCode, String stdout, String stderr, Termination 
     GitCommandResult(int exitCode, String stdout, String stderr) {
         this(exitCode, stdout, stderr, Termination.EXITED);
     }
+
+    /**
+     * The git evidence a cannot-verify outcome carries: how this result ended, and what it said.
+     * Shared by {@link RoundBoundaryCheck} and {@link HarvestedBoundaryCheck}, whose boundary
+     * diffs both classify a non-zero or non-exiting invocation as cannot-verify.
+     */
+    String cannotVerifyDetail() {
+        return "the boundary could not be verified (git " + termination() + ", exit " + exitCode() + "): "
+                + stderr().trim();
+    }
 }

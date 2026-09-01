@@ -2,8 +2,11 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.nio.file.Path;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Classifies a task branch tip on resume (FR21, design D15): a tip carrying the
@@ -22,7 +25,12 @@ import java.util.Optional;
  *
  * <p>Implements FR21 of add-sandbox-core.
  */
+// Not a record: a behavior-bearing reader over the git seam, kept a plain final class for parity
+// with its siblings in this package (see GitShowTip, VerifiedTip).
+@SuppressWarnings("ClassCanBeRecord")
 public final class SnapshotTipCheck {
+
+    private static final Logger log = LoggerFactory.getLogger(SnapshotTipCheck.class);
 
     private static final String SUBJECT_PREFIX = "gnomish: snapshot ";
 
@@ -44,6 +52,14 @@ public final class SnapshotTipCheck {
     public Optional<PendingVerification> inspect(String branch) {
         GitCommandResult tip = runner.run(cloneDir, "log", "-1", "--format=%H%x00%s", "refs/heads/" + branch);
         if (tip.exitCode() != 0) {
+            // Not an alarm — the branch may simply not exist yet — but the resume it silently
+            // routes through the ordinary salvage path is worth a trace (FR5).
+            // throwable-not-subject: git reported a status, not a thrown fault.
+            log.debug(
+                    "snapshot-tip check could not read {} (git exited {}): {}",
+                    branch,
+                    tip.exitCode(),
+                    LogText.forLog(tip.stderr()));
             return Optional.empty();
         }
         String[] parts = tip.stdout().strip().split("\u0000", 2);
@@ -53,14 +69,31 @@ public final class SnapshotTipCheck {
         String stageAndRound = parts[1].substring(SUBJECT_PREFIX.length());
         int hash = stageAndRound.lastIndexOf('#');
         if (hash <= 0) {
+            warnMalformed(branch, stageAndRound);
             return Optional.empty();
         }
         int round;
         try {
             round = Integer.parseInt(stageAndRound.substring(hash + 1));
         } catch (NumberFormatException e) {
+            warnMalformed(branch, stageAndRound);
             return Optional.empty();
         }
         return Optional.of(new PendingVerification(parts[0], stageAndRound.substring(0, hash), round));
+    }
+
+    /**
+     * A tip that announces itself as a snapshot but does not carry a readable {@code
+     * <stage>#<round>}: the factory wrote it, so this is an anomaly rather than an ordinary tip,
+     * and it silently costs the resume its no-attempt-burned re-verification (FR5 of
+     * harden-logging-observability). DEBUG because the resume still completes correctly through
+     * salvage — nothing is lost, only re-done.
+     */
+    private static void warnMalformed(String branch, String stageAndRound) {
+        // throwable-not-subject: the shape is the diagnosis; the parse failure carries nothing more.
+        log.debug(
+                "snapshot tip of {} carries an unreadable stage#round, resuming through salvage: {}",
+                branch,
+                LogText.forLog(stageAndRound));
     }
 }

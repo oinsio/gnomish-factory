@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.lease;
 
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -41,7 +42,7 @@ final class HeldClaims {
                 worker = Thread.ofVirtual()
                         .name("gnomish-heartbeat")
                         .uncaughtExceptionHandler(onDeath)
-                        .start(loopBody);
+                        .start(DaemonComponent.HEARTBEAT.framing(loopBody));
             }
             return willStart;
         }

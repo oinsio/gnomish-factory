@@ -44,7 +44,9 @@ import org.slf4j.LoggerFactory;
  * <p>Kept in sync with {@link WorktreeSalvage}: both must produce a salvage commit carrying the
  * claim-epoch trailer, restore factory-owned paths from the tip, and — past the guard that
  * tolerates a tip with no state directory — FAIL the salvage when that restore fails, rather
- * than letting the working copy's factory files ride into the commit.
+ * than letting the working copy's factory files ride into the commit. Their degrade paths are
+ * symmetric too: a discard that cannot reach or reset its working copy leaves the leftovers in
+ * place, and both ends say so at WARN (FR5 of harden-logging-observability).
  *
  * <p>Implements FR6 of add-sandbox-core; FR5 of harden-task-branch-contract.
  */
@@ -111,7 +113,7 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
             InBoxGitCommand.Outcome status = exec(STATUS);
             return status.succeeded() && !status.output().trim().isEmpty();
         } catch (ProcessStartException | UncheckedIOException e) {
-            log.warn("salvage probe could not reach the environment: {}", e.toString());
+            log.warn("salvage probe could not reach the environment", e);
             return false;
         }
     }
@@ -128,9 +130,9 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
             }
         } catch (ProcessStartException | UncheckedIOException e) {
             log.warn(
-                    "salvage skipped for taskId={}: environment lost, continuing from the last harvested state ({})",
+                    "salvage skipped for taskId={}: environment lost, continuing from the last harvested state",
                     taskId,
-                    e.toString());
+                    e);
             return;
         }
         harvestLossTolerant(taskId);
@@ -141,7 +143,7 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
         try {
             exec("git reset --hard HEAD && git clean -fd");
         } catch (ProcessStartException | UncheckedIOException e) {
-            log.warn("discard skipped: environment lost ({})", e.toString());
+            log.warn("discard skipped: environment lost, uncommitted leftovers stay in the box", e);
         }
     }
 
@@ -157,9 +159,9 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
         } catch (HarvestFailedException e) {
             log.warn(
                     "salvage harvest failed for taskId={}: environment lost, continuing from the last harvested"
-                            + " state ({})",
+                            + " state",
                     taskId,
-                    e.toString());
+                    e);
         }
     }
 

@@ -40,7 +40,8 @@ dependencies {
     // `FindingsSanitizer`). Each is used directly here, which the
     // dependency-analysis gate requires stated rather than inherited.
     //
-    // These two project edges are the whole compile classpath of this bundle:
+    // These project edges plus `:logtext` below are the whole compile classpath of
+    // this bundle:
     // `:application` is gone (FR3, M1 of close-plugin-api-compilability-gap), so the
     // first-party vendor adapter now compiles against exactly what a third-party
     // bundle would — the published contract plus the domain value model it exposes
@@ -48,6 +49,17 @@ dependencies {
     // including test, re-opens the G4 gap this change closed.
     api project(':gnomish-plugin-api')
     api project(':domain')
+
+    // The logging-support leaf (FR4 of harden-logging-observability): the Actions
+    // poll and the shared retry config report their failures to `RepeatSuppressor`
+    // so a dependency that stays down costs the console edges rather than one WARN
+    // per tick. `api`, and the only edge beyond the two above: the suppressor is a
+    // component of the public `GithubCheckExternalClient` record, so it is on this
+    // bundle's own surface. `:logtext` is a dependency-free leaf carrying slf4j-api
+    // and nothing else, so exporting it adds no transitive reach — the "a third
+    // party could build this bundle" claim below is about `:application` and the
+    // layers above it, which are still absent.
+    api project(':logtext')
 
     implementation libs.slf4j.api
 
@@ -105,12 +117,13 @@ pitest {
 // pass 2 buys over the package-level rule that stood in for it — a sibling's
 // types are now simply absent from the compile classpath.
 //
-// The allow-list is down to the published contract and the domain (FR3 of
-// close-plugin-api-compilability-gap): `:application` left with the
+// The allow-list is down to the published contract, the domain and the
+// dependency-free logging leaf (FR3 of close-plugin-api-compilability-gap; FR4 of
+// harden-logging-observability): `:application` left with the
 // `RecordedAttemptCommitWorkspace` downcast, and `:gitobjects` / `:sandbox:core`
 // reached this module only through `:application`'s `api` edges, so they went with
 // it. This list IS the "a third party could build this bundle" claim, checked by
 // the build rather than asserted in prose.
 layering {
-    allowedProjects = [':domain', ':gnomish-plugin-api']
+    allowedProjects = [':domain', ':gnomish-plugin-api', ':logtext']
 }

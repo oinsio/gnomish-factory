@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
 import com.github.oinsio.gnomish.subprocess.Captured;
 import com.github.oinsio.gnomish.subprocess.Termination;
@@ -250,8 +251,12 @@ public final class GitProcessRunner {
                     deadline);
             return;
         }
+        // FR9 of harden-logging-observability: an interrupt during the shutdown phase is the stop
+        // doing its job, so the line says so rather than reading as an unexplained abort. The level
+        // stays WARN and the stack stays absent either way — the bound that fired is the whole fact.
         log.warn(
-                "git command interrupted and its process tree was killed: subcommand={}, elapsed={}",
+                "git command {} and its process tree was killed: subcommand={}, elapsed={}",
+                ShutdownPhase.inProgress() ? "interrupted by the daemon shutdown" : "interrupted",
                 subcommand,
                 elapsed);
     }

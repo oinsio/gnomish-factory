@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import java.util.List;
 import java.util.Optional;
@@ -88,14 +89,11 @@ final class GuardDenialReads {
             // The runtime outage classification (NFR-R1) applies to work the factory still owes;
             // a denial read is pure observability of work already finished, so an unreachable
             // daemon here is silence with the cursor left where it was — never a thrown round.
-            log.warn("could not read egress guard log for {}: {}", key, e.getMessage());
+            log.warn("could not read egress guard log for {}", key, e);
             return List.of();
         }
         if (!logs.ok()) {
-            log.warn(
-                    "could not read egress guard log for {}: {}",
-                    key,
-                    logs.stderr().strip());
+            log.warn("could not read egress guard log for {}: {}", key, LogText.forLog(logs.stderr()));
             return List.of();
         }
         if (GuardLogCursor.saturated(logs.stdout(), LOG_TAIL_LINES)) {
@@ -109,7 +107,7 @@ final class GuardDenialReads {
         if (advanced != null) {
             since = advanced;
         }
-        return GuardDenialLog.findings(logs.stdout());
+        return GuardDenialLog.findings(key, logs.stdout());
     }
 
     /**
@@ -148,10 +146,16 @@ final class GuardDenialReads {
         try {
             probe = docker.run(GuardCommands.inspectGuardId(key));
         } catch (DockerUnavailableException e) {
+            // No source id means no committable cursor: the next lease replays every denial still
+            // in this guard's log rather than reading its own slice (FR5). DEBUG — the round's
+            // own findings are unaffected, only the cross-process de-duplication is.
+            log.debug("egress guard id for {} is unreadable; this attempt commits no denial cursor", key, e);
             return null;
         }
         String id = probe.stdout().strip();
         if (!probe.ok() || id.isEmpty()) {
+            // throwable-not-subject: docker answered; the answer is simply not an id.
+            log.debug("egress guard id for {} came back empty; this attempt commits no denial cursor", key);
             return null;
         }
         sourceId = id;

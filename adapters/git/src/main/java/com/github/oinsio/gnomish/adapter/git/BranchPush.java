@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,8 +60,7 @@ public final class BranchPush {
         GitCommandResult result = push.push(worktreeRoot, branch);
         String outcome = PushOutcome.describe("revocation push", result);
         if (outcome != null) {
-            log.warn(
-                    "{}: branch={}, stderr={}", outcome, branch, result.stderr().trim());
+            log.warn("{}: branch={}, stderr={}", outcome, branch, LogText.forLog(result.stderr()));
         }
     }
 }

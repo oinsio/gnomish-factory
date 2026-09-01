@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.List;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -65,13 +66,27 @@ final class SandboxLifecycleActions {
         if (result.ok()) {
             return true;
         }
-        log.warn(
+        // FR12 of harden-logging-observability: a refused action becomes the object's
+        // SKIPPED_NO_VERDICT verdict, and the verdict sink is the one owner of the operator line
+        // for it — this level carries the runtime's own words for whoever is diagnosing.
+        log.debug(
                 "{} of {} failed (exit {}): {}",
                 what,
                 object.name(),
                 result.exitCode(),
-                result.stderr().strip());
+                LogText.forLog(result.stderr()));
         return false;
+    }
+
+    /**
+     * Whether the object is still there, by its own name. Used to tell an object the pass could
+     * not <em>read</em> from one that is simply no longer there — a remnant this same pass already
+     * reclaimed through its key triple, or one another instance removed between the listing and
+     * the inspect. The first leaves work undone and needs a verdict; the second does not.
+     */
+    boolean stillExists(ListedDockerObject object) {
+        return docker.run(DockerLifecycleCommands.inspectExists(object.kind(), object.name()))
+                .ok();
     }
 
     /** Whether the object is gone: its own {@code inspect} no longer resolves the name. */
@@ -80,7 +95,8 @@ final class SandboxLifecycleActions {
                 .ok()) {
             return true;
         }
-        log.warn("dispose of {} left it in place", object.name());
+        // Same collapse: the pass's verdict for this object is what reaches the operator (FR12).
+        log.debug("dispose of {} left it in place", object.name());
         return false;
     }
 
@@ -96,7 +112,7 @@ final class SandboxLifecycleActions {
         try {
             action.run();
         } catch (RuntimeException e) {
-            log.debug("best-effort {} failed: {}", what, e.toString());
+            log.debug("best-effort {} failed", what, e);
         }
     }
 }

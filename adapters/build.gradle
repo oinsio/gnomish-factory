@@ -54,6 +54,10 @@ dependencies {
     api project(':sandbox:docker')
 
     implementation libs.slf4j.api
+    // The log-line sanitizer (design D5 of harden-logging-observability): the check runners
+    // put a manifest command and a remote-chosen redirect target into log lines, and both
+    // reach the line only through `LogText`.
+    implementation project(':logtext')
 
     // The `.gnomish/` YAML loader. The domain stays Jackson-free (guarded by
     // `DomainPuritySpec`). `api` for the two the DTOs expose on public
@@ -94,6 +98,9 @@ layering {
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',
+        // The dependency-free logging-support leaf (design D5/D10 of
+        // harden-logging-observability): the check runners sanitize their log lines through it.
+        ':logtext',
         ':sandbox:core',
         ':sandbox:docker',
         // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the

@@ -33,7 +33,7 @@ final class ContainerRunTermination {
                 log.info("gnomish run: {}", summary);
             }
         } catch (RuntimeException e) {
-            log.info("gnomish run: sandbox lifecycle sweep skipped: {}", e.toString());
+            log.info("gnomish run: sandbox lifecycle sweep skipped", e);
         }
     }
 

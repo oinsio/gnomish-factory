@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.plugin
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.security.CodeSource
 import java.security.cert.Certificate
 import spock.lang.Specification

@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The judge-side half of D8's control/criteria-file preflight (FR13, NFR-R1):
@@ -27,9 +29,11 @@ import java.util.Optional;
  * less direct than a dedicated readability check.
  *
  * <p>Implements FR13, NFR-R1, D8 of add-agent-executor; FR19, D14 of
- * add-sandbox-core.
+ * add-sandbox-core; FR5 of harden-logging-observability.
  */
 public final class JudgeCriteriaPreflight {
+
+    private static final Logger log = LoggerFactory.getLogger(JudgeCriteriaPreflight.class);
 
     private JudgeCriteriaPreflight() {}
 
@@ -55,6 +59,11 @@ public final class JudgeCriteriaPreflight {
         } catch (UnreadableLawFileException e) {
             String message =
                     e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            // The seventh cannot-verify exit of a judge check, and the only one outside
+            // JudgeRoundExecution: no process is spawned, so this is the sole trace the
+            // operator gets for a vote that was never cast (FR5 of
+            // harden-logging-observability).
+            log.warn("judge vote cannot verify for criteria {}: unreadable criteria file", check.criteriaFile(), e);
             return Optional.of(new Verdict.CannotVerify(message, message));
         }
     }

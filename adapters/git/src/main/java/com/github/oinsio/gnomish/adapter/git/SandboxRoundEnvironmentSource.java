@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
 import java.nio.file.Path;
@@ -64,6 +65,15 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         this.clock = clock;
     }
 
+    /**
+     * Shared by every round of this task (FR4 of harden-logging-observability): the listener is
+     * per-round, but an environment that cannot be harvested is one fault whether it spans polls
+     * of one round or rounds of one task, and a per-round suppressor would re-announce it each
+     * time. Built here rather than injected — the constructor is already at the parameter limit
+     * and a log-plane detail is not worth a parameter object.
+     */
+    private final RepeatSuppressor harvestSuppressor = RepeatSuppressor.system();
+
     @Override
     public Round openRound(StageExecutor.Request request) {
         String stage = request.stage().name();
@@ -71,7 +81,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         AttemptKey key = new AttemptKey(taskId, stage, request.attempt());
         BranchDecisionFile.Handle decision = BranchDecisionFile.open(environment, key);
         var midRound = new MidRoundHarvestListener(
-                environment, runner, cloneDir, taskId, branch, clock, MID_ROUND_MIN_INTERVAL);
+                environment, runner, cloneDir, taskId, branch, clock, MID_ROUND_MIN_INTERVAL, harvestSuppressor);
         return new SandboxRound(environment, decision, midRound, key);
     }
 

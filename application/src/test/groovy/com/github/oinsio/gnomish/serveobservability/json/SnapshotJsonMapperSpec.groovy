@@ -80,8 +80,8 @@ class SnapshotJsonMapperSpec extends Specification {
 
     def "lifecycle stopped renders state and reason"() {
         expect:
-        mapper.toDto(snapshotWithLifecycle(new LifecycleState.Stopped("sigterm"))).lifecycle() ==
-                new LifecycleDto("stopped", "sigterm")
+        mapper.toDto(snapshotWithLifecycle(new LifecycleState.Stopped("signal"))).lifecycle() ==
+                new LifecycleDto("stopped", "signal")
     }
 
     def "feed state serializes each phase to its lowerCamel wire value"() {
