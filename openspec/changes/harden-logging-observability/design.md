@@ -232,6 +232,20 @@ distinction from the ledger's `runSummary`.
   which implement a different invariant (documented at those sites); not a
   pair.
 
+Three further pairs were declared during implementation, each because this
+change had to edit both of its ends (the audit obligation in
+`.claude/rules/manual-sync-pairs.md` turns that into a declaration, not a
+choice). They are listed with their invariants in the *Sync-pair closure* note
+of `tasks.md`:
+
+- `MidRoundHarvestListener` ↔ `MidRoundPushListener` — the mid-round tip poll
+  (task 9.3): same `VerifiedTip` resolution, same skip-on-failure rule, same
+  suppressor path.
+- `CleanupCommit` ↔ `GitObjectsTerminalCommits#cleanUp` — the terminal cleanup
+  commit's FR2 anchor line, one per medium (task 4.6).
+- `SandboxLifecycleTick` ↔ `WorktreeJanitor` — the daemon-loop shape both ticks
+  share, which task 2.5's `component` MDC framing had to land on together.
+
 ### D9. Convention gates: source-scan spec + ArchUnit, not a custom Error Prone checker
 
 The throwable-trailing-arg rule and the untrusted-text routing rule are
@@ -245,6 +259,21 @@ subproject of its own; the scan spec is two orders cheaper and its false
 positives are suppressible by the same annotation-comment idiom the codebase
 already uses for exemptions. Revisit if the regex gate proves noisy. Context:
 FR7, G4, M2.
+
+Two shapes the scan must cover, and one it deliberately does not:
+
+- **Fluent SLF4J** (`log.atLevel(...).log(msg, args)`, `log.atInfo().setMessage(...).log()`)
+  carries its arguments past the level call, so the parser follows the builder
+  chain to its terminal `.log(...)`. Matching the level call alone would hand
+  both gates an always-empty argument list — a silent blind spot, which is
+  worse than a missing gate. Seeded fluent violations in both gate specs keep
+  this honest.
+- **Untrusted text inside an exception message** is out of the scan's reach by
+  construction: nothing untrusted appears at the log call, yet the throwable's
+  message is rendered into the record. FR6 still binds there, so the
+  obligation moves to the throw site (`.claude/rules/logging.md`, "Known
+  limit"), and the pre-existing raw-`stderr()` constructor arguments are named
+  as debt for a later change rather than half-fixed here.
 
 ### D10. MDC completeness
 
@@ -278,9 +307,20 @@ without checking the producing invocation — and get one rule (FR13):
   persist with the git evidence — a corrupt durable record outlives the
   process, a failed persist is already handled by the existing
   infrastructure machinery. The host twin (`GitAttemptPersistence`) is
-  verified for the same rule (mirror obligation of the declared pair).
-- **Read-only poll** (`MidRoundHarvestListener`): a failed resolution skips
-  the observation (never "tip moved"), logged via the suppressor (task 5.1).
+  verified for the same rule (mirror obligation of the declared pair). Both
+  twins resolve the *next* round's baseline after their durable commit, so
+  this one refusal is raised after a durable step: it skips the best-effort
+  push and freezes "round committed, not pushed" — the commit-before-push
+  window that already exists and that the same recovery converges, not a new
+  one. No new kill window, no new shape; the `@throws` contract of both
+  `persist` methods names the refusal at that position.
+- **Read-only polls** (`MidRoundHarvestListener` and its host twin
+  `MidRoundPushListener`): a failed resolution skips the observation (never
+  "tip moved"), logged via the suppressor (task 5.1). The host twin polls the
+  worktree through `RoundBoundaryCheck`, whose `currentHead()` is the
+  *durable-baseline* reading and refuses — so the poll reads the raw
+  `readHead()` result and classifies it itself, rather than inheriting a
+  refusal that the listener contract ("never throws") forbids it to raise.
 - **List enumeration** (`TaskBranchLister`): enumeration failure fails the
   command; per-branch degradation rules from harden are unchanged.
 

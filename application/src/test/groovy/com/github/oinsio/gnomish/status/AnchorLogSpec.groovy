@@ -9,7 +9,9 @@ import spock.lang.Specification
 
 /**
  * The operator plane's anchor vocabulary (FR2) and the one canonical task-summary renderer (FR3)
- * of harden-logging-observability.
+ * of harden-logging-observability. The start-anchor feature is also the banner half of UX1 — the
+ * startup line naming instance, WIP limit, grace and intervals; the quiet-console half is
+ * {@code HealthyServeCycleLogSpec}'s.
  *
  * <p>These are assertions about wording, not about plumbing: an anchor exists so an operator can
  * navigate a log file by it, so what the line says — and at which level it says it — is the whole

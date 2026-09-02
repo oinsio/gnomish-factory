@@ -26,7 +26,7 @@ import spock.lang.TempDir
 import spock.lang.Timeout
 
 /**
- * The healthy-cycle log proof (M1, UX2 of harden-logging-observability): one real {@code gnomish
+ * The healthy-cycle log proof (M1, UX1, UX2 of harden-logging-observability): one real {@code gnomish
  * serve --drain} pass over a real local git project, a real {@link InMemoryTracker} holding one
  * Ready task, and the fake agent binary standing in for the gnome — the whole claim → work →
  * deliver round, with nothing failing anywhere.

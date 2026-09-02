@@ -2,6 +2,8 @@
 
 Status: accepted (2026-08-31, introduced by `harden-logging-observability`)
 
+Implements FR1 of harden-logging-observability.
+
 ## Context
 
 The factory runs unattended: a `serve` daemon claims tasks, drives gnomes

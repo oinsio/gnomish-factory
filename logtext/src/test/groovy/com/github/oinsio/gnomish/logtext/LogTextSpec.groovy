@@ -123,6 +123,22 @@ class LogTextSpec extends Specification {
         LogText.capTail('exactly-ten', 11) == 'exactly-ten'
     }
 
+    // NFR-C1: the cap bounds what reaches the flattening, and every escaped character it keeps
+    // renders wider. Worst case is six characters out per one in — pinned here so the amplification
+    // stays a known bound instead of a surprise in a log file.
+    def "NFR-C1: escaping after the cap widens the line by a bounded factor, never without bound"() {
+        given: 'a hostile text of nothing but the widest escape LogText emits'
+        def payload = PARAGRAPH_SEPARATOR * (LogText.DEFAULT_CAP_CHARS * 10)
+
+        when:
+        def line = LogText.forLog(payload)
+
+        then: 'only the capped tail is escaped, at six characters per separator'
+        line.count('\\u2029') == LogText.DEFAULT_CAP_CHARS
+        line.length() < 7 * LogText.DEFAULT_CAP_CHARS
+        !line.contains('\n')
+    }
+
     def "a caller-chosen bound is honoured"() {
         expect:
         LogText.forLog('abcdefghij', 4).endsWith('ghij')

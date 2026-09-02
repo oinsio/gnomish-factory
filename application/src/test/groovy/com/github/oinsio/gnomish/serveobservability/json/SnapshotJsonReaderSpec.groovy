@@ -179,6 +179,60 @@ class SnapshotJsonReaderSpec extends Specification {
         ]
     }
 
+    // FR4: fromLifecycle maps every wire value back to its LifecycleState — each switch arm,
+    // including "stopped", whose reason is the one lifecycle field that travels on the wire.
+    // SnapshotJsonMapper <-> SnapshotJsonReader is a declared manually-synchronized pair whose
+    // invariant names LifecycleState (.claude/rules/manual-sync-pairs.md), so a constant mapped
+    // on only one side must fail here rather than in production.
+    def "lifecycle state parses each wire value back to its LifecycleState"() {
+        expect:
+        reader.read(mapper.serialize(withLifecycle(lifecycle))).lifecycle() == lifecycle
+
+        where:
+        lifecycle << [
+            new LifecycleState.Running(),
+            new LifecycleState.Draining(),
+            new LifecycleState.Stopping(),
+            new LifecycleState.Stopped('signal')
+        ]
+    }
+
+    // FR4: "stopped" without a reason is a malformed document, not a Stopped with a null reason —
+    // requireReason refuses it, since LifecycleState.Stopped's reason is never blank.
+    def "a stopped lifecycle with no reason is rejected"() {
+        given:
+        def json = mapper.serialize(withLifecycle(new LifecycleState.Stopped('signal')))
+                .replace('"reason" : "signal"', '"reason" : null')
+
+        when:
+        reader.read(json)
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('lifecycle.reason')
+    }
+
+    // FR4: an unrecognized lifecycle wire token fails loudly rather than silently defaulting —
+    // the default arm the class javadoc promises for a future contract version.
+    def "an unknown lifecycle wire token is rejected"() {
+        given:
+        def json = mapper.serialize(SnapshotJsonMapperSpec.referenceSnapshot())
+                .replaceFirst(/"state" : "running"/, '"state" : "hibernating"')
+
+        when:
+        reader.read(json)
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('unknown lifecycle.state: hibernating')
+    }
+
+    private static Snapshot withLifecycle(LifecycleState lifecycle) {
+        def s = SnapshotJsonMapperSpec.referenceSnapshot()
+        return new Snapshot(s.version(), s.writtenAt(), s.intervalSeconds(), s.instance(),
+                lifecycle, s.feed(), s.slots(), s.vitals(), s.tracker())
+    }
+
     private static Snapshot withFeedPhase(FeedPhase phase) {
         def s = SnapshotJsonMapperSpec.referenceSnapshot()
         def f = s.feed()

@@ -8,15 +8,16 @@ paths:
 The one-page checklist for anyone adding or touching a log call. The reasoning,
 the rejected alternatives and the accepted deviations live in
 `docs/adr/0004-logging-policy.md`; this file is what you check the line against.
+Together they implement FR1 of `harden-logging-observability`.
 
 ## Pick the level by the reader's required reaction
 
-| Level | The reader …                                                            | Use for                                                              |
-|-------|-------------------------------------------------------------------------|----------------------------------------------------------------------|
-| ERROR | **must act** — work was lost, or a component cannot continue            | unrecoverable failures, lost work, a daemon dying                    |
-| WARN  | **should look**; a persistent WARN means act                            | degraded results, fallbacks, destructive cross-instance actions      |
-| INFO  | reads it in a post-mortem timeline                                       | lifecycle anchors, state changes, the per-task summary               |
-| DEBUG | reads it only while diagnosing                                          | per-item detail, retries in progress, reconciliation chatter         |
+| Level | The reader …                                                 | Use for                                                         |
+|-------|--------------------------------------------------------------|-----------------------------------------------------------------|
+| ERROR | **must act** — work was lost, or a component cannot continue | unrecoverable failures, lost work, a daemon dying               |
+| WARN  | **should look**; a persistent WARN means act                 | degraded results, fallbacks, destructive cross-instance actions |
+| INFO  | reads it in a post-mortem timeline                           | lifecycle anchors, state changes, the per-task summary          |
+| DEBUG | reads it only while diagnosing                               | per-item detail, retries in progress, reconciliation chatter    |
 
 Not a WARN: a failure a bounded retry recovered (INFO at most, DEBUG per
 attempt); a first-of-two attempts failing; anything emitted once per polled
@@ -77,8 +78,31 @@ log.warn("stage command failed: {}", LogText.forLog(result.stderr()));
 A source-scan gate (`UntrustedLogTextGateSpec`) fails the build when one of the
 recognized untrusted accessors — `stderr()`, `stdout()`, `getOriginalMessage()`,
 `sessionId()`, `model()` — reaches a log call outside a `LogText.*(...)`
-wrapper. The list is what the gate can see, not the whole rule: a change that
-introduces a new untrusted accessor adds it there in the same change.
+wrapper. Both SLF4J shapes are scanned: the classic `log.warn(...)` and the
+fluent `log.atLevel(...)....log(...)`, whose arguments sit past the level call
+and are followed through the builder chain. The accessor list is what the gate
+can see, not the whole rule: a change that introduces a new untrusted accessor
+adds it there in the same change.
+
+### Known limit: untrusted text in exception messages
+
+The gate scans **log call sites**. An exception whose *message* concatenates
+subprocess output escapes it structurally — nothing untrusted appears at the
+log call, yet Logback renders the message when the throwable is logged, so the
+control characters and forged newlines land in the record anyway.
+
+So the obligation is on the throw site, not on the gate: **an exception that
+carries subprocess or in-container output into its message sanitizes it at
+construction.**
+
+```java
+throw new TaskListingFailedException(pattern, result.exitCode(), LogText.forLog(result.stderr()));
+```
+
+Sites predating this rule still concatenate raw `stderr()` (across
+`adapters/git`, `gitobjects`, `sandbox/docker`); they are honest debt, not
+precedent. Bringing them under the rule — and extending the gate to
+exception-constructor arguments so it stops being a limit — is its own change.
 
 Never log a secret **value**; a warning about a secret names the variable only.
 `FindingsSanitizer` is a different control at a different boundary (plugin

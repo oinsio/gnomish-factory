@@ -23,7 +23,9 @@ import org.slf4j.LoggerFactory
  * restores whatever level the logger carried before — leaving the pin behind would make any later
  * spec asserting on this logger's configured level order-dependent.
  *
- * <p>Implements FR11 of harden-logging-observability.
+ * <p>Implements FR11 and NFR-O1 of harden-logging-observability: NFR-O1's "the existing
+ * log-capture idiom" is this class, and every observability spec the change added asserts its
+ * emitted events through it.
  */
 final class LogCaptureSupport {
 

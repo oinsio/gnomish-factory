@@ -6,8 +6,8 @@ import java.util.regex.Pattern
 import spock.lang.Specification
 
 /**
- * FR7 of harden-logging-observability, design D9: every log call site that reports an exception
- * passes it as the trailing throwable argument. Interpolating {@code toString()} or
+ * FR7, M2 of harden-logging-observability, design D9: every log call site that reports an
+ * exception passes it as the trailing throwable argument. Interpolating {@code toString()} or
  * {@code getMessage()} instead amputates the stack and the cause chain — and {@code getMessage()}
  * prints {@code null} for a cause-only throwable — so the site loses exactly the diagnosis it
  * exists to record.
@@ -38,6 +38,12 @@ class ThrowableConventionGateSpec extends Specification {
 
         expect: 'the scan really reached the source tree'
         sources.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
+
+        and: 'and the log calls inside it — a floor on files alone would pass on an empty call set'
+        LogCallSites.productionCalls().size() >= LogCallSites.KNOWN_LOG_CALLS
+
+        and: 'and delimited every one of them — a site the parser drops is a site nobody judges'
+        LogCallSites.unparsedProductionCalls() == []
 
         when: 'each file is scanned for amputated diagnoses, honouring in-place exemptions'
         def violations = sources.collectMany { file ->
@@ -71,6 +77,20 @@ class ThrowableConventionGateSpec extends Specification {
             'e.toString()',
             'String.valueOf(e)'
         ]
+    }
+
+    // D9: the fluent builder form must be scanned too — its arguments sit past the level call.
+    def "a seeded fluent violation is detected"() {
+        given:
+        def code = '''
+            try { work(); } catch (IOException e) {
+                log.atWarn().log("could not read {}: {}", path, e.getMessage());
+            }
+        '''.stripIndent()
+
+        expect:
+        LogCallSites.inSource(code, 'SeededFluent.java')
+                .any { interpolatedExceptions(code, it.text) }
     }
 
     // D9: the correct form is not flagged — a gate that fails the fix is worse than none.

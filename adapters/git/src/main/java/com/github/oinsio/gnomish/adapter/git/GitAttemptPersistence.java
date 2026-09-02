@@ -87,6 +87,14 @@ public final class GitAttemptPersistence implements AttemptPersistence {
      *     previous round (off the task branch, history rewrite, {@code .gnomish-task/} touched)
      * @throws GitPersistFailedException if any step of the commit fails, or if the boundary
      *     diff could not be computed at all (cannot-verify, FR13 of harden-logging-observability)
+     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if the new
+     *     round baseline cannot be resolved after the commit (FR13). This one refusal is raised
+     *     <em>after</em> the durable step, so the best-effort push is skipped and the frozen
+     *     state is "round committed, not pushed" — the pre-existing commit-before-push window
+     *     the same recovery already converges, never a new one. The engine reads it exactly as it
+     *     reads a failed persist (both are unchecked, both abort the run), so keeping the tip
+     *     refusal's own type is what lets the post-mortem name the read that never answered; the
+     *     sandboxed twin {@link EnvironmentAttemptPersistence} refuses in the same position.
      */
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {

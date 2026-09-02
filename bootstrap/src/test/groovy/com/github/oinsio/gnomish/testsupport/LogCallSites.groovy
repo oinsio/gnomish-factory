@@ -20,8 +20,17 @@ class LogCallSites {
     /** A mis-built scanner would make both gates pass over an empty call set. */
     static final int KNOWN_LOG_CALLS = 200
 
-    private static final Pattern LOG_CALL =
-    Pattern.compile('\\b(?:log|logger|LOG|LOGGER)\\.(?:error|warn|info|debug|trace)\\s*\\(')
+    /**
+     * Both SLF4J call shapes. The classic one carries its arguments in the level method's own
+     * parens; the fluent one ({@code log.atLevel(x).log(msg, a, b)}, {@code
+     * log.atInfo().setMessage(...).log()}) carries them further down a builder chain, so a match
+     * on {@code atInfo(} alone would hand the gates an argument list that is always empty — a
+     * silent blind spot rather than a visible one. {@link #inSource} therefore extends a fluent
+     * match through the chain to its terminal {@code .log(...)}, and both gates see one call text
+     * either way.
+     */
+    private static final Pattern LOG_CALL = Pattern.compile(
+    '\\b(?:log|logger|LOG|LOGGER)\\.(?:error|warn|info|debug|trace|at(?:Level|Error|Warn|Info|Debug|Trace))\\s*\\(')
 
     /** One call site: where it is, and the whole call text with comments removed. */
     @Canonical
@@ -42,17 +51,53 @@ class LogCallSites {
 
     /** Every log call in one already comment-stripped source text. */
     static List<LogCall> inSource(String code, String path) {
+        scan(code, path).calls
+    }
+
+    /**
+     * The log calls in every production source whose argument list the parser could not delimit —
+     * an unbalanced literal left by comment stripping, a fluent chain whose {@code .log(...)} is
+     * not in this source. Every gate asserts this is empty: a site the parser drops is a site
+     * neither gate judges, and a scanner that fails open reports the same green as a codebase with
+     * no violations in it.
+     */
+    static List<String> unparsedProductionCalls(Predicate<String> filter = {
+                true
+            }) {
+        RepoSourceTree.productionSources(filter).collectMany { file ->
+            scan(RepoSourceTree.code(file), RepoSourceTree.relative(file)).unparsed
+        }
+    }
+
+    /** One source's scan: the calls whose text was delimited, and the sites where that failed. */
+    @Canonical
+    static class Scan {
+        List<LogCall> calls
+        List<String> unparsed
+    }
+
+    /** Both halves of one already comment-stripped source's scan. */
+    static Scan scan(String code, String path) {
         def calls = []
+        def unparsed = []
         def matcher = LOG_CALL.matcher(code)
         while (matcher.find()) {
+            int line = code.take(matcher.start()).count('\n') + 1
             int close = closingParen(code, matcher.end() - 1)
             if (close < 0) {
+                unparsed << "${path}:${line}".toString()
                 continue
             }
-            calls << new LogCall(path, code.take(matcher.start()).count('\n') + 1,
-                    code.substring(matcher.start(), close + 1))
+            int end = code.substring(matcher.start(), matcher.end()).contains('.at')
+                    ? endOfFluentChain(code, close)
+                    : close
+            if (end < 0) {
+                unparsed << "${path}:${line}".toString()
+                continue
+            }
+            calls << new LogCall(path, line, code.substring(matcher.start(), end + 1))
         }
-        calls
+        new Scan(calls, unparsed)
     }
 
     /**
@@ -77,10 +122,50 @@ class LogCallSites {
     }
 
     /**
+     * Index of the paren closing the fluent chain's terminal {@code .log(...)}, starting from the
+     * paren that closed {@code atLevel(...)}. Consumes {@code .name(...)} segments in order and
+     * stops after the one named {@code log} — which is where SLF4J's builder puts the message and
+     * its arguments. Returns -1 when the chain does not reach a {@code .log(...)} in this source,
+     * so the caller records the site as unparsed rather than reporting a truncated argument list
+     * as complete.
+     */
+    private static int endOfFluentChain(String code, int afterLevel) {
+        int i = afterLevel + 1
+        while (true) {
+            while (i <code.length() && Character.isWhitespace(code.charAt(i))) {
+                i++
+            }
+            if (i >= code.length() || code.charAt(i) != ('.' as char)) {
+                return -1
+            }
+            int nameStart = ++i
+            while (i <code.length() && (Character.isLetterOrDigit(code.charAt(i) as char)
+                    || code.charAt(i) == ('_' as char))) {
+                i++
+            }
+            String name = code.substring(nameStart, i)
+            while (i <code.length() && Character.isWhitespace(code.charAt(i))) {
+                i++
+            }
+            if (i >= code.length() || code.charAt(i) != ('(' as char)) {
+                return -1
+            }
+            int close = closingParen(code, i)
+            if (close < 0) {
+                return -1
+            }
+            if (name == 'log') {
+                return close
+            }
+            i = close + 1
+        }
+    }
+
+    /**
      * Index of the paren closing the one at {@code open}, skipping string and character literals so
      * a message like {@code "still failing ({})"} cannot unbalance the count. Returns -1 when the
-     * source does not close it (a comment-stripping artifact), so the caller skips that site
-     * rather than swallowing the rest of the file.
+     * source does not close it (a comment-stripping artifact), so the caller records that site as
+     * unparsed rather than swallowing the rest of the file — or dropping it silently.
      */
     private static int closingParen(String code, int open) {
         int depth = 0

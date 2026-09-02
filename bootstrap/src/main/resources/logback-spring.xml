@@ -24,7 +24,11 @@
   then system property, then environment variable) so an operator changes them
   for one run with no rebuild (FR10):
     - GNOMISH_LOG_LEVEL — the root level, default INFO. `logging.level.*` from
-      Spring Boot still applies on top of it for finer, per-logger grain.
+      Spring Boot still applies on top of it for finer, per-logger grain. A value
+      Logback does not recognize resolves to DEBUG, not to the INFO default —
+      Level.toLevel's own fallback — so a typo makes the run louder rather than
+      leaving the operator with a level they did not ask for. Pinned by
+      LogbackConfigSpec.
     - GNOMISH_LOG_DIR — the log directory, default `~/.gnomish/logs`. Its
       operational use is test isolation (FR11, M4): the E2E layer spawns this
       very jar as a real process, and that process's own log belongs in the

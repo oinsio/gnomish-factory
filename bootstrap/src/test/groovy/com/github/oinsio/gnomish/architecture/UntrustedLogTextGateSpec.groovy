@@ -41,6 +41,9 @@ class UntrustedLogTextGateSpec extends Specification {
         expect: 'the scan really reached the log call sites'
         LogCallSites.productionCalls().size() >= LogCallSites.KNOWN_LOG_CALLS
 
+        and: 'and delimited every one of them — a site the parser drops is a site nobody judges'
+        LogCallSites.unparsedProductionCalls() == []
+
         when:
         def violations = sources.collectMany { file ->
             def code = RepoSourceTree.code(file)
@@ -73,6 +76,21 @@ class UntrustedLogTextGateSpec extends Specification {
         ]
     }
 
+    // D9: the fluent builder form carries its arguments past the level call, so the gate must
+    //     follow the chain to .log(...) or the shape is a silent blind spot.
+    def "a seeded raw violation in the fluent form is detected: #call"() {
+        expect:
+        LogCallSites.inSource(call, 'SeededFluent.java').any {
+            unwrappedUntrusted(it.text)
+        }
+
+        where:
+        call << [
+            'log.atLevel(levelOf(v)).log("swept {}: {}", v, result.stderr());',
+            'log.atWarn().setMessage("boom").addArgument(result.stdout()).log();'
+        ]
+    }
+
     // D9: the wrapped form is not flagged, including through an intermediate conversion — the
     //     sanitizer anywhere up the enclosing call chain is what the rule asks for.
     def "the wrapped form is not flagged: #call"() {
@@ -85,7 +103,8 @@ class UntrustedLogTextGateSpec extends Specification {
         call << [
             'log.warn("push failed: {}", LogText.forLog(result.stderr()));',
             'log.debug("event {}", LogText.forLog(String.valueOf(started.sessionId())));',
-            'log.warn("excerpt {}", LogText.forLog(e.getOriginalMessage(), CAP));'
+            'log.warn("excerpt {}", LogText.forLog(e.getOriginalMessage(), CAP));',
+            'log.atLevel(levelOf(v)).log("swept {}: {}", v, LogText.forLog(result.stderr()));'
         ]
     }
 

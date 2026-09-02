@@ -146,6 +146,81 @@ class FinishedDeclineSpec extends Specification {
         logs.detach()
     }
 
+    // FR12: the latch's only eviction is a recovery nothing would ever report, so a decliner
+    //     that lives as long as the serve daemon must release a task when it leaves the feed —
+    //     otherwise one entry per finished task ever seen accumulates for the daemon's whole life.
+    def "a task that leaves the feed is released from the latch"() {
+        given:
+        Tracker tracker = [declineFinished: { TaskRef ref, String message -> }] as Tracker
+
+        when: 'a hundred distinct tasks are each declined once and then gone from the next read'
+        (1..100).each { n ->
+            decline.declineObserved(tracker, [task("github:o/r#${n}", true)])
+        }
+        decline.declineObserved(tracker, [])
+
+        then: 'the latch holds none of them'
+        latchedTasks().isEmpty()
+    }
+
+    // FR12: releasing must not re-arm the announcement while the task is still being handed back —
+    //     a latch that forgot mid-streak would write the first-sighting INFO on every poll.
+    def "a task still in the feed keeps its latch across sweeps"() {
+        given:
+        Tracker tracker = [declineFinished: { TaskRef ref, String message -> }] as Tracker
+        def logs = LogCaptureSupport.attach(FinishedDecline)
+
+        when: 'one task stays finished while another comes and goes around it'
+        decline.declineObserved(tracker, [
+            task('github:o/r#1', true),
+            task('github:o/r#2', true)
+        ])
+        clock.advance(Duration.ofMinutes(1))
+        decline.declineObserved(tracker, [task('github:o/r#1', true)])
+
+        then: 'the surviving entry was announced once, and only the departed one was released'
+        logs.list.findAll { it.level == Level.INFO }.size() == 2
+        latchedTasks() == ['github:o/r#1'] as Set
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR12: a decline that stuck on the first write is the ordinary case and says nothing more;
+    //     one the operator was told is "not taking effect" gets the line that retires that report.
+    def "only a decline that was reported as not taking effect announces its clearing"() {
+        given:
+        Tracker tracker = [declineFinished: { TaskRef ref, String message -> }] as Tracker
+        def logs = LogCaptureSupport.attach(FinishedDecline)
+
+        when: 'one task clears immediately; the other is handed back past the quiet period first'
+        decline.declineObserved(tracker, [
+            task('github:o/r#1', true),
+            task('github:o/r#2', true)
+        ])
+        clock.advance(ROLL_UP)
+        decline.declineObserved(tracker, [task('github:o/r#2', true)])
+        decline.declineObserved(tracker, [])
+
+        then: 'only the stubborn one is reported as finally cleared'
+        def cleared = logs.list.findAll {
+            it.formattedMessage.contains('the decline took effect')
+        }
+        cleared.size() == 1
+        cleared[0].formattedMessage.contains('github:o/r#2')
+        cleared[0].formattedMessage.contains('2 declines')
+
+        cleanup:
+        logs.detach()
+    }
+
+    /** The latch's key set, which the suppressor does not expose — read off the decliner's field. */
+    private Set<String> latchedTasks() {
+        def field = FinishedDecline.getDeclaredField('latched')
+        field.setAccessible(true)
+        new HashSet<String>(field.get(decline) as Set<String>)
+    }
+
     // FR3: an empty feed and an all-non-finished feed are both safe no-ops — no decline calls made.
     def "makes no decline calls when nothing observed is finished"() {
         given:

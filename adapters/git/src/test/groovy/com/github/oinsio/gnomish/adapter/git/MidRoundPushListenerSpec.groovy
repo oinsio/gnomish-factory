@@ -1,7 +1,14 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -24,6 +31,8 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
     Path bareRepo
 
     def toolEvent = new AgentProgressEvent.ToolStarted('Bash')
+
+    def suppressor = new RepeatSuppressor(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), Duration.ofMinutes(5))
 
     def setup() {
         repo = initWorkingRepo(tempDir)
@@ -48,7 +57,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR11: no push when HEAD has not moved since construction"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1')
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
 
         when:
         listener.onProgress(toolEvent)
@@ -59,7 +68,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR11: a gnome commit mid-round triggers a best-effort push on the next event"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1')
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
         gnomeCommit()
 
         when:
@@ -72,7 +81,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR11: a second event with an unchanged tip does not push again"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1')
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
         gnomeCommit()
         listener.onProgress(toolEvent)
         def firstPushedHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
@@ -88,7 +97,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "NFR-S1: push is skipped when HEAD moved but is off the expected branch"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1')
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
         runner.run(repo, 'checkout', '-q', '-b', 'not-the-task-branch')
         gnomeCommit()
 
@@ -102,7 +111,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "NFR-S1: push is skipped when the observed baseline is no longer an ancestor of HEAD"() {
         given: 'an orphan commit replaces branch history after construction, stranding the baseline tip'
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1')
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
         runner.run(repo, 'checkout', '-q', '--orphan', 'rewritten-history')
         new File(repo.toFile(), 'rewritten.txt').text = 'rewritten history'
         runner.run(repo, 'add', 'rewritten.txt')
@@ -121,7 +130,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
     def "FR11: no remote configured means onProgress never throws even after a tip movement"() {
         given:
         runner.run(repo, 'remote', 'remove', 'origin')
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1')
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
         gnomeCommit()
 
         when:
@@ -129,5 +138,87 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
         then:
         noExceptionThrown()
+    }
+
+    def "FR13: an unresolvable HEAD at construction is an unknown baseline, not a thrown failure"() {
+        given: 'a worktree whose HEAD points at an unborn branch, so rev-parse HEAD cannot answer'
+        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+
+        when:
+        new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+
+        then:
+        noExceptionThrown()
+    }
+
+    def "FR13: an unresolvable HEAD mid-round skips the observation instead of throwing"() {
+        given:
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+
+        when: 'HEAD stops resolving between two progress events'
+        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+        listener.onProgress(toolEvent)
+
+        then: 'the listener contract holds and nothing was pushed on the strength of a blank read'
+        noExceptionThrown()
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').exitCode() != 0
+    }
+
+    def "FR13: an unknown baseline is adopted by the first resolving event, and only later movement pushes"() {
+        given: 'the round starts with no resolvable HEAD, so the listener has no ancestry baseline'
+        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+
+        when: 'HEAD becomes resolvable again on the task branch and an event adopts it'
+        runner.run(repo, 'checkout', '-q', '-f', 'gnomish/PROJ-1')
+        listener.onProgress(toolEvent)
+
+        then: 'the adoption alone pushes nothing - there was no observed tip to prove ancestry from'
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').exitCode() != 0
+
+        when: 'the gnome then commits and a further event notices the movement'
+        gnomeCommit()
+        listener.onProgress(toolEvent)
+
+        then: 'the movement away from the adopted baseline is pushed'
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim() == currentHead()
+    }
+
+    def "FR4: a tip resolution that works again closes the streak with one INFO"() {
+        given:
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.INFO)
+
+        when: 'HEAD stops resolving, then resolves again on a later event'
+        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+        listener.onProgress(toolEvent)
+        runner.run(repo, 'checkout', '-q', '-f', 'gnomish/PROJ-1')
+        listener.onProgress(toolEvent)
+
+        then: 'the last word on the subject is the recovery, not the failure'
+        def recovery = logs.list.find { it.level == Level.INFO }
+        recovery != null
+        recovery.formattedMessage.contains('mid-round tip resolution recovered')
+        recovery.formattedMessage.contains('taskId=PROJ-1')
+    }
+
+    def "FR4, FR13: a failing tip resolution is one WARN, then counted rather than repeated"() {
+        given:
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
+
+        when: 'HEAD stays unresolvable across a burst of progress events'
+        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+        5.times { listener.onProgress(toolEvent) }
+
+        then: 'the first occurrence warns and the rest are DEBUG repeats'
+        logs.list.findAll { it.level == Level.WARN }.size() == 1
+        logs.list.findAll { it.level == Level.DEBUG }.size() == 4
+
+        and: 'the WARN names the task, the branch and git\'s own evidence'
+        def warning = logs.list.find { it.level == Level.WARN }.formattedMessage
+        warning.contains('taskId=PROJ-1')
+        warning.contains('branch=gnomish/PROJ-1')
+        warning.contains('git rev-parse')
     }
 }

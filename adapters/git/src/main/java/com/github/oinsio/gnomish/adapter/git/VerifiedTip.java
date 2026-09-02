@@ -57,6 +57,19 @@ final class VerifiedTip {
         return read(result).orElseThrow(() -> unavailable(revision, command, result));
     }
 
+    /**
+     * The git evidence a skipped observation carries: how the read ended, and what it said. The
+     * non-throwing counterpart of {@link #unavailable}'s message, for the read-only polls that log
+     * a failed resolution instead of throwing it.
+     *
+     * @param result the {@code rev-parse} invocation's outcome
+     * @return a one-line reason naming the termination, the exit status and git's own stderr
+     */
+    static String failureReason(GitCommandResult result) {
+        return "git rev-parse " + result.termination() + ", exit " + result.exitCode() + ": "
+                + result.stderr().trim();
+    }
+
     private static BranchTipUnavailableException unavailable(String revision, String command, GitCommandResult result) {
         if (result.termination() != Termination.EXITED) {
             return new BranchTipUnavailableException(

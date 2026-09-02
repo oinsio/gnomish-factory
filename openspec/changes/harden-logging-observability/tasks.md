@@ -144,7 +144,8 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       repo rename), per-tool-call INFO → DEBUG, self-check per-probe INFO →
       DEBUG with enriched aggregate, reconciliation/convergence chatter →
       DEBUG (incl. `Reaper` sweep-page-filled and its convergence-under-
-      contention lines — the stale-claim WARN stays), per-poll finished-task
+      contention lines — its three WARNs stay: sweep-listing failure,
+      foreign classification, per-task repair failure), per-poll finished-task
       decline latched (first INFO, repeats DEBUG), findings-file habit WARN →
       DEBUG, duplicate-per-path collapses
       (origin reconciliation, remote delivery, first push, dispose vs verdict);
@@ -171,7 +172,10 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       consequence named), claim-comment delete failure WARN, stale-claim
       removal + index repair INFO with converge-abort DEBUG, malformed
       factory-authored marker WARN; verify: specs per site.
-- [x] 6.4 Git adapter degradations: task-branch listing failure WARN, usage
+- [x] 6.4 Git adapter degradations: task-branch listing failure (DEBUG at the
+      site plus the command failure one line down — the decision is reported to
+      the operator by `TaskBranchLister`'s throw, so a WARN here would be one
+      fault logged twice), usage
       walker failures WARN/DEBUG, snapshot-tip and claim-epoch parse
       anomalies, terminal-commit idempotent skips DEBUG, retry-loop DEBUG in
       `GitInfrastructureRetry`, fetch-failure DEBUG before NotFound
@@ -236,7 +240,8 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       introduce the cannot-verify outcome routed to the round's
       infrastructure-failure path; mirror the three-outcome rule onto
       `HarvestedBoundaryCheck`, place `Kept in sync with` markers at both
-      ends, and update the registry row's invariant; verify: specs — failed
+      ends, and remove the registry row (per the rule: both ends declared with a
+      resolvable `{@link}`); verify: specs — failed
       diff aborts as infrastructure with no attempt burned and no violation
       attributed; seeded tamper still violates; both media covered (M6).
 - [x] 9.2 `EnvironmentAttemptPersistence` + `EnvironmentRoundSnapshot`:
@@ -245,10 +250,11 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       obeys the same rule (mirror obligation); verify: specs — no record with
       a blank tip is ever created; failed persist follows the existing
       infrastructure handling (M6).
-- [x] 9.3 `MidRoundHarvestListener`: a failed tip resolution skips the
-      observation (never reported as tip moved/lost), logging via the
-      suppressor path from 5.1; verify: spec — failed resolution changes no
-      harvest decision.
+- [x] 9.3 `MidRoundHarvestListener` and the host twin `MidRoundPushListener`:
+      a failed tip resolution skips the observation (never reported as tip
+      moved/lost), logging via the suppressor path from 5.1; verify: specs —
+      a failed resolution changes no harvest/push decision and never escapes
+      the listener contract.
 - [x] 9.4 `TaskBranchLister`: enumeration failure fails `gnomish status` list
       mode with the git evidence (task-inspection delta scenario); per-branch
       degradation unchanged; verify: spec — non-zero `for-each-ref` yields a
@@ -300,34 +306,38 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
 
 ### FR5 coverage table (M3)
 
-Every item of FR5's silent-degradation enumeration, the emitter that now logs
-it, and the spec that asserts the line. Regenerate the right-hand column with
+This table is the artifact M3 of harden-logging-observability is verified
+against: every item of FR5's silent-degradation enumeration, the emitter that
+now logs it, and the spec that asserts the line. Regenerate the right-hand column with
 `grep -rln "LogCaptureSupport" --include='*.groovy' .`.
 
-| FR5 enumeration item                                    | Emitter                                              | Spec                                                                     |
-|---------------------------------------------------------|------------------------------------------------------|--------------------------------------------------------------------------|
-| GitHub API retry / backoff / exhaustion                 | `github/.../GithubHttpClient` (Resilience4j events)  | `GithubRetryVisibilitySpec`                                              |
-| Every judge `CannotVerify` exit                          | `agent/.../JudgeRoundExecution`                      | `JudgeCannotVerifyLoggingSpec`                                          |
-| Egress refusals in guarded HTTP checks                  | `adapter/check/http/...`, `sandbox/.../EgressGuard`  | `HttpCheckRefusalLoggingSpec`, `EgressGuardSpec`                        |
-| Stale-claim removal                                      | `github/.../GithubStaleClaimRemoval`                 | `GithubStaleClaimRemovalSpec`                                           |
-| Index repair                                             | `github/.../GithubIndexRepair`                       | `GithubIndexRepairSpec`                                                 |
-| Abort-facts fallback to `none()` (dropped marker)        | `github/.../GithubMarker#warnDropped`                | `GithubMarkerSpec`                                                      |
-| Claim-comment delete failure                             | `github/.../GithubClaimLease`                        | `GithubClaimLeaseSpec`                                                  |
-| Container create / reattach / dispose outcomes           | `sandbox/.../ContainerTaskExecutionEnvironment`      | `ContainerTaskExecutionEnvironmentUnitSpec`                             |
-| Per-step dispose failure with environment key            | `sandbox/.../ContainerEnvironmentDisposal`           | `ContainerEnvironmentDisposalSpec` ("a swallowed dispose step names …")  |
-| Git lifecycle commits                                    | `git/.../GitTaskRepository`, `TaskLifecycleCommitWriter` | `GitTaskRepositorySpec`, `GitObjectsTaskRepositorySpec`             |
-| Worktree removal failures                                | `git/.../TaskWorktreeCleanup`, `serve/WorktreeJanitor` | `TaskWorktreeCleanupSpec`, `WorktreeJanitorSpec`                       |
-| Dashboard ledger/snapshot degradations, missing vs malformed | `dashboard/SnapshotReader`, `DashboardBoardCache` | `SnapshotReaderSpec` (missing → DEBUG, malformed → WARN), `DashboardBoardCacheSpec` |
-| Empty token-usage extraction                             | `agent/.../TokenUsageMapper`                         | `TokenUsageMapperSpec`                                                  |
-| Local resume-branch recreation from the origin tracking ref | `git/.../ContainerResumeBranch`                   | `ContainerResumeBranchSpec`                                             |
-| Env-file secret resolution warnings naming the variable  | `adapter/secrets/EnvFileSecretsProvider`             | `EnvFileSecretsProviderSpec`                                            |
+| FR5 enumeration item                                         | Emitter                                                                                          | Spec                                                                                                                                                             |
+|--------------------------------------------------------------|--------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| GitHub API retry / backoff / exhaustion                      | `github/.../GithubHttpClient` (Resilience4j events)                                              | `GithubRetryVisibilitySpec`                                                                                                                                      |
+| Every judge `CannotVerify` exit                              | `agent/.../JudgeRoundExecution`                                                                  | `JudgeCannotVerifyLoggingSpec`                                                                                                                                   |
+| Egress refusals in guarded HTTP checks                       | `adapter/check/http/...`, `sandbox/.../EgressGuard`                                              | `HttpCheckRefusalLoggingSpec`, `EgressGuardSpec`                                                                                                                 |
+| Stale-claim removal                                          | `github/.../GithubStaleClaimRemoval`                                                             | `GithubStaleClaimRemovalSpec`                                                                                                                                    |
+| Index repair                                                 | `github/.../GithubIndexRepair`                                                                   | `GithubIndexRepairSpec`                                                                                                                                          |
+| Abort-facts fallback to `none()` (dropped marker)            | `github/.../GithubMarker#warnDropped`                                                            | `GithubMarkerSpec`                                                                                                                                               |
+| Claim-comment delete failure                                 | `github/.../GithubClaimLease`                                                                    | `GithubClaimLeaseSpec`                                                                                                                                           |
+| Container create / reattach / dispose outcomes               | `sandbox/.../ContainerMaterializer` (create, reattach), `ContainerEnvironmentDisposal` (dispose) | `ContainerTaskExecutionEnvironmentUnitSpec`                                                                                                                      |
+| Per-step dispose failure with environment key                | `sandbox/.../ContainerEnvironmentDisposal`                                                       | `ContainerEnvironmentDisposalSpec` ("a swallowed dispose step names …")                                                                                          |
+| Git lifecycle commits                                        | `git/.../GitTaskRepository`, `TaskLifecycleCommitWriter`                                         | `GitTaskRepositorySpec`, `GitObjectsTaskRepositorySpec`                                                                                                          |
+| Worktree removal failures                                    | `git/.../TaskWorktreeCleanup`, `serve/WorktreeJanitor`                                           | `TaskWorktreeCleanupSpec`; `WorktreeJanitorSpec` covers the disposal decision's `taskId` scope, **not** the janitor's own scan/sanitize WARNs — see *Known gaps* |
+| Dashboard ledger/snapshot degradations, missing vs malformed | `dashboard/SnapshotReader`, `DashboardBoardCache`                                                | `SnapshotReaderSpec` (missing → DEBUG, malformed → WARN), `DashboardBoardCacheSpec`                                                                              |
+| Empty token-usage extraction                                 | `agent/.../TokenUsageMapper`                                                                     | `TokenUsageMapperSpec`                                                                                                                                           |
+| Local resume-branch recreation from the origin tracking ref  | `git/.../ContainerResumeBranch`                                                                  | `ContainerResumeBranchSpec`                                                                                                                                      |
+| Env-file secret resolution warnings naming the variable      | `adapter/secrets/EnvFileSecretsProvider`                                                         | `EnvFileSecretsProviderSpec`                                                                                                                                     |
 
 ### Sync-pair closure (D8)
 
-`grep -rn "Kept in sync with"` over production sources enumerates six declared
+`grep -rn "Kept in sync with"` over production sources enumerates eight declared
 pairs after this change: the two boundary checks, the two salvages, the two
 task-lifecycle commit writers, the two summary assemblers, the two sanitizers,
-and (test scope) the two stalling git fixtures.
+the two mid-round poll listeners, the two terminal-commit writers
+(`CleanupCommit` ↔ `GitObjectsTerminalCommits`), and the two daemon ticks
+(`SandboxLifecycleTick` ↔ `WorktreeJanitor`) — plus, in test scope, the two
+stalling git fixtures.
 
 Against D8's table, row by row:
 
@@ -355,6 +365,20 @@ Against D8's table, row by row:
   per the rule once both markers landed, since both are in `:application` and
   name each other with a resolvable `{@link}`. `SummaryAssemblerPairEquivalenceSpec`
   is the executable half.
+- **`MidRoundHarvestListener` ↔ `MidRoundPushListener`** — mirrored by task 9.3:
+  both resolve the tip through `VerifiedTip` and skip the observation on a failed
+  resolution, both report it through the same `MidRoundPollLog` suppressor path.
+  Markers at both ends; no registry row (neither end predated this change's
+  declaration).
+- **`CleanupCommit` ↔ `GitObjectsTerminalCommits#cleanUp`** — mirrored by task
+  4.6: both media log the FR2 anchor line for the terminal cleanup commit, in the
+  same shape used for every other lifecycle transition. Markers added at both ends
+  by this change; no registry row.
+- **`SandboxLifecycleTick` ↔ `WorktreeJanitor`** — a pre-existing undeclared pair
+  this change had to touch on both ends (task 2.5: both daemon loops gained
+  `DaemonComponent` framing, so the `component` key lands on both or neither), so
+  it was declared. The invariant the markers name is the shared
+  immediate-then-cadence loop shape. Markers added at both ends; no registry row.
 - **New: sanitizers** — markers at both ends; the row stays in the registry's
   *no shared classpath* section, which is the only navigational index the pair
   can have. `SanitizerPairEquivalenceSpec` feeds one adversarial corpus to both.
@@ -399,3 +423,31 @@ a typo:
 
 M4 re-verified after the green run: nothing under `~/.gnomish/logs/` was written
 during the build.
+
+### Known gaps and debt carried out of this change
+
+Recorded here so the archive states them rather than leaving them to be
+rediscovered. None blocks the change; each is a follow-up, not a defect.
+
+- **Eleven production files now sit over the 200-line hard cap
+  (`process-invariants.md`).** `TakeSlotRunner` was already over it and grew by
+  73 lines here, so it was the one worth splitting now, and was: its
+  summary/crash logging cluster moved to `SlotOutcomeLog`, which also gave that
+  cluster a same-module unit spec (`SlotOutcomeLogSpec`) instead of only
+  :bootstrap coverage. Ten more crossed the cap in this change, by +1…+32 lines
+  each, and are debt: `GithubClaimLease` (231), `TakeDispatcher` (227),
+  `ShellCommandCheckRunner` (219), `GithubMarker` (216),
+  `GithubStaleClaimRemoval` (213), `SlotLedger` (208), `WorktreeJanitor` (206),
+  `ServeShutdownWiring` (202), `FeedAutomaton` (202), `StandingReaper` (201).
+  Each grew by the degrade-path logging this change exists to add, so no
+  responsibility boundary opened up with the growth — which is precisely the
+  condition under which `process-invariants.md` says not to split. Splitting
+  them needs its own change, driven by responsibilities rather than by the count.
+- **`WorktreeJanitor`'s own scan-failure and held-ref-sanitize WARNs have no
+  spec.** `WorktreeJanitorSpec` asserts the `taskId` scope around the disposal
+  decision, not those two lines; the FR5 table above is corrected to say so.
+- **`FindingsSanitizer`'s ANSI pattern was edited.** Task 1.5 promised the
+  module's production code untouched. The edit — `\\]` → `]` inside an
+  alternation — is a semantic no-op (`]` outside a character class needs no
+  escape) and changes neither behavior nor the japicmp baseline. Recorded
+  because the promise was written, not because the character matters.

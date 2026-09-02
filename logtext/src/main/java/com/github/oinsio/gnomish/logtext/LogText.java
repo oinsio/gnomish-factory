@@ -21,7 +21,11 @@ import java.util.regex.Pattern;
  * </ol>
  *
  * <p>Cap before flatten deliberately: the truncation marker is written with a newline in it, the
- * same form {@link #capTail}'s twin uses, and flattening last neutralizes that newline too.
+ * same form {@link #capTail}'s twin uses, and flattening last neutralizes that newline too. The
+ * cap therefore bounds the <em>input</em> to the flattening, not the output: a kept character that
+ * renders as an escape grows, so a capped text of nothing but {@code U+2028} leaves as six
+ * characters per one — the worst case, and still a bound (about 12 KB for the default cap) rather
+ * than the unbounded flood the cap exists to stop.
  *
  * <p>Kept in sync with {@code com.github.oinsio.gnomish.app.findings.FindingsSanitizer}: both must
  * strip the same ANSI/control vocabulary and cap with the same tail semantics. Only that subset —

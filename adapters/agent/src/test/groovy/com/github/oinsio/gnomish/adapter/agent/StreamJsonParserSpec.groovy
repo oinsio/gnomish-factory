@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Instant
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
@@ -370,37 +368,11 @@ class StreamJsonParserSpec extends Specification {
 
     /** The raw-event DEBUG is written by the parser itself, not by the mapper {@link #captureAll} taps. */
     private static List<ILoggingEvent> captureRaw(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(StreamJsonParser)
-        def previousLevel = logbackLogger.level
-        logbackLogger.level = Level.DEBUG
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-            logbackLogger.level = previousLevel
-        }
-        return appender.list
+        captureFrom(StreamJsonParser, emit)
     }
 
     private static List<ILoggingEvent> captureAll(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(StreamJsonEventMapper)
-        def previousLevel = logbackLogger.level
-        logbackLogger.level = Level.DEBUG
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-            logbackLogger.level = previousLevel
-        }
-        return appender.list
+        captureFrom(StreamJsonEventMapper, emit)
     }
 
     // FR4: an empty stream yields no events
@@ -429,22 +401,23 @@ class StreamJsonParserSpec extends Specification {
     }
 
     private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(StreamJsonParser)
-        def previousLevel = logbackLogger.level
-        logbackLogger.level = Level.DEBUG
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        captureRaw(emit).findAll {
+            it.formattedMessage.contains('raw agent event')
+        }
+    }
+
+    /**
+     * FR11 of harden-logging-observability: the project's one log-capture helper, pinned at DEBUG
+     * because every line this spec asserts on is a DEBUG detail line.
+     */
+    private static List<ILoggingEvent> captureFrom(Class<?> emitter, Closure<?> emit) {
+        def capture = LogCaptureSupport.attach(emitter, Level.DEBUG)
         try {
             emit()
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-            logbackLogger.level = previousLevel
+            capture.detach()
         }
-        return appender.list.findAll {
-            it.formattedMessage.contains('raw agent event')
-        }
+        return List.copyOf(capture.list)
     }
 
     private static BufferedReader readerOf(String... lines) {

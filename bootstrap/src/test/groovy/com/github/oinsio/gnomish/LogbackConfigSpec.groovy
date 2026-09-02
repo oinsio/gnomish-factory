@@ -204,6 +204,13 @@ class LogbackConfigSpec extends Specification {
         null | Level.INFO
         'DEBUG' | Level.DEBUG
         'WARN' | Level.WARN
+        // FR10, pinned deliberately: Logback's own Level.toLevel fallback is DEBUG, so a typo in
+        // the override does not silently keep INFO — it makes the run louder, in the direction an
+        // operator who set the variable at all was reaching for. Asserted so the day the fallback
+        // is judged wrong (a mistyped variable quietly flooding the file), the change to a
+        // fail-loud or keep-INFO behavior is a red spec rather than an unnoticed shift.
+        'verbose' | Level.DEBUG
+        '' | Level.DEBUG
     }
 
     /**
