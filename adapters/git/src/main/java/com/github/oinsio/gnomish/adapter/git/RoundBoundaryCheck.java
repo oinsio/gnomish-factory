@@ -33,7 +33,9 @@ import java.nio.file.Path;
  * <p>The branch and ancestry checks are also exposed as non-throwing boolean queries ({@link
  * #isOnExpectedBranch()}, {@link #isAncestor(String)}) so {@link BestEffortPush} (NFR-S1) can
  * reuse the exact same git invocations as a skip-with-WARN push precondition, instead of
- * duplicating them.
+ * duplicating them. The tip read is exposed the same way through {@link #readHead()}: {@link
+ * #currentHead()} is the durable-baseline reading that refuses on a failed resolution, {@link
+ * #readHead()} is the raw result the read-only mid-round poll classifies for itself (FR13).
  *
  * <p>Implements FR12, NFR-S1 of add-git-workflow; FR13 of harden-logging-observability.
  */
@@ -82,7 +84,17 @@ final class RoundBoundaryCheck {
      *     cannot be resolved
      */
     String currentHead() {
-        return VerifiedTip.required("HEAD", "rev-parse", runner.run(worktreeRoot, "rev-parse", "HEAD"));
+        return VerifiedTip.required("HEAD", "rev-parse", readHead());
+    }
+
+    /**
+     * The raw {@code rev-parse HEAD} invocation behind {@link #currentHead()}, for the read-only
+     * poll that must not throw on a failed resolution ({@link MidRoundPushListener}): it classifies
+     * the outcome through {@link VerifiedTip#read} and skips the observation instead, so the same
+     * git command serves both the durable baseline and the poll without either duplicating it.
+     */
+    GitCommandResult readHead() {
+        return runner.run(worktreeRoot, "rev-parse", "HEAD");
     }
 
     /**

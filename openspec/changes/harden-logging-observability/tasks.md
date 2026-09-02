@@ -302,6 +302,89 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
       call sites), and M4 re-verified (no operator-log pollution). See
       *What the full check surfaced* at the end of this file.
 
+## 11. Operator-event catalog (FR14, D14)
+
+- [ ] 11.1 Create `logtext.OperatorEvent`: one constant per production
+      WARN/ERROR call site (125 at the September 2026 audit), stable `[GFnnn]`
+      codes, an accessor rendering the message head; class javadoc states the
+      contract (never reuse, additive-only, operator plane only — no INFO/DEBUG
+      codes); verify: catalog spec pins code uniqueness and format.
+- [ ] 11.2 Retag every production WARN/ERROR call site with its catalog
+      constant — mechanical message-head prefix, no level or wording changes;
+      the four ADR-exempt `domain` emitters take the literal `[GFnnn]` head
+      instead of a `:logtext` edge; verify: existing log-asserting specs stay
+      green after adjusting for the head (contains-style asserts need no edit).
+- [ ] 11.3 Round-trip spec pinning the `domain` literal heads to their catalog
+      entries (the wire-vocabulary spec shape from `.claude/rules/testing.md`);
+      verify: removing either side goes red.
+- [ ] 11.4 Glossary entries *operator event* and *log contract*; ADR 0004
+      amendment: the code-not-prose contract, the grep-from-column-0 migration
+      note, and the deliberately-deferred-no-longer status of the runtime gate;
+      `.claude/rules/logging.md` checklist gains items 7 (new WARN/ERROR takes
+      the next free code) and 8 (and a pinning spec); verify: docs cross-read.
+
+## 12. Pin the 53 dark lines (FR15, D17 — ordered by failure class)
+
+Each task: specs via `LogCaptureSupport` asserting code + level + attribution
+key; the definitive per-line map is in *Verification notes → Unpinned-line
+map* below.
+
+- [ ] 12.1 Ledger writers (11 lines, worst class — durable-plane loss with no
+      trace): `LifecycleLedgerWriter:62`, `RunSummaryLedgerWriter:62`,
+      `SweepLedgerWriter:85`, `TaskOutcomeLedgerWriter:68,:79`,
+      `LedgerRetentionSweeper:80,:95`, `SnapshotWriteCycle:72,:87`,
+      `SnapshotWriter:138`, `DashboardWatchLoop:88`.
+- [ ] 12.2 Abort/quarantine protocol (7 ERROR/WARN about lost work):
+      `AbortHandler:89,:124,:138`, `TakeQuarantinePark:59,:70`,
+      `FinishEffect:75,:83`, `GuardedPark:137,:145`.
+- [ ] 12.3 Daemon tick family (persistent-WARN-means-act):
+      `Reaper:106`, `WorktreeJanitor:109,:127,:170`, `SandboxLifecycleTick:74`,
+      `InstanceHeartbeat:191,:202,:239`, `HeartbeatBeater:35`,
+      `StandingReaper:145`, `DirtyNotifier:48`, `FeedOutageRetry:74`.
+- [ ] 12.4 Remaining application lines: `OrderedExit:133`,
+      `RunExceptionReporting:54`, `TakeBatch:79`, `FinishedDecline:99`,
+      `DecisionAck:133`, `RevocationCheckingAttemptPersistence:210`.
+- [ ] 12.5 Adapters: `ExecutorRoundExecution:123,:141,:146`,
+      `AgentProgressEmitter:93`, `CompositeAgentProgressListener:55`,
+      `FindingsFileReader:74,:83,:93`, `PinCheckedExternalCheckClient:98`,
+      `ReplicaPairReconciler:136`, `MidRoundPollLog:84` (the dark roll-up
+      edge — drive the streak past the threshold in both listener specs).
+- [ ] 12.6 Sandbox: `EgressGuard:98`, `GuardDenialReads:92,:96`,
+      `HostChannelFiles:72`.
+- [ ] 12.7 Drop the *Known gaps* rows this section closes (janitor WARNs) and
+      re-run the coverage sweep to confirm 0 unpinned; verify: static gate
+      (13.x) green with zero exemptions for these.
+
+## 13. Static log-contract gate (FR16, D15)
+
+- [ ] 13.1 `LogContractGateSpec` in `:bootstrap` architecture, on
+      `LogCallSites`/`RepoSourceTree`: every WARN/ERROR site coded; every code
+      used by exactly one site; every code present in ≥1 test source; in-place
+      exemption `log-contract-exempt: <reason>`; verify: seeded violations
+      (missing code, duplicate code, unreferenced code) each fail.
+- [ ] 13.2 Wire the scan floors (`KNOWN_*` counters) so an empty scan cannot
+      pass; verify: same guard pattern as `ThrowableConventionGateSpec`.
+
+## 14. Runtime log-expectation gate (FR17, D16)
+
+- [ ] 14.1 Global Spock extension in `:test-fixtures`: per-feature root-level
+      WARN+ capture over `com.github.oinsio.gnomish.*`; events observed by an
+      attached `LogCaptureSupport` count as expected; per-spec allowance
+      annotation with a mandatory reason for deliberate non-pinned traversal;
+      verify: extension spec — unexpected WARN fails, captured WARN passes,
+      allowance passes with reason.
+- [ ] 14.2 Land in observing mode; burn down every offender the report names
+      (jointly with section 12); verify: observing report empty on full check.
+- [ ] 14.3 Flip to enforcing (M8); verify: full `./gradlew check` green in
+      enforcing mode; a seeded unexpected WARN in a scratch spec goes red.
+
+## 15. Closure
+
+- [ ] 15.1 M7 sweep: rerun the coverage audit; 125/125 coded and pinned or
+      gate-exempted with reasons; verify: grep table appended below.
+- [ ] 15.2 Full `./gradlew check` green including both gates and PIT; M4
+      re-verified.
+
 ## Verification notes
 
 ### FR5 coverage table (M3)
@@ -424,6 +507,27 @@ a typo:
 M4 re-verified after the green run: nothing under `~/.gnomish/logs/` was written
 during the build.
 
+### Unpinned-line map (FR15 baseline, September 2026 audit)
+
+The definitive 53-row map: every production WARN/ERROR line no spec asserted
+at audit time, grouped as the section-12 tasks burn them down. Level is ERROR
+where marked, else WARN. Sources: two module-by-module audits over all
+`src/main/java` trees, cross-checked against every `src/test/groovy` tree
+(assertion-verified, not text-coincidence).
+
+| Cluster | Lines |
+|---|---|
+| 12.1 writers | `serveobservability/writer/` — LifecycleLedgerWriter:62 (E), RunSummaryLedgerWriter:62 (E), SweepLedgerWriter:85 (E), TaskOutcomeLedgerWriter:68, :79 (E), LedgerRetentionSweeper:80, :95, SnapshotWriteCycle:72, :87, SnapshotWriter:138; dashboard/DashboardWatchLoop:88 |
+| 12.2 abort | app/take/ — AbortHandler:89 (E), :124 (E), :138 (E), TakeQuarantinePark:59 (E), :70 (E), FinishEffect:75, :83, GuardedPark:137, :145 |
+| 12.3 daemons | app/lease/ — Reaper:106, InstanceHeartbeat:191, :202, :239, HeartbeatBeater:35, StandingReaper:145; app/serve/ — WorktreeJanitor:109, :127, :170, SandboxLifecycleTick:74, DirtyNotifier:48, FeedOutageRetry:74 |
+| 12.4 app misc | app/ — OrderedExit:133, RunExceptionReporting:54, TakeBatch:79; app/take/ — FinishedDecline:99, DecisionAck:133, RevocationCheckingAttemptPersistence:210 |
+| 12.5 adapters | adapter/agent/ — ExecutorRoundExecution:123, :141, :146, AgentProgressEmitter:93, CompositeAgentProgressListener:55; adapter/check/ — FindingsFileReader:74, :83, :93, PinCheckedExternalCheckClient:98; adapter/git/ — ReplicaPairReconciler:136, MidRoundPollLog:84 (roll-up edge) |
+| 12.6 sandbox | sandbox/environment/ — EgressGuard:98, GuardDenialReads:92, :96, HostChannelFiles:72 |
+
+Covered at audit time: 72/125 (domain 4/4; adapters/git 24/26; adapters/github
+4/4; the FR5-table lines 100%). The audit's SAFE half is deliberately not
+restated here — the gate (13.x) supersedes any static list once it lands.
+
 ### Known gaps and debt carried out of this change
 
 Recorded here so the archive states them rather than leaving them to be
@@ -446,6 +550,8 @@ rediscovered. None blocks the change; each is a follow-up, not a defect.
 - **`WorktreeJanitor`'s own scan-failure and held-ref-sanitize WARNs have no
   spec.** `WorktreeJanitorSpec` asserts the `taskId` scope around the disposal
   decision, not those two lines; the FR5 table above is corrected to say so.
+  *Superseded by section 12.3* — the September 2026 log-contract extension
+  (FR14–FR17) closes this row along with the 50 others the full audit found.
 - **`FindingsSanitizer`'s ANSI pattern was edited.** Task 1.5 promised the
   module's production code untouched. The edit — `\\]` → `]` inside an
   alternation — is a semantic no-op (`]` outside a character class needs no

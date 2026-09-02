@@ -85,6 +85,10 @@ import spock.lang.Timeout
  * and {@link FeedAutomaton} are both final production classes with no mocking support in this
  * project (no mockito-inline on the classpath) — this spec builds real instances (same pattern as
  * {@code TakeSlotRunnerSpec}) rather than mocking them.
+ *
+ * <p>Also carries UX4, M5 of harden-logging-observability: the signal-mid-drain features assert
+ * that Ctrl+C / SIGTERM leaves a log naming what was in flight, how it stopped, and the drain
+ * result — with no stack traces for shutdown-caused deaths.
  */
 // Bound every feature: these start a real SnapshotWriter thread on a 30s interval, so a wake/stop
 // mutant that drops the immediate wake would otherwise leave a shutdown test blocked on the worker

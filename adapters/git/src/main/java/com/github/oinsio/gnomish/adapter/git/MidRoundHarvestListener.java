@@ -38,8 +38,8 @@ import org.slf4j.LoggerFactory;
  * <p>A poll that keeps failing would otherwise cost one WARN per progress event for the whole
  * round, so failures report to a {@link RepeatSuppressor} through {@link MidRoundPollLog}, which
  * logs only the edges (FR4 of harden-logging-observability). The host-mode twin of this listener,
- * {@link MidRoundPushListener}, has no such loop — it observes the worktree directly and logs
- * nothing per event — so the round-environment-source pair needs no mirrored change here.
+ * {@link MidRoundPushListener}, polls once per progress event too, and suppresses its own tip
+ * subject the same way.
  *
  * <p>An observation is only ever a fact when git said so (FR13): a tip resolution that fails or
  * prints no ref <b>skips the observation</b> — the tip is reported neither moved nor lost, and no
@@ -50,6 +50,12 @@ import org.slf4j.LoggerFactory;
  * round's {@code execute()} and discarded after, mirroring {@link
  * MidRoundPushListener}. The tip baseline starts at the factory clone's branch
  * tip at construction.
+ *
+ * <p>Kept in sync with {@link MidRoundPushListener}: both must poll the tip once per progress
+ * event through {@link VerifiedTip} (a failed resolution skips the observation, never reduces to
+ * a blank), report the failure streak edge-only through {@link MidRoundPollLog}, live one
+ * instance per round, and push only behind an ancestry-proving precondition — the completed fast-forward harvest
+ * here, the {@link BestEffortPush} ancestry pre-check there.
  *
  * <p>Implements FR5 of add-sandbox-core; coordinates with FR11 of
  * add-git-workflow.
@@ -131,7 +137,7 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
         if (tip.isEmpty()) {
             // The resolution established nothing, so this poll observed nothing: skipping keeps a
             // failed read out of the moved/lost vocabulary entirely (FR13).
-            pollLog.failed(MidRoundPollLog.Subject.TIP, tipFailureReason(read), null);
+            pollLog.failed(MidRoundPollLog.Subject.TIP, VerifiedTip.failureReason(read), null);
             return;
         }
         pollLog.recovered(MidRoundPollLog.Subject.TIP);
@@ -141,12 +147,6 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
         }
         lastObservedTip = observedTip;
         push.pushBestEffort(cloneDir, branch);
-    }
-
-    /** The git evidence a skipped observation carries: how the read ended, and what it said. */
-    private static String tipFailureReason(GitCommandResult read) {
-        return "git rev-parse " + read.termination() + ", exit " + read.exitCode() + ": "
-                + read.stderr().trim();
     }
 
     /**

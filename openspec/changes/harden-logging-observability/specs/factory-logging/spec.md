@@ -120,6 +120,52 @@ never the value).
 - **THEN** a WARN records the substitution and its consequence before the
   decision is made
 
+### Requirement: Operator lines carry a stable event identity
+Every production WARN/ERROR message SHALL begin with a stable catalog code
+(`[GFnnn]`) owned by a single operator-event catalog: one code per call site,
+never reused, additive-only. The code — not the wording — is the operator
+contract; prose may change freely without breaking alerts, greps, or specs
+keyed on the code. Emitters that cannot reach the catalog module carry the
+literal code head, pinned to the catalog by a round-trip spec. INFO/DEBUG
+lines carry no codes.
+<!-- implements FR14 of harden-logging-observability -->
+
+#### Scenario: Wording drifts, contract holds
+- **WHEN** an operator line's prose is reworded without touching its code
+- **THEN** every spec, alert, and grep keyed on the code still matches, and no
+  test source needs editing
+
+#### Scenario: A code cannot be minted twice
+- **WHEN** a contributor adds a WARN line reusing an existing catalog code, or
+  omits the code entirely
+- **THEN** the build fails naming the site and the collision or omission
+
+### Requirement: Every operator line is pinned by a spec
+Every production WARN/ERROR call site SHALL have at least one spec asserting
+the event it emits — code, level, and attribution key where the line concerns
+a task or a check. A suppression site pins every edge the suppressor can emit
+(first occurrence, counted roll-up, recovery), not only the first. A build
+gate SHALL fail when a catalog code appears in no test source; a runtime gate
+SHALL fail any spec during which a production logger emits a WARN/ERROR event
+no attached capture observed and no declared allowance covers.
+<!-- implements FR15, FR16, FR17 of harden-logging-observability -->
+
+#### Scenario: A degrade line cannot land unasserted
+- **WHEN** a new WARN line is added with a fresh catalog code but no spec
+  asserts it
+- **THEN** the static gate fails on the unreferenced code, and any spec whose
+  run traverses the new path fails on the unexpected event
+
+#### Scenario: The level is part of the pin
+- **WHEN** a pinned WARN line is demoted to DEBUG without its spec changing
+- **THEN** the pinning spec goes red — the level, not only the text, is the
+  asserted contract
+
+#### Scenario: Roll-up edges are contract too
+- **WHEN** a suppression site's first-occurrence line is pinned but its
+  counted roll-up branch is broken
+- **THEN** a spec driving the streak past the roll-up threshold goes red
+
 ### Requirement: Untrusted text enters logs only sanitized
 Text from outside the factory's trust boundary — agent/LLM output, subprocess
 stderr, tracker-sourced strings, in-container command output — SHALL enter log

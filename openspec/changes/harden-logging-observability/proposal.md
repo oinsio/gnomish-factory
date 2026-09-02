@@ -210,6 +210,30 @@ defect classes cannot return.
   sweep-page/convergence chatter latched (first occurrence at the site's
   level, repeats DEBUG).
 
+- **FR14** Every production WARN/ERROR line SHALL carry a stable operator-event
+  code as its message head (`[GFnnn] …`), drawn from a single catalog
+  (`OperatorEvent` in `:logtext`): one code = one call site = one event meaning;
+  codes are never reused and changes are additive-only, so the code — not the
+  prose — is the operator contract and wording may drift freely. Modules that
+  cannot depend on `:logtext` (the four ADR-exempt `domain` emitters) carry the
+  literal code head; a round-trip spec pins every literal to a catalog entry.
+  INFO/DEBUG lines carry no codes — the catalog's scope is the operator plane.
+- **FR15** Every production WARN/ERROR line SHALL be pinned by at least one Spock
+  spec asserting the event — its code, its level, and (where the line concerns a
+  task or a check) its attribution key — through the shared log-capture helper.
+  Suppression sites pin every edge the suppressor can emit (first, roll-up,
+  recovery), not only the first. Baseline: 53 of 125 lines unpinned at the
+  September 2026 audit; the gates, not the count, are normative.
+- **FR16** A static log-contract gate SHALL fail the build when a production
+  WARN/ERROR call site carries no catalog code, when a catalog code is unused or
+  used by more than one site, or when a code appears in no test source — with the
+  same in-place exemption idiom as the existing source-scan gates.
+- **FR17** A runtime log-expectation gate SHALL fail any spec during which a
+  production logger emits a WARN/ERROR event that no attached capture observed
+  and no declared allowance covers — so a new degrade path cannot enter the
+  codebase with its line unasserted, and the static gate's text-presence check
+  gains a behavioral backstop.
+
 ### Non-Functional Reliability
 
 - **NFR-R1** The shutdown sequence is idempotent and covers both drain and signal
@@ -266,6 +290,12 @@ defect classes cannot return.
   behavior (cannot-verify abort, refused blank tip, list-mode error) and a
   spec proving the previous silent path is dead; baseline: all three defect
   classes reproduce today.
+- **M7** 100% of production WARN/ERROR call sites carry a catalog code and are
+  pinned by a spec (static gate red otherwise); baseline: 53/125 unpinned, 0/125
+  coded at the September 2026 audit.
+- **M8** The runtime log-expectation gate runs in enforcing mode across every
+  module's suite, and a green `./gradlew check` emits zero unexpected WARN/ERROR
+  events.
 
 ## Open Questions
 
@@ -297,3 +327,8 @@ defect classes cannot return.
 - **Existing sync pairs touched** (mirrored edits in scope): boundary-check
   twins, salvage twins, attempt-persistence twins, resume-runner twins,
   round-environment-source twins.
+- **Log-contract scope note** (FR14–FR17, added September 2026): the catalog
+  retag touches every module with a WARN/ERROR emitter — wide but mechanical
+  (message-head prefix only, no level or wording changes). Changes in flight
+  that add WARN/ERROR lines rebase onto the catalog by taking the next free
+  code; the static gate tells them so mechanically.

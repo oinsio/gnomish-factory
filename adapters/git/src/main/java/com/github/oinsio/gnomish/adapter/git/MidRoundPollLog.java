@@ -8,8 +8,9 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
- * The edge logging of one round's mid-round poll ({@link MidRoundHarvestListener}), owned here so
- * the listener holds the polling decisions and this holds what the operator is told about them.
+ * The edge logging of one round's mid-round poll ({@link MidRoundHarvestListener} in a sandboxed
+ * round, {@link MidRoundPushListener} in a host one), owned here so the listeners hold the polling
+ * decisions and this holds what the operator is told about them.
  *
  * <p>The poll runs once per agent progress event, so a failure that persists would otherwise cost
  * one WARN per event for the whole round: every failure reports to a {@link RepeatSuppressor} and
@@ -18,7 +19,8 @@ import org.slf4j.Logger;
  *
  * <p>Two subjects, suppressed independently: the <b>harvest</b> (mid-round commits stop being
  * mirrored out of the environment) and the <b>tip resolution</b> (the poll cannot see where the
- * branch is, so it observes nothing at all — FR13).
+ * branch is, so it observes nothing at all — FR13). The host-mode poll has no environment to
+ * harvest and reports only the second.
  *
  * <p>Implements FR4, FR13 of harden-logging-observability.
  */

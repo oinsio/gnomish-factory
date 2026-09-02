@@ -329,6 +329,86 @@ failure classification changes which existing path runs, so no new kill
 window appears and the kill-point matrix needs no new rows; the existing
 resume/abort specs cover the changed classification.
 
+### D14. Log contract: a stable event code is the identity, not the prose (FR14)
+
+Context: driven by FR14/FR15 from the proposal, added after a September 2026
+coverage audit found 53 of 125 production WARN/ERROR lines pinned by no spec —
+clustered exactly where the log is the only observable (ledger writers, the
+abort protocol, daemon tick loops). External research settled what to assert:
+the canon (SWE at Google ch. 13 names `logAccess()` as a legitimate
+interaction-test subject; Elasticsearch `MockLog`; JBoss `WFLY`-style message
+IDs; PostgreSQL errcodes) converges on "assert the event — logger, level,
+stable identity — never the sentence".
+
+Decision: every production WARN/ERROR message begins with a catalog code —
+`[GF042] failed to append sweep ledger line` — owned by one enum,
+`logtext.OperatorEvent`: one constant per call site, code never reused,
+changes additive-only. Call sites reference the constant (its accessor renders
+the head); the four ADR-exempt `domain` emitters, which must not gain a
+`:logtext` edge, carry the literal `[GFnnn]` head, and a data-driven
+round-trip-style spec pins every literal to its catalog entry (the same shape
+as the wire-vocabulary rule in `.claude/rules/testing.md`). INFO/DEBUG lines
+get no codes: the catalog's scope is the operator plane, and extending it
+below WARN is the K8s-migration-scale churn the research's avoid-list warns
+against.
+
+*Alternatives rejected:* an MDC `event` key (per-call put/remove ceremony,
+invisible in the rendered message a grep reads); SLF4J Markers (not rendered
+by default patterns, weak Spock ergonomics); prose-fragment matching as the
+contract (the original draft gate — verifies text co-occurrence, not identity,
+and re-couples tests to wording).
+
+### D15. Static log-contract gate, keyed on the catalog (FR16)
+
+A `:bootstrap` architecture gate in the `ThrowableConventionGateSpec` family,
+built on the existing `LogCallSites`/`RepoSourceTree` scanners. Three checks:
+every production WARN/ERROR call site carries a code (enum reference or
+literal head); every catalog constant is used by exactly one site (one event =
+one line — the twin-emitter case takes two constants); every code string
+appears in at least one test source. In-place exemption idiom
+(`log-contract-exempt: <reason>`), same shape as `throwable-not-subject`;
+seeded-violation features prove the detector. The text-presence check alone
+would be weak (a code in a comment satisfies it) — D16 is its behavioral
+backstop, which is why the pair ships together.
+
+*Alternatives rejected:* per-emitter capture check (`attach(<Class>` in the
+test tree) — the audit showed real per-line gaps inside captured classes
+(`FinishEffect` :89 pinned, :75/:83 dark), so emitter granularity misses the
+actual defect; a committed golden-inventory file (K8s stable-metrics shape) —
+a second bookkeeping surface where the catalog enum already is the inventory.
+
+### D16. Runtime log-expectation gate (FR17)
+
+A global Spock extension in `:test-fixtures` (spf4j-slf4j-test's model: an
+unasserted ERROR is treated like an uncaught exception). Per feature, a
+root-level capture collects WARN+ events from `com.github.oinsio.gnomish.*`
+loggers; at feature end, any event that no attached `LogCaptureSupport`
+observed and no declared allowance covers fails the feature. Attaching the
+existing helper IS the expectation declaration — no new assertion API; an
+explicit per-spec allowance annotation exists for the rare feature that must
+traverse a WARN path it deliberately does not pin (each use carries a reason,
+the `real-time-wiring` shape). Rollout inside this change: land in observing
+mode (report, not fail), close every offender the report names (which is
+exactly the FR15 sweep), then flip to enforcing — the flip is a one-line
+change asserted by M8. PIT note: a mutant that provokes an unexpected WARN now
+dies to the gate; that is a legitimate kill, recorded here so a reviewer does
+not read it as noise.
+
+*Alternative rejected:* enforcing from day one — hundreds of existing
+behavior-only specs legitimately traverse WARN paths; a mass-red flag day
+hides real failures in the noise.
+
+### D17. The pin sweep is ordered by failure class (FR15)
+
+The 53 unpinned lines close in this order: ledger writers (a durable-plane
+loss with no trace is the worst class), the abort/quarantine protocol (ERROR
+lines about lost work), the daemon tick family ("persistent WARN means act" —
+a lost tick WARN is a daemon rotting silently), then the remaining application
+and adapter sites. Suppression sites pin every edge (first, roll-up, recovery)
+— the audit found roll-up branches dark even where first-occurrence was
+pinned (`MidRoundPollLog` line 84). The definitive 53-row map lives in
+`tasks.md` beside the tasks that burn it down.
+
 ## Risks / Trade-offs
 
 - [Async FILE loses the last instants on `kill -9`] → accepted and documented
@@ -356,14 +436,26 @@ resume/abort specs cover the changed classification.
 - [`setRegisterShutdownHook(false)` changes shutdown for run/take/dashboard
   too] → the shared bootstrap exit path gives them the same ordered stop; a
   spec per command family asserts the context still closes and logs flush.
+- [The FR14 retag touches every module and collides with changes in flight] →
+  the edit is mechanical (message-head prefix only, no level/wording change);
+  an in-flight change that adds a WARN/ERROR line takes the next free code,
+  and the static gate reports the omission mechanically rather than by review.
+- [The runtime gate (D16) makes the suite order-fragile if a WARN leaks across
+  features] → capture is per-feature and cleared in the extension's own
+  cleanup; the observing-mode phase exists precisely to surface such leaks
+  before enforcement.
 
 ## Migration Plan
 
 No data migration. Config changes ship with the code; the log pattern gains
 `component=` (readers grep by key, not position). Rollback = revert the
 change; the log format addition is backward-tolerable for existing greps.
-Glossary gains: *anchor line*, *canonical task summary*, *repeat suppression
-(edge logging)*, *log text sanitization* — same change, per the glossary rule.
+The FR14 retag prepends `[GFnnn]` heads to WARN/ERROR messages — additive for
+grep, but any operator tooling matching a message from column 0 must adjust;
+recorded in the ADR 0004 amendment. Glossary gains: *anchor line*, *canonical
+task summary*, *repeat suppression (edge logging)*, *log text sanitization*,
+and (FR14) *operator event*, *log contract* — same change, per the glossary
+rule.
 
 ## Open Questions
 
