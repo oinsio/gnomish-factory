@@ -63,6 +63,13 @@ final class VerifiedTip {
      * non-throwing counterpart of {@link #unavailable}'s message, for the read-only polls that log
      * a failed resolution instead of throwing it.
      *
+     * <p>Unlike {@link #unavailable}, this one does not sanitize git's stderr, and the asymmetry is
+     * the rule rather than a gap: the refusal message escapes the untrusted-text gate structurally,
+     * so its throw site must sanitize, while this string is handed to a log call site — {@link
+     * MidRoundPollLog#failed}, which routes every reason through {@code LogText} on all four
+     * suppression edges (pinned by {@code MidRoundPollLogSpec}). Sanitizing here as well would cap
+     * and flatten the evidence twice ({@code .claude/rules/logging.md}, FR6).
+     *
      * @param result the {@code rev-parse} invocation's outcome
      * @return a one-line reason naming the termination, the exit status and git's own stderr
      */
