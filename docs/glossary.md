@@ -288,6 +288,23 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   in a manual run). *Not:* the ledger's `runSummary` line, which records a
   whole drain run in the machine plane — the canonical task summary is one
   task, in the log plane. *Never:* run summary (that name is taken).
+- **Operator event** — one production WARN or ERROR call site, named by a
+  stable `[GFnnn]` code that the site renders as its message head. One code is
+  one call site: two emitters of the same fault are two events, because the
+  code names *where* the factory degraded. Codes are never reused and the
+  catalog only grows; INFO and DEBUG lines have no codes, since the catalog's
+  scope is the operator plane. Owned by `OperatorEvent` in `:logtext`; the four
+  `:domain` emitters ADR 0004 exempts carry the literal head and are pinned to
+  their constants by a round-trip spec. *Not:* an anchor line, which is an INFO
+  timeline marker and carries no code. *Never:* error code, message ID.
+- **Log contract** — the promise the factory makes about its operator plane:
+  the *code* identifies the event, the prose does not. An alert, a grep or a
+  spec keyed on `[GF042]` keeps matching however the sentence is rewritten, and
+  every operator line is asserted by at least one spec — level and attribution
+  key included. Two gates hold it up: a static one failing an uncoded site, a
+  duplicated code or a code no test source names, and a runtime one failing any
+  spec that provokes a WARN/ERROR no capture observed. *Not:* the log format,
+  which is the encoder pattern in `logback.xml` and carries no promise at all.
 - **Repeat suppression** — the edge-logging discipline for a loop that can
   fail on every tick: the first occurrence (or a changed reason) logs at the
   site's level, repeats drop to DEBUG, a periodic roll-up names the count, and

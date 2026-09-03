@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -121,6 +124,7 @@ class TakeBatchSpec extends Specification {
             }
             new TakeResult.Delivered(null, "$ref delivered")
         }
+        def logs = LogCaptureSupport.attach(TakeBatch)
 
         when:
         def outcomes = TakeBatch.run(refs, 3, perRef)
@@ -135,6 +139,17 @@ class TakeBatchSpec extends Specification {
         outcomes[1].toolFailure() != null
         outcomes[1].exitCode() == 2
         outcomes[1].describe().contains('b is malformed')
+
+        and: 'FR15 of harden-logging-observability: the captured failure is a coded WARN naming the ref'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.BATCH_TAKE_REF_TOOL_ERROR.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains('b')
+
+        cleanup:
+        logs.detach()
     }
 
     // Edge: an interrupted wait for a free slot propagates rather than being swallowed.

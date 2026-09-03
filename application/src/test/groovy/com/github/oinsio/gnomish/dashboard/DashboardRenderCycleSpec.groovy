@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.dashboard
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
@@ -59,10 +60,10 @@ class DashboardRenderCycleSpec extends Specification {
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 2
         warnings*.formattedMessage.any {
-            it.contains('sweep-action ledger could not be aggregated')
+            it.startsWith(OperatorEvent.SWEEP_ACTION_LEDGER_UNAGGREGATABLE.head())
         }
         warnings*.formattedMessage.any {
-            it.contains('outcome ledger could not be aggregated')
+            it.startsWith(OperatorEvent.OUTCOME_LEDGER_UNAGGREGATABLE.head())
         }
         warnings.every { it.throwableProxy != null }
     }

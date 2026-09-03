@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -54,7 +55,8 @@ final class TokenUsageMapper {
             // to tell it from a round that genuinely spent nothing (FR5 of
             // harden-logging-observability).
             // throwable-not-subject: the shapes were classified above, not thrown.
-            log.warn("stream-json: the round reported no usable token usage; its cost reads as unreported");
+            log.warn(OperatorEvent.TOKEN_USAGE_UNREPORTED.head()
+                    + "stream-json: the round reported no usable token usage; its cost reads as unreported");
         }
         return tokensByModel;
     }

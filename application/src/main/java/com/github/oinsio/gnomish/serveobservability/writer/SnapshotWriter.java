@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import com.github.oinsio.gnomish.status.DaemonComponent;
@@ -135,7 +136,19 @@ public final class SnapshotWriter {
             try {
                 tick();
             } catch (RuntimeException e) {
-                log.warn("snapshot writer: tick failed; will retry on the next wake", e);
+                // log-contract-exempt: no spec can name this code (FR15 of
+                // harden-logging-observability wants one per WARN/ERROR line), because the branch
+                // is the unreachable defense-in-depth guard the comment above describes — every
+                // sub-method of tick() already catches everything its own operations raise, so
+                // reaching this line needs an artificially broken collaborator, and a spec built on
+                // one would assert "catch catches", not any behavior of the writer. The guard stays
+                // because its unreachability is a NON-LOCAL invariant: it holds only while every
+                // future step added to tick() keeps its own catch, and the cost of being wrong is a
+                // dead writer thread and a snapshot file that silently goes stale.
+                log.warn(
+                        OperatorEvent.SNAPSHOT_TICK_FAILED.head()
+                                + "snapshot writer: tick failed; will retry on the next wake",
+                        e);
             }
             awaitNextWake();
         }

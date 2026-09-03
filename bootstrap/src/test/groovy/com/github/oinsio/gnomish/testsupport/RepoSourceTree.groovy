@@ -38,6 +38,28 @@ class RepoSourceTree {
         }
     }
 
+    /** A mis-resolved repoRoot would make a test-source gate pass over an empty file set. */
+    static final int KNOWN_TEST_SOURCES = 100
+
+    /**
+     * Every test source of the build, optionally narrowed by a relative-path predicate. The log
+     * contract gate (FR16) needs it: "a code no test source names" is a whole-tree question about
+     * the test tree, the mirror of the production scan above.
+     */
+    static List<File> testSources(Predicate<String> extraFilter = {
+                true
+            }) {
+        Files.walk(repoRoot()).withCloseable { paths ->
+            paths.filter { Files.isRegularFile(it) }
+            .map { repoRoot().relativize(it).toString() }
+            .filter { it.contains('/src/test/') }
+            .filter { it.endsWith('.java') || it.endsWith('.groovy') }
+            .filter { extraFilter.test(it) }
+            .map { repoRoot().resolve(it).toFile() }
+            .toList()
+        }
+    }
+
     /** A file's source with every comment removed: what the compiler actually sees. */
     static String code(File file) {
         file.readLines()

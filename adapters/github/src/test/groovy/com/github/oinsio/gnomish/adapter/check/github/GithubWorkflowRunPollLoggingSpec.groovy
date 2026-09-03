@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
@@ -135,7 +136,7 @@ class GithubWorkflowRunPollLoggingSpec extends Specification {
         logs.list.findAll { it.level == Level.WARN }.size() == 1
         logs.list.find {
             it.level == Level.WARN
-        }.formattedMessage.contains('could not be verified')
+        }.formattedMessage.startsWith(OperatorEvent.GITHUB_WORKFLOW_CANNOT_VERIFY.head())
 
         and: 'the four repetitions are diagnosis-only and carry the running count'
         def repeats = logs.list.findAll { it.level == Level.DEBUG }
@@ -162,6 +163,8 @@ class GithubWorkflowRunPollLoggingSpec extends Specification {
             it.formattedMessage
         }
         warnings.size() == 2
+        warnings[0].startsWith(OperatorEvent.GITHUB_WORKFLOW_CANNOT_VERIFY.head())
+        warnings[1].startsWith(OperatorEvent.GITHUB_WORKFLOW_CANNOT_VERIFY_ROLLUP.head())
         warnings[1].contains('3x')
         warnings[1].contains('PT6M')
     }

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.secrets;
 
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -89,7 +90,11 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
             // that says WHICH read failed and why. Neither an IOException from a file read nor an
             // InvalidPathException carries file content, so the stack leaks nothing the message
             // does not already say.
-            log.warn("secret file named by {} could not be read; the secret resolves as absent", variable, e);
+            log.warn(
+                    OperatorEvent.SECRET_FILE_UNREADABLE.head()
+                            + "secret file named by {} could not be read; the secret resolves as absent",
+                    variable,
+                    e);
             return Optional.empty();
         }
     }

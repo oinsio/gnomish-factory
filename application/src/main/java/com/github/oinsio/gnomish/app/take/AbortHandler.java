@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,11 @@ public record AbortHandler(Tracker tracker, Clock clock) {
             int threshold,
             InstanceId instanceId,
             RecoveryCause category) {
-        log.error("Infrastructure abort on task {} ({}): {}", ref.id(), category.wireValue(), cause);
+        log.error(
+                OperatorEvent.INFRASTRUCTURE_ABORT.head() + "Infrastructure abort on task {} ({}): {}",
+                ref.id(),
+                category.wireValue(),
+                cause);
 
         var nextCount = facts.count() + 1;
         if (nextCount >= threshold) {
@@ -121,7 +126,11 @@ public record AbortHandler(Tracker tracker, Clock clock) {
         try {
             tracker.park(ref, ParkReason.INFRA, report);
         } catch (RuntimeException e) {
-            log.error("park(INFRA) failed for task {}; parking the run for a human anyway", ref.id(), e);
+            log.error(
+                    OperatorEvent.ABORT_PARK_FAILED.head()
+                            + "park(INFRA) failed for task {}; parking the run for a human anyway",
+                    ref.id(),
+                    e);
         }
     }
 
@@ -135,7 +144,11 @@ public record AbortHandler(Tracker tracker, Clock clock) {
         try {
             tracker.recordAbort(ref, new AbortRecord(cause, instanceId.value(), clock.instant(), category));
         } catch (RuntimeException e) {
-            log.error("recordAbort failed for task {}; proceeding with the abort anyway", ref.id(), e);
+            log.error(
+                    OperatorEvent.ABORT_RECORD_FAILED.head()
+                            + "recordAbort failed for task {}; proceeding with the abort anyway",
+                    ref.id(),
+                    e);
         }
     }
 }

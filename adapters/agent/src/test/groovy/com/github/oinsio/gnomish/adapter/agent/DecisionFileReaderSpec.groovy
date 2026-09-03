@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
@@ -81,6 +82,7 @@ class DecisionFileReaderSpec extends Specification {
         then: 'NFR-O2: raw content is logged at WARN on parse trouble'
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.DECISION_FILE_NOT_JSON.head())
         events[0].formattedMessage.contains(raw)
     }
 
@@ -123,6 +125,7 @@ class DecisionFileReaderSpec extends Specification {
         then: 'NFR-O2: empty content is parse trouble too, logged for diagnosability'
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.DECISION_FILE_EMPTY.head())
     }
 
     def "valid JSON does not log at WARN"() {

@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -522,6 +523,7 @@ tracker:
         then:
         capture.list.size() == 1
         capture.list[0].level == Level.ERROR
+        capture.list[0].formattedMessage.startsWith(OperatorEvent.SERVE_TRACKER_PROVISION_FAILED.head())
         capture.list[0].formattedMessage.contains("provisioning tracker 'github' (acme/widgets)")
 
         and: 'the throwable rides along, so the stack and cause chain survive'

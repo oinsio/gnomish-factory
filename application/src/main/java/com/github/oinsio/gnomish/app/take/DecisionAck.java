@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -130,7 +131,11 @@ public final class DecisionAck implements TerminalEffect {
         try {
             return tracker.collectDecisions(ref).isEmpty() ? EffectObservation.LANDED : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
-            log.warn("could not verify whether the decision acknowledge of {} landed", ref.id(), e);
+            log.warn(
+                    OperatorEvent.DECISION_ACK_UNVERIFIED.head()
+                            + "could not verify whether the decision acknowledge of {} landed",
+                    ref.id(),
+                    e);
             return EffectObservation.UNDETERMINED;
         }
     }

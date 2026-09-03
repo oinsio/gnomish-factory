@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.app.take.RevocationDetectedException
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.nio.file.Path
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -142,6 +143,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
             } catch (RevocationDetectedException e) {
                 revocation = e
             }
+            return
         }
 
         then: 'the round threw the revocation the engine turns into TaskOutcome.Aborted — the normal abort path, no park/finish'
@@ -152,7 +154,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         and: 'the zombie push was actually attempted and rejected as non-fast-forward — one WARN, no force retry'
         warns.size() == 1
         warns[0].level == Level.WARN
-        warns[0].formattedMessage.startsWith('push failed:')
+        warns[0].formattedMessage.startsWith(OperatorEvent.PUSH_FAILED.head() + 'push failed:')
 
         and: 'the fence held at runtime: origin still points at the holder\'s commit, NOT the zombie\'s — no force overwrote it'
         originTip() == head(holderWork)

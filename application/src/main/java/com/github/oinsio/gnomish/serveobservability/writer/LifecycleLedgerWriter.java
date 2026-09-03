@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.LifecycleLine;
 import com.github.oinsio.gnomish.serveobservability.LifecycleLineAssembler;
@@ -59,7 +60,10 @@ public final class LifecycleLedgerWriter {
         try {
             appender.append(line);
         } catch (IOException e) {
-            log.error("failed to append lifecycle ledger line ({})", line.event(), e);
+            log.error(
+                    OperatorEvent.LIFECYCLE_LEDGER_APPEND_FAILED.head() + "failed to append lifecycle ledger line ({})",
+                    line.event(),
+                    e);
         }
     }
 }

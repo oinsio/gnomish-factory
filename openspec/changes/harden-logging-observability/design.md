@@ -382,21 +382,60 @@ a second bookkeeping surface where the catalog enum already is the inventory.
 A global Spock extension in `:test-fixtures` (spf4j-slf4j-test's model: an
 unasserted ERROR is treated like an uncaught exception). Per feature, a
 root-level capture collects WARN+ events from `com.github.oinsio.gnomish.*`
-loggers; at feature end, any event that no attached `LogCaptureSupport`
-observed and no declared allowance covers fails the feature. Attaching the
-existing helper IS the expectation declaration — no new assertion API; an
-explicit per-spec allowance annotation exists for the rare feature that must
-traverse a WARN path it deliberately does not pin (each use carries a reason,
-the `real-time-wiring` shape). Rollout inside this change: land in observing
-mode (report, not fail), close every offender the report names (which is
-exactly the FR15 sweep), then flip to enforcing — the flip is a one-line
-change asserted by M8. PIT note: a mutant that provokes an unexpected WARN now
-dies to the gate; that is a legitimate kill, recorded here so a reviewer does
-not read it as noise.
+loggers and splits them by whether a spec's capture was attached anywhere in
+the emitting logger's chain — `LogCaptureSupport` or the hand-rolled
+`ListAppender` block that predates it, read alike off Logback, so NG5's "no
+bulk migration" holds. Attaching a capture IS the expectation declaration —
+no new assertion API; an allowance annotation (spec- or feature-level, each
+use carrying a reason, the `real-time-wiring` shape) exists for the run whose
+subject is elsewhere.
 
-*Alternative rejected:* enforcing from day one — hundreds of existing
-behavior-only specs legitimately traverse WARN paths; a mass-red flag day
-hides real failures in the noise.
+**Two outputs, because the report and the failure answer different
+questions.** Per feature, every unwatched operator line is written to a report
+— always, in every run: a line emitted in silence is the defect this change
+exists to end, so it is named whatever the verdict turns out to be. Per run,
+the observations accumulate into a file the `checkLogExpectationGate` build
+task (`build-logic`, the `TestTimeInjectionCheck` shape) turns into the
+verdict: **the build fails on an operator-event *code* the run emitted that no
+capture anywhere in that run was watching.**
+
+*Why the failure is by code and not per event.* Judged per event instance, an
+offender is any behavior spec that merely crosses an already-pinned degrade
+path — measured on this tree at the observing-mode landing, **162 specs and
+667 features**, almost all of them for lines a sibling feature pins properly.
+Making each carry an allowance would trade one real signal for 162 boilerplate
+reasons and take whole specs out from under the gate. The defect FR17 names is
+"a new degrade path enters the codebase with its line unasserted", and that is
+a statement about a code, not about one traversal of it. Measured after the
+change: 57 codes watched and 23 emitted-unwatched in `:application`, of which
+exactly one was watched nowhere.
+
+*Scope of the verdict.* Build-wide, over the `test` suite only. Build-wide
+because a module routinely emits a line whose emitter and pin both live
+somewhere else: `:application` reaches `:domain`'s persist-failure ERROR
+through every abort spec, and `:bootstrap`, being the composition root, does it
+for twelve codes at once. Judged per module those are all failures, and closing
+them means either a duplicate pin or a boilerplate allowance in a module that
+merely passes through — neither of which says anything true. The question worth
+failing on is "does anything in this build assert this line". `test` only,
+because the opportunistic and paid suites (`ollamaE2eTest`, the paid smoke) are
+not part of `check` and depending on them would have `check` spend real money;
+they still write their per-feature report.
+
+Rollout inside this change: land in observing mode (report, not fail), read
+the report, then wire the verdict task into `check` — asserted by M8. PIT
+note: a mutant that provokes an unwatched operator code now dies to the gate;
+that is a legitimate kill, recorded here so a reviewer does not read it as
+noise.
+
+*Alternatives rejected:* enforcing per event from day one — the 162-spec
+measurement above; a per-feature failure with 162 allowances — same measurement,
+and an allowance is a whole spec's exemption where the defect is one code's; a
+per-module verdict — measured at 12 failing codes in `:bootstrap` alone, every
+one of them owned and pinned in another module; throwing from the extension's
+own `stop()` instead of a build task — the failure surfaces as a JUnit-engine
+crash rather than a named verdict, and "observability over silence" is the whole
+point of the pair.
 
 ### D17. The pin sweep is ordered by failure class (FR15)
 

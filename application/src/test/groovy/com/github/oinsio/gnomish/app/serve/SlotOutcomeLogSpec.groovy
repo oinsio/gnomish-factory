@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -72,6 +73,7 @@ class SlotOutcomeLogSpec extends Specification {
         then:
         capture.list.size() == 1
         capture.list[0].level == Level.WARN
+        capture.list[0].formattedMessage.startsWith(OperatorEvent.SLOT_SKIPPED.head())
         capture.list[0].formattedMessage.contains('lost claim race')
 
         cleanup:
@@ -128,6 +130,7 @@ class SlotOutcomeLogSpec extends Specification {
         then:
         capture.list.size() == 1
         capture.list[0].level == Level.ERROR
+        capture.list[0].formattedMessage.startsWith(OperatorEvent.SLOT_CRASHED_UNCAUGHT.head())
         capture.list[0].formattedMessage.contains('crashed uncaught')
         capture.list[0].throwableProxy.message == 'boom'
 
@@ -148,6 +151,7 @@ class SlotOutcomeLogSpec extends Specification {
         then:
         capture.list.size() == 1
         capture.list[0].level == Level.WARN
+        capture.list[0].formattedMessage.startsWith(OperatorEvent.SLOT_STOPPED_BY_SHUTDOWN.head())
         capture.list[0].formattedMessage.contains('stopped by the daemon shutdown (InterruptedException)')
         capture.list[0].throwableProxy == null
 

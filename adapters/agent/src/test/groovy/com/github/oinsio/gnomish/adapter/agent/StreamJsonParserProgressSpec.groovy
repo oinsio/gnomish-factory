@@ -1,9 +1,12 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -71,6 +74,7 @@ class StreamJsonParserProgressSpec extends Specification {
             throw new RuntimeException('boom')
         }
         def parser = new StreamJsonParser(clock, throwing)
+        def logs = LogCaptureSupport.attach(AgentProgressEmitter)
 
         when: 'the plain-round fixture is parsed'
         def events = parser.parse(readerOf('plain-round'))
@@ -79,6 +83,17 @@ class StreamJsonParserProgressSpec extends Specification {
         noExceptionThrown()
         events.size() == 5
         events.last().event() instanceof AgentEvent.ResultEvent
+
+        and: 'FR15 of harden-logging-observability: every swallowed delivery leaves a coded WARN naming the event variant'
+        def listenerFailures = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.AGENT_PROGRESS_LISTENER_THREW.head())
+        }
+        listenerFailures.size() == 3
+        listenerFailures.every { it.level == Level.WARN }
+        listenerFailures*.formattedMessage.any { it.contains('RoundStarted') }
+
+        cleanup:
+        logs.detach()
     }
 
     // FR7, D10: garbage/unknown lines interleaved with valid ones produce no spurious progress

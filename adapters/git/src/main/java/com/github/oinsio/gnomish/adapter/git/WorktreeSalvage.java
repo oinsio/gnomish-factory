@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -148,7 +149,8 @@ public record WorktreeSalvage(GitProcessRunner runner, Path worktreeRoot, ClaimE
         if (result.exitCode() != 0) {
             // throwable-not-subject: git reported a status, not a thrown fault.
             log.warn(
-                    "discard step 'git {}' exited {}; uncommitted leftovers stay in the worktree: {}",
+                    OperatorEvent.WORKTREE_DISCARD_STEP_FAILED.head()
+                            + "discard step 'git {}' exited {}; uncommitted leftovers stay in the worktree: {}",
                     step,
                     result.exitCode(),
                     LogText.forLog(result.stderr()));

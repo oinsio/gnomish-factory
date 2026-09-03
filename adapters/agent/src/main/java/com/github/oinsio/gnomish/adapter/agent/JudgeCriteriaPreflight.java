@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,7 +64,11 @@ public final class JudgeCriteriaPreflight {
             // JudgeRoundExecution: no process is spawned, so this is the sole trace the
             // operator gets for a vote that was never cast (FR5 of
             // harden-logging-observability).
-            log.warn("judge vote cannot verify for criteria {}: unreadable criteria file", check.criteriaFile(), e);
+            log.warn(
+                    OperatorEvent.JUDGE_CRITERIA_UNREADABLE.head()
+                            + "judge vote cannot verify for criteria {}: unreadable criteria file",
+                    check.criteriaFile(),
+                    e);
             return Optional.of(new Verdict.CannotVerify(message, message));
         }
     }

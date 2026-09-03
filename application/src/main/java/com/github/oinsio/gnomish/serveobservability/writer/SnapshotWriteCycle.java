@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import java.io.IOException;
@@ -69,7 +70,7 @@ final class SnapshotWriteCycle {
             String json = jsonMapper.serialize(snapshot);
             AtomicFileWriter.write(targetFile, json);
         } catch (IOException | RuntimeException e) {
-            log.warn("snapshot writer: failed to write {}", targetFile, e);
+            log.warn(OperatorEvent.SNAPSHOT_WRITE_FAILED.head() + "snapshot writer: failed to write {}", targetFile, e);
         }
     }
 
@@ -84,7 +85,10 @@ final class SnapshotWriteCycle {
         try {
             retentionSweeper.sweep();
         } catch (RuntimeException e) {
-            log.warn("snapshot writer: ledger retention sweep failed", e);
+            log.warn(
+                    OperatorEvent.SNAPSHOT_RETENTION_SWEEP_FAILED.head()
+                            + "snapshot writer: ledger retention sweep failed",
+                    e);
         }
     }
 }

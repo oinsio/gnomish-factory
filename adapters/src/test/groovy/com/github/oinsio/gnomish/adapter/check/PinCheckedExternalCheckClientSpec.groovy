@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
@@ -8,6 +9,8 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.gitobjects.CommitRequest
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.gitobjects.TreeEdit
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 import spock.lang.Specification
@@ -63,6 +66,9 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
             new TreeEdit.PutFile('.github/workflows/ci.yml', bytes("name: ci\non: [push]\nsteps: echo ok\n"))
         ])
 
+        and:
+        def logs = LogCaptureSupport.attach(PinCheckedExternalCheckClient)
+
         when:
         def status = guard({ c ->
             [c.checkId()] as Set
@@ -78,6 +84,17 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
 
         and: 'the adapter was never invoked'
         delegate.pollCount == 0
+
+        and: 'FR15 of harden-logging-observability: the refusal to invoke is a coded WARN naming the check'
+        def warned = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.EXTERNAL_CHECK_PIN_MISMATCH.head())
+        }
+        warned != null
+        warned.level == Level.WARN
+        warned.formattedMessage.contains('ci')
+
+        cleanup:
+        logs.detach()
     }
 
     def "a modified law-declared pin path fails even when the adapter file is untouched"() {

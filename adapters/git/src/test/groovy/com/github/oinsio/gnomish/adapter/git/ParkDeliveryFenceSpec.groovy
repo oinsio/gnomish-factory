@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -141,7 +142,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         events.findAll { it.level == Level.WARN }.size() == 1
         events[0].level == Level.INFO
         events[1].level == Level.WARN
-        events[1].formattedMessage.startsWith('park delivery fence exhausted, parking anyway:')
+        events[1].formattedMessage.startsWith(OperatorEvent.PARK_FENCE_EXHAUSTED.head() + 'park delivery fence exhausted, parking anyway:')
     }
 
     def "a clone with no origin performs no remote interaction"() {
@@ -192,7 +193,8 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         and:
         events.size() == 1
         events[0].level == Level.WARN
-        events[0].formattedMessage.startsWith('park delivery fence skipped, local branch tip unreadable:')
+        events[0].formattedMessage.startsWith(OperatorEvent.PARK_FENCE_TIP_UNREADABLE.head()
+                + 'park delivery fence skipped, local branch tip unreadable:')
         events[0].formattedMessage.contains('taskId=NO-SUCH')
         events[0].formattedMessage.contains('branch=gnomish/NO-SUCH')
         events[0].formattedMessage.contains("cloneDir=${clone}")

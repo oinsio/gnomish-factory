@@ -1,10 +1,13 @@
 package com.github.oinsio.gnomish.app.take
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Instant
 import spock.lang.Specification
 
@@ -83,11 +86,25 @@ class DecisionAckSpec extends Specification {
             throw new RuntimeException('tracker unreachable')
         }
 
+        and:
+        def logs = LogCaptureSupport.attach(DecisionAck)
+
         when:
         DecisionAck.redriveAcknowledge(tracker, REF, contextWith('go ahead'), 'go ahead')
 
         then:
         1 * tracker.acknowledgeDecision(REF, 'go ahead')
+
+        and: 'FR15 of harden-logging-observability: the unverifiable probe is a coded WARN naming the task'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.DECISION_ACK_UNVERIFIED.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains(REF.id())
+
+        cleanup:
+        logs.detach()
     }
 
     // FR12: what marks an owed acknowledge — a pending reply the branch has already recorded.

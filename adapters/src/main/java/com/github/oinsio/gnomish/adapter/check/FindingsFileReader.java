@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -72,7 +73,8 @@ final class FindingsFileReader {
             FindingsFile wire = FINDINGS_MAPPER.readValue(text, FindingsFile.class);
             if (wire.findings() == null) {
                 log.warn(
-                        "GNOMISH_FINDINGS_FILE of check '{}' is malformed: missing 'findings' array;"
+                        OperatorEvent.FINDINGS_FILE_MISSING_ARRAY.head()
+                                + "GNOMISH_FINDINGS_FILE of check '{}' is malformed: missing 'findings' array;"
                                 + " using synthetic finding",
                         checkIdentity);
                 return null;
@@ -81,7 +83,8 @@ final class FindingsFileReader {
             for (FindingWire entry : wire.findings()) {
                 if (entry.message() == null || entry.message().isBlank()) {
                     log.warn(
-                            "GNOMISH_FINDINGS_FILE of check '{}' is malformed: an entry has a blank/missing"
+                            OperatorEvent.FINDINGS_FILE_BLANK_ENTRY.head()
+                                    + "GNOMISH_FINDINGS_FILE of check '{}' is malformed: an entry has a blank/missing"
                                     + " 'message'; using synthetic finding",
                             checkIdentity);
                     return null;
@@ -90,7 +93,11 @@ final class FindingsFileReader {
             }
             return findings;
         } catch (IOException e) {
-            log.warn("GNOMISH_FINDINGS_FILE of check '{}' is malformed; using synthetic finding", checkIdentity, e);
+            log.warn(
+                    OperatorEvent.FINDINGS_FILE_MALFORMED.head()
+                            + "GNOMISH_FINDINGS_FILE of check '{}' is malformed; using synthetic finding",
+                    checkIdentity,
+                    e);
             return null;
         }
     }

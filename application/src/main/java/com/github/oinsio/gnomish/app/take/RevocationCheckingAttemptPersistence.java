@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -207,7 +208,11 @@ public final class RevocationCheckingAttemptPersistence implements AttemptPersis
         try {
             tracker.recordProgress(ref);
         } catch (RuntimeException e) {
-            log.warn("recordProgress failed for task {}; proceeding with the run anyway", ref.id(), e);
+            log.warn(
+                    OperatorEvent.RECORD_PROGRESS_FAILED.head()
+                            + "recordProgress failed for task {}; proceeding with the run anyway",
+                    ref.id(),
+                    e);
         }
     }
 

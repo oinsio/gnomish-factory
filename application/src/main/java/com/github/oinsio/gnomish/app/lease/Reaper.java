@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -103,7 +104,10 @@ public final class Reaper implements ReaperDuty {
             // Tracker outage: forget the observation windows so recovery restarts every timer from
             // its first post-outage sighting (FR9, D2). No observation is fed, so nothing accrues,
             // and no pre-outage window survives to falsely repair a state that has since moved.
-            log.warn("sweep listing failed; forgetting observation windows, recovery restarts them", e);
+            log.warn(
+                    OperatorEvent.REAPER_SWEEP_LISTING_FAILED.head()
+                            + "sweep listing failed; forgetting observation windows, recovery restarts them",
+                    e);
             memory.forgetAll();
             listingSink.onListingFailed();
             return;
@@ -145,7 +149,8 @@ public final class Reaper implements ReaperDuty {
                 // its subject — a reap belongs to that task's `grep taskId=<id>` story.
                 try (var scope = MdcAwareThread.taskScope(observation.ref().id())) {
                     log.warn(
-                            "{} classifies foreign; no automatic repair owns it: {}",
+                            OperatorEvent.REAPER_FOREIGN_BRANCH_UNOWNED.head()
+                                    + "{} classifies foreign; no automatic repair owns it: {}",
                             observation.ref().id(),
                             diagnosis);
                 }
@@ -206,7 +211,7 @@ public final class Reaper implements ReaperDuty {
             // silence it: re-arm the once-per-shape latch (design D14) so the same unchanged shape
             // is retried next tick instead of staying frozen until its facts change.
             log.warn(
-                    "repair failed for {}; continuing with the rest",
+                    OperatorEvent.REAPER_REPAIR_FAILED.head() + "repair failed for {}; continuing with the rest",
                     repair.ref().id(),
                     e);
             memory.retryEmission(repair);

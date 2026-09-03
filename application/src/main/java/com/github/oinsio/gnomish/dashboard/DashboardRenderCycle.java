@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -79,7 +80,10 @@ public final class DashboardRenderCycle {
                     LedgerAggregator.DEFAULT_WINDOW_DAYS);
         } catch (IOException malformedLedger) {
             // An empty hygiene table and a healthy-and-quiet one render identically (FR5).
-            log.warn("sweep-action ledger could not be aggregated; the hygiene block renders empty", malformedLedger);
+            log.warn(
+                    OperatorEvent.SWEEP_ACTION_LEDGER_UNAGGREGATABLE.head()
+                            + "sweep-action ledger could not be aggregated; the hygiene block renders empty",
+                    malformedLedger);
             actions = SweepActionWindow.EMPTY;
         }
         return new SandboxHygieneView(sweep, actions.rows());
@@ -89,7 +93,10 @@ public final class DashboardRenderCycle {
         try {
             return ledgerAggregator.aggregate(homeDir, instanceName, LocalDate.ofInstant(now, ZoneOffset.UTC));
         } catch (IOException malformedLedger) {
-            log.warn("outcome ledger could not be aggregated; the history block renders empty", malformedLedger);
+            log.warn(
+                    OperatorEvent.OUTCOME_LEDGER_UNAGGREGATABLE.head()
+                            + "outcome ledger could not be aggregated; the history block renders empty",
+                    malformedLedger);
             return new LedgerHistoryView(List.of(), Map.of());
         }
     }

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.TaskSalvage;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
@@ -113,7 +114,9 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
             InBoxGitCommand.Outcome status = exec(STATUS);
             return status.succeeded() && !status.output().trim().isEmpty();
         } catch (ProcessStartException | UncheckedIOException e) {
-            log.warn("salvage probe could not reach the environment", e);
+            log.warn(
+                    OperatorEvent.SALVAGE_PROBE_UNREACHABLE.head() + "salvage probe could not reach the environment",
+                    e);
             return false;
         }
     }
@@ -130,7 +133,8 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
             }
         } catch (ProcessStartException | UncheckedIOException e) {
             log.warn(
-                    "salvage skipped for taskId={}: environment lost, continuing from the last harvested state",
+                    OperatorEvent.SALVAGE_SKIPPED_ENVIRONMENT_LOST.head()
+                            + "salvage skipped for taskId={}: environment lost, continuing from the last harvested state",
                     taskId,
                     e);
             return;
@@ -143,7 +147,10 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
         try {
             exec("git reset --hard HEAD && git clean -fd");
         } catch (ProcessStartException | UncheckedIOException e) {
-            log.warn("discard skipped: environment lost, uncommitted leftovers stay in the box", e);
+            log.warn(
+                    OperatorEvent.DISCARD_SKIPPED_ENVIRONMENT_LOST.head()
+                            + "discard skipped: environment lost, uncommitted leftovers stay in the box",
+                    e);
         }
     }
 
@@ -158,7 +165,8 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
             environment.harvest();
         } catch (HarvestFailedException e) {
             log.warn(
-                    "salvage harvest failed for taskId={}: environment lost, continuing from the last harvested"
+                    OperatorEvent.SALVAGE_HARVEST_FAILED.head()
+                            + "salvage harvest failed for taskId={}: environment lost, continuing from the last harvested"
                             + " state",
                     taskId,
                     e);

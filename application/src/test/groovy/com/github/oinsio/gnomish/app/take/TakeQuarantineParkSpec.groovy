@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -16,6 +17,8 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Instant
 import spock.lang.Specification
 
@@ -57,6 +60,7 @@ class TakeQuarantineParkSpec extends Specification {
     def "parks INFRA with the diagnosis and records no abort"() {
         given: 'a task with three attempts already on record, one of them a failed repair'
         def facts = new AbortFacts(3, Instant.parse('2026-08-20T10:00:00Z'), 1)
+        def logs = LogCaptureSupport.attach(TakeQuarantinePark)
 
         when:
         def result = TakeQuarantinePark.onQuarantine(
@@ -77,6 +81,17 @@ class TakeQuarantineParkSpec extends Specification {
         parked.reason() == ParkReason.INFRA
         parked.report().contains('state.json')
         parked.finalState() == TaskState.atStageStart('build')
+
+        and: 'FR15 of harden-logging-observability: the quarantine is a coded ERROR naming the task'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.TASK_QUARANTINED.head())
+        }
+        event != null
+        event.level == Level.ERROR
+        event.formattedMessage.contains('PROJ-1')
+
+        cleanup:
+        logs.detach()
     }
 
     // NFR-R2: a tracker that cannot be written to must not turn the quarantine into an escaping
@@ -86,6 +101,7 @@ class TakeQuarantineParkSpec extends Specification {
         tracker.park(*_) >> {
             throw new RuntimeException('tracker unreachable')
         }
+        def logs = LogCaptureSupport.attach(TakeQuarantinePark)
 
         when:
         def result = TakeQuarantinePark.onQuarantine(
@@ -96,5 +112,16 @@ class TakeQuarantineParkSpec extends Specification {
         noExceptionThrown()
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).report().contains('task.json')
+
+        and: 'FR15: the tracker never learned the task is parked, so the swallow leaves a coded ERROR'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.QUARANTINE_PARK_FAILED.head())
+        }
+        event != null
+        event.level == Level.ERROR
+        event.formattedMessage.contains('PROJ-1')
+
+        cleanup:
+        logs.detach()
     }
 }

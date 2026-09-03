@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
@@ -120,7 +121,10 @@ final class ExecutorRoundExecution {
         try {
             return round.environment().denialFindings();
         } catch (RuntimeException e) {
-            log.warn("could not read the egress denials of a finished round; reporting none", e);
+            log.warn(
+                    OperatorEvent.ROUND_DENIALS_UNREADABLE_ON_FINISH.head()
+                            + "could not read the egress denials of a finished round; reporting none",
+                    e);
             return List.of();
         }
     }
@@ -139,11 +143,15 @@ final class ExecutorRoundExecution {
         try {
             List<Finding> denials = round.environment().denialFindings();
             log.warn(
-                    "round failed before close; {} egress denial(s) drained, attached to no attempt: {}",
+                    OperatorEvent.ROUND_DENIALS_ORPHANED_ON_FAILURE.head()
+                            + "round failed before close; {} egress denial(s) drained, attached to no attempt: {}",
                     denials.size(),
                     denials);
         } catch (RuntimeException e) {
-            log.warn("could not read the egress denials of a failed round", e);
+            log.warn(
+                    OperatorEvent.ROUND_DENIALS_UNREADABLE_ON_FAILURE.head()
+                            + "could not read the egress denials of a failed round",
+                    e);
         }
     }
 

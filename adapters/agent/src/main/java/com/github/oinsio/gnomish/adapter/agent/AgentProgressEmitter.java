@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,7 +92,7 @@ final class AgentProgressEmitter {
             // is a CompositeAgentProgressListener, the child that actually threw is named by the
             // composite's own line (its per-child guard runs first).
             log.warn(
-                    "agent progress listener {} threw for {}",
+                    OperatorEvent.AGENT_PROGRESS_LISTENER_THREW.head() + "agent progress listener {} threw for {}",
                     progressListener.getClass().getSimpleName(),
                     event.getClass().getSimpleName(),
                     ex);

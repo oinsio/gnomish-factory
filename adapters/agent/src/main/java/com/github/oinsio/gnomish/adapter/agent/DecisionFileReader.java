@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -72,7 +73,8 @@ public final class DecisionFileReader {
         }
         String raw = rawContent.get();
         if (raw.isBlank()) {
-            log.warn("decision file was empty; falling back to a stand-in question");
+            log.warn(OperatorEvent.DECISION_FILE_EMPTY.head()
+                    + "decision file was empty; falling back to a stand-in question");
             return Optional.of(new Decision(FALLBACK_QUESTION, List.of()));
         }
         try {
@@ -87,7 +89,8 @@ public final class DecisionFileReader {
             // — capped and neutralized before it reaches the line, while the Decision itself still
             // carries the content verbatim for the human who answers the question.
             log.warn(
-                    "decision file was not valid decision JSON; using raw content as the question: {}",
+                    OperatorEvent.DECISION_FILE_NOT_JSON.head()
+                            + "decision file was not valid decision JSON; using raw content as the question: {}",
                     LogText.forLog(raw, RAW_CONTENT_CAP_CHARS));
             return Optional.of(new Decision(raw, List.of()));
         }

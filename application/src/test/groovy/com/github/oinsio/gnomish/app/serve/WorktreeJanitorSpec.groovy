@@ -1,15 +1,19 @@
 package com.github.oinsio.gnomish.app.serve
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
+import java.nio.file.attribute.PosixFilePermission
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.MDC
+import spock.lang.Requires
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -236,6 +240,74 @@ class WorktreeJanitorSpec extends Specification {
 
         then:
         later.lastRunAt() == NOW + Duration.ofMinutes(1)
+    }
+
+    // FR15 of harden-logging-observability: a tick that cannot read the project folder disposes
+    // nothing, and looks exactly like a tick with nothing to dispose unless it says so. This line
+    // and the sanitize one below were the two janitor WARNs the change's own audit recorded as
+    // unpinned; section 12.3 closes them.
+    //
+    // POSIX permissions aren't meaningful on Windows; this repo targets macOS/Linux (Darwin CI),
+    // but the guard keeps the spec portable rather than assuming the platform.
+    @Requires({
+        !System.getProperty('os.name').toLowerCase().contains('windows')
+    })
+    def "a project folder that cannot be listed leaves a coded WARN naming the folder"() {
+        given:
+        environment('task-a', NOW - AGE_THRESHOLD - Duration.ofDays(1))
+        def projectRoot = worktreesRoot.resolve('my-project')
+        def original = Files.getPosixFilePermissions(projectRoot)
+        // Execute-only: Files.isDirectory still succeeds, but Files.list needs read too.
+        Files.setPosixFilePermissions(projectRoot, EnumSet.of(PosixFilePermission.OWNER_EXECUTE))
+        def logs = LogCaptureSupport.attach(WorktreeJanitor)
+
+        when:
+        janitor().tick()
+
+        then:
+        noExceptionThrown()
+        disposed.isEmpty()
+
+        and:
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.WORKTREE_JANITOR_SCAN_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains(projectRoot.toString())
+
+        cleanup:
+        logs.detach()
+        Files.setPosixFilePermissions(projectRoot, original)
+    }
+
+    // FR15: a held ref that does not sanitize is skipped rather than failing the tick — which
+    // silently narrows the held set, so an environment still in use can be judged unheld. The
+    // WARN is the only trace of that narrowing, and it names the ref (its own taskId scope).
+    def "a held ref that does not sanitize leaves a coded WARN naming the ref and does not fail the tick"() {
+        given: 'an aged environment, and a held ref whose id sanitizes to nothing'
+        environment('task-a', NOW - AGE_THRESHOLD - Duration.ofDays(1))
+        def logs = LogCaptureSupport.attach(WorktreeJanitor)
+
+        when:
+        janitor(Set.of(new TaskRef('---'))).tick()
+
+        then: 'the tick completed, judging the environments it could'
+        noExceptionThrown()
+        disposed == ['task-a']
+
+        and:
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.WORKTREE_JANITOR_REF_UNSANITARY.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains('---')
+        event.MDCPropertyMap['taskId'] == '---'
+
+        cleanup:
+        logs.detach()
+        MDC.clear()
     }
 
     // FR14, D10: several environments in one project folder are each judged independently.

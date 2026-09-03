@@ -30,6 +30,32 @@ Not an ERROR: a death the daemon's own stop caused. Once
 an interrupted worker or an abandoned slot is one WARN without a stack — mark
 the exemption with the `throwable-not-subject` comment below.
 
+## Every WARN/ERROR carries its catalog code
+
+The message head of a production WARN or ERROR is a stable `[GFnnn]` code from
+`com.github.oinsio.gnomish.logtext.OperatorEvent` (module `:logtext`) — one
+constant per call site, never reused, additive-only:
+
+```java
+log.error(OperatorEvent.SWEEP_LEDGER_APPEND_FAILED.head() + "failed to append sweep ledger line", e);
+```
+
+The code is what an alert, a grep and a spec key on, so the sentence beside it
+may be rewritten at any time. Rules:
+
+- **A new WARN/ERROR takes the next free number** in the catalog. Do not fill a
+  gap left by a deleted constant — a retired code stays retired.
+- **One code, one call site.** Two emitters of the same fault (a
+  with-throwable twin, a roll-up branch) are two constants.
+- **INFO and DEBUG never carry codes.** The catalog is the operator plane only.
+- A module that cannot reach `:logtext` — today only the four `:domain`
+  emitters ADR 0004 exempts — writes the literal `[GFnnn] ` head and is pinned
+  to the catalog by `DomainOperatorEventHeadSpec`.
+
+`LogContractGateSpec` fails the build on an uncoded site, a duplicated code, or
+a code no test source names; exempt in place with `log-contract-exempt:
+<reason>` when a site genuinely must stay uncoded.
+
 ## Best effort must still leave a trace
 
 Catching a failure and continuing with a degraded result — an empty default, a
@@ -152,6 +178,12 @@ Specs that assert emitted lines use
 appender). Do not hand-roll a `ListAppender` block in a new spec; existing
 hand-rolled blocks migrate when their spec is touched, not in bulk.
 
+Assert the **event**, not the sentence: the emitter's `OperatorEvent` head, the
+level, and the attribution key (`taskId`, the check identity) the line must
+carry. A `startsWith('some prose')` re-freezes the wording the code exists to
+free — use the constant's `head()`, or `contains` for the fragment that really
+is the subject of the assertion.
+
 ## Before you commit the line, check
 
 1. Level matches the reader's required reaction (table above).
@@ -160,3 +192,34 @@ hand-rolled blocks migrate when their spec is touched, not in bulk.
 4. Untrusted text went through `LogText`; no secret values.
 5. Loop sites suppress or aggregate.
 6. The line is findable by `taskId` if it concerns a task.
+7. A new WARN/ERROR took the next free `OperatorEvent` code as its message head.
+8. A spec pins that code — its level, and its attribution key where the line
+   concerns a task or a check — through `LogCaptureSupport`.
+
+## The two gates that ask for you
+
+- **Static** (`LogContractGateSpec`, `:bootstrap`): every WARN/ERROR site
+  carries a code, every code belongs to one site, every code is named by some
+  test source. In-place escape hatch: `log-contract-exempt: <reason>`.
+- **Runtime** (`LogExpectationGate` in `:test-fixtures` +
+  `checkLogExpectationGate` in `build-logic`): a global Spock extension watches
+  every feature's operator plane. It **reports** — per module, in
+  `build/reports/log-expectation-gate/<task>/features-*.txt` — every WARN/ERROR
+  no capture was watching, and the build **fails** on a code the whole build's
+  `test` run emitted that no capture anywhere in it was watching. The verdict is
+  one build-wide task; its report is `build/reports/log-expectation-gate.txt` at
+  the root.
+
+  A spec declares "I know about this line" by attaching a capture — either
+  `LogCaptureSupport` or an older hand-rolled `ListAppender`; both are read off
+  Logback, so no migration is owed. Appearing in the per-feature report is not a
+  failure: crossing a line another spec pins is normal, and the pin may live in
+  another module. Close a real failure by pinning the line where its emitter
+  lives. Where a spec must traverse a path nothing pins,
+  `@AllowsUnexpectedLogEvents(reason = "...")` on the feature or the spec; the
+  reason is mandatory, the same shape as `real-time-wiring` and
+  `log-contract-exempt`.
+
+  Do not invent a `[GFnnn]` literal in a test source: `GF999` is pinned by
+  `LogContractGateSpec` as the code no test source names. Take codes from
+  `OperatorEvent`.

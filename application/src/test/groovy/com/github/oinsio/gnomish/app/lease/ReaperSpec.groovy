@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
@@ -285,8 +286,7 @@ class ReaperSpec extends Specification {
         0 * tracker.removeStaleClaim(_, _)
 
         when: 'the holder resumes beating within the fresh TTL and keeps beating'
-        (1..3).each { beat ->
-            def beaten = version('m1', "2000-01-01T0${beat}:00:00Z")
+        (1..3).each {
             time.advance(Duration.ofMinutes(5))
             reaper.reapOnce([])
         }
@@ -400,6 +400,7 @@ class ReaperSpec extends Specification {
         given:
         def sink = Mock(OpenTaskListingSink)
         def reaperWithSink = new Reaper(tracker, memory, sink)
+        def logs = LogCaptureSupport.attach(Reaper)
 
         when:
         reaperWithSink.reapOnce([])
@@ -408,6 +409,16 @@ class ReaperSpec extends Specification {
         1 * tracker.listOpen() >> { throw new RuntimeException('tracker down') }
         1 * sink.onListingFailed()
         0 * sink.onListed(_)
+
+        and: 'FR15 of harden-logging-observability: a reaper tick that reaped nothing because it could not look is a coded WARN'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.REAPER_SWEEP_LISTING_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+
+        cleanup:
+        logs.detach()
     }
 
     // The 2-arg constructor keeps every pre-existing call site working unchanged (NONE sink).

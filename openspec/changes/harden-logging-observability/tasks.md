@@ -304,20 +304,20 @@ overlap; the summary vocabulary is defined against post-harden `TakeResult`).
 
 ## 11. Operator-event catalog (FR14, D14)
 
-- [ ] 11.1 Create `logtext.OperatorEvent`: one constant per production
+- [x] 11.1 Create `logtext.OperatorEvent`: one constant per production
       WARN/ERROR call site (125 at the September 2026 audit), stable `[GFnnn]`
       codes, an accessor rendering the message head; class javadoc states the
       contract (never reuse, additive-only, operator plane only — no INFO/DEBUG
       codes); verify: catalog spec pins code uniqueness and format.
-- [ ] 11.2 Retag every production WARN/ERROR call site with its catalog
+- [x] 11.2 Retag every production WARN/ERROR call site with its catalog
       constant — mechanical message-head prefix, no level or wording changes;
       the four ADR-exempt `domain` emitters take the literal `[GFnnn]` head
       instead of a `:logtext` edge; verify: existing log-asserting specs stay
       green after adjusting for the head (contains-style asserts need no edit).
-- [ ] 11.3 Round-trip spec pinning the `domain` literal heads to their catalog
+- [x] 11.3 Round-trip spec pinning the `domain` literal heads to their catalog
       entries (the wire-vocabulary spec shape from `.claude/rules/testing.md`);
       verify: removing either side goes red.
-- [ ] 11.4 Glossary entries *operator event* and *log contract*; ADR 0004
+- [x] 11.4 Glossary entries *operator event* and *log contract*; ADR 0004
       amendment: the code-not-prose contract, the grep-from-column-0 migration
       note, and the deliberately-deferred-no-longer status of the runtime gate;
       `.claude/rules/logging.md` checklist gains items 7 (new WARN/ERROR takes
@@ -329,60 +329,78 @@ Each task: specs via `LogCaptureSupport` asserting code + level + attribution
 key; the definitive per-line map is in *Verification notes → Unpinned-line
 map* below.
 
-- [ ] 12.1 Ledger writers (11 lines, worst class — durable-plane loss with no
+- [x] 12.1 Ledger writers (11 lines, worst class — durable-plane loss with no
       trace): `LifecycleLedgerWriter:62`, `RunSummaryLedgerWriter:62`,
       `SweepLedgerWriter:85`, `TaskOutcomeLedgerWriter:68,:79`,
       `LedgerRetentionSweeper:80,:95`, `SnapshotWriteCycle:72,:87`,
       `SnapshotWriter:138`, `DashboardWatchLoop:88`.
-- [ ] 12.2 Abort/quarantine protocol (7 ERROR/WARN about lost work):
+- [x] 12.2 Abort/quarantine protocol (7 ERROR/WARN about lost work):
       `AbortHandler:89,:124,:138`, `TakeQuarantinePark:59,:70`,
       `FinishEffect:75,:83`, `GuardedPark:137,:145`.
-- [ ] 12.3 Daemon tick family (persistent-WARN-means-act):
+- [x] 12.3 Daemon tick family (persistent-WARN-means-act):
       `Reaper:106`, `WorktreeJanitor:109,:127,:170`, `SandboxLifecycleTick:74`,
       `InstanceHeartbeat:191,:202,:239`, `HeartbeatBeater:35`,
       `StandingReaper:145`, `DirtyNotifier:48`, `FeedOutageRetry:74`.
-- [ ] 12.4 Remaining application lines: `OrderedExit:133`,
+- [x] 12.4 Remaining application lines: `OrderedExit:133`,
       `RunExceptionReporting:54`, `TakeBatch:79`, `FinishedDecline:99`,
       `DecisionAck:133`, `RevocationCheckingAttemptPersistence:210`.
-- [ ] 12.5 Adapters: `ExecutorRoundExecution:123,:141,:146`,
+- [x] 12.5 Adapters: `ExecutorRoundExecution:123,:141,:146`,
       `AgentProgressEmitter:93`, `CompositeAgentProgressListener:55`,
       `FindingsFileReader:74,:83,:93`, `PinCheckedExternalCheckClient:98`,
       `ReplicaPairReconciler:136`, `MidRoundPollLog:84` (the dark roll-up
       edge — drive the streak past the threshold in both listener specs).
-- [ ] 12.6 Sandbox: `EgressGuard:98`, `GuardDenialReads:92,:96`,
+- [x] 12.6 Sandbox: `EgressGuard:98`, `GuardDenialReads:92,:96`,
       `HostChannelFiles:72`.
-- [ ] 12.7 Drop the *Known gaps* rows this section closes (janitor WARNs) and
+- [x] 12.7 Drop the *Known gaps* rows this section closes (janitor WARNs) and
       re-run the coverage sweep to confirm 0 unpinned; verify: static gate
-      (13.x) green with zero exemptions for these.
+      (13.x) green over this set, whose one `log-contract-exempt` is recorded
+      below. (The original wording said "zero exemptions for these"; the 53-row
+      map was built by a WARN/ERROR source scan, which does not distinguish a
+      reachable degrade path from an unreachable guard, and one row turned out
+      to be the latter — see *Known gaps*.)
 
 ## 13. Static log-contract gate (FR16, D15)
 
-- [ ] 13.1 `LogContractGateSpec` in `:bootstrap` architecture, on
+- [x] 13.1 `LogContractGateSpec` in `:bootstrap` architecture, on
       `LogCallSites`/`RepoSourceTree`: every WARN/ERROR site coded; every code
       used by exactly one site; every code present in ≥1 test source; in-place
       exemption `log-contract-exempt: <reason>`; verify: seeded violations
       (missing code, duplicate code, unreferenced code) each fail.
-- [ ] 13.2 Wire the scan floors (`KNOWN_*` counters) so an empty scan cannot
+      See *What the log-contract gate surfaced* below.
+- [x] 13.2 Wire the scan floors (`KNOWN_*` counters) so an empty scan cannot
       pass; verify: same guard pattern as `ThrowableConventionGateSpec`.
 
 ## 14. Runtime log-expectation gate (FR17, D16)
 
-- [ ] 14.1 Global Spock extension in `:test-fixtures`: per-feature root-level
-      WARN+ capture over `com.github.oinsio.gnomish.*`; events observed by an
-      attached `LogCaptureSupport` count as expected; per-spec allowance
-      annotation with a mandatory reason for deliberate non-pinned traversal;
-      verify: extension spec — unexpected WARN fails, captured WARN passes,
-      allowance passes with reason.
-- [ ] 14.2 Land in observing mode; burn down every offender the report names
-      (jointly with section 12); verify: observing report empty on full check.
-- [ ] 14.3 Flip to enforcing (M8); verify: full `./gradlew check` green in
-      enforcing mode; a seeded unexpected WARN in a scratch spec goes red.
+- [x] 14.1 Global Spock extension in `:test-fixtures`: per-feature root-level
+      WARN+ capture over `com.github.oinsio.gnomish.*`, split by whether a
+      spec's capture was attached in the emitting logger's chain — either
+      `LogCaptureSupport` or the hand-rolled `ListAppender` block that predates
+      it, read alike off Logback so NG5's no-bulk-migration holds; per-spec and
+      per-feature allowance annotation with a mandatory reason; verify:
+      extension spec — an unwatched WARN is reported, a captured one is not, an
+      allowance passes with a reason and a blank one fails.
+- [x] 14.2 Land in observing mode and read the report — which named 162 specs
+      and 667 features, almost all of them behavior specs crossing lines a
+      sibling feature pins. Per D16 as revised: the report stays per feature and
+      is always written, and the failure moves to the operator-event *code* over
+      the whole run; verify: the observing report is the artifact the revision
+      is argued from, and it is quoted in D16.
+- [x] 14.3 `checkLogExpectationGate` in `build-logic` (the
+      `TestTimeInjectionCheck` shape) computes the verdict from every module's
+      observations at once, registered on the root project and wired into
+      `check`, over the `test` suite only (M8). Build-wide because a per-module
+      verdict fails on codes owned and pinned one module up — 12 of them in
+      `:bootstrap` alone, plus `GF110` in `:application` and `GF114` in
+      `:adapters:git`, all of which the build-wide question answers correctly;
+      verify: full `./gradlew check` green with the task under it, and a seeded
+      uncaptured code in a scratch spec fails the build.
 
 ## 15. Closure
 
-- [ ] 15.1 M7 sweep: rerun the coverage audit; 125/125 coded and pinned or
+- [x] 15.1 M7 sweep: rerun the coverage audit; 125/125 coded and pinned or
       gate-exempted with reasons; verify: grep table appended below.
-- [ ] 15.2 Full `./gradlew check` green including both gates and PIT; M4
+- [x] 15.2 Full `./gradlew check` green including both gates and PIT; M4
       re-verified.
 
 ## Verification notes
@@ -507,6 +525,40 @@ a typo:
 M4 re-verified after the green run: nothing under `~/.gnomish/logs/` was written
 during the build.
 
+### What the catalog retag (section 11) surfaced
+
+- **The canonical summary's WARN rendering carries the code, its INFO rendering
+  does not.** `AnchorLog.taskSummary` picks its level from the outcome, and FR14
+  scopes codes to the operator plane, so `[GF109] ` prefixes only the
+  worth-looking-at half. The alternative was a `log-contract-exempt` on the site
+  — rejected: an exemption on the most-read line in the log is a bad precedent,
+  and the split is now asserted rather than incidental (`AnchorLogSpec` pins
+  `startsWith(head()) == (level == WARN)`).
+- **The retag made two dark lines' mutations visible; the second surfaced later.**
+  The first is `ReplicaPairReconciler`, below. The second is
+  `HostChannelFiles.DeleteFailures.record`'s `count++`: same mechanism — the
+  prepended head turns the format string into a concatenation, so PIT generates
+  a `MathMutator` on the counter argument that it had not generated before — and
+  `HostChannelFilesSpec` asserted the count as a bare `contains('7')`, which the
+  mutant's `-7` satisfies. Closed by asserting the count with its own words
+  around it (`contains('remove 7 entries')`) rather than by exempting the line.
+  Found while verifying task 14's `check`, which is the sort of place a
+  substring assertion this weak is worth looking for after any retag.
+- **The retag made one dark line's mutation visible.** Prepending the head turns
+  the format string into a runtime concatenation, and PIT then generates a
+  `MathMutator` on the `pass + 1` argument of `ReplicaPairReconciler`'s lost-CAS
+  WARN that it had not generated before — surviving, because nothing asserted
+  that line (it is a section-12.5 row). Closed by pinning the line instead of
+  working around the mutant: `ReplicaPairReconcilerSpec`'s bounded-passes feature
+  now asserts code, level, `taskId`, `branch` and `pass=1,2,3` over the three
+  lost passes. `:adapters:git` PIT is 646/646 again.
+- **Eleven specs asserted prose from column 0.** `startsWith('some sentence')` is
+  exactly what the code exists to unfreeze. Where the head is the subject, the
+  assert now reads `startsWith(OperatorEvent.X.head() + '…')`; where one
+  data-driven feature covers both an INFO and a WARN rendering, it reads
+  `contains`. `.claude/rules/logging.md` records the rule so the next spec starts
+  there.
+
 ### Unpinned-line map (FR15 baseline, September 2026 audit)
 
 The definitive 53-row map: every production WARN/ERROR line no spec asserted
@@ -528,10 +580,52 @@ Covered at audit time: 72/125 (domain 4/4; adapters/git 24/26; adapters/github
 4/4; the FR5-table lines 100%). The audit's SAFE half is deliberately not
 restated here — the gate (13.x) supersedes any static list once it lands.
 
+### What the log-contract gate surfaced
+
+Three things the whole-tree scan found that no diff review would have, recorded
+because each changed work outside section 13's own wording.
+
+- **48 of the 125 codes were named by no test source.** Section 12 closed the
+  *dark* lines — the ones no spec asserted at all — but the other 72 codes were
+  asserted by prose (`contains('command check timed out')`), which is the very
+  coupling FR14 introduced the catalog to remove: the sentence was still the
+  contract. All 48 are now pinned by code across ~25 spec files, mostly as a
+  `startsWith(OperatorEvent.X.head())` line beside the existing field asserts,
+  which stay — the code is the identity, the fields are the content. So M7's
+  125/125 holds by name, not only by capture.
+- **`LogCallSites` could not see a log call on an inline logger.** Its pattern
+  required the receiver to be a `log`/`logger`/`LOG`/`LOGGER` field, so
+  `DirtyNotifier.markDirtySafely`'s `LoggerFactory.getLogger(...).warn(...)` —
+  the shape a `static` helper with no instance to hold a field must use — was
+  invisible to *all three* source gates at once (FR6, FR7 and FR16), not just
+  this one. The pattern now accepts that receiver, and captures the level method
+  as a field rather than re-deriving it from the call text.
+- **A second `log-contract-exempt`, at `Slf4jSweepVerdictListener`.** Its one
+  `atLevel(levelOf(category))` statement writes DEBUG, INFO and WARN lines; a
+  catalog head is a property of the call, so coding it would stamp `[GFnnn]` on
+  the DEBUG and INFO siblings, which the operator-plane-only rule forbids.
+  Splitting the statement three ways to earn one code would duplicate its field
+  list to satisfy a gate. The WARN branch stays pinned behaviorally by
+  `Slf4jSweepVerdictListenerSpec`'s level table. Dynamic-level sites are judged
+  like every other operator site rather than skipped, so this exemption is
+  visible instead of being a hole the scanner never reported.
+
 ### Known gaps and debt carried out of this change
 
 Recorded here so the archive states them rather than leaving them to be
 rediscovered. None blocks the change; each is a follow-up, not a defect.
+
+- **The runtime gate reaches only the modules that carry `:test-fixtures`.**
+  Its registration is a `META-INF/services` entry there, so `:subprocess`,
+  `:atomicfile`, `:logtext` and `:sandbox:core` are outside it. No coverage is
+  lost today — none of the four writes a WARN or ERROR at all (the first two
+  never touch SLF4J, `:logtext` hands loggers to its callers, `:sandbox:core`
+  logs only at DEBUG) — and adding the edge now would fail the
+  dependency-analysis gate as an unused dependency. The debt is that this is a
+  fact rather than an invariant: a WARN added in one of those modules would be
+  caught by the static gate, which scans every `src/main`, but not by the
+  runtime one. The fix at that point is the `:test-fixtures` edge that module's
+  first spec-asserted line earns it, not a change to either gate.
 
 - **Eleven production files now sit over the 200-line hard cap
   (`process-invariants.md`).** `TakeSlotRunner` was already over it and grew by
@@ -547,13 +641,118 @@ rediscovered. None blocks the change; each is a follow-up, not a defect.
   responsibility boundary opened up with the growth — which is precisely the
   condition under which `process-invariants.md` says not to split. Splitting
   them needs its own change, driven by responsibilities rather than by the count.
-- **`WorktreeJanitor`'s own scan-failure and held-ref-sanitize WARNs have no
-  spec.** `WorktreeJanitorSpec` asserts the `taskId` scope around the disposal
-  decision, not those two lines; the FR5 table above is corrected to say so.
-  *Superseded by section 12.3* — the September 2026 log-contract extension
-  (FR14–FR17) closes this row along with the 50 others the full audit found.
+- **One of the 53 rows is exempt rather than pinned: `SnapshotWriter`'s
+  `SNAPSHOT_TICK_FAILED` guard.** `loop()` catches a `RuntimeException` from
+  `tick()`, but `SnapshotWriteCycle`'s `writeOnce()` and `sweepLedgerRetention()`
+  each already catch everything their own operations raise (both of *those*
+  lines are pinned by section 12.1), so the outer branch is reachable only with
+  an artificially broken collaborator — and a spec built on one asserts "catch
+  catches", not any behavior of the writer. The guard stays: its unreachability
+  is a non-local invariant that holds only while every future step added to
+  `tick()` keeps its own catch, and being wrong costs a dead writer thread and a
+  snapshot file that silently goes stale. The site carries the in-place
+  `log-contract-exempt` marker FR16 defines, with that reasoning at the line.
+  So the sweep closes 52 of 53 by spec and 1 by recorded exemption. (A second
+  exemption arrived with the gate itself, for a different reason — see *What the
+  log-contract gate surfaced*.) Also worth
+  saying: the 53-row map came from a source scan of WARN/ERROR sites, which
+  cannot tell a reachable degrade path from an unreachable guard — a later
+  audit of a similar map should expect a small tail of this shape rather than
+  read it as an implementation gap.
 - **`FindingsSanitizer`'s ANSI pattern was edited.** Task 1.5 promised the
   module's production code untouched. The edit — `\\]` → `]` inside an
   alternation — is a semantic no-op (`]` outside a character class needs no
   escape) and changes neither behavior nor the japicmp baseline. Recorded
   because the promise was written, not because the character matters.
+
+### M7 closure sweep (15.1)
+
+The final re-run of the coverage audit M7 is measured against, at the state
+this change ships in. Regenerate the counts with:
+
+```bash
+# catalog inventory
+grep -c 'GF[0-9]\{3\}' logtext/src/main/java/com/github/oinsio/gnomish/logtext/OperatorEvent.java
+# a code's production emitter
+grep -rn 'OperatorEvent\.<NAME>\|\[GFnnn\]' --include='*.java' */src/main --exclude-dir=build
+# the test sources naming it
+grep -rn 'OperatorEvent\.<NAME>\|\[GFnnn\]' --include='*.groovy' --include='*.java' */src/test --exclude-dir=build
+# the in-place exemptions
+grep -rn 'log-contract-exempt' --include='*.java' */src/main --exclude-dir=build
+```
+
+| Module | Catalog codes emitted | Pinned by a test source | Gate-exempt |
+|---|---|---|---|
+| `domain` | 4 | 4 | — |
+| `adapters` (check, pipeline, tracker-memory) | 10 | 10 | — |
+| `adapters/agent` | 12 | 12 | — |
+| `adapters/git` | 26 | 26 | — |
+| `adapters/github` | 4 | 4 | — |
+| `application` | 57 | 56 | 1 (`GF105`) |
+| `sandbox/docker` | 12 | 12 | — |
+| **Total** | **125** | **124** | **1** |
+
+Three properties hold across the sweep, each the whole-tree question one
+`LogContractGateSpec` feature asks, so the table is a snapshot of a gate that
+now fails the build rather than a list anybody must re-check by hand:
+
+- **125/125 coded.** Every catalog constant has exactly one production emitter;
+  no code is emitted from two files, and no site names a code the catalog does
+  not define.
+- **124/125 pinned by name.** Every code but one is named by at least one test
+  source, as `OperatorEvent.X` or as the literal `[GFnnn]` head.
+- **1/125 gate-exempt with a reason at the line.** `GF105`
+  (`SNAPSHOT_TICK_FAILED`, `SnapshotWriter:139`) — the unreachable
+  defense-in-depth guard argued in *Unpinned-line map* above; a spec built on an
+  artificially broken collaborator would assert "catch catches".
+
+One further operator-plane site is exempt and carries **no** code at all rather
+than an unpinned one: `Slf4jSweepVerdictListener:28`, whose single
+`atLevel(levelOf(category))` statement writes DEBUG, INFO and WARN, so a catalog
+head would stamp `[GFnnn]` on the non-operator siblings. It stays pinned
+behaviorally by `Slf4jSweepVerdictListenerSpec`'s level table. Both exemptions
+are visible to the scanner — it judges dynamic-level sites like any other rather
+than skipping what it cannot classify — so the escape hatch is a recorded
+decision, not a hole.
+
+### What the closure run surfaced (15.2)
+
+The first clean `./gradlew check` of the closure failed the runtime gate on
+`GF114` — and the failure was the gate's, not the code's. Recorded because the
+defect is invisible on any run where the tests happen to execute.
+
+**The runtime gate's evidence was not a declared task output.** The Spock
+extension writes each module's observations into
+`build/reports/log-expectation-gate/<suite>/`, but nothing told Gradle that
+directory belonged to the `test` task. A `test` served FROM-CACHE therefore
+contributed no evidence at all, and the verdict — deliberately build-wide, since
+a module routinely emits a line whose pin lives elsewhere — was computed over
+whichever suites happened to re-execute. In the failing run that was
+`:adapters:git:test` alone: it emitted `GF114` from the container contract spec,
+while `ContainerFileChannelSpec`, which pins that code, lives in
+`:sandbox:docker`, whose `test` came from cache. Nothing was watching, said the
+gate, correctly about the evidence it had and wrongly about the build.
+`outputs.dir(evidence)` in `test-conventions` closes it: a cached `test` restores
+its observations, so the verdict is a property of the build rather than of the
+cache's hit rate. The strength of the fix is visible in the report — 26 codes
+watched on the partial run, 125 on the whole one.
+
+Two environment flakes were separated out along the way, neither a defect of
+this change:
+
+- **Spotless fails when its apply task is cached and its check task is not.**
+  Every `spotless*Check` that executed while its `spotless*` twin came FROM-CACHE
+  raised `NoClassDefFoundError` out of the formatter's own classpath
+  (`Lists$TransformingSequentialList`, `GrEclipseFormatterStepImpl`). Both tasks
+  running for real is green, and the verifying run (`--no-build-cache`) reported
+  zero such errors. Worth knowing before reading it as a formatting failure.
+- **`GitProcessRunnerBoundedNetworkSpec` is load-sensitive.** Its wall-clock
+  assertion (a 2-second deadline plus a kill, asserted under 4 seconds) failed
+  once on a machine saturated by parallel PIT minions, and passes on its own.
+  Same shape as `ProcessSupervisorTreeKillSpec`'s sensitivity recorded in
+  `LogExpectationEvidence`.
+
+Final state: `./gradlew check` green with every gate under it — the throwable,
+untrusted-text, log-contract and log-expectation gates, `checkTestTimeInjection`,
+and PIT's `pitestVerifyAllKilled` in every module. M4 re-verified by byte-level
+comparison of `~/.gnomish/logs/` before and after the run: unchanged.

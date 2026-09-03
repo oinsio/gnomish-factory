@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -53,7 +54,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
         and:
         events.size() == 1
         events[0].level == Level.WARN
-        events[0].formattedMessage.startsWith('lifecycle push failed:')
+        events[0].formattedMessage.startsWith(OperatorEvent.LIFECYCLE_PUSH_FAILED.head() + 'lifecycle push failed:')
         events[0].formattedMessage.contains("taskId=${TASK_ID}")
         events[0].formattedMessage.contains("branch=${BRANCH}")
         events[0].formattedMessage.contains('event=RESUMED')

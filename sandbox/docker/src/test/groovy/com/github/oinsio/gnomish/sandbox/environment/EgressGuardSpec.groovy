@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -111,12 +112,26 @@ class EgressGuardSpec extends Specification {
             args == GuardCommands.inspectGuardRunning('k1') ? ok(recreated ? 'true\n' : 'false\n') : ok()
         }
 
+        and:
+        def logs = LogCaptureSupport.attach(EgressGuard)
+
         when:
         guard().ensureRunning()
 
         then: 'the broken guard was removed and a fresh one created with its bridge leg'
         docker.runs.contains(GuardCommands.removeGuard('k1'))
         docker.runs.contains(GuardCommands.connectBridge('k1'))
+
+        and: 'FR15 of harden-logging-observability: a silently recreated guard hides a repeating fault'
+        def recreatedWarning = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.EGRESS_GUARD_RECREATED.head())
+        }
+        recreatedWarning != null
+        recreatedWarning.level == Level.WARN
+        recreatedWarning.formattedMessage.contains('k1')
+
+        cleanup:
+        logs.detach()
     }
 
     // FR5 of harden-logging-observability: the repair pass verifies its own result, so a refused
@@ -565,7 +580,8 @@ class EgressGuardSpec extends Specification {
 
         then:
         warnings.any {
-            it.level == Level.WARN && it.formattedMessage.contains('tail window')
+            it.level == Level.WARN &&
+            it.formattedMessage.startsWith(OperatorEvent.GUARD_DENIAL_TAIL_WINDOW_FULL.head())
         }
     }
 
@@ -597,19 +613,19 @@ class EgressGuardSpec extends Specification {
         }
     }
 
-    /** Captures what the denial read logs — the reads live in {@link GuardDenialReads}, not the guard. */
+    /**
+     * Captures what the denial read logs — the reads live in {@link GuardDenialReads}, not the guard.
+     * Migrated to the shared helper (task 2.4 of harden-logging-observability) when section 12.6
+     * touched this spec.
+     */
     private static List<ILoggingEvent> capture(Closure emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(GuardDenialReads)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(GuardDenialReads)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        return appender.list
     }
 
     // NFR-R1: a transient docker outage must not silently swallow the denials it could not read
@@ -627,10 +643,19 @@ class EgressGuardSpec extends Specification {
         when:
         g.denialFindings()
         refuse = true
-        def duringOutage = g.denialFindings()
+        def duringOutage = null
+        def events = capture { duringOutage = g.denialFindings() }
 
-        then: 'the outage is silence, not a throw'
+        then: 'the outage is silence to the caller, but not to the log'
         duringOutage == []
+
+        and: 'FR15 of harden-logging-observability: an empty denial list that means "could not read" says so'
+        def refusedRead = events.find {
+            it.formattedMessage.startsWith(OperatorEvent.GUARD_DENIAL_LOG_READ_FAILED.head())
+        }
+        refusedRead != null
+        refusedRead.level == Level.WARN
+        refusedRead.formattedMessage.contains('k1')
 
         when: 'the daemon recovers and a denial arrived while it was down'
         refuse = false
@@ -662,11 +687,21 @@ class EgressGuardSpec extends Specification {
         when:
         g.denialFindings()
         down = true
-        def duringOutage = g.denialFindings()
+        def duringOutage = null
+        def events = capture { duringOutage = g.denialFindings() }
 
         then: 'the outage yields no findings and no exception'
         noExceptionThrown()
         duringOutage == []
+
+        and: 'FR15 of harden-logging-observability: the unreadable log is a coded WARN carrying the fault'
+        def unreadable = events.find {
+            it.formattedMessage.startsWith(OperatorEvent.GUARD_DENIAL_LOG_UNREADABLE.head())
+        }
+        unreadable != null
+        unreadable.level == Level.WARN
+        unreadable.formattedMessage.contains('k1')
+        unreadable.throwableProxy != null
 
         when: 'the daemon comes back and a denial arrived while it was down'
         down = false

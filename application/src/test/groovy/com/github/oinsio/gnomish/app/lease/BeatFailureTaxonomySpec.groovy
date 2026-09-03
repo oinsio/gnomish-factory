@@ -1,11 +1,14 @@
 package com.github.oinsio.gnomish.app.lease
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -58,6 +61,7 @@ class BeatFailureTaxonomySpec extends Specification {
         given:
         progressAt(A, 'plan', 0)
         hb.register(A)
+        def logs = LogCaptureSupport.attach(HeartbeatBeater)
 
         when: 'three consecutive beats fail with a 5xx-style exception'
         hb.tick()
@@ -69,12 +73,24 @@ class BeatFailureTaxonomySpec extends Specification {
         noExceptionThrown()
         !flag.isLost(A)
 
+        and: 'FR15 of harden-logging-observability: each swallowed beat leaves a coded WARN naming the task'
+        def beatFailures = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.HEARTBEAT_BEAT_FAILED.head())
+        }
+        beatFailures.size() == 3
+        beatFailures.every {
+            it.level == Level.WARN && it.formattedMessage.contains(A.id())
+        }
+
         when: 'the tracker recovers'
         hb.tick()
 
         then: 'the same claim beats again — it was never dropped'
         1 * tracker.heartbeat(A, _) >> BEATEN
         !flag.isLost(A)
+
+        cleanup:
+        logs.detach()
     }
 
     // FR8: a lost claim ends the run at the boundary — a ClaimGone beat sets the claim-loss

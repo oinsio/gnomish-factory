@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
@@ -36,7 +36,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             def runner = new Thread({
                 verdict = fence.ensureDelivered(tempDir, TASK_ID)
             })
@@ -59,7 +59,8 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         and: 'NFR-O2: the WARN names the interruption and does not call the push a failure'
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith('park delivery push interrupted, delivery unverified')
+        warnings[0].formattedMessage.startsWith(OperatorEvent.PARK_FENCE_INTERRUPTED.head()
+                + 'park delivery push interrupted, delivery unverified')
         !warnings.any { it.formattedMessage.contains('push failed') }
     }
 
@@ -70,7 +71,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = fence().ensureDelivered(tempDir, TASK_ID)
         }
 
@@ -91,7 +92,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = fence().ensureDelivered(tempDir, TASK_ID)
         }
 
@@ -102,7 +103,8 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         and: 'still one push: the deadline proved the remote unresponsive, a second wait proves nothing'
         pushAttempts(tempDir).toFile().readLines().size() == 1
         events.findAll { it.level == Level.WARN }*.formattedMessage.any {
-            it.startsWith('park delivery push timed out, origin confirmed behind')
+            it.startsWith(OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_BEHIND.head()
+            + 'park delivery push timed out, origin confirmed behind')
         }
     }
 
@@ -112,7 +114,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = fence().ensureDelivered(tempDir, TASK_ID)
         }
 
@@ -126,22 +128,12 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         and:
         pushAttempts(tempDir).toFile().readLines().size() == 1
         events.findAll { it.level == Level.WARN }*.formattedMessage.any {
-            it.startsWith('park delivery push timed out and origin did not answer the re-check')
+            it.startsWith(OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_SILENT.head()
+            + 'park delivery push timed out and origin did not answer the re-check')
         }
     }
 
     private ParkDeliveryFence fence() {
         new ParkDeliveryFence(new GitProcessRunner(stallingGit(tempDir).toString(), Duration.ofSeconds(2)))
-    }
-
-    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
-    private static List<ILoggingEvent> capture(Closure<?> emit) {
-        def logs = LogCaptureSupport.attach(ParkDeliveryFence, Level.INFO)
-        try {
-            emit()
-            return List.copyOf(logs.list)
-        } finally {
-            logs.detach()
-        }
     }
 }

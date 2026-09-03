@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -134,7 +135,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         noExceptionThrown()
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith('origin reconciliation push failed:')
+        warnings[0].formattedMessage.startsWith(OperatorEvent.ORIGIN_RECONCILIATION_FAILED.head() + 'origin reconciliation push failed:')
         warnings[0].formattedMessage.contains("taskId=${TASK_ID}")
         warnings[0].formattedMessage.contains("branch=${BRANCH}")
         warnings[0].formattedMessage.contains("touchpoint=${TOUCHPOINT}")
@@ -162,7 +163,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         and:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith('origin reconciliation skipped:')
+        warnings[0].formattedMessage.startsWith(OperatorEvent.ORIGIN_RECONCILIATION_SKIPPED.head() + 'origin reconciliation skipped:')
     }
 
     def "a clone with no origin is a silent no-op"() {

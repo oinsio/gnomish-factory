@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import org.jspecify.annotations.Nullable;
@@ -84,7 +85,11 @@ final class GithubWorkflowPollLog {
     private void cannotVerify(String subject, String reason) {
         switch (cannotVerifySuppressor.failed(KEY_PREFIX + subject, reason)) {
             case RepeatOccurrence.First first ->
-                log.warn("GitHub Actions check {} could not be verified: {}", subject, first.reason());
+                log.warn(
+                        OperatorEvent.GITHUB_WORKFLOW_CANNOT_VERIFY.head()
+                                + "GitHub Actions check {} could not be verified: {}",
+                        subject,
+                        first.reason());
             case RepeatOccurrence.Repeat repeat ->
                 log.debug(
                         "GitHub Actions check {} still cannot be verified ({}x): {}",
@@ -93,7 +98,8 @@ final class GithubWorkflowPollLog {
                         repeat.reason());
             case RepeatOccurrence.RollUp rollUp ->
                 log.warn(
-                        "GitHub Actions check {} could not be verified {}x over {}: {}",
+                        OperatorEvent.GITHUB_WORKFLOW_CANNOT_VERIFY_ROLLUP.head()
+                                + "GitHub Actions check {} could not be verified {}x over {}: {}",
                         subject,
                         rollUp.count(),
                         rollUp.elapsed(),

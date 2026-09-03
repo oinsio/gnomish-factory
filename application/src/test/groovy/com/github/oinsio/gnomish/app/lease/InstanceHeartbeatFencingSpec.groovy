@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -7,6 +8,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -78,6 +81,7 @@ class InstanceHeartbeatFencingSpec extends Specification {
             throw new TrackerUnavailableException('5xx')
         }
         hb.register(A)
+        def logs = LogCaptureSupport.attach(InstanceHeartbeat)
 
         when:
         clock.advance(LOST_DETECTION)
@@ -86,6 +90,17 @@ class InstanceHeartbeatFencingSpec extends Specification {
         then:
         unconfirmed == [A]
         lost.isEmpty()
+
+        and: 'FR15 of harden-logging-observability: the freeze is a coded WARN naming the claim it froze'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.CLAIM_UNCONFIRMED_WRITES_FROZEN.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains(A.id())
+
+        cleanup:
+        logs.detach()
     }
 
     // FR13: the fence is not the end of the run — the thread keeps beating, and a beat that lands

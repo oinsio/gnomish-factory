@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.serve.OccupiedSlot;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLineAssembler;
@@ -65,7 +66,10 @@ public final class TaskOutcomeLedgerWriter {
     public void write(TaskRef claimed, TakeResult result) {
         Instant startedAt = startedAtFor(claimed);
         if (startedAt == null) {
-            log.warn("no occupied slot entry for task {}; skipping taskOutcome ledger line", claimed.id());
+            log.warn(
+                    OperatorEvent.TASK_OUTCOME_SLOT_MISSING.head()
+                            + "no occupied slot entry for task {}; skipping taskOutcome ledger line",
+                    claimed.id());
             return;
         }
         TaskOutcomeLine line =
@@ -76,7 +80,11 @@ public final class TaskOutcomeLedgerWriter {
         try {
             appender.append(line);
         } catch (IOException e) {
-            log.error("failed to append taskOutcome ledger line for task {}", claimed.id(), e);
+            log.error(
+                    OperatorEvent.TASK_OUTCOME_LEDGER_APPEND_FAILED.head()
+                            + "failed to append taskOutcome ledger line for task {}",
+                    claimed.id(),
+                    e);
         }
     }
 

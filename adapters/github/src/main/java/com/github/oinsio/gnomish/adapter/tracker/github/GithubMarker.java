@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
@@ -209,7 +210,8 @@ public final class GithubMarker {
         // throwable-not-subject: the three parse failures are classified, not propagated — the
         //     reason phrase is the whole diagnosis and two of the branches have no exception at all.
         log.warn(
-                "dropping a gnomish marker comment because {}; the folds built on markers will not see it: {}",
+                OperatorEvent.MARKER_COMMENT_DROPPED.head()
+                        + "dropping a gnomish marker comment because {}; the folds built on markers will not see it: {}",
                 why,
                 LogText.forLog(json, MALFORMED_EXCERPT_CHARS));
     }

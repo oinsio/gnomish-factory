@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.nio.file.Path
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -122,6 +123,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         and: 'NFR-O2: exactly one WARN, carrying taskId/stage/round/branch context'
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.PUSH_SKIPPED_HEAD_OFF_BRANCH.head())
         events[0].formattedMessage.contains('taskId=PROJ-1')
         events[0].formattedMessage.contains('stage=implement')
         events[0].formattedMessage.contains('round=0')
@@ -151,6 +153,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         and: 'NFR-O2: exactly one WARN, carrying taskId/stage/round/branch/previousTip context'
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.PUSH_SKIPPED_TIP_NOT_ANCESTOR.head())
         events[0].formattedMessage.contains('taskId=PROJ-1')
         events[0].formattedMessage.contains('stage=implement')
         events[0].formattedMessage.contains('round=0')
@@ -184,7 +187,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         and: 'a WARN was actually logged for the rejected push — proving the failure branch, not the success one, ran'
         events.size() == 1
         events[0].level == Level.WARN
-        events[0].formattedMessage.startsWith('push failed:')
+        events[0].formattedMessage.startsWith(OperatorEvent.PUSH_FAILED.head() + 'push failed:')
         events[0].formattedMessage.contains('taskId=PROJ-1')
         events[0].formattedMessage.contains('stage=implement')
         events[0].formattedMessage.contains('round=0')

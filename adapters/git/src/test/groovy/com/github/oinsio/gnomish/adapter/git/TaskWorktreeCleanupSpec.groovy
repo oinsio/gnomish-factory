@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import spock.lang.Specification
@@ -137,6 +138,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         and: 'FR5: a removal git refused leaves a directory and a registration behind, and says so'
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.WORKTREE_REMOVE_FAILED.head())
         warnings[0].formattedMessage.contains('could not remove the worktree')
         warnings[0].formattedMessage.contains('stays registered until a prune')
     }

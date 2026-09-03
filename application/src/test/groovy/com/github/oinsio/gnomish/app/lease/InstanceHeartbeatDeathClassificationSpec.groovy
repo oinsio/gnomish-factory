@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
@@ -88,6 +89,7 @@ class InstanceHeartbeatDeathClassificationSpec extends Specification {
 
         then:
         levels == [Level.ERROR]
+        messages[0].startsWith(OperatorEvent.HEARTBEAT_THREAD_DIED.head())
         messages[0].contains('died; held claims will go stale and be reaped')
     }
 
@@ -101,6 +103,7 @@ class InstanceHeartbeatDeathClassificationSpec extends Specification {
 
         then: 'no ERROR blames the application, and the line says what really happened'
         levels == [Level.WARN]
+        messages[0].startsWith(OperatorEvent.HEARTBEAT_THREAD_STOPPED_BY_SHUTDOWN.head())
         messages[0].contains('stopped by the daemon shutdown')
         messages[0].contains('IllegalStateException')
     }

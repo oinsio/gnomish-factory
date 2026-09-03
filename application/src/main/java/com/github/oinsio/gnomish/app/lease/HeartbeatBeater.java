@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +33,7 @@ record HeartbeatBeater(Tracker tracker, HeartbeatProgress progress, Clock clock)
         try {
             result = tracker.heartbeat(ref, payload);
         } catch (RuntimeException e) {
-            log.warn("beat failed for {}; continuing", ref.id(), e);
+            log.warn(OperatorEvent.HEARTBEAT_BEAT_FAILED.head() + "beat failed for {}; continuing", ref.id(), e);
             return BeatOutcome.UNCONFIRMED;
         }
         if (result instanceof HeartbeatResult.ClaimGone) {

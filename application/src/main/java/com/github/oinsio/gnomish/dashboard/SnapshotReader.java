@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.LifecycleState;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonReader;
@@ -78,7 +79,8 @@ public final class SnapshotReader {
             // operator has to act on, while an absent one usually is not (FR5 of
             // harden-logging-observability).
             log.warn(
-                    "daemon snapshot at {} is present but unreadable; the dashboard renders it as absent",
+                    OperatorEvent.DAEMON_SNAPSHOT_UNREADABLE.head()
+                            + "daemon snapshot at {} is present but unreadable; the dashboard renders it as absent",
                     snapshotFile,
                     malformed);
             return new DaemonSnapshotView.Absent();

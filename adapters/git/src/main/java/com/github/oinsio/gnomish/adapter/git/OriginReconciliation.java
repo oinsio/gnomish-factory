@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -76,7 +77,8 @@ public final class OriginReconciliation {
             // repairs history (NG4): the resume-time reconciler owns discard-under-lease, this
             // read-only touchpoint does not, so it declines the push and says why.
             log.warn(
-                    "origin reconciliation skipped: taskId={}, branch={}, touchpoint={}, reason=origin tip {} is not"
+                    OperatorEvent.ORIGIN_RECONCILIATION_SKIPPED.head()
+                            + "origin reconciliation skipped: taskId={}, branch={}, touchpoint={}, reason=origin tip {} is not"
                             + " an ancestor of the local tip {}",
                     taskId,
                     branch,
@@ -103,7 +105,8 @@ public final class OriginReconciliation {
         String outcome = PushOutcome.describe("origin reconciliation push", result);
         if (outcome != null) {
             log.warn(
-                    "{}: taskId={}, branch={}, touchpoint={}, stderr={}",
+                    OperatorEvent.ORIGIN_RECONCILIATION_FAILED.head()
+                            + "{}: taskId={}, branch={}, touchpoint={}, stderr={}",
                     outcome,
                     taskId,
                     branch,

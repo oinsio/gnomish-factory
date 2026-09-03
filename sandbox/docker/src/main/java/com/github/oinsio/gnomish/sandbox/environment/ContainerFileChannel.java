@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
 import com.github.oinsio.gnomish.subprocess.Supervision;
 import com.github.oinsio.gnomish.subprocess.Termination;
@@ -103,7 +104,12 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
             throw new UncheckedIOException(failure("in-box read of " + path, code, errBytes));
         }
         if (bytes.length > sizeCap) {
-            log.warn("channel file {} in {} exceeded read cap {} bytes; truncated", path, key, sizeCap);
+            log.warn(
+                    OperatorEvent.CONTAINER_CHANNEL_FILE_TRUNCATED.head()
+                            + "channel file {} in {} exceeded read cap {} bytes; truncated",
+                    path,
+                    key,
+                    sizeCap);
             byte[] capped = new byte[(int) sizeCap];
             System.arraycopy(bytes, 0, capped, 0, capped.length);
             return Optional.of(capped);

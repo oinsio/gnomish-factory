@@ -25,6 +25,13 @@ public final class Slf4jSweepVerdictListener implements SweepVerdictListener {
 
     @Override
     public void onVerdict(SweepVerdict verdict) {
+        // log-contract-exempt: one statement, three levels. Only SKIPPED_NO_VERDICT grades to WARN
+        // (see levelOf below), and a catalog head is a property of the *call*, not of the level —
+        // prefixing it here would stamp a [GFnnn] code onto the CHECKED_ALIVE and DISPOSED_AGED
+        // lines this same statement writes at DEBUG and INFO, which the catalog's operator-plane-
+        // only rule forbids. Splitting the statement per level to earn one code would duplicate
+        // the field list three ways to satisfy a gate, not to serve an operator. The WARN branch
+        // is pinned behaviorally instead, by Slf4jSweepVerdictListenerSpec's level table.
         log.atLevel(levelOf(verdict.category()))
                 .log(
                         "sweep {} object={} role={} mode={} task={} reason=\"{}\" age={}",

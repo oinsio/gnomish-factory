@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,8 @@ public final class TaskWorktreeCleanup {
             // exactly the kind of slow leak nobody finds without a line (FR5).
             // throwable-not-subject: git reported a status, not a thrown fault.
             log.warn(
-                    "could not remove the worktree at {} (git exited {}); it stays registered until a prune: {}",
+                    OperatorEvent.WORKTREE_REMOVE_FAILED.head()
+                            + "could not remove the worktree at {} (git exited {}); it stays registered until a prune: {}",
                     worktreePath,
                     removal.exitCode(),
                     LogText.forLog(removal.stderr()));

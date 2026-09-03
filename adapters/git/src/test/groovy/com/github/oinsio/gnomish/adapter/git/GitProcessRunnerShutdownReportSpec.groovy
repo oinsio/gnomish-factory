@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -48,6 +49,7 @@ class GitProcessRunnerShutdownReportSpec extends Specification {
         result.termination() == Termination.INTERRUPTED
         capture.list.size() == 1
         capture.list[0].level == Level.WARN
+        capture.list[0].formattedMessage.startsWith(OperatorEvent.GIT_COMMAND_KILLED.head())
         capture.list[0].formattedMessage.contains('git command interrupted and its process tree was killed')
         !capture.list[0].formattedMessage.contains('daemon shutdown')
 
@@ -70,6 +72,7 @@ class GitProcessRunnerShutdownReportSpec extends Specification {
         capture.list.size() == 1
         capture.list[0].level == Level.WARN
         capture.list[0].throwableProxy == null
+        capture.list[0].formattedMessage.startsWith(OperatorEvent.GIT_COMMAND_KILLED.head())
         capture.list[0].formattedMessage.contains('git command interrupted by the daemon shutdown')
         capture.list[0].formattedMessage.contains('subcommand=ls-remote')
 

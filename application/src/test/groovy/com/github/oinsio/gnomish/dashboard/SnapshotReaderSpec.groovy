@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.dashboard
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
@@ -75,6 +76,7 @@ class SnapshotReaderSpec extends Specification {
         and:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.DAEMON_SNAPSHOT_UNREADABLE.head())
         warnings[0].formattedMessage.contains('present but unreadable')
 
         and: 'the parse failure keeps its stack'

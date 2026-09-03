@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,7 +61,11 @@ public final class BranchPush {
         GitCommandResult result = push.push(worktreeRoot, branch);
         String outcome = PushOutcome.describe("revocation push", result);
         if (outcome != null) {
-            log.warn("{}: branch={}, stderr={}", outcome, branch, LogText.forLog(result.stderr()));
+            log.warn(
+                    OperatorEvent.BRANCH_PUSH_FAILED.head() + "{}: branch={}, stderr={}",
+                    outcome,
+                    branch,
+                    LogText.forLog(result.stderr()));
         }
     }
 }

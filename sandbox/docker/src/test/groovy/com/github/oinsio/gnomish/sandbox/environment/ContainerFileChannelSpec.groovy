@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import spock.lang.Specification
@@ -76,6 +77,7 @@ class ContainerFileChannelSpec extends Specification {
 
         then:
         def warning = events.find { it.level == Level.WARN }
+        warning.formattedMessage.startsWith(OperatorEvent.CONTAINER_CHANNEL_FILE_TRUNCATED.head())
         warning.formattedMessage.contains('note.txt')
         warning.formattedMessage.contains('k1')
     }

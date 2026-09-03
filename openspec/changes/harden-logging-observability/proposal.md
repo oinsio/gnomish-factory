@@ -228,11 +228,16 @@ defect classes cannot return.
   WARN/ERROR call site carries no catalog code, when a catalog code is unused or
   used by more than one site, or when a code appears in no test source — with the
   same in-place exemption idiom as the existing source-scan gates.
-- **FR17** A runtime log-expectation gate SHALL fail any spec during which a
-  production logger emits a WARN/ERROR event that no attached capture observed
-  and no declared allowance covers — so a new degrade path cannot enter the
-  codebase with its line unasserted, and the static gate's text-presence check
-  gains a behavioral backstop.
+- **FR17** A runtime log-expectation gate SHALL report, for every spec, each
+  WARN/ERROR event a production logger emitted during it that no attached
+  capture was watching — so an operator line is never emitted in silence — and
+  SHALL fail the build on an operator-event code the build's test run emitted
+  that no attached capture anywhere in that run was watching and no declared
+  allowance covers. So a new degrade path cannot enter the codebase with its line
+  unasserted, and the static gate's text-presence check gains a behavioral
+  backstop. The failure is keyed on the code rather than on each traversal
+  because a behavior spec crossing an already-pinned degrade path is not the
+  defect (design D16 records the measurement that settled this).
 
 ### Non-Functional Reliability
 
@@ -293,9 +298,9 @@ defect classes cannot return.
 - **M7** 100% of production WARN/ERROR call sites carry a catalog code and are
   pinned by a spec (static gate red otherwise); baseline: 53/125 unpinned, 0/125
   coded at the September 2026 audit.
-- **M8** The runtime log-expectation gate runs in enforcing mode across every
-  module's suite, and a green `./gradlew check` emits zero unexpected WARN/ERROR
-  events.
+- **M8** The runtime log-expectation gate's verdict task runs under `check`, and
+  a green `./gradlew check` leaves zero operator-event codes emitted with no
+  capture watching them anywhere in the build's run.
 
 ## Open Questions
 

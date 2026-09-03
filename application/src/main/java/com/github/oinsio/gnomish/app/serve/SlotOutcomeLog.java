@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TaskSummaryAssembler;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.status.TaskSummary;
@@ -68,7 +69,11 @@ final class SlotOutcomeLog {
                         awaitingHuman.report());
             case TakeResult.Aborted aborted -> log.debug("slot for task {} aborted: {}", claimed.id(), aborted.cause());
             case TakeResult.Revoked revoked -> log.debug("slot for task {} revoked: {}", claimed.id(), revoked.note());
-            case TakeResult.Skipped skipped -> log.warn("slot for task {} skipped: {}", claimed.id(), skipped.reason());
+            case TakeResult.Skipped skipped ->
+                log.warn(
+                        OperatorEvent.SLOT_SKIPPED.head() + "slot for task {} skipped: {}",
+                        claimed.id(),
+                        skipped.reason());
             case TakeResult.EmptyQueue _ ->
                 log.debug("slot for task {} reported an unexpected empty-queue result", claimed.id());
         }
@@ -112,11 +117,15 @@ final class SlotOutcomeLog {
             // throwable-not-subject: the stop is the cause, and the classification is the whole
             //     content of the line — a stack here would be noise on every clean shutdown.
             log.warn(
-                    "slot for task {} stopped by the daemon shutdown ({})",
+                    OperatorEvent.SLOT_STOPPED_BY_SHUTDOWN.head()
+                            + "slot for task {} stopped by the daemon shutdown ({})",
                     claimed.id(),
                     crash.getClass().getSimpleName());
         } else {
-            log.error("slot for task {} crashed uncaught", claimed.id(), crash);
+            log.error(
+                    OperatorEvent.SLOT_CRASHED_UNCAUGHT.head() + "slot for task {} crashed uncaught",
+                    claimed.id(),
+                    crash);
         }
         AnchorLog.taskSummary(new TaskSummary(TaskSummary.Outcome.ABORTED, null, null, 0, wall, Map.of()));
     }

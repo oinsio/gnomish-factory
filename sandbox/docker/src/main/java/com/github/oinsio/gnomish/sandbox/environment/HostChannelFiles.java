@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.atomicfile.NonAtomicWrite;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -48,7 +49,11 @@ final class HostChannelFiles {
         try (InputStream in = Files.newInputStream(resolved)) {
             byte[] capped = in.readNBytes((int) Math.min(sizeCap, Integer.MAX_VALUE));
             if (in.read() != -1) {
-                log.warn("channel file {} exceeded read cap {} bytes; truncated", path, sizeCap);
+                log.warn(
+                        OperatorEvent.HOST_CHANNEL_FILE_TRUNCATED.head()
+                                + "channel file {} exceeded read cap {} bytes; truncated",
+                        path,
+                        sizeCap);
             }
             return Optional.of(capped);
         } catch (IOException e) {
@@ -69,7 +74,10 @@ final class HostChannelFiles {
         try (Stream<Path> walk = Files.walk(root)) {
             walk.sorted((a, b) -> b.getNameCount() - a.getNameCount()).forEach(p -> deleteQuietly(p, failures));
         } catch (IOException e) {
-            log.warn("could not fully remove scratch area {}", root, e);
+            log.warn(
+                    OperatorEvent.SCRATCH_AREA_REMOVAL_INCOMPLETE.head() + "could not fully remove scratch area {}",
+                    root,
+                    e);
             return;
         }
         failures.report(root, log);
@@ -103,7 +111,8 @@ final class HostChannelFiles {
                 return;
             }
             log.warn(
-                    "could not remove {} entries under scratch area {}; the first was {}",
+                    OperatorEvent.SCRATCH_AREA_ENTRIES_LEFT.head()
+                            + "could not remove {} entries under scratch area {}; the first was {}",
                     count,
                     root,
                     firstPath,

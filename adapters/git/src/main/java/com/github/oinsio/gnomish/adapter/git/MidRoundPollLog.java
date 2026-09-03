@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.util.Locale;
@@ -23,8 +24,13 @@ import org.slf4j.Logger;
  * harvest and reports only the second.
  *
  * <p>Implements FR4, FR13 of harden-logging-observability.
+ *
+ * @param log the listener's own logger, so lines are attributed to the polling class
+ * @param suppressor the edge-logging owner for this round's failure streaks
+ * @param taskId the task whose round is polling, for log context
+ * @param branch the task branch being watched; namespaces the streak keys
  */
-final class MidRoundPollLog {
+record MidRoundPollLog(Logger log, RepeatSuppressor suppressor, String taskId, String branch) {
 
     /** The suppressor subjects; each is namespaced by branch so rounds never share a streak. */
     enum Subject {
@@ -36,24 +42,6 @@ final class MidRoundPollLog {
         Subject(String label) {
             this.label = label;
         }
-    }
-
-    private final Logger log;
-    private final RepeatSuppressor suppressor;
-    private final String taskId;
-    private final String branch;
-
-    /**
-     * @param log the listener's own logger, so lines are attributed to the polling class
-     * @param suppressor the edge-logging owner for this round's failure streaks
-     * @param taskId the task whose round is polling, for log context
-     * @param branch the task branch being watched; namespaces the streak keys
-     */
-    MidRoundPollLog(Logger log, RepeatSuppressor suppressor, String taskId, String branch) {
-        this.log = log;
-        this.suppressor = suppressor;
-        this.taskId = taskId;
-        this.branch = branch;
     }
 
     /**
@@ -70,7 +58,13 @@ final class MidRoundPollLog {
         String clean = LogText.forLog(reason);
         switch (suppressor.failed(key(subject), clean)) {
             case RepeatOccurrence.First ignored ->
-                log.warn("{} skipped: taskId={}, branch={}, reason={}", subject.label, taskId, branch, clean, failure);
+                log.warn(
+                        OperatorEvent.MID_ROUND_POLL_SKIPPED.head() + "{} skipped: taskId={}, branch={}, reason={}",
+                        subject.label,
+                        taskId,
+                        branch,
+                        clean,
+                        failure);
             case RepeatOccurrence.Repeat repeat ->
                 log.debug(
                         "{} skipped again ({}x): taskId={}, branch={}, reason={}",
@@ -82,7 +76,8 @@ final class MidRoundPollLog {
                         failure);
             case RepeatOccurrence.RollUp rollUp ->
                 log.warn(
-                        "{} skipped {}x over {}: taskId={}, branch={}, reason={}",
+                        OperatorEvent.MID_ROUND_POLL_SKIPPED_ROLLUP.head()
+                                + "{} skipped {}x over {}: taskId={}, branch={}, reason={}",
                         subject.label,
                         rollUp.count(),
                         rollUp.elapsed(),

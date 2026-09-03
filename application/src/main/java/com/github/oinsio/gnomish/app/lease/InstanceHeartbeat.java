@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import java.time.Duration;
 import java.time.Instant;
@@ -152,11 +153,16 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             // the held claims going stale is the designed outcome, not lost work.
             // throwable-not-subject: an interrupt's stack describes the stop, not a defect.
             log.warn(
-                    "heartbeat thread {} stopped by the daemon shutdown ({}); held claims fall back to the lease TTL",
+                    OperatorEvent.HEARTBEAT_THREAD_STOPPED_BY_SHUTDOWN.head()
+                            + "heartbeat thread {} stopped by the daemon shutdown ({}); held claims fall back to the lease TTL",
                     dead.getName(),
                     e.getClass().getSimpleName());
         } else {
-            log.error("heartbeat thread {} died; held claims will go stale and be reaped", dead.getName(), e);
+            log.error(
+                    OperatorEvent.HEARTBEAT_THREAD_DIED.head()
+                            + "heartbeat thread {} died; held claims will go stale and be reaped",
+                    dead.getName(),
+                    e);
         }
         claims.markDied();
         // RUNNING → DIED, the FR7 trigger: wakes the writer so `died` lands immediately (design D4).
@@ -188,7 +194,7 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             try {
                 tick();
             } catch (RuntimeException e) {
-                log.warn("heartbeat tick failed; thread continues", e);
+                log.warn(OperatorEvent.HEARTBEAT_TICK_FAILED.head() + "heartbeat tick failed; thread continues", e);
             }
         }
     }
@@ -199,7 +205,10 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
         try {
             stateListener.onStateChanged();
         } catch (RuntimeException e) {
-            log.warn("heartbeat state listener failed; snapshot write may wait for the next timer beat", e);
+            log.warn(
+                    OperatorEvent.HEARTBEAT_STATE_LISTENER_FAILED.head()
+                            + "heartbeat state listener failed; snapshot write may wait for the next timer beat",
+                    e);
         }
     }
 
@@ -237,7 +246,8 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             return;
         }
         log.warn(
-                "claim for {} unconfirmed for longer than {}; freezing writes until it is re-verified",
+                OperatorEvent.CLAIM_UNCONFIRMED_WRITES_FROZEN.head()
+                        + "claim for {} unconfirmed for longer than {}; freezing writes until it is re-verified",
                 ref.id(),
                 lostDetection);
         claimLostSink.claimUnconfirmed(ref);

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
@@ -148,6 +149,7 @@ class GuardDenialLogSpec extends Specification {
         and: 'one line for the whole read — not twenty-five'
         def warnings = logs.list.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.GUARD_DENIAL_EVENTS_DROPPED.head())
         warnings[0].formattedMessage.contains('dropped 25 unparseable guard denial event(s)')
         warnings[0].formattedMessage.contains('20 malformed, 5 without a host')
         warnings[0].formattedMessage.contains(KEY)
@@ -248,6 +250,8 @@ class GuardDenialLogSpec extends Specification {
         GuardDenialLog.findings(KEY, log)
 
         then:
+        logs.list.find { it.level == Level.WARN }.formattedMessage
+        .startsWith(OperatorEvent.GUARD_DENIAL_LOG_TRUNCATED.head())
         logs.list.find { it.level == Level.WARN }.formattedMessage.contains(KEY)
 
         cleanup:

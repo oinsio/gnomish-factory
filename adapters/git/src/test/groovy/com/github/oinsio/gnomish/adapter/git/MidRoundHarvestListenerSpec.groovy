@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -167,6 +168,7 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         then: 'the console carries the fault once, with the throwable on it'
         def warnings = logs.list.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())
         warnings[0].formattedMessage.contains('taskId=PROJ-9')
         warnings[0].throwableProxy.className == HarvestRefusedException.name
 
@@ -174,6 +176,39 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         def repeats = logs.list.findAll { it.level == Level.DEBUG }
         repeats.size() == 4
         repeats.last().formattedMessage.contains('5x')
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR15 of harden-logging-observability: the roll-up is the other edge of the same suppression,
+    // and it is the one an operator acts on — "still failing, 6 times over 6 minutes" is what says
+    // the outage is not a blip. The audit found this branch dark while the first-occurrence branch
+    // was pinned, which is why it gets its own scenario rather than an extra assertion above.
+    def "FR15: a harvest still failing past the roll-up interval is announced again, with its count"() {
+        given: 'a harvest that fails on every poll of the round'
+        def l = listener(environment({
+            throw new HarvestRefusedException(BRANCH, 'non-fast-forward')
+        }))
+        def logs = LogCaptureSupport.attach(MidRoundHarvestListener, Level.DEBUG)
+
+        when: 'five polls inside the roll-up interval, then one past it'
+        5.times {
+            l.onProgress(toolEvent)
+            now = now.plusSeconds(60)
+            suppressorClock.advance(Duration.ofMinutes(1))
+        }
+        l.onProgress(toolEvent)
+
+        then: 'the sixth poll re-announces the streak rather than counting quietly'
+        def rollUps = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED_ROLLUP.head())
+        }
+        rollUps.size() == 1
+        rollUps[0].level == Level.WARN
+        rollUps[0].formattedMessage.contains('6x')
+        rollUps[0].formattedMessage.contains('taskId=PROJ-9')
+        rollUps[0].throwableProxy.className == HarvestRefusedException.name
 
         cleanup:
         logs.detach()

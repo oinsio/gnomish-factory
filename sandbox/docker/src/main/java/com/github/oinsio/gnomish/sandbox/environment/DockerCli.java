@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
@@ -168,7 +169,8 @@ class DockerCli {
         String subcommand = args.isEmpty() ? "docker" : args.getFirst();
         if (termination == Termination.TIMED_OUT) {
             log.warn(
-                    "docker command timed out and its process tree was killed: subcommand={},"
+                    OperatorEvent.DOCKER_COMMAND_TIMED_OUT.head()
+                            + "docker command timed out and its process tree was killed: subcommand={},"
                             + " elapsed={}, deadline={}",
                     subcommand,
                     elapsed,
@@ -178,7 +180,8 @@ class DockerCli {
         // FR9 of harden-logging-observability: same classification the git runner makes — an
         // interrupt during the shutdown phase is the stop, not an unexplained abort.
         log.warn(
-                "docker command {} and its process tree was killed: subcommand={}, elapsed={}",
+                OperatorEvent.DOCKER_COMMAND_KILLED.head()
+                        + "docker command {} and its process tree was killed: subcommand={}, elapsed={}",
                 ShutdownPhase.inProgress() ? "interrupted by the daemon shutdown" : "interrupted",
                 subcommand,
                 elapsed);

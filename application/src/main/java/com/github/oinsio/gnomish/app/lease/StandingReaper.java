@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.lease;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.time.Duration;
 import java.time.Instant;
@@ -112,7 +113,10 @@ public final class StandingReaper {
                 if (stopping) {
                     return;
                 }
-                log.warn("standing reaper tick failed; thread continues", e);
+                log.warn(
+                        OperatorEvent.STANDING_REAPER_TICK_FAILED.head()
+                                + "standing reaper tick failed; thread continues",
+                        e);
             }
         }
     }
@@ -134,7 +138,8 @@ public final class StandingReaper {
         Duration backoff = restartBackoff.nextBackoff(interval);
         int restartCount = restartBackoff.nextRestartCount();
         log.error(
-                "standing reaper worker {} died; respawning after {} backoff (restart #{})",
+                OperatorEvent.STANDING_REAPER_WORKER_DIED.head()
+                        + "standing reaper worker {} died; respawning after {} backoff (restart #{})",
                 dead.getName(),
                 backoff,
                 restartCount,
@@ -142,7 +147,10 @@ public final class StandingReaper {
         try {
             sleeper.sleep(backoff);
         } catch (Throwable backoffFailure) {
-            log.warn("backoff sleep before respawn failed; respawning without further delay", backoffFailure);
+            log.warn(
+                    OperatorEvent.STANDING_REAPER_BACKOFF_SLEEP_FAILED.head()
+                            + "backoff sleep before respawn failed; respawning without further delay",
+                    backoffFailure);
         }
         if (stopping) {
             return;

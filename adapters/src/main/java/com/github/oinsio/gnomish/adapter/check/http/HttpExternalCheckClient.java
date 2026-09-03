@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.util.List;
@@ -101,7 +102,8 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
             // throwable-not-subject: the refusal is a guard decision, not a fault — every fact is
             //     in its own sentence, and the exception exists only to unwind the hop.
             log.warn(
-                    "http check '{}' refused before the request left the factory: {}",
+                    OperatorEvent.HTTP_CHECK_REFUSED_BY_EGRESS.head()
+                            + "http check '{}' refused before the request left the factory: {}",
                     check.checkId(),
                     LogText.forLog(refusal.describe()));
             return new PollStatus.CannotVerify(

@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
@@ -239,7 +240,9 @@ class ReaperRepairSpec extends Specification {
         then: 'the diagnosis reaches the operator at warn'
         def warnings = logged.findAll { it.level == Level.WARN }
         warnings.any {
-            it.formattedMessage.contains('T-1') && it.formattedMessage.contains('no gnomish state label present')
+            it.formattedMessage.startsWith(OperatorEvent.REAPER_FOREIGN_BRANCH_UNOWNED.head()) &&
+            it.formattedMessage.contains('T-1') &&
+            it.formattedMessage.contains('no gnomish state label present')
         }
 
         and: 'FR8 of harden-logging-observability: and it is findable by taskId like every reap line'
@@ -400,7 +403,7 @@ class ReaperRepairSpec extends Specification {
             throw new IllegalStateException('tracker refused')
         }
         def failure = logged.find {
-            it.formattedMessage.contains('repair failed')
+            it.formattedMessage.startsWith(OperatorEvent.REAPER_REPAIR_FAILED.head())
         }
         failure.level == Level.WARN
         failure.MDCPropertyMap['taskId'] == 'T-1'

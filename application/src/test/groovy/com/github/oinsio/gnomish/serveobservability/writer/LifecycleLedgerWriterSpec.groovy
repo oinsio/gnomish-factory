@@ -1,15 +1,14 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
-import static com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile
-
+import ch.qos.logback.classic.Level
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
-import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -24,7 +23,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR12 of add-serve-observability.
  */
-class LifecycleLedgerWriterSpec extends Specification {
+class LifecycleLedgerWriterSpec extends Specification implements RotatingLedgerAppenderFixture {
 
     @TempDir
     Path homeDir
@@ -34,15 +33,12 @@ class LifecycleLedgerWriterSpec extends Specification {
     private static final ObjectMapper JSON = new ObjectMapper()
 
     private LifecycleLedgerWriter writer(Instant now) {
-        def appender = new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()),
-                homeDir, INSTANCE_NAME, Clock.fixed(now, ZoneOffset.UTC))
+        def appender = ledgerAppenderFor(homeDir, INSTANCE_NAME, now)
         return new LifecycleLedgerWriter(appender, INSTANCE, Clock.fixed(now, ZoneOffset.UTC))
     }
 
-    private Path ledgerFileFor(Instant now) {
-        def date = LocalDate.ofInstant(now, ZoneOffset.UTC)
-        return ledgerFile(homeDir, INSTANCE_NAME, date)
+    private Path fileFor(Instant now) {
+        return ledgerFileFor(homeDir, INSTANCE_NAME, now)
     }
 
     def "writeStarted appends exactly one started lifecycle line with no reason"() {
@@ -53,7 +49,7 @@ class LifecycleLedgerWriterSpec extends Specification {
         writer(now).writeStarted()
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+        def lines = Files.readString(fileFor(now)).split('\n').findAll {
             !it.isBlank()
         }
         lines.size() == 1
@@ -73,7 +69,7 @@ class LifecycleLedgerWriterSpec extends Specification {
         writer(now).writeStopped('signal')
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+        def lines = Files.readString(fileFor(now)).split('\n').findAll {
             !it.isBlank()
         }
         lines.size() == 1
@@ -85,16 +81,28 @@ class LifecycleLedgerWriterSpec extends Specification {
 
     // NFR-R1: a write failure (a blocked ledger directory) must never escape writeStarted/
     // writeStopped and crash the daemon.
-    def "writeStarted swallows an IOException from a blocked ledger directory"() {
+    //
+    // FR15 of harden-logging-observability: swallowed is not silent — the durable plane lost a
+    // line, so the pin is the catalog code and the ERROR level, not the sentence.
+    def "writeStarted swallows an IOException from a blocked ledger directory, leaving an ERROR trace"() {
         given:
         def now = Instant.parse('2026-08-03T10:00:00Z')
         Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
+        def logs = LogCaptureSupport.attach(LifecycleLedgerWriter)
 
         when:
         writer(now).writeStarted()
 
         then:
         noExceptionThrown()
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.LIFECYCLE_LEDGER_APPEND_FAILED.head())
+        }
+        event != null
+        event.level == Level.ERROR
+
+        cleanup:
+        logs.detach()
     }
 
     def "writeStarted then writeStopped append two lines in order"() {
@@ -107,7 +115,7 @@ class LifecycleLedgerWriterSpec extends Specification {
         w.writeStopped('drainComplete')
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+        def lines = Files.readString(fileFor(now)).split('\n').findAll {
             !it.isBlank()
         }
         lines.size() == 2

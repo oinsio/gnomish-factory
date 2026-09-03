@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import java.time.Duration;
 import java.time.Instant;
@@ -138,7 +139,8 @@ record FeedCycle(
                 // and assign() would reject the ref. A foreign instance may claim it, fenced as
                 // usual; this instance may again once the old slot releases.
                 log.warn(
-                        "feed skips claim candidate {}: it still occupies a local slot"
+                        OperatorEvent.FEED_CANDIDATE_OCCUPIES_SLOT.head()
+                                + "feed skips claim candidate {}: it still occupies a local slot"
                                 + " (self-reaped after an abnormal heartbeat death?)",
                         candidate.ref().id());
                 continue;

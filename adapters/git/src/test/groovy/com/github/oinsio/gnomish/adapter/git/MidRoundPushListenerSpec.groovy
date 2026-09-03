@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
@@ -217,8 +219,39 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
         and: 'the WARN names the task, the branch and git\'s own evidence'
         def warning = logs.list.find { it.level == Level.WARN }.formattedMessage
+        warning.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())
         warning.contains('taskId=PROJ-1')
         warning.contains('branch=gnomish/PROJ-1')
         warning.contains('git rev-parse')
+    }
+
+    // FR15 of harden-logging-observability: the host twin's roll-up edge, the one the audit found
+    // dark. A streak that outlives the quiet period must reach the console again with its count —
+    // otherwise a tip that has been unresolvable for the whole round says so exactly once and then
+    // goes quiet, which reads like a recovery.
+    def "FR15: a tip resolution still failing past the roll-up interval is announced again, with its count"() {
+        given: 'a suppressor on movable time, so the quiet period can elapse without waiting'
+        def suppressorClock = new MovableClock(Instant.EPOCH)
+        def rollingSuppressor = new RepeatSuppressor(suppressorClock, Duration.ofMinutes(5))
+        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', rollingSuppressor)
+        def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
+
+        when: 'HEAD stays unresolvable across a burst, then one more event past the quiet period'
+        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+        3.times { listener.onProgress(toolEvent) }
+        suppressorClock.advance(Duration.ofMinutes(6))
+        listener.onProgress(toolEvent)
+
+        then:
+        def rollUps = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED_ROLLUP.head())
+        }
+        rollUps.size() == 1
+        rollUps[0].level == Level.WARN
+        rollUps[0].formattedMessage.contains('4x')
+        rollUps[0].formattedMessage.contains('taskId=PROJ-1')
+
+        cleanup:
+        logs.detach()
     }
 }

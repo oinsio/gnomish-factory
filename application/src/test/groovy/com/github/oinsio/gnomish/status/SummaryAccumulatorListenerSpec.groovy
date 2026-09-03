@@ -62,7 +62,7 @@ class SummaryAccumulatorListenerSpec extends Specification {
 
         and:
         String message = capture.list[0].formattedMessage
-        message.startsWith("task summary: outcome=${word}")
+        message.contains("task summary: outcome=${word}")
         message.contains('stage=implement')
         message.contains('attempts=2')
         message.contains('tokens={sonnet=11/22/33/44}')

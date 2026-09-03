@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -155,6 +156,7 @@ class TakeCrashAbortSpec extends Specification {
         and: 'the degrade is not silent: the reset streak is named at WARN with the failure attached'
         def warn = events.find { it.level == Level.WARN }
         warn != null
+        warn.formattedMessage.startsWith(OperatorEvent.ABORT_FACTS_UNREADABLE.head())
         warn.formattedMessage.contains('PROJ-1')
         warn.formattedMessage.contains('first abort in the streak')
         warn.throwableProxy.message == 'tracker unreachable'

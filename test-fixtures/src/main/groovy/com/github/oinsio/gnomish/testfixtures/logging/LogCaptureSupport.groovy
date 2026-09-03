@@ -23,6 +23,13 @@ import org.slf4j.LoggerFactory
  * restores whatever level the logger carried before — leaving the pin behind would make any later
  * spec asserting on this logger's configured level order-dependent.
  *
+ * <p>Attaching is also how a spec declares the operator lines it expects: the runtime
+ * log-expectation gate ({@link LogExpectationGate}, FR17) fails a feature that provokes a
+ * WARN/ERROR no capture was watching. There is deliberately no second API for that declaration —
+ * a line a spec asserts on and a line a spec expects are the same line, and the gate reads the
+ * attachment straight off Logback rather than from a registry this class would have to keep in
+ * step.
+ *
  * <p>Implements FR11 and NFR-O1 of harden-logging-observability: NFR-O1's "the existing
  * log-capture idiom" is this class, and every observability spec the change added asserts its
  * emitted events through it.
@@ -63,6 +70,22 @@ final class LogCaptureSupport {
     /** The events captured so far. */
     List<ILoggingEvent> getList() {
         appender.list
+    }
+
+    /**
+     * Runs {@code emit} while capturing {@code loggerClass}'s logger at {@code level}, and returns
+     * the events it produced. Combines {@link #attach} and {@link #detach} for specs that need only
+     * the captured events, not the {@link LogCaptureSupport} instance — the shared shape of the
+     * hand-rolled attach/emit/detach block this class exists to replace.
+     */
+    static List<ILoggingEvent> capture(Class<?> loggerClass, Level level, Closure<?> emit) {
+        def logs = attach(loggerClass, level)
+        try {
+            emit()
+            return List.copyOf(logs.list)
+        } finally {
+            logs.detach()
+        }
     }
 
     /** Stops capturing and restores the logger's previous level. */

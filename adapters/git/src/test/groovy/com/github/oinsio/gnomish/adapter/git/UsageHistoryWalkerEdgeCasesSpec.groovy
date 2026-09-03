@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
@@ -209,6 +210,7 @@ exec git "\$@"
         and:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.USAGE_HISTORY_LISTING_FAILED.head())
         warnings[0].formattedMessage.contains('could not list the state-touching commits')
         warnings[0].formattedMessage.contains('the report will be empty')
     }

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +57,7 @@ public final class TakeQuarantinePark {
         TaskRef ref = trackerTask.ref();
         String report =
                 BranchQuarantineReport.of(trackerTask.snapshot().id(), quarantine.shape(), trackerTask.abortFacts());
-        log.error("Quarantining task {}", ref.id(), quarantine);
+        log.error(OperatorEvent.TASK_QUARANTINED.head() + "Quarantining task {}", ref.id(), quarantine);
         parkBestEffort(tracker, ref, report);
         TaskState finalState =
                 TaskState.atStageStart(definition.stages().getFirst().name());
@@ -67,7 +68,11 @@ public final class TakeQuarantinePark {
         try {
             tracker.park(ref, ParkReason.INFRA, report);
         } catch (RuntimeException unparked) {
-            log.error("park(INFRA) failed for quarantined task {}; stopping for a human anyway", ref.id(), unparked);
+            log.error(
+                    OperatorEvent.QUARANTINE_PARK_FAILED.head()
+                            + "park(INFRA) failed for quarantined task {}; stopping for a human anyway",
+                    ref.id(),
+                    unparked);
         }
     }
 }

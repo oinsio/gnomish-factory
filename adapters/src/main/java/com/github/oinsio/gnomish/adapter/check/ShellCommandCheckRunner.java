@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
@@ -142,7 +143,11 @@ public record ShellCommandCheckRunner(
         try {
             acquired = environments.acquire(check, workspace);
         } catch (CheckEnvironmentUnavailableException e) {
-            log.warn("command check '{}' cannot be verified: no environment to run it in", identityOf(check), e);
+            log.warn(
+                    OperatorEvent.COMMAND_CHECK_NO_ENVIRONMENT.head()
+                            + "command check '{}' cannot be verified: no environment to run it in",
+                    identityOf(check),
+                    e);
             return new Verdict.CannotVerify(e.getMessage() != null ? e.getMessage() : e.toString(), "");
         }
         try (acquired) {
@@ -153,7 +158,10 @@ public record ShellCommandCheckRunner(
                 // throwable-not-subject: the runner reports a failed start as a null outcome, so
                 //     there is no throwable to attach here — the cause was logged where it was
                 //     caught, and this line is the decision that turns it into CannotVerify.
-                log.warn("command check '{}' cannot be verified: the process failed to start", identityOf(check));
+                log.warn(
+                        OperatorEvent.COMMAND_CHECK_PROCESS_START_FAILED.head()
+                                + "command check '{}' cannot be verified: the process failed to start",
+                        identityOf(check));
                 return new Verdict.CannotVerify("failed to start command: " + check.command(), "");
             }
 

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -106,7 +107,10 @@ public final class WorktreeJanitor {
             try {
                 tick();
             } catch (RuntimeException e) {
-                log.warn("worktree janitor tick failed; will retry next tick", e);
+                log.warn(
+                        OperatorEvent.WORKTREE_JANITOR_TICK_FAILED.head()
+                                + "worktree janitor tick failed; will retry next tick",
+                        e);
             }
             sleeper.sleep(TICK_INTERVAL);
         }
@@ -124,7 +128,10 @@ public final class WorktreeJanitor {
         try (Stream<Path> children = Files.list(projectRoot)) {
             children.filter(Files::isDirectory).forEach(dir -> disposeIfAged(dir, held, now));
         } catch (IOException e) {
-            log.warn("worktree janitor: failed to scan {}", projectRoot, e);
+            log.warn(
+                    OperatorEvent.WORKTREE_JANITOR_SCAN_FAILED.head() + "worktree janitor: failed to scan {}",
+                    projectRoot,
+                    e);
         }
     }
 
@@ -167,7 +174,11 @@ public final class WorktreeJanitor {
                 // A held ref that already survived worktree creation is expected to sanitize
                 // cleanly; ignored defensively rather than failing the whole tick over one ref.
                 try (var taskScope = MdcAwareThread.taskScope(ref.id())) {
-                    log.warn("worktree janitor: held ref {} did not sanitize; skipping", ref.id(), e);
+                    log.warn(
+                            OperatorEvent.WORKTREE_JANITOR_REF_UNSANITARY.head()
+                                    + "worktree janitor: held ref {} did not sanitize; skipping",
+                            ref.id(),
+                            e);
                 }
             }
         }

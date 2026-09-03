@@ -1,0 +1,5 @@
+# The runtime log-expectation gate (FR17 of harden-logging-observability). Registering it here
+# rather than per module is the point: the gate must see every spec of every module whose test
+# classpath carries `:test-fixtures`, and a per-module registration is exactly the kind of
+# bookkeeping a new module would silently skip.
+com.github.oinsio.gnomish.testfixtures.logging.LogExpectationGate

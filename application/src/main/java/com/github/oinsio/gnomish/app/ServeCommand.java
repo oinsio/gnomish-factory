@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -210,7 +211,8 @@ final class ServeCommand {
             // a startup that died here left nothing at all in the log — the one record of why the
             // daemon never came up went to a terminal nobody keeps.
             log.error(
-                    "gnomish serve: startup failed provisioning tracker {}",
+                    OperatorEvent.SERVE_TRACKER_PROVISION_FAILED.head()
+                            + "gnomish serve: startup failed provisioning tracker {}",
                     bindingDescription(trackerConfig),
                     startupFailure);
             System.err.println("gnomish serve: startup failed provisioning tracker " + bindingDescription(trackerConfig)

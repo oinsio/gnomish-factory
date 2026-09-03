@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -67,7 +68,8 @@ final class GuardDenialLog {
             }
             if (findings.size() == MAX_EVENTS) {
                 log.warn(
-                        "guard denial log for {} holds more than {} events; further denials are truncated",
+                        OperatorEvent.GUARD_DENIAL_LOG_TRUNCATED.head()
+                                + "guard denial log for {} holds more than {} events; further denials are truncated",
                         key,
                         MAX_EVENTS);
                 break;
@@ -112,7 +114,8 @@ final class GuardDenialLog {
                 return;
             }
             log.warn(
-                    "dropped {} unparseable guard denial event(s) for {} ({} malformed, {} without a host);"
+                    OperatorEvent.GUARD_DENIAL_EVENTS_DROPPED.head()
+                            + "dropped {} unparseable guard denial event(s) for {} ({} malformed, {} without a host);"
                             + " these denials are missing from the findings. First malformed reason: {}",
                     malformed + withoutHost,
                     key,

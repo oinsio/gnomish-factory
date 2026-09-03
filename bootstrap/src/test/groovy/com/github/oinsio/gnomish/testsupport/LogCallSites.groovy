@@ -6,10 +6,10 @@ import java.util.function.Predicate
 import java.util.regex.Pattern
 
 /**
- * Extraction of SLF4J call sites from production sources, shared by the two convention gates of
- * harden-logging-observability (D9): ThrowableConventionGateSpec (FR7) and
- * UntrustedLogTextGateSpec (FR6). Both need the same thing — one log call's full argument list,
- * however many lines it spans — so the parser lives here once.
+ * Extraction of SLF4J call sites from production sources, shared by the convention gates of
+ * harden-logging-observability: ThrowableConventionGateSpec (FR7, D9), UntrustedLogTextGateSpec
+ * (FR6, D9) and LogContractGateSpec (FR16, D15). All of them need the same thing — one log call's
+ * full argument list, however many lines it spans — so the parser lives here once.
  *
  * <p>The scan runs over comment-stripped code ({@link RepoSourceTree#code}), because a convention
  * gate must judge what the compiler sees; the raw lines are kept alongside so an in-place
@@ -21,23 +21,43 @@ class LogCallSites {
     static final int KNOWN_LOG_CALLS = 200
 
     /**
-     * Both SLF4J call shapes. The classic one carries its arguments in the level method's own
-     * parens; the fluent one ({@code log.atLevel(x).log(msg, a, b)}, {@code
+     * A mis-built level filter would leave the log-contract gate (FR16) judging an empty site set
+     * while the whole-call floor above still passed: every INFO and DEBUG line would satisfy
+     * KNOWN_LOG_CALLS on its own. The catalog held 125 constants when the gate landed.
+     */
+    static final int KNOWN_OPERATOR_CALLS = 100
+
+    /**
+     * Both SLF4J call shapes, on either receiver shape. The classic call carries its arguments in
+     * the level method's own parens; the fluent one ({@code log.atLevel(x).log(msg, a, b)}, {@code
      * log.atInfo().setMessage(...).log()}) carries them further down a builder chain, so a match
      * on {@code atInfo(} alone would hand the gates an argument list that is always empty — a
      * silent blind spot rather than a visible one. {@link #inSource} therefore extends a fluent
-     * match through the chain to its terminal {@code .log(...)}, and both gates see one call text
+     * match through the chain to its terminal {@code .log(...)}, and every gate sees one call text
      * either way.
+     *
+     * <p>The receiver is the usual static {@code log} field or a logger acquired inline
+     * ({@code LoggerFactory.getLogger(X.class).warn(...)}, which a {@code static} helper with no
+     * instance to hold a field must do). Matching the field name alone made the inline shape
+     * invisible to all three gates at once — the same fail-open the unparsed-call list exists to
+     * prevent, one level further up.
      */
     private static final Pattern LOG_CALL = Pattern.compile(
-    '\\b(?:log|logger|LOG|LOGGER)\\.(?:error|warn|info|debug|trace|at(?:Level|Error|Warn|Info|Debug|Trace))\\s*\\(')
+    '(?:\\b(?:log|logger|LOG|LOGGER)|LoggerFactory\\s*\\.\\s*getLogger\\s*\\([^()]*\\))\\s*\\.\\s*' +
+    '(error|warn|info|debug|trace|at(?:Level|Error|Warn|Info|Debug|Trace))\\s*\\(')
 
-    /** One call site: where it is, and the whole call text with comments removed. */
+    /**
+     * One call site: where it is, the whole call text with comments removed, and the level method
+     * it was made through ({@code warn}, {@code atLevel}, ...). The level is captured rather than
+     * re-derived from the text, because the text may open with an inline logger acquisition and a
+     * message may itself contain the word.
+     */
     @Canonical
     static class LogCall {
         String path
         int line
         String text
+        String level
     }
 
     /** Every log call in every production source, optionally narrowed by relative path. */
@@ -88,14 +108,13 @@ class LogCallSites {
                 unparsed << "${path}:${line}".toString()
                 continue
             }
-            int end = code.substring(matcher.start(), matcher.end()).contains('.at')
-                    ? endOfFluentChain(code, close)
-                    : close
+            String level = matcher.group(1)
+            int end = level.startsWith('at') ? endOfFluentChain(code, close) : close
             if (end < 0) {
                 unparsed << "${path}:${line}".toString()
                 continue
             }
-            calls << new LogCall(path, line, code.substring(matcher.start(), end + 1))
+            calls << new LogCall(path, line, code.substring(matcher.start(), end + 1), level)
         }
         new Scan(calls, unparsed)
     }

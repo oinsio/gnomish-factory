@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.time.Duration;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
@@ -71,7 +72,11 @@ record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier) {
                 if (Thread.interrupted()) {
                     throw new InterruptedException(what + " interrupted during tracker-outage retry");
                 }
-                log.warn("{} failed, tracker outage suspected; retrying after backoff", what, e);
+                log.warn(
+                        OperatorEvent.FEED_TRACKER_OUTAGE_SUSPECTED.head()
+                                + "{} failed, tracker outage suspected; retrying after backoff",
+                        what,
+                        e);
                 sleeper.sleep(backoffSupplier.get());
             }
         }

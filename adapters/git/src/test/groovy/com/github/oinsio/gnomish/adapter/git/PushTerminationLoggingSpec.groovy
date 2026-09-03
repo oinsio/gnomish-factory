@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.nio.file.Path
 import java.time.Duration
 import org.slf4j.LoggerFactory
@@ -40,7 +41,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
         then:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith("push timed out: taskId=${TASK_ID}")
+        warnings[0].formattedMessage.startsWith(OperatorEvent.PUSH_FAILED.head() + "push timed out: taskId=${TASK_ID}")
         !warnings[0].formattedMessage.contains('push failed')
     }
 
@@ -62,7 +63,8 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
         then:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith("lifecycle push was interrupted: taskId=${TASK_ID}")
+        warnings[0].formattedMessage.startsWith(OperatorEvent.LIFECYCLE_PUSH_FAILED.head()
+                + "lifecycle push was interrupted: taskId=${TASK_ID}")
         !warnings[0].formattedMessage.contains('failed')
     }
 
@@ -78,7 +80,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
         and:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith("revocation push timed out: branch=${BRANCH}")
+        warnings[0].formattedMessage.startsWith(OperatorEvent.BRANCH_PUSH_FAILED.head() + "revocation push timed out: branch=${BRANCH}")
     }
 
     // NFR-O1: only the runner knows both numbers, so the WARN that carries them is the runner's.
@@ -91,7 +93,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
         then:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith('git network command timed out')
+        warnings[0].formattedMessage.startsWith(OperatorEvent.GIT_NETWORK_COMMAND_TIMED_OUT.head() + 'git network command timed out')
         warnings[0].formattedMessage.contains('subcommand=push')
         warnings[0].formattedMessage.contains('deadline=PT2S')
 
@@ -119,7 +121,7 @@ class PushTerminationLoggingSpec extends Specification implements StallingGitFix
         new RoundBoundaryCheck(runner, tempDir, BRANCH)
     }
 
-    private static List<ILoggingEvent> capture(Class<?> subject, Closure<Void> emit) {
+    private static List<ILoggingEvent> capture(Class<?> subject, Closure<?> emit) {
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(subject)
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
         appender.start()

@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
@@ -76,6 +77,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         and: 'the unreachable environment is named at WARN, with the cause attached'
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_PROBE_UNREACHABLE.head())
         warnings[0].formattedMessage.contains('salvage probe could not reach the environment')
         warnings[0].throwableProxy.className == ProcessStartException.name
     }
@@ -113,6 +115,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         and: 'but it is on the record, findable by the task it cost'
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_SKIPPED_ENVIRONMENT_LOST.head())
         warnings[0].formattedMessage.contains('taskId=SALV-LOST')
         warnings[0].formattedMessage.contains('environment lost')
         warnings[0].throwableProxy.className == ProcessStartException.name
@@ -142,6 +145,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         and:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.DISCARD_SKIPPED_ENVIRONMENT_LOST.head())
         warnings[0].formattedMessage.contains('discard skipped')
         warnings[0].formattedMessage.contains('leftovers stay in the box')
         warnings[0].throwableProxy.className == ProcessStartException.name
@@ -366,6 +370,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         and: 'FR5: the commit that never reached the factory clone is named, with its task and cause'
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_HARVEST_FAILED.head())
         warnings[0].formattedMessage.contains('salvage harvest failed for taskId=SALV-4')
         warnings[0].throwableProxy.className == HarvestFailedException.name
 

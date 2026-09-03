@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter.Vote;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
@@ -107,13 +108,22 @@ final class JudgeRoundExecution {
 
     /** The two exits whose cause is a decision rather than a throwable (timeout, interrupt). */
     private static Vote cannotVerify(VerifyCheck.Judge check, String reason, String details) {
-        log.warn(CANNOT_VERIFY_LINE, check.criteriaFile(), reason, details);
+        log.warn(
+                OperatorEvent.JUDGE_CANNOT_VERIFY_BY_DECISION.head() + CANNOT_VERIFY_LINE,
+                check.criteriaFile(),
+                reason,
+                details);
         return new Vote(new Verdict.CannotVerify(reason, details), Map.of());
     }
 
     /** The four exits carrying a throwable, which is passed trailing so the stack survives. */
     private static Vote cannotVerify(VerifyCheck.Judge check, String reason, String details, Throwable cause) {
-        log.warn(CANNOT_VERIFY_LINE, check.criteriaFile(), reason, details, cause);
+        log.warn(
+                OperatorEvent.JUDGE_CANNOT_VERIFY_BY_THROWABLE.head() + CANNOT_VERIFY_LINE,
+                check.criteriaFile(),
+                reason,
+                details,
+                cause);
         return new Vote(new Verdict.CannotVerify(reason, details), Map.of());
     }
 }

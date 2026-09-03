@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.adapter.github.GithubHttpException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -290,6 +291,7 @@ class GithubClaimLeaseSpec extends Specification {
         and: 'FR5 of harden-logging-observability: the swallowed delete still leaves a trace'
         def warnings = logs.list.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.CLAIM_COMMENT_DELETE_FAILED.head())
         warnings[0].formattedMessage.contains('could not delete claim comment 802')
         warnings[0].formattedMessage.contains('acme/widgets#26')
         warnings[0].formattedMessage.contains('it stays on the thread')

@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -15,7 +18,10 @@ import spock.lang.Specification
  */
 class OrderedExitSpec extends Specification {
 
-    List<String> steps = []
+    // Synchronized, not a bare ArrayList: the two concurrency features below append from the
+    // winner and loser threads while the feature thread reads, and an unsynchronized list makes
+    // that a data race whose symptom is an equality failure between two lists that print alike.
+    List<String> steps = Collections.synchronizedList(new ArrayList<String>())
 
     def setup() {
         ShutdownPhase.reset()
@@ -234,15 +240,19 @@ class OrderedExitSpec extends Specification {
         loser.start()
         !loserReturned.await(200, TimeUnit.MILLISECONDS)
 
-        when:
+        when: 'the close is released and both callers have run to completion'
         releaseClose.countDown()
+        // Joined here rather than in cleanup: the loser is freed from the winner's finally, which
+        // runs BEFORE the Error reaches the winner's own catch — so releasing the loser does not
+        // imply 'winnerThrew' has been appended yet, and asserting on it without this join is a
+        // race the suite loses intermittently.
+        winner.join(5_000)
 
         then: 'the flush happened, the Error still reached its own caller, and the loser is free'
         loserReturned.await(5, TimeUnit.SECONDS)
         steps == ['stopLogging', 'winnerThrew']
 
         cleanup:
-        winner.join(5_000)
         loser.join(5_000)
     }
 
@@ -293,11 +303,22 @@ class OrderedExitSpec extends Specification {
         }, {
             steps << 'stopLogging'
         })
+        def logs = LogCaptureSupport.attach(OrderedExit)
 
         when:
         OrderedExit.closeAndStopLogging()
 
         then:
         steps == ['stopLogging']
+
+        and: 'FR15 of harden-logging-observability: the unclean close is named before logging stops'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.CONTEXT_CLOSE_UNCLEAN.head())
+        }
+        event != null
+        event.level == Level.WARN
+
+        cleanup:
+        logs.detach()
     }
 }

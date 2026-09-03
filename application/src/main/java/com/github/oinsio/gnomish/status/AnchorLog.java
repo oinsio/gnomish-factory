@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.time.Duration;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -93,7 +94,7 @@ public final class AnchorLog {
     public static void taskSummary(TaskSummary summary) {
         String rendered = render(summary);
         if (summary.outcome().worthLookingAt()) {
-            log.warn("{}", rendered);
+            log.warn(OperatorEvent.TASK_SUMMARY_WORTH_LOOKING_AT.head() + "{}", rendered);
             return;
         }
         log.info("{}", rendered);

@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -85,6 +86,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
         then:
         def warning = theOnlyWarning()
+        warning.formattedMessage.startsWith(OperatorEvent.JUDGE_CANNOT_VERIFY_BY_THROWABLE.head())
         warning.formattedMessage.contains('criteria.md')
         warning.formattedMessage.contains('agent CLI process failed to start')
 
@@ -101,6 +103,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
         then:
         def warning = theOnlyWarning()
+        warning.formattedMessage.startsWith(OperatorEvent.JUDGE_CANNOT_VERIFY_BY_DECISION.head())
         warning.formattedMessage.contains('criteria.md')
         warning.formattedMessage.contains('exceeded roundTimeout')
 
@@ -117,6 +120,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
         then:
         def warning = theOnlyWarning()
+        warning.formattedMessage.startsWith(OperatorEvent.JUDGE_CANNOT_VERIFY_BY_DECISION.head())
         warning.formattedMessage.contains('wait was interrupted')
         !warning.formattedMessage.contains('exceeded')
     }
@@ -185,6 +189,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
         then:
         preflight.present
         def warning = theOnlyWarning()
+        warning.formattedMessage.startsWith(OperatorEvent.JUDGE_CRITERIA_UNREADABLE.head())
         warning.formattedMessage.contains('criteria.md')
         warning.formattedMessage.contains('unreadable criteria file')
         warning.throwableProxy != null

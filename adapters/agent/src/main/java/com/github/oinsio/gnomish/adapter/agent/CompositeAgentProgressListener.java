@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +54,8 @@ public record CompositeAgentProgressListener(List<AgentProgressListener> listene
                 // FR6: the child that threw is the news here, not the agent's words inside the
                 // event — so the line carries the listener's identity and the variant's type name.
                 log.warn(
-                        "agent progress listener {} threw for {}",
+                        OperatorEvent.COMPOSITE_PROGRESS_LISTENER_THREW.head()
+                                + "agent progress listener {} threw for {}",
                         listener.getClass().getSimpleName(),
                         event.getClass().getSimpleName(),
                         ex);

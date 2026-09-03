@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.util.HashSet;
@@ -97,7 +98,8 @@ public final class FinishedDecline {
                 announceDecline(task.ref().id());
             } catch (RuntimeException e) {
                 log.warn(
-                        "declineFinished failed for task {}; left for the next poll cycle",
+                        OperatorEvent.DECLINE_FINISHED_FAILED.head()
+                                + "declineFinished failed for task {}; left for the next poll cycle",
                         task.ref().id(),
                         e);
             }

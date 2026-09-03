@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -76,7 +77,11 @@ final class TakeBatch {
                 try {
                     outcomes[index] = new TakeBatchOutcome(rawRef, perRef.apply(rawRef));
                 } catch (RuntimeException ex) {
-                    log.warn("batch take: ref '{}' failed with a tool error", rawRef, ex);
+                    log.warn(
+                            OperatorEvent.BATCH_TAKE_REF_TOOL_ERROR.head()
+                                    + "batch take: ref '{}' failed with a tool error",
+                            rawRef,
+                            ex);
                     outcomes[index] = TakeBatchOutcome.toolFailure(rawRef, ex);
                 } finally {
                     ledger.release(slotKey);

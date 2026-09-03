@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
 import com.github.oinsio.gnomish.subprocess.Captured;
@@ -244,7 +245,8 @@ public final class GitProcessRunner {
         String subcommand = GitNetworkCommands.subcommand(args);
         if (termination == Termination.TIMED_OUT) {
             log.warn(
-                    "git network command timed out and its process tree was killed: subcommand={},"
+                    OperatorEvent.GIT_NETWORK_COMMAND_TIMED_OUT.head()
+                            + "git network command timed out and its process tree was killed: subcommand={},"
                             + " elapsed={}, deadline={}",
                     subcommand,
                     elapsed,
@@ -255,7 +257,8 @@ public final class GitProcessRunner {
         // doing its job, so the line says so rather than reading as an unexplained abort. The level
         // stays WARN and the stack stays absent either way — the bound that fired is the whole fact.
         log.warn(
-                "git command {} and its process tree was killed: subcommand={}, elapsed={}",
+                OperatorEvent.GIT_COMMAND_KILLED.head()
+                        + "git command {} and its process tree was killed: subcommand={}, elapsed={}",
                 ShutdownPhase.inProgress() ? "interrupted by the daemon shutdown" : "interrupted",
                 subcommand,
                 elapsed);

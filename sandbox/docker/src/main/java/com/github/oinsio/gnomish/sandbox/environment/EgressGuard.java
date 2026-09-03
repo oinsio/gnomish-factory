@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import java.nio.file.Path;
 import java.util.List;
@@ -95,7 +96,9 @@ public final class EgressGuard {
         if (repaired.ok() && running(repaired)) {
             return;
         }
-        log.warn("egress guard for {} did not come up; recreating it once", key);
+        log.warn(
+                OperatorEvent.EGRESS_GUARD_RECREATED.head() + "egress guard for {} did not come up; recreating it once",
+                key);
         repairStep("remove", docker.run(GuardCommands.removeGuard(key)));
         create();
         DockerResult recreated = docker.run(GuardCommands.inspectGuardRunning(key));

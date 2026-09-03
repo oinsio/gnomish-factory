@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
@@ -71,6 +72,9 @@ class FinishedDeclineSpec extends Specification {
             },
         ] as Tracker
 
+        and:
+        def logs = LogCaptureSupport.attach(FinishedDecline)
+
         when:
         decline.declineObserved(tracker, [
             task('github:o/r#1', true),
@@ -83,6 +87,17 @@ class FinishedDeclineSpec extends Specification {
             new TaskRef('github:o/r#1'),
             new TaskRef('github:o/r#2')
         ]
+
+        and: 'FR15 of harden-logging-observability: the entry left for the next cycle is a coded WARN naming it'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.DECLINE_FINISHED_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains('github:o/r#1')
+
+        cleanup:
+        logs.detach()
     }
 
     // FR12: serve re-reads the feed every few seconds. The first decline of a task is news; the

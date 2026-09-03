@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -130,7 +131,10 @@ public final class OrderedExit {
         } catch (RuntimeException contextCloseFailed) {
             // Logging is still up at this point — and this is the last chance to say anything at
             // all, since the very next statement stops it.
-            log.warn("application context did not close cleanly; logging is stopped next", contextCloseFailed);
+            log.warn(
+                    OperatorEvent.CONTEXT_CLOSE_UNCLEAN.head()
+                            + "application context did not close cleanly; logging is stopped next",
+                    contextCloseFailed);
         } finally {
             // In a finally rather than after the catch: an Error thrown out of the close (a bean
             // hitting OutOfMemoryError, a NoClassDefFoundError on a shutdown path) is not a

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import java.util.List;
 import java.util.Optional;
@@ -89,16 +90,23 @@ final class GuardDenialReads {
             // The runtime outage classification (NFR-R1) applies to work the factory still owes;
             // a denial read is pure observability of work already finished, so an unreachable
             // daemon here is silence with the cursor left where it was — never a thrown round.
-            log.warn("could not read egress guard log for {}", key, e);
+            log.warn(
+                    OperatorEvent.GUARD_DENIAL_LOG_UNREADABLE.head() + "could not read egress guard log for {}",
+                    key,
+                    e);
             return List.of();
         }
         if (!logs.ok()) {
-            log.warn("could not read egress guard log for {}: {}", key, LogText.forLog(logs.stderr()));
+            log.warn(
+                    OperatorEvent.GUARD_DENIAL_LOG_READ_FAILED.head() + "could not read egress guard log for {}: {}",
+                    key,
+                    LogText.forLog(logs.stderr()));
             return List.of();
         }
         if (GuardLogCursor.saturated(logs.stdout(), LOG_TAIL_LINES)) {
             log.warn(
-                    "egress guard log read for {} filled its {}-line tail window; older lines of this"
+                    OperatorEvent.GUARD_DENIAL_TAIL_WINDOW_FULL.head()
+                            + "egress guard log read for {} filled its {}-line tail window; older lines of this"
                             + " window were dropped before parsing and are not in the findings (NFR-O1)",
                     key,
                     LOG_TAIL_LINES);

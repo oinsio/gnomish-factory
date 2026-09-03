@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.status
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import spock.lang.Specification
@@ -83,10 +84,13 @@ class AnchorLogSpec extends Specification {
 
         and:
         String message = capture.list[0].formattedMessage
-        message.startsWith("task summary: outcome=${outcome.word()}")
+        message.contains("task summary: outcome=${outcome.word()}")
         message.contains('stage=implement')
         message.contains('attempts=2')
         message.contains('wall=PT1M15S')
+
+        and: 'FR14: the operator-plane rendering — and only it — carries the catalog code head'
+        message.startsWith(OperatorEvent.TASK_SUMMARY_WORTH_LOOKING_AT.head()) == (level == Level.WARN)
 
         and: 'a park names its reason inline; every other outcome adds no parenthetical'
         message.contains(' (') == (parkReason != null)

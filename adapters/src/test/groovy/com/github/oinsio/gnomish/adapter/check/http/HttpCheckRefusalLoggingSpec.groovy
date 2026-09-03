@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
@@ -26,6 +27,7 @@ class HttpCheckRefusalLoggingSpec extends Specification implements HttpCheckFixt
     private String refusalLine() {
         def warnings = logs.list.findAll { it.level.levelStr == 'WARN' }
         assert warnings.size() == 1
+        assert warnings[0].formattedMessage.startsWith(OperatorEvent.HTTP_CHECK_REFUSED_BY_EGRESS.head())
         warnings[0].formattedMessage
     }
 

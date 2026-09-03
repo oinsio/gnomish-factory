@@ -75,6 +75,47 @@ duplicate-per-path lines the audit found (origin reconciliation, remote
 delivery, first push, dispose vs verdict) and keeps the console count equal to
 the fault count.
 
+### The operator plane is addressed by code, not by prose
+
+Every production WARN and ERROR line begins with a stable catalog code —
+`[GF042] failed to append sweep ledger line` — drawn from one enum,
+`OperatorEvent` (`:logtext`). One constant per call site; a code is never
+reused; the catalog only grows. **The code is the contract and the sentence is
+not**: an alert, an operator's grep and a spec's assertion all key on the code,
+so wording may be rewritten freely without breaking any of them. That inverts
+the previous state, where a WARN line's only identity was its prose, and every
+test asserting one froze the wording it happened to have.
+
+One code is one *call site*, not one kind of fault: two emitters of the same
+condition take two constants, because what the operator needs from the code is
+*where* the factory degraded. INFO and DEBUG carry no codes — the catalog's
+scope is the operator plane, and extending it downward would make every
+diagnostic line a versioned interface.
+
+Two gates hold the contract up, and they ship together because each covers the
+other's blind spot: a **static** source scan fails the build on an uncoded
+WARN/ERROR site, a code used by two sites, or a code named by no test source
+(the in-place `log-contract-exempt: <reason>` idiom is its escape hatch); a
+**runtime** Spock extension fails any feature during which a production logger
+emits a WARN/ERROR that no attached capture observed and no declared allowance
+covers. The static half alone would accept a code that appears only in a
+comment; the runtime half is what makes it behavioral. A runtime assertion gate
+of this shape was passed over as too disruptive while hundreds of specs
+legitimately traversed WARN paths unasserted — it is adopted here because the
+pin sweep (FR15) closes those paths first, and the flip to enforcing is the
+last step rather than the first.
+
+Migration note for anyone with a saved grep: the head moved the prose off
+column 0. A pattern anchored at the start of the message (`^failed to append`,
+or a `startsWith` in a spec) no longer matches; an unanchored one still does.
+Prefer the code.
+
+The four `:domain` emitters of accepted deviation 1 cannot reach `:logtext`
+without giving the domain a module edge it exists to refuse, so they carry the
+literal `[GFnnn]` head. A round-trip spec pins each literal to its catalog
+constant, the same shape the project's wire-vocabulary rule prescribes: delete
+either side and it goes red.
+
 ### The exception is the trailing argument, always
 
 `log.warn("could not read {}", path, e)` — never `e.toString()`, never
@@ -136,8 +177,10 @@ accept on purpose:
 - The FILE appender is asynchronous, so a `kill -9` can lose the last instants.
   SIGTERM/Ctrl+C are protected by the owned shutdown sequence's flush; `kill -9`
   is not, and nothing that matters lives only in the log.
-- Nothing reads the log programmatically. A change may reword any line without
-  a compatibility concern; readers grep by MDC key, not by column position.
+- Nothing reads the log programmatically, and no *sentence* is a compatibility
+  surface: readers grep by MDC key or by operator-event code, never by column
+  position. The codes themselves are the one exception — they are stable on
+  purpose, which is what lets the prose stay free.
 
 ### Accepted deviations
 
@@ -173,8 +216,9 @@ Recorded so they are decisions rather than drift:
 
 ## Consequences
 
-- Every emitter has a citable rule, and two of the rules are mechanical gates
-  (throwable position, untrusted-text routing) rather than review vigilance.
+- Every emitter has a citable rule, and four of the rules are mechanical gates
+  (throwable position, untrusted-text routing, code coverage of the operator
+  plane, and no unasserted WARN in a spec run) rather than review vigilance.
 - Console volume becomes a health signal: a healthy `serve` hour is silent, so
   any WARN is worth reading.
 - New mechanisms carry ownership: `AnchorLog` for lifecycle anchors and the
@@ -186,8 +230,8 @@ Recorded so they are decisions rather than drift:
 ## See also
 
 - `.claude/rules/logging.md` — the emitter's one-page checklist.
-- `docs/glossary.md` — *anchor line*, *canonical task summary*, *repeat
-  suppression*, *log text sanitization*.
+- `docs/glossary.md` — *anchor line*, *canonical task summary*, *operator
+  event*, *log contract*, *repeat suppression*, *log text sanitization*.
 - `.claude/rules/manual-sync-pairs.md` — the `LogText` ↔ `FindingsSanitizer`
   row.
 - `docs/adr/0003-crash-consistency.md` — why the durable record is the media,

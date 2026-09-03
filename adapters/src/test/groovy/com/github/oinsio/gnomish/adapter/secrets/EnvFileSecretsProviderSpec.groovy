@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.secrets
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -106,6 +107,7 @@ class EnvFileSecretsProviderSpec extends Specification {
         and: 'exactly one warning, naming the _FILE variable'
         def warnings = events.findAll { it.level.levelStr == 'WARN' }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.SECRET_FILE_UNREADABLE.head())
         warnings[0].formattedMessage.contains('GNOMISH_GITHUB_TOKEN_FILE')
 
         and: 'no value the provider could have resolved appears anywhere in the line'

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -9,6 +10,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -40,6 +43,7 @@ class AbortHandlerSpec extends Specification {
     def "an abort below the fuse records the abort and returns Aborted"() {
         given: 'a prior count two below the threshold of 3'
         def facts = new AbortFacts(0, null)
+        def logs = LogCaptureSupport.attach(AbortHandler)
 
         when:
         def result = handler.handle(REF, STATE, 'connection reset', facts, THRESHOLD, INSTANCE)
@@ -48,6 +52,17 @@ class AbortHandlerSpec extends Specification {
         1 * tracker.recordAbort(REF, new AbortRecord('connection reset', INSTANCE.value(), CLOCK.instant()))
         0 * tracker.park(*_)
         result == new TakeResult.Aborted(STATE, 'connection reset')
+
+        and: 'FR15 of harden-logging-observability: every abort announces itself as a coded ERROR naming the task'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.INFRASTRUCTURE_ABORT.head())
+        }
+        event != null
+        event.level == Level.ERROR
+        event.formattedMessage.contains('PROJ-1')
+
+        cleanup:
+        logs.detach()
     }
 
     // FR14, NFR-C1: the fuse trips when count + 1 reaches the threshold, parking
@@ -160,6 +175,7 @@ class AbortHandlerSpec extends Specification {
         tracker.park(*_) >> {
             throw new RuntimeException('tracker unreachable')
         }
+        def logs = LogCaptureSupport.attach(AbortHandler)
 
         when:
         def result = handler.handle(REF, STATE, 'disk full', facts, THRESHOLD, INSTANCE)
@@ -169,6 +185,17 @@ class AbortHandlerSpec extends Specification {
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
         (result as TakeResult.AwaitingHuman).report().contains('disk full')
+
+        and: 'FR15: the tracker never learned the task is parked, so the swallow leaves a coded ERROR'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.ABORT_PARK_FAILED.head())
+        }
+        event != null
+        event.level == Level.ERROR
+        event.formattedMessage.contains('PROJ-1')
+
+        cleanup:
+        logs.detach()
     }
 
     // NFR-R2: "a dead tracker never blocks the abort itself" — a recordAbort
@@ -180,6 +207,7 @@ class AbortHandlerSpec extends Specification {
         tracker.recordAbort(*_) >> {
             throw new RuntimeException('tracker unreachable')
         }
+        def logs = LogCaptureSupport.attach(AbortHandler)
 
         when:
         def result = handler.handle(REF, STATE, 'tracker down', facts, THRESHOLD, INSTANCE)
@@ -187,6 +215,17 @@ class AbortHandlerSpec extends Specification {
         then:
         noExceptionThrown()
         result == new TakeResult.Aborted(STATE, 'tracker down')
+
+        and: 'FR15: the unrecorded attempt under-counts the fuse, so the swallow leaves a coded ERROR'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.ABORT_RECORD_FAILED.head())
+        }
+        event != null
+        event.level == Level.ERROR
+        event.formattedMessage.contains('PROJ-1')
+
+        cleanup:
+        logs.detach()
     }
 
     // FR10 of add-claim-heartbeat: the abort path stays best-effort — a tracker OUTAGE

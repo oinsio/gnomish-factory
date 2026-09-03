@@ -21,26 +21,20 @@ import org.slf4j.LoggerFactory;
  * surfaced to the loop as a {@link TaskOutcome.Aborted} (NFR-O1).
  *
  * <p>Implements FR11, FR12, NFR-O1 of add-stage-engine.
+ *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.logtext.OperatorEvent}: this class's
+ * operator line repeats catalog code {@code GF110} as a literal head, because {@code :domain}
+ * must not take a {@code :logtext} edge to reach the catalog (ADR 0004, accepted deviation 1).
+ * The literal and the constant are pinned equal by {@code DomainOperatorEventHeadSpec}; there is
+ * no resolvable link either way, which is why the pair is listed in
+ * {@code .claude/rules/manual-sync-pairs.md}.
+ *
+ * @param listener the listener the round's events are delivered to; never null
+ * @param persistence the port each round's state is persisted through; never null
  */
-final class AttemptJournal {
+record AttemptJournal(EngineEventListener listener, AttemptPersistence persistence) {
 
     private static final Logger log = LoggerFactory.getLogger(AttemptJournal.class);
-
-    private final EngineEventListener listener;
-    private final AttemptPersistence persistence;
-
-    /**
-     * Wires the journal from a run's ports: the {@link EngineEventListener} it emits to and
-     * the {@link AttemptPersistence} it persists each round through. Both immutable, so the
-     * journal carries no mutable state (NFR-R1).
-     *
-     * @param listener the listener the round's events are delivered to; never null
-     * @param persistence the port each round's state is persisted through; never null
-     */
-    AttemptJournal(EngineEventListener listener, AttemptPersistence persistence) {
-        this.listener = listener;
-        this.persistence = persistence;
-    }
 
     /**
      * Emits {@link EngineEvent.AttemptStarted} for the round about to run under {@code key}
@@ -73,7 +67,7 @@ final class AttemptJournal {
         try {
             persistence.persist(taskId, newState, trace);
         } catch (RuntimeException ex) {
-            log.error("persist failed for {}", key, ex);
+            log.error("[GF110] persist failed for {}", key, ex);
             return new TaskOutcome.Aborted(newState, key, StackTraces.render(ex));
         }
         Events.emit(listener, new EngineEvent.AttemptFinished(key, newState, trace));

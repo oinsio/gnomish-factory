@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
@@ -135,6 +136,7 @@ class TokenUsageMapperSpec extends Specification {
         and:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.TOKEN_USAGE_UNREPORTED.head())
         warnings[0].formattedMessage.contains('no usable token usage')
     }
 

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -192,6 +193,9 @@ exec git "\$@"
         warnings.size() == 2
         warnings[0].formattedMessage.contains('reset --hard HEAD')
         warnings[1].formattedMessage.contains('clean -fd')
+        warnings.every {
+            it.formattedMessage.startsWith(OperatorEvent.WORKTREE_DISCARD_STEP_FAILED.head())
+        }
         warnings.every {
             it.formattedMessage.contains('leftovers stay in the worktree')
         }

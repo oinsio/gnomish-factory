@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.app.serve
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
@@ -45,6 +48,7 @@ class FeedOutageRetryInterruptSpec extends Specification {
         def retry = new FeedOutageRetry(interruptingSleeper, {
             Duration.ofSeconds(30)
         })
+        def logs = LogCaptureSupport.attach(FeedOutageRetry)
 
         when: 'the outage retry runs against the perpetually-failing call while the interrupt arrives'
         retry.run('feed poll', {
@@ -57,5 +61,16 @@ class FeedOutageRetryInterruptSpec extends Specification {
         and: 'it did not spin: exactly one backoff, and the flag was consumed by Thread.interrupted()'
         sleeps.get() == 1
         !Thread.currentThread().isInterrupted()
+
+        and: 'FR15 of harden-logging-observability: the suspected outage is a coded WARN naming what failed'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.FEED_TRACKER_OUTAGE_SUSPECTED.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains('feed poll')
+
+        cleanup:
+        logs.detach()
     }
 }

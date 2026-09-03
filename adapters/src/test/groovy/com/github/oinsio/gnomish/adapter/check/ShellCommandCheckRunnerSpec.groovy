@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import java.nio.file.Files
@@ -107,6 +108,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         and: 'FR5 of harden-logging-observability: the degradation names the check it happened to'
         def warning = events.find { it.level.levelStr == 'WARN' }
         warning != null
+        warning.formattedMessage.startsWith(OperatorEvent.COMMAND_CHECK_PROCESS_START_FAILED.head())
         warning.formattedMessage.contains('failed to start')
         warning.formattedMessage.contains("'pwd'")
     }
@@ -133,6 +135,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         and:
         def warning = events.find { it.level.levelStr == 'WARN' }
         warning != null
+        warning.formattedMessage.startsWith(OperatorEvent.COMMAND_CHECK_NO_ENVIRONMENT.head())
         warning.formattedMessage.contains('no environment to run it in')
         warning.formattedMessage.contains("'pwd'")
 

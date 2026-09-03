@@ -1,14 +1,13 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -24,20 +23,6 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
 
     def setup() {
         setupUsageHistoryFixture()
-    }
-
-    private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(UsageHistoryWalker)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list
     }
 
     private String commitGarbageState(String taskId) {
@@ -64,7 +49,9 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
 
         when:
         UsageHistoryResult result = null
-        def events = capture { result = walker.walk(cloneDir, 'PROJ-20') }
+        def events = LogCaptureSupport.capture(UsageHistoryWalker, Level.INFO) {
+            result = walker.walk(cloneDir, 'PROJ-20')
+        }
 
         then: 'both readable rounds are reported — the broken commit cost only its own row'
         def found = result as UsageHistoryResult.Found
@@ -77,6 +64,7 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
         and: 'the skipped commit is named in a warning'
         def warning = events.find { it.level.toString() == 'WARN' }
         warning != null
+        warning.formattedMessage.startsWith(OperatorEvent.USAGE_HISTORY_COMMIT_UNREADABLE.head())
         warning.formattedMessage.contains(brokenCommit)
         warning.formattedMessage.contains('state.json')
     }

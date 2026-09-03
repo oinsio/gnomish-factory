@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.subprocess.Termination
 import java.nio.file.Files
@@ -82,6 +83,7 @@ class DockerCliBoundedSpec extends Specification {
 
         and: 'NFR-O1: one WARN names the command class, the timeout, and the deadline to raise'
         warns.size() == 1
+        warns[0].startsWith(OperatorEvent.DOCKER_COMMAND_TIMED_OUT.head())
         warns[0].contains('docker command timed out')
         warns[0].contains('subcommand=run')
         warns[0].contains('deadline=PT2S')
@@ -168,6 +170,7 @@ exit 0
 
         and: 'NFR-O2: the WARN blames the interruption, and names no deadline that was never reached'
         warns.size() == 1
+        warns[0].startsWith(OperatorEvent.DOCKER_COMMAND_KILLED.head())
         warns[0].contains('docker command interrupted')
         warns[0].contains('subcommand=ps')
         !warns[0].contains('deadline=')
@@ -192,6 +195,7 @@ exit 0
         then:
         result.termination() == Termination.INTERRUPTED
         warns.size() == 1
+        warns[0].startsWith(OperatorEvent.DOCKER_COMMAND_KILLED.head())
         warns[0].contains('docker command interrupted by the daemon shutdown')
         warns[0].contains('subcommand=ps')
 

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -77,7 +78,8 @@ public final class ParkDeliveryFence {
             // the park proceeds (FR5), but the operator gets the one line that says the delivery
             // check never actually ran rather than a silent pass (NFR-O1).
             log.warn(
-                    "park delivery fence skipped, local branch tip unreadable: taskId={}, branch={}, cloneDir={}",
+                    OperatorEvent.PARK_FENCE_TIP_UNREADABLE.head()
+                            + "park delivery fence skipped, local branch tip unreadable: taskId={}, branch={}, cloneDir={}",
                     taskId,
                     branch,
                     cloneDir);
@@ -104,7 +106,8 @@ public final class ParkDeliveryFence {
         }
         if (result.exitCode() != 0) {
             log.warn(
-                    "park delivery fence exhausted, parking anyway: taskId={}, branch={}, stderr={}",
+                    OperatorEvent.PARK_FENCE_EXHAUSTED.head()
+                            + "park delivery fence exhausted, parking anyway: taskId={}, branch={}, stderr={}",
                     taskId,
                     branch,
                     LogText.forLog(result.stderr()));
@@ -123,7 +126,8 @@ public final class ParkDeliveryFence {
             Path cloneDir, String taskId, String branch, String tip, GitCommandResult result) {
         if (result.termination() == Termination.INTERRUPTED) {
             log.warn(
-                    "park delivery push interrupted, delivery unverified, parking anyway: taskId={}, branch={}",
+                    OperatorEvent.PARK_FENCE_INTERRUPTED.head()
+                            + "park delivery push interrupted, delivery unverified, parking anyway: taskId={}, branch={}",
                     taskId,
                     branch);
             return new ParkDeliveryVerdict.Undelivered(
@@ -138,13 +142,15 @@ public final class ParkDeliveryFence {
         }
         if (carriage == RemoteBranchTip.Carriage.ABSENT) {
             log.warn(
-                    "park delivery push timed out, origin confirmed behind, parking anyway: taskId={}, branch={}",
+                    OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_BEHIND.head()
+                            + "park delivery push timed out, origin confirmed behind, parking anyway: taskId={}, branch={}",
                     taskId,
                     branch);
             return new ParkDeliveryVerdict.Undelivered(ParkDeliveryNotes.behind(branch));
         }
         log.warn(
-                "park delivery push timed out and origin did not answer the re-check, parking anyway:"
+                OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_SILENT.head()
+                        + "park delivery push timed out and origin did not answer the re-check, parking anyway:"
                         + " taskId={}, branch={}",
                 taskId,
                 branch);

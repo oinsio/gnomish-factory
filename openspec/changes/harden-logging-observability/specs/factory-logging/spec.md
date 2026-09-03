@@ -145,16 +145,24 @@ Every production WARN/ERROR call site SHALL have at least one spec asserting
 the event it emits — code, level, and attribution key where the line concerns
 a task or a check. A suppression site pins every edge the suppressor can emit
 (first occurrence, counted roll-up, recovery), not only the first. A build
-gate SHALL fail when a catalog code appears in no test source; a runtime gate
-SHALL fail any spec during which a production logger emits a WARN/ERROR event
-no attached capture observed and no declared allowance covers.
+gate SHALL fail when a catalog code appears in no test source. A runtime gate
+SHALL report every WARN/ERROR event a spec emitted that no attached capture was
+watching, and SHALL fail the build on an operator-event code the build's test
+run emitted that no attached capture anywhere in that run was watching and no
+declared allowance covers.
 <!-- implements FR15, FR16, FR17 of harden-logging-observability -->
 
 #### Scenario: A degrade line cannot land unasserted
 - **WHEN** a new WARN line is added with a fresh catalog code but no spec
   asserts it
-- **THEN** the static gate fails on the unreferenced code, and any spec whose
-  run traverses the new path fails on the unexpected event
+- **THEN** the static gate fails on the unreferenced code, and the runtime gate
+  fails the build that emitted it with nothing watching
+
+#### Scenario: Crossing a pinned degrade path is reported, not failed
+- **WHEN** a behavior spec traverses an operator line that another spec pins,
+  in this module or in the one that owns the emitter
+- **THEN** the line is named in the run's per-feature report, and the build
+  does not fail — the code is watched, and the traversal is not the defect
 
 #### Scenario: The level is part of the pin
 - **WHEN** a pinned WARN line is demoted to DEBUG without its spec changing

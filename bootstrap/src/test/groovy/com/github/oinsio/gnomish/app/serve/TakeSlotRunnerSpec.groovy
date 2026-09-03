@@ -290,7 +290,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
 
         then:
         def summaries = capture.list.findAll {
-            it.formattedMessage.startsWith('task summary:')
+            it.formattedMessage.contains('task summary:')
         }
         summaries.size() == 1
         summaries[0].level == Level.INFO
@@ -318,7 +318,7 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
 
         then:
         def summaries = capture.list.findAll {
-            it.formattedMessage.startsWith('task summary:')
+            it.formattedMessage.contains('task summary:')
         }
         summaries.size() == 1
         summaries[0].level == Level.WARN

@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.take.FinishedDecline
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -182,7 +183,9 @@ class FeedCycleSpec extends Specification {
 
         and: 'the skip is loud: a WARN naming the occupied ref'
         appender.list.any {
-            it.level == Level.WARN && it.formattedMessage.contains('github:o/r#zombie')
+            it.level == Level.WARN &&
+            it.formattedMessage.startsWith(OperatorEvent.FEED_CANDIDATE_OCCUPIES_SLOT.head()) &&
+            it.formattedMessage.contains('github:o/r#zombie')
         }
     }
 

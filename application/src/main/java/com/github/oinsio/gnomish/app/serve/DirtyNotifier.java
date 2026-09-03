@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -46,7 +47,8 @@ public interface DirtyNotifier {
         } catch (RuntimeException e) {
             LoggerFactory.getLogger(DirtyNotifier.class)
                     .warn(
-                            "{}: dirty notifier failed; snapshot write may be delayed until the next timer beat",
+                            OperatorEvent.DIRTY_NOTIFIER_FAILED.head()
+                                    + "{}: dirty notifier failed; snapshot write may be delayed until the next timer beat",
                             callSite,
                             e);
         }

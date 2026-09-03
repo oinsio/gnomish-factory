@@ -1,23 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.adapter.law.PipelineLaw
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
-import java.nio.file.Files
-import java.nio.file.Path
-import spock.lang.Specification
-import spock.lang.TempDir
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 
 /**
  * FR3, D1 of fix-denial-report-attachment: the round reads its environment's
@@ -30,44 +17,14 @@ import spock.lang.TempDir
  * the environment substituted, so the wiring under test is the production path
  * rather than a hand-built stand-in for it.
  */
-class ExecutorRoundDenialSpec extends Specification {
+class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
 
     static final def DENIAL = new Finding(
     'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
 
-    @TempDir
-    Path workspaceDir
-
-    @TempDir
-    Path decisionRoot
-
-    def clock = new VirtualClock()
-
-    private static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
-
-    def setup() {
-        Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
-    }
-
-    private StageExecutor.Request request() {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(workspaceDir), 0, [])
-    }
-
     private ExecutionResult runWith(String scenario, List<Finding> denials) {
-        def hostSource = new HostRoundEnvironmentSource(
-                new DecisionFileTransport(decisionRoot), clock, ChildEnvAllowlist.none())
-        def source = new ScriptedDenialRounds(hostSource, [denials])
-        new CliStageExecutor(
-                FakeAgentSupport.propertiesFor(scenario), clock,
-                { AgentProgressEvent e -> } as AgentProgressListener, LAW, source)
-                .execute(request())
+        def source = new ScriptedDenialRounds(hostSource(), [denials])
+        executorFor(scenario, source).execute(requestFor())
     }
 
     // FR3: a completed round whose environment reports denials carries them out
@@ -94,6 +51,9 @@ class ExecutorRoundDenialSpec extends Specification {
     //     cannot answer at all must cost the round nothing. The port contract promises a degraded
     //     empty answer, but a round is far too expensive to stake on a collaborator keeping it.
     def "NFR-R1: a throwing denial read still yields a completed round"() {
+        given:
+        def logs = LogCaptureSupport.attach(ExecutorRoundExecution)
+
         when: 'the round finishes and its environment cannot serve the denial read at all'
         def result = runWith('plain-round', null)
 
@@ -101,6 +61,16 @@ class ExecutorRoundDenialSpec extends Specification {
         noExceptionThrown()
         result instanceof ExecutionResult.Completed
         result.denials() == []
+
+        and: 'FR15 of harden-logging-observability: an empty denial list that means "could not read" says so'
+        def warned = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.ROUND_DENIALS_UNREADABLE_ON_FINISH.head())
+        }
+        warned != null
+        warned.level == Level.WARN
+
+        cleanup:
+        logs.detach()
     }
 
     // FR1, UX2: an environment that answers empty — a quiet round, or one with no guard at all —
