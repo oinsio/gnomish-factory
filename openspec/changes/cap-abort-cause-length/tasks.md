@@ -21,7 +21,9 @@
       `recordAbort`'s `AbortRecord.cause` and the fuse-trip `park(INFRA)` report already
       capped (marker present, length within budget), while the ERROR log event carries the
       full uncapped text (NFR-O1); a within-budget cause reaches both writes unchanged
-      (FR1). Drive through a stub `Tracker` and a Logback `ListAppender`. Verify: red.
+      (FR1). Drive through a stub `Tracker` and `LogCaptureSupport.attach(AbortHandler)`
+      (the shared helper the spec's existing features already use — `logging.md`
+      bans hand-rolled `ListAppender` blocks in new specs). Verify: red.
 - [ ] 2.2 Wire `AbortCauseBudget.cap` into `AbortHandler.handle` after the ERROR log and
       before `AbortReportBuilder.build` / `AbortRecord` (design D1); update `AbortHandler`
       and `AbortReportBuilder` javadoc to name the budget guarantee. Traceability comment:

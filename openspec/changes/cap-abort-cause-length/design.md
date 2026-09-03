@@ -109,6 +109,13 @@ Per the propose-checked scout:
   `recordAborted` writes the outcome to the task branch, not the tracker, and is out of
   scope by D1's log/branch exemption.
 
+- The codebase already holds one declared text-capping pair —
+  `LogText`/`FindingsSanitizer` (ANSI/control stripping + tail-cap) — but it
+  implements a different rule at a different boundary: log lines and plugin
+  findings, tail-only truncation. `AbortCauseBudget` caps tracker comment
+  bodies with head+tail semantics; neither invariant subsumes the other, so no
+  third implementation of an existing rule arises and no abstraction is owed.
+
 Sync surfaces: none beyond the analysis above — this change adds no parallel
 implementation and touches no declared pair.
 

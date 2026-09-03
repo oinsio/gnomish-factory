@@ -7,10 +7,14 @@ An infrastructure abort is either an engine `Aborted` outcome (durable persist
 failed) or an uncaught exception of the take run itself. On an infrastructure
 abort the factory SHALL log ERROR, then best-effort: post the
 structural abort comment, release the claim, and return the task to `Ready` via
-`recordAbort` — a dead tracker never blocks the abort itself. When the
-consecutive-abort count (shared across instances via tracker facts) reaches the
-configured `abort-threshold` K, the factory SHALL instead park the task as
-`AwaitingHuman(infra)` with an infrastructure report carrying the abort history.
+`recordAbort` — a dead tracker never blocks the abort itself. The
+consecutive-abort count SHALL be the crash-cause category of the unified
+recovery accounting ("Recovery attempts share one budgeted accounting with the
+crash fuse") — one counter model and one quarantine outcome, replacing the
+previous standalone fuse counter while remaining shared across instances via
+tracker facts. When that accounting reaches the configured threshold, the
+factory SHALL instead park the task as `AwaitingHuman(infra)` with a report
+carrying the categorized failure history (crash and recovery causes distinct).
 
 Any abort-cause text handed to a tracker write — the structural abort marker's
 cause and the fuse-trip report — SHALL first be capped to the abort-cause
@@ -26,25 +30,26 @@ is the tracker's, not the diagnostic record's.
 <!-- implements FR14 of add-tracker-port -->
 <!-- implements NFR-R2 of add-tracker-port -->
 <!-- implements NFR-C1 of add-tracker-port -->
+<!-- implements FR14, NFR-O2 of harden-task-branch-contract -->
 <!-- implements FR1 of cap-abort-cause-length -->
 <!-- implements NFR-R1 of cap-abort-cause-length -->
 <!-- implements NFR-O1 of cap-abort-cause-length -->
 
 #### Scenario: Abort below the fuse
-- **WHEN** a run aborts with prior abort count K−2
+- **WHEN** a run aborts with the shared accounting below its threshold
 - **THEN** the task returns to `Ready` with a structural abort comment and the
   slot-free process exits
 
 #### Scenario: Fuse trips at K
-- **WHEN** a run aborts and the shared count reaches K
-- **THEN** the task is parked as `AwaitingHuman(infra)` with an abort summary in
-  the report (count, threshold, last cause and time of the previous abort)
-  pointing to the structural abort records as the full cross-instance history
+- **WHEN** a run aborts and the shared accounting reaches its threshold
+- **THEN** the task is parked as `AwaitingHuman(infra)` with a report carrying
+  the categorized history (crash vs recovery causes, counts, last cause and
+  time) pointing to the structural records as the full cross-instance history
 
 #### Scenario: Runner crash is an abort
 - **WHEN** the take run dies with an uncaught exception mid-run
 - **THEN** the best-effort abort protocol runs: structural abort comment, claim
-  released, task back to `Ready` (or parked at the fuse threshold)
+  released, task back to `Ready` (or parked at the shared threshold)
 
 #### Scenario: Oversized cause is capped before the tracker write
 - **WHEN** a run aborts with a cause longer than the abort-cause budget (e.g. a
