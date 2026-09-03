@@ -52,7 +52,7 @@ Flags use Spring's `--key=value` form (quote values with spaces):
 
 \* Exactly one of `--task`/`--task-file` is required unless `--resume` is given, in which case none of `--task`/`--task-file`/`--task-id`/`--from-stage` may be used. `--base`, `--resume`, and `--discard-work` are rejected together with `--mode=in-place` (exit code 2, usage error).
 
-At **any** prompt you can type `status` or `status --json` to print the live task report, and **Ctrl-D** is always a safe exit. After every attempt the operator gets a one-line summary; a full report prints at the end. The runner writes nothing inside the project clone — logs, findings, and (in git mode) the task workspace all live outside it.
+At **any** prompt you can type `status` or `status --json` to print the live task report, and **Ctrl-D** is always a safe exit. After every attempt the operator gets a one-line summary; a full report prints at the end. The runner writes nothing inside the project clone — logs, findings, and (in git mode) the task workspace all live outside it. The terminal carries the dialog plus `WARN` and above; the full narrative goes to the rolling log file under `~/.gnomish/logs/` — its location, the `GNOMISH_LOG_LEVEL` override, the `taskId=`/`stage=`/`attempt=` correlation keys and the `[GFnnn]` codes are described in [`operator-guide-observability.md` → *Reading the log*](operator-guide-observability.md#reading-the-log), which applies to every command, not only to `serve`.
 
 ## Git mode vs. in-place mode
 

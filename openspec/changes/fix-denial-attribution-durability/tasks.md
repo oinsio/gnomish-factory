@@ -7,10 +7,13 @@ production until block 1 below), and its finding DTO.
 `add-serve-sandbox-lifecycle` is archived (2026-08-22) — its guard-disposal
 outcomes are already absorbed in NFR-R2 and D2.
 
-Sequencing: implement after `harden-task-branch-contract` archives — this
+Sequencing: `harden-task-branch-contract` archived 2026-08-30 — this
 change's restore rides its branch-shape classifier and its shared atomic
-lifecycle writer, and the `git-task-persistence` MODIFIED block below is
-rebased onto that change's merged text at archive time.
+lifecycle writer, and the `git-task-persistence` MODIFIED block is rebased
+onto its merged text. Implement after `harden-logging-observability` lands:
+its tasks edit the guard-denial parse loop in `GuardDenialLog` and the
+cursor-unreadable log line, and blocks 4–5 below are written on top of
+those edits.
 
 ## 1. Wiring repair and the mechanical gate (FR6, FR9, G5, M4, M5, D7)
 
@@ -34,7 +37,9 @@ the production wiring. This block revives it and closes the defect class.
       interface `I` and holding a same-type delegate (fields, constructor
       params, record components, `Supplier<I>`) must override every default
       method of `I`; named allowlist for justified exemptions (currently
-      `EpochRecordingTrackerFactory`'s self-delegating `create/4`); the
+      `EpochRecordingTrackerFactory`, which overrides the 3-param `create`
+      and deliberately leaves the port's 4-param default unforwarded — that
+      default self-delegates into the overridden form); the
       rule's own spec seeds a violation and asserts it fails.
 
 ## 2. Failure channel — denials leave a round that throws (FR1, NFR-O1, D1)
@@ -81,7 +86,8 @@ the production wiring. This block revives it and closes the defect class.
 ## 4. Durable position for the drained read (FR3, FR4, FR5, NFR-R1, NFR-R2, NFR-R3, NFR-O2, D2, D3, D7)
 
 The attempt-path mechanics (`GuardDenialReads`,
-`EnvironmentAttemptPersistence`, `ContainerRunTermination.restoreDenialCursor`)
+`EnvironmentAttemptPersistence`, and the restore in `ContainerTipReader`
+behind `SandboxRunSupport.restoreDenialCursor`)
 exist and are revived by block 1. This block extends the
 position-with-the-record pattern to the escalation path over the atomic
 commit machinery of `harden-task-branch-contract`; it builds no new storage
@@ -104,9 +110,9 @@ saturation visible).
       but never lead it (FR3).
 - [ ] 4.4 Cursor preservation (FR5): no lifecycle rewrite of `state.json`
       drops a committed cursor — `putTaskAndState` carries the tip's
-      `egressCursor` forward (coordinate with `harden-task-branch-contract`:
-      whichever change is still open carries the code; this change carries
-      the kill-point spec either way).
+      `egressCursor` forward (`harden-task-branch-contract` archived
+      2026-08-30 with the cursorless rewrite in place, so this change
+      carries both the code and the kill-point spec).
 - [ ] 4.5 Teach the resume restore to read the branch tip through the
       branch-shape classifier of the `task-branch-contract` capability:
       positions are offered only for shapes that carry one, a quarantining
@@ -120,8 +126,15 @@ saturation visible).
       escalation-only tips restore what they have; a mismatched stamp still
       falls back to a full read and logs; a tip with neither cursor reads
       from container start; a RESUMED commit between attempt and restore
-      does not lose the cursor (4.4).
-- [ ] 4.7 Spec M2 at the environment level: a fresh wrapper standing in for a
+      does not lose the cursor (4.4). (If `polish-sandbox-forensics` has
+      landed, the docker fake's `inspectContainerState` output carries its
+      third `OOMKilled` field.)
+- [ ] 4.7 Mirror of 4.4 for `task.json` (D8): no lifecycle rewrite by either
+      `TaskLifecycleStore` implementation (`GitTaskRepository`,
+      `GitObjectsTaskRepository`) drops a committed `task.json` cursor —
+      carry the cursor inside the DTO the mapper returns rather than as a
+      new positional `toDto` argument, and spec preservation per end.
+- [ ] 4.8 Spec M2 at the environment level: a fresh wrapper standing in for a
       second factory process, resuming after a `CannotExecute` park, reports
       neither the attempts' nor the escalation's already-recorded denials.
 
@@ -150,7 +163,7 @@ saturation visible).
 ## 6. API compatibility (D1, predecessor precedent)
 
 - [ ] 6.1 `EscalationReport.CannotExecute` is re-exposed by
-      `gnomish-plugin-api`: bump the api version 0.3.0 → 0.4.0 (pre-1.0
+      `gnomish-plugin-api`: bump the api version 0.4.0 → 0.5.0 (pre-1.0
       breaking = MINOR) and regenerate both `compat-baseline/` jars in this
       change's diff.
 
@@ -169,5 +182,10 @@ saturation visible).
       delimits, recorded events carry source-assigned identity for idempotent
       re-reads, and known loss is reported in-band — so later transitions
       cite the ADR (provenance: this change).
-- [ ] 7.5 Recommend a Conventional Commits message referencing
+- [ ] 7.5 `.claude/rules/manual-sync-pairs.md` (D8): append to the
+      `GitAttemptPersistence` / `EnvironmentAttemptPersistence` row that the
+      denial cursor and identity are deliberately environment-side only —
+      host mode has no egress guard, so no denial source exists to mirror
+      (provenance: `fix-denial-attribution-durability`).
+- [ ] 7.6 Recommend a Conventional Commits message referencing
       fix-denial-attribution-durability.

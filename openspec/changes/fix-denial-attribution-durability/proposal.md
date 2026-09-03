@@ -15,12 +15,18 @@ delta modifies the same requirement ("Denials are captured as structured
 findings"); that block is rebased onto the merged text after this change
 archives.
 
-Coordination: lands after `harden-task-branch-contract`, whose
-`git-task-persistence` delta modifies the same requirement ("State directory
+Coordination: lands after `harden-logging-observability` (in flight on its
+own branch), whose tasks edit the guard-denial parse loop in `GuardDenialLog`
+and the cursor-unreadable log line; this change's guard-side tasks are
+written on top of those edits (the overlap is also declared in that change's
+own artifacts).
+
+Coordination: `harden-task-branch-contract` archived 2026-08-30. Its
+`git-task-persistence` delta modified the same requirement ("State directory
 with one writer per file" — the initial `state.json` is written once by
-`TaskRepository` in the STARTED commit); this change's block for that
-requirement is rebased onto the merged text after that change archives. Three
-further consequences of that ordering, absorbed into this change's tasks:
+`TaskRepository` in the STARTED commit), and this change's block for that
+requirement is rebased onto the merged text. Three further consequences of
+that ordering, absorbed into this change's tasks:
 
 - The resume restore reads the task branch tip through the branch-shape
   classifier of the `task-branch-contract` capability, not through an ad-hoc
@@ -37,9 +43,9 @@ further consequences of that ordering, absorbed into this change's tasks:
 - That change's `TaskLifecycleCommitWriter.putTaskAndState` currently rewrites
   `state.json` with the cursorless mapper overload, so a RESUMED commit erases
   the committed cursor from the tip. The cursor-preservation rule (no lifecycle
-  rewrite drops a committed cursor) is specified here; whichever change is
-  still open when the fix is written carries the code, and the other verifies
-  it.
+  rewrite drops a committed cursor) is specified here; with that change
+  archived and `putTaskAndState` still cursorless, this change carries both
+  the fix and its kill-point spec.
 
 ## Why
 
@@ -146,7 +152,7 @@ None — every gap is a requirement change in an existing capability.
 
 - `:domain` — `EscalationReport.CannotExecute` gains a component; a
   `gnomish-plugin-api` type, so the api-compat gate arms and the api version
-  moves again (current baseline 0.4.0 after two prior bumps; pre-1.0
+  moves again (current baseline 0.4.0 after three prior bumps; pre-1.0
   breaking = MINOR, both `compat-baseline/` jars regenerated)
 - `:adapters:git` — the task JSON mapper, and the escalation write that now
   carries the drained read position; denial DTO gains the identity field
@@ -156,7 +162,7 @@ None — every gap is a requirement change in an existing capability.
   `cannotExecute` escalation sample)
 - `:bootstrap` — the resume restore offers the newest committed position
   through the branch-shape classifier; the new architecture spec
-  (decorator-completeness gate) joins the existing eight
+  (decorator-completeness gate) joins the existing nine
 - `:sandbox:docker` — `LeasedEnvironment` gains the three denial forwards;
   `GuardDenialLog` carries the daemon timestamp onto each parsed denial as
   its identity; the loss marker is emitted where the tail cap saturates.

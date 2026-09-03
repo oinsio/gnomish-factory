@@ -15,8 +15,8 @@ today; they have nowhere to go but the log.
 Second, the read position is *designed* to be durable along the attempt path
 (predecessor FR5: committed in `state.json` with the attempt, stamped with
 the guard container's runtime id, offered back on resume through
-`GuardDenialReads`, `EnvironmentAttemptPersistence`,
-`ContainerRunTermination`) — but the 2026-08-28 audit found the design
+`GuardDenialReads`, `EnvironmentAttemptPersistence`, and `ContainerTipReader`
+behind `SandboxRunSupport.restoreDenialCursor`) — but the 2026-08-28 audit found the design
 disconnected in production: `LeasedEnvironment`, the view both writers are
 built over, forwards none of the port's three denial default methods, so the
 constant defaults answer instead of the guard, no cursor is ever committed,
@@ -179,12 +179,47 @@ someone else's capability.
 *Rationale:* three independent bugs (forgotten forwards, cursorless mapper
 overload on RESUMED, drain advancing without a commit) share this one root;
 fixing instances without owning the invariant invites the fourth. ArchUnit
-1.5.0 is already in the build with eight architecture specs to stand beside.
+1.5.0 is already in the build with nine architecture specs to stand beside.
 *Alternative rejected:* splitting the optional denial capability into a
 separate `Optional<DenialSource>` accessor interface — it turns a wrong
 *answer* into a wrong *object* (the same silent-empty one level up) and
 rewrites every implementer for no stronger guarantee than the gate gives;
 javadoc discipline alone — that is what just failed.
+
+**D8 — Sync surfaces.**
+Three declared pairs from `manual-sync-pairs.md` border this change:
+
+- `GitAttemptPersistence` / `EnvironmentAttemptPersistence` (invariant:
+  attempt commit + state-file write sequence). The environment end is
+  reworked — D7 folds its read onto the `(findings, position)` seam (blocks 1
+  and 4). Decision: **declared pair, no mirrored change.** The denial
+  machinery (findings, cursor, identity) hangs off
+  `TaskExecutionEnvironment`, a port host mode does not have: no egress
+  guard, no denial source, nothing to persist a position of. The
+  synchronized write sequence itself is untouched — this change only adds
+  fields to what the environment half writes. The registry row's invariant
+  line is updated in this change to record the deliberate one-sidedness
+  (precedent: the `VerifiedTip` note added by `harden-logging-observability`).
+- `GitTaskRepository` / `GitObjectsTaskRepository` (invariant: task lifecycle
+  write protocol). D2's `task.json` cursor extends that protocol, and both
+  ends render through the shared `TaskJsonMapper.toDto` positional overloads —
+  the exact shape whose cursorless variant produced the RESUMED erasure on
+  `state.json` (D7's second root-cause instance). Decision: **mirrored
+  change on both ends** — every lifecycle rewrite of `task.json` by either
+  implementation carries the tip's cursor forward, spec'd per end
+  (task 4.7). Prefer carrying the cursor inside the DTO the mapper already
+  returns over adding one more positional `toDto` parameter, so a call site
+  cannot drop it silently.
+- `HostRoundEnvironmentSource` / `SandboxRoundEnvironmentSource` (round
+  environment contract per mode): **untouched** — verified: neither end
+  carries a denial surface today and this change adds none to that contract.
+
+*Alternative rejected:* extracting a shared attempt-persistence abstraction
+over both media instead of keeping the first pair — the media differ exactly
+in what they can observe (an environment exists only in sandbox mode), so the
+abstraction would thread an always-empty optional capability through host
+mode for no stronger guarantee; the rule-of-three third implementation has
+not arrived.
 
 ## Risks / Trade-offs
 
@@ -194,14 +229,15 @@ javadoc discipline alone — that is what just failed.
 - [`EscalationReport` is re-exposed by `gnomish-plugin-api`, so a new component
   breaks the api-compat gate] → accept it the documented way, as the
   predecessor did for `AttemptRecord`: pre-1.0 breaking = MINOR api version
-  bump (0.3.0 → 0.4.0 as of this writing) plus both `compat-baseline/` jars
+  bump (0.4.0 → 0.5.0 as of this writing) plus both `compat-baseline/` jars
   regenerated in this change's diff.
 - [`harden-task-branch-contract`'s `putTaskAndState` rewrites `state.json`
   cursorless, so a RESUMED commit erases the committed cursor] → the
   cursor-preservation rule is specified in this change's
-  `git-task-persistence` delta; whichever change is still open when the fix
-  lands carries the code (see the proposal's coordination notes). Until
-  fixed, D5's identity merge caps the damage at a clean re-merge.
+  `git-task-persistence` delta; that change archived 2026-08-30 with the
+  cursorless rewrite in place, so this change carries both the fix and its
+  kill-point spec (tasks 4.4, 4.7). Until fixed, D5's identity merge caps the
+  damage at a clean re-merge.
 - [The tail cap can drop denials before any read, cursor or no cursor] → not
   fully preventable at this layer (the log is the daemon's); D6 makes it
   *visible* in the report, which is the guarantee this change can honestly
