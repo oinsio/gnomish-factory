@@ -74,8 +74,11 @@ class ThrowableConventionGateSpec extends Specification {
         where:
         form << [
             'e.getMessage()',
+            'e.getLocalizedMessage()',
             'e.toString()',
-            'String.valueOf(e)'
+            'String.valueOf(e)',
+            '"failed: " + e',
+            'e + " while reading"'
         ]
     }
 
@@ -107,11 +110,20 @@ class ThrowableConventionGateSpec extends Specification {
                 .every { !interpolatedExceptions(code, it.text) }
     }
 
-    /** True when the call renders an exception the file has bound, rather than passing it. */
+    /**
+     * True when the call renders an exception the file has bound, rather than passing it. Four
+     * shapes, all of which amputate the same diagnosis: the two message accessors
+     * ({@code getMessage}, its localized twin), {@code toString}, the {@code String.valueOf}
+     * spelling of it, and string concatenation — {@code "failed: " + e} calls {@code toString}
+     * without naming it, which is the form the first three checks alone would wave through.
+     */
     private static boolean interpolatedExceptions(String code, String call) {
         exceptionNames(code).any { name ->
-            call =~ /\b${Pattern.quote(name)}\.(?:getMessage|toString)\(\)/ ||
-            call =~ /String\.valueOf\(\s*${Pattern.quote(name)}\s*\)/
+            def quoted = Pattern.quote(name)
+            call =~ /\b${quoted}\.(?:getMessage|getLocalizedMessage|toString)\(\)/ ||
+                    call =~ /String\.valueOf\(\s*${quoted}\s*\)/ ||
+                    call =~ /\+\s*${quoted}\b(?!\s*[.(])/ ||
+                    call =~ /\b${quoted}\s*\+/
         }
     }
 

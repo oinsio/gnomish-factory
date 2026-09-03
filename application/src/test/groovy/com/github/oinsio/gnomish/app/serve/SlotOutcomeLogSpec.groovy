@@ -183,21 +183,6 @@ class SlotOutcomeLogSpec extends Specification {
         capture.detach()
     }
 
-    // The wall time is the interval between two readings of a monotonic source, so a clock stepped
-    // by NTP mid-run cannot make a slot report a negative — or an absurd — duration. Bounded on
-    // both sides: a lower bound alone would also hold for the sum of the readings, not the gap.
-    def "elapsedSince measures the interval between two monotonic readings, not their sum"() {
-        given: 'a start reading taken one second in the past'
-        long oneSecondAgo = System.nanoTime() - Duration.ofSeconds(1).toNanos()
-
-        when:
-        def elapsed = SlotOutcomeLog.elapsedSince(oneSecondAgo)
-
-        then:
-        elapsed >= Duration.ofSeconds(1)
-        elapsed <Duration.ofSeconds(2)
-    }
-
     private static TaskState state() {
         new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none())
     }

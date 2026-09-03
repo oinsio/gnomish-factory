@@ -9,7 +9,8 @@ import spock.lang.Specification
  * thread that spawned it was in — otherwise the lines describing what a task's process actually
  * said are exactly the ones a {@code grep taskId=} misses.
  *
- * <p>FR8 of harden-logging-observability.
+ * <p>FR8, NFR-O1 of harden-logging-observability — NFR-O1's MDC-completeness contract spec for
+ * the thread-hop half (the listener half is {@code MdcEventListenerSpec}).
  */
 class MdcAwareThreadSpec extends Specification {
 

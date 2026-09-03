@@ -18,7 +18,8 @@ import spock.lang.TempDir
  * the git-task-persistence delta: the mid-round poll may skip an observation, but must never read
  * a failed tip resolution as one. The empty string differs from every real SHA, so an unverified
  * read reports movement on the poll that fails and a return to the old tip on the next — decisions
- * made on a read that established nothing.
+ * made on a read that established nothing. M6's failing-invocation spec for the skipped-poll
+ * site: the refusal path is exercised, and the previous silent path asserted dead.
  */
 class MidRoundTipObservationSpec extends Specification implements BareGitRepoFixture, FailingSubcommandGitFixture {
 
@@ -61,11 +62,9 @@ class MidRoundTipObservationSpec extends Specification implements BareGitRepoFix
                 env,
                 new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString()),
                 clone,
-                'PROJ-9',
-                BRANCH,
                 clock,
                 Duration.ofSeconds(30),
-                suppressor)
+                new MidRoundPollContext('PROJ-9', BRANCH, suppressor))
     }
 
     def "FR13: a tip the poll cannot resolve changes no harvest decision"() {

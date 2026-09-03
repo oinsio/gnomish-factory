@@ -1,20 +1,16 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.status.AnchorLog;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -42,16 +38,21 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve. Implements FR2 of
  * fix-reaper-idle-liveness (design D6).
+ *
+ * @param feed the tracker, with the instance identity every claim is made under
+ * @param slotLedger the WIP permit ledger this cycle acquires, assigns and abandons against
+ * @param slotRunner what a claimed task is handed to, on a virtual thread of its own
+ * @param selection the constants a feed read is graded against, and the two gradings themselves
+ * @param stateLogger the once-per-transition feed-state log plane (NFR-O1, UX2)
+ * @param outageRetry the tracker-outage retry every tracker call in this cycle runs through
+ * @param finishedDecline the terminal-status sweep applied to each feed read (design D4 of
+ *     enforce-finish-terminality)
  */
 record FeedCycle(
-        Tracker tracker,
-        InstanceId instanceId,
+        FeedTracker feed,
         SlotLedger slotLedger,
         SlotRunner slotRunner,
-        Duration backoffBase,
-        Duration backoffCap,
-        int wipLimit,
-        Random random,
+        FeedSelection selection,
         FeedStateLogger stateLogger,
         FeedOutageRetry outageRetry,
         FinishedDecline finishedDecline) {
@@ -76,12 +77,10 @@ record FeedCycle(
      */
     Poll poll(Instant now) throws InterruptedException {
         return outageRetry.run("feed poll", () -> {
-            List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
-            finishedDecline.declineObserved(tracker, readyTasks);
-            int openFrontCount = tracker.listOpen().size();
-            List<ReadyTask> candidates = FeedPolicy.selectClaimCandidates(
-                    readyTasks, backoffBase, backoffCap, now, openFrontCount, wipLimit, random);
-            return new Poll(readyTasks, openFrontCount, now, candidates);
+            List<ReadyTask> readyTasks = feed.listReady();
+            finishedDecline.declineObserved(feed.tracker(), readyTasks);
+            int openFrontCount = feed.openFrontCount();
+            return new Poll(readyTasks, openFrontCount, now, selection.candidates(readyTasks, now, openFrontCount));
         });
     }
 
@@ -121,7 +120,7 @@ record FeedCycle(
                 AnchorLog.claimAcquired(claimed.id(), slotLedger.freeSlots(), slotLedger.totalSlots());
             }
             startSlot(claimed);
-            stateLogger.onSlotFilled(slotLedger.freeSlots(), wipLimit);
+            stateLogger.onSlotFilled(slotLedger.freeSlots(), selection.wipLimit());
         }
     }
 
@@ -145,11 +144,10 @@ record FeedCycle(
                         candidate.ref().id());
                 continue;
             }
-            if (!OpenFrontGate.isStillEligible(
-                    candidate, () -> tracker.listOpen().size(), wipLimit)) {
+            if (!selection.isStillEligible(candidate, feed::openFrontCount)) {
                 continue;
             }
-            ClaimResult claim = tracker.claim(candidate.ref(), instanceId.value());
+            ClaimResult claim = feed.claim(candidate.ref());
             if (claim instanceof ClaimResult.Acquired) {
                 return candidate.ref();
             }

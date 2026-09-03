@@ -15,9 +15,9 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import com.github.oinsio.gnomish.status.TaskSummary;
+import com.github.oinsio.gnomish.status.WallTime;
 import java.nio.file.Path;
 import java.time.Clock;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -179,7 +179,7 @@ record TakeDispatcher(
      * duration must not be affected by a wall-clock adjustment landing mid-run.
      */
     private static void summarize(TakeResult result, long startedNanos) {
-        TaskSummary summary = TaskSummaryAssembler.assemble(result, Duration.ofNanos(System.nanoTime() - startedNanos));
+        TaskSummary summary = TaskSummaryAssembler.assemble(result, WallTime.since(startedNanos));
         if (summary != null) {
             AnchorLog.taskSummary(summary);
         }

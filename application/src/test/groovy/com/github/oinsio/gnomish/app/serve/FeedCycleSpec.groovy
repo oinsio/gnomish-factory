@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -55,8 +56,9 @@ class FeedCycleSpec extends Specification {
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
         def outageRetry = new FeedOutageRetry(sleeper, {
             Duration.ofSeconds(1)
-        })
-        new FeedCycle(tracker, INSTANCE, ledger, runner, BASE, CAP, 2, new Random(0), new FeedStateLogger(), outageRetry, new FinishedDecline())
+        }, RepeatSuppressorFixture.quiet())
+        new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner, new FeedSelection(BASE, CAP, 2, new Random(0)),
+                new FeedStateLogger(), outageRetry, new FinishedDecline())
     }
 
     // FR9, D5: every candidate loses the claim race (Held) — attemptClaim falls through the

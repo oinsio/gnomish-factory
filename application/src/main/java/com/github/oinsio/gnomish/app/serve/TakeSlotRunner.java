@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
 import com.github.oinsio.gnomish.status.MdcEventListener;
+import com.github.oinsio.gnomish.status.WallTime;
 import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -185,10 +186,10 @@ public final class TakeSlotRunner implements SlotRunner {
             if (ledgerWriter != null) {
                 ledgerWriter.write(claimed, result);
             }
-            outcomeLog.summarize(result, SlotOutcomeLog.elapsedSince(startedNanos));
+            outcomeLog.summarize(result, WallTime.since(startedNanos));
         } catch (Throwable crash) {
             // Deliberate boundary: see class javadoc. A slot never crashes the daemon.
-            outcomeLog.crashed(claimed, crash, SlotOutcomeLog.elapsedSince(startedNanos));
+            outcomeLog.crashed(claimed, crash, WallTime.since(startedNanos));
         } finally {
             MDC.remove(taskIdMdcKey);
             // FR8: backstop for a slot that ended without TaskFinished — a crash caught at the

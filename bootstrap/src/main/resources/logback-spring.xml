@@ -98,12 +98,19 @@
          reaching the blocking edge in normal operation.
          The flush at shutdown is not Logback's to own: the factory's stop sequence
          stops the logging system as its last step (design D6, FR9), which drains
-         this queue before the JVM exits. -->
+         this queue before the JVM exits. maxFlushTime is that drain's budget, and
+         Logback's default is 1000 ms: on expiry AsyncAppender.stop() interrupts the
+         worker and drops whatever is still queued, which would make "never discard"
+         a promise the shutdown path alone breaks — exactly during the incident whose
+         last lines matter most. Five seconds is far more than a 1024-event queue
+         needs against a local file, and it is a ceiling, not a wait: a queue that
+         drains in 3 ms costs 3 ms. -->
     <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="FILE"/>
         <discardingThreshold>0</discardingThreshold>
         <neverBlock>false</neverBlock>
         <queueSize>1024</queueSize>
+        <maxFlushTime>5000</maxFlushTime>
     </appender>
 
     <!-- stdout belongs to the dialog (NFR-O2): only WARN and above reach the

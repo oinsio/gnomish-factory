@@ -59,7 +59,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR11: no push when HEAD has not moved since construction"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
 
         when:
         listener.onProgress(toolEvent)
@@ -70,7 +70,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR11: a gnome commit mid-round triggers a best-effort push on the next event"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         gnomeCommit()
 
         when:
@@ -83,7 +83,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR11: a second event with an unchanged tip does not push again"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         gnomeCommit()
         listener.onProgress(toolEvent)
         def firstPushedHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().trim()
@@ -99,7 +99,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "NFR-S1: push is skipped when HEAD moved but is off the expected branch"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         runner.run(repo, 'checkout', '-q', '-b', 'not-the-task-branch')
         gnomeCommit()
 
@@ -113,7 +113,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "NFR-S1: push is skipped when the observed baseline is no longer an ancestor of HEAD"() {
         given: 'an orphan commit replaces branch history after construction, stranding the baseline tip'
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         runner.run(repo, 'checkout', '-q', '--orphan', 'rewritten-history')
         new File(repo.toFile(), 'rewritten.txt').text = 'rewritten history'
         runner.run(repo, 'add', 'rewritten.txt')
@@ -132,7 +132,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
     def "FR11: no remote configured means onProgress never throws even after a tip movement"() {
         given:
         runner.run(repo, 'remote', 'remove', 'origin')
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         gnomeCommit()
 
         when:
@@ -147,7 +147,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
 
         when:
-        new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
 
         then:
         noExceptionThrown()
@@ -155,7 +155,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR13: an unresolvable HEAD mid-round skips the observation instead of throwing"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
 
         when: 'HEAD stops resolving between two progress events'
         runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
@@ -169,7 +169,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
     def "FR13: an unknown baseline is adopted by the first resolving event, and only later movement pushes"() {
         given: 'the round starts with no resolvable HEAD, so the listener has no ancestry baseline'
         runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
 
         when: 'HEAD becomes resolvable again on the task branch and an event adopts it'
         runner.run(repo, 'checkout', '-q', '-f', 'gnomish/PROJ-1')
@@ -188,7 +188,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR4: a tip resolution that works again closes the streak with one INFO"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.INFO)
 
         when: 'HEAD stops resolving, then resolves again on a later event'
@@ -206,7 +206,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR4, FR13: a failing tip resolution is one WARN, then counted rather than repeated"() {
         given:
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', suppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
 
         when: 'HEAD stays unresolvable across a burst of progress events'
@@ -233,7 +233,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         given: 'a suppressor on movable time, so the quiet period can elapse without waiting'
         def suppressorClock = new MovableClock(Instant.EPOCH)
         def rollingSuppressor = new RepeatSuppressor(suppressorClock, Duration.ofMinutes(5))
-        def listener = new MidRoundPushListener(runner, repo, 'PROJ-1', 'implement', 0, 'gnomish/PROJ-1', rollingSuppressor)
+        def listener = new MidRoundPushListener(runner, repo, 'implement', 0, new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', rollingSuppressor))
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
 
         when: 'HEAD stays unresolvable across a burst, then one more event past the quiet period'

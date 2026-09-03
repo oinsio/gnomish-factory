@@ -43,7 +43,18 @@ import org.jspecify.annotations.Nullable;
  */
 public final class SummaryAccumulatorListener implements EngineEventListener {
 
-    private long startedNanos = System.nanoTime();
+    /**
+     * The run's start reading, rewritten on {@link EngineEvent.RunStarted} and read on {@link
+     * EngineEvent.TaskFinished}.
+     *
+     * <p>{@code volatile} because the two events need not reach this listener on the same thread:
+     * the engine runs stage work on virtual threads, and a plain field written by one and read by
+     * another is a data race whose visible symptom would be a summary reporting the construction
+     * time instead of the run — a wrong duration on the line, not a crash, so nothing would fail
+     * loudly. One listener instance serves exactly one manual run ({@code ManualRunRunner}), so
+     * the field carries no cross-run state that a lock would have to guard.
+     */
+    private volatile long startedNanos = System.nanoTime();
 
     /**
      * Starts the clock on the run bookend and emits the summary on the closing one; every other
@@ -70,7 +81,7 @@ public final class SummaryAccumulatorListener implements EngineEventListener {
      * uses on the other end, so the two assemblers word an identical situation identically.
      */
     private TaskSummary summaryOf(TaskOutcome outcome) {
-        Duration wall = Duration.ofNanos(System.nanoTime() - startedNanos);
+        Duration wall = WallTime.since(startedNanos);
         return switch (outcome) {
             case TaskOutcome.Completed completed ->
                 summary(TaskSummary.Outcome.DELIVERED, null, completed.finalState(), wall);

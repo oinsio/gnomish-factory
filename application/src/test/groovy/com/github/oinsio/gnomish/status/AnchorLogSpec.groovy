@@ -19,6 +19,9 @@ import spock.lang.Specification
  * contract. The summary renderer is exercised across every outcome family precisely because the
  * design's promise is that one renderer serves all of them; a family rendered by a second code
  * path would show up here as a differing form.
+ *
+ * <p>This spec is NFR-O1's anchor-line and summary-content half: the change's own observability
+ * is contract-tested through the shared log-capture idiom, not read off a rendered file.
  */
 class AnchorLogSpec extends Specification {
 
@@ -43,7 +46,8 @@ class AnchorLogSpec extends Specification {
         capture.list[0].formattedMessage == 'claim acquired for task task-7: 1 of 2 slot(s) free'
     }
 
-    // FR2: serve started names the configuration actually in effect
+    // FR2, UX1: serve started names the configuration actually in effect — this is the banner half
+    // of UX1, the one line a healthy hour of serve is allowed to print
     def "the serve start anchor names every configured value"() {
         when:
         AnchorLog.serveStarted(new AnchorLog.ServeConfig(

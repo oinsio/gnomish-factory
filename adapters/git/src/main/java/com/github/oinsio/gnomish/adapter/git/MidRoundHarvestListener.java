@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import com.github.oinsio.gnomish.logtext.FailureReason;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
@@ -80,30 +81,27 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
      * @param environment the task's bound environment; {@code harvest()} is the only call made
      * @param runner the git subprocess runner, shared with the run's other git-adapter machinery
      * @param cloneDir the factory clone harvest lands in; tip reads and the push run here
-     * @param taskId the task whose branch is being watched, for log context; held by the poll log
-     * @param branch the task branch name, e.g. {@link TaskIdSanitizer#branchName}
      * @param clock the poll rate-limit time source
      * @param minInterval the minimum time between two actual harvests; the factory-side rate
      *     limit of design D3
-     * @param suppressor the edge-logging owner for the harvest-failure streak of this round
+     * @param context whose round this is — the task id and branch (e.g. {@link
+     *     TaskIdSanitizer#branchName}) and the suppressor its failure streaks live in
      */
     public MidRoundHarvestListener(
             TaskExecutionEnvironment environment,
             GitProcessRunner runner,
             Path cloneDir,
-            String taskId,
-            String branch,
             Clock clock,
             Duration minInterval,
-            RepeatSuppressor suppressor) {
+            MidRoundPollContext context) {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.push = new BranchPush(runner);
-        this.branch = branch;
+        this.branch = context.branch();
         this.clock = clock;
         this.minInterval = minInterval;
-        this.pollLog = new MidRoundPollLog(log, suppressor, taskId, branch);
+        this.pollLog = context.logTo(log);
         this.lastObservedTip = currentTip().orElse(null);
     }
 
@@ -127,7 +125,7 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
         try {
             environment.harvest();
         } catch (RuntimeException e) {
-            pollLog.failed(MidRoundPollLog.Subject.HARVEST, String.valueOf(e.getMessage()), e);
+            pollLog.failed(MidRoundPollLog.Subject.HARVEST, FailureReason.of(e), e);
             return;
         }
         pollLog.recovered(MidRoundPollLog.Subject.HARVEST);

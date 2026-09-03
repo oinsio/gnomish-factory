@@ -59,8 +59,16 @@ class SanitizerPairEquivalenceSpec extends Specification {
         'C1 lower edge': "a${ch(0x80)}b",
         'C1 NEL': "a${ch(0x85)}b",
         'C1 upper edge': "a${ch(0x9F)}b",
+        'bidi override lower edge (LRE)': "a${ch(0x202A)}b",
+        'bidi RLO': "a${ch(0x202E)}b",
+        'bidi isolate lower edge (LRI)': "a${ch(0x2066)}b",
+        'bidi isolate upper edge (PDI)': "a${ch(0x2069)}b",
+        'bidi-forged tail': "deleted ${ch(0x202E)}txt.exe",
         'forged log record': 'stage failed\n2026-08-31 12:00:00 ERROR [main] compromised',
         'overlong input': 'x' * 5_000 + 'THE-ERROR',
+        // The cap counts UTF-16 units, so an astral character straddling the boundary is where the
+        // two ends could silently disagree: one dropping the orphaned half, one keeping it.
+        'astral character on the cap boundary': ch(0x1F600) * 3_000 + 'a',
     ]
 
     def "the stripping table is identical at both ends — #label"() {

@@ -26,12 +26,16 @@ class UntrustedLogTextGateSpec extends Specification {
 
     /**
      * The accessors that yield attacker-influenced text in this codebase: subprocess and
-     * in-container command output ({@code stderr}, {@code stdout}), Jackson's echo of the
-     * offending untrusted bytes ({@code getOriginalMessage}), and the agent-CLI session banner
-     * fields the agent process itself chooses ({@code sessionId}, {@code model}).
+     * in-container command output ({@code stderr}, {@code stdout}, and {@code output} — the
+     * in-box capture {@code CapturedExec} carries, which is the sandbox self-check's and the
+     * guard probes' whole subject), Jackson's echo of the
+     * offending untrusted bytes ({@code getOriginalMessage}), the agent-CLI session banner
+     * fields the agent process itself chooses ({@code sessionId}, {@code model}), and the verify
+     * check's identity ({@code label}), which {@code CheckRef.of} derives from the target
+     * repository's own {@code .gnomish/} manifest.
      */
     private static final Pattern UNTRUSTED =
-    Pattern.compile('\\.(?:stderr|stdout|getOriginalMessage|sessionId|model)\\s*\\(\\s*\\)')
+    Pattern.compile('\\.(?:stderr|stdout|output|getOriginalMessage|sessionId|model|label)\\s*\\(\\s*\\)')
 
     // FR6: every untrusted accessor reaching a log line goes through the sanitizing choke point.
     def "untrusted text enters log lines only through LogText"() {
@@ -70,9 +74,11 @@ class UntrustedLogTextGateSpec extends Specification {
         accessor << [
             'stderr',
             'stdout',
+            'output',
             'getOriginalMessage',
             'sessionId',
-            'model'
+            'model',
+            'label'
         ]
     }
 

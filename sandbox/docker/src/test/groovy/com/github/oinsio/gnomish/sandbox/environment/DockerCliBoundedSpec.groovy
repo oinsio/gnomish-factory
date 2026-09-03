@@ -1,16 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.subprocess.Termination
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -33,10 +29,7 @@ class DockerCliBoundedSpec extends Specification {
     Path tempDir
 
     private DockerCli cliBackedBy(String script, Duration timeout) {
-        Path bin = tempDir.resolve('fakedocker')
-        Files.writeString(bin, "#!/bin/sh\n" + script)
-        bin.toFile().setExecutable(true)
-        new DockerCli(bin.toString(), timeout)
+        new DockerCli(FakeDockerBinary.write(tempDir, script), timeout)
     }
 
     def cleanup() {
@@ -44,21 +37,17 @@ class DockerCliBoundedSpec extends Specification {
         ShutdownPhase.reset()
     }
 
-    /** The WARN lines the CLI wrote while {@code emit} ran — the operator's whole view of a bound that fired. */
+    /**
+     * The WARN lines the CLI wrote while {@code emit} ran — the operator's whole view of a bound
+     * that fired. Through the shared helper (`.claude/rules/logging.md`) rather than a hand-rolled
+     * {@code ListAppender}: the helper saves and restores the logger's level, and the Logback level
+     * registry is JVM-global, so a pin left behind makes a later spec order-dependent.
+     */
     private static List<String> warnings(Closure emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(DockerCli)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list.findAll {
-            it.level == Level.WARN
-        }*.formattedMessage
+        LogCaptureSupport.capture(DockerCli, Level.DEBUG, emit)
+                .findAll {
+                    it.level == Level.WARN
+                }*.formattedMessage
     }
 
     // FR10, NFR-R1, M4: the wedged registry case — the command ends on its deadline, not on docker

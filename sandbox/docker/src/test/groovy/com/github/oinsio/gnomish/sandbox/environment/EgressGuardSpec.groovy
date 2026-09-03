@@ -1,19 +1,15 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR7, NFR-O1, NFR-R1 of add-sandbox-core (design D4): the guard lifecycle —
  * created on the task network with a bridge leg when missing, restarted when

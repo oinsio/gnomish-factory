@@ -93,6 +93,35 @@ class LogTextSpec extends Specification {
         'C1 upper edge' | "a${ch(0x9F)}b" || 'ab'
     }
 
+    // NFR-S1: the Trojan Source vector — a bidi override reorders what a reader sees after it,
+    //          so the rendered line stops matching the recorded one. Same class as an ANSI trick.
+    def "FR6: bidirectional overrides and isolates are removed — #label"() {
+        expect:
+        LogText.strip(input) == expected
+
+        where:
+        label | input || expected
+        'LRE, override lower edge' | "a${ch(0x202A)}b" || 'ab'
+        'RLO' | "a${ch(0x202E)}b" || 'ab'
+        'PDF, override upper edge' | "a${ch(0x202C)}b" || 'ab'
+        'LRI, isolate lower edge' | "a${ch(0x2066)}b" || 'ab'
+        'RLI' | "a${ch(0x2067)}b" || 'ab'
+        'PDI, isolate upper edge' | "a${ch(0x2069)}b" || 'ab'
+        'a forged tail' | "deleted ${ch(0x202E)}txt.exe" || 'deleted txt.exe'
+    }
+
+    def "FR6: the characters framing the bidi ranges are ordinary text — #label"() {
+        expect: 'the ranges are exact — U+2029 is the flattening half\'s, the other three are plain text'
+        LogText.strip("a${ch(codePoint)}b") == "a${ch(codePoint)}b"
+
+        where:
+        label | codePoint
+        'U+2029, below the override range' | 0x2029
+        'U+202F, above it' | 0x202F
+        'U+2065, below the isolate range' | 0x2065
+        'U+206A, above it' | 0x206A
+    }
+
     def "FR6: strip keeps the line structure it is not asked to destroy"() {
         expect: 'the half shared with the findings sanitizer leaves newline and tab alone'
         LogText.strip('a\nb\tc') == 'a\nb\tc'
@@ -137,6 +166,54 @@ class LogTextSpec extends Specification {
         line.count('\\u2029') == LogText.DEFAULT_CAP_CHARS
         line.length() < 7 * LogText.DEFAULT_CAP_CHARS
         !line.contains('\n')
+    }
+
+    // NFR-S1: the cap counts UTF-16 units, so its boundary can fall between the halves of an astral
+    // character. A kept low half is an unpaired surrogate every UTF-8 sink downstream renders as a
+    // replacement character — evidence a reader cannot tell from a genuine one, produced by the
+    // sanitizer itself. Kept in step with FindingsSanitizer by SanitizerPairEquivalenceSpec.
+    def "the cap never splits an astral character in half"() {
+        given: 'a text whose cap boundary falls between the two halves of a surrogate pair'
+        // The character AFTER the pair is deliberately an ordinary one: the guard has to look at
+        // the unit before the boundary, and a payload of nothing but pairs would read the same
+        // either way.
+        def grinning = new String(Character.toChars(0x1F600))
+        def payload = 'p' * 500 + grinning + 'x' * 1_999
+        int start = payload.length() - LogText.DEFAULT_CAP_CHARS
+
+        expect: 'the boundary really is mid-pair, or the scenario proves nothing'
+        Character.isLowSurrogate(payload.charAt(start))
+        Character.isHighSurrogate(payload.charAt(start - 1))
+        !Character.isHighSurrogate(payload.charAt(start + 1))
+
+        when:
+        def capped = LogText.capTail(payload, LogText.DEFAULT_CAP_CHARS)
+
+        then: 'the orphaned half is dropped — codePoints() yields a lone surrogate only when one remains'
+        capped.codePoints().noneMatch { Character.isSurrogate((char) it) }
+
+        and: 'the tail kept is everything past the pair, one character short of the cap'
+        capped.endsWith('x' * 1_999)
+        capped.startsWith("[truncated, showing last 1999 of ${payload.length()} chars]\n")
+    }
+
+    // The other side of the same boundary: a pair that sits wholly inside the tail is kept whole,
+    // so the guard drops an orphan rather than trimming every astral character near the cap.
+    def "a pair that starts exactly on the cap boundary is kept whole"() {
+        given: 'a payload whose boundary lands on the HIGH half, not between the two'
+        def grinning = new String(Character.toChars(0x1F600))
+        def payload = 'p' * 500 + grinning + 'x' * 1_998
+        int start = payload.length() - LogText.DEFAULT_CAP_CHARS
+
+        expect: 'the boundary is the pair\'s own first unit'
+        Character.isHighSurrogate(payload.charAt(start))
+
+        when:
+        def capped = LogText.capTail(payload, LogText.DEFAULT_CAP_CHARS)
+
+        then: 'nothing is dropped: the marker reports the full cap and the emoji survives'
+        capped.contains(grinning)
+        capped.startsWith("[truncated, showing last ${LogText.DEFAULT_CAP_CHARS} of ${payload.length()} chars]\n")
     }
 
     def "a caller-chosen bound is honoured"() {

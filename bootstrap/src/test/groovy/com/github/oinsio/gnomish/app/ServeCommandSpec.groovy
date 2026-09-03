@@ -272,7 +272,7 @@ tracker:
 
         and: 'the assembled feed polls through the FR8/D12 health decorator wrapping the startup ' +
         'smoke test tracker (add-serve-observability) — not a null and not the raw mock'
-        def wrappedTracker = starter.captured.@cycle.@tracker
+        def wrappedTracker = starter.captured.@cycle.@feed.@tracker
         wrappedTracker instanceof TrackerHealthTracker
 
         and: 'no claim attempt was ever made — the scheduler was assembled but never actually run'

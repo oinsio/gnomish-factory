@@ -129,7 +129,6 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         when: 'cleanup runs a second time for the same task, e.g. on a resumed run'
         cleanup.cleanUp(cloneDir, path, new TaskOutcome.Completed(sampleState()))
         def events = List.copyOf(logs.list)
-        logs.detach()
 
         then:
         noExceptionThrown()
@@ -141,6 +140,9 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         warnings[0].formattedMessage.startsWith(OperatorEvent.WORKTREE_REMOVE_FAILED.head())
         warnings[0].formattedMessage.contains('could not remove the worktree')
         warnings[0].formattedMessage.contains('stays registered until a prune')
+
+        cleanup: 'in cleanup, not in when: a throwing subject would otherwise leak the pinned level'
+        logs.detach()
     }
 
     def "FR6: git worktree prune drops registrations for directories deleted outside git"() {

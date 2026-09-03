@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.architecture
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.classic.spi.LoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.AllowsUnexpectedLogEvents
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.logging.LogExpectationGate
 import com.github.oinsio.gnomish.testfixtures.logging.LogExpectationLedger
+import com.github.oinsio.gnomish.testfixtures.logging.OperatorLogEvents
 import com.github.oinsio.gnomish.testfixtures.logging.OperatorLogWatch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -159,26 +162,65 @@ class LogExpectationGateSpec extends Specification {
     }
 
     // FR17: the ledger is what the build task's by-code verdict is computed from.
+    //
+    // On a ledger of its own, and on events built rather than emitted — both deliberate. A row
+    // recorded into the run's ledger would mark a real catalog code asserted for the whole
+    // `:bootstrap` run, and an emitted one would do it through the gate's own interceptor even if
+    // this feature touched no ledger at all. Either way the gate would be weakened by the feature
+    // that proves it works, so here the code is data and the ledger is this feature's.
     def "the ledger records a watched code and an unwatched line"() {
         given: 'a coded line some capture was watching, and an uncoded one nothing was'
         def code = OperatorEvent.values().first().code()
-        def capture = LogCaptureSupport.attach(LogExpectationGateSpec)
-        def watch = OperatorLogWatch.start()
-        FACTORY_LOG.warn("[$code] a real catalog code, watched")
-        capture.detach()
-        FACTORY_LOG.warn('an uncoded line nothing watched')
+        def ledger = new LogExpectationLedger()
+        def events = new OperatorLogEvents(
+                [
+                    unemitted("[$code] a real catalog code, watched")
+                ],
+                [
+                    unemitted('an uncoded line nothing watched')
+                ])
 
         when:
-        LogExpectationLedger.record('SomeSpec.some feature', watch.stop(), false)
+        ledger.record('SomeSpec.some feature', events, false)
 
         then: 'the code joins the watched set, and the unwatched line is a row of its own'
-        def observations = LogExpectationLedger.observations()
+        def observations = ledger.observations()
         observations.contains("watched\t$code")
         observations.contains('unwatched\t-\tSomeSpec.some feature\tWARN\t')
         observations.contains('an uncoded line nothing watched')
 
         and: 'and they are left where the build task looks for them'
         LogExpectationGate.reportDirectory().path.contains('log-expectation-gate')
+    }
+
+    // FR17: the run's ledger is the gate's own, so nothing a spec records can reach the verdict.
+    def "a ledger a spec builds is not the one the run's verdict is computed from"() {
+        given: 'a fabricated watched code, recorded into a ledger of this feature\'s own'
+        def code = OperatorEvent.values().first().code()
+        def mine = new LogExpectationLedger()
+        def theirs = new LogExpectationLedger()
+
+        when:
+        mine.record('SomeSpec.some feature', new OperatorLogEvents([
+            unemitted("[$code] fabricated")
+        ], []), false)
+
+        then: 'the second ledger never saw it — the state is per instance, not per JVM'
+        mine.observations().contains("watched\t$code")
+        !theirs.observations().contains(code)
+    }
+
+    /**
+     * A WARN event as data: never handed to a logger, so it reaches neither the operator plane nor
+     * the gate's interceptor. What the ledger reads off an event is its level, logger name and
+     * message, all of which a constructed event carries.
+     */
+    private static ILoggingEvent unemitted(String message) {
+        def event = new LoggingEvent()
+        event.level = Level.WARN
+        event.loggerName = LogExpectationGateSpec.name
+        event.message = message
+        event
     }
 
     private static ILoggingEvent event(String message) {

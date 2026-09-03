@@ -26,6 +26,11 @@ import java.util.Optional;
  * MidRoundHarvestListener} mirrors mid-round gnome commits out best-effort
  * (FR5).
  *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource}
+ * (no shared classpath between {@code adapters/git} and {@code adapters/agent}): both implement
+ * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with a
+ * decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21.
+ *
  * <p>Implements FR4, FR5, FR21, FR23 of add-sandbox-core.
  */
 public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSource {
@@ -69,8 +74,8 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
      * Shared by every round of this task (FR4 of harden-logging-observability): the listener is
      * per-round, but an environment that cannot be harvested is one fault whether it spans polls
      * of one round or rounds of one task, and a per-round suppressor would re-announce it each
-     * time. Built here rather than injected — the constructor is already at the parameter limit
-     * and a log-plane detail is not worth a parameter object.
+     * time. Built here rather than injected — the constructor is already at the parameter limit,
+     * and this is the owner the round's {@link MidRoundPollContext} borrows it from.
      */
     private final RepeatSuppressor harvestSuppressor = RepeatSuppressor.system();
 
@@ -81,7 +86,12 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         AttemptKey key = new AttemptKey(taskId, stage, request.attempt());
         BranchDecisionFile.Handle decision = BranchDecisionFile.open(environment, key);
         var midRound = new MidRoundHarvestListener(
-                environment, runner, cloneDir, taskId, branch, clock, MID_ROUND_MIN_INTERVAL, harvestSuppressor);
+                environment,
+                runner,
+                cloneDir,
+                clock,
+                MID_ROUND_MIN_INTERVAL,
+                new MidRoundPollContext(taskId, branch, harvestSuppressor));
         return new SandboxRound(environment, decision, midRound, key);
     }
 

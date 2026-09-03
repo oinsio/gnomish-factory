@@ -56,7 +56,6 @@ class DockerRuntimeProbeSpec extends Specification {
         when:
         def available = DockerRuntimeProbe.dockerAvailable(docker)
         def events = List.copyOf(logs.list)
-        logs.detach()
 
         then:
         !available
@@ -66,6 +65,9 @@ class DockerRuntimeProbeSpec extends Specification {
         events[0].level == Level.INFO
         events[0].formattedMessage.contains('container mode is unavailable')
         (events[0].throwableProxy != null) == carriesCause
+
+        cleanup: 'in cleanup, not in when: a throwing subject would otherwise leak the pinned level'
+        logs.detach()
 
         where:
         label | carriesCause | answer
@@ -86,10 +88,12 @@ class DockerRuntimeProbeSpec extends Specification {
         when:
         def available = DockerRuntimeProbe.dockerAvailable(docker)
         def events = List.copyOf(logs.list)
-        logs.detach()
 
         then:
         available
         events.isEmpty()
+
+        cleanup: 'in cleanup, not in when: a throwing subject would otherwise leak the pinned level'
+        logs.detach()
     }
 }

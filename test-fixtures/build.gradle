@@ -35,6 +35,8 @@ dependencies {
     api project(':gitobjects')
     // The tracker port-contract suites are typed in the port's own DTOs.
     api project(':gnomish-plugin-api')
+    // RepeatSuppressorFixture returns a RepeatSuppressor in its own signature.
+    api project(':logtext')
     // The application-layer fixtures shared by `:application`'s own specs and
     // the composition root's (task 4.5 of split-into-modules): the scripted
     // console, the blocking sleeper and virtual monotonic time, the recording

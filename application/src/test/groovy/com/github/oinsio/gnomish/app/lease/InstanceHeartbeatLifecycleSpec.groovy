@@ -246,7 +246,9 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
         def guarded = new InstanceHeartbeat(
                 tracker, progress, sleeper, new VirtualClock(), INTERVAL, throwingSink)
         started << guarded
-        def logs = LogCaptureSupport.attach(InstanceHeartbeat)
+        // The tick's edge logging moved to HeartbeatTickLog with FR4's repeat suppression, so the
+        // line is attributed to that class now; the level and the code are unchanged.
+        def logs = LogCaptureSupport.attach(HeartbeatTickLog)
 
         when: 'the claim registers, the first tick blows up, and the loop reaches its next sleep'
         guarded.register(REF)

@@ -140,9 +140,13 @@ class LogbackConfigSpec extends Specification {
 
         and: 'the queue is sized above Logback\'s 256 default for the serve-tick fan-out burst'
         async.queueSize == 1024
+
+        and: 'the shutdown drain budget is long enough for a full queue, not Logback\'s 1s default'
+        async.maxFlushTime == 5000
     }
 
-    // D7: the consoles stay synchronous — an ERROR is often a dying process's last word
+    // NFR-P1, D7: the consoles stay synchronous — they carry only the post-cleanup WARN+ trickle,
+    // and an ERROR is often a dying process's last word
     def "the console appenders are attached synchronously, not through the async wrapper"() {
         given:
         LoggerContext context = configure()

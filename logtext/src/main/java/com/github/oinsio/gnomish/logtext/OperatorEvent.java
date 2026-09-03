@@ -168,7 +168,11 @@ public enum OperatorEvent {
     GUARD_DENIAL_TAIL_WINDOW_FULL("GF122"),
     HOST_CHANNEL_FILE_TRUNCATED("GF123"),
     SCRATCH_AREA_REMOVAL_INCOMPLETE("GF124"),
-    SCRATCH_AREA_ENTRIES_LEFT("GF125");
+    SCRATCH_AREA_ENTRIES_LEFT("GF125"),
+    // sustained-outage roll-ups (FR4): the periodic counted reminder beside each first-occurrence
+    FEED_TRACKER_OUTAGE_ROLLUP("GF126"),
+    HEARTBEAT_BEAT_FAILING_ROLLUP("GF127"),
+    HEARTBEAT_TICK_FAILING_ROLLUP("GF128");
 
     private final String code;
     private final String head;

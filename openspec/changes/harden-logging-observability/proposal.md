@@ -194,6 +194,13 @@ defect classes cannot return.
 - **FR11** Test runs SHALL NOT write to the operator's log: a `logback-test.xml`
   isolates the suite; the shared log-capture helper (with level save/restore) is
   the documented way specs assert logging.
+- **FR12** Noise sites identified by the audit SHALL be releveled: sweep verdict
+  level follows category (steady-state DEBUG, actions INFO, `SKIPPED_NO_VERDICT`
+  WARN); recovered transients and first-of-two-attempts demoted from WARN;
+  per-tool-call and per-probe INFO demoted to DEBUG; duplicate-per-path lines
+  collapsed to one owner each; per-poll finished-task decline INFO and reaper
+  sweep-page/convergence chatter latched (first occurrence at the site's
+  level, repeats DEBUG).
 - **FR13** Evidence-producing git invocations SHALL be verified: the round
   boundary check distinguishes clean / violated / cannot-verify, with
   cannot-verify aborting as an infrastructure failure (no attempt burned, no
@@ -202,13 +209,6 @@ defect classes cannot return.
   evidence; read-only polls skip a failed observation rather than interpret
   it; the task-list enumeration failure surfaces as a command error, never an
   empty table.
-- **FR12** Noise sites identified by the audit SHALL be releveled: sweep verdict
-  level follows category (steady-state DEBUG, actions INFO, `SKIPPED_NO_VERDICT`
-  WARN); recovered transients and first-of-two-attempts demoted from WARN;
-  per-tool-call and per-probe INFO demoted to DEBUG; duplicate-per-path lines
-  collapsed to one owner each; per-poll finished-task decline INFO and reaper
-  sweep-page/convergence chatter latched (first occurrence at the site's
-  level, repeats DEBUG).
 
 - **FR14** Every production WARN/ERROR line SHALL carry a stable operator-event
   code as its message head (`[GFnnn] …`), drawn from a single catalog

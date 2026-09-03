@@ -15,7 +15,8 @@ import spock.lang.Specification
  * {@link RepeatSuppressor}: a poll loop that fails every tick must cost the operator a first line,
  * a periodic counted roll-up and a recovery line — never one line per tick.
  *
- * <p>FR4, NFR-R2, UX3 of harden-logging-observability.
+ * <p>FR4, NFR-O1, NFR-R2, UX3 of harden-logging-observability — NFR-O1's suppression-behavior
+ * contract spec.
  */
 class RepeatSuppressorSpec extends Specification {
 
@@ -207,7 +208,16 @@ class RepeatSuppressorSpec extends Specification {
         RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL == Duration.ofMinutes(5)
     }
 
-    /** A {@link Clock} the spec moves by hand — the suppressor's contract is entirely about elapsed time. */
+    /**
+     * A {@link Clock} the spec moves by hand — the suppressor's contract is entirely about elapsed
+     * time, so no feature here may sleep.
+     *
+     * <p>A deliberate copy of {@code com.github.oinsio.gnomish.testfixtures.time.MovableClock},
+     * forced by the layering rather than overlooked: {@code :test-fixtures} depends on
+     * {@code :logtext}, so this leaf cannot reach back for the shared one without a cycle. The
+     * shared copy carries the same note at its end. Both are the same handful of lines over
+     * {@code java.time.Clock}; if they ever diverge, this one is the one to delete.
+     */
     static class MovableClock extends Clock {
 
         private Instant now

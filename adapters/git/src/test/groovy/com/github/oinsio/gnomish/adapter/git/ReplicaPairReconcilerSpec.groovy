@@ -1,17 +1,15 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -395,7 +393,7 @@ exit 1
         script
     }
 
-    /** Runs {@code emit} with a {@link ListAppender} attached to the reconciler's own logger. */
+    /** Runs {@code emit} with a {@link ch.qos.logback.core.read.ListAppender} attached to the reconciler's own logger. */
     private static List<ILoggingEvent> capture(Closure<?> emit) {
         List<ILoggingEvent> sink = []
         capture(sink, emit)
@@ -408,15 +406,15 @@ exit 1
      * them would not do — an assignment never completes when its right-hand side throws.
      */
     private static void capture(List<ILoggingEvent> sink, Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(ReplicaPairReconciler)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        // Through the shared helper rather than a hand-rolled ListAppender (`.claude/rules/logging.md`):
+        // it restores the logger's level on the way out, and the Logback level registry is JVM-global.
+        // Pinned at DEBUG because these features assert on the absence of an INFO line too.
+        def logs = LogCaptureSupport.attach(ReplicaPairReconciler, Level.DEBUG)
         try {
             emit()
         } finally {
-            logbackLogger.detachAppender(appender)
-            sink.addAll(appender.list)
+            sink.addAll(logs.list)
+            logs.detach()
         }
     }
 

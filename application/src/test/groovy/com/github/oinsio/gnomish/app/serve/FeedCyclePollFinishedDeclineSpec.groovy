@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
 import java.time.Instant
@@ -41,10 +42,10 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
         def outageRetry = new FeedOutageRetry(sleeper, {
             Duration.ofSeconds(1)
-        })
+        }, RepeatSuppressorFixture.quiet())
         new FeedCycle(
-                tracker, INSTANCE, new SlotLedger(1), { TaskRef ref -> } as SlotRunner,
-                BASE, CAP, wipLimit, new Random(0), new FeedStateLogger(), outageRetry,
+                new FeedTracker(tracker, INSTANCE), new SlotLedger(1), { TaskRef ref -> } as SlotRunner,
+                new FeedSelection(BASE, CAP, wipLimit, new Random(0)), new FeedStateLogger(), outageRetry,
                 new FinishedDecline(new RepeatSuppressor(new MovableClock(Instant.EPOCH), Duration.ofMinutes(5))))
     }
 

@@ -9,7 +9,8 @@ import spock.lang.Specification
  * every failure shape reduces to the empty string unless the invocation itself is checked. This is
  * the one place that check lives — {@link VerifiedTip#read} for probes that may skip an
  * observation, {@link VerifiedTip#required} for resolutions recorded durably or gating a
- * decision.
+ * decision. M6's failing-invocation spec for the shared resolution point both refusal paths
+ * reduce to.
  */
 class VerifiedTipSpec extends Specification {
 
@@ -52,5 +53,23 @@ class VerifiedTipSpec extends Specification {
     def "FR13: a clean resolution returns the trimmed sha"() {
         expect:
         VerifiedTip.required('HEAD', 'rev-parse', new GitCommandResult(0, SHA + '\n', '')) == SHA
+    }
+
+    // FR6: git's stderr is subprocess output, and this message is rendered into a log record when
+    //     the refusal is logged; a newline in it would forge a second record. logging.md puts that
+    //     obligation on the throw site, since the log-call gate cannot see inside a message.
+    def "FR6: the git evidence carried into the refusal message is sanitized at construction"() {
+        given:
+        def esc = Character.toString(27)
+        def stderr = "fatal: bad revision\n2026-01-01 ERROR forged record${esc}[31m"
+
+        when:
+        VerifiedTip.required('refs/heads/gnomish/PROJ-1', 'rev-parse', new GitCommandResult(128, '', stderr))
+
+        then:
+        def failure = thrown(BranchTipUnavailableException)
+        !failure.message.contains('\n')
+        !failure.message.contains(esc)
+        failure.message.contains('forged record')
     }
 }

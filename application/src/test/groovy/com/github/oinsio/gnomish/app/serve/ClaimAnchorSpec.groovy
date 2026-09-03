@@ -8,11 +8,13 @@ import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.FinishedDecline
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.MdcAwareThread
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -51,7 +53,7 @@ class ClaimAnchorSpec extends Specification {
 
         and: 'a tracker that grants the claim'
         Tracker tracker = [claim: { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             }] as Tracker
 
         and: 'a slot runner that records the anchors already emitted when it is entered'
@@ -86,7 +88,7 @@ class ClaimAnchorSpec extends Specification {
         def ledger = new SlotLedger(2)
         ledger.acquire()
         Tracker tracker = [claim: { TaskRef ref, String instance ->
-                new ClaimResult.Acquired()
+                new ClaimResult.Acquired(new ClaimEpoch(1))
             }] as Tracker
 
         when: 'the claim is announced and the slot launched, all on this thread'
@@ -105,8 +107,9 @@ class ClaimAnchorSpec extends Specification {
     private static FeedCycle cycle(Tracker tracker, SlotLedger ledger, SlotRunner runner) {
         def outageRetry = new FeedOutageRetry(new BudgetedVirtualSleeper(new VirtualClock()), {
             Duration.ofSeconds(1)
-        })
-        new FeedCycle(tracker, INSTANCE, ledger, runner, Duration.ofMinutes(2), Duration.ofHours(1),
-                2, new Random(0), new FeedStateLogger(), outageRetry, new FinishedDecline())
+        }, RepeatSuppressorFixture.quiet())
+        new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner,
+                new FeedSelection(Duration.ofMinutes(2), Duration.ofHours(1), 2, new Random(0)),
+                new FeedStateLogger(), outageRetry, new FinishedDecline())
     }
 }

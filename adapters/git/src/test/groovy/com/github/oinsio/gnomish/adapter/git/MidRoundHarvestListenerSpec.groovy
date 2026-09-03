@@ -73,7 +73,8 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
     }
 
     private MidRoundHarvestListener listener(TaskExecutionEnvironment env, Duration interval = Duration.ofSeconds(30)) {
-        new MidRoundHarvestListener(env, runner, clone, 'PROJ-9', BRANCH, clock, interval, suppressor)
+        new MidRoundHarvestListener(
+                env, runner, clone, clock, interval, new MidRoundPollContext('PROJ-9', BRANCH, suppressor))
     }
 
     def "FR5: a moved harvested tip is pushed best-effort to origin"() {
@@ -181,6 +182,42 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         logs.detach()
     }
 
+    // FR4: the streak identity of a fault is its type plus its own words (FailureReason), never the
+    // message alone — two different faults that both carry no message are two pieces of news, and
+    // reading them as one streak silences the second fault's arrival entirely.
+    def "FR4: two different faults with no message each restart the streak"() {
+        given: 'a harvest whose fault type changes between polls, neither carrying a message'
+        def faults = [
+            new IllegalStateException(),
+            new UnsupportedOperationException()
+        ].iterator()
+        def l = listener(environment({
+            throw faults.next()
+        }))
+        def logs = LogCaptureSupport.attach(MidRoundHarvestListener, Level.DEBUG)
+
+        when: 'two polls, a minute apart — well inside the roll-up interval'
+        2.times {
+            l.onProgress(toolEvent)
+            now = now.plusSeconds(60)
+            suppressorClock.advance(Duration.ofMinutes(1))
+        }
+
+        then: 'each fault is announced on its own — the second is news, not more of the first'
+        def warnings = logs.list.findAll { it.level == Level.WARN }
+        warnings.size() == 2
+        warnings*.throwableProxy*.className == [
+            IllegalStateException.name,
+            UnsupportedOperationException.name
+        ]
+
+        and: 'neither is demoted to a counted repeat'
+        logs.list.findAll { it.level == Level.DEBUG }.isEmpty()
+
+        cleanup:
+        logs.detach()
+    }
+
     // FR15 of harden-logging-observability: the roll-up is the other edge of the same suppression,
     // and it is the one an operator acts on — "still failing, 6 times over 6 minutes" is what says
     // the outage is not a blip. The audit found this branch dark while the first-occurrence branch
@@ -233,7 +270,12 @@ class MidRoundHarvestListenerSpec extends Specification implements BareGitRepoFi
         when: 'an unrelated round on the other branch fails for the first time'
         def logs = LogCaptureSupport.attach(MidRoundHarvestListener, Level.DEBUG)
         new MidRoundHarvestListener(
-                failing, runner, clone, 'PROJ-10', otherBranch, clock, Duration.ofSeconds(30), suppressor)
+                failing,
+                runner,
+                clone,
+                clock,
+                Duration.ofSeconds(30),
+                new MidRoundPollContext('PROJ-10', otherBranch, suppressor))
                 .onProgress(toolEvent)
         def events = List.copyOf(logs.list)
         logs.detach()

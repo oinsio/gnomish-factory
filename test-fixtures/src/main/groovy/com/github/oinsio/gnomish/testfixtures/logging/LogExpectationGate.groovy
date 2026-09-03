@@ -53,6 +53,13 @@ class LogExpectationGate implements IGlobalExtension {
     /** Enough lines to identify the offender without turning a report entry into a log dump. */
     private static final int MAX_REPORTED = 10
 
+    /**
+     * This run's ledger — one per JVM, which is one per test task. Owned here rather than by the
+     * ledger class itself so that {@link LogExpectationLedger}'s own spec can drive a ledger of its
+     * own without its fabricated rows becoming part of the verdict this one feeds.
+     */
+    private static final LogExpectationLedger RUN = new LogExpectationLedger()
+
     @Override
     void visitSpec(SpecInfo spec) {
         // Per feature, not per spec: `SpecInfo` has no iteration hook of its own, and a
@@ -68,7 +75,7 @@ class LogExpectationGate implements IGlobalExtension {
     void stop() {
         def file = new File(reportDirectory(), "observations-${ProcessHandle.current().pid()}.tsv")
         file.parentFile?.mkdirs()
-        file.text = LogExpectationLedger.observations()
+        file.text = RUN.observations()
     }
 
     /**
@@ -83,7 +90,7 @@ class LogExpectationGate implements IGlobalExtension {
         def location = "${invocation.spec?.name}.${invocation.feature?.name}"
         def allowance = allowance(invocation)
         reasonOf(location, allowance)
-        LogExpectationLedger.record(location, events, allowance != null)
+        RUN.record(location, events, allowance != null)
         if (allowance == null && !events.unwatched.isEmpty()) {
             report(complaint(location, events.unwatched))
         }

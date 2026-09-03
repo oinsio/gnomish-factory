@@ -69,6 +69,77 @@ class ModuleBuildFileSpec extends Specification {
         !rootBuildFile.contains('dependencies {')
     }
 
+    /**
+     * The shared leaf modules whose emptiness is load-bearing, each mapped to the exact set of
+     * production-scope dependency declarations its build file may carry. {@code :subprocess} and
+     * {@code :atomicfile} declare nothing at all; {@code :logtext} declares the SLF4J API and the
+     * BOM that pins it — MDC propagation is not expressible without the API, while a logging
+     * <em>backend</em> stays the composition root's choice (module-layering scenario "The logtext
+     * leaf carries only the logging API"). The internal half of each invariant is gated by
+     * {@code layering { allowedProjects = [] } }; this map is the external half.
+     */
+    private static final Map<String, Set<String>> LEAF_PRODUCTION_DEPENDENCIES = [
+        logtext: [
+            'implementation platform(libs.spring.boot.dependencies)',
+            'api libs.slf4j.api'
+        ] as Set,
+        subprocess: [] as Set,
+        atomicfile: [] as Set,
+    ]
+
+    // FR6: a shared leaf stays consumable from every layer only while it drags nothing behind it,
+    // so its permitted external edges are enumerated by this gate rather than described in a comment
+    def "the shared leaf #module declares only its permitted production dependencies"() {
+        given: 'the module build file'
+        def buildFile = RepoSourceTree.repoRoot().resolve(module).resolve('build.gradle').toFile()
+
+        expect: 'the build file really exists, so the scan is not vacuous'
+        buildFile.isFile()
+
+        and: 'its production-scope declarations are exactly the permitted set'
+        productionDependencies(buildFile) == permitted
+
+        where:
+        module << LEAF_PRODUCTION_DEPENDENCIES.keySet()
+        permitted << LEAF_PRODUCTION_DEPENDENCIES.values()
+    }
+
+    /**
+     * The non-test dependency declarations of a build file: the body of its {@code dependencies}
+     * block with comments and blank lines removed, minus the {@code test*} configurations, whose
+     * scope reaches no consumer. A build file with no {@code dependencies} block declares nothing.
+     */
+    private static Set<String> productionDependencies(File buildFile) {
+        dependenciesBlock(buildFile)
+                .readLines()
+                .collect { it.replaceFirst(/\/\/.*$/, '').trim() }
+                .findAll { !it.isEmpty() }
+                .findAll { !(it =~ /^test\w*\s/) }
+                .toSet()
+    }
+
+    /** The text between the braces of the {@code dependencies} block, or empty when there is none. */
+    private static String dependenciesBlock(File buildFile) {
+        def text = buildFile.text
+        def start = text.indexOf('dependencies {')
+        if (start < 0) {
+            return ''
+        }
+        def depth = 0
+        for (int i = text.indexOf('{', start); i <text.length(); i++) {
+            def ch = text.charAt(i)
+            if (ch == '{' as char) {
+                depth++
+            } else if (ch == '}' as char) {
+                depth--
+                if (depth == 0) {
+                    return text.substring(text.indexOf('{', start) + 1, i)
+                }
+            }
+        }
+        throw new IllegalStateException("unbalanced dependencies block in ${buildFile}")
+    }
+
     /** Every Gradle script in the repository, skipping build outputs. */
     private static List<File> gradleScripts() {
         walk { it.fileName.toString().endsWith('.gradle') }

@@ -88,8 +88,9 @@ pitest {
     // line from mutation coverage: every InstanceHeartbeat line it touches is also driven
     // SYNCHRONOUSLY on the test thread by InstanceHeartbeatSpec — loop() (sleep, empty-and-stop,
     // per-tick failure) via seedHeldForTest + a bounded sleeper, register()'s single-thread guard via
-    // "a single instance-level thread serves all claims", and beat()'s ClaimGone branch via the
-    // direct-tick specs — so the gate still holds; only the timing-sensitive lifecycle rehearsal
+    // "a single instance-level thread serves all claims", tickGuarded()'s failure/recovery edges via
+    // "a guarded tick announces the fault once and closes it when the tick works again", and beat()'s
+    // ClaimGone branch via the direct-tick specs — so the gate still holds; only the timing-sensitive lifecycle rehearsal
     // (which stays green under plain `test`) is kept out of PIT's per-mutation re-runs.
     excludedTestClasses = [
         'com.github.oinsio.gnomish.app.lease.InstanceHeartbeatLifecycleSpec',

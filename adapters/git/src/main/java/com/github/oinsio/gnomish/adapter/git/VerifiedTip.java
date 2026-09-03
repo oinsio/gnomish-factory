@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.util.Optional;
 
@@ -70,12 +71,21 @@ final class VerifiedTip {
                 + result.stderr().trim();
     }
 
+    /**
+     * The refusal, carrying git's own words. The stderr is sanitized here rather than at whichever
+     * handler logs the exception: the untrusted-text gate reads log call sites, and an exception
+     * message escapes it structurally, so the throw site owns the sanitizing (FR6 of
+     * harden-logging-observability; {@code .claude/rules/logging.md}).
+     */
     private static BranchTipUnavailableException unavailable(String revision, String command, GitCommandResult result) {
         if (result.termination() != Termination.EXITED) {
             return new BranchTipUnavailableException(
                     revision, command, result.termination().name());
         }
         return new BranchTipUnavailableException(
-                revision, command, result.exitCode(), result.stderr().trim());
+                revision,
+                command,
+                result.exitCode(),
+                LogText.forLog(result.stderr().trim()));
     }
 }

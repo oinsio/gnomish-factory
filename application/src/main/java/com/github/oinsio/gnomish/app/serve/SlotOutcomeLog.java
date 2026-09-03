@@ -36,11 +36,6 @@ final class SlotOutcomeLog {
         this.log = log;
     }
 
-    /** Wall time from a monotonic source: a clock stepped by NTP mid-run must not report a negative run. */
-    static Duration elapsedSince(long startedNanos) {
-        return Duration.ofNanos(System.nanoTime() - startedNanos);
-    }
-
     /**
      * The per-outcome <em>detail</em> line: the free text each terminal variant carries (a delivery
      * summary, a park report, an abort cause) which the canonical summary's fixed vocabulary has no

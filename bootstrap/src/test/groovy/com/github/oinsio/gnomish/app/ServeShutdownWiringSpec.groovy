@@ -86,7 +86,8 @@ import spock.lang.Timeout
  * project (no mockito-inline on the classpath) — this spec builds real instances (same pattern as
  * {@code TakeSlotRunnerSpec}) rather than mocking them.
  *
- * <p>Also carries UX4, M5 of harden-logging-observability: the signal-mid-drain features assert
+ * <p>Also carries NFR-O1, UX4, M5 of harden-logging-observability — NFR-O1's shutdown-ordering
+ * contract spec: the signal-mid-drain features assert
  * that Ctrl+C / SIGTERM leaves a log naming what was in flight, how it stopped, and the drain
  * result — with no stack traces for shutdown-caused deaths.
  */

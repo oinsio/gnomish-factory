@@ -9,9 +9,10 @@ import java.util.regex.Pattern;
  * read as evidence. Three neutralizations, in this order:
  *
  * <ol>
- *   <li>{@link #strip} removes ANSI CSI/OSC/Fe sequences and every ISO control character except
- *       {@code \n} and {@code \t} (DEL and the C1 range included) — the carriers of cursor tricks
- *       against the operator's terminal;
+ *   <li>{@link #strip} removes ANSI CSI/OSC/Fe sequences, every ISO control character except
+ *       {@code \n} and {@code \t} (DEL and the C1 range included), and the Unicode
+ *       bidirectional overrides and isolates — the carriers of cursor tricks against the
+ *       operator's terminal and of visible/recorded text divergence;
  *   <li>{@link #capTail} bounds the volume, keeping the tail (where the error is) and naming what
  *       was dropped;
  *   <li>{@link #flatten} renders the surviving line separators — {@code \n}, {@code \r},
@@ -130,16 +131,29 @@ public final class LogText {
         if (text.length() <= cap) {
             return text;
         }
-        String tail = text.substring(text.length() - cap);
-        return "[truncated, showing last %d of %d chars]\n%s".formatted(cap, text.length(), tail);
+        // The cap counts UTF-16 units, so the boundary can land between the two halves of an
+        // astral character. Keeping the low half alone emits an unpaired surrogate, which every
+        // UTF-8 sink downstream renders as a replacement character — evidence the reader cannot
+        // tell from a real one. Dropping it costs one character of an already-truncated tail.
+        int start = text.length() - cap;
+        if (Character.isLowSurrogate(text.charAt(start)) && Character.isHighSurrogate(text.charAt(start - 1))) {
+            start++;
+        }
+        String tail = text.substring(start);
+        return "[truncated, showing last %d of %d chars]\n%s".formatted(tail.length(), text.length(), tail);
     }
 
     /**
      * Renders every line separator as a visible escape so the result occupies exactly one log line.
-     * Covers what {@link #strip} deliberately keeps ({@code \n}, {@code \r}, {@code \t}) and the
-     * two Unicode separators it never saw ({@code U+2028}, {@code U+2029}), which are not ISO
-     * controls but do break lines for many readers — the forgery vector a control-only filter
-     * misses.
+     * Covers what {@link #strip} deliberately keeps ({@code \n}, {@code \t}) and the two Unicode
+     * separators it never saw ({@code U+2028}, {@code U+2029}), which are not ISO controls but do
+     * break lines for many readers — the forgery vector a control-only filter misses.
+     *
+     * <p>{@code \r} is escaped too, though {@link #strip} removes it: this method is public and
+     * usable on text that never went through {@link #strip}, so leaving the one line separator a
+     * caller is most likely to still hold would defeat the one-event-one-line promise. Inside
+     * {@link #forLog} that arm is unreachable, which is why it carries no round-trip through the
+     * pipeline of its own.
      *
      * @param text the text to render on one line; never null
      * @return the flattened text; never null, never containing a line break
@@ -161,13 +175,24 @@ public final class LogText {
     }
 
     /**
-     * A character {@link #strip} removes: ISO controls except {@code \n} and {@code \t}, DEL, and
-     * the C1 range — the carriers of cursor tricks and log forgery.
+     * A character {@link #strip} removes: ISO controls except {@code \n} and {@code \t}, DEL, the
+     * C1 range, and the bidirectional overrides — the carriers of cursor tricks and log forgery.
      */
     private static boolean isStrippedControl(char c) {
         if (c == '\n' || c == '\t') {
             return false;
         }
-        return c < 0x20 || (c >= 0x7F && c <= 0x9F);
+        return c < 0x20 || (c >= 0x7F && c <= 0x9F) || isBidiOverride(c);
+    }
+
+    /**
+     * The bidirectional embedding/override controls {@code U+202A}–{@code U+202E} and the
+     * isolates {@code U+2066}–{@code U+2069}. Not ISO controls, so a control-only filter keeps
+     * them, but they reorder everything the reader sees after them: the Trojan Source vector,
+     * where the rendered line stops matching the recorded one. That is the same claim about the
+     * evidence that an ANSI cursor sequence makes, so they leave by the same door.
+     */
+    private static boolean isBidiOverride(char c) {
+        return (c >= 0x202A && c <= 0x202E) || (c >= 0x2066 && c <= 0x2069);
     }
 }

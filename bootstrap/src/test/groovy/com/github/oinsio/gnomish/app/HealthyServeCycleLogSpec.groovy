@@ -150,6 +150,12 @@ tracker:
         and: 'the claim anchor opens it, before any event of the round (FR2)'
         story.first().startsWith("claim acquired for task ${REF.id()}")
 
+        // Prose prefixes here, despite `.claude/rules/logging.md`'s "assert the event, not the
+        // sentence": the catalog is the operator plane only, so an INFO line carries no
+        // OperatorEvent code to key on, and what this feature asserts is the *order* of the story,
+        // for which the line's opening phrase is the only stable handle it has. Rewording one of
+        // these lines is expected to update this list — that cost buys the ordering guarantee UX2
+        // is made of, and no cheaper handle exists until INFO lines gain identities of their own.
         and: 'the engine\'s own round events sit in the middle, in the order the round ran them'
         def middle = story.subList(1, story.size() - 1)
         middle.findIndexOf { it.startsWith('run started:') } >= 0

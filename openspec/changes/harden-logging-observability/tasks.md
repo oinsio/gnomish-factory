@@ -333,7 +333,7 @@ map* below.
       trace): `LifecycleLedgerWriter:62`, `RunSummaryLedgerWriter:62`,
       `SweepLedgerWriter:85`, `TaskOutcomeLedgerWriter:68,:79`,
       `LedgerRetentionSweeper:80,:95`, `SnapshotWriteCycle:72,:87`,
-      `SnapshotWriter:138`, `DashboardWatchLoop:88`.
+      `SnapshotWriter:148`, `DashboardWatchLoop:88`.
 - [x] 12.2 Abort/quarantine protocol (7 ERROR/WARN about lost work):
       `AbortHandler:89,:124,:138`, `TakeQuarantinePark:59,:70`,
       `FinishEffect:75,:83`, `GuardedPark:137,:145`.
@@ -424,7 +424,7 @@ now logs it, and the spec that asserts the line. Regenerate the right-hand colum
 | Container create / reattach / dispose outcomes               | `sandbox/.../ContainerMaterializer` (create, reattach), `ContainerEnvironmentDisposal` (dispose) | `ContainerTaskExecutionEnvironmentUnitSpec`                                                                                                                      |
 | Per-step dispose failure with environment key                | `sandbox/.../ContainerEnvironmentDisposal`                                                       | `ContainerEnvironmentDisposalSpec` ("a swallowed dispose step names …")                                                                                          |
 | Git lifecycle commits                                        | `git/.../GitTaskRepository`, `TaskLifecycleCommitWriter`                                         | `GitTaskRepositorySpec`, `GitObjectsTaskRepositorySpec`                                                                                                          |
-| Worktree removal failures                                    | `git/.../TaskWorktreeCleanup`, `serve/WorktreeJanitor`                                           | `TaskWorktreeCleanupSpec`; `WorktreeJanitorSpec` covers the disposal decision's `taskId` scope, **not** the janitor's own scan/sanitize WARNs — see *Known gaps* |
+| Worktree removal failures                                    | `git/.../TaskWorktreeCleanup`, `serve/WorktreeJanitor`                                           | `TaskWorktreeCleanupSpec`; `WorktreeJanitorSpec` (disposal `taskId` scope, plus `[GF078]`/`[GF079]` scan and sanitize), `WorktreeJanitorLifecycleSpec` (`[GF077]` tick) |
 | Dashboard ledger/snapshot degradations, missing vs malformed | `dashboard/SnapshotReader`, `DashboardBoardCache`                                                | `SnapshotReaderSpec` (missing → DEBUG, malformed → WARN), `DashboardBoardCacheSpec`                                                                              |
 | Empty token-usage extraction                                 | `agent/.../TokenUsageMapper`                                                                     | `TokenUsageMapperSpec`                                                                                                                                           |
 | Local resume-branch recreation from the origin tracking ref  | `git/.../ContainerResumeBranch`                                                                  | `ContainerResumeBranchSpec`                                                                                                                                      |
@@ -432,13 +432,14 @@ now logs it, and the spec that asserts the line. Regenerate the right-hand colum
 
 ### Sync-pair closure (D8)
 
-`grep -rn "Kept in sync with"` over production sources enumerates eight declared
+`grep -rn "Kept in sync with"` over production sources enumerates nine declared
 pairs after this change: the two boundary checks, the two salvages, the two
 task-lifecycle commit writers, the two summary assemblers, the two sanitizers,
 the two mid-round poll listeners, the two terminal-commit writers
-(`CleanupCommit` ↔ `GitObjectsTerminalCommits`), and the two daemon ticks
-(`SandboxLifecycleTick` ↔ `WorktreeJanitor`) — plus, in test scope, the two
-stalling git fixtures.
+(`CleanupCommit` ↔ `GitObjectsTerminalCommits`), the two daemon ticks
+(`SandboxLifecycleTick` ↔ `WorktreeJanitor`), and `OperatorEvent` ↔ the four
+`:domain` emitters that repeat their `[GFnnn]` heads as literals (ADR 0004
+accepted deviation 1) — plus, in test scope, the two stalling git fixtures.
 
 Against D8's table, row by row:
 
@@ -569,7 +570,7 @@ where marked, else WARN. Sources: two module-by-module audits over all
 
 | Cluster | Lines |
 |---|---|
-| 12.1 writers | `serveobservability/writer/` — LifecycleLedgerWriter:62 (E), RunSummaryLedgerWriter:62 (E), SweepLedgerWriter:85 (E), TaskOutcomeLedgerWriter:68, :79 (E), LedgerRetentionSweeper:80, :95, SnapshotWriteCycle:72, :87, SnapshotWriter:138; dashboard/DashboardWatchLoop:88 |
+| 12.1 writers | `serveobservability/writer/` — LifecycleLedgerWriter:62 (E), RunSummaryLedgerWriter:62 (E), SweepLedgerWriter:85 (E), TaskOutcomeLedgerWriter:68, :79 (E), LedgerRetentionSweeper:80, :95, SnapshotWriteCycle:72, :87, SnapshotWriter:148; dashboard/DashboardWatchLoop:88 |
 | 12.2 abort | app/take/ — AbortHandler:89 (E), :124 (E), :138 (E), TakeQuarantinePark:59 (E), :70 (E), FinishEffect:75, :83, GuardedPark:137, :145 |
 | 12.3 daemons | app/lease/ — Reaper:106, InstanceHeartbeat:191, :202, :239, HeartbeatBeater:35, StandingReaper:145; app/serve/ — WorktreeJanitor:109, :127, :170, SandboxLifecycleTick:74, DirtyNotifier:48, FeedOutageRetry:74 |
 | 12.4 app misc | app/ — OrderedExit:133, RunExceptionReporting:54, TakeBatch:79; app/take/ — FinishedDecline:99, DecisionAck:133, RevocationCheckingAttemptPersistence:210 |
@@ -627,20 +628,42 @@ rediscovered. None blocks the change; each is a follow-up, not a defect.
   runtime one. The fix at that point is the `:test-fixtures` edge that module's
   first spec-asserted line earns it, not a change to either gate.
 
-- **Eleven production files now sit over the 200-line hard cap
-  (`process-invariants.md`).** `TakeSlotRunner` was already over it and grew by
-  73 lines here, so it was the one worth splitting now, and was: its
-  summary/crash logging cluster moved to `SlotOutcomeLog`, which also gave that
-  cluster a same-module unit spec (`SlotOutcomeLogSpec`) instead of only
-  :bootstrap coverage. Ten more crossed the cap in this change, by +1…+32 lines
-  each, and are debt: `GithubClaimLease` (231), `TakeDispatcher` (227),
-  `ShellCommandCheckRunner` (219), `GithubMarker` (216),
-  `GithubStaleClaimRemoval` (213), `SlotLedger` (208), `WorktreeJanitor` (206),
-  `ServeShutdownWiring` (202), `FeedAutomaton` (202), `StandingReaper` (201).
+- **Twenty-four production files this change touches now sit over the 200-line
+  hard cap (`process-invariants.md`).** `TakeSlotRunner` was already over it and
+  grew by 73 lines here, so it was the one worth splitting now, and was: its
+  summary/crash logging cluster moved to `SlotOutcomeLog` (leaving it at 199),
+  which also gave that cluster a same-module unit spec (`SlotOutcomeLogSpec`)
+  instead of only :bootstrap coverage. The rest are debt, in two groups.
+
+  Eleven crossed the cap in this change, by +2…+38 lines each:
+  `GithubClaimLease` (199→233), `TakeDispatcher` (197→227),
+  `ShellCommandCheckRunner` (190→227), `GithubMarker` (178→218),
+  `WorktreeJanitor` (193→217), `GithubStaleClaimRemoval` (185→213),
+  `StandingReaper` (200→209), `SlotLedger` (196→208), `RoundExecution`
+  (200→207), `FeedAutomaton` (200→202), `ServeShutdownWiring` (164→202).
+
+  Thirteen were already over the cap and grew further here, by +3…+77 lines
+  each: `InstanceHeartbeat` (264→341), `ManualRunRunner` (279→298),
+  `GitProcessRunner` (283→291), `UsageHistoryWalker` (242→259),
+  `GitTaskRepository` (225→242), `Reaper` (213→241),
+  `ReplicaPairReconciler` (230→233), `SandboxLifecycleDecision` (204→232),
+  `RevocationCheckingAttemptPersistence` (226→231), `ServeCommand` (204→229),
+  `TakeCommand` (215→225), `EgressGuard` (202→222),
+  `EnvironmentAttemptPersistence` (210→222).
+
   Each grew by the degrade-path logging this change exists to add, so no
   responsibility boundary opened up with the growth — which is precisely the
   condition under which `process-invariants.md` says not to split. Splitting
-  them needs its own change, driven by responsibilities rather than by the count.
+  them needs its own change, driven by responsibilities rather than by the
+  count. Regenerate these counts with:
+
+  ```bash
+  for f in $(git diff --name-only main -- '*/src/main/java/*.java'); do
+    [ -f "$f" ] || continue
+    printf '%s %s %s\n' "$(git show "main:$f" | wc -l)" "$(wc -l < "$f")" "$f"
+  done | awk '$2 > 200'
+  ```
+
 - **One of the 53 rows is exempt rather than pinned: `SnapshotWriter`'s
   `SNAPSHOT_TICK_FAILED` guard.** `loop()` catches a `RuntimeException` from
   `tick()`, but `SnapshotWriteCycle`'s `writeOnce()` and `sweepLedgerRetention()`
@@ -702,7 +725,7 @@ now fails the build rather than a list anybody must re-check by hand:
 - **124/125 pinned by name.** Every code but one is named by at least one test
   source, as `OperatorEvent.X` or as the literal `[GFnnn]` head.
 - **1/125 gate-exempt with a reason at the line.** `GF105`
-  (`SNAPSHOT_TICK_FAILED`, `SnapshotWriter:139`) — the unreachable
+  (`SNAPSHOT_TICK_FAILED`, `SnapshotWriter:148`) — the unreachable
   defense-in-depth guard argued in *Unpinned-line map* above; a spec built on an
   artificially broken collaborator would assert "catch catches".
 

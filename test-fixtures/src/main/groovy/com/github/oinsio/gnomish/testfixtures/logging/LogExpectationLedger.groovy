@@ -19,9 +19,17 @@ import java.util.regex.Pattern
  * run was watching. The per-feature detail is not discarded — it is written out beside the
  * verdict, because a line emitted in silence is exactly what this change exists to end.
  *
- * <p>State is per JVM, which is per test task: the accumulation is only valid within one run, and
- * the file it writes is that run's evidence. {@code LogExpectationGateCheck} in {@code
- * build-logic} reads the files back and renders the verdict.
+ * <p>State is per instance, and the run's instance is {@link LogExpectationGate}'s own: one
+ * ledger per JVM, which is per test task, so the accumulation is only valid within one run and the
+ * file it writes is that run's evidence. {@code LogExpectationGateCheck} in {@code build-logic}
+ * reads the files back and renders the verdict.
+ *
+ * <p><b>Why an instance rather than static state.</b> This class's own spec has to drive
+ * {@code record} to assert what a row looks like, and a static ledger would make those fabricated
+ * rows part of the real verdict: a watched code written by a spec that never went near that code's
+ * production emitter marks it asserted for the whole run, and the gate is then weakened by the
+ * very test that proves it works. The spec runs its own ledger instead, and nothing it records can
+ * reach the run's.
  */
 final class LogExpectationLedger {
 
@@ -31,30 +39,22 @@ final class LogExpectationLedger {
     /** Written for a line whose site is a documented {@code log-contract-exempt}, so it has no code. */
     private static final String NO_CODE = '-'
 
-    private static final Set<String> WATCHED = ConcurrentHashMap.newKeySet()
+    /** Concurrent because features of one run may execute on more than one thread. */
+    private final Set<String> watched = ConcurrentHashMap.newKeySet()
 
-    private static final List<String> ROWS = new CopyOnWriteArrayList<String>()
-
-    private LogExpectationLedger() {
-    }
+    private final List<String> rows = new CopyOnWriteArrayList<String>()
 
     /** Records one finished feature's operator plane. */
-    static void record(String location, OperatorLogEvents events, boolean allowed) {
-        events.watched.each { WATCHED.add(codeOf(it)) }
+    void record(String location, OperatorLogEvents events, boolean allowed) {
+        events.watched.each { watched.add(codeOf(it)) }
         events.unwatched.each { event ->
-            ROWS.add(row(allowed ? 'allowed' : 'unwatched', codeOf(event), location, event))
+            rows.add(row(allowed ? 'allowed' : 'unwatched', codeOf(event), location, event))
         }
     }
 
     /** Everything this run saw, one observation per line, for the build-logic verdict to read. */
-    static String observations() {
-        (WATCHED.sort().collect { "watched\t$it" } + ROWS).join('\n') + '\n'
-    }
-
-    /** Forgets the run — for the gate's own spec, which must not leak into the real verdict. */
-    static void reset() {
-        WATCHED.clear()
-        ROWS.clear()
+    String observations() {
+        (watched.sort().collect { "watched\t$it" } + rows).join('\n') + '\n'
     }
 
     private static String codeOf(ILoggingEvent event) {

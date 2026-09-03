@@ -3,8 +3,11 @@ package com.github.oinsio.gnomish.app.serve
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -47,7 +50,8 @@ class FeedOutageRetryInterruptSpec extends Specification {
         def attempts = new AtomicInteger()
         def retry = new FeedOutageRetry(interruptingSleeper, {
             Duration.ofSeconds(30)
-        })
+        }, new RepeatSuppressor(new MovableClock(Instant.parse('2026-09-03T10:00:00Z')),
+        RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL))
         def logs = LogCaptureSupport.attach(FeedOutageRetry)
 
         when: 'the outage retry runs against the perpetually-failing call while the interrupt arrives'

@@ -76,28 +76,21 @@ public final class MidRoundPushListener implements AgentProgressListener {
     /**
      * @param runner the git subprocess runner, shared with the round's other git-adapter machinery
      * @param worktreeRoot the task worktree; git commands run with this path as {@code cwd}
-     * @param taskId the task whose branch is being watched, for WARN log context
      * @param stage the current stage name, for WARN log context
      * @param round the current round number, for WARN log context
-     * @param branch the task branch name, e.g. {@link TaskIdSanitizer#branchName}
-     * @param suppressor the edge-logging owner for this round's tip-resolution failure streak
+     * @param context whose round this is — the task id and branch (e.g. {@link
+     *     TaskIdSanitizer#branchName}) and the suppressor its failure streaks live in
      */
     public MidRoundPushListener(
-            GitProcessRunner runner,
-            Path worktreeRoot,
-            String taskId,
-            String stage,
-            int round,
-            String branch,
-            RepeatSuppressor suppressor) {
+            GitProcessRunner runner, Path worktreeRoot, String stage, int round, MidRoundPollContext context) {
         this.push = new BestEffortPush(runner);
-        this.roundBoundaryCheck = new RoundBoundaryCheck(runner, worktreeRoot, branch);
+        this.roundBoundaryCheck = new RoundBoundaryCheck(runner, worktreeRoot, context.branch());
         this.worktreeRoot = worktreeRoot;
-        this.taskId = taskId;
+        this.taskId = context.taskId();
         this.stage = stage;
         this.round = round;
-        this.branch = branch;
-        this.pollLog = new MidRoundPollLog(log, suppressor, taskId, branch);
+        this.branch = context.branch();
+        this.pollLog = context.logTo(log);
         // An unresolvable HEAD leaves the baseline unknown rather than blank: the first event that
         // does resolve it adopts it silently, and only movement away from that adopted tip pushes.
         this.lastObservedTip = VerifiedTip.read(roundBoundaryCheck.readHead()).orElse(null);
