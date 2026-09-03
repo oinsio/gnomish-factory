@@ -9,19 +9,21 @@ and NFR-R1/R2, NFR-O1, NFR-C1 of this change's proposal. Current state, verified
   adapter never consults `.State.OOMKilled`, although
   `DockerCommands.inspectContainerState` already reads `.State.Running` and
   `.State.FinishedAt` and is consumed in exactly one place
-  (`ContainerTaskExecutionEnvironment.materialize`, whose reattach branch checks a
-  `startsWith("true")` prefix).
+  (`ContainerTaskExecutionEnvironment.materialize`, which hands the output to
+  `ContainerMaterializer.reattach`, whose `startsWith("true")` prefix check parses it).
 - Failure messages in `ContainerMaterializer.management` and `EgressGuard`
   (`GuardUnavailableException` sites) carry the environment key; the concrete object names
   are derivable via the package-private `FactoryDockerLabels.containerName`/`guardName`
   but never rendered. `ContainerEnvironmentKeeper.stopKeeping` logs nothing on success.
 - A failed `EnvironmentSelfCheck` throws `SelfCheckFailedException` out of
   `SelfCheckedEnvironment.materialize`. The round box then simply falls out of the lease
-  (`EnvironmentLease` assigns `current` only after materialize succeeds), while both
-  fresh-box sources dispose on any materialize failure
-  (`SandboxCheckEnvironmentSource` catches `RuntimeException` → `dispose()`;
-  `FreshJudgeEnvironments` disposes on the next attempt). The `sandbox-egress` spec pins
-  "the environment is disposed" for the degraded-egress scenario.
+  (`EnvironmentLease` assigns `current` only after materialize succeeds).
+  `SandboxCheckEnvironmentSource` disposes on any materialize failure (catches
+  `RuntimeException` → `dispose()`); `FreshJudgeEnvironments` does **not** — it runs
+  `disposeCurrent()` *before* materialize and assigns `current` only on success, so a box
+  whose materialize failed is never tracked and nothing ever disposes it. The
+  `sandbox-egress` spec pins "the environment is disposed" for the degraded-egress
+  scenario.
 
 ## Goals / Non-Goals
 
@@ -41,10 +43,13 @@ Design-level boundaries beyond the proposal's scope:
 reattach branch's `startsWith("true")` parse untouched, and the self-check/lifecycle
 readers use their own separate commands (`DockerLifecycleCommands.inspectContainerTiming`
 is documented as deliberately separate and is not changed). The container adapter wraps
-the `ExecHandle` it returns from `exec()`: when a wait observes exit code 137, it runs the
-inspect best-effort and logs one WARN naming the container and "likely container OOM" when
-`OOMKilled=true` (FR1, NFR-O1). The wrapper changes no exit code, no `Wait` outcome, and
-no classification (NFR-R1); an inspect failure logs nothing extra.
+the `ExecHandle` it returns from `exec()`: when `waitForExit()` observes exit code 137 —
+`Wait.Exited` deliberately carries no exit code, so `waitForExit()` is the one seam that
+surfaces it — the wrapper runs the inspect best-effort and logs one WARN, headed by a new
+`OperatorEvent` catalog code per the `harden-logging-observability` log contract, naming
+the container and "likely container OOM" when `OOMKilled=true` (FR1, NFR-O1). The wrapper
+changes no exit code, no `Wait` outcome, and no classification (NFR-R1); an inspect
+failure logs nothing extra.
 *Rationale:* the exec seam is the one point every in-box process passes through — agent
 rounds, checks, probes — so the annotation covers them all without touching the engine's
 failure classes. *Alternative rejected:* annotating in the engine/agent adapter where exit
@@ -66,19 +71,24 @@ polish change.
 **D3 — Keep-on-failed-self-check is enforced at the single self-check site, and
 dispose-on-failure sites learn to step aside.** `SelfCheckedEnvironment.materialize`
 catches `SelfCheckFailedException`, stops the box via `ContainerEnvironmentKeeper`
-(best-effort: a failed stop is logged and never masks the probe failure — the original
-exception is always rethrown, NFR-R1), logs the kept container's name, and rethrows (FR3,
-UX3). Because `SelfCheckedEnvironment` wraps every role (round, judge, verification) by
-construction, this is the one point that covers all self-checked boxes. The two fresh-box
-sources (`SandboxCheckEnvironmentSource`, `FreshJudgeEnvironments`) skip their
-dispose-on-materialize-failure when the failure is a `SelfCheckFailedException` (a public
-type they can name), so the kept evidence survives; every other materialize failure still
-disposes as today. The round-box path needs no edit: `EnvironmentLease` never registers a
-failed materialize, and nothing else disposes it.
+(best-effort: a failed stop is logged as a WARN under its own new `OperatorEvent` catalog
+code and never masks the probe failure — the original exception is always rethrown,
+NFR-R1), logs the kept container's name, and rethrows (FR3, UX3). The log notice at the
+failure site is the operator-facing carrier of the container name (NFR-O1); the rethrown
+exception stays untouched. Because `SelfCheckedEnvironment` wraps every role (round,
+judge, verification) by construction, this is the one point that covers all self-checked
+boxes. `SandboxCheckEnvironmentSource` skips its dispose-on-materialize-failure when the
+failure is a `SelfCheckFailedException` (a public type it can name), so the kept evidence
+survives; every other materialize failure still disposes as today. `FreshJudgeEnvironments`
+needs no code edit — a failed materialize is never assigned to `current` and nothing
+disposes it — but the keep-on-failed-self-check behavior there is pinned by spec so a
+future refactor cannot silently start disposing the evidence. The round-box path needs no
+edit either: `EnvironmentLease` never registers a failed materialize, and nothing else
+disposes it.
 *Rationale:* one producer of keep semantics, zero mode twins. *Alternative rejected:*
 keeping only the round box (no adapters-module edits) — it forfeits exactly the fresh-box
-failures (same image, same allowlist) the forensics are for, for the price of two
-one-line-condition edits.
+failures (same image, same allowlist) the forensics are for, for the price of one
+one-line-condition edit and one pinning spec.
 
 **D4 — Sync surfaces: none — this change adds no parallel implementation and touches no
 declared pair.** Verified: `grep -rn "Kept in sync with"` over the touched files
@@ -119,6 +129,12 @@ the delta scenario "Kept self-check box is governed by the existing sweep" (NFR-
   keys are deterministic per task and role, so retries reuse (reattach) the same objects
   rather than multiplying them; the population is bounded by task count, as for park/abort
   keeps today.
+- [The active change `add-sandbox-hardening` also carries a MODIFIED delta of the
+  `sandbox-egress` requirement "Mandatory fail-closed self-check", written against the
+  pre-keep text — whichever change archives second would silently overwrite the other's
+  additions] → ordering is fixed: this change archives first; `add-sandbox-hardening`
+  rebases its MODIFIED text on the then-current stable requirement (keep semantics
+  included) before its own archive. Recorded on both sides.
 
 ## Migration Plan
 

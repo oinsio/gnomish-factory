@@ -1,9 +1,9 @@
 ## MODIFIED Requirements
 
 ### Requirement: Mandatory fail-closed self-check
-Before the first gnome-product process in every materialized sandboxed environment — round environments and fresh-box verification/judge environments alike; the probes themselves run via `exec()` — the factory SHALL verify from inside the box: the in-box process user is non-root (the channel-write and commit identity D16 depends on), direct egress fails, a non-allowlisted destination is denied, an allowlisted destination succeeds, and the isolation mechanism in effect matches the adapter passport. Any failed probe SHALL be an infrastructure failure: the environment is rejected and no gnome-product process executes in it — at task start the task does not start; at verification time the affected check or judge vote classifies as an infrastructure failure. A rejected box SHALL be stopped and kept — container, volume, and network retained — rather than disposed, so the operator can inspect why the self-check failed; the failure report SHALL name the kept container. The keep-stop is best-effort forensics and SHALL never mask or reclassify the self-check failure itself. Retention of a kept box is governed entirely by the existing `sandbox-lifecycle` sweep policy — no self-check-specific retention exists.
+Before the first gnome-product process in every materialized sandboxed environment — round environments and fresh-box verification/judge environments alike; the probes themselves run via `exec()` — the factory SHALL verify from inside the box: the in-box process user is non-root (the channel-write and commit identity D16 depends on), direct egress fails, a non-allowlisted destination is denied, an allowlisted destination succeeds, and the isolation mechanism in effect matches the adapter passport. Any failed probe SHALL be an infrastructure failure: the environment is rejected and no gnome-product process executes in it — at task start the task does not start; at verification time the affected check or judge vote classifies as an infrastructure failure. In the container adapter, a rejected box SHALL be stopped and kept — container, volume, and network retained — rather than disposed, so the operator can inspect why the self-check failed; the operator-facing keep notice in the factory log at the failure site SHALL name the kept container (the rejection exception itself is unchanged). Retention semantics of other execution media are owned by their own changes. The keep-stop is best-effort forensics and SHALL never mask or reclassify the self-check failure itself. Retention of a kept box is governed entirely by the existing `sandbox-lifecycle` sweep policy — no self-check-specific retention exists.
 <!-- implements FR8 of add-sandbox-core -->
-<!-- implements FR3, NFR-R1, NFR-C1, UX3 of polish-sandbox-forensics -->
+<!-- implements FR3, NFR-R1, NFR-R2, NFR-O1, NFR-C1, UX3 of polish-sandbox-forensics -->
 
 #### Scenario: Silent protection degradation is caught
 - **WHEN** the internal network was created without the internal flag and direct egress unexpectedly succeeds
@@ -19,7 +19,7 @@ Before the first gnome-product process in every materialized sandboxed environme
 
 #### Scenario: The failed box is kept for inspection
 - **WHEN** a self-check probe fails in a materialized box
-- **THEN** the box's container is stopped, its container, volume, and network remain, the failure report names the kept container, and the environment is still rejected as an infrastructure failure
+- **THEN** the box's container is stopped, its container, volume, and network remain, the keep notice in the factory log names the kept container, and the environment is still rejected as an infrastructure failure
 
 #### Scenario: A failed keep-stop does not mask the self-check failure
 - **WHEN** the stop of a rejected box itself fails (runtime outage mid-rejection)

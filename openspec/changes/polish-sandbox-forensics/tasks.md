@@ -7,12 +7,14 @@
   the argv carries the new field and that
   `ContainerTaskExecutionEnvironment.materialize`'s reattach branch still recognizes a
   running container from the extended output (FR1)
-- [ ] 1.2 Wrap the `ExecHandle` returned by the container adapter's `exec()` so an
-  observed exit code 137 triggers a best-effort inspect of `OOMKilled` and one WARN naming
-  the container with "likely container OOM" when it is `true`; verify by Spock spec over a
-  fake docker seam: annotation logged on `true`, absent on `false`, absent and non-failing
-  when the inspect fails, and exit code / `Wait` outcome unchanged in all three cases
-  (FR1, NFR-R1, NFR-O1, UX2)
+- [ ] 1.2 Wrap the `ExecHandle` returned by the container adapter's `exec()` so an exit
+  code 137 observed via `waitForExit()` (the one seam that surfaces exit codes —
+  `Wait.Exited` carries none) triggers a best-effort inspect of `OOMKilled` and one WARN
+  naming the container with "likely container OOM" when it is `true`; register the next
+  free `OperatorEvent` catalog code for the WARN head per the log contract; verify by
+  Spock spec over a fake docker seam: annotation logged on `true`, absent on `false`,
+  absent and non-failing when the inspect fails, and exit code / `Wait` outcome unchanged
+  in all three cases (FR1, NFR-R1, NFR-O1, UX2)
 - [ ] 1.3 Update `Supervision`'s exit-137 javadoc note to mention that the container
   adapter annotates a likely OOM, and verify `./gradlew :subprocess:check` stays green
   (FR1 — documentation touch point cited in the proposal)
@@ -34,17 +36,20 @@
 ## 3. Keep box on failed self-check (FR3, NFR-R1, NFR-R2, NFR-C1, UX3 — design D3, D5)
 
 - [ ] 3.1 In `SelfCheckedEnvironment.materialize`, catch `SelfCheckFailedException`, stop
-  the box via `ContainerEnvironmentKeeper` best-effort, log the kept container's name, and
-  rethrow the original exception; verify by spec: box stopped and exception propagated on
-  a failed probe, original exception still propagated (and logged) when the stop itself
+  the box via `ContainerEnvironmentKeeper` best-effort, log the kept container's name (the
+  log notice is the operator-facing carrier of the name — the rethrown exception stays
+  untouched), and rethrow the original exception; the failed-stop WARN takes its own next
+  free `OperatorEvent` catalog code; verify by spec: box stopped and exception propagated
+  on a failed probe, original exception still propagated (and logged) when the stop itself
   throws, no stop on a successful self-check (FR3, NFR-R1, UX3)
 - [ ] 3.2 In `SandboxCheckEnvironmentSource`, skip the dispose-on-materialize-failure when
   the cause is a `SelfCheckFailedException` (still wrapping into
   `CheckEnvironmentUnavailableException`); verify by spec: self-check failure keeps the
   fresh box undisposed, any other materialize failure still disposes (FR3)
-- [ ] 3.3 In `FreshJudgeEnvironments`, ensure a materialize failed on
-  `SelfCheckFailedException` does not lead to the box's disposal; verify by spec parallel
-  to 3.2 (FR3)
+- [ ] 3.3 Pin by spec that `FreshJudgeEnvironments` keeps a box whose materialize failed
+  on `SelfCheckFailedException`: today a failed materialize is never assigned to `current`
+  (`disposeCurrent()` runs before materialize) so nothing disposes it — no code edit; the
+  spec guards that a future refactor cannot silently start disposing the evidence (FR3)
 - [ ] 3.4 Add a spec asserting the kept-on-failed-self-check box is enumerated by the
   sweep universe: a container created through the adapter's own create commands carries
   the ownership labels at creation, so `SandboxLifecycleClassification` classifies it with
@@ -52,8 +57,9 @@
 
 ## 4. Verification and closure
 
-- [ ] 4.1 Run `./gradlew :sandbox:docker:check :adapters:check` (Spock + PIT per module)
-  and verify green with the mutation gate intact for all touched classes (M1, M2)
+- [ ] 4.1 Run `./gradlew :sandbox:docker:check :adapters:check :adapters:agent:check`
+  (Spock + PIT per module — `:adapters:agent` carries the 3.3 pinning spec) and verify
+  green with the mutation gate intact for all touched classes (M1, M2)
 - [ ] 4.2 Grep-verify traceability: every FR/NFR/UX of the proposal is referenced by at
   least one spec, code javadoc, or test touched by this change (`traceability.md`
   verification rule)
