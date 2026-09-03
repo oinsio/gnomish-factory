@@ -1,0 +1,17 @@
+# Gitleaks findings suppressed by fingerprint (NFR-S1 of add-project-skeleton).
+#
+# The Gitleaks workflow scans the full git history, so a `gitleaks:allow`
+# comment added today cannot clear the commit that first introduced the line.
+# These fingerprints pin those historical commits; the current file contents
+# carry the inline `gitleaks:allow` comment instead.
+#
+# Every entry must be a proven false positive with the reason written here.
+# Never add a fingerprint for a real credential — rotate it and rewrite history.
+
+# Test constant: a gnomish environment key ("gnomish-<task-id>"), not a credential.
+c67a717c19fb3e770a0160baf3a0ea3af7e56fab:sandbox/docker/src/test/groovy/com/github/oinsio/gnomish/sandbox/environment/GuardDenialLogSpec.groovy:generic-api-key:18
+64c73e5ba84f30ce27c09fdf70222556397944ca:sandbox/docker/src/test/groovy/com/github/oinsio/gnomish/sandbox/environment/GuardDenialLogSpec.groovy:generic-api-key:19
+
+# Test fixture: a fabricated GitHub-token-shaped string the spec asserts is
+# stripped out of a normalized origin URL. It never was a real token.
+86e9b36f8f5d70e426cb1c8aa91dcfe1379cd65c:application/src/test/groovy/com/github/oinsio/gnomish/app/git/OriginUrlNormalizerSpec.groovy:generic-api-key:110
