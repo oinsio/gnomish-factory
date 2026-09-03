@@ -43,7 +43,9 @@ Design-level only (scope is in the proposal):
 request's own facts: worktree root from the `DirectoryWorkspace`, taskId from
 `request.context()`, stage from `request.stage().name()`, round from `request.attempt()`,
 branch via `TaskIdSanitizer.branchName` — the same derivations `SandboxRoundEnvironmentSource`
-uses. All other `Round` methods delegate untouched. *Rationale:* the seam exists precisely for
+uses. `openRound` is called exactly once per attempt request (`CliStageExecutor`), so the
+attempt number *is* this seam's round number — the same equivalence the sandbox source
+encodes in its `AttemptKey`. All other `Round` methods delegate untouched. *Rationale:* the seam exists precisely for
 this (its javadoc even names the sandbox harvest poll as its purpose), the per-round lifecycle
 the listener documents falls out of `openRound`'s own cadence, and the class lands in the
 module that owns `MidRoundPushListener` and `GitProcessRunner`. *Alternative rejected:*
@@ -105,11 +107,24 @@ divergence reconciliation on resume already converges). Stated here so the check
   per-mode asymmetry rather than widening it; the pairs stay declared pairs (no third
   implementation appears, so no abstraction extraction is due). The container ends need no
   mirrored edit — their attachment already exists.
+- `HostRoundEnvironmentSource` ↔ `SandboxRoundEnvironmentSource` (registry row "round
+  environment contract per mode"): the change alters what host git-mode rounds *carry* (a
+  listener instead of the no-op default), but does so by wrapping the host source from the
+  outside — `HostRoundEnvironmentSource` itself is not edited and the pair's synchronized
+  contract (what a `Round` provides per mode) is unchanged. **No mirrored change needed**;
+  the sandbox source's rounds already carry their listener.
 - The new decorator is not a second implementation of any existing rule: it composes the
   existing listener and existing host source; no new pair is created.
 
 ## Risks / Trade-offs
 
+- [Active change `add-command-executor` rewrites `ExecutorAdapterSelector` (its task 6.1
+  replaces the executor with a type-keyed dispatching composite) and builds its
+  `CommandStageExecutor` over the same `RoundEnvironmentSource` seam — the same class and
+  branch logic task 3.1 here modifies] → whichever change lands second must re-thread the
+  host-git piece through the new selector shape so no host branch silently loses the
+  decorated rounds; record the mirrored note in `add-command-executor`'s artifacts when it
+  is next revised.
 - [The decorator casts `Workspace` to `DirectoryWorkspace` like the host source does; a future
   workspace type would break both] → the cast lives beside the identical existing cast, so any
   workspace generalization already has to visit this file's twin; keep them adjacent in review.

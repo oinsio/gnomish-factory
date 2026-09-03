@@ -16,7 +16,9 @@
       `roundListener()` with a fresh `MidRoundPushListener` per round built from the request
       (worktree root from `DirectoryWorkspace`, taskId from `TaskContext`, stage name, attempt
       as round, `TaskIdSanitizer.branchName`); verify: Spock spec on a local bare repo — a
-      commit between two progress events is pushed, delegated methods pass through — FR1, FR2.
+      commit between two progress events is pushed, delegated methods pass through, and the
+      wiring adds no git invocations beyond the listener's own per-event `rev-parse` (assert
+      the runner's invocation count per progress event) — FR1, FR2, NFR-P1.
 - [ ] 2.2 Share one `RepeatSuppressor` across the decorator's rounds (D4) with the same
       rationale comment shape `SandboxRoundEnvironmentSource.harvestSuppressor` carries;
       verify: spec — a tip-resolution failure spanning two rounds logs one WARN edge, not one
@@ -43,7 +45,7 @@
 
 - [ ] 4.1 Replace `MidRoundPushListener`'s "section 4's job" javadoc sentence with the real
       wiring point (the decorator + attachment), keeping the `Kept in sync with` marker
-      accurate; verify: `grep -n "section 4" adapters/git/src/main` is empty — FR4.
+      accurate; verify: `grep -rn "section 4" adapters/git/src/main` is empty — FR4.
 - [ ] 4.2 Confirm the manual-sync-pairs obligations recorded in design.md (no mirrored edits
       on the harvest side; host/container runner pairs gain only the host-side attachment);
       verify: `grep -rn "Kept in sync with" src/main` still enumerates both listener ends and
