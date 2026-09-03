@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -10,10 +12,12 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -65,6 +69,28 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
 
     private GitModeRunner runner() {
         new GitModeRunner(assemblyRunningLoop(executor), new TaskGit(store, branches, worktrees), worktreesRoot)
+    }
+
+    // FR1, FR3 of wire-host-mid-round-push (design D3): the fresh git-mode host run attaches the
+    // TaskGit bundle's own mid-round push decoration to the run assembly — the operator instance
+    // the composition root put on the bundle is exactly what reaches withHostGitPush.
+    def "attaches the task-git mid-round push decoration to the run assembly"() {
+        given:
+        def attached = []
+        UnaryOperator<RoundEnvironmentSource> marker = { rounds ->
+            rounds
+        } as UnaryOperator<RoundEnvironmentSource>
+        def runner = new GitModeRunner(
+                assemblyRunningLoop(executor, new ScriptedConsoleIO(['']), new Verdict.Pass(), attached),
+                new TaskGit(store, branches, worktrees, marker), worktreesRoot)
+
+        when:
+        runner.run(cloneDir, null, completingPipeline(), context(), TaskState.atStageStart('build'),
+                RunArguments.InteractiveMode.NONE)
+
+        then:
+        attached.size() == 1
+        attached[0].is(marker)
     }
 
     private String runCapturingStdout(String base = null) {
