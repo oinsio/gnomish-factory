@@ -137,12 +137,29 @@ public final class CliStageExecutor implements StageExecutor {
             DecisionFileTransport decisionFileTransport,
             ChildEnvAllowlist childEnv,
             PipelineLaw law) {
-        this(
-                factoryProperties,
-                clock,
-                progressListener,
-                law,
-                new HostRoundEnvironmentSource(decisionFileTransport, clock, childEnv));
+        this(factoryProperties, clock, progressListener, law, hostRounds(decisionFileTransport, clock, childEnv));
+    }
+
+    /**
+     * The host-mode {@link RoundEnvironmentSource} the host convenience constructor wires —
+     * exposed so {@code bootstrap} can decorate it (the git-mode mid-round push) and hand the
+     * decorated source back through the canonical rounds-accepting constructor, keeping {@code
+     * HostRoundEnvironmentSource} and its {@link DecisionFileTransport} internals package-private
+     * (design D2 of wire-host-mid-round-push).
+     *
+     * <p>Implements FR2 of wire-host-mid-round-push.
+     *
+     * @param clock the exec start-instant source; never null
+     * @param childEnv the run's layered child-env allowlist; never null
+     * @return the host round source, identical to the host constructor's; never null
+     */
+    public static RoundEnvironmentSource hostRounds(Clock clock, ChildEnvAllowlist childEnv) {
+        return hostRounds(new DecisionFileTransport(), clock, childEnv);
+    }
+
+    /** Testing seam (package-private): {@link #hostRounds} with the transport supplied. */
+    static RoundEnvironmentSource hostRounds(DecisionFileTransport transport, Clock clock, ChildEnvAllowlist childEnv) {
+        return new HostRoundEnvironmentSource(transport, clock, childEnv);
     }
 
     /**

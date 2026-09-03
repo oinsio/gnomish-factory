@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -10,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 /**
  * Builds one run's collaborators once its {@link TaskContext} and initial {@link TaskState} are
@@ -93,4 +95,18 @@ public interface RunAssembly {
      * @return a new assembly identical but for the sandbox pieces; never null
      */
     RunAssembly withSandbox(SandboxRunPieces pieces);
+
+    /**
+     * Returns a copy of this assembly whose host executor rounds are decorated by {@code
+     * decoration} (FR1, FR3, design D3 of wire-host-mid-round-push): git-mode host control flows
+     * attach the mid-round push decoration this way, in-place mode never calls it, and a run in
+     * container mode ignores it — the sandbox rounds win by construction. The decoration is a
+     * value, not a flag: the composition root builds the operator, so no git-adapter knowledge
+     * enters this layer, and the default is {@code UnaryOperator.identity()} so consumers apply
+     * it unconditionally.
+     *
+     * @param decoration the round-source decoration the composition root built; never null
+     * @return a new assembly identical but for the decoration; never null
+     */
+    RunAssembly withHostGitPush(UnaryOperator<RoundEnvironmentSource> decoration);
 }

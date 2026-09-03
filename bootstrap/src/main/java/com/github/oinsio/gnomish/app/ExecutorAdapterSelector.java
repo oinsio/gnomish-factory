@@ -46,14 +46,12 @@ final class ExecutorAdapterSelector {
             DialogConsole console,
             RunArguments.InteractiveMode interactiveMode,
             StatusSnapshotHolder holder,
-            FactoryProperties factoryProperties,
-            SystemClock systemClock,
+            ManualRunAssembly assembly,
             ChildEnvAllowlist childEnv,
-            PipelineLaw law,
-            @Nullable SandboxRunPieces sandbox) {
+            PipelineLaw law) {
         return switch (interactiveMode) {
             case ALL, EXECUTOR_ONLY -> new InteractiveStageExecutor(console, new StageBriefing(law));
-            case NONE, JUDGE_ONLY -> cliStageExecutor(holder, factoryProperties, systemClock, childEnv, law, sandbox);
+            case NONE, JUDGE_ONLY -> cliStageExecutor(holder, assembly, childEnv, law);
         };
     }
 
@@ -65,18 +63,26 @@ final class ExecutorAdapterSelector {
      * re-run (FR21, D15).
      */
     private static StageExecutor cliStageExecutor(
-            StatusSnapshotHolder holder,
-            FactoryProperties factoryProperties,
-            SystemClock systemClock,
-            ChildEnvAllowlist childEnv,
-            PipelineLaw law,
-            @Nullable SandboxRunPieces sandbox) {
+            StatusSnapshotHolder holder, ManualRunAssembly assembly, ChildEnvAllowlist childEnv, PipelineLaw law) {
+        SandboxRunPieces sandbox = assembly.sandbox;
         if (sandbox == null) {
+            // Sandbox pieces win by construction (design D3 of wire-host-mid-round-push): the
+            // host-git decoration is consumed only on this branch, so a run carrying both seams
+            // cannot double-wire its rounds. The decoration defaults to identity, so applying it
+            // unconditionally IS the previous host construction when nothing was attached.
             return new CliStageExecutor(
-                    factoryProperties, systemClock, executorProgressListener(holder), childEnv, law);
+                    assembly.factoryProperties,
+                    assembly.systemClock,
+                    executorProgressListener(holder),
+                    law,
+                    assembly.hostGitPush.apply(CliStageExecutor.hostRounds(assembly.systemClock, childEnv)));
         }
         var cli = new CliStageExecutor(
-                factoryProperties, systemClock, executorProgressListener(holder), law, sandbox.executorRounds());
+                assembly.factoryProperties,
+                assembly.systemClock,
+                executorProgressListener(holder),
+                law,
+                sandbox.executorRounds());
         return new ResumeVerificationStageExecutor(cli, sandbox.attemptCommit(), sandbox.pendingVerification());
     }
 

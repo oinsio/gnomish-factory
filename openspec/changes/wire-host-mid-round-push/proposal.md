@@ -123,8 +123,9 @@ with the existing requirement, so writing a delta would restate the main spec un
 - `adapters/git` — new small decorator/source composing the listener per round.
 - `adapters/agent` — a public seam for the host round source (today package-private, built
   inside `CliStageExecutor`).
-- `application` — the git-mode-only attachment point on `RunAssembly` (mirroring how container
-  runners attach `SandboxRunPieces`).
+- `application` — the git-mode-only attachment point on `RunAssembly` (a decorator-as-value
+  mirroring how container runners attach `SandboxRunPieces`) and a fourth `TaskGit` component
+  carrying the decoration to the host git control flows.
 - `bootstrap` — composition of the two adapters; `ExecutorAdapterSelector` consumes the piece.
 - Javadoc of `MidRoundPushListener`; the manual-sync-pairs registry is unaffected (design.md
   records the sync-surfaces decision).

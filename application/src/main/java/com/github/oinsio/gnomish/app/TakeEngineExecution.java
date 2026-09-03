@@ -124,8 +124,11 @@ record TakeEngineExecution(
         var delegate = git.store().attemptPersistence(worktree, taskId);
         var persistence = new RevocationCheckingAttemptPersistence(delegate, tracker, ref, instanceId, claimLossFlag);
         var workspace = new DirectoryWorkspace(worktree);
-        var assembled = assembly.assemble(
-                definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, cloneDir);
+        // The one take attachment point for the mid-round push decoration (FR1, FR3, design D3
+        // of wire-host-mid-round-push): fresh (TakeFreshClaim) and resume (TakeResumeRunner) both
+        // funnel through this method, so neither entry point can silently lose it.
+        var assembled = assembly.withHostGitPush(git.midRoundPush())
+                .assemble(definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, cloneDir);
 
         TaskOutcome outcome = new Engine().run(definition, context, state, workspace, assembled.ports());
 
