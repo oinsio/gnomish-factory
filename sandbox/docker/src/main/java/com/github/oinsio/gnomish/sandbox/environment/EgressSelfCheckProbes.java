@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
@@ -38,15 +39,21 @@ record EgressSelfCheckProbes(
 
     private static final Duration GUARD_READINESS_PAUSE = Duration.ofMillis(500);
 
-    /** Direct egress bypassing the proxy must fail: the internal network has no route out (FR7, FR8). */
-    void probeDirectEgressFails() {
+    /**
+     * Direct egress bypassing the proxy must fail: the internal network has no route out (FR7, FR8).
+     *
+     * @return what this probe established, for the caller's one aggregate line (FR12 of
+     *     harden-logging-observability: a passing probe is per-item detail, not an anchor)
+     */
+    String probeDirectEgressFails() {
         String target = dialableAllowlistHost().orElse(FALLBACK_PROBE_HOST);
         Probe probe = run("curl", "--noproxy", "*", "-sS", "-o", "/dev/null", "--max-time", "5", url(target));
         if (probe.exitCode() == 0) {
             throw new SelfCheckFailedException(
                     "direct-egress", "direct connection to " + target + " unexpectedly succeeded");
         }
-        log.info("self-check probe direct-egress passed for {}: no direct route", key);
+        log.debug("self-check probe direct-egress passed for {}: no direct route", key);
+        return "no direct route";
     }
 
     /**
@@ -56,8 +63,10 @@ record EgressSelfCheckProbes(
      * connection, never a wrong status) is retried briefly before it counts as a
      * failure; a wrong HTTP status is a real allowlist-enforcement failure and
      * fails immediately.
+     *
+     * @return what this probe established, for the caller's one aggregate line
      */
-    void probeDeniedHostRefused() {
+    String probeDeniedHostRefused() {
         Probe probe = null;
         for (int attempt = 0; attempt < GUARD_READINESS_ATTEMPTS; attempt++) {
             if (attempt > 0) {
@@ -76,24 +85,33 @@ record EgressSelfCheckProbes(
                     guard.proxyUrl(),
                     url(DENIED_PROBE_HOST));
             if (probe.output().strip().endsWith("403")) {
-                log.info("self-check probe denied-host passed for {}: guard denies non-allowlisted", key);
-                return;
+                log.debug("self-check probe denied-host passed for {}: guard denies non-allowlisted", key);
+                return "guard denies non-allowlisted";
             }
             if (probe.exitCode() == 0) {
                 break;
             }
-            log.debug("self-check probe denied-host retrying for {}: guard not answering yet ({})", key, probe);
+            log.debug(
+                    "self-check probe denied-host retrying for {}: guard not answering yet ({})",
+                    key,
+                    LogText.forLog(probe.toString()));
         }
         throw new SelfCheckFailedException(
                 "denied-host", "expected the guard's 403 for " + DENIED_PROBE_HOST + ", observed: " + probe);
     }
 
-    /** An allowlisted destination via the guard must be reachable; vacuous with no dialable entry (FR8). */
-    void probeAllowlistedPasses() {
+    /**
+     * An allowlisted destination via the guard must be reachable; vacuous with no dialable entry
+     * (FR8).
+     *
+     * @return what this probe established — including the skip, which the aggregate must name
+     *     rather than pass over silently
+     */
+    String probeAllowlistedPasses() {
         Optional<String> target = dialableAllowlistHost();
         if (target.isEmpty()) {
-            log.info("self-check probe allowlisted-host skipped for {}: allowlist names no dialable host", key);
-            return;
+            log.debug("self-check probe allowlisted-host skipped for {}: allowlist names no dialable host", key);
+            return "allowlisted-host probe skipped (allowlist names no dialable host)";
         }
         Probe probe =
                 run("curl", "-sS", "-o", "/dev/null", "--max-time", "15", "-x", guard.proxyUrl(), url(target.get()));
@@ -101,7 +119,8 @@ record EgressSelfCheckProbes(
             throw new SelfCheckFailedException(
                     "allowlisted-host", "allowlisted " + target.get() + " unreachable via guard: " + probe);
         }
-        log.info("self-check probe allowlisted-host passed for {}: {} reachable via guard", key, target.get());
+        log.debug("self-check probe allowlisted-host passed for {}: {} reachable via guard", key, target.get());
+        return target.get() + " reachable via guard";
     }
 
     /** The first allowlist entry that is a dialable host — wildcards name no single destination. */

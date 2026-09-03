@@ -35,10 +35,10 @@ class LifecycleSnapshotAssemblerSpec extends Specification {
 
     def "maps STOPPED with its reason"() {
         given:
-        def view = new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0, 'sigterm')
+        def view = new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0, 'signal')
 
         expect:
-        LifecycleSnapshotAssembler.assemble(view) == new LifecycleState.Stopped('sigterm')
+        LifecycleSnapshotAssembler.assemble(view) == new LifecycleState.Stopped('signal')
     }
 
     def "STOPPED with no reason is an invalid view and fails loudly rather than silently dropping it"() {

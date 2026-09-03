@@ -4,10 +4,13 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import com.github.oinsio.gnomish.logtext.FailureReason;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,10 +36,27 @@ import org.slf4j.LoggerFactory;
  * (git-task-persistence "Push safety rules"). Like every {@link
  * AgentProgressListener}, {@link #onProgress} never throws.
  *
+ * <p>A poll that keeps failing would otherwise cost one WARN per progress event for the whole
+ * round, so failures report to a {@link RepeatSuppressor} through {@link MidRoundPollLog}, which
+ * logs only the edges (FR4 of harden-logging-observability). The host-mode twin of this listener,
+ * {@link MidRoundPushListener}, polls once per progress event too, and suppresses its own tip
+ * subject the same way.
+ *
+ * <p>An observation is only ever a fact when git said so (FR13): a tip resolution that fails or
+ * prints no ref <b>skips the observation</b> — the tip is reported neither moved nor lost, and no
+ * push decision rests on it — rather than reducing to the empty string, which differs from every
+ * real SHA and so would read as movement on one poll and as a return to it on the next.
+ *
  * <p><b>Lifecycle: one instance per round</b>, constructed right before the
  * round's {@code execute()} and discarded after, mirroring {@link
  * MidRoundPushListener}. The tip baseline starts at the factory clone's branch
  * tip at construction.
+ *
+ * <p>Kept in sync with {@link MidRoundPushListener}: both must poll the tip once per progress
+ * event through {@link VerifiedTip} (a failed resolution skips the observation, never reduces to
+ * a blank), report the failure streak edge-only through {@link MidRoundPollLog}, live one
+ * instance per round, and push only behind an ancestry-proving precondition — the completed fast-forward harvest
+ * here, the {@link BestEffortPush} ancestry pre-check there.
  *
  * <p>Implements FR5 of add-sandbox-core; coordinates with FR11 of
  * add-git-workflow.
@@ -49,47 +69,47 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
     private final GitProcessRunner runner;
     private final Path cloneDir;
     private final BranchPush push;
-    private final String taskId;
     private final String branch;
     private final Clock clock;
     private final Duration minInterval;
+    private final MidRoundPollLog pollLog;
 
     private @Nullable Instant lastPollAt;
-    private String lastObservedTip;
+    private @Nullable String lastObservedTip;
 
     /**
      * @param environment the task's bound environment; {@code harvest()} is the only call made
      * @param runner the git subprocess runner, shared with the run's other git-adapter machinery
      * @param cloneDir the factory clone harvest lands in; tip reads and the push run here
-     * @param taskId the task whose branch is being watched, for WARN log context
-     * @param branch the task branch name, e.g. {@link TaskIdSanitizer#branchName}
      * @param clock the poll rate-limit time source
      * @param minInterval the minimum time between two actual harvests; the factory-side rate
      *     limit of design D3
+     * @param context whose round this is — the task id and branch (e.g. {@link
+     *     TaskIdSanitizer#branchName}) and the suppressor its failure streaks live in
      */
     public MidRoundHarvestListener(
             TaskExecutionEnvironment environment,
             GitProcessRunner runner,
             Path cloneDir,
-            String taskId,
-            String branch,
             Clock clock,
-            Duration minInterval) {
+            Duration minInterval,
+            MidRoundPollContext context) {
         this.environment = environment;
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.push = new BranchPush(runner);
-        this.taskId = taskId;
-        this.branch = branch;
+        this.branch = context.branch();
         this.clock = clock;
         this.minInterval = minInterval;
-        this.lastObservedTip = currentTip();
+        this.pollLog = context.logTo(log);
+        this.lastObservedTip = currentTip().orElse(null);
     }
 
     /**
      * Harvests and pushes best-effort if the rate limit allows and the harvested
      * tip moved since the last observation; otherwise a cheap no-op. Never
-     * throws: a refused or failed harvest is one WARN and no push.
+     * throws: a refused or failed harvest, and a tip the poll cannot resolve,
+     * are each one suppressed line and no push.
      *
      * @param event the progress event that just occurred; unused beyond being the
      *     poll opportunity — tip movement, not event content, is what matters
@@ -105,21 +125,39 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
         try {
             environment.harvest();
         } catch (RuntimeException e) {
-            log.warn("mid-round harvest skipped: taskId={}, branch={}, reason={}", taskId, branch, e.toString());
+            pollLog.failed(MidRoundPollLog.Subject.HARVEST, FailureReason.of(e), e);
             return;
         }
+        pollLog.recovered(MidRoundPollLog.Subject.HARVEST);
 
-        String tip = currentTip();
-        if (tip.equals(lastObservedTip)) {
+        GitCommandResult read = readTip();
+        Optional<String> tip = VerifiedTip.read(read);
+        if (tip.isEmpty()) {
+            // The resolution established nothing, so this poll observed nothing: skipping keeps a
+            // failed read out of the moved/lost vocabulary entirely (FR13).
+            pollLog.failed(MidRoundPollLog.Subject.TIP, VerifiedTip.failureReason(read), null);
             return;
         }
-        lastObservedTip = tip;
+        pollLog.recovered(MidRoundPollLog.Subject.TIP);
+        String observedTip = tip.get();
+        if (observedTip.equals(lastObservedTip)) {
+            return;
+        }
+        lastObservedTip = observedTip;
         push.pushBestEffort(cloneDir, branch);
     }
 
-    private String currentTip() {
-        return runner.run(cloneDir, "rev-parse", "--verify", "refs/heads/" + branch)
-                .stdout()
-                .trim();
+    /**
+     * The last observed tip, or empty when the round started without a resolvable one — an unknown
+     * baseline, deliberately not a remembered blank: the first poll that does resolve the tip adopts
+     * it, and pushes, since a best-effort push of an unmoved branch is a no-op while a missed one
+     * leaves in-box commits unmirrored.
+     */
+    private Optional<String> currentTip() {
+        return VerifiedTip.read(readTip());
+    }
+
+    private GitCommandResult readTip() {
+        return runner.run(cloneDir, "rev-parse", "--verify", "refs/heads/" + branch);
     }
 }

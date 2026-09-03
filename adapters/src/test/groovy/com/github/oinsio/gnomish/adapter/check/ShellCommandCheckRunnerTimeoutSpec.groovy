@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -91,12 +92,14 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         then: 'one WARN names the check id and the deadline an operator would raise'
         def warnings = events.findAll { it.level.toString() == 'WARN' }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.COMMAND_CHECK_TIMED_OUT.head())
         warnings[0].formattedMessage.contains('command check timed out')
         warnings[0].formattedMessage.contains('while true')
         warnings[0].formattedMessage.contains("deadline=${SHORT_TIMEOUT}")
 
         and: 'the elapsed it reports is the check\'s own, measured from its start'
-        def reported = Duration.parse((warnings[0].formattedMessage =~ /elapsed=(PT[^,\s]+)/)[0][1])
+        def reported = Duration.parse(
+                (warnings[0].formattedMessage =~ /elapsed=(PT[^,\s]+)/)[0][1] as String)
         reported >= SHORT_TIMEOUT
         reported <Duration.ofMinutes(1)
     }
@@ -130,6 +133,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         and: 'NFR-O2: the WARN names interruption, not a deadline the check never reached'
         def warnings = events.findAll { it.level.toString() == 'WARN' }
         warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.COMMAND_CHECK_INTERRUPTED.head())
         warnings[0].formattedMessage.contains('command check interrupted')
         !warnings[0].formattedMessage.contains('deadline=')
     }

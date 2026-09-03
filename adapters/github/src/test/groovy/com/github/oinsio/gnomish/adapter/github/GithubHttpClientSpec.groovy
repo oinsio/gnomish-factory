@@ -7,9 +7,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
 import spock.lang.Specification
 
 /**
@@ -34,22 +31,12 @@ class GithubHttpClientSpec extends Specification {
         wireMock.stop()
     }
 
-    private static RetryConfig fastRetryConfig() {
-        RetryConfig.custom()
-                .maxAttempts(4)
-                .intervalFunction(IntervalFunction.of(10))
-                .retryOnException({
-                    it instanceof GithubHttpUncheckedIOException
-                })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
-                .build()
-    }
-
     def "sends the Authorization header as Bearer <token>"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets'))
                 .willReturn(aResponse().withStatus(200).withBody('{}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'secret-token-123', fastRetryConfig())
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'secret-token-123',
+                GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/repos/acme/widgets'))
@@ -64,7 +51,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets'))
                 .willReturn(aResponse().withStatus(200).withBody('{}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         client.send(client.newRequest('/repos/acme/widgets'))
@@ -86,7 +73,7 @@ class GithubHttpClientSpec extends Specification {
                 .inScenario('flaky-503')
                 .whenScenarioStateIs('second')
                 .willReturn(aResponse().withStatus(200).withBody('ok')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/flaky'))
@@ -101,7 +88,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/always-down'))
                 .willReturn(aResponse().withStatus(503)))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/always-down'))
@@ -117,7 +104,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/missing'))
                 .willReturn(aResponse().withStatus(404).withBody('{"message":"Not Found"}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/missing'))
@@ -134,7 +121,7 @@ class GithubHttpClientSpec extends Specification {
                 .withHeader('Location', wireMock.baseUrl() + '/blob-storage/log-1')))
         wireMock.stubFor(get(urlEqualTo('/blob-storage/log-1'))
                 .willReturn(aResponse().withStatus(200).withBody('log tail contents')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/repos/acme/widgets/actions/jobs/1/logs'))
@@ -148,7 +135,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         def deadUrl = wireMock.baseUrl()
         wireMock.stop()
-        def client = new GithubHttpClient(deadUrl, 'tok', fastRetryConfig())
+        def client = new GithubHttpClient(deadUrl, 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         client.send(client.newRequest('/unreachable'))

@@ -114,18 +114,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
                     docker, key, image, sourceClone, name, inspect, branch, commitPin, ownership);
         } else {
             ContainerMaterializer.create(
-                    docker,
-                    key,
-                    image,
-                    sourceClone,
-                    runtime,
-                    limits,
-                    enforceDiskQuota,
-                    WORKING_COPY,
-                    SCRATCH,
-                    branch,
-                    commitPin,
-                    ownership);
+                    docker, key, image, sourceClone, runtime, limits, enforceDiskQuota, branch, commitPin, ownership);
         }
         channel = new ContainerFileChannel(docker, key, WORKING_COPY, SCRATCH);
         this.branch = branch;

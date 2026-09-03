@@ -11,6 +11,8 @@ import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
 import com.github.oinsio.gnomish.app.port.git.UsageTotals;
+import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -124,6 +126,15 @@ public final class UsageHistoryWalker {
         GitCommandResult log = answered(
                 ref, "log", runner.run(cloneDir, "log", "--reverse", "--format=%H", ref, "--", STATE_JSON_PATH));
         if (log.exitCode() != 0) {
+            // The whole branch's usage report silently becomes empty otherwise (FR5).
+            // throwable-not-subject: git reported a status, not a thrown fault.
+            UsageHistoryWalker.log.warn(
+                    OperatorEvent.USAGE_HISTORY_LISTING_FAILED.head()
+                            + "usage: could not list the state-touching commits of {} (git exited {}); the report will be"
+                            + " empty: {}",
+                    ref,
+                    log.exitCode(),
+                    LogText.forLog(log.stderr()));
             return List.of();
         }
         return log.stdout().lines().filter(UsageHistoryWalker::isNonBlank).toList();
@@ -170,16 +181,22 @@ public final class UsageHistoryWalker {
     private @Nullable StateJsonDto readStateAt(Path cloneDir, String commit) {
         GitCommandResult show = answered(commit, "show", runner.run(cloneDir, "show", commit + ":" + STATE_JSON_PATH));
         if (show.exitCode() != 0) {
+            // DEBUG, not WARN: this IS the normal outcome being classified — the cleanup commit
+            // (FR15) deletes state.json, so a path-filtered log entry with nothing to show is
+            // expected on every completed branch (`.claude/rules/logging.md`).
+            // throwable-not-subject: the absence is the classification; git threw nothing.
+            log.debug("usage: commit {} carries no {} (the cleanup commit reads this way)", commit, STATE_JSON_PATH);
             return null;
         }
         try {
             return StateJsonMapper.readDto(show.stdout());
         } catch (RuntimeException failure) {
             log.warn(
-                    "usage: skipping commit {} — its {} could not be read: {}",
+                    OperatorEvent.USAGE_HISTORY_COMMIT_UNREADABLE.head()
+                            + "usage: skipping commit {} — its {} could not be read",
                     commit,
                     STATE_JSON_PATH,
-                    failure.getMessage());
+                    failure);
             return null;
         }
     }

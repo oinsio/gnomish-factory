@@ -1,0 +1,44 @@
+import com.github.oinsio.gnomish.build.LogExpectationGateCheck
+
+// The build-wide verdict of the runtime log-expectation gate (FR17, design D16 of
+// harden-logging-observability). Applied to the root project only: the evidence is written
+// per module by `test-conventions`, and read here all at once.
+plugins {
+    id 'base'
+}
+
+// Runtime log-expectation gate, the verdict half (FR17, design D16 of
+// harden-logging-observability). Each module's Test tasks write what their run
+// put on the operator plane; this task reads all of it at once and fails on an
+// operator-event code the build emitted that nothing in the build was watching.
+//
+// Build-wide rather than per module on purpose. A module routinely emits a line
+// whose emitter and pin both live somewhere else — `:application` reaches
+// `:domain`'s persist-failure ERROR through every abort spec, and `:bootstrap`,
+// being the composition root, does it for twelve codes at once. Judged per
+// module those are all failures, and closing them would mean either a duplicate
+// pin or a boilerplate allowance in the module that merely passes through. The
+// question worth failing on is "does anything in this build assert this line",
+// and that is one question about one run of the whole suite.
+def logExpectationGate = tasks.register('checkLogExpectationGate',
+        LogExpectationGateCheck) {
+    group = 'verification'
+    description = 'Fails when the build\'s test run emitted an operator log event no capture was watching.'
+    // `test` only: the opportunistic and manual suites (`ollamaE2eTest`, the paid
+    // smoke) are not part of `check`, and depending on them here would have
+    // `check` spend real money. They still write their evidence — the per-feature
+    // report is worth having from any run — but the verdict is computed over the
+    // suite `check` actually runs, so a code's watched/unwatched status is judged
+    // against one coherent run.
+    dependsOn subprojects.collect { it.tasks.matching { task -> task.name == 'test' } }
+    observations.from(subprojects.collect { module ->
+        module.fileTree(module.layout.buildDirectory.dir('reports/log-expectation-gate/test')) {
+            include 'observations-*.tsv'
+        }
+    })
+    report = layout.buildDirectory.file('reports/log-expectation-gate.txt')
+}
+
+tasks.named('check') {
+    dependsOn logExpectationGate
+}

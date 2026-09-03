@@ -18,10 +18,14 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.status.AnchorLog;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 
 /**
@@ -58,6 +62,8 @@ import org.springframework.boot.ApplicationArguments;
  * Implements FR1, FR4, FR7, FR8, FR9, FR12, D12 of add-serve-observability.
  */
 final class ServeCommand {
+
+    private static final Logger log = LoggerFactory.getLogger(ServeCommand.class);
 
     private final ServeArgumentsParser argumentsParser = new ServeArgumentsParser();
     private final RunAssembly assembly;
@@ -163,6 +169,16 @@ final class ServeCommand {
                 containerTakeSupport,
                 epochs);
 
+        // FR2 of harden-logging-observability: the start anchor names the configuration the daemon
+        // actually resolved — flags, properties and defaults already folded together — so a
+        // post-mortem never has to reconstruct which settings were in effect.
+        AnchorLog.serveStarted(new AnchorLog.ServeConfig(
+                instanceId.value(),
+                effectiveSlots,
+                trackerConfig.wipLimit(),
+                serveProperties.idlePollInterval(),
+                serveProperties.sigtermGrace()));
+
         runtime.worktreeJanitor().start();
         // fix-reaper-idle-liveness FR1, FR5: the standing reaper runs for the daemon's whole
         // lifetime, exactly like WorktreeJanitor above — ServeShutdown.shutdown() stops it (FR4).
@@ -190,6 +206,15 @@ final class ServeCommand {
         try {
             return factory.create(secretsProvider, trackerConfig, instanceId.value());
         } catch (RuntimeException startupFailure) {
+            // The operator's console gets the plain sentence; the log file gets the same failure
+            // with its stack and cause chain (FR2, FR7 of harden-logging-observability). Until now
+            // a startup that died here left nothing at all in the log — the one record of why the
+            // daemon never came up went to a terminal nobody keeps.
+            log.error(
+                    OperatorEvent.SERVE_TRACKER_PROVISION_FAILED.head()
+                            + "gnomish serve: startup failed provisioning tracker {}",
+                    bindingDescription(trackerConfig),
+                    startupFailure);
             System.err.println("gnomish serve: startup failed provisioning tracker " + bindingDescription(trackerConfig)
                     + ": " + startupFailure.getMessage());
             throw new ServeExitCodeException(1);

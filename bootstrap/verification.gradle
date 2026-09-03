@@ -38,6 +38,16 @@ tasks.named('test') {
         exclude '**/build/**', '**/.git/**', '**/.gradle/**'
     }).withPropertyName('buildMetadata')
 
+    // LogContractGateSpec (FR16 of harden-logging-observability) asks a question about the *test*
+    // tree — "which operator codes does any spec name?" — so every module's test sources are a
+    // real input of this task for the same reason the build files above are. Without declaring
+    // them, deleting the only spec that names a code leaves `test` up to date and the gate simply
+    // does not run.
+    inputs.files(rootProject.fileTree(rootProject.projectDir) {
+        include '**/src/test/**/*.groovy', '**/src/test/**/*.java'
+        exclude '**/build/**', '**/.git/**', '**/.gradle/**'
+    }).withPropertyName('testSources')
+
     // The Ollama E2E layer (task 11.1) needs a native local Ollama install and a logged-in
     // `claude` CLI, and the paid smoke layer (task 11.3) spends real money against the real
     // Anthropic backend by design. Both are excluded here and run only via their dedicated tasks

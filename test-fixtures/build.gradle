@@ -35,6 +35,8 @@ dependencies {
     api project(':gitobjects')
     // The tracker port-contract suites are typed in the port's own DTOs.
     api project(':gnomish-plugin-api')
+    // RepeatSuppressorFixture returns a RepeatSuppressor in its own signature.
+    api project(':logtext')
     // The application-layer fixtures shared by `:application`'s own specs and
     // the composition root's (task 4.5 of split-into-modules): the scripted
     // console, the blocking sleeper and virtual monotonic time, the recording
@@ -72,6 +74,16 @@ dependencies {
     api project(':sandbox:docker')
     api libs.groovy
     api libs.spock.core
+    // `LogCaptureSupport` (task 2.4 of harden-logging-observability) attaches a Logback
+    // `ListAppender` and hands back `ILoggingEvent`s, so the backend is part of a consuming
+    // spec's compile surface — `api`, not `implementation`. Logback is the project's only
+    // SLF4J backend (ADR 0001), and this is a test-only classpath, so nothing here forces a
+    // backend choice onto production code.
+    api libs.logback.classic
+    // `LogCaptureSupport` resolves the logger it captures through the SLF4J API and casts it to
+    // the backend type; only the cast target reaches a consuming spec's compile surface, so the
+    // API itself stays `implementation` (dependency-analysis advice).
+    implementation libs.slf4j.api
 
 
     // `ApplicationArgumentsFixture` returns Spring Boot's own

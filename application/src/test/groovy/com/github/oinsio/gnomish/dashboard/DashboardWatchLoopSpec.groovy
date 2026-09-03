@@ -1,9 +1,12 @@
 package com.github.oinsio.gnomish.dashboard
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.board.BoardModel
 import com.github.oinsio.gnomish.board.ReadySummary
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testsupport.StepClock
 import java.nio.file.Files
 import java.nio.file.Path
@@ -96,11 +99,14 @@ class DashboardWatchLoopSpec extends Specification {
         fetchCount == (int) (Duration.ofHours(1).seconds / DashboardWatchLoop.BOARD_CADENCE.seconds)
     }
 
+    // FR15 of harden-logging-observability: the page silently stops updating unless the swallow
+    // leaves a coded WARN naming the file it could not write.
     def "NFR-R1: an output-write failure is logged and swallowed so the watch loop keeps running"() {
         given: 'an output path whose parent cannot be created — a regular file sits where the directory must be'
         def blocker = Files.createFile(homeDir.resolve('blocker'))
         def unwritable = blocker.resolve('dashboard.html')
         def loop = newLoop([T0])
+        def logs = LogCaptureSupport.attach(DashboardWatchLoop)
 
         when: 'a cycle renders but the atomic write cannot place its file'
         loop.renderOnce(homeDir, INSTANCE_NAME, unwritable, { -> model })
@@ -108,6 +114,17 @@ class DashboardWatchLoopSpec extends Specification {
         then: 'the write failure never propagates — the loop survives to render the next cycle'
         noExceptionThrown()
         !Files.exists(unwritable)
+
+        and: 'and it is not silent: one coded WARN naming the unwritable target'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.DASHBOARD_RENDER_WRITE_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains(unwritable.toString())
+
+        cleanup:
+        logs.detach()
     }
 
     @Timeout(5)

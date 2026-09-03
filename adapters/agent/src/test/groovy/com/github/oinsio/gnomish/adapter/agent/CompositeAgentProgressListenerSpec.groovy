@@ -1,7 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -9,8 +12,8 @@ import spock.lang.Specification
  * {@link AgentProgressEvent} out to every wrapped listener, in order, and — unlike
  * {@link com.github.oinsio.gnomish.status.CompositeEngineEventListener}, which relies
  * on {@code Events.emit}'s single outer try/catch — must swallow each child's own
- * exception itself: {@link StreamJsonParser#deliver} wraps only the one call it makes
- * to whichever listener {@code EnginePorts}/the app assembly hands it, so if that one
+ * exception itself: {@link AgentProgressEmitter#deliver} wraps only the one call it
+ * makes to whichever listener {@code EnginePorts}/the app assembly hands it, so if that one
  * listener is this composite, a child throwing must never stop delivery to the
  * children after it in the same fan-out.
  */
@@ -51,6 +54,7 @@ class CompositeAgentProgressListenerSpec extends Specification {
         } as AgentProgressListener
         def after = new RecordingAgentProgressListener()
         def composite = new CompositeAgentProgressListener([before, throwing, after])
+        def logs = LogCaptureSupport.attach(CompositeAgentProgressListener)
 
         when:
         composite.onProgress(EVENT)
@@ -59,6 +63,17 @@ class CompositeAgentProgressListenerSpec extends Specification {
         noExceptionThrown()
         before.events == [EVENT]
         after.events == [EVENT]
+
+        and: 'FR15 of harden-logging-observability: the child that broke is named by a coded WARN'
+        def warned = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.COMPOSITE_PROGRESS_LISTENER_THREW.head())
+        }
+        warned != null
+        warned.level == Level.WARN
+        warned.formattedMessage.contains(EVENT.getClass().simpleName)
+
+        cleanup:
+        logs.detach()
     }
 
     def "the listener list is defensively copied — mutating the original does not affect delivery"() {

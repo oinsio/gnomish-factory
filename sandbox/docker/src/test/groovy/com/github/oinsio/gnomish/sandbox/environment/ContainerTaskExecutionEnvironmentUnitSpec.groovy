@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 import java.time.Instant
@@ -64,6 +66,46 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
                 '/gnomish/scratch'
             ]),
         ]
+    }
+
+    // FR2 of harden-logging-observability: the remote end of a task's lifecycle gets its own INFO
+    // anchor at its own choke point. Creating and reattaching mean very different things about
+    // what the run started from, so the two are separate words, not one "materialized".
+    def "FR2: a fresh materialize logs the creation anchor with the key, branch and image"() {
+        given:
+        def capture = LogCaptureSupport.attach(ContainerMaterializer)
+
+        when:
+        env().materialize('gnomish/task-x', null)
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].level == Level.INFO
+        capture.list[0].formattedMessage ==
+                "container environment ${KEY} created for branch gnomish/task-x (image gnomish/img)"
+
+        cleanup:
+        capture.detach()
+    }
+
+    def "FR2: a reattach logs the reattachment anchor instead of the creation one"() {
+        given:
+        def capture = LogCaptureSupport.attach(ContainerMaterializer)
+        docker.onRun = { List<String> args ->
+            args[0] == 'inspect' ? new DockerResult(0, 'true', '') : new DockerResult(0, '', '')
+        }
+
+        when:
+        env().materialize('gnomish/task-x', null)
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].level == Level.INFO
+        capture.list[0].formattedMessage ==
+                "container environment ${KEY} reattached for branch gnomish/task-x (image gnomish/img)"
+
+        cleanup:
+        capture.detach()
     }
 
     def "FR6: materialize reattaches to a stopped kept container — start it, never re-clone"() {
@@ -200,7 +242,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         given:
         docker.onRun = { args ->
             throw new DockerUnavailableException('Cannot connect to the Docker daemon', null)
-        }
+        } as Closure<DockerResult>
 
         when:
         env().materialize('task/x', null)

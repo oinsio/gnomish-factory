@@ -55,24 +55,24 @@ class ObservabilityWiringSpec extends Specification {
         def wiring = newWiring(clock, lifecycleTracker)
 
         when: 'finalizeStopped runs once'
-        wiring.finalizeStopped('sigterm')
+        wiring.finalizeStopped('signal')
 
         then: 'the lifecycle tracker moved to stopped with that reason'
         lifecycleTracker.view().state() == DaemonLifecycleState.STOPPED
-        lifecycleTracker.view().reason() == 'sigterm'
+        lifecycleTracker.view().reason() == 'signal'
 
         and: 'exactly one stopped ledger line was written'
         def lines = Files.readString(ledgerFile(now)).readLines().findAll {
             it.contains('"event":"stopped"')
         }
         lines.size() == 1
-        lines[0].contains('"reason":"sigterm"')
+        lines[0].contains('"reason":"signal"')
 
         when: 'a second call arrives with a DIFFERENT reason (e.g. the JVM shutdown hook firing again on normal exit)'
         wiring.finalizeStopped('drainComplete')
 
         then: 'it is a no-op: the original reason and ledger line stand, no second line was appended'
-        lifecycleTracker.view().reason() == 'sigterm'
+        lifecycleTracker.view().reason() == 'signal'
         Files.readString(ledgerFile(now)).readLines().findAll {
             it.contains('"event":"stopped"')
         }.size() == 1

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -144,7 +145,10 @@ public final class StreamJsonParser {
             while ((line = reader.readLine()) != null) {
                 var readAt = clock.now();
                 parseLine(line).ifPresent(event -> {
-                    log.debug("raw agent event: {}", event);
+                    // FR6: a recognized event still carries the agent's own words (assistant
+                    // text, tool arguments, the result summary), so the rendered record is
+                    // neutralized and capped before it becomes a line.
+                    log.debug("raw agent event: {}", LogText.forLog(String.valueOf(event)));
                     sink.add(new TimestampedEvent(event, readAt));
                     if (event instanceof AgentEvent.InitEvent init) {
                         initEvent[0] = init;
@@ -165,7 +169,7 @@ public final class StreamJsonParser {
         try {
             wire = MAPPER.readValue(line, StreamJsonLine.class);
         } catch (JsonProcessingException e) {
-            log.debug("stream-json: skipping non-JSON or malformed line: {}", e.toString());
+            log.debug("stream-json: skipping non-JSON or malformed line", e);
             return java.util.Optional.empty();
         }
         return StreamJsonEventMapper.toEvent(wire);

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,7 +84,8 @@ public final class TakeCrashAbort {
         TaskRef ref = trackerTask.ref();
         String cause = "uncaught exception during the take run: " + crash;
         AbortFacts facts = abortFactsBestEffort(tracker, ref);
-        TaskState finalState = TaskState.atStageStart(definition.stages().get(0).name());
+        TaskState finalState =
+                TaskState.atStageStart(definition.stages().getFirst().name());
         return abortHandler.handle(ref, finalState, cause, facts, abortThreshold, instanceId, categoryOf(crash));
     }
 
@@ -119,7 +121,8 @@ public final class TakeCrashAbort {
             // An operator seeing repeated aborts on one task needs this line to tell "K is too high"
             // from "the count never accumulated".
             log.warn(
-                    "abort facts unreadable for task {}; counting this crash as the first abort in the streak",
+                    OperatorEvent.ABORT_FACTS_UNREADABLE.head()
+                            + "abort facts unreadable for task {}; counting this crash as the first abort in the streak",
                     ref.id(),
                     unreadable);
             return AbortFacts.none();

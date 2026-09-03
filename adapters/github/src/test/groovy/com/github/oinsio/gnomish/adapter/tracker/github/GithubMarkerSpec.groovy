@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Instant
 import spock.lang.Specification
 
@@ -102,6 +104,72 @@ class GithubMarkerSpec extends Specification {
         expect:
         GithubMarker.parse('<!-- gnomish {"kind":"reticulate-splines","instance":"gnomish-factory-x7k2q1",' +
                 '"at":"2026-07-20T12:00:00Z","version":1} -->\nhello').isEmpty()
+    }
+
+    // FR5 of harden-logging-observability: a comment that opened with the factory's own prefix but
+    // cannot be read back is dropped from every marker fold — the claim window, the abort count,
+    // the boundary anchor. That is a silent degradation unless it says so.
+    def "FR5: a malformed factory-authored marker warns naming what it could not read (#label)"() {
+        given:
+        def logs = LogCaptureSupport.attach(GithubMarker)
+
+        when:
+        def parsed = GithubMarker.parse(body as String)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        parsed.isEmpty()
+
+        and:
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.contains(expectedReason as String)
+
+        where:
+        label | body | expectedReason
+        'unparseable' | '<!-- gnomish {not valid json} -->\nhello' | 'does not parse'
+        'missing fields' | '<!-- gnomish {"version":1} -->\nhello' | 'missing kind, instance or at'
+        'unknown kind' | '<!-- gnomish {"kind":"reticulate-splines","instance":"gnomish-factory-x7k2q1",' +
+                '"at":"2026-07-20T12:00:00Z","version":1} -->\nhello' | 'not a value this version understands'
+    }
+
+    // FR5: an operator's own reply is not a degradation — warning on every human comment of every
+    // polled issue would drown the very lines above.
+    def "FR5: a comment carrying no factory marker is dropped silently (#label)"() {
+        given:
+        def logs = LogCaptureSupport.attach(GithubMarker)
+
+        when:
+        def parsed = GithubMarker.parse(body as String)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        parsed.isEmpty()
+        events.isEmpty()
+
+        where:
+        label | body
+        'human reply' | 'just a human reply, no marker here'
+        'blank' | ''
+        'other marker' | "<!-- some other tool's marker -->\nhello"
+    }
+
+    // FR6: the excerpt is tracker-sourced text, so a marker body cannot forge a second log record.
+    def "FR6: a malformed marker cannot forge a second log line"() {
+        given:
+        def logs = LogCaptureSupport.attach(GithubMarker)
+        def forged = '<!-- gnomish {broken\nWARN forged line} -->\nhello'
+
+        when:
+        GithubMarker.parse(forged)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        events.size() == 1
+        !events[0].formattedMessage.contains('\n')
     }
 
     def "GithubMarkerKind.PROGRESS round-trips its wire value ('progress')"() {

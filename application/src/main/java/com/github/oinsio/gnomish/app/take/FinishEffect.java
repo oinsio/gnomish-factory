@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import org.slf4j.Logger;
 
 /**
@@ -72,7 +73,11 @@ public record FinishEffect(
                     ? EffectObservation.LANDED
                     : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
-            log.warn("could not verify whether the finish of {} already landed: {}", ref.id(), e.toString());
+            log.warn(
+                    OperatorEvent.FINISH_LANDING_UNVERIFIED.head()
+                            + "could not verify whether the finish of {} already landed",
+                    ref.id(),
+                    e);
             return EffectObservation.UNDETERMINED;
         }
     }
@@ -80,14 +85,18 @@ public record FinishEffect(
     @Override
     public boolean deliver() {
         if (!ClaimGuard.stillOurs(tracker, ref, instanceId)) {
-            log.warn("skipping finish of {}: claim is no longer held by this instance", ref.id());
+            log.warn(
+                    OperatorEvent.FINISH_SKIPPED_CLAIM_LOST.head()
+                            + "skipping finish of {}: claim is no longer held by this instance",
+                    ref.id());
             return false;
         }
         if (retry.confirm(() -> tracker.finish(ref, summary)) == TerminalWriteRetry.Result.CONFIRMED) {
             return true;
         }
         log.error(
-                "finish of {} could not be written before the retry bound elapsed; the branch records the "
+                OperatorEvent.FINISH_UNWRITTEN_AFTER_RETRIES.head()
+                        + "finish of {} could not be written before the retry bound elapsed; the branch records the "
                         + "delivery and a later resume will reconcile the deferred finish",
                 ref.id());
         return false;

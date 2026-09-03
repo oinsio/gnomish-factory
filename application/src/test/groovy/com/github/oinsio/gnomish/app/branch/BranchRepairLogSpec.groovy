@@ -6,6 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -78,6 +79,7 @@ class BranchRepairLogSpec extends Specification {
         then:
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.BRANCH_REPAIR_REPEATED.head())
         events[0].formattedMessage.contains('priorAttempts=2')
         events[0].formattedMessage.contains('(repeated)')
     }

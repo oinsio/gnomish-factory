@@ -9,6 +9,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Implements {@code Tracker.repairIndex} for the GitHub adapter (github-tracker spec, "Index-repair
@@ -31,12 +33,19 @@ import java.util.List;
  * caller's observation; anything else is {@link RepairIndexResult.Unchanged} with the current
  * facts, which is what makes concurrent repairs converge.
  *
- * <p>Implements FR19, FR12 of harden-task-branch-contract.
+ * <p>A repair rewrites another instance's labels, so the one that happens is an INFO anchor naming
+ * the shape it corrected; a converge-abort — the re-read disagreeing with the caller's observation,
+ * which is what two sweepers meeting looks like — is DEBUG (FR5, FR12 of
+ * harden-logging-observability).
+ *
+ * <p>Implements FR19, FR12 of harden-task-branch-contract; FR5 of harden-logging-observability.
  */
 // Not a record: a behavior-bearing repair service holding an HTTP client, label ops and the marker
 // writer, kept as a plain final class for parity with its siblings.
 @SuppressWarnings("ClassCanBeRecord")
 public final class GithubIndexRepair {
+
+    private static final Logger log = LoggerFactory.getLogger(GithubIndexRepair.class);
 
     private final GithubHttpClient httpClient;
     private final GithubLabelOps labelOps;
@@ -59,10 +68,14 @@ public final class GithubIndexRepair {
         GithubTaskId id = GithubTaskId.parse(ref.id());
         TrackerFacts current = reRead(id);
         if (!current.equals(observedFacts)) {
+            log.debug(
+                    "index repair for task {} converged without acting: the facts moved since they were observed",
+                    ref.id());
             return new RepairIndexResult.Unchanged(current);
         }
         postRepairMarker(id, current);
         flip(id, current.latestBoundary());
+        log.info("repaired the index of task {}: observed {}", ref.id(), observedShape(current));
         return new RepairIndexResult.Repaired(reRead(id));
     }
 
@@ -94,11 +107,19 @@ public final class GithubIndexRepair {
         return response.body();
     }
 
-    private void postRepairMarker(GithubTaskId id, TrackerFacts observed) {
-        String shape = observed.latestBoundary() == null
+    /**
+     * The shape phrase both the repair marker and the log line carry, so the thread and the log
+     * name the same observation.
+     */
+    private static String observedShape(TrackerFacts observed) {
+        return observed.latestBoundary() == null
                 ? "claim pending"
                 : "index lagging behind the " + observed.latestBoundary().name().toLowerCase(java.util.Locale.ROOT)
                         + " marker";
+    }
+
+    private void postRepairMarker(GithubTaskId id, TrackerFacts observed) {
+        String shape = observedShape(observed);
         markerWriter.write(
                 id,
                 new GithubMarkerWrite(

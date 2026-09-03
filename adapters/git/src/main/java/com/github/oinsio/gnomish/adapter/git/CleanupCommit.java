@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@code Completed} cleanup commit (FR15/M4 of add-git-workflow): removes {@code
@@ -19,8 +21,15 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Extracted from {@link GitTaskRepository} purely to keep that class within the project's
  * file-size guidance; the repository still owns worktree resolution.
+ *
+ * <p>Kept in sync with {@link GitObjectsTerminalCommits#cleanUp}: both media log the FR2 anchor
+ * line ({@code task lifecycle commit written for task {}: event={}}) after the cleanup commit
+ * succeeds, the same shape used for every other lifecycle transition
+ * (harden-logging-observability).
  */
 final class CleanupCommit {
+
+    private static final Logger log = LoggerFactory.getLogger(CleanupCommit.class);
 
     private CleanupCommit() {}
 
@@ -37,6 +46,7 @@ final class CleanupCommit {
         if (!Files.exists(worktree.resolve(".gnomish-task"))) {
             // Already cleaned: running the destructive step twice equals running it once, which is
             // what lets the completion recovery re-run safely (FR10 of harden-task-branch-contract).
+            log.debug("cleanup commit for task {} is a no-op: the worktree carries no envelope", taskId);
             return;
         }
         GitCommandResult rm = runner.run(worktree, "rm", "-r", ".gnomish-task");
@@ -50,5 +60,6 @@ final class CleanupCommit {
             throw new GitTaskRepositoryException(
                     taskId, TaskLifecycleEvent.COMPLETED, "git commit (cleanup)", commit.stderr());
         }
+        log.info("task lifecycle commit written for task {}: event={}", taskId, TaskLifecycleEvent.COMPLETED);
     }
 }

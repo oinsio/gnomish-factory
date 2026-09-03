@@ -6,9 +6,13 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.take.FinishedDecline
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
+import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -38,10 +42,11 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
         def outageRetry = new FeedOutageRetry(sleeper, {
             Duration.ofSeconds(1)
-        })
+        }, RepeatSuppressorFixture.quiet())
         new FeedCycle(
-                tracker, INSTANCE, new SlotLedger(1), { TaskRef ref -> } as SlotRunner,
-                BASE, CAP, wipLimit, new Random(0), new FeedStateLogger(), outageRetry)
+                new FeedTracker(tracker, INSTANCE), new SlotLedger(1), { TaskRef ref -> } as SlotRunner,
+                new FeedSelection(BASE, CAP, wipLimit, new Random(0)), new FeedStateLogger(), outageRetry,
+                new FinishedDecline(new RepeatSuppressor(new MovableClock(Instant.EPOCH), Duration.ofMinutes(5))))
     }
 
     // FR3, FR4: a finished entry observed in one listReady result is declined exactly once within

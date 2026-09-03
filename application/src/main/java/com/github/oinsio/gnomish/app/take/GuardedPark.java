@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -74,6 +75,9 @@ public final class GuardedPark implements TerminalEffect {
         this.transition = transition;
         this.log = log;
         this.kind = kind;
+        // Recovered: this is the verdict reportText() reads, since recordIntent() is a no-op for
+        // it. Fresh: this placeholder only satisfies the field's non-null initialization —
+        // recordIntent() unconditionally overwrites it before anything reads the field.
         this.verdict = transition instanceof ParkTransition.Recovered(var recorded, var ignoredReceipt)
                 ? recorded
                 : new ParkDeliveryVerdict.Delivered();
@@ -134,7 +138,12 @@ public final class GuardedPark implements TerminalEffect {
                     ? EffectObservation.LANDED
                     : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
-            log.warn("could not verify whether the {} of {} already landed: {}", kind, ref.id(), e.toString());
+            log.warn(
+                    OperatorEvent.PARK_LANDING_UNVERIFIED.head()
+                            + "could not verify whether the {} of {} already landed",
+                    kind,
+                    ref.id(),
+                    e);
             return EffectObservation.UNDETERMINED;
         }
     }
@@ -142,7 +151,11 @@ public final class GuardedPark implements TerminalEffect {
     @Override
     public boolean deliver() {
         if (!ClaimGuard.stillOurs(tracker, ref, instanceId)) {
-            log.warn("skipping {} of {}: claim is no longer held by this instance", kind, ref.id());
+            log.warn(
+                    OperatorEvent.PARK_SKIPPED_CLAIM_LOST.head()
+                            + "skipping {} of {}: claim is no longer held by this instance",
+                    kind,
+                    ref.id());
             return false;
         }
         String text = reportText();
@@ -150,7 +163,8 @@ public final class GuardedPark implements TerminalEffect {
             return true;
         }
         log.error(
-                "{} of {} could not be written before the retry bound elapsed; the branch keeps the "
+                OperatorEvent.PARK_UNWRITTEN_AFTER_RETRIES.head()
+                        + "{} of {} could not be written before the retry bound elapsed; the branch keeps the "
                         + "outcome as tracker-write pending and a later resume will reconcile the deferred "
                         + "park",
                 kind,

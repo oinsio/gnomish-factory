@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.branch;
 
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,8 @@ public final class BranchRepairLog {
         }
         if (priorRecoveryAttempts > 0) {
             log.warn(
-                    "branch repair: task={} shape={} epoch={} owner={} action={} priorAttempts={} (repeated)",
+                    OperatorEvent.BRANCH_REPAIR_REPEATED.head()
+                            + "branch repair: task={} shape={} epoch={} owner={} action={} priorAttempts={} (repeated)",
                     taskId,
                     describe(shape),
                     render(epoch),

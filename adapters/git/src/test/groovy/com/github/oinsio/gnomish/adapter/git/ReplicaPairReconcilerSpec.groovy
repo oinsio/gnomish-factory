@@ -1,15 +1,15 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,12 +38,6 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
     /** The manual-resume path: no tracker, no claim, so no tenure on anything. */
     def claimless = ClaimEpochSource.NONE
-
-    private void commit(Path repo, String fileName, String content) {
-        new File(repo.toFile(), fileName).text = content
-        runner.run(repo, 'add', fileName)
-        runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
-    }
 
     /** A bare origin plus a clone that has the task branch checked out as a worktree. */
     private Map<String, Path> setUpClonedBranch() {
@@ -232,10 +226,13 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         }
 
         then:
+        // FR15 of harden-logging-observability: the discard destroys local work under the claim, so
+        // its identity is the catalog code, not the sentence.
         def discard = events.find {
-            it.formattedMessage.contains('discarding the local task branch')
+            it.formattedMessage.startsWith(OperatorEvent.REPLICA_LOCAL_BRANCH_DISCARDED.head())
         }
         discard != null
+        discard.level == Level.WARN
         discard.formattedMessage.contains(discardedTip)
         discard.formattedMessage.contains(tip(env.bare, "refs/heads/${branchName}"))
         events.every { !it.formattedMessage.contains('fast-forwarding') }
@@ -280,9 +277,14 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         def clone = initWorkingRepo(tempDir, 'clone-cas-loser')
         commit(clone, 'a.txt', 'first')
 
+        and: 'a sink for the lines it emits on its way to refusing'
+        List<ILoggingEvent> events = []
+
         when:
-        ReplicaPairReconciler.forWorktree(new GitProcessRunner(alwaysLosingSwapGit().toString()), clone, underTenure)
-                .reconcile('PROJ-1', branchName)
+        capture(events) {
+            ReplicaPairReconciler.forWorktree(new GitProcessRunner(alwaysLosingSwapGit().toString()), clone, underTenure)
+            .reconcile('PROJ-1', branchName)
+        }
 
         then: 'the reconciler refuses to proceed rather than guess which line is real'
         def ex = thrown(IllegalStateException)
@@ -294,6 +296,20 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
         and: 'it spent exactly the bounded passes trying, not one more'
         Files.readAllLines(tempDir.resolve('swap-attempts.txt')).size() == 3
+
+        and: 'FR14, FR15: every lost pass leaves one coded WARN naming the task and the pass number'
+        def lost = events.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.REPLICA_RESET_LOST_CAS.head())
+        }
+        lost*.level == [Level.WARN] * 3
+        lost*.formattedMessage.every {
+            it.contains('taskId=PROJ-1') && it.contains("branch=${branchName}")
+        }
+
+        and: 'the passes are counted from one, so the third line is the last the bound allows'
+        lost.collect {
+            (it.formattedMessage =~ /pass=(\d+)/)[0][1]
+        } == ['1', '2', '3']
     }
 
     def "FR8: a losing swap that said nothing is named as such in the second-writer diagnosis"() {
@@ -377,18 +393,29 @@ exit 1
         script
     }
 
-    /** Runs {@code emit} with a {@link ListAppender} attached to the reconciler's own logger. */
+    /** Runs {@code emit} with a {@link ch.qos.logback.core.read.ListAppender} attached to the reconciler's own logger. */
     private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(ReplicaPairReconciler)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        List<ILoggingEvent> sink = []
+        capture(sink, emit)
+        sink
+    }
+
+    /**
+     * The same capture for a body that <em>throws</em>: the events land in {@code sink} on the way
+     * out, so a feature can assert both the exception and the lines emitted before it. Returning
+     * them would not do — an assignment never completes when its right-hand side throws.
+     */
+    private static void capture(List<ILoggingEvent> sink, Closure<?> emit) {
+        // Through the shared helper rather than a hand-rolled ListAppender (`.claude/rules/logging.md`):
+        // it restores the logger's level on the way out, and the Logback level registry is JVM-global.
+        // Pinned at DEBUG because these features assert on the absence of an INFO line too.
+        def logs = LogCaptureSupport.attach(ReplicaPairReconciler, Level.DEBUG)
         try {
             emit()
         } finally {
-            logbackLogger.detachAppender(appender)
+            sink.addAll(logs.list)
+            logs.detach()
         }
-        appender.list
     }
 
     /**

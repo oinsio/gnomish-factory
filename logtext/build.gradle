@@ -1,0 +1,54 @@
+// Build script for the `:logtext` module (FR4, FR6, FR8, design D5/D10 of
+// harden-logging-observability): the three pieces every layer's log emitters
+// share — `LogText` (the untrusted-text choke point: control/ANSI stripping,
+// newline flattening, length cap), `RepeatSuppressor` (edge logging for poll
+// and retry loops) and `MdcAwareThread` (the capture/apply/clear pattern for a
+// virtual-thread hop that logs).
+//
+// The module depends on the SLF4J API and NOTHING else — no backend, no
+// framework, no factory module, no domain type. That emptiness is the reason
+// the module exists at all: the sanitizer has to be reachable from
+// `:application`, from the adapter modules and from the sandbox backends, and
+// the layering leaves those no common home above the leaves (`:application` is
+// invisible to `sandbox:*`). A dependency added here would be pushed into all
+// of them. `slf4j-api` is the one permitted external edge, because MDC
+// propagation is not expressible without it; a logging *backend* is the
+// composition root's choice, never this module's.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and
+// the PIT mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no
+    // internal project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Logging support: untrusted-text sanitization, repeat suppression, MDC propagation.'
+
+dependencies {
+    // Version management only (no artifacts): slf4j-api and logback are
+    // BOM-pinned in this project rather than versioned in the catalog, so every
+    // module that uses them imports the same platform (design D3 of
+    // add-project-skeleton).
+    implementation platform(libs.spring.boot.dependencies)
+
+    // `api`, because SLF4J is on this module's own surface: `MdcAwareThread.taskScope`
+    // hands back the `MDC.MDCCloseable` a caller closes at the end of its scope, so a
+    // consumer cannot use the helper without the type. (The `Runnable`-in/`Runnable`-out
+    // wrappers beside it would indeed be `implementation`; the gate scopes the whole
+    // module, and the widest surface wins.)
+    api libs.slf4j.api
+
+    // Test scope only: SLF4J's MDC is a no-op without a bound backend, so the
+    // MDC specs need a real adapter to assert against. The production choice of
+    // backend stays with the composition root.
+    testImplementation libs.logback.classic
+}
+
+// `:logtext` reaches no other project at all — the same gate `:domain`,
+// `:subprocess` and `:atomicfile` carry, and for the same reason: a shared leaf
+// that acquired an internal edge would push it into every layer above it.
+layering {
+    allowedProjects = []
+}

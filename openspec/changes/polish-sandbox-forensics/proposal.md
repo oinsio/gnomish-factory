@@ -84,10 +84,11 @@ None.
   (container materialize failures, guard start failures, the keep-path notice) SHALL embed
   the concrete Docker object name (`gnomish-box-<key>` / `gnomish-guard-<key>`), not only
   the environment key
-- **FR3** — when the mandatory environment self-check fails, the factory SHALL stop and
-  keep the checked box (container stopped; container, volume, and network retained)
-  instead of disposing it, and the failure report SHALL name the kept container; the
-  failure classification (infrastructure, no attempt burned) is unchanged
+- **FR3** — when the mandatory environment self-check fails in the container adapter,
+  the factory SHALL stop and keep the checked box (container stopped; container, volume,
+  and network retained) instead of disposing it, and the operator-facing keep notice in
+  the factory log SHALL name the kept container (the rejection exception is unchanged);
+  the failure classification (infrastructure, no attempt burned) is unchanged
 
 ### Non-Functional Reliability
 

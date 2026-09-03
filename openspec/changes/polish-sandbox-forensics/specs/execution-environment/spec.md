@@ -2,7 +2,7 @@
 
 ### Requirement: Exit 137 is annotated with the container's OOM state
 When a process run through the container adapter's `exec()` exits with code 137, the adapter SHALL read the container's `OOMKilled` runtime state and, when it is `true`, annotate the reported failure with a "likely container OOM" note at the point the exit code is surfaced to the operator. The annotation SHALL be advisory only: the exit code, the failure classification, and attempt accounting are unchanged. The inspect read SHALL be best-effort — an unreadable runtime state yields the unannotated report, never a new failure.
-<!-- implements FR1, NFR-R1, NFR-O1 of polish-sandbox-forensics -->
+<!-- implements FR1, NFR-R1, NFR-O1, UX2 of polish-sandbox-forensics -->
 
 #### Scenario: OOM-killed process is reported as likely OOM
 - **WHEN** an in-box process exits 137 and the container's runtime state reports `OOMKilled=true`

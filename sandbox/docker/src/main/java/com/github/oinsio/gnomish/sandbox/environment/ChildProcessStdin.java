@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -37,7 +38,7 @@ final class ChildProcessStdin {
             return;
         }
         byte[] bytes = stdin.getBytes(StandardCharsets.UTF_8);
-        Thread.ofVirtual().start(() -> pump(process, bytes));
+        Thread.ofVirtual().start(MdcAwareThread.inheritingContext(() -> pump(process, bytes)));
     }
 
     /**
@@ -52,7 +53,7 @@ final class ChildProcessStdin {
         try (OutputStream os = process.getOutputStream()) {
             os.write(bytes);
         } catch (IOException e) {
-            log.debug("process closed stdin before consuming it: {}", e.toString());
+            log.debug("process closed stdin before consuming it", e);
         }
     }
 }

@@ -545,8 +545,15 @@ exit 0
     // FR5, FR21, FR22: persistence() returns the real strict-persistence-plus-best-effort-push
     // wrapper, not null.
     def "persistence returns the sandboxed persistence wrapped with best-effort push"() {
+        // Both container drives build this bundle only once the task branch exists, and since FR13
+        // of harden-logging-observability the strict persistence resolves its baseline tip at
+        // construction rather than carrying a blank one forward — so the branch has to be there.
+        given: 'a run whose task branch exists'
+        def support = support()
+        createTask(support)
+
         expect:
-        support().persistence() instanceof PushBestEffortAttemptPersistence
+        support.persistence() instanceof PushBestEffortAttemptPersistence
     }
 
     // D15: workspace() returns the real attempt-commit workspace, not null — the engine workspace

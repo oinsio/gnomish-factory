@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -77,14 +78,20 @@ final class LedgerRetentionSweeper {
         try (Stream<Path> entries = Files.list(directory)) {
             entries.filter(Files::isRegularFile).forEach(path -> sweepIfEligible(path, cutoff));
         } catch (IOException e) {
-            log.warn("ledger retention sweep: failed to list {}", directory, e);
+            log.warn(
+                    OperatorEvent.LEDGER_RETENTION_LIST_FAILED.head() + "ledger retention sweep: failed to list {}",
+                    directory,
+                    e);
         }
     }
 
     private void sweepIfEligible(Path file, LocalDate cutoff) {
-        encodedDate(file.getFileName().toString())
+        boolean eligible = encodedDate(file.getFileName().toString())
                 .filter(date -> date.isBefore(cutoff))
-                .ifPresent(date -> delete(file));
+                .isPresent();
+        if (eligible) {
+            delete(file);
+        }
     }
 
     private void delete(Path file) {
@@ -92,7 +99,10 @@ final class LedgerRetentionSweeper {
             Files.deleteIfExists(file);
             log.info("ledger retention sweep: deleted {}", file);
         } catch (IOException e) {
-            log.warn("ledger retention sweep: failed to delete {}", file, e);
+            log.warn(
+                    OperatorEvent.LEDGER_RETENTION_DELETE_FAILED.head() + "ledger retention sweep: failed to delete {}",
+                    file,
+                    e);
         }
     }
 

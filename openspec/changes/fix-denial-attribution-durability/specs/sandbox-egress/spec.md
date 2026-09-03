@@ -60,7 +60,7 @@ Every recorded denial SHALL carry a source-assigned identity — the denial sour
 
 ### Requirement: Denial loss is visible in the report
 When the factory can see that denials were lost — the tail cap saturated a read (lines older than the read window are gone), or a committed cursor names a source that no longer holds its log while recorded history says denials existed — it SHALL record a loss marker as a synthetic finding through the same findings channel the denials use, funnel-fenced like any finding, naming the loss window it can bound. A report SHALL thereby distinguish "no denials" from "no data": a task with neither denials nor loss shows nothing. The marker SHALL gate nothing, exactly like the denials it stands in for.
-<!-- implements FR8, NFR-O3, UX3, G6 of fix-denial-attribution-durability -->
+<!-- implements FR8, NFR-O3, UX3 of fix-denial-attribution-durability -->
 
 #### Scenario: A saturated tail cap surfaces as loss
 - **WHEN** a read returns the tail cap's maximum and the cursor shows the window began after the last read position

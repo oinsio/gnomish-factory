@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,7 +36,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             def runner = new Thread({
                 verdict = fence.ensureDelivered(tempDir, TASK_ID)
             })
@@ -61,7 +59,8 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         and: 'NFR-O2: the WARN names the interruption and does not call the push a failure'
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith('park delivery push interrupted, delivery unverified')
+        warnings[0].formattedMessage.startsWith(OperatorEvent.PARK_FENCE_INTERRUPTED.head()
+                + 'park delivery push interrupted, delivery unverified')
         !warnings.any { it.formattedMessage.contains('push failed') }
     }
 
@@ -72,14 +71,18 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = fence().ensureDelivered(tempDir, TASK_ID)
         }
 
         then: 'origin itself answers that it carries the park, so the park report says nothing'
         verdict instanceof ParkDeliveryVerdict.Delivered
         pushAttempts(tempDir).toFile().readLines().size() == 1
-        events.findAll { it.level == Level.WARN }*.formattedMessage.any {
+
+        and: 'FR12 of harden-logging-observability: a recovered transient is INFO, not a WARN —'
+        // the delivery happened; there is nothing here for an operator to act on.
+        events.findAll { it.level == Level.WARN }.isEmpty()
+        events.findAll { it.level == Level.INFO }*.formattedMessage.any {
             it.startsWith('park delivery push timed out, but origin carries the park')
         }
     }
@@ -89,7 +92,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = fence().ensureDelivered(tempDir, TASK_ID)
         }
 
@@ -100,7 +103,8 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         and: 'still one push: the deadline proved the remote unresponsive, a second wait proves nothing'
         pushAttempts(tempDir).toFile().readLines().size() == 1
         events.findAll { it.level == Level.WARN }*.formattedMessage.any {
-            it.startsWith('park delivery push timed out, origin confirmed behind')
+            it.startsWith(OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_BEHIND.head()
+            + 'park delivery push timed out, origin confirmed behind')
         }
     }
 
@@ -110,7 +114,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = fence().ensureDelivered(tempDir, TASK_ID)
         }
 
@@ -124,25 +128,12 @@ class ParkDeliveryFenceTerminationSpec extends Specification implements Stalling
         and:
         pushAttempts(tempDir).toFile().readLines().size() == 1
         events.findAll { it.level == Level.WARN }*.formattedMessage.any {
-            it.startsWith('park delivery push timed out and origin did not answer the re-check')
+            it.startsWith(OperatorEvent.PARK_FENCE_TIMED_OUT_ORIGIN_SILENT.head()
+            + 'park delivery push timed out and origin did not answer the re-check')
         }
     }
 
     private ParkDeliveryFence fence() {
         new ParkDeliveryFence(new GitProcessRunner(stallingGit(tempDir).toString(), Duration.ofSeconds(2)))
-    }
-
-    private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(ParkDeliveryFence)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        appender.list
     }
 }

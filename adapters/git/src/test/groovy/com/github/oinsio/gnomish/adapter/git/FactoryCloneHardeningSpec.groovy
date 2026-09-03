@@ -33,7 +33,7 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
         hook.toFile().setExecutable(true)
     }
 
-    private int commit(Path cwd, String file, String message) {
+    private int commitWithExitCode(Path cwd, String file, String message) {
         Files.writeString(cwd.resolve(file), 'x')
         runner.run(cwd, 'add', file)
         runner.run(cwd, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', message).exitCode()
@@ -58,13 +58,13 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
         plantFailingPreCommitHook()
 
         expect: 'without hardening, the hook fires and the commit fails'
-        commit(cloneDir, 'before.txt', 'before') != 0
+        commitWithExitCode(cloneDir, 'before.txt', 'before') != 0
 
         when:
         hardening.harden(cloneDir)
 
         then: 'the same commit now succeeds — hooks are redirected to the empty directory'
-        commit(cloneDir, 'after.txt', 'after') == 0
+        commitWithExitCode(cloneDir, 'after.txt', 'after') == 0
     }
 
     def "FR17: hardening is idempotent"() {
@@ -86,7 +86,7 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
         runner.run(cloneDir, 'worktree', 'add', worktree.toString())
 
         expect: 'a commit inside the worktree runs no hook — the shared .git/config carries core.hooksPath'
-        commit(worktree, 'wt.txt', 'in-worktree') == 0
+        commitWithExitCode(worktree, 'wt.txt', 'in-worktree') == 0
     }
 
     def "FR17: harden throws when the target is not a git repository"() {

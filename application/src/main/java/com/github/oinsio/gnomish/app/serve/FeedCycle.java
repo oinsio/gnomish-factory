@@ -1,17 +1,16 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
-import java.time.Duration;
+import com.github.oinsio.gnomish.logtext.MdcAwareThread;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.status.AnchorLog;
 import java.time.Instant;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -23,7 +22,8 @@ import org.slf4j.LoggerFactory;
  * on a lost race or a per-candidate {@link OpenFrontGate} rejection — shared verbatim by {@link
  * FeedAutomaton#step()} and {@link FeedAutomaton#drain()}. Extracted only to keep {@link
  * FeedAutomaton} within the file-size limit (process-invariants.md); holds no state of its own
- * beyond its collaborators.
+ * beyond its collaborators — two of which, {@link FeedStateLogger} and {@link FinishedDecline},
+ * carry the log-plane latches that keep a repeating poll from repeating its lines.
  *
  * <p>Both {@link #poll} and {@link #claimOrAbandon} run their tracker calls through {@link
  * FeedOutageRetry} (NFR-R3): a sustained tracker outage is caught, logged, and retried with
@@ -38,18 +38,24 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve. Implements FR2 of
  * fix-reaper-idle-liveness (design D6).
+ *
+ * @param feed the tracker, with the instance identity every claim is made under
+ * @param slotLedger the WIP permit ledger this cycle acquires, assigns and abandons against
+ * @param slotRunner what a claimed task is handed to, on a virtual thread of its own
+ * @param selection the constants a feed read is graded against, and the two gradings themselves
+ * @param stateLogger the once-per-transition feed-state log plane (NFR-O1, UX2)
+ * @param outageRetry the tracker-outage retry every tracker call in this cycle runs through
+ * @param finishedDecline the terminal-status sweep applied to each feed read (design D4 of
+ *     enforce-finish-terminality)
  */
 record FeedCycle(
-        Tracker tracker,
-        InstanceId instanceId,
+        FeedTracker feed,
         SlotLedger slotLedger,
         SlotRunner slotRunner,
-        Duration backoffBase,
-        Duration backoffCap,
-        int wipLimit,
-        Random random,
+        FeedSelection selection,
         FeedStateLogger stateLogger,
-        FeedOutageRetry outageRetry) {
+        FeedOutageRetry outageRetry,
+        FinishedDecline finishedDecline) {
 
     private static final Logger log = LoggerFactory.getLogger(FeedCycle.class);
 
@@ -71,12 +77,10 @@ record FeedCycle(
      */
     Poll poll(Instant now) throws InterruptedException {
         return outageRetry.run("feed poll", () -> {
-            List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
-            FinishedDecline.declineObserved(tracker, readyTasks);
-            int openFrontCount = tracker.listOpen().size();
-            List<ReadyTask> candidates = FeedPolicy.selectClaimCandidates(
-                    readyTasks, backoffBase, backoffCap, now, openFrontCount, wipLimit, random);
-            return new Poll(readyTasks, openFrontCount, now, candidates);
+            List<ReadyTask> readyTasks = feed.listReady();
+            finishedDecline.declineObserved(feed.tracker(), readyTasks);
+            int openFrontCount = feed.openFrontCount();
+            return new Poll(readyTasks, openFrontCount, now, selection.candidates(readyTasks, now, openFrontCount));
         });
     }
 
@@ -103,8 +107,20 @@ record FeedCycle(
             slotLedger.abandon();
         } else {
             slotLedger.assign(claimed);
+            // FR2 of harden-logging-observability: the claim anchor is emitted before the slot
+            // thread starts, so it precedes every engine event of that task in the file — the
+            // "claim is the first correlated line" scenario. Both claim paths call the same
+            // AnchorLog method, so the two never word the same event differently.
+            // Under the task's own MDC (FR8): the anchor is written on the feed thread, which owns
+            // no task, so without the scope the very first line of a task's story is the one line a
+            // `grep taskId=<id>` misses (UX2). The scope closes before the slot starts — the slot
+            // thread sets the key itself, and a context left open across the launch would leak the
+            // finished task's id into the feed thread's next cycle.
+            try (var taskScope = MdcAwareThread.taskScope(claimed.id())) {
+                AnchorLog.claimAcquired(claimed.id(), slotLedger.freeSlots(), slotLedger.totalSlots());
+            }
             startSlot(claimed);
-            stateLogger.onSlotFilled(slotLedger.freeSlots(), wipLimit);
+            stateLogger.onSlotFilled(slotLedger.freeSlots(), selection.wipLimit());
         }
     }
 
@@ -122,16 +138,16 @@ record FeedCycle(
                 // and assign() would reject the ref. A foreign instance may claim it, fenced as
                 // usual; this instance may again once the old slot releases.
                 log.warn(
-                        "feed skips claim candidate {}: it still occupies a local slot"
+                        OperatorEvent.FEED_CANDIDATE_OCCUPIES_SLOT.head()
+                                + "feed skips claim candidate {}: it still occupies a local slot"
                                 + " (self-reaped after an abnormal heartbeat death?)",
                         candidate.ref().id());
                 continue;
             }
-            if (!OpenFrontGate.isStillEligible(
-                    candidate, () -> tracker.listOpen().size(), wipLimit)) {
+            if (!selection.isStillEligible(candidate, feed::openFrontCount)) {
                 continue;
             }
-            ClaimResult claim = tracker.claim(candidate.ref(), instanceId.value());
+            ClaimResult claim = feed.claim(candidate.ref());
             if (claim instanceof ClaimResult.Acquired) {
                 return candidate.ref();
             }

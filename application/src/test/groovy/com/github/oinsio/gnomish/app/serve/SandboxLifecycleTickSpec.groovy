@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
 import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
 import com.github.oinsio.gnomish.app.lease.LivenessOracle
@@ -7,6 +8,9 @@ import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -29,12 +33,12 @@ class SandboxLifecycleTickSpec extends Specification {
 
     def "tick evaluates the liveness oracle fresh and runs the pass against this clone dir"() {
         given:
-        def calls = []
+        List<List<Object>> calls = []
         SandboxLifecyclePass pass = { dir, liveness ->
             calls << [dir, liveness]
             ''
         }
-        def sandboxTick = new SandboxLifecycleTick(pass, livenessOracle, cloneDir, Duration.ofMinutes(5), Mock(com.github.oinsio.gnomish.domain.engine.port.Sleeper), clock)
+        def sandboxTick = new SandboxLifecycleTick(pass, livenessOracle, cloneDir, Duration.ofMinutes(5), Mock(Sleeper), clock)
 
         when:
         sandboxTick.tick()
@@ -52,7 +56,7 @@ class SandboxLifecycleTickSpec extends Specification {
         given:
         def instants = [NOW, NOW.plusSeconds(300)].iterator()
         def advancingClock = { -> instants.next() } as Clock
-        def sandboxTick = new SandboxLifecycleTick(SandboxLifecyclePass.NONE, livenessOracle, cloneDir, Duration.ofMinutes(5), Mock(com.github.oinsio.gnomish.domain.engine.port.Sleeper), advancingClock)
+        def sandboxTick = new SandboxLifecycleTick(SandboxLifecyclePass.NONE, livenessOracle, cloneDir, Duration.ofMinutes(5), Mock(Sleeper), advancingClock)
 
         expect: 'construction seeds it, so the assertion below cannot pass by accident'
         sandboxTick.lastRunAt() == NOW
@@ -104,6 +108,7 @@ class SandboxLifecycleTickSpec extends Specification {
             throw new IllegalStateException('boom')
         }
         def sandboxTick = new SandboxLifecycleTick(throwing, livenessOracle, cloneDir, Duration.ofMinutes(5), sleeper, clock)
+        def logs = LogCaptureSupport.attach(SandboxLifecycleTick)
 
         when:
         sandboxTick.start()
@@ -118,5 +123,15 @@ class SandboxLifecycleTickSpec extends Specification {
 
         then:
         secondSleep == Duration.ofMinutes(5)
+
+        and: 'FR15 of harden-logging-observability: a daemon that sweeps nothing tick after tick says so, once per lost tick'
+        def lostTicks = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.SANDBOX_LIFECYCLE_TICK_FAILED.head())
+        }
+        lostTicks.size() >= 2
+        lostTicks.every { it.level == Level.WARN }
+
+        cleanup:
+        logs.detach()
     }
 }

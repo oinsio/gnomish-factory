@@ -5,17 +5,19 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskListRow;
+import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
-import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Enumerates every {@code gnomish/*} branch already known to git — local {@code refs/heads/} and
@@ -24,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  * and reduces them to one {@link TaskListRow} per task, local tip preferred when a task has both.
  *
  * <p>Every branch yields exactly one row whatever its shape (FR16 of harden-task-branch-contract):
- * each ref is classified through {@link BranchShapeClassifier} first, and only a shape whose tip
+ * each ref is classified through {@link TipEnvelopeReader} first, and only a shape whose tip
  * carries readable envelopes is read for its stage, attempts and outcome. Delivered, bare,
  * pre-contract and quarantine branches render from their shape alone, so one unreadable branch
  * degrades to its own diagnostic row instead of failing the listing of the others (UX4).
@@ -38,18 +40,25 @@ import org.jspecify.annotations.Nullable;
  * branch name throughout, so a task whose local tip is delivered and whose remote tip still carries
  * its files is one row, not two.
  *
- * <p>Implements FR13 of add-git-workflow; FR16, FR2 of harden-task-branch-contract.
+ * <p>Per-branch degradation stops at the branch: the <em>enumeration</em> is not one. A ref
+ * listing that did not run to its own exit, or that exited non-zero, established nothing about
+ * which branches exist, so {@link #list} fails ({@link
+ * com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException}, {@link
+ * TaskListingFailedException}) rather than returning the empty listing that renders as a verified
+ * "no tasks" (FR13 of harden-logging-observability).
+ *
+ * <p>Implements FR13 of add-git-workflow; FR16, FR2 of harden-task-branch-contract; FR13 of
+ * harden-logging-observability.
  */
 public final class TaskBranchLister {
 
-    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
-    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
+    private static final Logger log = LoggerFactory.getLogger(TaskBranchLister.class);
+
     private static final String LOCAL_PREFIX = "refs/heads/gnomish/";
     private static final String REMOTE_PREFIX = "refs/remotes/origin/gnomish/";
 
     private final GitProcessRunner runner;
-    private final BranchTipFactsReader facts = new BranchTipFactsReader();
-    private final BranchShapeClassifier classifier = new BranchShapeClassifier();
+    private final TipEnvelopeReader tipEnvelopeReader = new TipEnvelopeReader();
 
     public TaskBranchLister(GitProcessRunner runner) {
         this.runner = runner;
@@ -60,8 +69,9 @@ public final class TaskBranchLister {
      * per branch name with the local tip preferred over a remote-tracking one.
      *
      * @param cloneDir the working directory of an existing git clone (the {@code --dir} target)
-     * @return one row per task, in the order first encountered (local branches first); empty if
-     *     no {@code gnomish/*} branch exists anywhere
+     * @return one row per task, in the order first encountered (local branches first); empty only
+     *     when the enumeration ran and found no {@code gnomish/*} branch anywhere
+     * @throws TaskListingFailedException if the ref enumeration exited non-zero
      */
     public List<TaskListRow> list(Path cloneDir) {
         Map<String, TaskListRow> byBranch = new LinkedHashMap<>();
@@ -85,7 +95,19 @@ public final class TaskBranchLister {
                     pattern + "gnomish/*", "for-each-ref", result.termination().name());
         }
         if (result.exitCode() != 0) {
-            return List.of();
+            // An enumeration that git refused established nothing about which branches exist, so
+            // the table it would feed is not an answer (FR13 of harden-logging-observability): the
+            // command fails with the git evidence rather than printing "no tasks".
+            // DEBUG, not WARN: the decision this failure forces is made one line down and reported
+            //     to the operator as a command failure, so a second WARN would be one fault twice.
+            // throwable-not-subject: git reported a status, not a thrown fault.
+            log.debug(
+                    "ref enumeration of {} exited {}: {}",
+                    pattern + "gnomish/*",
+                    result.exitCode(),
+                    LogText.forLog(result.stderr()));
+            throw new TaskListingFailedException(
+                    pattern + "gnomish/*", result.exitCode(), LogText.forLog(result.stderr()));
         }
         return result.stdout()
                 .lines()
@@ -99,18 +121,12 @@ public final class TaskBranchLister {
      */
     private TaskListRow readRow(Path cloneDir, String ref, String prefix) {
         BranchTipSource source = new RefTipSource(runner, cloneDir, ref);
-        BranchShape shape = classifier.classify(facts.read(source, null));
         String branchName = ref.substring(prefix.length());
-        if (!shape.tipCarriesState()) {
-            return new TaskListRow(branchName, null, 0, null, shape);
-        }
-        Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
-        Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
-        if (taskJson.isEmpty() || stateJson.isEmpty()) {
-            // A pre-contract Created tip (FR3): identity without state, or state without identity.
-            return new TaskListRow(branchName, null, 0, null, shape);
-        }
-        return contentRow(shape, taskJson.get(), stateJson.get());
+        return switch (tipEnvelopeReader.read(source)) {
+            case TipEnvelopeRead.NoState(BranchShape shape) -> new TaskListRow(branchName, null, 0, null, shape);
+            case TipEnvelopeRead.Loaded(BranchShape shape, String taskJson, String stateJson) ->
+                contentRow(shape, taskJson, stateJson);
+        };
     }
 
     private static TaskListRow contentRow(BranchShape shape, String taskJson, String stateJson) {

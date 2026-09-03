@@ -177,6 +177,14 @@ account pinning is the real defense).
   docs discipline (UX4).
 - [Gateway sees all gnome↔model traffic] → it is factory-owned and local
   by requirement (NFR-S1); never a hosted service.
+- [The active change `polish-sandbox-forensics` also carries a MODIFIED
+  delta of the `sandbox-egress` requirement "Mandatory fail-closed
+  self-check" (keep-on-failed-self-check semantics); this change's own
+  MODIFIED delta of the same requirement predates it] → ordering is
+  fixed: `polish-sandbox-forensics` archives first, and this change's
+  `specs/sandbox-egress/spec.md` MODIFIED text must be rebased on the
+  then-current stable requirement (keep semantics included) before this
+  change archives. Recorded on both sides.
 
 ## Migration Plan
 

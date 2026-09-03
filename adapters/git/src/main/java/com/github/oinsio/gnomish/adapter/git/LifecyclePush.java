@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,12 +57,12 @@ final class LifecyclePush {
         String outcome = PushOutcome.describe("lifecycle push", result);
         if (outcome != null) {
             log.warn(
-                    "{}: taskId={}, branch={}, event={}, stderr={}",
+                    OperatorEvent.LIFECYCLE_PUSH_FAILED.head() + "{}: taskId={}, branch={}, event={}, stderr={}",
                     outcome,
                     taskId,
                     branch,
                     event,
-                    result.stderr().trim());
+                    LogText.forLog(result.stderr()));
         }
     }
 }

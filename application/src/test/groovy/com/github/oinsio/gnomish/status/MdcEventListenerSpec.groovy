@@ -139,4 +139,44 @@ class MdcEventListenerSpec extends Specification {
         MDC.get('stage') == null
         MDC.get('attempt') == null
     }
+
+    // FR8 of harden-logging-observability: the leak scenario the eager TaskFinished clear misses —
+    //     a run that aborts out of the engine never emits that event, so without the boundary
+    //     backstop the next body on this carrier thread inherits a finished attempt's scope.
+    def "FR8: a run that ends without TaskFinished leaves stage and attempt behind"() {
+        given:
+        def listener = new MdcEventListener()
+
+        when: 'the last event before the abort is an attempt event'
+        listener.onEvent(new EngineEvent.AttemptStarted(key(5, 'implement')))
+
+        then: 'nothing clears them — this is the leak, stated as the reason the backstop exists'
+        MDC.get('stage') == 'implement'
+        MDC.get('attempt') == '5'
+
+        when: 'the thread boundary that clears taskId runs its backstop'
+        MdcEventListener.clearAttemptScope()
+
+        then:
+        MDC.get('stage') == null
+        MDC.get('attempt') == null
+    }
+
+    // FR8: the backstop is the same clear TaskFinished performs, so a normal run pays nothing
+    def "FR8: clearing an already-clear attempt scope is a no-op"() {
+        given:
+        def listener = new MdcEventListener()
+        listener.onEvent(new EngineEvent.AttemptStarted(key(5, 'implement')))
+        def outcome = new TaskOutcome.Completed(TaskState.atStageStart('implement'))
+        listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, outcome))
+        MDC.put('taskId', TASK_ID)
+
+        when:
+        MdcEventListener.clearAttemptScope()
+
+        then: 'the keys stay clear, and the backstop touches nothing else'
+        MDC.get('stage') == null
+        MDC.get('attempt') == null
+        MDC.get('taskId') == TASK_ID
+    }
 }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -19,7 +20,21 @@ import java.util.List;
  * the gnome (FR23). Files named for any other stage or attempt are stale by
  * construction and stay violations.
  *
- * <p>Implements FR21, FR23 of add-sandbox-core.
+ * <p>Verification has three outcomes, never two (FR13 of
+ * harden-logging-observability): clean, violated, and <b>cannot-verify</b> — a
+ * diff that never produced its evidence aborts the round as an infrastructure
+ * failure ({@link GitPersistFailedException}), burning no stage attempt and
+ * attributing no violation to the gnome.
+ *
+ * <p>Kept in sync with {@link RoundBoundaryCheck}: both must apply the same
+ * {@code .gnomish-task/} boundary rule with the same three outcomes — a
+ * non-zero or non-exiting diff invocation is cannot-verify (a thrown {@link
+ * GitPersistFailedException}, the round's infrastructure-failure path), a
+ * non-empty diff is a violation, and only a diff that ran to a zero exit with
+ * no listed path is clean.
+ *
+ * <p>Implements FR21, FR23 of add-sandbox-core; FR13 of
+ * harden-logging-observability.
  */
 public final class HarvestedBoundaryCheck {
 
@@ -45,14 +60,18 @@ public final class HarvestedBoundaryCheck {
      * @param snapshotCommit the harvested snapshot commit closing this round
      * @param key the current round's key; fixes the single permitted decision path
      * @throws RoundBoundaryViolationException if any other {@code .gnomish-task/} path changed
-     * @throws GitPersistFailedException if the diff itself cannot be computed
+     * @throws GitPersistFailedException if the diff itself cannot be computed — cannot-verify,
+     *     the round's infrastructure-failure path
      */
     public void verify(String taskId, String previousTip, String snapshotCommit, AttemptKey key) {
         GitCommandResult diff =
                 runner.run(cloneDir, "diff", "--name-only", previousTip, snapshotCommit, "--", ".gnomish-task/");
-        if (diff.exitCode() != 0) {
+        // A diff that failed printed no paths for the same reason a clean one prints none, so its
+        // empty stdout is not evidence of an untouched state directory: cannot-verify, and the
+        // round aborts as infrastructure rather than blaming the gnome for what git never said.
+        if (diff.termination() != Termination.EXITED || diff.exitCode() != 0) {
             throw new GitPersistFailedException(
-                    taskId, key.stage(), key.attempt(), "harvested boundary diff", diff.stderr());
+                    taskId, key.stage(), key.attempt(), "harvested boundary diff", diff.cannotVerifyDetail());
         }
         String allowed = decisionPath(key);
         List<String> touched = diff.stdout()

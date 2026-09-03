@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
@@ -79,6 +81,32 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         content.outcome() == null
         content.lastEscalation() == null
         content.baseCommit() != null
+    }
+
+    // FR2 of harden-logging-observability: the host medium's lifecycle-commit anchor. One INFO
+    // line per transition, at the one choke point every transition passes through — so a task's
+    // branch-side story is reconstructible from the log without reading the branch.
+    def "FR2: each lifecycle transition logs exactly one INFO anchor naming the event"() {
+        given:
+        def capture = LogCaptureSupport.attach(GitTaskRepository)
+
+        when: 'a task is created and then carried through a second transition'
+        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+
+        then: 'one anchor per transition, in order, each naming its event and its task'
+        def anchors = capture.list.findAll {
+            it.formattedMessage.startsWith('task lifecycle commit written')
+        }
+        anchors.size() == 2
+        anchors.every {
+            it.level == Level.INFO && it.formattedMessage.contains('PROJ-1')
+        }
+        anchors[0].formattedMessage.contains("event=${TaskLifecycleEvent.STARTED}")
+        anchors[1].formattedMessage.contains("event=${TaskLifecycleEvent.COMPLETED}")
+
+        cleanup:
+        capture.detach()
     }
 
     // FR3 of harden-task-branch-contract: the STARTED commit carries the initial state.json
@@ -271,6 +299,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     }
 
     // FR10 of harden-task-branch-contract: running the destructive step twice equals running it once.
+    // FR5 of harden-logging-observability: the second run writes nothing, so only a DEBUG line
+    // distinguishes "already done" from "never ran".
     def "FR10: finishCleanup on an already-cleaned tip changes nothing"() {
         given:
         repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
@@ -278,12 +308,20 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         repository.finishCleanup('PROJ-1')
         def worktree = worktreeFor('PROJ-1')
         def tip = runner.run(worktree, 'rev-parse', 'HEAD').stdout().trim()
+        def logs = LogCaptureSupport.attach(CleanupCommit, Level.DEBUG)
 
         when:
         repository.finishCleanup('PROJ-1')
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then:
         runner.run(worktree, 'rev-parse', 'HEAD').stdout().trim() == tip
+
+        and:
+        events.size() == 1
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.contains('cleanup commit for task PROJ-1 is a no-op')
     }
 
     def "FR15/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, full history preserved"() {

@@ -76,11 +76,11 @@ class LifecycleStateTrackerSpec extends Specification {
         def tracker = new LifecycleStateTracker(T0, notifier)
 
         when:
-        tracker.stop('sigterm', T0.plusSeconds(9))
+        tracker.stop('signal', T0.plusSeconds(9))
 
         then:
         1 * notifier.markDirty()
-        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'sigterm')
+        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'signal')
     }
 
     def "stop rejects a blank reason"() {
@@ -111,25 +111,25 @@ class LifecycleStateTrackerSpec extends Specification {
         tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.DRAINING, T0.plusSeconds(5), null)
 
         when:
-        tracker.stop('sigterm', T0.plusSeconds(9))
+        tracker.stop('signal', T0.plusSeconds(9))
 
         then:
         noExceptionThrown()
-        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'sigterm')
+        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'signal')
     }
 
     def "once STOPPED, calling stop again with the same terminal state does not wake the notifier"() {
         given:
         def notifier = Mock(DirtyNotifier)
         def tracker = new LifecycleStateTracker(T0, notifier)
-        tracker.stop('sigterm', T0.plusSeconds(9))
+        tracker.stop('signal', T0.plusSeconds(9))
 
         when:
         tracker.stop('drainComplete', T0.plusSeconds(20))
 
         then:
         0 * notifier.markDirty()
-        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'sigterm')
+        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'signal')
     }
 
     // FR4: STOPPED is terminal — a transition to a NON-terminal state after stop must be ignored,
@@ -141,13 +141,13 @@ class LifecycleStateTrackerSpec extends Specification {
         given:
         def notifier = Mock(DirtyNotifier)
         def tracker = new LifecycleStateTracker(T0, notifier)
-        tracker.stop('sigterm', T0.plusSeconds(9))
+        tracker.stop('signal', T0.plusSeconds(9))
 
         when:
         tracker.transitionTo(DaemonLifecycleState.STOPPING, T0.plusSeconds(20))
 
         then:
         0 * notifier.markDirty()
-        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'sigterm')
+        tracker.view() == new DaemonLifecycleView(DaemonLifecycleState.STOPPED, T0.plusSeconds(9), 'signal')
     }
 }

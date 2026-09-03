@@ -10,8 +10,12 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.app.take.TaskSummaryAssembler;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.status.AnchorLog;
+import com.github.oinsio.gnomish.status.TaskSummary;
+import com.github.oinsio.gnomish.status.WallTime;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
@@ -113,7 +117,8 @@ record TakeDispatcher(
                 heartbeat.flag(),
                 containerTakeSupport,
                 epochs);
-        return disposition.dispose(
+        long startedNanos = System.nanoTime();
+        TakeResult result = disposition.dispose(
                 takeArguments.dir(),
                 takeArguments.base(),
                 definition,
@@ -122,6 +127,8 @@ record TakeDispatcher(
                 trackerTask,
                 tracker,
                 instanceId);
+        summarize(result, startedNanos);
+        return result;
     }
 
     TakeResult runBare(
@@ -151,7 +158,31 @@ record TakeDispatcher(
                 new Random(),
                 containerTakeSupport,
                 epochs);
-        return bareAuto.run(takeArguments.dir(), definition, takeArguments.interactiveMode(), tracker, instanceId);
+        long startedNanos = System.nanoTime();
+        TakeResult result =
+                bareAuto.run(takeArguments.dir(), definition, takeArguments.interactiveMode(), tracker, instanceId);
+        summarize(result, startedNanos);
+        return result;
+    }
+
+    /**
+     * FR3, design D3 of harden-logging-observability: {@code take}'s end of the canonical task
+     * summary, emitted from the same assembler and rendered by the same renderer a {@code serve}
+     * slot uses — the point of "one summary form for all modes" is that a {@code take} log and a
+     * {@code serve} log read alike.
+     *
+     * <p>Emitted here, at the outermost point that still holds the task's {@code taskId} MDC, so
+     * the summary really is the last line of a grep by that id. Results describing a run that
+     * never happened — an empty queue, a declined or foreign ref — assemble to no summary.
+     *
+     * <p>Wall time comes from {@link System#nanoTime()} rather than this record's {@link Clock}: a
+     * duration must not be affected by a wall-clock adjustment landing mid-run.
+     */
+    private static void summarize(TakeResult result, long startedNanos) {
+        TaskSummary summary = TaskSummaryAssembler.assemble(result, WallTime.since(startedNanos));
+        if (summary != null) {
+            AnchorLog.taskSummary(summary);
+        }
     }
 
     /**
@@ -178,7 +209,6 @@ record TakeDispatcher(
             throws InterruptedException {
         return TakeBatch.dispatch(
                 this,
-                taskIdMdcKey,
                 takeArguments,
                 definition,
                 trackerConfig,

@@ -26,7 +26,9 @@ import java.nio.file.Path;
  *
  * <p>Round-boundary protocol checks (design D12, task 3.3) run before the round commit: still on
  * the task branch, the previous round's tip is an ancestor of {@code HEAD} (no history rewrite),
- * and {@code .gnomish-task/} untouched by the gnome — delegated to {@link RoundBoundaryCheck}. The
+ * and {@code .gnomish-task/} untouched by the gnome — delegated to {@link RoundBoundaryCheck}, whose
+ * third outcome, cannot-verify, arrives here as a {@link GitPersistFailedException} so a failed
+ * probe aborts the round as infrastructure instead of being read as a clean boundary. The
  * "previous tip" is this instance's own remembered state: the worktree's {@code HEAD} at
  * construction time for the first round, updated to the new {@code HEAD} after every successful
  * commit — one adapter instance is expected to live for a whole task run, over one worktree.
@@ -45,7 +47,7 @@ import java.nio.file.Path;
  * superseded holder wrote before it was reaped.
  *
  * <p>Implements FR2, FR11, FR12, NFR-R1, NFR-S1 of add-git-workflow; FR5, FR13 of
- * harden-task-branch-contract.
+ * harden-task-branch-contract; FR13 of harden-logging-observability.
  */
 public final class GitAttemptPersistence implements AttemptPersistence {
 
@@ -83,14 +85,23 @@ public final class GitAttemptPersistence implements AttemptPersistence {
      *
      * @throws RoundBoundaryViolationException if the gnome broke git discipline since the
      *     previous round (off the task branch, history rewrite, {@code .gnomish-task/} touched)
-     * @throws GitPersistFailedException if any step of the commit fails
+     * @throws GitPersistFailedException if any step of the commit fails, or if the boundary
+     *     diff could not be computed at all (cannot-verify, FR13 of harden-logging-observability)
+     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if the new
+     *     round baseline cannot be resolved after the commit (FR13). This one refusal is raised
+     *     <em>after</em> the durable step, so the best-effort push is skipped and the frozen
+     *     state is "round committed, not pushed" — the pre-existing commit-before-push window
+     *     the same recovery already converges, never a new one. The engine reads it exactly as it
+     *     reads a failed persist (both are unchecked, both abort the run), so keeping the tip
+     *     refusal's own type is what lets the post-mortem name the read that never answered; the
+     *     sandboxed twin {@link EnvironmentAttemptPersistence} refuses in the same position.
      */
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         AttemptKey key = trace.key();
         Path gnomishTaskRoot = worktreeRoot.resolve(".gnomish-task");
 
-        roundBoundaryCheck.verify(taskId, previousTip);
+        roundBoundaryCheck.verify(taskId, key, previousTip);
         String tipBeforeThisRound = previousTip;
 
         writeStateJson(taskId, key, state, gnomishTaskRoot);

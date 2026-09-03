@@ -19,6 +19,11 @@ import java.util.Optional;
  * flow {@code CliStageExecutor} inlined before the seam existed. Rounds close
  * with no snapshot: host mode keeps the single round commit (FR21).
  *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource}
+ * (no shared classpath between {@code adapters/agent} and {@code adapters/git}): both implement
+ * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with a
+ * decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21.
+ *
  * <p>Implements FR2, FR4 of add-sandbox-core.
  *
  * @param transport the temp-dir decision transport (a testing seam supplies a rooted one)

@@ -1,0 +1,501 @@
+# Design: harden-logging-observability
+
+## Context
+
+See proposal.md — Why. Current state that shapes the approach:
+
+- The engine's run window is already event-shaped: seven sealed `EngineEvent`
+  variants rendered by `LoggingEventListener` at INFO, MDC maintained by
+  `MdcEventListener`. The gaps are *around* the run: claim, serve lifecycle,
+  container lifecycle, git lifecycle commits.
+- Per-task summary facts already exist in serve mode: `TaskOutcomeLine`
+  (outcome, parkReason, stage, attemptsUsed, startedAt/finishedAt, wallMillis,
+  tokensByModel), assembled at the slot's terminal write point.
+- Logback: rolling file at INFO, console WARN+ (stdout) and ERROR+ (stderr),
+  root INFO, no test config, no charset pinned, all appenders synchronous.
+  Spring Boot auto-registers a shutdown hook that closes the context and stops
+  logging concurrently with the serve shutdown hook.
+- Module layering (post `bound-subprocess-commands` /
+  `harden-task-branch-contract`): `application` cannot be seen from
+  `sandbox:*`; `adapters` sees `application`; the only precedent for a shared
+  dependency-free leaf is `atomicfile`.
+- `FindingsSanitizer` (ANSI/control stripping preserving `\n`/`\t`, tail cap)
+  lives in `gnomish-plugin-api` as part of the published plugin contract
+  (moved there by `close-plugin-api-compilability-gap`; the module's gate
+  pins `allowedProjects = [':domain']` — a plugin compiles against one
+  declared dependency). Its `forLog` is applied at exactly one log site;
+  `application` and `adapters` reach it through their allowed plugin-api
+  dependency, the sandbox modules cannot. `StatusLineFormatter` already
+  hand-rolls `strip(...)` plus newline flattening — an ad-hoc preview of
+  `LogText`.
+- 57 Spock specs already assert log output; `LogCaptureSupport` exists but is
+  used by 2 of them.
+
+Constraints: crash-consistency rule (multi-step transitions need named
+windows — applies to the shutdown sequence), manual-sync-pairs rule (declared
+pairs, rule of three), file-size and parameter-count limits, PIT 100% gate.
+
+## Goals / Non-Goals
+
+**Goals:**
+- One owner per mechanism: anchor vocabulary, summary rendering, repeat
+  suppression, untrusted-text sanitization, shutdown ordering.
+- Every convention backed by a gate or a contract spec, not by review vigilance.
+- No new module cycles; the shared pieces live below every consumer.
+
+**Non-Goals:**
+- Changing what the ledgers/snapshots record (the machine plane is untouched
+  except for reusing its facts).
+- Redesigning the three-appender console model — it is confirmed and kept.
+- Building a general structured-logging framework; text stays text.
+
+## Decisions
+
+### D1. Policy lands as ADR + rule; artifacts here only reference it
+
+`docs/adr/0004-logging-policy.md` carries: level semantics as reader reaction,
+best-effort-must-log, one-failure-one-log (the deciding layer logs), the
+log-expendable/ledger-durable retention rationale, the accepted deviations
+(the four domain port-failure logs stay — rejected alternative: an
+`EngineEvent.PortFailed` variant, deferred as scope creep with no current
+consumer; unstructured text log — the ledger is the structured plane), and the
+untrusted-text and throwable conventions. `.claude/rules/logging.md` is the
+emitter checklist (trigger-scoped to `**/*.java`). Rationale: capabilities and
+rules outlive changes (crash-consistency.md referencing precedent); a policy
+in design.md would archive and govern nothing. Context: driven by FR1.
+
+### D2. Anchor vocabulary: one `AnchorLog` class, not an event bus
+
+`AnchorLog` (application, package `status` — note the package
+`com.github.oinsio.gnomish.status` sits outside the component-scan root
+`com.github.oinsio.gnomish.app`, so `AnchorLog` is wired explicitly, like its
+package neighbors `LoggingEventListener`/`MdcEventListener`) owns the
+operator-plane anchor forms: `claimAcquired(ref, freeSlots, wip)`, `serveStarted(config…)`,
+`serveStopping(reason)`, `taskSummary(TaskSummary)`. Both claim paths
+(`FeedCycle.claimOrAbandon`, `BareTakeClaimWalk`) call the same method.
+*Alternative rejected:* an application-level lifecycle event bus mirroring
+`EngineEvent` — the ledger/snapshot observers already watch these transitions
+through their own seams (`SlotLedger`, `FeedState`), so a bus would be a third
+mechanism serving only log lines; `AnchorLog` collapses into a renderer if a
+real event vocabulary ever appears. Remote-module anchors (container
+create/reattach/dispose in `sandbox:docker`, lifecycle commits in
+`adapters/git` at `GitTaskRepository.commitWith` / `TaskLifecycleCommitWriter.
+build`) are plain INFO at their own choke points — pulling them through a
+shared class would add cross-module dependencies for a log line. Context: FR2.
+
+### D3. Canonical summary: one neutral value, one renderer, two declared assemblers
+
+A `TaskSummary` value (outcome word, stage, attempts, wall time,
+tokensByModel) is the renderer's only input; `AnchorLog.taskSummary` is the
+only renderer. Two assemblers produce it:
+
+- serve/take: a mapper from `TaskOutcomeLine` at the existing slot write point
+  (facts are already complete there, including outcomes that happen outside
+  the engine — revoked, quarantined per post-harden `TakeResult`);
+- manual run: `SummaryAccumulatorListener`, an `EngineEventListener` that
+  accumulates usage/attempts/wall time and emits on `TaskFinished` (fires on
+  crash-shaped exits because `TaskFinished` is the run bookend; the runner's
+  outcome loop covers the abort path).
+
+*Alternative rejected:* wiring the event accumulator into serve slots too —
+it would duplicate the already-designed `TaskOutcomeLine` write point (serve
+observability design D6) and still miss non-engine outcomes. The two
+assemblers are a **declared sync pair** (both must populate the full
+`TaskSummary` vocabulary); see D8. Context: FR3, proposal Q2 — resolved.
+
+### D4. Repeat suppression: one `RepeatSuppressor` owner; sandbox uses local aggregates
+
+`RepeatSuppressor` is logger-agnostic: keyed by (component, subject, reason),
+it answers `firstOccurrence / repeat / rollUpDue(count) / recovered(elapsed)`;
+the call site chooses levels per policy (first at site level, repeats DEBUG,
+roll-up at site level with count, recovery INFO). In-memory only (NFR-R2), no
+durable state, thread-safe via a `ConcurrentHashMap`. Routed sites:
+workflow-run poll, first-push retry, mid-round harvest poll, GitHub retry
+listener. Sites in `sandbox:docker` that flood per-item within one read
+(guard-denial parse loop, scratch-tree deletion) use **local aggregate
+counters** emitting one summary line per operation — that is a different,
+simpler invariant (aggregate-per-call, not edge-across-calls), so it is not a
+second implementation of the suppressor rule and no pair is declared.
+*Alternative rejected:* Logback `DuplicateMessageFilter` — raw-message keying,
+no expiry, no recovery line, config-global blast radius. Context: FR4.
+
+### D5. Shared leaf module `:logtext` for sanitization (and the suppressor's home)
+
+`LogText` (strip control/ANSI, flatten newlines — including the Unicode line
+separators `U+2028`/`U+2029` — to a visible escape, cap length) must be
+reachable from
+`adapters`, `sandbox:docker`, and `application`; the layering allows no
+existing common home (`application` is invisible to sandbox; `sandbox:core`
+is invisible to nothing that matters but owning log utilities there is a
+wrong responsibility). A new dependency-free leaf module `:logtext`
+(precedent: `atomicfile`) holds `LogText` and `RepeatSuppressor` (pure
+logic, `slf4j-api` only, no internal deps). The module-layering delta admits
+`:logtext` alongside `atomicfile` in every consumer's allowed list.
+
+`FindingsSanitizer` stays self-contained in `gnomish-plugin-api` — it guards
+a *different trust boundary* with a *different contract*: a plugin sanitizes
+untrusted machine output entering findings and deliberately preserves line
+structure, while `LogText` sanitizes text entering a log line and
+deliberately destroys it (one event = one line). One choke point per
+boundary is the canonical shape (OWASP logging guidance; Logback/kubectl
+both sanitize at the writing layer). What the two genuinely share is the
+character vocabulary — the ANSI/control stripping table and the tail-cap
+semantics, ~25 lines — kept in step as a **declared pair** (see D8) backed
+by an executable equivalence spec, not by a production dependency.
+
+*Alternative rejected:* the original plan — `FindingsSanitizer` delegates
+its stripping primitives to `LogText`. It was written against a stale module
+map (the sanitizer's adapters home predates
+`close-plugin-api-compilability-gap`) and would give the published API
+module an internal dependency: `:logtext` would enter the published POM
+(even `implementation` scope publishes as runtime), become a
+coordinates-bearing artifact whose semver couples into the API's japicmp
+contract, and break the build-enforced one-declared-dependency promise —
+all to deduplicate ~25 stable lines whose divergence the pair spec catches
+mechanically ("a little copying is better than a little dependency"; the
+rule of three extracts a shared core only when a third implementation
+appears). Context: FR6, proposal Q1 — resolved.
+
+### D6. Shutdown: one owned sequence; Spring's auto hook disabled
+
+`FactoryApplication` calls `SpringApplication.setRegisterShutdownHook(false)`
+(its `main` currently uses the static `SpringApplication.run(...)`, so it
+switches to a constructed `SpringApplication` instance to have a receiver);
+the serve hook (both drain and forever paths) owns the full order:
+drain slots → close the application context → stop the logging system
+(flushing the async FILE appender). Logback's own `<shutdownHook>` stays
+absent (it would be a second racer). Kill-window analysis (crash-consistency
+checklist): the sequence has no durable multi-step writes of its own — every
+window freezes into states the existing lease/TTL/reaper machinery already
+converges; the only new invariant is ordering of in-process teardown, asserted
+by spec. A `volatile` shutdown-phase flag (set first in the hook) lets the
+slot crash boundary, `InstanceHeartbeat.onWorkerDeath`, and subprocess
+supervisors classify deaths as shutdown-caused (WARN, no stack) versus
+independent (unchanged ERROR). Non-serve commands (run/take/dashboard) get the
+same ordering via a shared exit path in bootstrap: work → context close → log
+stop. *Alternative rejected:* keeping Spring's hook and ordering via
+`getShutdownHandlers()` — handlers run only after context close, which is the
+wrong side of the drain. Context: FR9, NFR-R1, M5.
+
+### D7. Logback config: async FILE, UTF-8, runtime level, test isolation
+
+FILE wraps in `AsyncAppender` (`discardingThreshold=0`, `neverBlock=false`,
+queue sized in config with a comment); consoles stay synchronous (post-cleanup
+WARN+ is a trickle; ERROR must reach the terminal before death). All three
+encoders pin UTF-8. Root level reads `${GNOMISH_LOG_LEVEL:-INFO}` (Logback
+variable substitution — no rebuild; Spring `logging.level.*` continues to work
+for finer grain). Pattern gains `component=%X{component}` next to the task
+triple. A `logback-test.xml` on the test classpath of every module that boots
+a context routes to console-only (or a build-dir file), closing the observed
+test pollution of `~/.gnomish/logs/`. `LogCaptureSupport` moves to
+`test-fixtures` so all modules reach it; the rule (not a bulk migration)
+makes it the documented idiom. Context: FR10, FR11, NFR-P1, M4.
+
+### D8. Sync surfaces (mandatory per propose-checked)
+
+Declared pairs this change touches — mirrored edits are in scope, and both
+ends receive `Kept in sync with` markers where they are edited:
+
+| Pair (registry row unless noted)                                                                                        | Mirrored edit here                                                                                                       |
+|-------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `RoundBoundaryCheck` ↔ `HarvestedBoundaryCheck`                                                                         | three-outcome boundary rule (D11) implemented at both ends; invariant text updated                                       |
+| `WorktreeSalvage` ↔ `EnvironmentSalvage` (marker-declared; already removed from the registry)                           | degrade-path logs get task context on both ends; discard/restore failures logged symmetrically                           |
+| `GitAttemptPersistence` ↔ `EnvironmentAttemptPersistence`                                                               | lifecycle-commit anchor and level fixes applied to both write sequences; verified tip resolution (D11) confirmed on both |
+| `TakeResumeRunner` ↔ `TakeContainerResumeRunner` (and the fresh-claim / engine-execution / manual-run rows they anchor) | claim/summary anchor calls added symmetrically per mode                                                                  |
+| `HostRoundEnvironmentSource` ↔ `SandboxRoundEnvironmentSource`                                                          | harvest-poll suppression applied to the polling twin; host twin verified for the same flood shape                        |
+
+New parallel implementations introduced, decided by the preference order:
+
+- **Summary assemblers (D3): declared pair.** `TaskOutcomeLine→TaskSummary`
+  mapper ↔ `SummaryAccumulatorListener`. Invariant: both populate the full
+  `TaskSummary` vocabulary for every terminal outcome family. Markers at both
+  ends + a registry row; a data-driven spec asserts equivalent summaries from
+  equivalent facts. Abstraction rejected for now (two genuinely different fact
+  sources); a third assembler mandates extraction. Naming: the new types must
+stay distinguishable from the existing ledger-plane
+`serveobservability.RunSummaryAccumulator`/`RunSummaryLine` (different role:
+drain-run `runSummary` ledger lines, untouched here) — prefer names carrying
+"task summary" and let the glossary entry *canonical task summary* draw the
+distinction from the ledger's `runSummary`.
+- **Sanitizer (D5): declared pair**, not a shared abstraction —
+  `LogText` (`:logtext`, internal log-line boundary) ↔ `FindingsSanitizer`
+  (`gnomish-plugin-api`, plugin findings boundary). Invariant: the
+  ANSI/control character-stripping table and the tail-cap semantics — and
+  only those; newline handling deliberately differs (findings preserve line
+  structure, log lines flatten). Markers at both ends + a registry row; a
+  data-driven equivalence spec feeds one adversarial corpus (CR/LF,
+  `U+2028`/`U+2029`, ANSI CSI/OSC, NUL, DEL, C1 range, overlong input) to
+  both and asserts equivalent neutralization of the shared subset —
+  test-scope coupling only, no production edge. A third implementation of
+  the stripping table mandates extraction.
+- **Suppression (D4): single owner** + local aggregate counters in sandbox,
+  which implement a different invariant (documented at those sites); not a
+  pair.
+
+Three further pairs were declared during implementation, each because this
+change had to edit both of its ends (the audit obligation in
+`.claude/rules/manual-sync-pairs.md` turns that into a declaration, not a
+choice). They are listed with their invariants in the *Sync-pair closure* note
+of `tasks.md`:
+
+- `MidRoundHarvestListener` ↔ `MidRoundPushListener` — the mid-round tip poll
+  (task 9.3): same `VerifiedTip` resolution, same skip-on-failure rule, same
+  suppressor path.
+- `CleanupCommit` ↔ `GitObjectsTerminalCommits#cleanUp` — the terminal cleanup
+  commit's FR2 anchor line, one per medium (task 4.6).
+- `SandboxLifecycleTick` ↔ `WorktreeJanitor` — the daemon-loop shape both ticks
+  share, which task 2.5's `component` MDC framing had to land on together.
+
+### D9. Convention gates: source-scan spec + ArchUnit, not a custom Error Prone checker
+
+The throwable-trailing-arg rule and the untrusted-text routing rule are
+enforced by a repo-source-scanning Spock spec (regex over `src/main` log
+calls: no `\.toString\(\)`/`getMessage()` as a format argument in a call
+carrying an exception name; stderr/agent-output identifiers only inside
+`LogText.*(...)` wrappers at log sites) plus an ArchUnit rule keeping
+`LoggerFactory` out of `domain` beyond the four allowed classes. *Alternative
+rejected:* a custom Error Prone `BugChecker` — precise but a build-logic
+subproject of its own; the scan spec is two orders cheaper and its false
+positives are suppressible by the same annotation-comment idiom the codebase
+already uses for exemptions. Revisit if the regex gate proves noisy. Context:
+FR7, G4, M2.
+
+Two shapes the scan must cover, and one it deliberately does not:
+
+- **Fluent SLF4J** (`log.atLevel(...).log(msg, args)`, `log.atInfo().setMessage(...).log()`)
+  carries its arguments past the level call, so the parser follows the builder
+  chain to its terminal `.log(...)`. Matching the level call alone would hand
+  both gates an always-empty argument list — a silent blind spot, which is
+  worse than a missing gate. Seeded fluent violations in both gate specs keep
+  this honest.
+- **Untrusted text inside an exception message** is out of the scan's reach by
+  construction: nothing untrusted appears at the log call, yet the throwable's
+  message is rendered into the record. FR6 still binds there, so the
+  obligation moves to the throw site (`.claude/rules/logging.md`, "Known
+  limit"), and the pre-existing raw-`stderr()` constructor arguments are named
+  as debt for a later change rather than half-fixed here.
+
+### D10. MDC completeness
+
+The capture/apply/clear pattern (`StreamDrain` precedent) becomes a tiny
+helper (`MdcAwareThread` factory in `:logtext`, slf4j-api only) applied at
+the virtual-thread hops that log (`ChildProcessStdin`, `ContainerFileChannel`
+pump, `ExecPipeDrain`). `stage`/`attempt` clearing moves from
+`TaskFinished`-only to the same four thread boundaries that clear `taskId`
+(the listener still clears eagerly on `TaskFinished`; the boundary clear is
+the backstop). Daemon threads set `component` once at worker start; reaper and
+janitor wrap per-task work in `MDC.putCloseable("taskId", …)`. Context: FR8.
+
+### D11. Exit-code defects: cannot-verify is infrastructure, blank tips refuse to persist
+
+The three audit-adjacent correctness bugs share one shape — evidence consumed
+without checking the producing invocation — and get one rule (FR13):
+
+- **Round boundary**: the check gains a third outcome, cannot-verify, mapped
+  to the round's *infrastructure* failure path — no attempt burned, no
+  violation attributed. *Alternative rejected:* throwing the boundary
+  violation on a failed diff — simple, but it misattributes an infrastructure
+  fault to the gnome, burns an attempt, and feeds false evidence into the
+  escalation report. The stage contract already separates quality from
+  infrastructure failures; this rides that split. The two boundary media
+  (`RoundBoundaryCheck` worktree diff ↔ `HarvestedBoundaryCheck` harvested
+  refs) are the registry's first pair row: the three-outcome rule is
+  implemented on both ends, markers placed, and the pair's invariant text
+  updated to name it.
+- **Durable tip resolutions** (`EnvironmentAttemptPersistence`,
+  `EnvironmentRoundSnapshot`): a failed or blank `rev-parse` fails the
+  persist with the git evidence — a corrupt durable record outlives the
+  process, a failed persist is already handled by the existing
+  infrastructure machinery. The host twin (`GitAttemptPersistence`) is
+  verified for the same rule (mirror obligation of the declared pair). Both
+  twins resolve the *next* round's baseline after their durable commit, so
+  this one refusal is raised after a durable step: it skips the best-effort
+  push and freezes "round committed, not pushed" — the commit-before-push
+  window that already exists and that the same recovery converges, not a new
+  one. No new kill window, no new shape; the `@throws` contract of both
+  `persist` methods names the refusal at that position.
+- **Read-only polls** (`MidRoundHarvestListener` and its host twin
+  `MidRoundPushListener`): a failed resolution skips the observation (never
+  "tip moved"), logged via the suppressor (task 5.1). The host twin polls the
+  worktree through `RoundBoundaryCheck`, whose `currentHead()` is the
+  *durable-baseline* reading and refuses — so the poll reads the raw
+  `readHead()` result and classifies it itself, rather than inheriting a
+  refusal that the listener contract ("never throws") forbids it to raise.
+- **List enumeration** (`TaskBranchLister`): enumeration failure fails the
+  command; per-branch degradation rules from harden are unchanged.
+
+Crash-consistency note: no durable step is added or reordered anywhere —
+failure classification changes which existing path runs, so no new kill
+window appears and the kill-point matrix needs no new rows; the existing
+resume/abort specs cover the changed classification.
+
+### D14. Log contract: a stable event code is the identity, not the prose (FR14)
+
+Context: driven by FR14/FR15 from the proposal, added after a September 2026
+coverage audit found 53 of 125 production WARN/ERROR lines pinned by no spec —
+clustered exactly where the log is the only observable (ledger writers, the
+abort protocol, daemon tick loops). External research settled what to assert:
+the canon (SWE at Google ch. 13 names `logAccess()` as a legitimate
+interaction-test subject; Elasticsearch `MockLog`; JBoss `WFLY`-style message
+IDs; PostgreSQL errcodes) converges on "assert the event — logger, level,
+stable identity — never the sentence".
+
+Decision: every production WARN/ERROR message begins with a catalog code —
+`[GF042] failed to append sweep ledger line` — owned by one enum,
+`logtext.OperatorEvent`: one constant per call site, code never reused,
+changes additive-only. Call sites reference the constant (its accessor renders
+the head); the four ADR-exempt `domain` emitters, which must not gain a
+`:logtext` edge, carry the literal `[GFnnn]` head, and a data-driven
+round-trip-style spec pins every literal to its catalog entry (the same shape
+as the wire-vocabulary rule in `.claude/rules/testing.md`). INFO/DEBUG lines
+get no codes: the catalog's scope is the operator plane, and extending it
+below WARN is the K8s-migration-scale churn the research's avoid-list warns
+against.
+
+*Alternatives rejected:* an MDC `event` key (per-call put/remove ceremony,
+invisible in the rendered message a grep reads); SLF4J Markers (not rendered
+by default patterns, weak Spock ergonomics); prose-fragment matching as the
+contract (the original draft gate — verifies text co-occurrence, not identity,
+and re-couples tests to wording).
+
+### D15. Static log-contract gate, keyed on the catalog (FR16)
+
+A `:bootstrap` architecture gate in the `ThrowableConventionGateSpec` family,
+built on the existing `LogCallSites`/`RepoSourceTree` scanners. Three checks:
+every production WARN/ERROR call site carries a code (enum reference or
+literal head); every catalog constant is used by exactly one site (one event =
+one line — the twin-emitter case takes two constants); every code string
+appears in at least one test source. In-place exemption idiom
+(`log-contract-exempt: <reason>`), same shape as `throwable-not-subject`;
+seeded-violation features prove the detector. The text-presence check alone
+would be weak (a code in a comment satisfies it) — D16 is its behavioral
+backstop, which is why the pair ships together.
+
+*Alternatives rejected:* per-emitter capture check (`attach(<Class>` in the
+test tree) — the audit showed real per-line gaps inside captured classes
+(`FinishEffect` :89 pinned, :75/:83 dark), so emitter granularity misses the
+actual defect; a committed golden-inventory file (K8s stable-metrics shape) —
+a second bookkeeping surface where the catalog enum already is the inventory.
+
+### D16. Runtime log-expectation gate (FR17)
+
+A global Spock extension in `:test-fixtures` (spf4j-slf4j-test's model: an
+unasserted ERROR is treated like an uncaught exception). Per feature, a
+root-level capture collects WARN+ events from `com.github.oinsio.gnomish.*`
+loggers and splits them by whether a spec's capture was attached anywhere in
+the emitting logger's chain — `LogCaptureSupport` or the hand-rolled
+`ListAppender` block that predates it, read alike off Logback, so NG5's "no
+bulk migration" holds. Attaching a capture IS the expectation declaration —
+no new assertion API; an allowance annotation (spec- or feature-level, each
+use carrying a reason, the `real-time-wiring` shape) exists for the run whose
+subject is elsewhere.
+
+**Two outputs, because the report and the failure answer different
+questions.** Per feature, every unwatched operator line is written to a report
+— always, in every run: a line emitted in silence is the defect this change
+exists to end, so it is named whatever the verdict turns out to be. Per run,
+the observations accumulate into a file the `checkLogExpectationGate` build
+task (`build-logic`, the `TestTimeInjectionCheck` shape) turns into the
+verdict: **the build fails on an operator-event *code* the run emitted that no
+capture anywhere in that run was watching.**
+
+*Why the failure is by code and not per event.* Judged per event instance, an
+offender is any behavior spec that merely crosses an already-pinned degrade
+path — measured on this tree at the observing-mode landing, **162 specs and
+667 features**, almost all of them for lines a sibling feature pins properly.
+Making each carry an allowance would trade one real signal for 162 boilerplate
+reasons and take whole specs out from under the gate. The defect FR17 names is
+"a new degrade path enters the codebase with its line unasserted", and that is
+a statement about a code, not about one traversal of it. Measured after the
+change: 57 codes watched and 23 emitted-unwatched in `:application`, of which
+exactly one was watched nowhere.
+
+*Scope of the verdict.* Build-wide, over the `test` suite only. Build-wide
+because a module routinely emits a line whose emitter and pin both live
+somewhere else: `:application` reaches `:domain`'s persist-failure ERROR
+through every abort spec, and `:bootstrap`, being the composition root, does it
+for twelve codes at once. Judged per module those are all failures, and closing
+them means either a duplicate pin or a boilerplate allowance in a module that
+merely passes through — neither of which says anything true. The question worth
+failing on is "does anything in this build assert this line". `test` only,
+because the opportunistic and paid suites (`ollamaE2eTest`, the paid smoke) are
+not part of `check` and depending on them would have `check` spend real money;
+they still write their per-feature report.
+
+Rollout inside this change: land in observing mode (report, not fail), read
+the report, then wire the verdict task into `check` — asserted by M8. PIT
+note: a mutant that provokes an unwatched operator code now dies to the gate;
+that is a legitimate kill, recorded here so a reviewer does not read it as
+noise.
+
+*Alternatives rejected:* enforcing per event from day one — the 162-spec
+measurement above; a per-feature failure with 162 allowances — same measurement,
+and an allowance is a whole spec's exemption where the defect is one code's; a
+per-module verdict — measured at 12 failing codes in `:bootstrap` alone, every
+one of them owned and pinned in another module; throwing from the extension's
+own `stop()` instead of a build task — the failure surfaces as a JUnit-engine
+crash rather than a named verdict, and "observability over silence" is the whole
+point of the pair.
+
+### D17. The pin sweep is ordered by failure class (FR15)
+
+The 53 unpinned lines close in this order: ledger writers (a durable-plane
+loss with no trace is the worst class), the abort/quarantine protocol (ERROR
+lines about lost work), the daemon tick family ("persistent WARN means act" —
+a lost tick WARN is a daemon rotting silently), then the remaining application
+and adapter sites. Suppression sites pin every edge (first, roll-up, recovery)
+— the audit found roll-up branches dark even where first-occurrence was
+pinned (`MidRoundPollLog` line 84). The definitive 53-row map lives in
+`tasks.md` beside the tasks that burn it down.
+
+## Risks / Trade-offs
+
+- [Async FILE loses the last instants on `kill -9`] → accepted and documented
+  in the ADR: durable truth lives in ledger/branch/tracker; SIGTERM/Ctrl+C
+  tails are protected by D6's owned flush.
+- [Overlap with `add-stage-finished-event` on the sealed `EngineEvent`: that
+  change adds a variant, and this change adds `SummaryAccumulatorListener`
+  plus touches other exhaustive-switch listeners] → whichever change lands
+  second adds the new switch arm in the affected listeners; no other coupling,
+  no ordering constraint.
+- [Overlap with `fix-denial-attribution-durability` in guard-denial code
+  (`GuardDenialLog`/`GuardDenialReads`)] → this change's edits there are
+  small (aggregate counter, key threading); sequence after harden archives
+  and coordinate with the denial change's wiring tasks; rebase cost is
+  bounded to two files.
+- [Module-layering delta lands while harden's own layering delta archives] →
+  base the delta on the post-harden spec text; verify at apply time with
+  `openspec status` that harden archived first.
+- [Regex convention gate false positives] → suppression idiom + the gate spec
+  documents each exemption inline; escalate to a real Error Prone checker only
+  if exemptions accumulate (recorded as the revisit trigger in D9).
+- [Releveling WARN→INFO/DEBUG could hide a signal someone relied on] → every
+  demotion is listed in tasks with its audit rationale; the suppressor keeps
+  first occurrences at the original level.
+- [`setRegisterShutdownHook(false)` changes shutdown for run/take/dashboard
+  too] → the shared bootstrap exit path gives them the same ordered stop; a
+  spec per command family asserts the context still closes and logs flush.
+- [The FR14 retag touches every module and collides with changes in flight] →
+  the edit is mechanical (message-head prefix only, no level/wording change);
+  an in-flight change that adds a WARN/ERROR line takes the next free code,
+  and the static gate reports the omission mechanically rather than by review.
+- [The runtime gate (D16) makes the suite order-fragile if a WARN leaks across
+  features] → capture is per-feature and cleared in the extension's own
+  cleanup; the observing-mode phase exists precisely to surface such leaks
+  before enforcement.
+
+## Migration Plan
+
+No data migration. Config changes ship with the code; the log pattern gains
+`component=` (readers grep by key, not position). Rollback = revert the
+change; the log format addition is backward-tolerable for existing greps.
+The FR14 retag prepends `[GFnnn]` heads to WARN/ERROR messages — additive for
+grep, but any operator tooling matching a message from column 0 must adjust;
+recorded in the ADR 0004 amendment. Glossary gains: *anchor line*, *canonical
+task summary*, *repeat suppression (edge logging)*, *log text sanitization*,
+and (FR14) *operator event*, *log contract* — same change, per the glossary
+rule.
+
+## Open Questions
+
+None — Q1 (suppressor placement) resolved by D5, Q2 (summary assembly) by D3.

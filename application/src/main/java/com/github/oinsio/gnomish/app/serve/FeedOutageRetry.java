@@ -1,6 +1,10 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.FailureReason;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.time.Duration;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
@@ -18,6 +22,14 @@ import org.slf4j.LoggerFactory;
  * {@link FeedAutomaton#drain()} and kills the {@code gnomish-serve-feed} thread — the feed
  * survives the outage and resumes normal operation the moment the tracker call succeeds again.
  *
+ * <p><b>The outage is logged as edges, not as ticks (FR4, UX3 of
+ * harden-logging-observability).</b> The retry runs once per poll interval for as long as the
+ * tracker is down, so a WARN per attempt is precisely the per-poll flood a healthy console must
+ * not have. Every failure reports to a {@link RepeatSuppressor} keyed by what was being called:
+ * the first occurrence (and any change of fault) is the WARN, the polls in between are DEBUG, a
+ * counted roll-up returns at the quiet period, and the call that finally succeeds emits one INFO
+ * naming how long the outage lasted.
+ *
  * <p>Deliberately reuses the Idle state's jittered poll-interval pause as the outage backoff
  * (supplied by the caller) rather than introducing a separate configurable backoff policy: an
  * outage-retry pause is conceptually the same "nothing to do right now, wait and re-poll" shape,
@@ -28,7 +40,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements NFR-R3 of add-factory-serve.
  */
-record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier) {
+record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier, RepeatSuppressor suppressor) {
 
     private static final Logger log = LoggerFactory.getLogger(FeedOutageRetry.class);
 
@@ -37,6 +49,7 @@ record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier) {
      * @param backoffSupplier supplies one backoff duration per retry attempt; called fresh each
      *     time so jitter (design D4) varies attempt to attempt, exactly like the idle poll; never
      *     null
+     * @param suppressor the edge-logging owner for this feed's outage streaks; never null
      */
     FeedOutageRetry {}
 
@@ -63,7 +76,9 @@ record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier) {
     <T extends @Nullable Object> T run(String what, Supplier<T> attempt) throws InterruptedException {
         while (true) {
             try {
-                return attempt.get();
+                T value = attempt.get();
+                recovered(what);
+                return value;
             } catch (RuntimeException e) {
                 // Thread.interrupted() reads AND clears the flag, converting the pending interrupt
                 // into a single InterruptedException signal (the idiomatic hand-off) rather than
@@ -71,9 +86,51 @@ record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier) {
                 if (Thread.interrupted()) {
                     throw new InterruptedException(what + " interrupted during tracker-outage retry");
                 }
-                log.warn("{} failed, tracker outage suspected; retrying after backoff", what, e);
+                logFailure(what, e);
                 sleeper.sleep(backoffSupplier.get());
             }
         }
+    }
+
+    /**
+     * Logs whichever edge the suppressor returns for this failure. The streak's reason is the
+     * fault's own words, so a <em>different</em> tracker fault arriving mid-outage restarts the
+     * streak and is announced; the throwable rides every form as the trailing argument, so the
+     * diagnosis survives the suppression.
+     */
+    private void logFailure(String what, RuntimeException e) {
+        String reason = FailureReason.of(e);
+        switch (suppressor.failed(what, reason)) {
+            case RepeatOccurrence.First ignored ->
+                log.warn(
+                        OperatorEvent.FEED_TRACKER_OUTAGE_SUSPECTED.head()
+                                + "{} failed, tracker outage suspected; retrying after backoff: {}",
+                        what,
+                        reason,
+                        e);
+            case RepeatOccurrence.Repeat repeat ->
+                log.debug("{} still failing ({}x); retrying after backoff: {}", what, repeat.count(), reason, e);
+            case RepeatOccurrence.RollUp rollUp ->
+                log.warn(
+                        OperatorEvent.FEED_TRACKER_OUTAGE_ROLLUP.head()
+                                + "{} failing {}x over {}, tracker outage continues: {}",
+                        what,
+                        rollUp.count(),
+                        rollUp.elapsed(),
+                        reason,
+                        e);
+        }
+    }
+
+    /** One INFO when the call works again, so the operator's last word on the outage is its end. */
+    private void recovered(String what) {
+        suppressor
+                .recovered(what)
+                .ifPresent(recovery -> log.info(
+                        "{} recovered after {} failure(s) over {}: last reason={}",
+                        what,
+                        recovery.occurrences(),
+                        recovery.outage(),
+                        recovery.reason()));
     }
 }

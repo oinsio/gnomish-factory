@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import spock.lang.Specification
 
@@ -32,9 +34,12 @@ class GitInfrastructureRetrySpec extends Specification {
         given:
         def runs = 0
         def retry = new GitInfrastructureRetry(sleeper, 3, Duration.ofMillis(500))
+        def logs = LogCaptureSupport.attach(GitInfrastructureRetry, Level.DEBUG)
 
         when:
         def result = retry.until({ runs++; 'unsettled' }, { false })
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then: 'three attempts in total, so two waits between them'
         result == 'unsettled'
@@ -43,6 +48,12 @@ class GitInfrastructureRetrySpec extends Specification {
             Duration.ofMillis(500),
             Duration.ofSeconds(1)
         ]
+
+        and: 'FR5, FR12 of harden-logging-observability: each re-ask is diagnosis, below the console'
+        events.size() == 2
+        events.every { it.level == Level.DEBUG }
+        events[0].formattedMessage.contains('attempt 2 of 3')
+        events[1].formattedMessage.contains('attempt 3 of 3')
     }
 
     def "FR6: the loop stops at the first attempt that settles the question"() {

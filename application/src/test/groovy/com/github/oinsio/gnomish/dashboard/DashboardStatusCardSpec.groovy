@@ -45,7 +45,7 @@ class DashboardStatusCardSpec extends Specification {
         'no snapshot ever written' | new DaemonSnapshotView.Absent() | 'Daemon has not run here' | ' status--down'
         'a fresh snapshot reads as running' | new DaemonSnapshotView.Fresh(snapshot(new LifecycleState.Running())) | 'Daemon running' | ''
         'a dead daemon reads as not updating' | new DaemonSnapshotView.DeadDaemon(snapshot(new LifecycleState.Running())) | 'Snapshot not updating' | ' status--down'
-        'a clean stop is not an alarm' | new DaemonSnapshotView.StoppedStale(snapshot(new LifecycleState.Stopped('sigterm'))) | 'Daemon stopped (sigterm)' | ' status--stopped'
+        'a clean stop is not an alarm' | new DaemonSnapshotView.StoppedStale(snapshot(new LifecycleState.Stopped('signal'))) | 'Daemon stopped (signal)' | ' status--stopped'
     }
 
     def "a snapshot carries the instance, its writtenAt as a time element, and both stats"() {

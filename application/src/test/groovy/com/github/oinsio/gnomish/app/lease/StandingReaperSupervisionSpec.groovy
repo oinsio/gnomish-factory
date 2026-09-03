@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.app.lease
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
 
@@ -31,17 +29,16 @@ class StandingReaperSupervisionSpec extends Specification {
     private static final Duration MAX_BACKOFF = Duration.ofMinutes(10)
 
     private final BlockingSleeper sleeper = new BlockingSleeper()
-    private final Logger logbackLogger = (Logger) LoggerFactory.getLogger(StandingReaper)
-    private final ListAppender<ILoggingEvent> appender = new ListAppender<>()
+    // The shared capture helper rather than a hand-rolled ListAppender block (task 2.4 of
+    // harden-logging-observability; migrated here because this spec is being touched, per NG5).
+    private LogCaptureSupport logs
 
     def setup() {
-        appender.start()
-        logbackLogger.addAppender(appender)
+        logs = LogCaptureSupport.attach(StandingReaper)
     }
 
     def cleanup() {
-        logbackLogger.detachAppender(appender)
-        appender.stop()
+        logs.detach()
     }
 
     private static ReaperDuty countingDuty() {
@@ -145,8 +142,10 @@ class StandingReaperSupervisionSpec extends Specification {
         }
 
         then: 'the ERROR lines carry restart counts 1, 2, 3 in order'
-        def errorMessages = appender.list.findAll {
-            it.level == Level.ERROR
+        // FR15 of harden-logging-observability: the code is the pin, the sentence is not — the
+        // restart counter below is the one wording detail that is genuinely the subject here.
+        def errorMessages = logs.list.findAll {
+            it.level == Level.ERROR && it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_WORKER_DIED.head())
         }*.formattedMessage
         errorMessages.size() == 3
         errorMessages[0].contains('restart #1')

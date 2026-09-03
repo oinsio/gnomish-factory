@@ -2,8 +2,6 @@ package com.github.oinsio.gnomish;
 
 import com.github.oinsio.gnomish.sandbox.BindingProperties;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -18,13 +16,19 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  * server-capability classes unresolvable).
  *
  * <p>This class is the documented PIT/mutation-gate exclusion (design D5, D10): it must stay
- * {@code main()} + {@code SpringApplication.run} wiring only, with no logic that would deserve
- * mutation coverage. The single unconditional {@code log.debug} statement below respects that
- * budget: it is the production exercise of the SLF4J-to-Logback stack (FR4) and carries no
- * branching. It is placed <em>after</em> {@code run} deliberately — only then has Spring Boot's
- * {@code LoggingSystem} applied {@code logging.level.*} from configuration/environment; before
- * {@code run}, Logback still sits on its DEBUG-to-console bootstrap default, which would print the
- * line regardless of configuration and defeat the FR4 level-toggle contract.
+ * {@code main()} wiring only, with no logic that would deserve mutation coverage — which is why
+ * the ordered teardown it hands the application to (Spring's own shutdown hook off, context close
+ * before logging stop; design D6 of harden-logging-observability) lives in {@link CommandExit} and
+ * not here.
+ *
+ * <p>It once also carried a single unconditional {@code log.debug} between {@link
+ * CommandExit#start} and {@link CommandExit#finish}, as the production exercise of the
+ * SLF4J-to-Logback stack and of FR4's "log level from configuration". That role has moved
+ * (task 4.1 of harden-logging-observability): the level-override contract is now carried by the
+ * {@code ${GNOMISH_LOG_LEVEL}} root-level substitution asserted in {@code LogbackConfigSpec}, and
+ * the finer-grain {@code logging.level.*} leg by {@code LoggingLevelSpec}. What every boot now
+ * writes instead is the {@code serve} lifecycle anchor set ({@code AnchorLog}, FR2) — real
+ * operator content rather than a line whose only reader was a spec.
  *
  * <p>Implements FR2, FR4 of add-project-skeleton.
  */
@@ -51,10 +55,8 @@ public class FactoryApplication {
      */
     static final String USE_CASE_PACKAGE = "com.github.oinsio.gnomish.app";
 
-    private static final Logger log = LoggerFactory.getLogger(FactoryApplication.class);
-
     static void main(String[] args) {
-        SpringApplication.run(FactoryApplication.class, args);
-        log.debug("Factory context booted; configured log levels are active");
+        CommandExit.start(new SpringApplication(FactoryApplication.class), args);
+        CommandExit.finish();
     }
 }

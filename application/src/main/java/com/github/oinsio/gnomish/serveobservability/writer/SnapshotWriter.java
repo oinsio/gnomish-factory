@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
+import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -74,7 +76,7 @@ public final class SnapshotWriter {
     /** Starts the writer thread: an immediate first write, then timer/dirty-flag wakes. */
     public void start() {
         running = true;
-        worker = Thread.ofVirtual().name("gnomish-snapshot-writer").start(this::loop);
+        worker = Thread.ofVirtual().name("gnomish-snapshot-writer").start(DaemonComponent.SNAPSHOT.framing(this::loop));
     }
 
     /** Stops the writer thread after its current or next wake completes, waking it immediately. */
@@ -134,7 +136,19 @@ public final class SnapshotWriter {
             try {
                 tick();
             } catch (RuntimeException e) {
-                log.warn("snapshot writer: tick failed; will retry on the next wake", e);
+                // log-contract-exempt: no spec can name this code (FR15 of
+                // harden-logging-observability wants one per WARN/ERROR line), because the branch
+                // is the unreachable defense-in-depth guard the comment above describes — every
+                // sub-method of tick() already catches everything its own operations raise, so
+                // reaching this line needs an artificially broken collaborator, and a spec built on
+                // one would assert "catch catches", not any behavior of the writer. The guard stays
+                // because its unreachability is a NON-LOCAL invariant: it holds only while every
+                // future step added to tick() keeps its own catch, and the cost of being wrong is a
+                // dead writer thread and a snapshot file that silently goes stale.
+                log.warn(
+                        OperatorEvent.SNAPSHOT_TICK_FAILED.head()
+                                + "snapshot writer: tick failed; will retry on the next wake",
+                        e);
             }
             awaitNextWake();
         }
@@ -147,6 +161,9 @@ public final class SnapshotWriter {
     // wake after THAT blocks for the full interval again.
     private void awaitNextWake() {
         try {
+            // Return value (acquired vs. timed out) is deliberately unused: both outcomes take the
+            // same next step (drainPermits below), so there is no decision to make on it.
+            //noinspection ResultOfMethodCallIgnored
             wakeSignal.tryAcquire(interval.toNanos(), TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.TaskListRow
+import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -13,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -141,6 +144,50 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
 
         and: 'REMOTE-ONLY is read from the remote-tracking ref, the only place it exists'
         rows.find { it.taskId() == 'REMOTE-ONLY' }.stage() == 'implement'
+    }
+
+    // FR13 of harden-logging-observability: an enumeration git refused established nothing about
+    // which branches exist, so it must not render as "no tasks" — the empty table is a positive
+    // claim, and printing it for a listing that never ran is the most misleading answer this
+    // read-only command can give.
+    def "FR13: a refused enumeration is a command failure, not an empty table"() {
+        given: 'a directory that is not a git repository at all, so for-each-ref exits non-zero'
+        def notARepo = Files.createDirectory(tempDir.resolve('not-a-repo'))
+
+        when:
+        lister.list(notARepo)
+
+        then: 'the command fails, naming the git failure'
+        def failure = thrown(TaskListingFailedException)
+        failure.message.contains('could not enumerate')
+        failure.message.contains('gnomish/*')
+        !failure.message.isBlank()
+    }
+
+    // FR13, M6: the refusal's own evidence — git's exit code and its stderr — is recorded at DEBUG
+    // beside the thrown failure, so raising verbosity explains the refusal while the operator-facing
+    // report stays the single command failure (one fault reported once).
+    def "FR13: a refused enumeration records git's exit code and stderr at DEBUG"() {
+        given: 'a directory that is not a git repository at all, so for-each-ref exits non-zero'
+        def notARepo = Files.createDirectory(tempDir.resolve('not-a-repo-debug'))
+
+        when:
+        def events = LogCaptureSupport.capture(TaskBranchLister, Level.DEBUG) {
+            try {
+                lister.list(notARepo)
+            } catch (TaskListingFailedException expected) {
+                assert expected != null
+            }
+            null
+        }
+
+        then: 'exactly one line — the local enumeration refused before the remote one was attempted'
+        events.size() == 1
+
+        and: 'it names the refused ref pattern and git\'s exit, at DEBUG and with no stack trace'
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.startsWith('ref enumeration of refs/heads/gnomish/* exited ')
+        events[0].throwableProxy == null
     }
 
     def "FR13: no gnomish/* branches anywhere returns an empty list without crashing"() {

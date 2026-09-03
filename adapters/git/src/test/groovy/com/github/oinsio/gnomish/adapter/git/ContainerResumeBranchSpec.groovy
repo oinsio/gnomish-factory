@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -80,10 +82,22 @@ class ContainerResumeBranchSpec extends Specification implements BareGitRepoFixt
     def "FR6: a remote-tracking-only branch becomes a local ref at the tracking tip"() {
         given: 'the branch lives on origin only'
         setOriginBranch(base)
+        def logs = LogCaptureSupport.attach(ContainerResumeBranch)
 
-        expect:
-        resume().ensureLocalBranch(clone, TASK)
+        when:
+        def located = resume().ensureLocalBranch(clone, TASK)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        located
         localTip() == base
+
+        and: 'FR5 of harden-logging-observability: adopting another instance\'s work is an anchor'
+        def anchors = events.findAll { it.level == Level.INFO }
+        anchors.size() == 1
+        anchors[0].formattedMessage.contains(TASK)
+        anchors[0].formattedMessage.contains('adopting work pushed by another instance')
     }
 
     def "FR6: a local branch behind origin is fast-forwarded to the origin tip"() {

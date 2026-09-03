@@ -174,6 +174,34 @@ final class SandboxLifecycleDecision {
         }
     }
 
+    /**
+     * The verdict for an object this pass enumerated but could not read: the inspect failed, or
+     * its output was not the shape the reader parses. An enumerated object never leaves a pass
+     * without a verdict (`sandbox-lifecycle` "Unreadable object still gets a verdict") — dropping
+     * it silently is the stall {@code SKIPPED_NO_VERDICT} exists to make visible, since such an
+     * object is then never reaped and never reported either.
+     *
+     * <p>No age: none was measured, which is exactly the case {@link SweepVerdict#age()} is
+     * nullable for.
+     *
+     * <p>An object that has since disappeared is not this case and gets no verdict: see the
+     * existence re-check below.
+     *
+     * @param object the enumerated object whose read failed; never null
+     * @param c its classification from the listing labels, which succeeded; never null
+     * @param reason what could not be read; never blank
+     */
+    void skipUnreadable(ListedDockerObject object, SandboxLifecycleClassification c, String reason) {
+        if (!actions.stillExists(object)) {
+            // Not unreadable — gone. Either this same pass already reclaimed it through a sibling's
+            // key triple (a main box's network rides along with its volume), or another instance
+            // removed it between the listing and the inspect. Nothing is left undone, so a
+            // SKIPPED_NO_VERDICT here would be a WARN about work that actually got done.
+            return;
+        }
+        emit(c, object.name(), SweepVerdictCategory.SKIPPED_NO_VERDICT, reason, null);
+    }
+
     private static Gate trackedGate(SandboxLifecycleClassification c, LivenessVerdict liveness) {
         if (liveness instanceof LivenessVerdict.NoVerdict) {
             return Gate.SKIPPED;

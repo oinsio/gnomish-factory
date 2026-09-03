@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import java.nio.file.Path
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -111,7 +112,16 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         and: 'a WARN was actually logged for the rejected push'
         events.size() == 1
         events[0].level == Level.WARN
-        events[0].formattedMessage.startsWith('revocation push failed:')
+        events[0].formattedMessage.startsWith(OperatorEvent.BRANCH_PUSH_FAILED.head() + 'revocation push failed:')
         events[0].formattedMessage.contains('branch=gnomish/PROJ-1')
+
+        and: 'FR6 of harden-logging-observability: git rejects a push in several lines of prose, ' +
+        'and all of it reaches the log as one line — a subprocess stream is untrusted text ' +
+        'whose newlines would otherwise become log lines of their own'
+        !events[0].formattedMessage.contains('\n')
+        !events[0].formattedMessage.contains('\r')
+
+        and: 'and the rejection is still legible after neutralization'
+        events[0].formattedMessage.contains('rejected') || events[0].formattedMessage.contains('non-fast-forward')
     }
 }

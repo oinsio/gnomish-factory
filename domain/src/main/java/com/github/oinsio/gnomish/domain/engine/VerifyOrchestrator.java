@@ -27,6 +27,13 @@ import org.slf4j.LoggerFactory;
  * and no mutable state, so one instance drives concurrent verifications safely (NFR-R1).
  *
  * <p>Implements FR2, FR3, FR4, FR7, NFR-R3, NFR-O1 of add-stage-engine.
+ *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.logtext.OperatorEvent}: this class's
+ * operator line repeats catalog code {@code GF113} as a literal head, because {@code :domain}
+ * must not take a {@code :logtext} edge to reach the catalog (ADR 0004, accepted deviation 1).
+ * The literal and the constant are pinned equal by {@code DomainOperatorEventHeadSpec}; there is
+ * no resolvable link either way, which is why the pair is listed in
+ * {@code .claude/rules/manual-sync-pairs.md}.
  */
 final class VerifyOrchestrator {
 
@@ -140,7 +147,7 @@ final class VerifyOrchestrator {
                 }
             };
         } catch (RuntimeException ex) {
-            log.error("check adapter threw for {}", ref, ex);
+            log.error("[GF113] check adapter threw for {}", ref, ex);
             return new Verdict.CannotVerify("check adapter threw", StackTraces.render(ex));
         }
     }

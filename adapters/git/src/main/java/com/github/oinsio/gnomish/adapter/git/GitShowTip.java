@@ -2,9 +2,12 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@code git show} half of the tip-reader seam: reads a file at a revision and searches that
@@ -27,6 +30,8 @@ import java.util.Optional;
 @SuppressWarnings("ClassCanBeRecord")
 final class GitShowTip {
 
+    private static final Logger log = LoggerFactory.getLogger(GitShowTip.class);
+
     private final GitProcessRunner runner;
     private final Path repo;
     private final String revision;
@@ -39,7 +44,11 @@ final class GitShowTip {
 
     Optional<String> readAtTip(String path) {
         GitCommandResult result = answered("show", runner.run(repo, "show", revision + ":" + path));
-        return result.exitCode() == 0 ? Optional.of(result.stdout()) : Optional.empty();
+        if (result.exitCode() != 0) {
+            warnAbsent("show", path, result);
+            return Optional.empty();
+        }
+        return Optional.of(result.stdout());
     }
 
     /**
@@ -49,7 +58,29 @@ final class GitShowTip {
      */
     Optional<ClaimEpoch> tipEpoch() {
         GitCommandResult result = answered("log", runner.run(repo, "log", "-1", "--format=%B", revision));
-        return result.exitCode() == 0 ? ClaimEpochTrailer.parse(result.stdout()) : Optional.empty();
+        if (result.exitCode() != 0) {
+            warnAbsent("log", "commit message", result);
+            return Optional.empty();
+        }
+        return ClaimEpochTrailer.parse(result.stdout());
+    }
+
+    /**
+     * Records that a non-zero exit is about to be read as absence, with git's own diagnosis kept (FR5 of
+     * harden-logging-observability). DEBUG, not WARN: an unresolvable revision or an absent file
+     * is the normal outcome this reader classifies — the branch may legitimately not exist — but
+     * the classification is the only place git's reason for it survives, and NG1 keeps the
+     * behavior itself unchanged.
+     */
+    private void warnAbsent(String command, String subject, GitCommandResult result) {
+        // throwable-not-subject: git reported a status, not a thrown fault.
+        log.debug(
+                "git {} of {} at {} exited {}, reading as absent: {}",
+                command,
+                subject,
+                revision,
+                result.exitCode(),
+                LogText.forLog(result.stderr()));
     }
 
     /**

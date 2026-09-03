@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -128,6 +129,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         and: 'NFR-O2: raw message logged at WARN, with the no-JSON-found reason (not the malformed-JSON reason)'
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.JUDGE_VERDICT_UNEXTRACTABLE.head())
         events[0].formattedMessage.contains('no JSON verdict object found')
         events[0].formattedMessage.contains(message)
     }

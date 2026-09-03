@@ -51,6 +51,20 @@ trait BareGitRepoFixture {
         assert result.exitCode() == 0: "git commit failed: ${result.stderr()}"
     }
 
+    /**
+     * Writes {@code content} to {@code fileName} under {@code repo}, stages it and commits it with
+     * a fixed test identity, using {@code fileName} itself as the commit message — the standard
+     * "add one named file" step shared by specs that build up a working tree file by file rather
+     * than seeding it wholesale via {@link #commitAll}.
+     */
+    void commit(Path repo, String fileName, String content) {
+        def runner = new GitProcessRunner()
+        new File(repo.toFile(), fileName).text = content
+        assert runner.run(repo, 'add', fileName).exitCode() == 0
+        def result = runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', fileName)
+        assert result.exitCode() == 0: "git commit failed: ${result.stderr()}"
+    }
+
     /** Registers {@code url} as remote {@code name} in {@code repo}, asserting success. */
     void addRemote(Path repo, String name, String url) {
         def result = new GitProcessRunner().run(repo, 'remote', 'add', name, url)

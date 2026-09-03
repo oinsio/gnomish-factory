@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -8,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -74,6 +76,50 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         allSources().every {
             it.readAtTip('.gnomish-task/decisions/implement-a0.json').isEmpty()
         }
+    }
+
+    // FR5 of harden-logging-observability: absence and "git refused the read" give the same empty
+    // answer, so the DEBUG classification is the only place git's own reason survives (NG1: the
+    // behavior itself is unchanged).
+    def "FR5: an absent file's empty answer carries git's reason at DEBUG"() {
+        given:
+        def logs = LogCaptureSupport.attach(GitShowTip, Level.DEBUG)
+
+        when:
+        def read = new RefTipSource(runner, cloneDir, 'gnomish/PROJ-1')
+                .readAtTip('.gnomish-task/decisions/implement-a0.json')
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        read.isEmpty()
+
+        and:
+        events.size() == 1
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.contains('reading as absent')
+        events[0].formattedMessage.contains('.gnomish-task/decisions/implement-a0.json')
+    }
+
+    // FR5: the same classification for the epoch read — an unresolvable revision and an unstamped
+    // tip both answer empty, and only the line says which happened.
+    def "FR5: an unresolvable revision's empty epoch carries git's reason at DEBUG"() {
+        given:
+        def logs = LogCaptureSupport.attach(GitShowTip, Level.DEBUG)
+
+        when:
+        def epoch = new RefTipSource(runner, cloneDir, 'gnomish/NO-SUCH-TASK').tipEpoch()
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        epoch.isEmpty()
+
+        and:
+        events.size() == 1
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.contains('gnomish/NO-SUCH-TASK')
+        events[0].formattedMessage.contains('reading as absent')
     }
 
     // FR3: the STARTED commit carries the initial state.json beside task.json, so a tip read

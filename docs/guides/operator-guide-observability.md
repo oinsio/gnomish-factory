@@ -3,8 +3,9 @@
 <!-- implements FR2, FR3, FR9, FR14, FR15, UX1, UX2, UX3, UX4 of add-serve-observability -->
 
 This is the reference for the `serve` daemon's file-based observability
-surface: the local snapshot and ledger files it writes, and the external
-cron monitor pattern documented against them (design D9). It assumes
+surface: the local snapshot and ledger files it writes, the log file beside
+them, and the external cron monitor pattern documented against them (design
+D9). It assumes
 [`operator-guide-serve.md`](operator-guide-serve.md) — the feed automaton,
 lifecycle, and slot model described there are exactly what the files below
 report on.
@@ -133,6 +134,82 @@ jq -sr '[.[] | select(.type=="taskOutcome")] | group_by(.outcome)
 **Retention.** The snapshot writer's tick also sweeps `ledger-*.jsonl`
 files older than `factory.serve.ledger-retention-days` (default 30; `0`
 means keep forever) — no separate retention process to run (FR15).
+
+## Reading the log
+
+<!-- implements FR8, FR10, FR14 of harden-logging-observability -->
+
+The snapshot and the ledgers above are the *durable* record — they survive a
+`kill -9` and they are what a monitor reads. The log file is the
+*expendable* one: a days-horizon narrative for a post-mortem, never a data
+source for automation (ADR [0004](../adr/0004-logging-policy.md)). This
+section is the operator's map of it.
+
+**Where it is.** One rolling file per host, outside every workspace and
+every git tree:
+
+```
+~/.gnomish/logs/gnomish.log            # current
+~/.gnomish/logs/gnomish.2026-09-02.0.log   # rolled, 10MB or one UTC day
+```
+
+Rolling keeps ~7 days and at most 100MB in total; older segments are deleted
+oldest-first. Two environment variables move or change it for one run, with
+no rebuild:
+
+| Variable            | Default             | Meaning                                                                                                                       |
+|---------------------|---------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `GNOMISH_LOG_LEVEL` | `INFO`              | root level for the file and the consoles. A value Logback does not recognize resolves to `DEBUG` — a typo makes the run louder, never quieter. Spring's `logging.level.<logger>` still applies on top for finer grain |
+| `GNOMISH_LOG_DIR`   | `~/.gnomish/logs`   | log directory. Exists for test isolation; pointing it inside a workspace or a git tree gives up the "never in a git tree" guarantee |
+
+**What reaches the terminal.** The console carries `WARN` and above only —
+`ERROR` goes to both stdout and stderr, `WARN` to stdout. Everything from
+`INFO` down lives in the file alone, so a quiet terminal during a long run is
+the normal case, not a sign the daemon stopped writing.
+
+**Every line carries its correlation.** The pattern puts four MDC keys in
+front of the logger name:
+
+```
+2026-09-02T14:03:11,204 [gnomish-slot-42] WARN  [taskId=42, stage=implement, attempt=2, component=] c.g.o.g.a.git.MidRoundPushListener - [GF024] ...
+2026-09-02T14:05:00,017 [gnomish-worktree-janitor] WARN  [taskId=, stage=, attempt=, component=janitor] c.g.o.g.app.serve.WorktreeJanitor - [GF078] ...
+```
+
+So the whole story of one task — including the daemon work done on its
+behalf — is one grep:
+
+```bash
+grep 'taskId=42' ~/.gnomish/logs/gnomish.log
+```
+
+`stage` and `attempt` narrow it to one pipeline step. `component` names the
+long-lived daemon worker that wrote the line — one of `janitor`, `reaper`,
+`snapshot`, `sweep`, `heartbeat` — and is what separates estate-wide work
+from task work in a busy file (`grep 'component=reaper'`). Task lines leave it
+empty; daemon lines leave the task triple empty unless the work is on behalf
+of one task.
+
+**`WARN` and `ERROR` are addressed by code, not by prose.** Every
+operator-plane line begins with a stable `[GFnnn]` head drawn from one
+catalog (`OperatorEvent`). The code is the contract and the sentence is not:
+wording may be rewritten at any time, the code may not, and a retired code is
+never reused. Alert rules and greps therefore key on the code:
+
+```bash
+grep -c '\[GF072\]' ~/.gnomish/logs/gnomish.log   # tracker outage suspected
+grep -o '\[GF[0-9]\{3\}\]' ~/.gnomish/logs/gnomish.log | sort | uniq -c | sort -rn
+```
+
+`INFO` and `DEBUG` lines never carry a code — extending the catalog downward
+would make every diagnostic line a versioned interface. The full code list is
+the `OperatorEvent` enum in `:logtext`; codes worth knowing by heart are few,
+and the second command above is the practical way to find the ones a given
+incident produced.
+
+**Do not build alerting on the log.** It rolls, it can be truncated by a
+`kill -9` outside the owned stop sequence, and its wording is not a contract
+beyond the codes. Alert on `snapshot.json` (below); read the log afterwards to
+find out why.
 
 ## The dead-man's-switch monitor (UX3, design D9)
 

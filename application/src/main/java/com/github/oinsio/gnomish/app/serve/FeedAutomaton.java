@@ -4,9 +4,11 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
+import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.time.Duration;
 import java.util.Random;
 
@@ -110,18 +112,18 @@ public final class FeedAutomaton {
         this.wipLimit = wipLimit;
         this.idleTiming = new IdleTiming(idlePollInterval, backoffBase, backoffCap, random);
         // NFR-R3: the outage backoff reuses the Idle state's jittered interval, not a separate policy.
-        var outageRetry = new FeedOutageRetry(sleeper, idleTiming::jittered);
+        // FR4: the retry's own edge logging runs on real time — the suppressor is log-plane only,
+        //     never a source of behavior, so it does not join the injected-time contract the
+        //     sleeper and clock above carry.
+        var outageRetry = new FeedOutageRetry(sleeper, idleTiming::jittered, RepeatSuppressor.system());
         this.cycle = new FeedCycle(
-                tracker,
-                instanceId,
+                new FeedTracker(tracker, instanceId),
                 slotLedger,
                 slotRunner,
-                backoffBase,
-                backoffCap,
-                wipLimit,
-                random,
+                new FeedSelection(backoffBase, backoffCap, wipLimit, random),
                 stateLogger,
-                outageRetry);
+                outageRetry,
+                new FinishedDecline());
         // FR5: a construction-time idle baseline, so a snapshot before step() reads a coherent view.
         this.viewTracker = new FeedViewTracker(FeedState.IDLE_EMPTY, clock.now(), wipLimit, dirtyNotifier);
     }

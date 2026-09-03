@@ -9,10 +9,14 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Implements {@code Tracker.claim} for the GitHub adapter as a lease (design
@@ -72,6 +76,8 @@ import java.util.Optional;
 // siblings GithubTaskFetcher / GithubStateWrites / GithubLabelOps.
 @SuppressWarnings("ClassCanBeRecord")
 public final class GithubClaimLease {
+
+    private static final Logger log = LoggerFactory.getLogger(GithubClaimLease.class);
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -174,17 +180,45 @@ public final class GithubClaimLease {
         return GithubClaimWindow.of(response.body(), id);
     }
 
+    /**
+     * Best-effort per design D13: a delete failure, including exhausted retries surfaced as a
+     * {@link GithubHttpException}, never masks the caller's own outcome (a {@code Held} result, or
+     * the verify-read failure above). Best effort still leaves a trace (FR5 of
+     * harden-logging-observability): the undeleted comment stays on the thread as a claim marker
+     * this instance no longer stands behind, and the next reader has to resolve it away — an
+     * operator looking at a thread with two claim comments needs to find the line that explains it.
+     *
+     * <p>A {@code 404} is not a failure: a racing remover already deleted the comment, which is the
+     * outcome this call wanted.
+     */
     private void deleteComment(GithubTaskId id, long commentId) {
         String path = "/repos/%s/%s/issues/comments/%d".formatted(id.owner(), id.repo(), commentId);
         HttpRequest.Builder request = httpClient.newRequest(path).DELETE();
-        // Best-effort per design D13: a delete failure, including exhausted
-        // retries surfaced as GithubHttpException, never masks the caller's
-        // own outcome (a Held result, or the verify-read failure above).
         try {
-            httpClient.send(request);
-        } catch (GithubHttpException ignored) {
-            // Swallowed: see above.
+            HttpResponse<String> response = httpClient.send(request);
+            if (response.statusCode() / 100 != 2 && response.statusCode() != 404) {
+                // throwable-not-subject: a non-2xx is a status, not a thrown fault; the status IS
+                //     the diagnosis and no stack exists to attach.
+                logUndeleted(id, commentId, "HTTP " + response.statusCode(), null);
+            }
+        } catch (GithubHttpException e) {
+            logUndeleted(id, commentId, "the request never completed", e);
         }
+    }
+
+    /** The one line both delete-failure shapes write, so the two cannot drift apart. */
+    private static void logUndeleted(
+            GithubTaskId id, long commentId, String cause, @Nullable GithubHttpException failure) {
+        log.warn(
+                OperatorEvent.CLAIM_COMMENT_DELETE_FAILED.head()
+                        + "could not delete claim comment {} on {}/{}#{} ({}); it stays on the thread until a"
+                        + " later boundary or reap removes it",
+                commentId,
+                id.owner(),
+                id.repo(),
+                id.issueNumber(),
+                cause,
+                failure);
     }
 
     private static long readCommentId(String createdCommentJson, GithubTaskId id) {

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -134,7 +135,8 @@ final class ReplicaPairReconciler {
                 return relation;
             }
             log.warn(
-                    "replica reset lost its compare-and-swap, classifying again: taskId={}, branch={}, pass={},"
+                    OperatorEvent.REPLICA_RESET_LOST_CAS.head()
+                            + "replica reset lost its compare-and-swap, classifying again: taskId={}, branch={}, pass={},"
                             + " update-ref said: {}",
                     taskId,
                     branch,
@@ -180,7 +182,8 @@ final class ReplicaPairReconciler {
             // repair is auditable. The tenure is present by construction — reconcile() refuses a
             // claimless discard before reaching here — and is logged as the evidence of that.
             log.warn(
-                    "discarding the local task branch under the claim: taskId={}, branch={}, epoch={},"
+                    OperatorEvent.REPLICA_LOCAL_BRANCH_DISCARDED.head()
+                            + "discarding the local task branch under the claim: taskId={}, branch={}, epoch={},"
                             + " discardedTip={}, adoptedOriginTip={}",
                     taskId,
                     branch,

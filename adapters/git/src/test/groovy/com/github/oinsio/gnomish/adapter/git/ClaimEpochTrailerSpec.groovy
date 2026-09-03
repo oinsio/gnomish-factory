@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -55,6 +57,36 @@ class ClaimEpochTrailerSpec extends Specification {
         where:
         value << [
             '',
+            'not-a-number',
+            '-1',
+            '9999999999999999999999',
+            '1 2'
+        ]
+    }
+
+    // FR5 of harden-logging-observability: a trailer the factory itself wrote that does not read
+    // back as an epoch leaves the tip fencing against nothing — indistinguishable, without a line,
+    // from a tip that was never stamped. DEBUG: the read still answers correctly, nothing is lost.
+    def "FR5: a trailer value that is not an epoch leaves a DEBUG trace naming it (#value)"() {
+        given:
+        def logs = LogCaptureSupport.attach(ClaimEpochTrailer, Level.DEBUG)
+
+        when:
+        def parsed = ClaimEpochTrailer.parse('gnomish: round build#1\n\nGnomish-Claim-Epoch: ' + value)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        parsed.isEmpty()
+
+        and:
+        events.size() == 1
+        events[0].level == Level.DEBUG
+        events[0].formattedMessage.contains('claim-epoch trailer')
+        events[0].formattedMessage.contains(value as String)
+
+        where:
+        value << [
             'not-a-number',
             '-1',
             '9999999999999999999999',

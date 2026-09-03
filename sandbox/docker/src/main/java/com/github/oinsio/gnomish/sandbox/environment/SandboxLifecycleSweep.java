@@ -101,8 +101,13 @@ public final class SandboxLifecycleSweep {
         if (c == null) {
             return;
         }
+        // An unreadable inspect used to drop the object out of the pass without a trace; it now
+        // gets the one verdict that says so (`sandbox-lifecycle` "Unreadable object still gets a
+        // verdict", FR12 of harden-logging-observability).
         reader.containerTiming(object.name())
-                .ifPresent(timing -> decision.decideContainer(object, c, timing, liveness, now, thresholds));
+                .ifPresentOrElse(
+                        timing -> decision.decideContainer(object, c, timing, liveness, now, thresholds),
+                        () -> decision.skipUnreadable(object, c, "container timing could not be read"));
     }
 
     private void evaluateRemnant(
@@ -122,6 +127,8 @@ public final class SandboxLifecycleSweep {
                 ? DockerLifecycleCommands.inspectVolumeCreatedAt(object.name())
                 : DockerLifecycleCommands.inspectNetworkCreatedAt(object.name());
         reader.createdAt(object.name(), inspectArgv)
-                .ifPresent(createdAt -> decision.decideRemnant(object, c, createdAt, liveness, now, thresholds));
+                .ifPresentOrElse(
+                        createdAt -> decision.decideRemnant(object, c, createdAt, liveness, now, thresholds),
+                        () -> decision.skipUnreadable(object, c, "creation time could not be read"));
     }
 }

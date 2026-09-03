@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.gitobjects.BlobTooLargeException;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -96,7 +97,8 @@ public record PinCheckedExternalCheckClient(
         }
         if (!diffs.isEmpty()) {
             log.warn(
-                    "pin-check failed for external check '{}': {} pinned definition file(s) differ from '{}';"
+                    OperatorEvent.EXTERNAL_CHECK_PIN_MISMATCH.head()
+                            + "pin-check failed for external check '{}': {} pinned definition file(s) differ from '{}';"
                             + " the adapter is not invoked",
                     check.checkId(),
                     diffs.size(),

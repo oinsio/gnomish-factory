@@ -10,11 +10,15 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import static com.github.tomakehurst.wiremock.http.Fault.CONNECTION_RESET_BY_PEER
 
+import ch.qos.logback.classic.Level
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -197,6 +201,7 @@ class GithubClaimLeaseSpec extends Specification {
 
     def "loser leaves labels as they stand (does not revert the working-label add)"() {
         given:
+        def logs = LogCaptureSupport.attach(GithubClaimLease)
         stubLabelCalls(wireMock, 22)
         wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/22/comments'))
                 .willReturn(aResponse().withStatus(201).withBody('{"id":700,"body":"whatever"}')))
@@ -219,6 +224,12 @@ class GithubClaimLeaseSpec extends Specification {
         wireMock.verify(1, postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/22/labels')))
         wireMock.verify(1, deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/22/labels/gnomish%3Aready')))
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/700')))
+
+        and: 'FR5 of harden-logging-observability: a delete that worked says nothing'
+        logs.list.findAll { it.level == Level.WARN }.isEmpty()
+
+        cleanup:
+        logs.detach()
     }
 
     def "unverifiable claim (persistent 5xx on verify-read) backs out: deletes own comment and throws"() {
@@ -269,12 +280,94 @@ class GithubClaimLeaseSpec extends Specification {
         wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/802'))
                 .willReturn(aResponse().withFault(CONNECTION_RESET_BY_PEER)))
         def lease = newLease()
+        def logs = LogCaptureSupport.attach(GithubClaimLease)
 
         when:
         lease.claim(refFor(26), 'gnomish-factory-unlucky')
 
         then: 'the original verify-read failure still propagates, not a delete-related exception'
         thrown(GithubClaimException)
+
+        and: 'FR5 of harden-logging-observability: the swallowed delete still leaves a trace'
+        def warnings = logs.list.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.CLAIM_COMMENT_DELETE_FAILED.head())
+        warnings[0].formattedMessage.contains('could not delete claim comment 802')
+        warnings[0].formattedMessage.contains('acme/widgets#26')
+        warnings[0].formattedMessage.contains('it stays on the thread')
+
+        and: 'the transport failure keeps its stack'
+        warnings[0].throwableProxy != null
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR5 of harden-logging-observability: the other delete-failure shape — the request completes
+    // and answers a status that is not a deletion. The comment survives just the same.
+    def "a claim-comment delete answered with a non-2xx status warns that the comment survives"() {
+        given:
+        stubLabelCalls(wireMock, 27)
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/27/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":900,"body":"whatever"}')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/27/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":850,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-winner\\",\\"at\\":\\"2026-07-23T09:59:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":900,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-loser\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}
+                        ]
+                        ''')))
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/900'))
+                .willReturn(aResponse().withStatus(403)))
+        def lease = newLease()
+        def logs = LogCaptureSupport.attach(GithubClaimLease)
+
+        when:
+        def result = lease.claim(refFor(27), 'gnomish-factory-loser')
+
+        then: 'the Held outcome is unaffected — the delete was never load-bearing'
+        result == new ClaimResult.Held('gnomish-factory-winner')
+
+        and:
+        def warnings = logs.list.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.contains('HTTP 403')
+
+        and: 'a status, not a fault: nothing to attach'
+        warnings[0].throwableProxy == null
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR5: a racing remover having already deleted the comment is the outcome this call wanted —
+    // warning on it would put a line on the console every time convergence works.
+    def "a claim-comment delete answered 404 is not a degradation and stays silent"() {
+        given:
+        stubLabelCalls(wireMock, 28)
+        wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/28/comments'))
+                .willReturn(aResponse().withStatus(201).withBody('{"id":950,"body":"whatever"}')))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/28/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('''
+                        [
+                          {"id":940,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-winner\\",\\"at\\":\\"2026-07-23T09:59:00Z\\",\\"version\\":1} -->\\n🤖 claimed"},
+                          {"id":950,"body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"gnomish-factory-loser\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}
+                        ]
+                        ''')))
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/950'))
+                .willReturn(aResponse().withStatus(404)))
+        def lease = newLease()
+        def logs = LogCaptureSupport.attach(GithubClaimLease)
+
+        when:
+        def result = lease.claim(refFor(28), 'gnomish-factory-loser')
+
+        then:
+        result == new ClaimResult.Held('gnomish-factory-winner')
+        logs.list.findAll { it.level == Level.WARN }.isEmpty()
+
+        cleanup:
+        logs.detach()
     }
 
     def "boundary-anchors the race to claim markers after the latest abort"() {
@@ -434,7 +527,7 @@ class GithubClaimLeaseSpec extends Specification {
         then:
         def posted = wireMock.findAll(postRequestedFor(
                         urlEqualTo('/repos/acme/widgets/issues/26/comments'))).first().bodyAsString
-        def body = new com.fasterxml.jackson.databind.ObjectMapper().readTree(posted).get('body').asText()
+        def body = new ObjectMapper().readTree(posted).get('body').asText()
         def parsed = GithubMarker.parse(body).get()
         parsed.identity() == GithubCommentIdentity.of(
                 new GithubTaskId('', 'acme', 'widgets', 26), 'claim@gnomish-factory-x7k2q1')

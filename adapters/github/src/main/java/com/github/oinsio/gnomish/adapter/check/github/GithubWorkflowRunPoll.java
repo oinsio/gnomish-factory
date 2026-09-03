@@ -2,11 +2,11 @@ package com.github.oinsio.gnomish.adapter.check.github;
 
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Optional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Wraps one {@link GithubWorkflowRunQuery#latestMatchingRun} call and classifies its outcome
@@ -34,6 +34,11 @@ import org.slf4j.LoggerFactory;
  * the URL additionally rides in each finding's {@code details} via {@link
  * GithubWorkflowJobsFetcher}, which is what reaches the tracker report (UX1).
  *
+ * <p>What an operator is told about each outcome — including the level policy for a check that
+ * keeps failing to answer — belongs to {@link GithubWorkflowPollLog}, which owns the poll's log
+ * plane and the streak state that goes with it (FR4 of harden-logging-observability). This class
+ * classifies; that one reports.
+ *
  * <p>Resilience4j retrying of the underlying HTTP call already happens one layer down, inside
  * {@link com.github.oinsio.gnomish.adapter.github.GithubHttpClient#send}: this class adds no
  * second retry layer, it only classifies what the shared plumbing hands back — a successful
@@ -45,17 +50,26 @@ import org.slf4j.LoggerFactory;
  */
 public final class GithubWorkflowRunPoll {
 
-    private static final Logger log = LoggerFactory.getLogger(GithubWorkflowRunPoll.class);
     private static final String CANNOT_VERIFY_REASON = "GitHub Actions runs query failed";
-    private static final String NO_RUN = "none";
-    private static final String NO_URL = "unavailable";
 
     private final GithubWorkflowRunQuery query;
     private final GithubWorkflowJobsFetcher jobsFetcher;
+    private final GithubWorkflowPollLog outcomeLog;
 
-    public GithubWorkflowRunPoll(GithubWorkflowRunQuery query, GithubWorkflowJobsFetcher jobsFetcher) {
+    /**
+     * @param query the runs query this poll classifies the outcome of; never null
+     * @param jobsFetcher the failed-job/step findings populator for a Fail verdict; never null
+     * @param cannotVerifySuppressor the edge-logging owner for the cannot-verify streak — it
+     *     outlives this object, because a poll loop rebuilds the poll per tick and the streak is
+     *     what has to survive between them; never null
+     */
+    public GithubWorkflowRunPoll(
+            GithubWorkflowRunQuery query,
+            GithubWorkflowJobsFetcher jobsFetcher,
+            RepeatSuppressor cannotVerifySuppressor) {
         this.query = query;
         this.jobsFetcher = jobsFetcher;
+        this.outcomeLog = new GithubWorkflowPollLog(cannotVerifySuppressor);
     }
 
     /**
@@ -77,13 +91,13 @@ public final class GithubWorkflowRunPoll {
         PollStatus status;
         try {
             matchingRun = query.latestMatchingRun(checkId, headSha);
-            status = withFindings(GithubWorkflowRunVerdict.fromMatchingRun(matchingRun), matchingRun);
+            status = withFindings(GithubWorkflowRunVerdict.fromMatchingRun(matchingRun), matchingRun.orElse(null));
         } catch (GithubHttpException | GithubWorkflowRunInfrastructureException e) {
             status = new PollStatus.CannotVerify(CANNOT_VERIFY_REASON, render(e));
         } catch (GithubWorkflowRunUnverifiableException e) {
             status = new PollStatus.CannotVerify(misconfigurationReason(checkId, e.statusCode()), render(e));
         }
-        logOutcome(checkId, headSha, status, matchingRun);
+        outcomeLog.outcome(checkId, headSha, status, matchingRun.orElse(null));
         return status;
     }
 
@@ -109,37 +123,11 @@ public final class GithubWorkflowRunPoll {
         return "external check '" + checkId + "' cannot be verified (HTTP " + statusCode + "): " + cause;
     }
 
-    private PollStatus withFindings(PollStatus mapped, Optional<GithubWorkflowRun> matchingRun) {
-        if (mapped instanceof PollStatus.Fail && matchingRun.isPresent()) {
-            return new PollStatus.Fail(jobsFetcher.failureFindings(matchingRun.get()));
+    private PollStatus withFindings(PollStatus mapped, @Nullable GithubWorkflowRun matchingRun) {
+        if (mapped instanceof PollStatus.Fail && matchingRun != null) {
+            return new PollStatus.Fail(jobsFetcher.failureFindings(matchingRun));
         }
         return mapped;
-    }
-
-    private void logOutcome(
-            String checkId, String headSha, PollStatus status, Optional<GithubWorkflowRun> matchingRun) {
-        String runId = matchingRun.map(run -> Long.toString(run.id())).orElse(NO_RUN);
-        String runUrl = matchingRun.map(GithubWorkflowRun::htmlUrl).orElse(NO_URL);
-        switch (status) {
-            case PollStatus.Pass ignored ->
-                log.info("GitHub Actions check {}@{} passed: run {} ({})", checkId, headSha, runId, runUrl);
-            case PollStatus.Fail fail ->
-                log.info(
-                        "GitHub Actions check {}@{} failed: run {} ({}), {} finding(s)",
-                        checkId,
-                        headSha,
-                        runId,
-                        runUrl,
-                        fail.findings().size());
-            case PollStatus.Running ignored ->
-                log.debug("GitHub Actions check {}@{} still running: run {}", checkId, headSha, runId);
-            case PollStatus.CannotVerify cannotVerify ->
-                log.warn(
-                        "GitHub Actions check {}@{} could not be verified: {}",
-                        checkId,
-                        headSha,
-                        cannotVerify.reason());
-        }
     }
 
     private static String render(Throwable ex) {

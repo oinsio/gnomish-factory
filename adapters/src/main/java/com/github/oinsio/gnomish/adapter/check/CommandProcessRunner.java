@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
@@ -160,13 +161,15 @@ final class CommandProcessRunner {
             }
             case ExecHandle.Wait.TimedOut ignored ->
                 log.warn(
-                        "command check timed out and its process tree was killed: check={}, elapsed={}, deadline={}",
+                        OperatorEvent.COMMAND_CHECK_TIMED_OUT.head()
+                                + "command check timed out and its process tree was killed: check={}, elapsed={}, deadline={}",
                         check.command(),
                         elapsed,
                         checkTimeout);
             case ExecHandle.Wait.Interrupted ignored ->
                 log.warn(
-                        "command check interrupted and its process tree was killed: check={}, elapsed={}",
+                        OperatorEvent.COMMAND_CHECK_INTERRUPTED.head()
+                                + "command check interrupted and its process tree was killed: check={}, elapsed={}",
                         check.command(),
                         elapsed);
         }

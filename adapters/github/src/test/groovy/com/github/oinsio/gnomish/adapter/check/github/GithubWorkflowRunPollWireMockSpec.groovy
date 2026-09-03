@@ -7,10 +7,14 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
+import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -50,12 +54,13 @@ class GithubWorkflowRunPollWireMockSpec extends Specification {
                 .build()
     }
 
-    private GithubWorkflowRunPoll pollFor(String baseUrl) {
+    private static GithubWorkflowRunPoll pollFor(String baseUrl) {
         def httpClient = new GithubHttpClient(baseUrl, 'tok', fastRetryConfig())
         def cache = new GithubConditionalRequestCache(httpClient)
         new GithubWorkflowRunPoll(
                 new GithubWorkflowRunQuery(cache, 'acme', 'widgets'),
-                new GithubWorkflowJobsFetcher(cache, 'acme', 'widgets'))
+                new GithubWorkflowJobsFetcher(cache, 'acme', 'widgets'),
+                new RepeatSuppressor(new MovableClock(Instant.EPOCH), Duration.ofMinutes(5)))
     }
 
     def "a network error classifies as CannotVerify with a non-blank reason and preserved detail"() {

@@ -45,6 +45,22 @@ class FindingsSanitizerSpec extends Specification {
         FindingsSanitizer.strip('a\u001F b~\u007Fc\u009Fd\u00A0e') == 'a b~cd\u00A0e'
     }
 
+    // NFR-S1: the Trojan Source vector — a bidi override reorders everything a reader sees after
+    // it, so the rendered finding stops matching the recorded one. Same class as an ANSI trick.
+    def "bidirectional overrides and isolates are stripped"() {
+        expect:
+        FindingsSanitizer.strip('deleted \u202Etxt.exe') == 'deleted txt.exe'
+        FindingsSanitizer.strip('a\u202Ab\u2066c') == 'abc'
+    }
+
+    // NFR-S1: the boundary characters themselves — U+2029 is a separator the flattening half owns,
+    // U+202F and U+2065 and U+206A are ordinary text, so the two ranges must not spill onto them.
+    def "the bidi boundaries are exact: 0x202A-0x202E and 0x2066-0x2069 go, their neighbors stay"() {
+        expect:
+        FindingsSanitizer.strip('a\u2029\u202Ab\u202E\u202Fc') == 'a\u2029b\u202Fc'
+        FindingsSanitizer.strip('d\u2065\u2066e\u2069\u206Af') == 'd\u2065e\u206Af'
+    }
+
     def "carriage return is stripped so log lines cannot be overwritten"() {
         expect:
         FindingsSanitizer.strip('all tests pass\rHIDDEN') == 'all tests passHIDDEN'
@@ -75,6 +91,53 @@ class FindingsSanitizerSpec extends Specification {
 
         then:
         capped == '[truncated, showing last 10 of 15 chars]\n' + 'b' * 10
+    }
+
+    // The cap counts UTF-16 units, so its boundary can fall between the halves of an astral
+    // character; a kept low half is an unpaired surrogate the finding's sink renders as a
+    // replacement character. Kept in step with LogText.capTail — the declared pair's shared
+    // tail-cap semantics (`.claude/rules/manual-sync-pairs.md`), pinned across both ends by
+    // SanitizerPairEquivalenceSpec.
+    def "capTail never splits an astral character in half"() {
+        given: 'a text whose cap boundary falls between the two halves of a surrogate pair'
+        // The character AFTER the pair is deliberately an ordinary one: the guard has to look at
+        // the unit before the boundary, and a payload of nothing but pairs would read the same
+        // either way.
+        def grinning = new String(Character.toChars(0x1F600))
+        def payload = 'p' * 5 + grinning + 'x' * 9
+        int start = payload.length() - 10
+
+        expect: 'the boundary really is mid-pair, or the scenario proves nothing'
+        Character.isLowSurrogate(payload.charAt(start))
+        Character.isHighSurrogate(payload.charAt(start - 1))
+        !Character.isHighSurrogate(payload.charAt(start + 1))
+
+        when:
+        def capped = FindingsSanitizer.capTail(payload, 10)
+
+        then: 'the orphaned half is dropped, and the marker reports the tail actually kept'
+        capped.codePoints().noneMatch { Character.isSurrogate(it as char) }
+        capped.endsWith('x' * 9)
+        capped.startsWith("[truncated, showing last 9 of ${payload.length()} chars]\n")
+    }
+
+    // The other side of the same boundary: a pair wholly inside the tail is kept whole, so the
+    // guard drops an orphan rather than trimming every astral character near the cap.
+    def "capTail keeps a pair that starts exactly on the cap boundary"() {
+        given: 'a payload whose boundary lands on the HIGH half, not between the two'
+        def grinning = new String(Character.toChars(0x1F600))
+        def payload = 'p' * 5 + grinning + 'x' * 8
+        int start = payload.length() - 10
+
+        expect:
+        Character.isHighSurrogate(payload.charAt(start))
+
+        when:
+        def capped = FindingsSanitizer.capTail(payload, 10)
+
+        then: 'nothing is dropped: the marker reports the full cap and the emoji survives'
+        capped.contains(grinning)
+        capped.startsWith("[truncated, showing last 10 of ${payload.length()} chars]\n")
     }
 
     def "capTail refuses a non-positive cap"() {

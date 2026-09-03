@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLine;
@@ -59,7 +60,9 @@ public final class RunSummaryLedgerWriter {
         try {
             appender.append(line);
         } catch (IOException e) {
-            log.error("failed to append runSummary ledger line", e);
+            log.error(
+                    OperatorEvent.RUN_SUMMARY_LEDGER_APPEND_FAILED.head() + "failed to append runSummary ledger line",
+                    e);
         }
     }
 }

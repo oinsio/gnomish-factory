@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import java.time.Duration
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -119,7 +120,7 @@ class LoggingEventListenerSpec extends Specification {
     def "CheckFinished logs one INFO line"() {
         given:
         def listener = new LoggingEventListener()
-        def result = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), java.time.Duration.ofMillis(3))
+        def result = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
 
         when:
         def events = capture {
@@ -168,5 +169,41 @@ class LoggingEventListenerSpec extends Specification {
         events[0].level == Level.INFO
         events[0].formattedMessage.contains('task finished')
         events[0].formattedMessage.contains('Completed')
+    }
+
+    // FR6 of harden-logging-observability: a check label is derived from the target repository's
+    //     own .gnomish/ manifest (CheckRef.of -> "command:" + command), so a gnome or an untrusted
+    //     PR chooses its bytes; a newline in it would forge a second log record.
+    def "a repo-controlled check label is flattened before it reaches the line"() {
+        given:
+        def listener = new LoggingEventListener()
+        def check = new CheckRef(0, 'command:./gradlew test\n2026-01-01 ERROR forged record')
+
+        when:
+        def events = capture {
+            listener.onEvent(new EngineEvent.CheckStarted(key(), check))
+        }
+
+        then:
+        events.size() == 1
+        !events[0].formattedMessage.contains('\n')
+        events[0].formattedMessage.contains('forged record')
+    }
+
+    // FR6: the same obligation on the finished line, which reads the label off the result.
+    def "a repo-controlled check label is flattened on the finished line too"() {
+        given:
+        def listener = new LoggingEventListener()
+        def check = new CheckRef(0, 'command:./gradlew test\n2026-01-01 ERROR forged record')
+        def result = new CheckResult(check, new Verdict.Pass(), Duration.ofMillis(3))
+
+        when:
+        def events = capture {
+            listener.onEvent(new EngineEvent.CheckFinished(key(), result))
+        }
+
+        then:
+        events.size() == 1
+        !events[0].formattedMessage.contains('\n')
     }
 }

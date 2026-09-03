@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -13,6 +14,8 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -204,7 +207,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     def "a claim-loss flag set with an explicit reason surfaces that reason in the revocation"() {
         given: 'the shutdown sequence flagged this task stopped, not the heartbeat'
         def flag = new ClaimLossFlag()
-        flag.claimLost(REF, 'daemon shutting down (SIGTERM)')
+        flag.claimLost(REF, 'daemon shutting down (signal)')
         def guarded = new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, flag)
 
         when:
@@ -214,7 +217,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         1 * delegate.persist('PROJ-1', STATE, TRACE)
         def ex = thrown(RevocationDetectedException)
         ex.message.contains('PROJ-1')
-        ex.message.contains('daemon shutting down (SIGTERM)')
+        ex.message.contains('daemon shutting down (signal)')
         !ex.message.contains('claim marker gone')
         guarded.revocation().get() == ex
     }
@@ -238,14 +241,27 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     def "a recordProgress throw is swallowed and the round proceeds as if it succeeded"() {
         given:
         tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
-        tracker.recordProgress(REF) >> { throw new RuntimeException('boom') }
+        def logs = LogCaptureSupport.attach(RevocationCheckingAttemptPersistence)
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
 
+        // The throw is declared on the then-block interaction, not as a given-block stub: a
+        // cardinality interaction in `then` takes precedence over an earlier stub for the same
+        // call, so a stubbed response there would never fire and the catch would go undriven.
         then: 'the throw never surfaces — the revocation check still runs and passes normally'
         noExceptionThrown()
-        1 * tracker.recordProgress(REF)
+        1 * tracker.recordProgress(REF) >> {
+            throw new RuntimeException('boom')
+        }
+
+        and: 'FR15 of harden-logging-observability: the unwritten marker (a later over-count) is a coded WARN naming the task'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.RECORD_PROGRESS_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains(REF.id())
 
         and: 'revocation() stays empty — a failed marker never turns into a revocation'
         persistence.revocation().isEmpty()
@@ -256,5 +272,8 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         then: 'the guard was set despite the throw — recordProgress is not attempted again'
         0 * tracker.recordProgress(REF)
         noExceptionThrown()
+
+        cleanup:
+        logs.detach()
     }
 }

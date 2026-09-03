@@ -13,6 +13,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads the sweep's {@code sweepAction} lines out of the last N daily ledger files for the
@@ -29,6 +31,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements NFR-O3, UX1 of add-serve-sandbox-lifecycle.
  */
 public final class SweepActionAggregator {
+
+    private static final Logger log = LoggerFactory.getLogger(SweepActionAggregator.class);
 
     /** How many actions the table carries, newest first, before truncating. */
     public static final int MAX_ACTIONS = 20;
@@ -120,6 +124,8 @@ public final class SweepActionAggregator {
         try {
             return Instant.parse(at);
         } catch (DateTimeException malformed) {
+            // One row loses its instant and still counts; the whole aggregate does not fail (FR5).
+            log.debug("sweep-action ledger line carries an unreadable instant, dropping its timestamp", malformed);
             return null;
         }
     }

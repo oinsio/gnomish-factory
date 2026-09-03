@@ -1,4 +1,5 @@
 import com.github.oinsio.gnomish.build.HardwareSpec
+import com.github.oinsio.gnomish.build.LogExpectationEvidence
 import com.github.oinsio.gnomish.build.TestTimeInjectionCheck
 import com.github.oinsio.gnomish.build.HeavyJvmBudget
 import org.gradle.api.artifacts.VersionCatalogsExtension
@@ -120,6 +121,35 @@ tasks.named('test') {
     // Generate coverage reports whenever tests run, so `check` produces them
     // as part of the single-command verification (FR5 of add-project-skeleton).
     finalizedBy tasks.named('jacocoTestReport')
+}
+
+// --- Runtime log-expectation gate (harden-logging-observability, FR17 / task 14) ---
+//
+// The Spock extension in `:test-fixtures` watches every feature's operator plane and writes what
+// it saw into a directory of this Test task's own, so `:bootstrap`'s several suites do not
+// overwrite each other: `features-*.txt` names every WARN/ERROR no capture was watching (the
+// report — always written, because silence is the defect) and `observations-*.tsv` feeds the
+// failure. The verdict itself is a build-wide task in the root project, not one per module: a
+// module can emit an operator line whose emitter and pin both live elsewhere — `:bootstrap` does
+// it twelve times over, being the composition root — so "was anything watching this code" is a
+// question about the whole build's run, not about one module's. See LogExpectationGateCheck.
+tasks.withType(Test).configureEach {
+    def evidence = layout.buildDirectory.dir("reports/log-expectation-gate/${name}").get().asFile
+    // Through an argument provider, not `systemProperty`: the path is an absolute one and would
+    // otherwise be an input, costing every Test task in the build its cache hits. See
+    // LogExpectationEvidence for the measurement that made that concrete.
+    jvmArgumentProviders.add(new LogExpectationEvidence(directory: evidence))
+    // Declared as an output, so a `test` served FROM-CACHE restores the evidence it would
+    // otherwise not write at all. Without this the build-wide verdict is computed over whichever
+    // Test tasks happened to execute: a clean `check` that re-ran only `:adapters:git:test`
+    // reported GF114 as watched by nothing, because the spec pinning it lives in
+    // `:sandbox:docker`, whose `test` came from cache and left no observations. The verdict must
+    // be a property of the build, not of the cache's hit rate.
+    outputs.dir(evidence)
+    // The extension appends, so last run's evidence would otherwise be read as this run's. A
+    // plain File rather than `delete dir`: the configuration cache rejects a closure that reaches
+    // back into the script object at execution time.
+    doFirst('clear the log-expectation evidence') { evidence.listFiles()?.each { it.delete() } }
 }
 
 // --- Time injection in tests (harden-task-branch-contract, task 9.1) ---

@@ -70,6 +70,11 @@ dependencies {
     // code in this module calls `AtomicFileWriter`.
     implementation project(':atomicfile')
 
+    // The dependency-free logging-support leaf (design D5/D6 of
+    // harden-logging-observability): `DockerCli` reads `ShutdownPhase` so an
+    // interrupt the daemon's own stop caused does not read as an unexplained abort.
+    implementation project(':logtext')
+
     // Shared fakes (FR7, design D8), test scope only: RecordingDockerCli /
     // ScriptedSandboxDocker and the TaskExecutionEnvironment port-contract
     // suite the host backend's spec runs.
@@ -93,6 +98,9 @@ layering {
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',
+        // The dependency-free logging-support leaf (design D5/D10 of
+        // harden-logging-observability); `DockerCli` names its `ShutdownPhase`.
+        ':logtext',
         ':sandbox:core',
         ':subprocess',
     ]

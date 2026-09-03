@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -140,6 +143,8 @@ class LedgerRetentionSweeperSpec extends Specification {
     @Requires({
         !System.getProperty('os.name').toLowerCase().contains('windows')
     })
+    // FR15 of harden-logging-observability: "logged" is the assertion — the catalog code and the
+    // WARN level, not the sentence.
     def "a directory listing failure is logged and swallowed rather than propagated"() {
         given:
         Files.writeString(dir.resolve('ledger-2020-01-01.jsonl'), 'stale')
@@ -147,14 +152,21 @@ class LedgerRetentionSweeperSpec extends Specification {
         // Execute-only: Files.isDirectory still succeeds, but Files.list needs read too.
         Files.setPosixFilePermissions(dir, EnumSet.of(PosixFilePermission.OWNER_EXECUTE))
         def sweeper = new LedgerRetentionSweeper(dir, 30, clock)
+        def logs = LogCaptureSupport.attach(LedgerRetentionSweeper)
 
         when:
         sweeper.sweep()
 
         then:
         noExceptionThrown()
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.LEDGER_RETENTION_LIST_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
 
         cleanup:
+        logs.detach()
         Files.setPosixFilePermissions(dir, original)
     }
 
@@ -191,6 +203,8 @@ class LedgerRetentionSweeperSpec extends Specification {
     @Requires({
         !System.getProperty('os.name').toLowerCase().contains('windows')
     })
+    // FR15: same pin on the delete edge — a retention file that survives its cutoff unnoticed is
+    // exactly the silent-degradation shape this change exists to close.
     def "a delete failure is logged and swallowed rather than propagated"() {
         given:
         def stale = dir.resolve('ledger-2020-01-01.jsonl')
@@ -199,14 +213,21 @@ class LedgerRetentionSweeperSpec extends Specification {
         def original = Files.getPosixFilePermissions(dir)
         Files.setPosixFilePermissions(dir, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_EXECUTE))
         def sweeper = new LedgerRetentionSweeper(dir, 30, clock)
+        def logs = LogCaptureSupport.attach(LedgerRetentionSweeper)
 
         when:
         sweeper.sweep()
 
         then:
         noExceptionThrown()
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.LEDGER_RETENTION_DELETE_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
 
         cleanup:
+        logs.detach()
         Files.setPosixFilePermissions(dir, original)
     }
 }

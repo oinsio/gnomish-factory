@@ -44,6 +44,7 @@ Active changes: `openspec/changes/`. Archived: `openspec/changes/archive/` (immu
 | `testing.md`            | global                        | Spock, TDD, JaCoCo + PIT, WireMock, Testcontainers usage   |
 | `process-invariants.md` | global                        | Immutability, file size, module boundaries, change naming  |
 | `diagrams.md`           | global                        | Mermaid diagram conventions                                |
+| `logging.md`            | `**/*.java`                   | Level policy, throwable form, untrusted text, MDC, suppression |
 | `crash-consistency.md`  | multi-step transitions        | Kill windows, shapes, recovery owners, ordering checklist  |
 | `manual-sync-pairs.md`  | hand-synced implementations   | Declared pairs, sync markers, rule-of-three extraction     |
 | `stage-description.md`  | stage docs                    | IDEF0/ICOM + Quality Control format for pipeline stages    |

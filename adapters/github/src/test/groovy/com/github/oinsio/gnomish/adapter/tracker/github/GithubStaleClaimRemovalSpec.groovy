@@ -9,6 +9,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import static com.github.tomakehurst.wiremock.http.Fault.CONNECTION_RESET_BY_PEER
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.adapter.github.GithubHttpException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.RemoveStaleClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -130,6 +132,60 @@ class GithubStaleClaimRemovalSpec extends Specification {
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/70/labels'))
                 .withRequestBody(WireMock.containing(READY_LABEL)))
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/70/labels/gnomish%3Aworking')))
+    }
+
+    // FR5 of harden-logging-observability: a removal retires another instance's tenure, so the one
+    // that happens is an anchor an operator can find; the convergences that do nothing are DEBUG,
+    // because two reapers meeting is the mechanism working.
+    def "FR5: a removal that acts is an INFO anchor naming the retired holder"() {
+        given:
+        stubComments(80, '[' + claimComment(510, 'gnomish-factory-dead', '2026-07-23T10:00:00Z') + ']')
+        stubMarkerPost(80)
+        wireMock.stubFor(delete(urlEqualTo('/repos/acme/widgets/issues/comments/510'))
+                .willReturn(aResponse().withStatus(204)))
+        stubLabelTransition(80)
+        def logs = LogCaptureSupport.attach(GithubStaleClaimRemoval, Level.DEBUG)
+
+        when:
+        newRemoval().removeStaleClaim(refFor(80),
+                new ClaimFacts.Live('gnomish-factory-dead', new ClaimVersion('510', Instant.parse('2026-07-23T10:00:00Z'), new ClaimEpoch(510))))
+
+        then:
+        def infos = logs.list.findAll { it.level == Level.INFO }
+        infos.size() == 1
+        infos[0].formattedMessage.contains('gnomish-factory-dead')
+        infos[0].formattedMessage.contains('acme/widgets#80')
+        infos[0].formattedMessage.contains('back in circulation')
+
+        cleanup:
+        logs.detach()
+    }
+
+    def "FR5: a converge-abort is DEBUG, not an anchor and not a warning (#label)"() {
+        given:
+        stubComments(issue, thread as String)
+        def logs = LogCaptureSupport.attach(GithubStaleClaimRemoval, Level.DEBUG)
+
+        when:
+        def result = newRemoval().removeStaleClaim(refFor(issue as int), observed)
+
+        then:
+        result instanceof RemoveStaleClaimResult.Mismatch
+
+        and:
+        def debugs = logs.list.findAll { it.level == Level.DEBUG }
+        debugs.size() == 1
+        debugs[0].formattedMessage.contains('converged without acting')
+        logs.list.every { it.level == Level.DEBUG }
+
+        cleanup:
+        logs.detach()
+
+        where:
+        label | issue | thread | observed
+        'claim moved' | 85 | '[' + claimComment(777, 'gnomish-factory-new', '2026-07-23T11:00:00Z') + ']' |
+                new ClaimFacts.Live('gnomish-factory-dead', new ClaimVersion('502', Instant.parse('2026-07-23T10:00:00Z'), new ClaimEpoch(502)))
+        'no footprint' | 86 | '[]' | new ClaimFacts.None()
     }
 
     def "FR5: a beaten claim (updated_at advanced) is a no-op reporting the live version"() {
@@ -349,7 +405,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
         """{"id":${id},"updated_at":"2026-07-23T10:05:00Z","created_at":"2026-07-23T10:05:00Z","body":"<!-- gnomish {\\"kind\\":\\"abort\\",\\"instance\\":\\"gnomish-factory-dead\\",\\"at\\":\\"2026-07-23T10:05:00Z\\",\\"version\\":1} -->\\n🤖 aborted"}"""
     }
 
-    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
         new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

@@ -1,11 +1,15 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -83,6 +87,7 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         def writer = new SnapshotWriter(target, {
             -> SnapshotWriterSpec.fixtureSnapshot()
         }, mapper, Duration.ofSeconds(30), clock, 1)
+        def logs = LogCaptureSupport.attach(SnapshotWriteCycle)
 
         when:
         writer.tick()
@@ -90,6 +95,58 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         then:
         noExceptionThrown()
         !Files.exists(target)
+
+        and: 'FR15 of harden-logging-observability: the stale snapshot file is explained by a coded WARN'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.SNAPSHOT_WRITE_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains(target.toString())
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR15 of harden-logging-observability: the sweep's own failure domain (design D7) is pinned
+    // too. LedgerRetentionSweeper#sweep swallows every IOException its filesystem calls raise, so
+    // the only way into SnapshotWriteCycle's outer catch is a sweeper whose clock itself fails —
+    // which is exactly the "defense in depth" case the catch exists for.
+    def "a retention sweep that fails outside its own catch is isolated behind a coded WARN"() {
+        given:
+        def target = tempDir.resolve('snapshot.json')
+        def brokenClock = new Clock() {
+                    ZoneId getZone() {
+                        ZoneOffset.UTC
+                    }
+                    Clock withZone(ZoneId zone) {
+                        this
+                    }
+                    Instant instant() {
+                        throw new IllegalStateException('clock is broken')
+                    }
+                }
+        def cycle = new SnapshotWriteCycle(target, {
+            -> SnapshotWriterSpec.fixtureSnapshot()
+        }, mapper, Duration.ofSeconds(30), clock, new LedgerRetentionSweeper(tempDir, 30, brokenClock))
+        def logs = LogCaptureSupport.attach(SnapshotWriteCycle)
+
+        when:
+        cycle.run()
+
+        then: 'the write still landed — the two failure domains are independent'
+        noExceptionThrown()
+        Files.exists(target)
+
+        and:
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.SNAPSHOT_RETENTION_SWEEP_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+
+        cleanup:
+        logs.detach()
     }
 
     def "repeated failing ticks never crash and each one still attempts the write again"() {

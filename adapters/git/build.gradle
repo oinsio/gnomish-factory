@@ -59,6 +59,16 @@ dependencies {
     // kill mid-write leaves a whole file for the next pickup to classify.
     // `implementation`: the writer is called from method bodies only.
     implementation project(':atomicfile')
+    // The dependency-free logging-support leaf (design D5/D6 of
+    // harden-logging-observability): `GitProcessRunner` reads `ShutdownPhase` to
+    // tell an interrupt the daemon's own stop caused from an unexplained one, and
+    // the poll sites report their failures to `RepeatSuppressor` so a dependency
+    // that stays down costs the console edges rather than one line per tick.
+    // `api`, not `implementation`: the suppressor is handed in through the surface
+    // of the polling collaborators (the mid-round harvest listener takes one), so a
+    // consumer that constructs them needs the type — which is what the
+    // dependency-analysis gate establishes.
+    api project(':logtext')
 
     // The task state file and `task.json` are Jackson documents. The state DTOs
     // are on this module's own api surface (the `git.state` mappers hand them
@@ -114,6 +124,7 @@ layering {
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',
+        ':logtext',
         ':sandbox:core',
         ':sandbox:docker',
         ':subprocess',

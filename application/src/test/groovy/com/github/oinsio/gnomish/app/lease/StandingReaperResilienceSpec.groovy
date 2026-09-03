@@ -1,15 +1,13 @@
 package com.github.oinsio.gnomish.app.lease
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
 
@@ -43,17 +41,16 @@ class StandingReaperResilienceSpec extends Specification {
 
     private final BlockingSleeper sleeper = new BlockingSleeper()
     private final AtomicInteger ticks = new AtomicInteger()
-    private final Logger logbackLogger = (Logger) LoggerFactory.getLogger(StandingReaper)
-    private final ListAppender<ILoggingEvent> appender = new ListAppender<>()
+    // The shared capture helper rather than a hand-rolled ListAppender block (task 2.4 of
+    // harden-logging-observability; migrated here because this spec is being touched, per NG5).
+    private LogCaptureSupport logs
 
     def setup() {
-        appender.start()
-        logbackLogger.addAppender(appender)
+        logs = LogCaptureSupport.attach(StandingReaper)
     }
 
     def cleanup() {
-        logbackLogger.detachAppender(appender)
-        appender.stop()
+        logs.detach()
     }
 
     private ReaperDuty countingDuty() {
@@ -67,7 +64,7 @@ class StandingReaperResilienceSpec extends Specification {
         def calls = new AtomicInteger()
         def duty = { Collection<TaskRef> own ->
             if (calls.incrementAndGet() == 1) {
-                throw new AssertionError('duty exploded on the first tick')
+                throw new AssertionError('duty exploded on the first tick' as Object)
             }
             ticks.incrementAndGet()
         } as ReaperDuty
@@ -83,7 +80,11 @@ class StandingReaperResilienceSpec extends Specification {
         then: 'the throw was logged at WARN and the loop reached a second sleep instead of dying'
         sleeper.awaitEntered()
         calls.get() == 1
-        appender.list.any { it.level == Level.WARN }
+        // FR15 of harden-logging-observability: the level alone is not the contract — the catalog
+        // code is, so a demotion or a re-worded sentence is caught here.
+        logs.list.any {
+            it.level == Level.WARN && it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_TICK_FAILED.head())
+        }
 
         when: 'that second sleep releases and the following tick runs'
         sleeper.releaseOne()
@@ -124,7 +125,9 @@ class StandingReaperResilienceSpec extends Specification {
         base.awaitEntered()
         calls.get() == 2
         ticks.get() == 0
-        appender.list.any { it.level == Level.WARN }
+        logs.list.any {
+            it.level == Level.WARN && it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_TICK_FAILED.head())
+        }
 
         when: 'that sleep releases, letting the tick run'
         base.releaseOne()
@@ -160,7 +163,7 @@ class StandingReaperResilienceSpec extends Specification {
         then: 'the worker terminated cleanly, having never ticked and never logged an abnormal death'
         !worker.isAlive()
         ticks.get() == 0
-        appender.list.every { it.level != Level.ERROR }
+        logs.list.every { it.level != Level.ERROR }
     }
 
     // FR4, D4, D5: because catch (Throwable) leaves no realistic escape from the guarded loop, a
@@ -194,6 +197,45 @@ class StandingReaperResilienceSpec extends Specification {
         then: 'a fresh, distinct worker took over and reached its own first sleep'
         sleeper.awaitEntered()
         !reaper.worker().is(deadWorker)
+
+        cleanup:
+        reaper.stop()
+    }
+
+    // FR15 of harden-logging-observability: the backoff sleep before a respawn is itself guarded
+    //     (design D5), and the guard's WARN is the only trace that a respawn skipped its backoff —
+    //     a reaper respawning in a tight loop with no delay looks identical without it.
+    def "a backoff sleep that throws before the respawn is logged at WARN and the respawn still happens"() {
+        given: 'a sleeper that throws on the backoff call only — the loop sleeps normally'
+        def base = new BlockingSleeper()
+        def calls = new AtomicInteger()
+        def flaky = { Duration d ->
+            if (calls.incrementAndGet() == 2) {
+                throw new IllegalStateException('backoff sleep blew up')
+            }
+            base.sleep(d)
+        } as Sleeper
+        def reaper = new StandingReaper(countingDuty(), flaky, INTERVAL, {
+            []
+        }, new SystemClock())
+        reaper.start()
+        base.awaitEntered()
+        def deadWorker = reaper.worker()
+
+        when: 'the worker dies and the handler backs off on the throwing sleeper'
+        Thread.ofVirtual().start {
+            deadWorker.uncaughtExceptionHandler.uncaughtException(deadWorker, new OutOfMemoryError('simulated death'))
+        }
+
+        then: 'a fresh worker still took over, reaching its own first interval sleep'
+        base.awaitEntered()
+        !reaper.worker().is(deadWorker)
+
+        and:
+        logs.list.any {
+            it.level == Level.WARN &&
+            it.formattedMessage.startsWith(OperatorEvent.STANDING_REAPER_BACKOFF_SLEEP_FAILED.head())
+        }
 
         cleanup:
         reaper.stop()

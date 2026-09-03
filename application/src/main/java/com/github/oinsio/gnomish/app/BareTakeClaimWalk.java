@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.status.AnchorLog;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -70,6 +71,11 @@ record BareTakeClaimWalk(
                 // merely considered and lost to a race are never tagged, since this instance never
                 // ends up acting on them.
                 MDC.put(taskIdMdcKey, candidate.ref().id());
+                // FR2 of harden-logging-observability: the same anchor form the serve feed emits,
+                // from the second claim path. A bare take is a one-slot instance that this claim
+                // has just filled, so it reports no free slot out of one — the identical fact the
+                // feed states about its own ledger, not a placeholder.
+                AnchorLog.claimAcquired(candidate.ref().id(), 0, 1);
                 var trackerTask = tracker.fetchTask(candidate.ref());
                 return claimAndWork.dispatchAfterClaim(
                         cloneDir, null, definition, interactiveMode, false, trackerTask, tracker, instanceId);

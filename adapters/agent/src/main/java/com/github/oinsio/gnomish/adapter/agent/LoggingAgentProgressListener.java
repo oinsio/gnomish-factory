@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.logtext.LogText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,6 +15,13 @@ import org.slf4j.LoggerFactory;
  * com.github.oinsio.gnomish.status.LoggingEventListener}'s per-round engine
  * lines. Every line is logged through SLF4J with parameterized arguments —
  * never string concatenation — matching that class's established idiom.
+ *
+ * <p>Every field this listener renders — model, session id, tool name, result subtype and summary
+ * — is the agent CLI's own text, so each goes through {@link
+ * com.github.oinsio.gnomish.logtext.LogText} before it reaches the line: one event stays one line,
+ * and no payload can forge a second (FR6 of harden-logging-observability). {@code tokensByModel} is
+ * exempt because it is this side's own map of parsed integers, keyed by an already-sanitized model
+ * name.
  *
  * <p>The {@code taskId}/{@code stage}/{@code attempt} MDC keys are already set
  * on the calling thread by the time this listener runs (task 8.2, {@link
@@ -38,8 +46,9 @@ public final class LoggingAgentProgressListener implements AgentProgressListener
     private static final Logger log = LoggerFactory.getLogger(LoggingAgentProgressListener.class);
 
     /**
-     * Logs one structured INFO line for {@code event}, with content specific to
-     * its kind, by an exhaustive switch over the sealed {@link
+     * Logs one structured line for {@code event}, with content and level specific to
+     * its kind — the round's own boundaries at INFO, the per-tool-call detail at DEBUG (FR12 of
+     * harden-logging-observability) — by an exhaustive switch over the sealed {@link
      * AgentProgressEvent} variants — no {@code default} arm, so a new variant
      * fails to compile here until its log line is added.
      *
@@ -51,14 +60,20 @@ public final class LoggingAgentProgressListener implements AgentProgressListener
     public void onProgress(AgentProgressEvent event) {
         switch (event) {
             case AgentProgressEvent.RoundStarted started ->
-                log.info("round started: model={}, sessionId={}", started.model(), started.sessionId());
-            case AgentProgressEvent.ToolStarted started -> log.info("tool started: {}", started.name());
+                log.info(
+                        "round started: model={}, sessionId={}",
+                        LogText.forLog(started.model()),
+                        LogText.forLog(started.sessionId()));
+            // FR12 of harden-logging-observability: one line per tool call is per-item detail —
+            //     a single round makes dozens, and none of them is a state change of the run.
+            case AgentProgressEvent.ToolStarted started ->
+                log.debug("tool started: {}", LogText.forLog(started.name()));
             case AgentProgressEvent.RoundFinished finished ->
                 log.info(
                         "round finished: subtype={}, tokensByModel={}, summary={}",
-                        finished.subtype(),
+                        LogText.forLog(String.valueOf(finished.subtype())),
                         finished.tokensByModel(),
-                        finished.summary());
+                        LogText.forLog(finished.summary()));
         }
     }
 }

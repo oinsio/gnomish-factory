@@ -8,13 +8,11 @@ import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
-import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.status.LiveActivity;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
 import java.nio.file.Path;
-import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -26,7 +24,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>What the tip holds is decided by the shape classifier before anything is rendered (FR16 of
  * harden-task-branch-contract): the located ref is read through {@link RefTipSource} into {@link
- * BranchTipFactsReader}'s facts, and the resulting {@link BranchShape} says whether a report can be
+ * TipEnvelopeReader}, and the resulting {@link BranchShape} says whether a report can be
  * built at all. A shape whose tip carries no readable envelopes — delivered, bare, or one of the
  * three quarantine shapes — comes back as {@link BranchStateResult.Shaped} for the caller to render
  * calmly, so an unknown {@code "version"} or an unparseable {@code state.json} is a named shape
@@ -51,13 +49,9 @@ import org.jspecify.annotations.Nullable;
  */
 public final class BranchStateReader {
 
-    private static final String TASK_JSON_PATH = GnomishTaskPaths.TASK_JSON_PATH;
-    private static final String STATE_JSON_PATH = GnomishTaskPaths.STATE_JSON_PATH;
-
     private final GitProcessRunner runner;
     private final TaskBranchLocator locator;
-    private final BranchTipFactsReader facts = new BranchTipFactsReader();
-    private final BranchShapeClassifier classifier = new BranchShapeClassifier();
+    private final TipEnvelopeReader tipEnvelopeReader = new TipEnvelopeReader();
 
     public BranchStateReader(GitProcessRunner runner) {
         this.runner = runner;
@@ -97,18 +91,11 @@ public final class BranchStateReader {
      */
     private BranchStateResult readAt(Path cloneDir, String ref) {
         BranchTipSource source = new RefTipSource(runner, cloneDir, ref);
-        BranchShape shape = classifier.classify(facts.read(source, null));
-        if (!shape.tipCarriesState()) {
-            return new BranchStateResult.Shaped(shape);
-        }
-        Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
-        Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
-        if (taskJson.isEmpty() || stateJson.isEmpty()) {
-            // A pre-contract Created tip: identity recorded without state (FR3). Pending is the
-            // honest answer, not a missing-file failure.
-            return new BranchStateResult.Shaped(shape);
-        }
-        return new BranchStateResult.Found(readReport(taskJson.get(), stateJson.get()));
+        return switch (tipEnvelopeReader.read(source)) {
+            case TipEnvelopeRead.NoState(BranchShape shape) -> new BranchStateResult.Shaped(shape);
+            case TipEnvelopeRead.Loaded(BranchShape ignored, String taskJson, String stateJson) ->
+                new BranchStateResult.Found(readReport(taskJson, stateJson));
+        };
     }
 
     private StatusReport readReport(String taskJson, String stateJson) {

@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app.serve;
 import com.github.oinsio.gnomish.app.lease.LivenessOracle;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.status.DaemonComponent;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,6 +19,9 @@ import org.slf4j.LoggerFactory;
  * per design D7's explicit call to reuse that pattern. A separate thread from the janitor by
  * design: container objects and host worktrees are disjoint populations with disjoint cleaners
  * (design D7, "no object has two cleaners").
+ *
+ * <p>Kept in sync with {@link WorktreeJanitor}: both must keep the "immediate-then-cadence, tick
+ * failure logged and retried" daemon-loop shape (start/loop/tick/lastRunAt) identical.
  *
  * <p>Implements FR6, NFR-P1, NFR-R3 of add-serve-sandbox-lifecycle.
  */
@@ -58,16 +63,20 @@ public final class SandboxLifecycleTick {
 
     /** Starts the tick thread: one immediate tick, then every {@code interval} thereafter. */
     public void start() {
-        Thread.ofVirtual().name("gnomish-sandbox-lifecycle-tick").start(this::loop);
+        Thread.ofVirtual().name("gnomish-sandbox-lifecycle-tick").start(DaemonComponent.SWEEP.framing(this::loop));
     }
 
     // Package-private: lifecycle specs drive this on their own thread with a controllable sleeper.
+    @SuppressWarnings("InfiniteLoopStatement") // intentional: runs for the daemon's whole lifetime
     void loop() {
         while (true) {
             try {
                 tick();
             } catch (RuntimeException e) {
-                log.warn("sandbox lifecycle tick failed; will retry next tick", e);
+                log.warn(
+                        OperatorEvent.SANDBOX_LIFECYCLE_TICK_FAILED.head()
+                                + "sandbox lifecycle tick failed; will retry next tick",
+                        e);
             }
             sleeper.sleep(interval);
         }

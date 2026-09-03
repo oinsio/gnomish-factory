@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import java.time.Duration;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The bounded re-try the factory spends on a git network operation whose outcome was never
@@ -30,6 +32,8 @@ import java.util.function.Supplier;
  */
 public record GitInfrastructureRetry(Sleeper sleeper, int attempts, Duration initialBackoff) {
 
+    private static final Logger log = LoggerFactory.getLogger(GitInfrastructureRetry.class);
+
     /** Total attempts spent on one unsettled network question. */
     public static final int DEFAULT_ATTEMPTS = 3;
 
@@ -53,6 +57,12 @@ public record GitInfrastructureRetry(Sleeper sleeper, int attempts, Duration ini
         T result = operation.get();
         Duration backoff = initialBackoff;
         for (int spent = 1; spent < attempts && !settled.test(result); spent++) {
+            // DEBUG per the level policy: a retry in progress is diagnosis, not an alarm — the
+            // layer that finally gives up writes the operator-facing line (FR5, FR12 of
+            // harden-logging-observability).
+            // throwable-not-subject: the unsettled result is a value, not a thrown fault.
+            log.debug(
+                    "git network question unsettled; re-asking in {} (attempt {} of {})", backoff, spent + 1, attempts);
             sleeper.sleep(backoff);
             backoff = backoff.multipliedBy(2);
             result = operation.get();

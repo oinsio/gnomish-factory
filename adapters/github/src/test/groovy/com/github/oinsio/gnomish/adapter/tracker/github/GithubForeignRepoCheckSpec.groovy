@@ -6,12 +6,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 /**
@@ -38,18 +36,15 @@ class GithubForeignRepoCheckSpec extends Specification {
         wireMock.stop()
     }
 
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(GithubForeignRepoCheck)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
+        def logs = LogCaptureSupport.attach(GithubForeignRepoCheck)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        return appender.list
     }
 
     def "id already names the configured repo: no HTTP call is made"() {
@@ -63,7 +58,9 @@ class GithubForeignRepoCheckSpec extends Specification {
         wireMock.findAll(getRequestedFor(urlEqualTo('/repos/acme/widgets'))).isEmpty()
     }
 
-    def "foreign repo whose full_name resolves to the configured repo: proceeds with a WARN"() {
+    // FR12 of harden-logging-observability: a rename redirect that resolved is a recovered
+    //     transient — the verification succeeded — so it is INFO, off the operator console.
+    def "foreign repo whose full_name resolves to the configured repo: proceeds with an INFO"() {
         given: 'the id names a pre-rename repo that GitHub now reports under the configured owner/repo'
         wireMock.stubFor(get(urlEqualTo('/repos/old-org/widgets'))
                 .willReturn(aResponse().withStatus(200).withBody('{"full_name":"acme/widgets"}')))
@@ -74,10 +71,13 @@ class GithubForeignRepoCheckSpec extends Specification {
             check.verify(id, 'acme', 'widgets')
         }
 
-        then: 'no exception, and a WARN names both the id repo and the configured target'
+        then: 'no exception, and one INFO names both the id repo and the configured target'
         events.any {
-            it.level == Level.WARN && it.formattedMessage.contains('old-org/widgets') && it.formattedMessage.contains('acme/widgets')
+            it.level == Level.INFO && it.formattedMessage.contains('old-org/widgets') && it.formattedMessage.contains('acme/widgets')
         }
+
+        and: 'nothing reaches the operator console for a redirect that resolved'
+        events.every { it.level != Level.WARN }
     }
 
     def "foreign repo whose full_name resolves elsewhere: refused, naming both repos"() {

@@ -51,6 +51,11 @@ plugins {
     // `base` + the Spotless build-file format (FR6, design D9); the root
     // project applies no java/test convention because it has no sources.
     id 'build-metadata-conventions'
+    // The build-wide verdict of the runtime log-expectation gate (FR17 of
+    // harden-logging-observability). A convention plugin, not a block here: this
+    // file is under a 200-line cap that `ModuleBuildFileSpec` enforces, and the
+    // bulk of build logic belongs in `build-logic` by FR6 of split-into-modules.
+    id 'log-expectation-conventions'
     // dependency-analysis is applied build-wide from settings.gradle (FR10,
     // design D8); only its configuration and `check` wiring live here.
 }

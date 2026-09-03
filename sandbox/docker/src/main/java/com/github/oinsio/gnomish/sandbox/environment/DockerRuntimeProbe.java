@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Whether the Docker runtime answers at all — the container-mode prerequisite
@@ -12,6 +14,8 @@ import java.util.List;
  * <p>Implements D13, G2 of add-sandbox-core.
  */
 public final class DockerRuntimeProbe {
+
+    private static final Logger log = LoggerFactory.getLogger(DockerRuntimeProbe.class);
 
     private DockerRuntimeProbe() {}
 
@@ -35,9 +39,19 @@ public final class DockerRuntimeProbe {
     /** The seam-testable probe behind {@link #dockerAvailable()}: true iff {@code docker version} answers ok. */
     static boolean dockerAvailable(DockerCli docker) {
         try {
-            return docker.run(List.of("version", "--format", "{{.Server.Version}}"))
+            boolean answered = docker.run(List.of("version", "--format", "{{.Server.Version}}"))
                     .ok();
+            if (!answered) {
+                // INFO, not WARN: this probe exists to decide a mode, and "no Docker here" is a
+                // legitimate answer the caller turns into its own fail-closed refusal (D13, G2).
+                // But the refusal names the mode, not the probe, so this is the only line saying
+                // the daemon was asked and said no (FR5 of harden-logging-observability).
+                // throwable-not-subject: docker answered with a status; nothing was thrown.
+                log.info("docker version did not answer ok; container mode is unavailable");
+            }
+            return answered;
         } catch (DockerUnavailableException e) {
+            log.info("the docker runtime is unreachable; container mode is unavailable", e);
             return false;
         }
     }

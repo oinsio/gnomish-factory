@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
-import java.io.IOException
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -17,7 +20,7 @@ import spock.lang.Specification
  */
 class RunExceptionReportingSpec extends Specification {
 
-    private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(RunExceptionReportingSpec)
+    private static final Logger LOG = LoggerFactory.getLogger(RunExceptionReportingSpec)
 
     /** What the reporter rethrew, captured so a scenario can assert it travelled through UNCHANGED. */
     private Throwable rethrown = null
@@ -117,6 +120,9 @@ class RunExceptionReportingSpec extends Specification {
     // UX3: anything unclassified is the generic fallback — named as a run failure and carrying the
     // cause's message, so an unexpected fault is still legible without a stack trace.
     def "reports an unclassified failure as a run failure, carrying its message"() {
+        given: 'the reporter logs through the caller-supplied logger, which here is this spec class'
+        def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)
+
         when:
         def output = reportOf({
             throw new IllegalStateException('boom')
@@ -125,6 +131,17 @@ class RunExceptionReportingSpec extends Specification {
         then:
         output.contains('gnomish run failed: boom')
         rethrown instanceof IllegalStateException
+
+        and: 'FR15 of harden-logging-observability: the calm stderr line is backed by a coded WARN carrying the stack'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.RUN_UNHANDLED_EXCEPTION.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.throwableProxy != null
+
+        cleanup:
+        logs.detach()
     }
 
     // UX3: an I/O fault takes the same fallback — it is a checked exception the action may throw,

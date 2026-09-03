@@ -1,0 +1,98 @@
+// How `:application` verifies itself: this module's mutation scope. Split out of
+// `application/build.gradle` to keep that file within the project file-size cap
+// (.claude/rules/process-invariants.md; same shape and same reason as
+// `bootstrap/verification.gradle`) — the build file states what this module *is*
+// (its plugins, dependencies and permitted reach), this one states how it is *checked*.
+// A module-local script plugin rather than a `build-logic` convention plugin: nothing here
+// is shared — `build-logic` is for configuration more than one module applies.
+
+// PIT exclusions documented for THIS module (task 8.1 of split-into-modules:
+// each module's mutation scope is its own production packages, so each module
+// carries its own exceptions). The engine configuration lives in
+// `pitest-conventions`; per-method exemptions are `@DoNotMutate` markers on the
+// methods themselves (.claude/rules/testing.md) — TakeBatchExitCode's
+// isNewSmallestNonZero is this module's one equivalent-mutant case.
+pitest {
+    // FR11/D9 documented exception (add-factory-serve, task 5.5): RealProcessTreeKiller walks
+    // ProcessHandle.current().descendants() and destroys them — spawning and killing real OS
+    // processes in a unit test would be heavy and flaky for no coverage benefit. The sequencing
+    // that decides whether/when it runs (ServeShutdown: interrupt feed, flag occupied claims,
+    // wait the grace window, then always call the process-tree killer) is fully covered by
+    // ServeShutdownSpec against a fake ProcessTreeKiller, so excluding this thin real
+    // implementation removes no production DECISION from mutation coverage, only the
+    // unverifiable OS-process bytes themselves — the same "main()/bootstrap wiring" category
+    // as `:bootstrap`'s FactoryApplication.
+    // Arid-wiring exemptions (task 8.6 of split-into-modules, design D13(b); the category and the
+    // bar every entry below has to clear are in `.claude/rules/testing.md`, "Per-class exemptions").
+    // Each was read through before being listed: none holds a conditional, a loop or a computed
+    // value, so every one of its mutations is a nulled return of an object it just constructed or a
+    // removed hand-off between two objects it holds — "method calls method". The named suite is the
+    // one that really drives the class end to end, so what is dropped here is the mutation gate on
+    // the construction itself, never the coverage of the graph being constructed.
+    excludedClasses = [
+        'com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller',
+        // Builds a TakeCommand, defaulting the seams; driven by :bootstrap's TakeCommandSpec.
+        'com.github.oinsio.gnomish.app.TakeCommandFactory',
+        // The five `with*` copies of the seam parameter object; driven by :bootstrap's
+        // TakeCommandStandingReaperWiringSpec / TakeCommandBatchSpec / TakeHeartbeatLifecycleSpecBase,
+        // each of which overrides one seam and asserts the resulting take run's behavior.
+        'com.github.oinsio.gnomish.app.TakeCommandSeams',
+        // Builds the take + serve commands and bundles them with the pre-built ones; driven by
+        // :bootstrap's SubcommandDispatchSpec (routing) and ManualRunRunner's own specs.
+        'com.github.oinsio.gnomish.app.SubcommandDispatchFactory',
+        // Wires the resume chain behind a TakeClaimAndWork; driven by :bootstrap's TakeBareAutoSpec
+        // and TakeSlotRunnerSpec, which run the whole claim-and-resume flow through it.
+        'com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory',
+        // Straight-line assembly of the serve runtime over ServeAssembly's leaf builders; driven by
+        // :bootstrap's ServeCommandSpec, which starts the assembled runtime.
+        'com.github.oinsio.gnomish.app.ServeRuntimeAssembly',
+
+        // Integration-covered exemptions (task 8.7 of split-into-modules, design D13(c); the bar is
+        // in `.claude/rules/testing.md`, "Per-class exemptions ... integration-covered"). Each of
+        // the three is covered scenario by scenario by a :bootstrap suite that CANNOT move down:
+        // every one of them builds a real TakeSlotRunner over a real git clone and the composition
+        // root's own assembly, which task 8.5 established is a composition-root integration spec by
+        // D3's by-role rule. Their collaborators here (TakeSlotRunner, FeedAutomaton, ServeShutdown,
+        // ObservabilityWiring) are final classes exposing no state for their hand-offs, so a
+        // same-module spec could asserted only "method calls method" over hand-built stand-ins.
+        // ServeShutdownWiringSpec, 16 scenarios — including both halves of the truth-in-reporting
+        // decision (stopped(signal) when a signal lands mid-drain vs stopped(drainComplete) after),
+        // the interrupt-status restoration, and the owned teardown order (shutdown phase marked
+        // first, a line logged during the drain still reaching the file, the second pass a no-op),
+        // all driven through this class's own ShutdownHookRegistrar seam.
+        'com.github.oinsio.gnomish.app.ServeShutdownWiring',
+        // ServeCommandSpec, 10 scenarios — startup refusal and failure paths, the shared
+        // heartbeat/claim-loss wiring, the ledger-writer attach, --drain vs the forever loop, the
+        // janitor and standing reaper actually starting, and the --slots override.
+        'com.github.oinsio.gnomish.app.ServeCommand',
+        // TakeSlotRunnerSpec, 11 scenarios — the take cycle, the MDC frame, all three optional
+        // attachments present and absent, outcome logging, the swallowed fetch failure, and both
+        // halves of the crash classification (ERROR with a stack, WARN without one during the stop).
+        'com.github.oinsio.gnomish.app.serve.TakeSlotRunner',
+        // SubcommandDispatchSpec, 10 scenarios — one per routed subcommand plus the `run` fall-through,
+        // each asserting the routed command really ran. Its six collaborators are final command
+        // classes the composition root assembles; a same-module spec would need stand-ins for all six.
+        'com.github.oinsio.gnomish.app.SubcommandDispatch',
+        // TakeCommandSpec, 10 scenarios (plus TakeCommandStandingReaperWiringSpec for the reaper
+        // thread's lifetime) — startup refusals, explicit and bare mode, short-ref expansion and the
+        // foreign-ref refusal. The three mutations here are the reaper start/stop frame and the
+        // hand-off to TakeRefDispatch, all covered there against a real tracker adapter.
+        'com.github.oinsio.gnomish.app.TakeCommand',
+    ]
+    // M5 documented exception (add-claim-heartbeat): InstanceHeartbeatLifecycleSpec drives the REAL
+    // background beat thread through a rendezvous BlockingSleeper (register → worker → awaitEntered →
+    // releaseOne → join). Under PIT mutation a loop/register/beat mutant either makes the worker
+    // never enter its sleep (the test's unbounded awaitEntered/join then blocks) or drops the sleep
+    // so the worker busy-spins — both surface as TIMED_OUT, not a clean kill, and no covering-test
+    // change fixes a genuinely non-terminating background loop. Excluding it removes NO production
+    // line from mutation coverage: every InstanceHeartbeat line it touches is also driven
+    // SYNCHRONOUSLY on the test thread by InstanceHeartbeatSpec — loop() (sleep, empty-and-stop,
+    // per-tick failure) via seedHeldForTest + a bounded sleeper, register()'s single-thread guard via
+    // "a single instance-level thread serves all claims", tickGuarded()'s failure/recovery edges via
+    // "a guarded tick announces the fault once and closes it when the tick works again", and beat()'s
+    // ClaimGone branch via the direct-tick specs — so the gate still holds; only the timing-sensitive lifecycle rehearsal
+    // (which stays green under plain `test`) is kept out of PIT's per-mutation re-runs.
+    excludedTestClasses = [
+        'com.github.oinsio.gnomish.app.lease.InstanceHeartbeatLifecycleSpec',
+    ]
+}

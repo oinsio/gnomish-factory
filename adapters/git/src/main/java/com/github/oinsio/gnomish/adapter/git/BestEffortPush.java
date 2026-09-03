@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,7 +85,8 @@ final class BestEffortPush {
 
         if (!roundBoundaryCheck.isOnExpectedBranch()) {
             log.warn(
-                    "push skipped: taskId={}, stage={}, round={}, branch={}, reason=HEAD is not on the task branch",
+                    OperatorEvent.PUSH_SKIPPED_HEAD_OFF_BRANCH.head()
+                            + "push skipped: taskId={}, stage={}, round={}, branch={}, reason=HEAD is not on the task branch",
                     taskId,
                     stage,
                     round,
@@ -93,7 +96,8 @@ final class BestEffortPush {
 
         if (!roundBoundaryCheck.isAncestor(previousTip)) {
             log.warn(
-                    "push skipped: taskId={}, stage={}, round={}, branch={}, reason=previous tip {} is not an"
+                    OperatorEvent.PUSH_SKIPPED_TIP_NOT_ANCESTOR.head()
+                            + "push skipped: taskId={}, stage={}, round={}, branch={}, reason=previous tip {} is not an"
                             + " ancestor of HEAD",
                     taskId,
                     stage,
@@ -107,13 +111,13 @@ final class BestEffortPush {
         String outcome = PushOutcome.describe("push", result);
         if (outcome != null) {
             log.warn(
-                    "{}: taskId={}, stage={}, round={}, branch={}, stderr={}",
+                    OperatorEvent.PUSH_FAILED.head() + "{}: taskId={}, stage={}, round={}, branch={}, stderr={}",
                     outcome,
                     taskId,
                     stage,
                     round,
                     branch,
-                    result.stderr().trim());
+                    LogText.forLog(result.stderr()));
         }
     }
 }

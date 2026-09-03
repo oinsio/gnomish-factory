@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.lease
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -7,6 +8,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -139,6 +142,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
         def sleeper = new BlockingSleeper()
         def hb = new InstanceHeartbeat(tracker, progress, sleeper, clock, INTERVAL, ClaimLostSink.IGNORE, boom)
         started << hb
+        def logs = LogCaptureSupport.attach(InstanceHeartbeat)
 
         when:
         hb.register(A)
@@ -149,7 +153,15 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
         hb.worker().isAlive()
         hb.state() == HeartbeatWorkerState.RUNNING
 
+        and: 'FR15 of harden-logging-observability: the swallowed listener failure leaves a coded WARN'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.HEARTBEAT_STATE_LISTENER_FAILED.head())
+        }
+        event != null
+        event.level == Level.WARN
+
         cleanup:
+        logs.detach()
         hb.unregister(A)
         sleeper.releaseOne()
         hb.worker().join()

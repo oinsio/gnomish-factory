@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.subprocess.Termination
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -32,10 +31,7 @@ class DockerCliSpec extends Specification {
     }
 
     private String fakeBinary(String script) {
-        Path bin = tempDir.resolve('fakedocker')
-        Files.writeString(bin, "#!/bin/sh\n" + script)
-        bin.toFile().setExecutable(true)
-        bin.toString()
+        FakeDockerBinary.write(tempDir, script)
     }
 
     private static String readFully(InputStream stream) {

@@ -26,6 +26,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
@@ -34,6 +35,8 @@ import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
+import com.github.oinsio.gnomish.status.AnchorLog
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -250,7 +253,10 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     // Logback logger (same pattern as FeedAutomatonSpec#captureLogs) around a run and assert the
     // "delivered" summary is actually logged, killing the VoidMethodCallMutator that removes the
     // call to logOutcome from run().
-    def "logs the delivered outcome via logOutcome after a successful run"() {
+    // Task 4.3 of harden-logging-observability: the per-outcome line survives as the DEBUG detail
+    // carrier — the delivery's own free text has no room in the summary's fixed vocabulary — while
+    // the level-bearing statement of the outcome moved to the summary (the feature below).
+    def "logs the delivered outcome detail via logOutcome after a successful run"() {
         given:
         tracker.fetchTask(new TaskRef('PROJ-6')) >> workingTask('PROJ-6')
         def slotRunner = newSlotRunner()
@@ -262,8 +268,66 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
 
         then:
         events.any {
-            it.level == Level.INFO && it.formattedMessage.contains('PROJ-6') && it.formattedMessage.contains('delivered')
+            it.level == Level.DEBUG && it.formattedMessage.contains('PROJ-6') && it.formattedMessage.contains('delivered')
         }
+
+        and: 'and nothing above DEBUG duplicates it — one outcome, one level-bearing line'
+        !events.any {
+            it.level.isGreaterOrEqual(Level.INFO) && it.formattedMessage.contains('delivered')
+        }
+    }
+
+    // FR3 of harden-logging-observability: exactly one canonical summary per terminal result, in
+    // the shared form, at the level the outcome warrants.
+    def "emits exactly one canonical task summary for a terminal result"() {
+        given:
+        tracker.fetchTask(new TaskRef('PROJ-9')) >> workingTask('PROJ-9')
+        def slotRunner = newSlotRunner()
+        def capture = LogCaptureSupport.attach(AnchorLog)
+
+        when:
+        slotRunner.run(new TaskRef('PROJ-9'))
+
+        then:
+        def summaries = capture.list.findAll {
+            it.formattedMessage.contains('task summary:')
+        }
+        summaries.size() == 1
+        summaries[0].level == Level.INFO
+        summaries[0].formattedMessage.contains('outcome=delivered')
+        summaries[0].formattedMessage.contains('attempts=')
+        summaries[0].formattedMessage.contains('wall=')
+
+        cleanup:
+        capture.detach()
+    }
+
+    // FR3: the crash boundary is the one terminal path with no result to read, and it is exactly
+    // where a missing summary would leave the grep story unfinished. The line states what it knows
+    // — the outcome and the wall time — and fabricates nothing else.
+    def "emits a summary for a task that leaves through the crash boundary"() {
+        given:
+        ShutdownPhase.reset()
+        tracker.fetchTask(new TaskRef('PROJ-10')) >> {
+            throw new IllegalStateException('tracker unreachable')
+        }
+        def capture = LogCaptureSupport.attach(AnchorLog)
+
+        when:
+        newSlotRunner().run(new TaskRef('PROJ-10'))
+
+        then:
+        def summaries = capture.list.findAll {
+            it.formattedMessage.contains('task summary:')
+        }
+        summaries.size() == 1
+        summaries[0].level == Level.WARN
+        summaries[0].formattedMessage.contains('outcome=aborted')
+        summaries[0].formattedMessage.contains('attempts=0')
+        summaries[0].formattedMessage.contains('tokens=unreported')
+
+        cleanup:
+        capture.detach()
     }
 
     private static List<ILoggingEvent> captureLogs(Closure body) {
@@ -299,5 +363,57 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         then:
         noExceptionThrown()
         MDC.get(MDC_KEY) == null
+    }
+
+    // FR9 of harden-logging-observability: outside a stop, a slot dying uncaught is exactly what
+    // ERROR is for — work was lost and nobody asked for it.
+    def "FR9: a crash outside the shutdown phase stays an ERROR with its stack"() {
+        given:
+        ShutdownPhase.reset()
+        tracker.fetchTask(new TaskRef('PROJ-4')) >> {
+            throw new IllegalStateException('tracker unreachable')
+        }
+        def capture = LogCaptureSupport.attach(TakeSlotRunner)
+
+        when:
+        newSlotRunner().run(new TaskRef('PROJ-4'))
+
+        then:
+        def crash = capture.list.find {
+            it.formattedMessage.contains('crashed uncaught')
+        }
+        crash.level == Level.ERROR
+        crash.throwableProxy != null
+
+        cleanup:
+        capture.detach()
+    }
+
+    // FR9, factory-serve "Shutdown-caused death is not an alarm": the same death during the stop is
+    // the stop doing its job. One line, WARN, no stack — the stack would describe the shutdown.
+    def "FR9: a crash during the shutdown phase is one WARN without a stack"() {
+        given:
+        ShutdownPhase.begin()
+        tracker.fetchTask(new TaskRef('PROJ-5')) >> {
+            throw new IllegalStateException('interrupted by the stop')
+        }
+        def capture = LogCaptureSupport.attach(TakeSlotRunner)
+
+        when:
+        newSlotRunner().run(new TaskRef('PROJ-5'))
+
+        then: 'the death is attributed to the stop, and no ERROR blames the application'
+        def lines = capture.list.findAll {
+            it.formattedMessage.contains('PROJ-5')
+        }
+        lines.size() == 1
+        lines[0].level == Level.WARN
+        lines[0].throwableProxy == null
+        lines[0].formattedMessage.contains('stopped by the daemon shutdown')
+        lines[0].formattedMessage.contains('IllegalStateException')
+
+        cleanup:
+        capture.detach()
+        ShutdownPhase.reset()
     }
 }

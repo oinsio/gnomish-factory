@@ -13,6 +13,11 @@ import org.slf4j.LoggerFactory;
  * add-sandbox-core): reattaching to a kept container or creating a fresh one — network, volume,
  * seed clone, task container, scratch. Extracted from {@link ContainerTaskExecutionEnvironment}
  * for file size; the behavior is unchanged.
+ *
+ * <p>Both halves end at an INFO anchor naming the environment key, the branch and the image (FR2
+ * of harden-logging-observability) — the remote end of the lifecycle a {@code taskId} grep
+ * otherwise loses sight of, logged here at its own choke point rather than pulled through the
+ * application's anchor vocabulary, which this module cannot see (design D2).
  */
 final class ContainerMaterializer {
 
@@ -36,7 +41,11 @@ final class ContainerMaterializer {
             String branch,
             @Nullable String commitPin,
             ObjectOwnership ownership) {
-        log.debug("container environment reattaching to {} for branch {}", name, branch);
+        // FR2 of harden-logging-observability: a container environment's lifecycle is anchored at
+        // INFO at its own choke point. Reattaching is the transition an operator most needs to see
+        // named — the surviving volume may hold the only copy of unrecorded work, so "reattached"
+        // and "created" mean very different things about what the run started from.
+        log.info("container environment {} reattached for branch {} (image {})", key, branch, image);
         boolean running = inspect.stdout().strip().startsWith("true");
         if (!running) {
             management(docker, key, DockerCommands.startContainer(name), "start container");
@@ -60,8 +69,6 @@ final class ContainerMaterializer {
             String runtime,
             ResourceLimits limits,
             boolean enforceDiskQuota,
-            String workingCopy,
-            String scratch,
             String branch,
             @Nullable String commitPin,
             ObjectOwnership ownership) {
@@ -84,13 +91,29 @@ final class ContainerMaterializer {
         management(
                 docker,
                 key,
-                DockerCommands.runContainer(key, image, runtime, limits, enforceDiskQuota, workingCopy, ownership),
+                DockerCommands.runContainer(
+                        key,
+                        image,
+                        runtime,
+                        limits,
+                        enforceDiskQuota,
+                        ContainerTaskExecutionEnvironment.WORKING_COPY,
+                        ownership),
                 "run container");
         management(
                 docker,
                 key,
-                DockerCommands.exec(key, workingCopy, Map.of(), false, List.of("mkdir", "-p", scratch)),
+                DockerCommands.exec(
+                        key,
+                        ContainerTaskExecutionEnvironment.WORKING_COPY,
+                        Map.of(),
+                        false,
+                        List.of("mkdir", "-p", ContainerTaskExecutionEnvironment.SCRATCH)),
                 "create scratch");
+        // FR2: the creation anchor, logged after the last step rather than before the first — the
+        // line states that the environment exists, and a materialize that threw part-way through
+        // has not created one. Its failure is already reported by the throw.
+        log.info("container environment {} created for branch {} (image {})", key, branch, image);
     }
 
     private static void management(DockerCli docker, String key, List<String> argv, String what) {

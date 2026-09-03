@@ -17,6 +17,13 @@ import org.slf4j.LoggerFactory;
  * log is emitted here, at the point of capture (NFR-O1).
  *
  * <p>Implements FR12, NFR-O1 of add-stage-engine.
+ *
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.logtext.OperatorEvent}: this class's
+ * operator line repeats catalog code {@code GF111} as a literal head, because {@code :domain}
+ * must not take a {@code :logtext} edge to reach the catalog (ADR 0004, accepted deviation 1).
+ * The literal and the constant are pinned equal by {@code DomainOperatorEventHeadSpec}; there is
+ * no resolvable link either way, which is why the pair is listed in
+ * {@code .claude/rules/manual-sync-pairs.md}.
  */
 final class Events {
 
@@ -46,7 +53,7 @@ final class Events {
         try {
             listener.onEvent(event);
         } catch (RuntimeException ex) {
-            log.warn("event listener threw for {}", event, ex);
+            log.warn("[GF111] event listener threw for {}", event, ex);
         }
     }
 }

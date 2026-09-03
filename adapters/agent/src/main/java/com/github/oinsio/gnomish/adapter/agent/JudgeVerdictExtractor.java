@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -152,7 +153,8 @@ public final class JudgeVerdictExtractor {
      */
     private Verdict.CannotVerify cannotVerify(String reason, String rawMessage) {
         log.warn(
-                "judge verdict could not be extracted ({}); raw final message: {}",
+                OperatorEvent.JUDGE_VERDICT_UNEXTRACTABLE.head()
+                        + "judge verdict could not be extracted ({}); raw final message: {}",
                 reason,
                 FindingsSanitizer.forLog(rawMessage));
         return new Verdict.CannotVerify(reason, rawMessage);

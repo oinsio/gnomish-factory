@@ -1,14 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.subprocess.Termination
-import java.nio.file.Files
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -31,31 +29,25 @@ class DockerCliBoundedSpec extends Specification {
     Path tempDir
 
     private DockerCli cliBackedBy(String script, Duration timeout) {
-        Path bin = tempDir.resolve('fakedocker')
-        Files.writeString(bin, "#!/bin/sh\n" + script)
-        bin.toFile().setExecutable(true)
-        new DockerCli(bin.toString(), timeout)
+        new DockerCli(FakeDockerBinary.write(tempDir, script), timeout)
     }
 
     def cleanup() {
         Thread.interrupted() // never leak an interrupt flag into the next feature
+        ShutdownPhase.reset()
     }
 
-    /** The WARN lines the CLI wrote while {@code emit} ran — the operator's whole view of a bound that fired. */
+    /**
+     * The WARN lines the CLI wrote while {@code emit} ran — the operator's whole view of a bound
+     * that fired. Through the shared helper (`.claude/rules/logging.md`) rather than a hand-rolled
+     * {@code ListAppender}: the helper saves and restores the logger's level, and the Logback level
+     * registry is JVM-global, so a pin left behind makes a later spec order-dependent.
+     */
     private static List<String> warnings(Closure emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(DockerCli)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list.findAll {
-            it.level == Level.WARN
-        }*.formattedMessage
+        LogCaptureSupport.capture(DockerCli, Level.DEBUG, emit)
+                .findAll {
+                    it.level == Level.WARN
+                }*.formattedMessage
     }
 
     // FR10, NFR-R1, M4: the wedged registry case — the command ends on its deadline, not on docker
@@ -80,6 +72,7 @@ class DockerCliBoundedSpec extends Specification {
 
         and: 'NFR-O1: one WARN names the command class, the timeout, and the deadline to raise'
         warns.size() == 1
+        warns[0].startsWith(OperatorEvent.DOCKER_COMMAND_TIMED_OUT.head())
         warns[0].contains('docker command timed out')
         warns[0].contains('subcommand=run')
         warns[0].contains('deadline=PT2S')
@@ -166,9 +159,34 @@ exit 0
 
         and: 'NFR-O2: the WARN blames the interruption, and names no deadline that was never reached'
         warns.size() == 1
+        warns[0].startsWith(OperatorEvent.DOCKER_COMMAND_KILLED.head())
         warns[0].contains('docker command interrupted')
         warns[0].contains('subcommand=ps')
         !warns[0].contains('deadline=')
+
+        and: 'the caller up the stack still sees the interrupt'
+        Thread.interrupted()
+    }
+
+    // FR9 of harden-logging-observability: the stop interrupts every in-flight docker command, so
+    // the same line that is a fair warning outside a shutdown becomes a wall of unexplained
+    // warnings during one. It names the stop instead.
+    def "FR9: an interrupt during the shutdown phase is attributed to the stop"() {
+        given:
+        def cli = cliBackedBy("sleep ${STALL_SECONDS}", Duration.ofSeconds(60))
+        ShutdownPhase.begin()
+
+        when:
+        def result = null
+        Thread.currentThread().interrupt()
+        def warns = warnings { result = cli.run(['ps']) }
+
+        then:
+        result.termination() == Termination.INTERRUPTED
+        warns.size() == 1
+        warns[0].startsWith(OperatorEvent.DOCKER_COMMAND_KILLED.head())
+        warns[0].contains('docker command interrupted by the daemon shutdown')
+        warns[0].contains('subcommand=ps')
 
         and: 'the caller up the stack still sees the interrupt'
         Thread.interrupted()

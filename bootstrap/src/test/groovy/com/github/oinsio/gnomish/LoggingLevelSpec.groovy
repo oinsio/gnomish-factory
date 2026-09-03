@@ -10,7 +10,19 @@ import spock.lang.Specification
 
 /**
  * Log level is configurable without recompilation (FR4 scenario "Log level
- * from configuration"). Each spec boots the real context with a
+ * from configuration") — the finer-grain, per-logger leg of it.
+ *
+ * <p>FR4 used to be proven end to end by a single unconditional {@code
+ * log.debug} in {@code FactoryApplication.main}. Task 4.1 of
+ * harden-logging-observability retired that line (a log statement whose only
+ * reader was a spec is not an operator anchor), which splits the contract in
+ * two: the operator-facing "raise verbosity for one run with no rebuild" now
+ * rides the {@code ${GNOMISH_LOG_LEVEL}} root-level substitution and is
+ * asserted by {@code LogbackConfigSpec}; the {@code logging.level.*} property
+ * that still layers finer grain on top of it is what these specs pin, through
+ * a probe of their own rather than through production's boot line.
+ *
+ * <p>Each spec boots the real context with a
  * {@code logging.level.com.github.oinsio.gnomish} property, then emits one
  * DEBUG event strictly through the SLF4J API and captures what Logback lets
  * through with a ListAppender: the same bytecode produces a DEBUG record only

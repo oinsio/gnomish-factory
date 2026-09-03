@@ -46,6 +46,12 @@ dependencies {
     implementation project(':sandbox:docker')
     api project(':sandbox:core')
 
+    // The dependency-free logging-support leaf (design D5/D10 of harden-logging-observability):
+    // `LogText` neutralizes every piece of agent-written text this module logs — stream-json raw
+    // events, decision-file content, progress payloads — and `MdcAwareThread` is the thread-hop
+    // context helper. Declared, not inherited: this module names both in its own source.
+    implementation project(':logtext')
+
     implementation libs.slf4j.api
 
     // The agent CLI's stream-JSON output. The DTOs are internal to this module,
@@ -122,6 +128,10 @@ layering {
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',
+        // The dependency-free logging-support leaf (design D5/D10 of
+        // harden-logging-observability): this module's own sources name `LogText` at every
+        // agent-text log site.
+        ':logtext',
         ':sandbox:core',
         ':sandbox:docker',
         // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the

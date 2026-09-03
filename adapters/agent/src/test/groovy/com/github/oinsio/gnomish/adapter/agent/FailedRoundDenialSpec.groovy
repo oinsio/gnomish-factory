@@ -1,24 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.adapter.law.PipelineLaw
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
-import java.nio.file.Files
-import java.nio.file.Path
-import spock.lang.Specification
-import spock.lang.TempDir
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 
 /**
  * FR3, D1 of fix-denial-report-attachment — the failure half of the denial read:
@@ -30,7 +16,7 @@ import spock.lang.TempDir
  * round's attempt — the hung round's blocked exfiltration reported as the next
  * attempt's.
  */
-class FailedRoundDenialSpec extends Specification {
+class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
 
     static final def HUNG_ROUND_DENIAL = new Finding(
     'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
@@ -38,24 +24,11 @@ class FailedRoundDenialSpec extends Specification {
     static final def NEXT_ROUND_DENIAL = new Finding(
     'egress denied: pastebin.example.org:443', 'pastebin.example.org:443/api', 'kind=http method=POST')
 
-    @TempDir
-    Path workspaceDir
-
-    @TempDir
-    Path decisionRoot
-
-    def clock = new VirtualClock()
-
-    private static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
-
-    def setup() {
-        Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
-    }
-
     // FR3, D1: the drain is what advances the guard's delta cursor past the failed round
     def "a timed-out round drains its environment's denials"() {
         given:
         def source = scriptedSource([[HUNG_ROUND_DENIAL]])
+        def logs = LogCaptureSupport.attach(ExecutorRoundExecution)
 
         when:
         executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
@@ -65,6 +38,17 @@ class FailedRoundDenialSpec extends Specification {
 
         and: 'the hung round asked its environment for denials exactly once'
         source.reads() == 1
+
+        and: 'FR15 of harden-logging-observability: denials attached to no attempt are named, with their count'
+        def warned = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.ROUND_DENIALS_ORPHANED_ON_FAILURE.head())
+        }
+        warned != null
+        warned.level == Level.WARN
+        warned.formattedMessage.contains('1')
+
+        cleanup:
+        logs.detach()
     }
 
     // FR3, D1: a stream with no result event dies before the close too — same drain
@@ -110,36 +94,26 @@ class FailedRoundDenialSpec extends Specification {
     def "a throwing denial read does not mask the round's failure"() {
         given: 'an environment that cannot serve a denial read at all'
         def source = scriptedSource([null])
+        def logs = LogCaptureSupport.attach(ExecutorRoundExecution)
 
         when:
         executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
         then:
         thrown(RoundTimeoutException)
+
+        and: 'FR15 of harden-logging-observability: the undrained cursor is a coded WARN of its own'
+        def warned = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.ROUND_DENIALS_UNREADABLE_ON_FAILURE.head())
+        }
+        warned != null
+        warned.level == Level.WARN
+
+        cleanup:
+        logs.detach()
     }
 
     private ScriptedDenialRounds scriptedSource(List<List<Finding>> answers) {
         new ScriptedDenialRounds(hostSource(), answers)
-    }
-
-    private HostRoundEnvironmentSource hostSource() {
-        new HostRoundEnvironmentSource(new DecisionFileTransport(decisionRoot), clock, ChildEnvAllowlist.none())
-    }
-
-    private StageExecutor executorFor(String scenario, RoundEnvironmentSource source) {
-        new CliStageExecutor(
-                FakeAgentSupport.propertiesFor(scenario), clock,
-                { AgentProgressEvent e -> } as AgentProgressListener, LAW, source)
-    }
-
-    private StageExecutor.Request requestFor(Map<String, Object> settings = [:]) {
-        def stage = new StageDefinition(
-                'build', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', settings),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        new StageExecutor.Request(
-                new TaskContext('TASK-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(workspaceDir), 0, [])
     }
 }

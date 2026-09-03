@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -15,8 +16,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.status.AnchorLog
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
-import java.util.Random
 import spock.lang.Specification
 
 /**
@@ -118,6 +120,41 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * tracker.fetchTask(_) >> readyTask()
         thrown(UsageException)
+    }
+
+    // FR2 of harden-logging-observability, scenario "Claim is the first correlated line": the
+    // second claim path emits the same anchor form the serve feed does, before it dispatches the
+    // work — here observable because the dispatch is stopped at its first git call.
+    def "emits the claim anchor before dispatching the claimed task"() {
+        given: 'the claim chain is stopped at its first git call, as above'
+        def store = Stub(TaskStoreGit) {
+            taskRepository(_, _) >> {
+                throw new UsageException('dispatched')
+            }
+        }
+        def git = new TaskGit(store, Stub(TaskBranchGit) {
+            locate(_, _) >> new BranchLocation.NotFound()
+            classifyShape(_, _) >> new BranchShape.Bare()
+        }, Stub(TaskWorktreeGit))
+        def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
+                BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
+        def capture = LogCaptureSupport.attach(AnchorLog)
+
+        when:
+        resolve(subject, [ready('github:o/r#1')])
+
+        then:
+        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        1 * tracker.fetchTask(_) >> readyTask()
+        thrown(UsageException)
+
+        and: 'one anchor, in the shared form: a bare take fills its single slot'
+        capture.list.size() == 1
+        capture.list[0].level == Level.INFO
+        capture.list[0].formattedMessage == 'claim acquired for task github:o/r#1: 0 of 1 slot(s) free'
+
+        cleanup:
+        capture.detach()
     }
 
     // FR10: losing a claim race is not the end of the walk — another instance winning one entry says

@@ -1,7 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
+import com.github.oinsio.gnomish.logtext.LogText;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.nio.file.Path;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Decides the fate of a task worktree from its terminal {@link TaskOutcome} (FR6, design D6):
@@ -26,6 +30,8 @@ import java.nio.file.Path;
  */
 public final class TaskWorktreeCleanup {
 
+    private static final Logger log = LoggerFactory.getLogger(TaskWorktreeCleanup.class);
+
     private final GitProcessRunner runner;
 
     /**
@@ -49,14 +55,14 @@ public final class TaskWorktreeCleanup {
      */
     public void cleanUp(Path cloneDir, Path worktreePath, TaskOutcome outcome) {
         switch (outcome) {
-            case TaskOutcome.Completed completed -> remove(cloneDir, worktreePath);
-            case TaskOutcome.Paused paused -> {
+            case TaskOutcome.Completed _ -> remove(cloneDir, worktreePath);
+            case TaskOutcome.Paused _ -> {
                 // Kept as-is: a manual checkpoint may resume from this working copy.
             }
-            case TaskOutcome.Escalated escalated -> {
+            case TaskOutcome.Escalated _ -> {
                 // Kept as-is: an escalated task may resume from this working copy.
             }
-            case TaskOutcome.Aborted aborted -> {
+            case TaskOutcome.Aborted _ -> {
                 // Always kept, unconditionally (design D6): may hold the only copy of work
                 // that never reached durable storage.
             }
@@ -74,6 +80,18 @@ public final class TaskWorktreeCleanup {
     }
 
     private void remove(Path cloneDir, Path worktreePath) {
-        runner.run(cloneDir, "worktree", "remove", "--force", worktreePath.toString());
+        GitCommandResult removal = runner.run(cloneDir, "worktree", "remove", "--force", worktreePath.toString());
+        if (removal.exitCode() != 0) {
+            // Best effort — a worktree that will not go away never fails a completed task — but
+            // it leaves a directory and a registration behind for every completed task, which is
+            // exactly the kind of slow leak nobody finds without a line (FR5).
+            // throwable-not-subject: git reported a status, not a thrown fault.
+            log.warn(
+                    OperatorEvent.WORKTREE_REMOVE_FAILED.head()
+                            + "could not remove the worktree at {} (git exited {}); it stays registered until a prune: {}",
+                    worktreePath,
+                    removal.exitCode(),
+                    LogText.forLog(removal.stderr()));
+        }
     }
 }

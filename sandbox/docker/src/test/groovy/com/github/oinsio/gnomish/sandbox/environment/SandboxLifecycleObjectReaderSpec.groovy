@@ -1,9 +1,8 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import org.slf4j.LoggerFactory
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import java.time.Instant as JavaInstant
 import spock.lang.Specification
 
 class SandboxLifecycleObjectReaderSpec extends Specification {
@@ -199,8 +198,10 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
     }
 
     // An unparseable timestamp costs the object its verdict for the whole pass, so it must never
-    // pass silently: without the warning, a remnant is skipped with no log and no reaping forever.
-    def "createdAt warns with the object name and the raw value when the timestamp is unparseable"() {
+    // pass silently. The operator-facing half of that is now the sweep's own SKIPPED_NO_VERDICT
+    // verdict (FR12 of harden-logging-observability — one owner per fault); what stays here is the
+    // raw value the parse choked on, which the verdict does not carry, at DEBUG.
+    def "createdAt notes the object name and the raw value when the timestamp is unparseable"() {
         given:
         def appender = attachAppender()
         docker.onRun = { ok('2026-08-07 09:00:01.813301176 +0000 UTC') }
@@ -210,18 +211,21 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
 
         then:
         createdAt.isEmpty()
-        def warnings = appender.list.findAll {
-            it.level.toString() == 'WARN'
+        def notes = appender.list.findAll {
+            it.level.toString() == 'DEBUG'
         }*.formattedMessage
-        warnings.size() == 1
-        warnings[0].contains('gnomish-net-k')
-        warnings[0].contains('2026-08-07 09:00:01.813301176 +0000 UTC')
+        notes.size() == 1
+        notes[0].contains('gnomish-net-k')
+        notes[0].contains('2026-08-07 09:00:01.813301176 +0000 UTC')
+
+        and: 'the console stays clear — the sweep verdict is what reaches the operator'
+        appender.list.every { it.level.toString() == 'DEBUG' }
 
         cleanup:
         detachAppender(appender)
     }
 
-    def "containerTiming warns with the container name when its created-at is unparseable"() {
+    def "containerTiming notes the container name when its created-at is unparseable"() {
         given:
         def appender = attachAppender()
         docker.onRun = {
@@ -232,10 +236,10 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
         reader.containerTiming('gnomish-box-k')
 
         then:
-        def warnings = appender.list.findAll {
-            it.level.toString() == 'WARN'
+        def notes = appender.list.findAll {
+            it.level.toString() == 'DEBUG'
         }*.formattedMessage
-        warnings.any {
+        notes.any {
             it.contains('gnomish-box-k') && it.contains('not-a-date')
         }
 
@@ -243,19 +247,19 @@ class SandboxLifecycleObjectReaderSpec extends Specification {
         detachAppender(appender)
     }
 
-    private static ListAppender<ILoggingEvent> attachAppender() {
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        ((Logger) LoggerFactory.getLogger(SandboxLifecycleObjectReader)).addAppender(appender)
-        appender
+    /**
+     * Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec —
+     * pinned at DEBUG, which is where the reader's per-object notes now live.
+     */
+    private static LogCaptureSupport attachAppender() {
+        LogCaptureSupport.attach(SandboxLifecycleObjectReader, Level.DEBUG)
     }
 
-    private static void detachAppender(ListAppender<ILoggingEvent> appender) {
-        ((Logger) LoggerFactory.getLogger(SandboxLifecycleObjectReader)).detachAppender(appender)
-        appender.stop()
+    private static void detachAppender(LogCaptureSupport logs) {
+        logs.detach()
     }
 
-    private static java.time.Instant Instant(String s) {
-        java.time.Instant.parse(s)
+    private static JavaInstant Instant(String s) {
+        JavaInstant.parse(s)
     }
 }

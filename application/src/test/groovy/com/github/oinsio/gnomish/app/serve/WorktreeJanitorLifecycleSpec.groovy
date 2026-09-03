@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.app.serve
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
@@ -116,6 +118,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
         def janitor = new WorktreeJanitor(worktreesRoot, cloneDir, Duration.ofSeconds(0), disposal, clock, sleeper, {
             -> Set.of()
         })
+        def logs = LogCaptureSupport.attach(WorktreeJanitor)
 
         when: 'the janitor starts, ticks once (throwing), and reaches the next sleep regardless'
         janitor.start()
@@ -130,5 +133,15 @@ class WorktreeJanitorLifecycleSpec extends Specification {
 
         then: 'the thread survived the failing tick and looped back around for another'
         secondSleep == WorktreeJanitor.TICK_INTERVAL
+
+        and: 'FR15 of harden-logging-observability: every lost tick leaves its own coded WARN'
+        def lostTicks = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.WORKTREE_JANITOR_TICK_FAILED.head())
+        }
+        lostTicks.size() >= 2
+        lostTicks.every { it.level == Level.WARN }
+
+        cleanup:
+        logs.detach()
     }
 }

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
 import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
@@ -66,7 +67,7 @@ public final class EnvironmentSelfCheck {
      * @param allowlist       the operator egress allowlist; never null, may be empty
      * @param sleeper         the pause seam of the guard-readiness retry; never null
      */
-    public EnvironmentSelfCheck(
+    EnvironmentSelfCheck(
             TaskExecutionEnvironment environment,
             EgressGuard guard,
             DockerCli docker,
@@ -91,12 +92,16 @@ public final class EnvironmentSelfCheck {
      */
     public void verify() {
         guard.ensureRunning();
-        probeRunsAsNonRoot();
-        probes.probeDirectEgressFails();
-        probes.probeDeniedHostRefused();
-        probes.probeAllowlistedPasses();
-        probeIsolationMatchesPassport();
-        log.info("environment self-check passed for {}", key);
+        // FR12 of harden-logging-observability: each probe's own pass is per-item detail at DEBUG,
+        // and what it established rides into the single INFO below — so a healthy box costs the
+        // operator one line that still says what was actually verified, not five that repeat it.
+        List<String> established = List.of(
+                probeRunsAsNonRoot(),
+                probes.probeDirectEgressFails(),
+                probes.probeDeniedHostRefused(),
+                probes.probeAllowlistedPasses(),
+                probeIsolationMatchesPassport());
+        log.info("environment self-check passed for {}: {}", key, String.join("; ", established));
     }
 
     /**
@@ -106,7 +111,7 @@ public final class EnvironmentSelfCheck {
      * onto a root-owned cage config. A root {@code id -u} of {@code 0}, or an
      * {@code id} that cannot run at all, fails closed (FR8, D16).
      */
-    private void probeRunsAsNonRoot() {
+    private String probeRunsAsNonRoot() {
         ExecHandle handle = environment.exec(new ExecCommand(List.of("id", "-u"), Map.of(), null, true));
         CapturedExec probe = EgressSelfCheckProbes.capture(handle, "self-check probe non-root");
         String output = probe.output().strip();
@@ -119,13 +124,14 @@ public final class EnvironmentSelfCheck {
             throw new SelfCheckFailedException(
                     "non-root", "the in-box user is root (uid 0); D16 requires a non-root image user");
         }
-        log.info("self-check probe non-root passed for {}: in-box uid {}", key, output);
+        log.debug("self-check probe non-root passed for {}: in-box uid {}", key, LogText.forLog(output));
+        return "in-box uid " + output;
     }
 
     /**
      * The isolation in effect must match the passport: internal network, configured runtime (FR8, D5).
      */
-    private void probeIsolationMatchesPassport() {
+    private String probeIsolationMatchesPassport() {
         CapabilityPassport passport = environment.passport();
         if (passport.isolation() != IsolationLevel.CONTAINER || !passport.egressControlled()) {
             throw new SelfCheckFailedException(
@@ -142,6 +148,8 @@ public final class EnvironmentSelfCheck {
             throw new SelfCheckFailedException(
                     "isolation", "container runtime is '" + runtime + "', expected '" + expectedRuntime + "'");
         }
-        log.info("self-check probe isolation passed for {}: internal network, runtime {}", key, runtime);
+        log.debug(
+                "self-check probe isolation passed for {}: internal network, runtime {}", key, LogText.forLog(runtime));
+        return "internal network, runtime " + runtime;
     }
 }

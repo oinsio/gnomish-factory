@@ -53,8 +53,13 @@ public record ServeShutdown(
 
     private static final Logger log = LoggerFactory.getLogger(ServeShutdown.class);
 
-    /** Design D9: the shutdown-specific reason folded into the round-boundary "work stopped" note. */
-    static final String SHUTDOWN_REASON = "daemon shutting down (SIGTERM)";
+    /**
+     * Design D9: the shutdown-specific reason folded into the round-boundary "work stopped" note.
+     * Says "signal", not "SIGTERM": the JVM runs this sequence for SIGINT too, and the note is read
+     * by a human on the tracker who would otherwise be told the wrong thing about half the stops
+     * (task 3.4 of harden-logging-observability).
+     */
+    static final String SHUTDOWN_REASON = "daemon shutting down (signal)";
 
     /**
      * @param slotLedger the shared slot ledger whose {@link SlotLedger#occupiedRefs()} names the

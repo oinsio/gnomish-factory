@@ -166,7 +166,8 @@ public final class TakeBareAuto {
             Tracker tracker,
             InstanceId instanceId) {
         List<ReadyTask> readyTasks = tracker.listReady(FeedPolicy.FEED_LIMIT);
-        FinishedDecline.declineObserved(tracker, readyTasks);
+        // A one-shot run: its own latch, cold, discarded with the run (FR12).
+        new FinishedDecline().declineObserved(tracker, readyTasks);
         int openFrontCount = tracker.listOpen().size();
         return walk.resolve(cloneDir, definition, interactiveMode, tracker, instanceId, readyTasks, openFrontCount);
     }

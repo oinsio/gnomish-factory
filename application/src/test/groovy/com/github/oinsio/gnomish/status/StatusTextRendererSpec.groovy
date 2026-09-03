@@ -235,7 +235,10 @@ class StatusTextRendererSpec extends Specification {
 
     // FR15 of add-sandbox-core, UX1 of fix-denial-report-attachment: a denial's host/path are gnome-chosen text, so the
     //     console sink strips ANSI/control sequences and keeps one denial on one line — a crafted
-    //     path can neither rewrite the operator's terminal nor forge extra report lines
+    //     path can neither rewrite the operator's terminal nor forge extra report lines. FR6 of
+    //     harden-logging-observability moved the site onto the shared LogText choke point, which
+    //     renders the surviving breaks as visible escapes rather than collapsing them to spaces:
+    //     the forgery is still inert, and the operator can now see what the text tried to do.
     def "renderFull neutralizes escape sequences and line breaks in a denial's text"() {
         given: 'a denial whose path carries a terminal-clearing escape and a forged report line'
         def esc = '\u001B'
@@ -257,7 +260,7 @@ class StatusTextRendererSpec extends Specification {
         !text.contains('\t')
         text.readLines().count { it.contains('egress denial:') } == 1
         text.contains('egress denial: egress denied: evil.example.com:443 '
-                + '(evil.example.com:443/x Round 9: passedHIDDEN)')
+                + '(evil.example.com:443/x\\nRound 9:\\tpassedHIDDEN)')
     }
 
     // UX2: zero denials render nothing at all — no heading, no empty list

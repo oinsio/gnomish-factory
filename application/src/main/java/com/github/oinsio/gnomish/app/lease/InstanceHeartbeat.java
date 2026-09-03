@@ -1,9 +1,13 @@
 package com.github.oinsio.gnomish.app.lease;
 
+import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -26,7 +30,9 @@ import org.slf4j.LoggerFactory;
  * lock (in {@link HeldClaims}), so a claim registered exactly as the thread stops is never lost. An
  * <i>abnormal</i> death (an {@code Error} or a throwing sleeper) is not resurrected — the designed
  * degradation (design D3): beats stop, the claim goes stale, a reaper returns it. {@link
- * #onWorkerDeath} only makes it loud (ERROR), clears {@code running} so a later {@link #register}
+ * #onWorkerDeath} only makes it loud — ERROR normally, WARN without a stack once {@link
+ * ShutdownPhase} says the stop caused it (FR9 of harden-logging-observability) — clears {@code
+ * running} so a later {@link #register}
  * starts a fresh thread, and fires the {@link HeartbeatStateListener} so {@code died} reaches the
  * snapshot immediately (FR7). Each tick beats a lock-taken snapshot of this instance's own claims
  * (never held across a network write); a claim {@link HeartbeatBeater} reports gone is surfaced
@@ -57,6 +63,10 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     private final HeldClaims claims = new HeldClaims();
     private final Duration lostDetection;
     private final Map<TaskRef, Instant> lastConfirmedAt = new ConcurrentHashMap<>();
+
+    /** The tick streak's edge logging; the per-claim streaks belong to {@link HeartbeatBeater}. */
+    private final HeartbeatTickLog tickLog;
+
     private volatile Instant lastTickAt;
 
     /**
@@ -115,13 +125,43 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             HeartbeatStateListener stateListener,
             Duration lostDetection) {
         this.lostDetection = lostDetection;
-        this.beater = new HeartbeatBeater(tracker, progress, clock);
+        // The edge-logging owner for the two streaks this thread can run: each claim's beat
+        // failures (namespaced by HeartbeatBeater) and the tick itself failing. Built here rather
+        // than injected because it is log-plane only — it decides how a repeated failure is
+        // *said*, never what the beat does — and the constructor is already at the parameter
+        // limit (process-invariants.md). FR4 of harden-logging-observability.
+        RepeatSuppressor suppressor = new RepeatSuppressor(java.time.Clock.systemUTC(), rollUpFor(interval));
+        this.tickLog = new HeartbeatTickLog(suppressor);
+        this.beater = new HeartbeatBeater(tracker, progress, clock, suppressor);
         this.sleeper = sleeper;
         this.interval = interval;
         this.claimLostSink = claimLostSink;
         this.clock = clock;
         this.stateListener = stateListener;
         this.lastTickAt = clock.now();
+    }
+
+    /**
+     * The quiet period between roll-ups for a loop that ticks every {@code interval}. A roll-up
+     * period equal to the loop's own tick is no suppression at all — every repeat would qualify —
+     * and the beat interval's own default (design D8) is exactly the suppressor's default, so the
+     * period is derived from the loop rather than taken from the catalog: at most one reminder per
+     * six beats, and never more often than {@link RepeatSuppressor#DEFAULT_ROLL_UP_INTERVAL}.
+     */
+    // Package-private so the derivation is asserted directly; the suppressor it feeds is built in
+    // the constructor and never exposed.
+    //
+    // @DoNotMutate: provably equivalent mutant. The two arms of the comparison return equal
+    //     durations at the boundary — when six beats are exactly the default, `>` and `>=` both
+    //     yield the default's own value — so no covering test can distinguish the boundary
+    //     mutation (testing.md, "provably equivalent mutant"). HeartbeatRollUpPeriodSpec covers
+    //     the method on both sides of the boundary and on the boundary itself.
+    @DoNotMutate
+    static Duration rollUpFor(Duration interval) {
+        Duration sixBeats = interval.multipliedBy(6);
+        return sixBeats.compareTo(RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL) > 0
+                ? sixBeats
+                : RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL;
     }
 
     /**
@@ -144,7 +184,22 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     // The worker's UncaughtExceptionHandler; runs only on the abnormal exit (a normal loop() return
     // clears running without throwing). Not resurrected (design D3), only made loud and restart-safe.
     private void onWorkerDeath(Thread dead, Throwable e) {
-        log.error("heartbeat thread {} died; held claims will go stale and be reaped", dead.getName(), e);
+        if (ShutdownPhase.inProgress()) {
+            // FR9 of harden-logging-observability: the stop interrupted this worker on purpose, so
+            // the held claims going stale is the designed outcome, not lost work.
+            // throwable-not-subject: an interrupt's stack describes the stop, not a defect.
+            log.warn(
+                    OperatorEvent.HEARTBEAT_THREAD_STOPPED_BY_SHUTDOWN.head()
+                            + "heartbeat thread {} stopped by the daemon shutdown ({}); held claims fall back to the lease TTL",
+                    dead.getName(),
+                    e.getClass().getSimpleName());
+        } else {
+            log.error(
+                    OperatorEvent.HEARTBEAT_THREAD_DIED.head()
+                            + "heartbeat thread {} died; held claims will go stale and be reaped",
+                    dead.getName(),
+                    e);
+        }
         claims.markDied();
         // RUNNING → DIED, the FR7 trigger: wakes the writer so `died` lands immediately (design D4).
         notifyStateChanged();
@@ -160,6 +215,9 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
     public void unregister(TaskRef ref) {
         claims.remove(ref);
         lastConfirmedAt.remove(ref);
+        // A claim released mid-outage has no streak left to roll up, and leaving one behind would
+        // grow the suppressor's map for the life of the process (FR4).
+        beater.forget(ref);
     }
 
     // Package-private so a spec drives the loop synchronously (seeded via seedHeldForTest, with a
@@ -172,11 +230,22 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
                 notifyStateChanged();
                 return;
             }
-            try {
-                tick();
-            } catch (RuntimeException e) {
-                log.warn("heartbeat tick failed; thread continues", e);
-            }
+            tickGuarded();
+        }
+    }
+
+    /**
+     * One tick under the loop's own guard: a collaborator bug must cost one tick, not the beat
+     * thread (design D3). Package-private and separate from {@link #loop} so a spec drives both
+     * edges — the failure and the recovery that closes it — synchronously, instead of racing the
+     * worker thread for them.
+     */
+    void tickGuarded() {
+        try {
+            tick();
+            tickLog.recovered();
+        } catch (RuntimeException e) {
+            tickLog.failed(e);
         }
     }
 
@@ -186,7 +255,10 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
         try {
             stateListener.onStateChanged();
         } catch (RuntimeException e) {
-            log.warn("heartbeat state listener failed; snapshot write may wait for the next timer beat", e);
+            log.warn(
+                    OperatorEvent.HEARTBEAT_STATE_LISTENER_FAILED.head()
+                            + "heartbeat state listener failed; snapshot write may wait for the next timer beat",
+                    e);
         }
     }
 
@@ -224,7 +296,8 @@ public final class InstanceHeartbeat implements ClaimBeat, HeartbeatVitals {
             return;
         }
         log.warn(
-                "claim for {} unconfirmed for longer than {}; freezing writes until it is re-verified",
+                OperatorEvent.CLAIM_UNCONFIRMED_WRITES_FROZEN.head()
+                        + "claim for {} unconfirmed for longer than {}; freezing writes until it is re-verified",
                 ref.id(),
                 lostDetection);
         claimLostSink.claimUnconfirmed(ref);

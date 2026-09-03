@@ -22,6 +22,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The bare-object commit-building plumbing behind {@link GitObjectsTaskRepository} (design D19):
@@ -35,6 +37,8 @@ import java.util.Optional;
  * method here rather than a stamp at each call site.
  */
 record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity, Instant now, ClaimEpochSource epochs) {
+
+    private static final Logger log = LoggerFactory.getLogger(TaskLifecycleCommitWriter.class);
 
     /** {@code task.json} is a small factory-authored document; a 1&nbsp;MiB read cap is generous. */
     private static final long TASK_JSON_SIZE_CAP = 1L << 20;
@@ -113,6 +117,15 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
         build(taskId, new CommitRequest(ref, expectedTip, parent, edits, metadata(taskId, event)), event);
     }
 
+    /**
+     * The bare-objects medium's task-lifecycle commit choke point — every lifecycle transition
+     * recorded without a worktree passes through here, so the FR2 anchor of
+     * harden-logging-observability sits here rather than at each caller.
+     *
+     * <p>Kept in sync with {@link GitTaskRepository}: both media log one INFO line per lifecycle
+     * transition, after the commit succeeds, naming the task and the event — an anchor states that
+     * the transition is on the branch, and a failed commit has not put it there.
+     */
     void build(String taskId, CommitRequest request, TaskLifecycleEvent event) {
         try {
             gitObjects.commit(request);
@@ -121,6 +134,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
         } catch (RuntimeException e) {
             throw new GitTaskRepositoryException(taskId, event, "building lifecycle commit", e);
         }
+        log.info("task lifecycle commit written for task {}: event={}", taskId, event);
     }
 
     CommitMetadata metadata(String taskId, TaskLifecycleEvent event) {

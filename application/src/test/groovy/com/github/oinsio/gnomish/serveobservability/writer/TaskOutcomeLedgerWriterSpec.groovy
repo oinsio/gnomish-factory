@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import ch.qos.logback.classic.Level
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -9,15 +10,14 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
-import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
-import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -30,7 +30,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR11 of add-serve-observability.
  */
-class TaskOutcomeLedgerWriterSpec extends Specification {
+class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedgerAppenderFixture {
 
     @TempDir
     Path homeDir
@@ -43,15 +43,12 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
     private SlotLedger slotLedger = new SlotLedger(2, slotClock)
 
     private TaskOutcomeLedgerWriter writer(Instant now) {
-        def appender = new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()),
-                homeDir, INSTANCE_NAME, Clock.fixed(now, ZoneOffset.UTC))
+        def appender = ledgerAppenderFor(homeDir, INSTANCE_NAME, now)
         return new TaskOutcomeLedgerWriter(slotLedger, appender, INSTANCE, Clock.fixed(now, ZoneOffset.UTC))
     }
 
     private Path ledgerFile(Instant now) {
-        def date = LocalDate.ofInstant(now, ZoneOffset.UTC)
-        return ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, date)
+        return ledgerFileFor(homeDir, INSTANCE_NAME, now)
     }
 
     private static TaskState finalState(Position position) {
@@ -166,7 +163,10 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
 
     // NFR-R1: a write failure (a blocked ledger directory) must never escape write() and crash
     // the slot that is finishing.
-    def "swallows an IOException from a blocked ledger directory"() {
+    //
+    // FR15 of harden-logging-observability: the lost line is a task's own outcome, so the ERROR
+    // carries the taskId — the attribution key an operator greps the run by.
+    def "swallows an IOException from a blocked ledger directory, leaving an ERROR naming the task"() {
         given:
         def ref = new TaskRef('PROJ-6')
         slotClock.instant = Instant.parse('2026-08-03T10:00:00Z')
@@ -174,19 +174,31 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
         def now = Instant.parse('2026-08-03T10:01:00Z')
         def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
         Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
+        def logs = LogCaptureSupport.attach(TaskOutcomeLedgerWriter)
 
         when:
         writer(now).write(ref, result)
 
         then:
         noExceptionThrown()
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.TASK_OUTCOME_LEDGER_APPEND_FAILED.head())
+        }
+        event != null
+        event.level == Level.ERROR
+        event.formattedMessage.contains('PROJ-6')
+
+        cleanup:
+        logs.detach()
     }
 
+    // FR15: the skip is a missing outcome line, so it is WARN and it names the task it skipped.
     def "never throws when no slot ledger entry exists for the task (defensive, should not happen in production)"() {
         given:
         def ref = new TaskRef('PROJ-5')
         def now = Instant.parse('2026-08-03T10:01:00Z')
         def result = new TakeResult.Delivered(finalState(new Position.AtStage('build')), 'shipped it')
+        def logs = LogCaptureSupport.attach(TaskOutcomeLedgerWriter)
 
         when:
         writer(now).write(ref, result)
@@ -194,5 +206,14 @@ class TaskOutcomeLedgerWriterSpec extends Specification {
         then:
         noExceptionThrown()
         !Files.exists(ledgerFile(now))
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.TASK_OUTCOME_SLOT_MISSING.head())
+        }
+        event != null
+        event.level == Level.WARN
+        event.formattedMessage.contains('PROJ-5')
+
+        cleanup:
+        logs.detach()
     }
 }

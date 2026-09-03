@@ -4,7 +4,9 @@ import com.github.oinsio.gnomish.app.serve.DrainReport;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
+import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator;
+import com.github.oinsio.gnomish.status.AnchorLog;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -18,7 +20,17 @@ import org.slf4j.LoggerFactory;
  * why a no-op flag/wait/kill on an already-empty ledger is safe). Extracted purely to keep {@link
  * ServeCommand} within the file-size limit (process-invariants.md) — holds no state of its own.
  *
- * <p>Implements FR10, FR11, NFR-O2, M3, D9 of add-factory-serve.
+ * <p><b>The hook owns the whole teardown order</b> (design D6 of harden-logging-observability):
+ * mark the {@link ShutdownPhase}, drain, finalize the observability lifecycle, then hand off to
+ * {@link OrderedExit} for the context close and the logging stop. Owning the last two rather than
+ * leaving them to the framework is what keeps a terminal slot line written mid-drain in the log
+ * file — the async FILE appender is flushed by the logging stop, and nothing may stop it while a
+ * slot is still finishing. Both entry points claim the stop via {@link
+ * OrderedExit#reserveSignalOwner()} at <em>registration</em> time, standing the composition root's
+ * generic signal hook down before any signal can arrive, and a second pass is a no-op (NFR-R1).
+ *
+ * <p>Implements FR10, FR11, NFR-O2, M3, D9 of add-factory-serve; FR9, NFR-R1 of
+ * harden-logging-observability.
  */
 final class ServeShutdownWiring {
 
@@ -29,6 +41,19 @@ final class ServeShutdownWiring {
 
     /** The JVM shutdown hook thread name (FR11, D9): covers both SIGTERM and normal exit. */
     static final String SHUTDOWN_HOOK_THREAD_NAME = "gnomish-serve-shutdown";
+
+    /** The lifecycle reason of a drain that ran to completion (FR12, FR13 of add-serve-observability). */
+    static final String DRAIN_COMPLETE_REASON = "drainComplete";
+
+    /**
+     * The lifecycle reason of a stop the operating system asked for. Named after the mechanism, not
+     * after one signal: the JVM runs its shutdown hooks for SIGINT (an operator's Ctrl-C) exactly as
+     * it does for SIGTERM (an orchestrator stopping the daemon), and the hook cannot tell which
+     * arrived — the previous {@code "sigterm"} therefore misreported half the stops it recorded.
+     * The reason travels as opaque text through the snapshot and the ledger, so readers of either
+     * are unaffected by the wording (task 3.4 of harden-logging-observability).
+     */
+    static final String SIGNAL_REASON = "signal";
 
     private ServeShutdownWiring() {}
 
@@ -51,7 +76,7 @@ final class ServeShutdownWiring {
      * hook (were it to win the finalize) would still say {@code "drainComplete"}; but on a SIGTERM
      * that lands mid-drain the flag is still clear and the main body may never reach its own
      * {@link ObservabilityWiring#finalizeStopped}/{@code runSummary} write, so the hook finalizes
-     * with reason {@code "sigterm"} — the final {@code stopped} snapshot then truthfully records an
+     * with {@link #SIGNAL_REASON} — the final {@code stopped} snapshot then truthfully records an
      * interrupted drain rather than a misleading {@code "drainComplete"} (FR12, FR13, UX4).
      */
     static void runDrain(
@@ -81,10 +106,18 @@ final class ServeShutdownWiring {
         slotRunner.attachRunSummaryAccumulator(accumulator);
         Instant drainStartedAt = observability.now();
         AtomicBoolean drainCompleted = new AtomicBoolean();
+        OrderedExit.reserveSignalOwner();
         hookRegistrar.register(new Thread(
                 () -> {
+                    ShutdownPhase.begin();
+                    String reason = drainCompleted.get() ? DRAIN_COMPLETE_REASON : SIGNAL_REASON;
+                    // FR2 of harden-logging-observability: the stopping anchor opens the teardown,
+                    // so every line the sequence still writes is bracketed by it — and it names the
+                    // same reason the final snapshot records, so log and snapshot never disagree.
+                    AnchorLog.serveStopping(reason);
                     shutdown.shutdown(null);
-                    observability.finalizeStopped(drainCompleted.get() ? "drainComplete" : "sigterm");
+                    observability.finalizeStopped(reason);
+                    OrderedExit.closeAndStopLogging();
                 },
                 SHUTDOWN_HOOK_THREAD_NAME));
         observability.beginDraining();
@@ -92,7 +125,7 @@ final class ServeShutdownWiring {
         drainCompleted.set(true);
         observability.beginStopping();
         observability.newRunSummaryLedgerWriter().write(accumulator, drainStartedAt);
-        observability.finalizeStopped("drainComplete");
+        observability.finalizeStopped(DRAIN_COMPLETE_REASON);
         log.info("gnomish serve --drain finished: {}", report.summary());
     }
 
@@ -106,8 +139,9 @@ final class ServeShutdownWiring {
      *
      * <p>FR4, FR12 of add-serve-observability: the shutdown hook also drives {@code observability}
      * through {@code draining} (before the SIGTERM sequence stops claiming/awaits the grace
-     * window), {@code stopping} (once it returns), then finalizes with reason {@code "sigterm"} —
-     * the final {@code stopped} snapshot and ledger line.
+     * window), {@code stopping} (once it returns), then finalizes with {@link #SIGNAL_REASON} —
+     * the final {@code stopped} snapshot and ledger line — before {@link
+     * OrderedExit#closeAndStopLogging()} closes the context and flushes the log file.
      */
     static void runForever(
             FeedAutomaton automaton,
@@ -132,12 +166,16 @@ final class ServeShutdownWiring {
             ShutdownHookRegistrar hookRegistrar)
             throws InterruptedException {
         Thread feedThread = new Thread(() -> runFeedLoop(automaton, starter), FEED_THREAD_NAME);
+        OrderedExit.reserveSignalOwner();
         hookRegistrar.register(new Thread(
                 () -> {
+                    ShutdownPhase.begin();
+                    AnchorLog.serveStopping(SIGNAL_REASON);
                     observability.beginDraining();
                     shutdown.shutdown(feedThread);
                     observability.beginStopping();
-                    observability.finalizeStopped("sigterm");
+                    observability.finalizeStopped(SIGNAL_REASON);
+                    OrderedExit.closeAndStopLogging();
                 },
                 SHUTDOWN_HOOK_THREAD_NAME));
         feedThread.start();

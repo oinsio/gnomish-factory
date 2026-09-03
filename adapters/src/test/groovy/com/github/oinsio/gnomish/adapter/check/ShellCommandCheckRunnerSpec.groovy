@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import java.nio.file.Files
@@ -95,10 +97,50 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def check = command('pwd')
 
         when:
-        def verdict = failingRunner.run(check, workspace())
+        Verdict verdict = null
+        def events = capture(ShellCommandCheckRunner) {
+            verdict = failingRunner.run(check, workspace())
+        }
 
         then:
         verdict instanceof Verdict.CannotVerify
+
+        and: 'FR5 of harden-logging-observability: the degradation names the check it happened to'
+        def warning = events.find { it.level.levelStr == 'WARN' }
+        warning != null
+        warning.formattedMessage.startsWith(OperatorEvent.COMMAND_CHECK_PROCESS_START_FAILED.head())
+        warning.formattedMessage.contains('failed to start')
+        warning.formattedMessage.contains("'pwd'")
+    }
+
+    // FR5 of harden-logging-observability: no environment to run a check in is an infrastructure
+    // failure the engine only ever sees as a CannotVerify — the operator needs the line and the
+    // check that hit it.
+    def "an unavailable check environment is warned about, naming the check"() {
+        given:
+        def unavailable = { c, w ->
+            throw new CheckEnvironmentUnavailableException('fresh box could not be materialized')
+        } as CheckEnvironmentSource
+        def check = command('pwd')
+
+        when:
+        Verdict verdict = null
+        def events = capture(ShellCommandCheckRunner) {
+            verdict = runner.withEnvironments(unavailable).run(check, workspace())
+        }
+
+        then:
+        verdict instanceof Verdict.CannotVerify
+
+        and:
+        def warning = events.find { it.level.levelStr == 'WARN' }
+        warning != null
+        warning.formattedMessage.startsWith(OperatorEvent.COMMAND_CHECK_NO_ENVIRONMENT.head())
+        warning.formattedMessage.contains('no environment to run it in')
+        warning.formattedMessage.contains("'pwd'")
+
+        and: 'the cause keeps its stack rather than being interpolated'
+        warning.throwableProxy.className == CheckEnvironmentUnavailableException.name
     }
 
     def "GNOMISH_FINDINGS_FILE is passed as a path outside the workspace root"() {
@@ -200,7 +242,9 @@ exit 1''')
         fail.findings()[0].details().contains('boom-output')
     }
 
-    def "a findings file with content on exit 0 is ignored - verdict stays Pass, and a warning is logged"() {
+    // FR12 of harden-logging-observability: a check that writes findings unconditionally is its
+    //     author's habit, not a degradation of this run — noted at DEBUG, not warned about.
+    def "a findings file with content on exit 0 is ignored - verdict stays Pass, and it is noted"() {
         given: 'a command that exits 0 but still writes findings-shaped content'
         def check = command('''cat > "$GNOMISH_FINDINGS_FILE" <<'EOF'
 {"findings":[{"message":"should be ignored"}]}
@@ -216,8 +260,16 @@ exit 0''')
         then:
         verdict instanceof Verdict.Pass
         events.any {
-            it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content')
+            it.formattedMessage.contains('has content but the command exited 0')
         }
+
+        and: 'FR5 of harden-logging-observability: the note names the check that wrote the channel'
+        events.any {
+            it.formattedMessage.contains('should be ignored')
+        }
+
+        and: 'the multi-line command reaches the line as one line (FR6)'
+        events.every { !it.formattedMessage.contains('\n') }
     }
 
     def "exit 0 with no findings file content logs no warning"() {
@@ -233,7 +285,7 @@ exit 0''')
         then:
         verdict instanceof Verdict.Pass
         events.every {
-            !it.formattedMessage.contains('GNOMISH_FINDINGS_FILE has content')
+            !it.formattedMessage.contains('has content but the command exited 0')
         }
     }
 

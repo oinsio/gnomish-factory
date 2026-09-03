@@ -2,9 +2,9 @@ package com.github.oinsio.gnomish.serveobservability;
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.engine.Position;
-import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.app.take.TaskSummaryAssembler;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import com.github.oinsio.gnomish.status.TaskSummary;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -19,14 +19,19 @@ import org.jspecify.annotations.Nullable;
  * and {@link TakeResult.Skipped} map to {@code null} since no engine run happened, so no line is
  * written for them ("engine run happened iff spend happened iff line exists", design D6).
  *
- * <p>{@code stage} and {@code attemptsUsed} come straight off {@code finalState}, exactly like
- * {@code StatusReport} builds its own outcome text from the same fields (design D6): {@link
- * Position.AtStage#name()} becomes {@code stage}, {@link Position.PipelineEnd} becomes a {@code
- * null} stage; {@link TaskState#attemptsUsed()} carries across verbatim. {@code tokensByModel}
- * reuses the whole-task cumulative total already carried on {@code finalState} (design D6's "raw
- * material already exists" — per-task token totals in status-report v1) rather than collecting
- * anything new, converted field-for-field from {@link TokenUsage} to this package's {@link
- * LedgerTokenUsage} (mirroring {@link LedgerTokenUsage}'s own package-local-copy rationale).
+ * <p>{@code stage}, {@code attemptsUsed} and {@code tokensByModel} are not derived here: they come
+ * from {@link TaskSummaryAssembler}, the one extraction of a terminal result's facts, which the
+ * log plane's canonical task summary is also rendered from (FR3, design D3 of
+ * harden-logging-observability). Sharing the extraction is what keeps the ledger line and the
+ * summary line from ever disagreeing about the same task. The token totals are the whole-task
+ * cumulative ones already carried on {@code finalState} (design D6's "raw material already exists"
+ * — per-task token totals in status-report v1), converted field-for-field from {@link TokenUsage}
+ * to this package's {@link LedgerTokenUsage} (mirroring {@link LedgerTokenUsage}'s own
+ * package-local-copy rationale).
+ *
+ * <p>The {@code parkReason} stays this assembler's own read of the result: the ledger records it
+ * as the {@link ParkReason} enum the tracker port owns, while the summary — a deliberately neutral
+ * value — carries only its name.
  *
  * <p>Stateless: a pure function with no fields, following the module's assembler convention
  * (e.g. {@link TrackerHealthAssembler}, {@link SlotEntryAssembler}).
@@ -51,53 +56,44 @@ public final class TaskOutcomeLineAssembler {
      */
     public static @Nullable TaskOutcomeLine assemble(
             InstanceInfo instance, String taskId, TakeResult result, Instant startedAt, Instant finishedAt) {
-        return switch (result) {
-            case TakeResult.Delivered delivered ->
-                line(instance, taskId, TaskOutcome.DELIVERED, null, delivered.finalState(), startedAt, finishedAt);
-            case TakeResult.AwaitingHuman awaitingHuman ->
-                line(
-                        instance,
-                        taskId,
-                        TaskOutcome.AWAITING_HUMAN,
-                        awaitingHuman.reason(),
-                        awaitingHuman.finalState(),
-                        startedAt,
-                        finishedAt);
-            case TakeResult.Aborted aborted ->
-                line(instance, taskId, TaskOutcome.ABORTED, null, aborted.finalState(), startedAt, finishedAt);
-            case TakeResult.Revoked revoked ->
-                line(instance, taskId, TaskOutcome.REVOKED, null, revoked.finalState(), startedAt, finishedAt);
-            case TakeResult.EmptyQueue emptyQueue -> null;
-            case TakeResult.Skipped skipped -> null;
-        };
-    }
-
-    private static TaskOutcomeLine line(
-            InstanceInfo instance,
-            String taskId,
-            TaskOutcome outcome,
-            @Nullable ParkReason parkReason,
-            TaskState finalState,
-            Instant startedAt,
-            Instant finishedAt) {
+        Duration wall = Duration.between(startedAt, finishedAt);
+        TaskSummary summary = TaskSummaryAssembler.assemble(result, wall);
+        if (summary == null) {
+            return null;
+        }
         return new TaskOutcomeLine(
                 instance,
                 taskId,
-                outcome,
-                parkReason,
-                stageOf(finalState.position()),
-                finalState.attemptsUsed(),
+                outcomeOf(summary.outcome()),
+                parkReasonOf(result),
+                summary.stage(),
+                summary.attemptsUsed(),
                 startedAt,
                 finishedAt,
-                Duration.between(startedAt, finishedAt).toMillis(),
-                toLedgerTokens(finalState.totals().tokensByModel()));
+                wall.toMillis(),
+                toLedgerTokens(summary.tokensByModel()));
     }
 
-    private static @Nullable String stageOf(Position position) {
-        return switch (position) {
-            case Position.AtStage atStage -> atStage.name();
-            case Position.PipelineEnd pipelineEnd -> null;
+    /**
+     * The ledger's own outcome vocabulary for the summary's — two enums naming the same four
+     * families in two planes, exhaustively mapped so a family added to one fails to compile until
+     * it is added to the other.
+     */
+    private static TaskOutcome outcomeOf(TaskSummary.Outcome outcome) {
+        return switch (outcome) {
+            case DELIVERED -> TaskOutcome.DELIVERED;
+            case AWAITING_HUMAN -> TaskOutcome.AWAITING_HUMAN;
+            case ABORTED -> TaskOutcome.ABORTED;
+            case REVOKED -> TaskOutcome.REVOKED;
         };
+    }
+
+    /**
+     * The park reason as the typed enum the ledger records, read straight off the result — the one
+     * fact the neutral summary carries only by name (see the class javadoc).
+     */
+    private static @Nullable ParkReason parkReasonOf(TakeResult result) {
+        return result instanceof TakeResult.AwaitingHuman awaitingHuman ? awaitingHuman.reason() : null;
     }
 
     private static Map<String, LedgerTokenUsage> toLedgerTokens(Map<String, TokenUsage> tokensByModel) {

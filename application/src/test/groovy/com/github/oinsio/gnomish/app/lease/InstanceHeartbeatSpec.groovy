@@ -7,9 +7,12 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import spock.lang.Specification
 
 /**
@@ -232,5 +235,47 @@ class InstanceHeartbeatSpec extends Specification {
 
         then: 'it slept the interval before beating A, then once more before finding the set drained and stopping'
         recorded == [INTERVAL, INTERVAL]
+    }
+
+    // FR4 of harden-logging-observability: the loop's guard, driven synchronously on the test
+    //     thread (the timing-sensitive rehearsal lives in InstanceHeartbeatLifecycleSpec, which PIT
+    //     excludes). A collaborator bug costs one tick; the tick that works again closes the streak,
+    //     so the operator's last word on a fault that ended is not the fault.
+    def "a guarded tick announces the fault once and closes it when the tick works again"() {
+        given: 'a sink whose confirmation callback throws until it is switched off'
+        def throwing = new AtomicBoolean(true)
+        ClaimLostSink toggleSink = new ClaimLostSink() {
+                    void claimLost(TaskRef ref) {}
+                    void claimConfirmed(TaskRef ref) {
+                        if (throwing.get()) {
+                            throw new IllegalStateException('sink boom')
+                        }
+                    }
+                }
+        def guarded = new InstanceHeartbeat(
+                tracker, progress, new BlockingSleeper(), clock, INTERVAL, toggleSink)
+        guarded.seedHeldForTest(A)
+        progressAt(A, 'plan', 0)
+        def logs = LogCaptureSupport.attach(HeartbeatTickLog)
+
+        when: 'the first guarded tick blows up inside the sink and the second completes'
+        guarded.tickGuarded()
+        throwing.set(false)
+        guarded.tickGuarded()
+
+        then:
+        2 * tracker.heartbeat(A, _) >> BEATEN
+
+        and: 'the fault is announced exactly once, and never propagates out of the guard'
+        noExceptionThrown()
+        logs.list.count {
+            it.formattedMessage.startsWith(OperatorEvent.HEARTBEAT_TICK_FAILED.head())
+        } == 1
+
+        and: 'the recovery closes it at INFO'
+        logs.list.any { it.formattedMessage.contains('tick recovered') }
+
+        cleanup:
+        logs.detach()
     }
 }

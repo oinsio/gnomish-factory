@@ -28,7 +28,10 @@ final class TakeBatchSummary {
      * @param log the logger to write the summary line to; never null
      */
     static void log(List<TakeBatchOutcome> outcomes, Logger log) {
-        log.info(render(outcomes));
+        // FR7: the rendered summary is built only if INFO is on, and it reaches the logger as a
+        // message rather than as a format pattern — a rendered string in pattern position would
+        // have any `{}` inside a ref or an outcome text read as a placeholder.
+        log.atInfo().setMessage(() -> render(outcomes)).log();
     }
 
     /**

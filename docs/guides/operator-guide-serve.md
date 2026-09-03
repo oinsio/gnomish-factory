@@ -107,6 +107,8 @@ sequenceDiagram
     S->>Gh: release claim -> Ready (instant, no TTL wait)
     D->>D: wait up to sigterm-grace for all slots to release
     D->>D: kill process tree (no gnome subprocess survives)
+    D->>D: close the application context
+    D->>D: stop the logging system (flush the async log file)
     D->>Op: exit 0
 ```
 
@@ -121,6 +123,16 @@ the ordinary lease path (TTL, reaper, resume from the branch) — no new
 mechanism is invented for it. Because a 30-second default grace rarely
 catches an hour-long round's boundary, a *planned* stop should prefer
 `--drain` (below) over sending SIGTERM to a daemon mid-round.
+
+The last two steps are the daemon's own, not the framework's: Spring's
+automatic shutdown hook is disabled and Logback registers none, so a single
+sequence closes the application context and then stops the logging system
+(ADR [0004](../adr/0004-logging-policy.md), design D6 of
+`harden-logging-observability`). Stopping the logging system last is what
+flushes the asynchronous file appender — a terminal slot line written while
+the drain was still running reaches `~/.gnomish/logs/gnomish.log` rather than
+dying in the queue. If the context close fails, the daemon logs `[GF053]` and
+stops logging anyway; the exit is not blocked by it.
 
 **Drain mode.** With `--drain`, "nothing eligible to claim" becomes the
 stop-claiming signal instead of an idle sleep: the feed stops polling for new

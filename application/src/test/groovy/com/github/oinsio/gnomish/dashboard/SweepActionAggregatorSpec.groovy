@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.dashboard
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -129,12 +131,24 @@ class SweepActionAggregatorSpec extends Specification {
             actionLine('stoppedOrphan', 'box-1', 'tracked', 'task-1', 5)
         ])
 
+        and: 'FR5 of harden-logging-observability: a dropped timestamp leaves a DEBUG trace'
+        def logs = LogCaptureSupport.attach(SweepActionAggregator, Level.DEBUG)
+
         when:
         def window = aggregator.aggregate(tempDir, INSTANCE, TODAY, 1)
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then:
         window.rows()*.objectName() == ['box-1']
         window.total() == 1
+
+        and:
+        def traces = events.findAll {
+            it.formattedMessage.contains('unreadable instant')
+        }
+        traces.size() == 1
+        traces[0].level == Level.DEBUG
     }
 
     // NFR-O2: a verdict that measured no age renders as absent, not as zero.

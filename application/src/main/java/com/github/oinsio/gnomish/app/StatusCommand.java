@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component;
  * {@code gnomish status --dir <clone> [<task>] [--json]} (FR13 of add-git-workflow): a read-only
  * reader over task branches — with a task id, the branch state at its tip; without one, a minimal
  * table over every {@code gnomish/*} branch (task 5.4). Argument parsing is {@link
- * StatusArgumentsParser}; branch reading is {@link BranchStateReader} (task 5.2) for the
- * single-task case and {@link TaskBranchLister} (task 5.4) for list mode; rendering reuses the
+ * StatusArgumentsParser}; branch reading is {@code BranchStateReader} (task 5.2) for the
+ * single-task case and {@code TaskBranchLister} (task 5.4) for list mode; rendering reuses the
  * status-report v1 text/JSON machinery verbatim for the single-task case (FR13), mirroring {@code
  * ConsoleStatusRenderer#render}'s json-flag dispatch, and {@link TaskListRenderer} for list mode.
  * The worktree path (FR6, UX1) is printed via {@link TaskWorktreePath}'s pure formula — never
@@ -35,7 +35,14 @@ import org.springframework.stereotype.Component;
  * BranchShapeReportRenderer}, and a quarantine shape prints its diagnosis and then signals {@link
  * BranchShapeRefusedException} for exit code 7, the same calm protocol "task not found" follows.
  *
- * <p>Implements FR13, FR6, UX3 of add-git-workflow; FR16, UX4 of harden-task-branch-contract.
+ * <p>List mode degrades per branch, never per listing (FR13 of harden-logging-observability): one
+ * unreadable branch renders as its own diagnostic row, but a ref enumeration that failed
+ * established nothing about which branches exist, so {@link
+ * com.github.oinsio.gnomish.app.port.git.TaskListingFailedException} propagates and the command
+ * fails with the git evidence — an empty table means "verified: no tasks", never "could not look".
+ *
+ * <p>Implements FR13, FR6, UX3 of add-git-workflow; FR16, UX4 of harden-task-branch-contract;
+ * FR13 of harden-logging-observability.
  */
 @Component
 final class StatusCommand {
@@ -60,6 +67,8 @@ final class StatusCommand {
      *     exists anywhere (FR13, UX3) — printed calmly to {@link System#out} first
      * @throws BranchShapeRefusedException if the branch classifies as a quarantine shape (FR16) —
      *     its diagnosis printed calmly to {@link System#out} first
+     * @throws com.github.oinsio.gnomish.app.port.git.TaskListingFailedException if list mode's ref
+     *     enumeration failed; nothing is printed, since an empty table would be a false answer
      */
     void run(ApplicationArguments args) {
         StatusArguments statusArguments = argumentsParser.parse(args);

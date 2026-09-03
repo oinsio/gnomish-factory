@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -10,6 +11,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * One dashboard render: reads the daemon snapshot and the ledger history window fresh, and
@@ -27,6 +30,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR3, FR6, FR9, NFR-O1, NFR-R1 of add-dashboard-page (design D9).
  */
 public final class DashboardRenderCycle {
+
+    private static final Logger log = LoggerFactory.getLogger(DashboardRenderCycle.class);
 
     private final SnapshotReader snapshotReader = new SnapshotReader();
     private final LedgerAggregator ledgerAggregator = new LedgerAggregator();
@@ -74,6 +79,11 @@ public final class DashboardRenderCycle {
                     LocalDate.ofInstant(now, ZoneOffset.UTC),
                     LedgerAggregator.DEFAULT_WINDOW_DAYS);
         } catch (IOException malformedLedger) {
+            // An empty hygiene table and a healthy-and-quiet one render identically (FR5).
+            log.warn(
+                    OperatorEvent.SWEEP_ACTION_LEDGER_UNAGGREGATABLE.head()
+                            + "sweep-action ledger could not be aggregated; the hygiene block renders empty",
+                    malformedLedger);
             actions = SweepActionWindow.EMPTY;
         }
         return new SandboxHygieneView(sweep, actions.rows());
@@ -83,6 +93,10 @@ public final class DashboardRenderCycle {
         try {
             return ledgerAggregator.aggregate(homeDir, instanceName, LocalDate.ofInstant(now, ZoneOffset.UTC));
         } catch (IOException malformedLedger) {
+            log.warn(
+                    OperatorEvent.OUTCOME_LEDGER_UNAGGREGATABLE.head()
+                            + "outcome ledger could not be aggregated; the history block renders empty",
+                    malformedLedger);
             return new LedgerHistoryView(List.of(), Map.of());
         }
     }

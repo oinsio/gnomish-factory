@@ -133,6 +133,18 @@ public final class SlotLedger {
     }
 
     /**
+     * The instance's configured slot count — the denominator {@link #freeSlots()} is read against.
+     * Exposed so the claim anchor can state occupancy as a fraction rather than as a bare count
+     * (FR2 of harden-logging-observability): "1 of 2 slots free" is a fact, "1 slot free" is half
+     * of one.
+     *
+     * @return the total number of slots this ledger was built with; positive
+     */
+    public int totalSlots() {
+        return totalSlots;
+    }
+
+    /**
      * Blocks until every slot is free — drain mode's wait barrier (FR10). Once the feed has
      * decided to stop calling {@link #acquire()} for good, the only permits still outstanding
      * belong to slots running their tasks to a terminal result; acquiring all N of them can

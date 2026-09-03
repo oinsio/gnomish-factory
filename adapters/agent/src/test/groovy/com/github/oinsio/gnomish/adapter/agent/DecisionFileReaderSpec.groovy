@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import org.slf4j.LoggerFactory
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -17,20 +15,6 @@ import spock.lang.Specification
  * text with empty options.
  */
 class DecisionFileReaderSpec extends Specification {
-
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(DecisionFileReader)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list
-    }
 
     def "absent content yields no decision"() {
         given:
@@ -88,13 +72,17 @@ class DecisionFileReaderSpec extends Specification {
         given:
         def reader = new DecisionFileReader()
         def raw = 'totally not json'
+        def logs = LogCaptureSupport.attach(DecisionFileReader)
 
         when:
-        def events = capture { reader.read(Optional.of(raw)) }
+        reader.read(Optional.of(raw))
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then: 'NFR-O2: raw content is logged at WARN on parse trouble'
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.DECISION_FILE_NOT_JSON.head())
         events[0].formattedMessage.contains(raw)
     }
 
@@ -127,25 +115,76 @@ class DecisionFileReaderSpec extends Specification {
     def "empty file content also logs at WARN"() {
         given:
         def reader = new DecisionFileReader()
+        def logs = LogCaptureSupport.attach(DecisionFileReader)
 
         when:
-        def events = capture { reader.read(Optional.of('')) }
+        reader.read(Optional.of(''))
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then: 'NFR-O2: empty content is parse trouble too, logged for diagnosability'
         events.size() == 1
         events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.DECISION_FILE_EMPTY.head())
     }
 
     def "valid JSON does not log at WARN"() {
         given:
         def reader = new DecisionFileReader()
         def raw = '{"question": "Q?", "options": []}'
+        def logs = LogCaptureSupport.attach(DecisionFileReader)
 
         when:
-        def events = capture { reader.read(Optional.of(raw)) }
+        reader.read(Optional.of(raw))
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then:
         events.isEmpty()
+    }
+
+    // FR6 of harden-logging-observability: the decision file is written by the agent, so an agent
+    //     that fails to write JSON can choose exactly what the WARN line says. Neutralized on the
+    //     way to the log; the Decision the same call returns still carries the content verbatim,
+    //     because the human answering the question needs the real text.
+    def "FR6: unparseable content carrying newlines and ANSI escapes renders one inert line"() {
+        given:
+        def reader = new DecisionFileReader()
+        def forged = "not json\n2026-08-31 12:00:00 ERROR forged\u001B[31mred\u001B[0m\u2029tail"
+
+        def logs = LogCaptureSupport.attach(DecisionFileReader)
+
+        when:
+        reader.read(Optional.of(forged))
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        events.size() == 1
+        events[0].level == Level.WARN
+        !events[0].formattedMessage.contains('\n')
+        !events[0].formattedMessage.contains('\u2029')
+        !events[0].formattedMessage.contains('\u001B')
+        events[0].formattedMessage.contains('forged')
+    }
+
+    // FR6: the cap is the line's, not the decision's — a huge file cannot flood the operator log
+    def "FR6: oversized content is capped in the line while the decision keeps it whole"() {
+        given:
+        def reader = new DecisionFileReader()
+        def huge = 'x' * 5_000
+        def logs = LogCaptureSupport.attach(DecisionFileReader)
+
+        when:
+        reader.read(Optional.of(huge))
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        events[0].formattedMessage.length() < 1_000
+
+        and:
+        reader.read(Optional.of(huge)).get().question() == huge
     }
 
     def "JSON missing the question field is treated as unparseable"() {

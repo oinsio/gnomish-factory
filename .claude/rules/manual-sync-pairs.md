@@ -60,8 +60,7 @@ audits treat these rows as if the markers were present.
 
 | End A                                            | End B                                                            | Synchronized invariant                                                 |
 |--------------------------------------------------|------------------------------------------------------------------|------------------------------------------------------------------------|
-| `adapters/git/.../RoundBoundaryCheck`            | `adapters/git/.../HarvestedBoundaryCheck`                        | `.gnomish-task/` boundary rule (allowed paths, exit-code handling)     |
-| `adapters/git/.../GitAttemptPersistence`         | `adapters/git/.../EnvironmentAttemptPersistence`                 | attempt commit + state-file write sequence                             |
+| `adapters/git/.../GitAttemptPersistence`         | `adapters/git/.../EnvironmentAttemptPersistence`                 | attempt commit + state-file write sequence. The tip-resolution half of it is no longer hand-synced: both media resolve through `VerifiedTip` (`harden-logging-observability` FR13), so a blank or failed resolution refuses on both by construction. |
 | `adapters/git/.../GitTaskRepository`             | `adapters/git/.../GitObjectsTaskRepository`                      | task lifecycle write protocol                                          |
 | `adapters/agent/.../DecisionFileTransport`       | `adapters/git/.../BranchDecisionFile`                            | `GNOMISH_DECISION_FILE` env var name, read semantics, size cap         |
 | `adapters/agent/.../RoundTimeout`                | `adapters/.../pipeline/AgentSettingsValidator`                   | accepted `roundTimeout` shapes                                         |
@@ -70,8 +69,20 @@ audits treat these rows as if the markers were present.
 | `application/.../app/TakeResumeRunner`           | `application/.../app/TakeContainerResumeRunner`                  | resume control flow per mode                                           |
 | `application/.../app/GitModeRunner`              | `application/.../app/ContainerGitModeRunner`                     | manual-run control flow per mode                                       |
 | `application/.../app/GitResumeRunner`            | `application/.../app/ContainerResumeRunner`                      | manual-resume control flow per mode                                    |
-| `adapters/agent/.../HostRoundEnvironmentSource`  | `adapters/git/.../SandboxRoundEnvironmentSource`                 | round environment contract per mode                                    |
 | `serveobservability/json/LedgerJsonMapper`       | `dashboard/LedgerAggregator` + `dashboard/SweepActionAggregator` | ledger wire tokens (`TaskOutcome`, `SweepVerdictCategory`)             |
 | `serveobservability/json/SnapshotJsonMapper`     | `serveobservability/json/SnapshotJsonReader`                     | snapshot wire tokens (`FeedPhase`, `HeartbeatState`, `LifecycleState`) |
 | `application/.../app/serve/FeedState`            | `serveobservability/FeedPhase`                                   | deliberate layer decoupling: constant sets must match                  |
 | `application/.../app/serve/HeartbeatWorkerState` | `serveobservability/HeartbeatState`                              | deliberate layer decoupling: constant sets must match                  |
+
+## Declared pairs with no shared classpath
+
+Both ends carry the marker, so the rule above would have them leave the
+registry — but neither end can name the other with a resolvable `{@link}`,
+because the two deliberately share no compile edge. The registry is their only
+navigational index, so these rows stay listed for as long as the pair does.
+
+| End A                        | End B                                               | Synchronized invariant                                                                    |
+|------------------------------|-----------------------------------------------------|-------------------------------------------------------------------------------------------|
+| `logtext/.../logtext/LogText` | `gnomish-plugin-api/.../findings/FindingsSanitizer` | ANSI/control stripping table + tail-cap semantics; newline handling deliberately differs. Verified by `SanitizerPairEquivalenceSpec` over a shared adversarial corpus. |
+| `logtext/.../logtext/OperatorEvent` | `domain/.../engine/{AttemptJournal,Events,RoundExecution,VerifyOrchestrator}` | the four operator-event codes the domain emitters repeat as literal `[GFnnn]` message heads; `:domain` takes no `:logtext` edge (ADR 0004, accepted deviation 1). Verified by `DomainOperatorEventHeadSpec`, in both directions. |
+| `adapters/agent/.../HostRoundEnvironmentSource` | `adapters/git/.../SandboxRoundEnvironmentSource` | round environment contract per mode: both open/close rounds with a decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21; `adapters/agent` and `adapters/git` share no compile edge. |

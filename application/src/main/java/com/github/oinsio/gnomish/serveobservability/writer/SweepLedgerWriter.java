@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickRecord;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.SweepActionLine;
@@ -82,7 +83,7 @@ public final class SweepLedgerWriter implements SweepVerdictListener, SweepTickL
         try {
             appender.append(line);
         } catch (IOException e) {
-            log.error("failed to append sweep ledger line", e);
+            log.error(OperatorEvent.SWEEP_LEDGER_APPEND_FAILED.head() + "failed to append sweep ledger line", e);
         }
     }
 }

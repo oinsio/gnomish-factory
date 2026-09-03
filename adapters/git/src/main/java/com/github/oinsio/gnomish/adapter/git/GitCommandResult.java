@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 
 /**
@@ -32,5 +33,21 @@ record GitCommandResult(int exitCode, String stdout, String stderr, Termination 
     /** A result for a command that ran to its own exit — the shape every caller had before FR6. */
     GitCommandResult(int exitCode, String stdout, String stderr) {
         this(exitCode, stdout, stderr, Termination.EXITED);
+    }
+
+    /**
+     * The git evidence a cannot-verify outcome carries: how this result ended, and what it said.
+     * Shared by {@link RoundBoundaryCheck} and {@link HarvestedBoundaryCheck}, whose boundary
+     * diffs both classify a non-zero or non-exiting invocation as cannot-verify.
+     *
+     * <p>git's stderr is subprocess output, and this string travels into a {@code
+     * GitPersistFailedException} message that is rendered into a log record, into {@code task.json}
+     * and into the escalation report. The log-call gate cannot see inside an exception's message,
+     * so the sanitizing happens here, where the untrusted text enters it (FR6 of
+     * harden-logging-observability; {@code .claude/rules/logging.md}).
+     */
+    String cannotVerifyDetail() {
+        return "the boundary could not be verified (git " + termination() + ", exit " + exitCode() + "): "
+                + LogText.forLog(stderr().trim());
     }
 }

@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,45 +100,45 @@ final class StreamJsonEventMapper {
         }
         return content.stream()
                 .map(StreamJsonEventMapper::toContentBlock)
-                .filter(java.util.Objects::nonNull)
+                .flatMap(Optional::stream)
                 .toList();
     }
 
-    private static @Nullable ContentBlock toContentBlock(StreamJsonLine.ContentBlockWire block) {
+    private static Optional<ContentBlock> toContentBlock(StreamJsonLine.ContentBlockWire block) {
         String type = block.type();
         if (type == null) {
-            return null;
+            return Optional.empty();
         }
         return switch (type) {
             case "text" -> toText(block);
             case "tool_use" -> toToolUse(block);
             case "tool_result" -> toToolResult(block);
-            default -> null;
+            default -> Optional.empty();
         };
     }
 
-    private static @Nullable ContentBlock toText(StreamJsonLine.ContentBlockWire block) {
+    private static Optional<ContentBlock> toText(StreamJsonLine.ContentBlockWire block) {
         String text = block.text();
-        return text == null ? null : new ContentBlock.Text(text);
+        return text == null ? Optional.empty() : Optional.of(new ContentBlock.Text(text));
     }
 
-    private static @Nullable ContentBlock toToolUse(StreamJsonLine.ContentBlockWire block) {
+    private static Optional<ContentBlock> toToolUse(StreamJsonLine.ContentBlockWire block) {
         String id = block.id();
         String name = block.name();
         if (id == null || name == null) {
-            return null;
+            return Optional.empty();
         }
         Map<String, Object> input = block.input() == null ? Map.of() : block.input();
-        return new ContentBlock.ToolUse(id, name, input);
+        return Optional.of(new ContentBlock.ToolUse(id, name, input));
     }
 
-    private static @Nullable ContentBlock toToolResult(StreamJsonLine.ContentBlockWire block) {
+    private static Optional<ContentBlock> toToolResult(StreamJsonLine.ContentBlockWire block) {
         String toolUseId = block.tool_use_id();
         if (toolUseId == null) {
-            return null;
+            return Optional.empty();
         }
         String content = block.content() == null ? "" : String.valueOf(block.content());
-        return new ContentBlock.ToolResult(toolUseId, content);
+        return Optional.of(new ContentBlock.ToolResult(toolUseId, content));
     }
 
     private static Optional<AgentEvent> present(AgentEvent event) {
@@ -146,7 +146,8 @@ final class StreamJsonEventMapper {
     }
 
     private static Optional<AgentEvent> skip(StreamJsonLine wire, String reason) {
-        log.debug("stream-json: skipping line of type '{}' ({})", wire.type(), reason);
+        // FR6: the type is the agent's own token, not a value this side chose.
+        log.debug("stream-json: skipping line of type '{}' ({})", LogText.forLog(String.valueOf(wire.type())), reason);
         return Optional.empty();
     }
 }

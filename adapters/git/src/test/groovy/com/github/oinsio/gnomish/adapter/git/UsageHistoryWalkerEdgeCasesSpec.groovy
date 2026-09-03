@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -11,6 +12,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -171,5 +174,67 @@ exec git "\$@"
         then: 'exactly one row — the blank line never surfaces as a bogus row'
         result.rows().size() == 1
         result.rows()[0].attempt().round() == 0
+    }
+
+    /** A walker over a stand-in git that fails one subcommand and delegates the rest (see above). */
+    private UsageHistoryWalker walkerFailing(String subcommand) {
+        def fakeGit = tempDir.resolve("fail-${subcommand}-git.sh")
+        fakeGit.toFile().text = """#!/bin/sh
+if [ "\$1" = "${subcommand}" ]; then
+  echo 'fatal: stand-in git refuses' >&2
+  exit 128
+fi
+exec git "\$@"
+"""
+        fakeGit.toFile().setExecutable(true)
+        new UsageHistoryWalker(new GitProcessRunner(fakeGit.toString()))
+    }
+
+    // FR5 of harden-logging-observability: a refused commit listing renders as a report with no
+    // rounds at all — the same shape a task that never ran produces. Only the WARN separates them.
+    def "FR5: a refused commit listing warns before the report renders empty"() {
+        given:
+        taskRepository().createTask(new TaskContext('PROJ-9', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        persistRound('PROJ-9', TaskState.atStageStart('implement')
+                .recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)), 'implement', 0)
+        def logs = LogCaptureSupport.attach(UsageHistoryWalker, Level.DEBUG)
+
+        when:
+        def result = walkerFailing('log').walk(cloneDir, 'PROJ-9') as UsageHistoryResult.Found
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        result.rows().isEmpty()
+
+        and:
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.USAGE_HISTORY_LISTING_FAILED.head())
+        warnings[0].formattedMessage.contains('could not list the state-touching commits')
+        warnings[0].formattedMessage.contains('the report will be empty')
+    }
+
+    // FR5: a commit that shows no state.json is the ORDINARY case — the cleanup commit deletes it —
+    // so the classification is DEBUG, below the console, and never an alarm.
+    def "FR5: a commit carrying no state.json is classified at DEBUG, not warned about"() {
+        given:
+        taskRepository().createTask(new TaskContext('PROJ-10', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        persistRound('PROJ-10', TaskState.atStageStart('implement')
+                .recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)), 'implement', 0)
+        def logs = LogCaptureSupport.attach(UsageHistoryWalker, Level.DEBUG)
+
+        when:
+        def result = walkerFailing('show').walk(cloneDir, 'PROJ-10') as UsageHistoryResult.Found
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        result.rows().isEmpty()
+
+        and:
+        !events.isEmpty()
+        events.every { it.level == Level.DEBUG }
+        events[0].formattedMessage.contains('carries no .gnomish-task/state.json')
     }
 }

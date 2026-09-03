@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -41,5 +43,57 @@ class DockerRuntimeProbeSpec extends Specification {
 
         expect:
         !DockerRuntimeProbe.dockerAvailable(docker)
+    }
+
+    // FR5 of harden-logging-observability: the caller turns a false into a refusal naming the MODE,
+    // so this is the only line saying the daemon was asked and did not answer. INFO: "no Docker
+    // here" is a legitimate configuration, not something the operator must act on.
+    def "FR5: a probe that answers no leaves an INFO trace (#label)"() {
+        given:
+        docker.onRun = answer
+        def logs = LogCaptureSupport.attach(DockerRuntimeProbe)
+
+        when:
+        def available = DockerRuntimeProbe.dockerAvailable(docker)
+        def events = List.copyOf(logs.list)
+
+        then:
+        !available
+
+        and:
+        events.size() == 1
+        events[0].level == Level.INFO
+        events[0].formattedMessage.contains('container mode is unavailable')
+        (events[0].throwableProxy != null) == carriesCause
+
+        cleanup: 'in cleanup, not in when: a throwing subject would otherwise leak the pinned level'
+        logs.detach()
+
+        where:
+        label | carriesCause | answer
+        'non-zero' | false | { List<String> args ->
+            new DockerResult(1, '', '')
+        }
+        'unreachable' | true | { List<String> args ->
+            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null)
+        } as Closure<DockerResult>
+    }
+
+    // FR5: a runtime that answers ok says nothing — a healthy start produces no output.
+    def "FR5: a probe that answers ok is silent"() {
+        given:
+        docker.onRun = { List<String> args -> new DockerResult(0, '', '') }
+        def logs = LogCaptureSupport.attach(DockerRuntimeProbe)
+
+        when:
+        def available = DockerRuntimeProbe.dockerAvailable(docker)
+        def events = List.copyOf(logs.list)
+
+        then:
+        available
+        events.isEmpty()
+
+        cleanup: 'in cleanup, not in when: a throwing subject would otherwise leak the pinned level'
+        logs.detach()
     }
 }

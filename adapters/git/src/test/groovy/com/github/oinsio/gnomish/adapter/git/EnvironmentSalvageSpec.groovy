@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
@@ -53,14 +56,99 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         !new EnvironmentSalvage(materializedBox(), ClaimEpochSource.NONE).hasLeftovers()
     }
 
-    def "FR6: a dead environment probes as having nothing reachable to salvage"() {
+    // FR5 of harden-logging-observability, the environment half of WorktreeSalvage's degrade
+    // specs: every one of this class's four lost-environment fallbacks returns a degraded answer,
+    // and a degraded answer that leaves no trace is indistinguishable from a healthy one.
+    def "FR5: a dead environment probes as having nothing reachable to salvage, and says so"() {
         given: 'an environment whose exec cannot even start'
         def dead = [exec: { ExecCommand command ->
                 throw new ProcessStartException('container gone', new IOException('no runtime'))
             }] as TaskExecutionEnvironment
+        def logs = LogCaptureSupport.attach(EnvironmentSalvage)
 
-        expect: 'the probe degrades to false — resume continues from the last harvested state'
-        !new EnvironmentSalvage(dead, ClaimEpochSource.NONE).hasLeftovers()
+        when: 'the probe degrades to false — resume continues from the last harvested state'
+        def leftovers = new EnvironmentSalvage(dead, ClaimEpochSource.NONE).hasLeftovers()
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        !leftovers
+
+        and: 'the unreachable environment is named at WARN, with the cause attached'
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_PROBE_UNREACHABLE.head())
+        warnings[0].formattedMessage.contains('salvage probe could not reach the environment')
+        warnings[0].throwableProxy.className == ProcessStartException.name
+    }
+
+    // FR5: the environment died between the probe and the commit — the leftovers are real but
+    // unreachable, so the round's tail is lost and resume continues from the last harvest. Silent,
+    // it would read as a salvage that had nothing to do.
+    def "FR5: salvage() warns with the taskId when the environment dies before the commit"() {
+        given: 'a box whose status still answers but whose commit cannot start'
+        cloneDir = initWorkingRepo(tempDir, 'factory-clone-dying')
+        new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
+        commitAll(cloneDir)
+        gitOutput(cloneDir, 'branch', BRANCH)
+        def dying = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('dying-box'))) {
+                    @Override
+                    ExecHandle exec(ExecCommand command) {
+                        if (command.command()[2].contains('commit -m')) {
+                            throw new ProcessStartException('container gone', new IOException('no runtime'))
+                        }
+                        super.exec(command)
+                    }
+                }
+        dying.materialize(BRANCH, null)
+        new File(dying.workingCopy.toFile(), 'work.txt').text = 'interrupted round'
+        def logs = LogCaptureSupport.attach(EnvironmentSalvage)
+
+        when:
+        new EnvironmentSalvage(dying, ClaimEpochSource.NONE).salvage('SALV-LOST')
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'the loss does not propagate — resume continues from the last harvested state'
+        noExceptionThrown()
+
+        and: 'but it is on the record, findable by the task it cost'
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_SKIPPED_ENVIRONMENT_LOST.head())
+        warnings[0].formattedMessage.contains('taskId=SALV-LOST')
+        warnings[0].formattedMessage.contains('environment lost')
+        warnings[0].throwableProxy.className == ProcessStartException.name
+
+        and: 'nothing reached the factory clone'
+        gitOutput(cloneDir, 'log', '--format=%s', 'refs/heads/' + BRANCH) == 'init'
+    }
+
+    // FR5, mirrored on WorktreeSalvage's own discard degrade path: a discard that could not run
+    // leaves the very leftovers it exists to remove, so the next round starts on a working copy
+    // nobody expects. The taskId rides the MDC here, as it does for every line of a working task.
+    def "FR5: discard() warns that the leftovers stay when the environment is gone"() {
+        given:
+        def dead = [exec: { ExecCommand command ->
+                throw new ProcessStartException('container gone', new IOException('no runtime'))
+            }] as TaskExecutionEnvironment
+        def logs = LogCaptureSupport.attach(EnvironmentSalvage)
+
+        when:
+        new EnvironmentSalvage(dead, ClaimEpochSource.NONE).discard()
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        noExceptionThrown()
+
+        and:
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.DISCARD_SKIPPED_ENVIRONMENT_LOST.head())
+        warnings[0].formattedMessage.contains('discard skipped')
+        warnings[0].formattedMessage.contains('leftovers stay in the box')
+        warnings[0].throwableProxy.className == ProcessStartException.name
     }
 
     def "FR6: salvage() commits and harvests a leftover into the factory clone"() {
@@ -269,12 +357,22 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
                 }
         flakyBox.materialize(BRANCH, null)
         new File(flakyBox.workingCopy.toFile(), 'work.txt').text = 'interrupted round'
+        def logs = LogCaptureSupport.attach(EnvironmentSalvage)
 
         when:
         new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE).salvage('SALV-4')
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then: 'no exception propagates — the WARN path is taken and resume continues from the last harvested state'
         noExceptionThrown()
+
+        and: 'FR5: the commit that never reached the factory clone is named, with its task and cause'
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_HARVEST_FAILED.head())
+        warnings[0].formattedMessage.contains('salvage harvest failed for taskId=SALV-4')
+        warnings[0].throwableProxy.className == HarvestFailedException.name
 
         and: 'the in-box commit did land even though the harvest afterward failed'
         !new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE).hasLeftovers()

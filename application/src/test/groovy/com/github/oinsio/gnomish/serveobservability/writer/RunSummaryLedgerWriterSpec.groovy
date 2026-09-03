@@ -1,21 +1,20 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
-import static com.github.oinsio.gnomish.serveobservability.ObservabilityPaths.ledgerFile
-
+import ch.qos.logback.classic.Level
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator
-import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -28,7 +27,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR13, D6 of add-serve-observability.
  */
-class RunSummaryLedgerWriterSpec extends Specification {
+class RunSummaryLedgerWriterSpec extends Specification implements RotatingLedgerAppenderFixture {
 
     @TempDir
     Path homeDir
@@ -38,14 +37,12 @@ class RunSummaryLedgerWriterSpec extends Specification {
     private static final ObjectMapper JSON = new ObjectMapper()
 
     private RunSummaryLedgerWriter writer(Instant now) {
-        def appender = new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder'), new LedgerJsonMapper()),
-                homeDir, INSTANCE_NAME, Clock.fixed(now, ZoneOffset.UTC))
+        def appender = ledgerAppenderFor(homeDir, INSTANCE_NAME, now)
         return new RunSummaryLedgerWriter(appender, INSTANCE, Clock.fixed(now, ZoneOffset.UTC))
     }
 
-    private Path ledgerFileFor(Instant now) {
-        return ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(now, ZoneOffset.UTC))
+    private Path fileFor(Instant now) {
+        return ledgerFileFor(homeDir, INSTANCE_NAME, now)
     }
 
     private static TaskState delivered(Map<String, TokenUsage> tokensByModel) {
@@ -64,7 +61,7 @@ class RunSummaryLedgerWriterSpec extends Specification {
         writer(finishedAt).write(accumulator, startedAt)
 
         then:
-        def lines = Files.readString(ledgerFileFor(finishedAt)).split('\n').findAll {
+        def lines = Files.readString(fileFor(finishedAt)).split('\n').findAll {
             !it.isBlank()
         }
         lines.size() == 1
@@ -79,16 +76,28 @@ class RunSummaryLedgerWriterSpec extends Specification {
 
     // NFR-R1: a write failure (a blocked ledger directory) must never escape write() and crash
     // the drain run it is completing.
-    def "swallows an IOException from a blocked ledger directory"() {
+    //
+    // FR15 of harden-logging-observability: the drain run's one summary line is gone, so the
+    // swallow leaves an ERROR carrying the catalog code.
+    def "swallows an IOException from a blocked ledger directory, leaving an ERROR trace"() {
         given:
         def now = Instant.parse('2026-08-03T09:00:00Z')
         Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
+        def logs = LogCaptureSupport.attach(RunSummaryLedgerWriter)
 
         when:
         writer(now).write(new RunSummaryAccumulator(), now)
 
         then:
         noExceptionThrown()
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.RUN_SUMMARY_LEDGER_APPEND_FAILED.head())
+        }
+        event != null
+        event.level == Level.ERROR
+
+        cleanup:
+        logs.detach()
     }
 
     def "write appends a zero-outcome runSummary line for an accumulator with nothing recorded"() {
@@ -99,7 +108,7 @@ class RunSummaryLedgerWriterSpec extends Specification {
         writer(now).write(new RunSummaryAccumulator(), now)
 
         then:
-        def lines = Files.readString(ledgerFileFor(now)).split('\n').findAll {
+        def lines = Files.readString(fileFor(now)).split('\n').findAll {
             !it.isBlank()
         }
         lines.size() == 1

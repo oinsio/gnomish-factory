@@ -11,6 +11,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Thin, reusable core around {@link HttpClient} for the GitHub tracker
@@ -26,9 +28,19 @@ import java.util.function.Function;
  * claim lease, markers, feed — tasks 4.5-4.11) build a request with {@link
  * #newRequest(String)} and send it with {@link #send(HttpRequest.Builder)}.
  *
- * <p>Implements NFR-R2, NFR-S1 of add-tracker-port.
+ * <p>The retry itself is not silent (FR5 of harden-logging-observability): every retry reports
+ * its attempt number, the backoff it is about to wait and the failure that caused it, and an
+ * exhausted budget reports the failure it gave up on. Both are DEBUG — a retry in progress is
+ * diagnosis, and the layer that finally gives up (the poll, the tracker call) is the one that
+ * writes the WARN, so the two planes never double-report one fault. The line names this client's
+ * API base rather than the individual request: Resilience4j's events carry the throwable, not the
+ * URI, and one client is one host.
+ *
+ * <p>Implements NFR-R2, NFR-S1 of add-tracker-port; FR5 of harden-logging-observability.
  */
 public final class GithubHttpClient {
+
+    private static final Logger log = LoggerFactory.getLogger(GithubHttpClient.class);
 
     private static final String API_VERSION = "2022-11-28";
 
@@ -58,6 +70,21 @@ public final class GithubHttpClient {
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
         this.retry = Retry.of("github-api", retryConfig);
+        this.retry
+                .getEventPublisher()
+                .onRetry(event -> log.debug(
+                        "GitHub API call retry {} of {} against {}, waiting {}",
+                        event.getNumberOfRetryAttempts(),
+                        retryConfig.getMaxAttempts() - 1,
+                        apiUrl,
+                        event.getWaitInterval(),
+                        event.getLastThrowable()))
+                // The error event counts attempts, not retries — hence the different noun here.
+                .onError(event -> log.debug(
+                        "GitHub API call against {} gave up after {} attempt(s)",
+                        apiUrl,
+                        event.getNumberOfRetryAttempts(),
+                        event.getLastThrowable()));
     }
 
     /**

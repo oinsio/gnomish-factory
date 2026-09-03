@@ -1,9 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -116,15 +119,30 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
     def "FR6: cleaning up an already-removed Completed worktree does not crash"() {
         given:
         def path = setUpWorktree('PROJ-5')
+        def logs = LogCaptureSupport.attach(TaskWorktreeCleanup)
         cleanup.cleanUp(cloneDir, path, new TaskOutcome.Completed(sampleState()))
         assert !path.toFile().exists()
 
+        and: 'FR5 of harden-logging-observability: a removal that worked says nothing'
+        assert logs.list.findAll { it.level == Level.WARN }.isEmpty()
+
         when: 'cleanup runs a second time for the same task, e.g. on a resumed run'
         cleanup.cleanUp(cloneDir, path, new TaskOutcome.Completed(sampleState()))
+        def events = List.copyOf(logs.list)
 
         then:
         noExceptionThrown()
         !path.toFile().exists()
+
+        and: 'FR5: a removal git refused leaves a directory and a registration behind, and says so'
+        def warnings = events.findAll { it.level == Level.WARN }
+        warnings.size() == 1
+        warnings[0].formattedMessage.startsWith(OperatorEvent.WORKTREE_REMOVE_FAILED.head())
+        warnings[0].formattedMessage.contains('could not remove the worktree')
+        warnings[0].formattedMessage.contains('stays registered until a prune')
+
+        cleanup: 'in cleanup, not in when: a throwing subject would otherwise leak the pinned level'
+        logs.detach()
     }
 
     def "FR6: git worktree prune drops registrations for directories deleted outside git"() {

@@ -78,7 +78,11 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // FR13: 'status' actually reaches StatusCommand#run (PIT: VoidMethodCallMutator survivor) —
     // proven by its list-mode output, and reports the invocation as handled.
     def "dispatchNonRun() routes to StatusCommand for the 'status' subcommand and returns true"() {
-        given:
+        // A real (if empty) clone: since FR13 of harden-logging-observability a ref enumeration
+        // git refuses fails the listing instead of rendering as a verified "no tasks", so the
+        // dispatch target needs a directory git will actually enumerate.
+        given: 'a clone with no task branches in it'
+        assert gitExitCode(worktreesRoot, 'init') == 0
         def args = new DefaultApplicationArguments('status', "--dir=${worktreesRoot}".toString())
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()

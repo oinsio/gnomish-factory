@@ -10,6 +10,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Implements {@code Tracker.removeStaleClaim} for the GitHub adapter (design D5,
@@ -50,13 +52,22 @@ import org.jspecify.annotations.Nullable;
  * later tenure posts its own — which the lease anchor depends on, since it takes the latest
  * boundary by position and updating a comment in place does not move it.
  *
- * <p>Implements FR4, FR5 of add-claim-heartbeat; FR11 of harden-task-branch-contract.
+ * <p>A removal is a destructive action taken against another instance's tenure, so the one that
+ * happens is an INFO anchor naming the holder whose claim was retired; the far more common
+ * converge-abort — the pre-action re-check finding the claim already beaten, removed or replaced —
+ * is DEBUG, since two reapers converging is the mechanism working, not a degradation (FR5, FR12 of
+ * harden-logging-observability).
+ *
+ * <p>Implements FR4, FR5 of add-claim-heartbeat; FR11 of harden-task-branch-contract; FR5 of
+ * harden-logging-observability.
  */
 // Not a record: this is a behavior-bearing removal service (a collaborator holding an HTTP client,
 // label ops and this instance's id, not immutable data), kept as a plain final class for parity
 // with its documented siblings GithubClaimLease / GithubStateWrites / GithubHeartbeat.
 @SuppressWarnings("ClassCanBeRecord")
 public final class GithubStaleClaimRemoval {
+
+    private static final Logger log = LoggerFactory.getLogger(GithubStaleClaimRemoval.class);
 
     private final GithubHttpClient httpClient;
     private final GithubLabelOps labelOps;
@@ -83,28 +94,39 @@ public final class GithubStaleClaimRemoval {
         Optional<List<GithubClaimComment.Candidate>> thread = reReadThread(id);
         if (thread.isEmpty()) {
             // The issue itself is gone, so the claim is gone with it: a converging no-op.
-            return new RemoveStaleClaimResult.Mismatch(null);
+            return convergeAbort(ref, "the issue is gone", null);
         }
         ClaimFacts current = GithubTrackerFacts.claim(thread.get());
         if (!current.equals(observedClaim)) {
-            return new RemoveStaleClaimResult.Mismatch(current.liveVersion());
+            return convergeAbort(ref, "the claim moved since it was observed", current.liveVersion());
         }
         return switch (current) {
-            case ClaimFacts.Live live -> removeLiveClaim(id, thread.get(), live);
+            case ClaimFacts.Live live -> removeLiveClaim(ref, id, thread.get(), live);
             // A dead footprint has no comment left to delete: the boundary marker and the label
             // flip still run, which is exactly what retires the footprint and returns the task.
-            case ClaimFacts.Dead dead -> retire(id, dead.lastKnownHolder(), null, null);
+            case ClaimFacts.Dead dead -> retire(ref, id, dead.lastKnownHolder(), null, null);
             // No footprint at all is the one input with nothing to retire; reporting the absent
             // facts converges rather than posting a boundary for a tenure that left no trace.
-            case ClaimFacts.None ignored -> new RemoveStaleClaimResult.Mismatch(null);
+            case ClaimFacts.None ignored -> convergeAbort(ref, "the tenure left no footprint", null);
         };
     }
 
     /** The live-claim path: retire the footprint naming its holder, then delete its own comment. */
     private RemoveStaleClaimResult removeLiveClaim(
-            GithubTaskId id, List<GithubClaimComment.Candidate> thread, ClaimFacts.Live live) {
+            TaskRef ref, GithubTaskId id, List<GithubClaimComment.Candidate> thread, ClaimFacts.Live live) {
         GithubClaimComment.Candidate claim = GithubClaimComment.resolve(thread).orElseThrow();
-        return retire(id, live.holder(), claim.id(), live.version());
+        return retire(ref, id, live.holder(), claim.id(), live.version());
+    }
+
+    /**
+     * The no-op every convergence path returns, and the one place it is recorded. DEBUG: a reap
+     * that finds nothing to reap is two instances agreeing, which the operator has nothing to do
+     * about — but a reaper that never removes anything is exactly what someone diagnosing "why is
+     * this claim still here" needs to read.
+     */
+    private static RemoveStaleClaimResult convergeAbort(TaskRef ref, String why, @Nullable ClaimVersion liveVersion) {
+        log.debug("stale-claim removal for task {} converged without acting: {}", ref.id(), why);
+        return new RemoveStaleClaimResult.Mismatch(liveVersion);
     }
 
     /**
@@ -114,12 +136,18 @@ public final class GithubStaleClaimRemoval {
      * destructive, so a kill anywhere leaves a shape the sweep still enumerates.
      */
     private RemoveStaleClaimResult retire(
-            GithubTaskId id, String deadHolder, @Nullable Long commentId, @Nullable ClaimVersion observedVersion) {
+            TaskRef ref,
+            GithubTaskId id,
+            String deadHolder,
+            @Nullable Long commentId,
+            @Nullable ClaimVersion observedVersion) {
         postRemovalMarker(id, deadHolder, commentId, observedVersion);
         if (commentId != null) {
             deleteClaimComment(id, commentId);
         }
         labelOps.transition(id.owner(), id.repo(), id.issueNumber(), workingLabel, readyLabel);
+        log.info(
+                "removed stale claim of instance {} on task {}; the task is back in circulation", deadHolder, ref.id());
         return new RemoveStaleClaimResult.Removed();
     }
 

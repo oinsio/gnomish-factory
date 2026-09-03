@@ -208,6 +208,10 @@ class LedgerJsonMapperSpec extends Specification {
         new LifecycleLine(instance(), Instant.parse("2026-08-02T07:00:00Z"), new LedgerLifecycleEvent.Started())
     }
 
+    // The reason the wiring writes today is `ServeShutdownWiring.SIGNAL_REASON`; this sample keeps
+    // the older `sigterm` wording on purpose. It feeds the frozen `ledger-v1.reference.jsonl`
+    // anchor, and the point of that anchor is that a reader parses a v1 line whatever reason text
+    // it carries — the field is opaque to the wire format, which is what made the rename safe.
     static LifecycleLine stoppedLine() {
         new LifecycleLine(
                 instance(), Instant.parse("2026-08-02T23:00:00Z"), new LedgerLifecycleEvent.Stopped("sigterm"))

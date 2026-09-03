@@ -23,7 +23,7 @@ import java.util.List;
  * survives any death. A {@link HarvestRefusedException} (rewritten history)
  * propagates as the existing violation.
  *
- * <p>Implements FR21 of add-sandbox-core.
+ * <p>Implements FR21 of add-sandbox-core; FR13 of harden-logging-observability.
  */
 public final class EnvironmentRoundSnapshot {
 
@@ -68,6 +68,9 @@ public final class EnvironmentRoundSnapshot {
      * @return the harvested attempt commit id
      * @throws GitPersistFailedException if the in-box snapshot commit fails
      * @throws HarvestRefusedException if the branch history was rewritten in-box
+     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if the
+     *     harvested tip cannot be resolved — no attempt commit is recorded blank (FR13 of
+     *     harden-logging-observability)
      */
     public String snapshot(String taskId, String stage, int round) {
         String message = ServiceCommitMessages.snapshot(stage, round);
@@ -82,9 +85,11 @@ public final class EnvironmentRoundSnapshot {
 
         environment.harvest();
 
-        String tip = runner.run(cloneDir, "rev-parse", "refs/heads/" + branch)
-                .stdout()
-                .trim();
+        // The harvested tip is recorded as the round's attempt commit and judged by every
+        // verification check that follows, so a failed resolution must fail the snapshot rather
+        // than record the empty string as a commit (FR13 of harden-logging-observability).
+        String revision = "refs/heads/" + branch;
+        String tip = VerifiedTip.required(revision, "rev-parse", runner.run(cloneDir, "rev-parse", revision));
         attemptCommit.record(tip);
         return tip;
     }

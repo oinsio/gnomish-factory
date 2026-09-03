@@ -1,17 +1,17 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickRecord
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
-import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
-import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -21,7 +21,7 @@ import spock.lang.TempDir
  * or dispose, one summary line per tick, nothing at all for untouched objects, and an append
  * failure that never reaches the sweep that already acted.
  */
-class SweepLedgerWriterSpec extends Specification {
+class SweepLedgerWriterSpec extends Specification implements RotatingLedgerAppenderFixture {
 
     static final Instant NOW = Instant.parse('2026-08-06T09:00:00Z')
     static final InstanceInfo INSTANCE = new InstanceInfo('gnome-1', 'host1', '1.0.0')
@@ -33,17 +33,11 @@ class SweepLedgerWriterSpec extends Specification {
     def clock = Clock.fixed(NOW, ZoneOffset.UTC)
 
     private SweepLedgerWriter writer() {
-        new SweepLedgerWriter(appender(), INSTANCE, clock)
-    }
-
-    private RotatingLedgerAppender appender() {
-        new RotatingLedgerAppender(
-                new LedgerAppender(homeDir.resolve('placeholder.jsonl'), new LedgerJsonMapper()),
-                homeDir, INSTANCE_NAME, clock)
+        new SweepLedgerWriter(ledgerAppenderFor(homeDir, INSTANCE_NAME, NOW), INSTANCE, clock)
     }
 
     private List<String> ledgerLines() {
-        def file = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(NOW, ZoneOffset.UTC))
+        def file = ledgerFileFor(homeDir, INSTANCE_NAME, NOW)
         Files.exists(file) ? Files.readAllLines(file).findAll {
             !it.isBlank()
         } : []
@@ -138,10 +132,14 @@ class SweepLedgerWriterSpec extends Specification {
     }
 
     // NFR-R3: an observability write must never fail a sweep tick that already stopped a container.
-    def "an append failure is swallowed, not propagated"() {
+    //
+    // FR15 of harden-logging-observability: both append edges (an action line and a tick line)
+    // leave an ERROR carrying the catalog code, so a silently ledger-less sweep is impossible.
+    def "an append failure is swallowed, not propagated, and leaves one ERROR per lost line"() {
         given: 'a regular file where the ledger directory belongs, so every append fails'
         Files.writeString(homeDir.resolve('.gnomish'), 'not a directory')
         def writer = writer()
+        def logs = LogCaptureSupport.attach(SweepLedgerWriter)
 
         when:
         writer.onVerdict(verdict(SweepVerdictCategory.STOPPED_ORPHAN))
@@ -149,5 +147,13 @@ class SweepLedgerWriterSpec extends Specification {
 
         then:
         noExceptionThrown()
+        def events = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.SWEEP_LEDGER_APPEND_FAILED.head())
+        }
+        events.size() == 2
+        events.every { it.level == Level.ERROR }
+
+        cleanup:
+        logs.detach()
     }
 }

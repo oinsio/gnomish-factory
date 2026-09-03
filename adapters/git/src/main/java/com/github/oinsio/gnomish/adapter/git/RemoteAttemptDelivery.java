@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import org.slf4j.Logger;
@@ -77,14 +78,18 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
 
         GitCommandResult push = push();
         if (push.termination() == Termination.EXITED && push.exitCode() != 0) {
-            log.warn(
+            // FR12: first of two bounded attempts — the WARN belongs to the exhausted case, and
+            //     the Undeliverable outcome below is what the caller reports on.
+            log.info(
                     "attempt-commit delivery push failed, re-attempting once: branch={}, stderr={}",
                     branch,
-                    push.stderr().trim());
+                    LogText.forLog(push.stderr()));
             push = push();
         }
         if (push.termination() != Termination.EXITED) {
-            log.warn(
+            // FR12: the Undeliverable returned below carries this same fact into the check's
+            //     CannotVerify verdict, which the engine reports — one path, one operator line.
+            log.debug(
                     "attempt-commit delivery push {}: branch={}",
                     push.termination() == Termination.TIMED_OUT ? "timed out" : "was interrupted",
                     branch);
