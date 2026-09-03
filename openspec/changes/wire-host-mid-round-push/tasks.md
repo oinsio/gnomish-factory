@@ -35,8 +35,10 @@
       `RunChainFakes` map fakes, and consume it in `ExecutorAdapterSelector` by applying the
       decoration unconditionally inside the `sandbox == null` branch (comment records that
       sandbox wins by construction); verify: bootstrap/application specs — decoration
-      attached → CLI executor built with the decorated rounds; decoration absent → identity →
-      previous host construction byte-for-byte — FR3.
+      attached → the operator sees the real host rounds and the CLI executor is built over its
+      return; decoration absent → the identity default, so the host CLI executor is built exactly
+      as before — equivalence follows from the identity default plus `HostRoundsFactorySpec`,
+      which pins the factory's rounds against the host constructor's — FR3.
 - [x] 3.2 Grow `TaskGit` with the fourth `midRoundPush` component (identity default via a
       three-component convenience constructor, so existing construction sites stay untouched),
       build the real operator only in `ManualRunConfiguration.taskGit(...)` (decorator over the
@@ -44,8 +46,10 @@
       factories do), and attach it via `assembly.withHostGitPush(git.midRoundPush())` from the
       git-mode host control flows — `GitModeRunner.run`, `GitResumeContinuation`, and
       `TakeEngineExecution.run` (covering take fresh and resume in one place) — never from
-      in-place mode; verify: specs per runner assert the attachment, and an in-place-mode spec
-      asserts no piece and no push attempt — FR1, FR3, M2.
+      in-place mode; verify: specs per runner assert the attachment, and `ManualRunRunnerSpec`
+      asserts that the shared assembly in-place mode assembles from still carries the identity
+      decoration even when the injected `TaskGit` supplies a real one — so no `MidRoundPushRounds`
+      and no listener is built outside git mode — FR1, FR3, M2.
 
 ## 4. Documentation and sync surfaces
 

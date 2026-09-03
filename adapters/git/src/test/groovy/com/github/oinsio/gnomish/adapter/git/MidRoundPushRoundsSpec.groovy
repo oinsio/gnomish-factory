@@ -48,7 +48,13 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
     }
 
+    /** A request over the spec's own working repo — the undisturbed case. */
     private StageExecutor.Request request(int attempt = 0) {
+        request(repo, attempt)
+    }
+
+    /** The one request fixture: the stage is fixed, only the workspace and the round vary. */
+    private static StageExecutor.Request request(Path workspace, int attempt) {
         def stage = new StageDefinition(
                 'implement', 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
@@ -56,7 +62,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
                 new AutonomyLimits(3), AdvancementMode.AUTO)
         new StageExecutor.Request(
                 new TaskContext('PROJ-1', 'title', 'body', []),
-                stage, new DirectoryWorkspace(repo), attempt, [])
+                stage, new DirectoryWorkspace(workspace), attempt, [])
     }
 
     private void gnomeCommit(String fileName = 'gnome.txt') {
@@ -152,18 +158,8 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
 
         when: 'two rounds open over the broken workspace and each observes one event'
-        def brokenRequest = { int attempt ->
-            def stage = new StageDefinition(
-            'implement', 'purpose', [], [],
-            new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
-            'instructions.md', [],
-            new AutonomyLimits(3), AdvancementMode.AUTO)
-            new StageExecutor.Request(
-                    new TaskContext('PROJ-1', 'title', 'body', []),
-                    stage, new DirectoryWorkspace(notARepo), attempt, [])
-        }
-        source.openRound(brokenRequest(0)).roundListener().onProgress(toolEvent)
-        source.openRound(brokenRequest(1)).roundListener().onProgress(toolEvent)
+        source.openRound(request(notARepo, 0)).roundListener().onProgress(toolEvent)
+        source.openRound(request(notARepo, 1)).roundListener().onProgress(toolEvent)
 
         then: 'one WARN edge for the whole streak; the later polls are DEBUG repeats'
         def warnings = logs.list.findAll { it.level == Level.WARN }
@@ -205,14 +201,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         def delegate = new PassThroughRounds()
         def source = new MidRoundPushRounds(delegate, runner)
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
-        def stage = new StageDefinition(
-                'implement', 'purpose', [], [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
-                'instructions.md', [],
-                new AutonomyLimits(3), AdvancementMode.AUTO)
-        def round = source.openRound(new StageExecutor.Request(
-                        new TaskContext('PROJ-1', 'title', 'body', []),
-                        stage, new DirectoryWorkspace(notARepo), 0, []))
+        def round = source.openRound(request(notARepo, 0))
 
         when:
         round.roundListener().onProgress(toolEvent)

@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -115,7 +116,10 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                     null, null, null, null, null, null, false, null, null, null, null),
             // Host binding, explicitly: container is the default (D13 of add-sandbox-core),
             // and most specs sharing this fixture prove the host git-mode path.
-            BindingProperties bindingProperties = new BindingProperties('host', [:])) {
+            BindingProperties bindingProperties = new BindingProperties('host', [:]),
+            // Defaulted last so every existing call site is untouched: only the specs that need to
+            // tell the runner's own git bundle apart from the identity default supply their own.
+            TaskGit git = TaskGitFixture.real()) {
         new ManualRunRunner(
                 new RunArgumentsParser(),
                 new PipelineStartup(TrackerValidatorStub.plainSource()),
@@ -131,7 +135,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 sandboxProperties,
                 bindingProperties,
                 DiscoveredBindings.real(),
-                TaskGitFixture.real(),
+                git,
                 worktreesRoot,
                 homeDir,
                 new StatusCommand(TaskGitFixture.real(), worktreesRoot),

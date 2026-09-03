@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -12,10 +14,13 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.sandbox.BindingProperties
+import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
+import java.util.function.UnaryOperator
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -410,6 +415,29 @@ advancement: auto
         cleanup:
         System.in = originalIn
         System.out = originalOut
+    }
+
+    // FR3, M2 of wire-host-mid-round-push: in-place mode assembles the run from the runner's
+    // own shared assembly (ManualRunDrive.driveInPlace), and that assembly carries the identity
+    // host-git decoration — so no MidRoundPushRounds and no MidRoundPushListener is ever built
+    // for a run with no git behind it. Attaching the decoration in this constructor instead of
+    // at the three git-mode control flows would leak it into in-place; this is what catches it.
+    def "the assembly in-place mode runs on carries no mid-round push decoration"() {
+        given: 'a task-git bundle whose mid-round push decoration is a recognizable marker'
+        def decorated = Stub(RoundEnvironmentSource)
+        def real = TaskGitFixture.real()
+        def git = new TaskGit(real.store(), real.branches(), real.worktrees(), { rounds ->
+            decorated
+        } as UnaryOperator<RoundEnvironmentSource>)
+        def source = Stub(RoundEnvironmentSource)
+
+        when: 'the runner is built over that bundle'
+        def runner = newManualRunRunner(worktreesRoot, homeDir,
+                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new BindingProperties('host', [:]), git)
+
+        then: 'the shared assembly in-place assembles from still decorates nothing'
+        runner.assembly.hostGitPush.apply(source).is(source)
     }
 
     // FR6, FR7, UX1: --mode git (the default) prints the branch/worktree banner upfront, before
