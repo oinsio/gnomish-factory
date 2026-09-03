@@ -39,13 +39,17 @@ failures alike, with no per-execution console output at any level.
   the seam returns
 
 ### Requirement: Coverage spans all four spawn families
-Access records SHALL be produced by all four spawn families — the task
-execution environment port (agent CLI rounds, command checks, and in-box git,
-in host and container modes alike), the factory git runner, the docker
-management-command seam, and the git-objects plumbing runner — and by no
-other path. The dependency-free supervision module SHALL remain outside the
-mechanism: it acquires no logging capability and no dependency.
-<!-- implements FR2 of add-subprocess-access-log -->
+Access records SHALL be produced by all four spawn families through five
+emission sites — the task execution environment port (agent CLI rounds,
+command checks, in-box git, and environment self-check probes, in host and
+container modes alike), the factory git runner, the docker
+management-command seam, the container file channel's own docker
+executions, and the git-objects plumbing runner — and by no other path,
+enforced by a build gate that enumerates the allowed spawn sites. The git
+`ext::` harvest transport's docker grandchild is represented by its
+git-family record. The dependency-free supervision module SHALL remain
+outside the mechanism: it acquires no logging capability and no dependency.
+<!-- implements FR2, FR10, FR12, FR13 of add-subprocess-access-log -->
 
 #### Scenario: Environment exec is covered in both modes
 - **WHEN** a command check or an agent round runs through the task execution
@@ -69,6 +73,24 @@ mechanism: it acquires no logging capability and no dependency.
 - **THEN** the supervision module still declares no internal module,
   framework, or logging dependency
 
+#### Scenario: File-channel executions are covered
+- **WHEN** the container file channel writes or reads a factory file through
+  its own docker execution
+- **THEN** one docker-family access record is appended when the channel's
+  wait resolves
+
+#### Scenario: Self-check probes are covered
+- **WHEN** a new environment runs its self-check probes before the first
+  round
+- **THEN** each probe execution appends one environment-family record,
+  because the probes exec through the audited seam
+
+#### Scenario: A fifth spawn path fails the build
+- **WHEN** a production class outside the enumerated spawn sites references
+  the process-launch API
+- **THEN** the spawn-boundary gate fails the build naming the offending
+  class
+
 ### Requirement: One emitter owns format and redaction
 All access records SHALL be composed and redacted by a single emitter
 component; emission sites hand it structured execution facts and SHALL NOT
@@ -88,20 +110,27 @@ the identical schema regardless of which family wrote it.
   supplying the fact
 
 ### Requirement: Constructive redaction is a precondition of every record
-Argv redaction SHALL be constructive first: environment-variable values
-inlined into argv are never logged (variable names only, values replaced by a
-placeholder); seams that inject secret values into argv (the AI auth token,
-credential-bearing remote URLs) declare those exact values, and the emitter
-replaces every occurrence with a placeholder; a structural URL-userinfo scrub
-runs as the second net over the whole argv. Redaction SHALL run before
-truncation and before any hash over the argv is computed.
+Redaction SHALL be constructive first: environment-variable values are never
+logged on any family (variable names only); seams that hold secret values
+(the AI auth token, credential-bearing remote URLs) declare those exact
+values, and the emitter replaces every occurrence with a placeholder; a
+structural URL-userinfo scrub and an env-span scrub (any `-e NAME=value`
+form rewritten value-less) run as second nets over the whole argv even
+though no first-net path composes such an argv any more. Redaction SHALL
+run before truncation and before any hash over the argv is computed.
 <!-- implements FR4, NFR-S1 of add-subprocess-access-log -->
 
-#### Scenario: Docker exec env values never appear
-- **WHEN** a container exec passes environment entries on its argv as
-  `-e NAME=value` pairs
-- **THEN** the record shows each entry's name with a placeholder value, and no
-  entry's value appears anywhere in the record
+#### Scenario: Env values appear in no record on either mode
+- **WHEN** an agent round runs with factory-set environment entries, on host
+  or in a container, and every emitted record is scanned
+- **THEN** environment variable names may appear, and no entry's value
+  appears anywhere in any record
+
+#### Scenario: A reintroduced env-on-argv span leaks a placeholder, not a value
+- **WHEN** a future seam hands the emitter an argv containing a
+  `-e NAME=value` span
+- **THEN** the record carries the span with a placeholder in place of the
+  value
 
 #### Scenario: The injected AI token is unfindable
 - **WHEN** an agent round runs with a known fake auth token injected through
@@ -124,9 +153,11 @@ Records SHALL use OTel `process.*` semantic-convention field names where one
 exists (`process.executable.name`, `process.command_args`,
 `process.exit.code`, `error.type`), RFC3339 UTC timestamps, a per-line schema
 version, and a closed termination token set `exited | timed_out |
-interrupted`. Every wire constant of the termination vocabulary SHALL have a
-round-trip mapping spec iterating all constants, no hand-listed subset.
-<!-- implements FR5 of add-subprocess-access-log -->
+interrupted | start_failed`. Every wire constant of the termination
+vocabulary SHALL have a round-trip mapping spec iterating all constants, no
+hand-listed subset, with `start_failed` pinned as the sole emitter-owned
+token that maps from no supervision constant.
+<!-- implements FR5, FR11 of add-subprocess-access-log -->
 
 #### Scenario: A line is self-describing
 - **WHEN** a collector parses one access line with no other context
@@ -137,6 +168,43 @@ round-trip mapping spec iterating all constants, no hand-listed subset.
 - **WHEN** a termination constant is added or renamed on either side of the
   wire mapping
 - **THEN** the round-trip spec over all constants fails until both sides agree
+
+### Requirement: The environment family records the logical command
+For gnome-product processes the environment-family record SHALL be the sole
+access record of the execution and SHALL describe the logical in-box
+command, carrying a mechanism token (`host | container`), the container
+identity where one exists, the composed environment's variable names, and a
+generated execution id; the physical container exec wrapper argv SHALL NOT
+be logged by any family.
+<!-- implements FR9 of add-subprocess-access-log -->
+
+#### Scenario: One record per gnome process, at the logical layer
+- **WHEN** an agent round runs in a container and the access file is
+  inspected
+- **THEN** exactly one record describes that execution, its argv is the
+  in-box command, its mechanism token is `container`, and no record anywhere
+  carries the wrapper's own argv
+
+#### Scenario: Host and container records differ only in mechanism
+- **WHEN** the same logical command runs on host mode and in a container
+- **THEN** both records carry the same logical argv and differ in the
+  mechanism token and container identity
+
+#### Scenario: The execution id joins the record to the session's artifacts
+- **WHEN** an operator holds an environment-family record of an agent round
+- **THEN** its execution id identifies the round in the session's other
+  correlated artifacts
+
+### Requirement: Failed starts leave a record
+A factory-issued spawn that fails to produce a process SHALL append one
+record whose termination is `start_failed` and which carries no exit code,
+so "tried and could not start" is distinguishable from silence.
+<!-- implements FR11 of add-subprocess-access-log -->
+
+#### Scenario: A spawn that never started is recorded
+- **WHEN** launching a subprocess fails before a process exists
+- **THEN** one access record with termination `start_failed` and no exit
+  code is appended, and the seam's own failure handling proceeds unchanged
 
 ### Requirement: Oversized argv truncates with marker and hash
 An argv whose rendered length exceeds the record's budget SHALL be truncated
@@ -216,12 +284,23 @@ The capability's documentation SHALL state that the log covers factory-issued
 commands only: processes the agent spawns inside its box do not cross a
 factory seam and produce no records, with the bounding mechanisms for them
 named (egress guard on the network plane; boundary checks and
-fast-forward-only harvest on the git plane). The log SHALL claim operational
-value only — the factory host is the trusted root, and no tamper-evidence is
-claimed.
-<!-- implements NFR-S2 of add-subprocess-access-log -->
+fast-forward-only harvest on the git plane). The documentation SHALL also
+state the host-mode posture: the origin remote credential is reachable from
+inside a host-mode box through the worktree's git configuration, while
+container mode removes the remote from the seed clone. The log SHALL claim
+operational value only — the factory host is the trusted root, and no
+tamper-evidence is claimed. A round that dies together with the factory
+leaves no record; the attempt journal and the task branch are the named
+owners of in-flight state.
+<!-- implements NFR-S2, NFR-S3 of add-subprocess-access-log -->
 
 #### Scenario: In-box spawns produce no records and no false promise
 - **WHEN** an agent inside its environment spawns a process of its own
 - **THEN** no access record is produced, and the capability's documentation
   states this boundary and the mechanisms that bound in-box effects
+
+#### Scenario: Host-mode credential reachability is written down
+- **WHEN** an operator reads the capability documentation for host mode
+- **THEN** it states that the origin remote credential is reachable from
+  inside a host-mode box via the worktree's git configuration, and that
+  container mode removes the remote

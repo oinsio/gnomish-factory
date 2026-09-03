@@ -77,11 +77,14 @@ it rethrow or log at DEBUG. Two lines for one fault is a finding.
 log.warn("could not read {}", path, e);              // yes
 log.warn("could not read {}: {}", path, e.toString());   // no — amputated stack
 log.warn("could not read {}: {}", path, e.getMessage()); // no — prints null for cause-only
+log.warn("could not read " + path + ": " + e);           // no — concatenation calls toString()
 ```
 
-A source-scan gate fails the build on interpolated exceptions. Where the
-throwable genuinely is not the subject, exempt in place with a comment on the
-call's own line or directly above it:
+A source-scan gate fails the build on interpolated exceptions. It recognizes
+`getMessage()`, `getLocalizedMessage()`, `toString()`, `String.valueOf(e)` and
+string concatenation of the exception. Where the throwable genuinely is not the
+subject, exempt in place with a comment on the call's own line or directly above
+it:
 
 ```java
 // throwable-not-subject: only the classification matters here; the cause is
@@ -102,9 +105,9 @@ log.warn("stage command failed: {}", LogText.forLog(result.stderr()));
 ```
 
 A source-scan gate (`UntrustedLogTextGateSpec`) fails the build when one of the
-recognized untrusted accessors — `stderr()`, `stdout()`, `getOriginalMessage()`,
-`sessionId()`, `model()` — reaches a log call outside a `LogText.*(...)`
-wrapper. Both SLF4J shapes are scanned: the classic `log.warn(...)` and the
+recognized untrusted accessors — `stderr()`, `stdout()`, `output()`,
+`getOriginalMessage()`, `sessionId()`, `model()`, `label()` — reaches a log call
+outside a `LogText.*(...)` wrapper. Both SLF4J shapes are scanned: the classic `log.warn(...)` and the
 fluent `log.atLevel(...)....log(...)`, whose arguments sit past the level call
 and are followed through the builder chain. The accessor list is what the gate
 can see, not the whole rule: a change that introduces a new untrusted accessor

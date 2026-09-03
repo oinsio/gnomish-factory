@@ -34,6 +34,24 @@ naturally joins.
   also cover access-log emission; `:gitobjects` stays dependency-free — it
   reaches the emitter only through a JDK-only observer hook on its own public
   API.
+- **MODIFIED** `execution-environment`: the container exec seam stops
+  rendering environment values into the `docker exec` argv (secret-free
+  wrapper argv at the source); the environment self-check runs its probes
+  through the decorated exec seam instead of the raw adapter; the "sole
+  process-launch seam" claim is narrowed to name its two disclosed bypasses
+  (the container file channel, the git `ext::` harvest transport) and is
+  enforced by a widened spawn-boundary gate.
+- **MODIFIED** `factory-logging`: the untrusted-text rule is tightened — the
+  findings sanitizer prepares no log-line text outside the findings funnel
+  (the judge-verdict extraction WARN moves to the logging choke point), and
+  the untrusted-log-text gate learns the local-string shape that let that
+  site bypass it.
+- **MODIFIED** `subprocess-supervision`: the three silently unbounded waits
+  found by the systemic audit (container file channel, environment
+  self-check probes, in-box service git commands) gain deadlines, and the
+  docker runtime probe uses the operator-configured docker-command timeout;
+  the factory's git and docker client subprocesses start from a cleared
+  environment instead of inheriting every factory credential.
 
 ## Capabilities
 
@@ -52,6 +70,14 @@ naturally joins.
 - `module-layering`: the `:logtext` consumer grant is widened to access-log
   emission, and the `:gitobjects` extraction contract is pinned against the
   new hook (no new dependency edge).
+- `execution-environment`: secret-free container exec argv, probes through
+  the decorated seam, honest and gate-enforced sole-seam wording.
+- `subprocess-supervision`: bounded file-channel/probe/in-box-git waits,
+  configured probe timeout, minimized child environments for git/docker
+  clients.
+- `factory-logging`: the findings sanitizer barred from log-line text outside
+  the findings funnel; the untrusted-log-text gate extended to the
+  local-string shape.
 
 ## Goals
 
@@ -65,6 +91,12 @@ naturally joins.
   emission sites cannot drift into private formats or private scrubbing.
 - **G4** The log is operationally free: producing it adds no tracker calls,
   no AI tokens, no new subprocess, and its failure never harms task work.
+- **G5** The container exec wrapper argv carries no secret values at all
+  after this change — env moves off the argv at the source, so log redaction
+  becomes the second net, not the only control.
+- **G6** No factory-issued subprocess wait on the covered seams is silently
+  unbounded: every wait either has a deadline or carries a written
+  justification for not having one.
 
 ## Non-Goals
 
@@ -82,13 +114,21 @@ naturally joins.
   existing paths (captures, tails, transcripts).
 - **NG5** A new module: the emitter and redactor live in the `:logtext` leaf
   that `harden-logging-observability` introduces; this change adds no module.
+- **NG6** The rest of the secrets-hardening backlog: `HOME` inheritance on
+  host mode, the declaration-dependency of credential stripping, and gateway
+  virtual keys stay with `add-sandbox-hardening`; host-mode in-box
+  reachability of the origin credential is documented here (NFR-S3), not
+  re-engineered.
 
 ## Users & Scenarios
 
 - **U1 Operator auditing a run**: after a serve day, runs
   `jq 'select(.taskId=="T-42")' access-*.jsonl` and reads every command the
-  factory issued for that task in order, each with duration and exit code —
-  including the docker exec lines whose env values never appear.
+  factory issued for that task in order, each with duration and exit code.
+  Gnome processes appear as environment-family lines showing the logical
+  in-box command and a `mechanism` field (`host`/`container`); the physical
+  `docker exec` wrapper argv — the only argv that ever carried env values —
+  is not logged by any family, and env variable names appear without values.
 - **U2 Post-mortem investigator**: a task aborted on a timed-out push;
   the access line shows the exact (redacted) argv, the elapsed time against
   the deadline, and `termination: timed_out` — no reproduction needed.
@@ -106,24 +146,28 @@ naturally joins.
   duration, the exit code (when the process chose one), the termination kind,
   the spawn-family identifier, correlation context, and a per-line schema
   version.
-- **FR2** Coverage SHALL span the four spawn families with no fifth path: the
-  `TaskExecutionEnvironment` port (agent CLI rounds, command checks, in-box
-  git — host and container modes alike) via a decorator over the port;
-  `GitProcessRunner` (factory git); `DockerCli` management commands (sandbox
-  lifecycle); and `GitExec` (`:gitobjects` plumbing) via a dependency-free
-  observer hook. The `:subprocess` module stays out: its neutrality contract
-  forbids logging and dependencies, and `CaptureRunner` is a record with
-  nothing to decorate.
+- **FR2** Coverage SHALL span the four spawn families through five emission
+  sites: the `TaskExecutionEnvironment` port (agent CLI rounds, command
+  checks, in-box git — host and container modes alike, self-check probes
+  included) via a decorator over the port; `GitProcessRunner` (factory git);
+  `DockerCli` management commands (sandbox lifecycle); the container file
+  channel's own `docker exec` spawns (docker family, emitted where the
+  channel resolves its wait); and `GitExec` (`:gitobjects` plumbing) via a
+  dependency-free observer hook. The git `ext::` harvest transport's docker
+  grandchild is represented by its git-family record. The `:subprocess`
+  module stays out: its neutrality contract forbids logging and
+  dependencies, and `CaptureRunner` is a record with nothing to decorate.
 - **FR3** One emitter SHALL own the record format and the redaction; emission
   sites hand it a structured record and SHALL NOT compose JSON, choose field
   names, or scrub argv themselves.
-- **FR4** Redaction SHALL be constructive first: the seams that inject secret
-  values into argv (the AI auth token inlined by `docker exec -e`,
-  credential-bearing remote URLs) declare those exact values to the emitter,
-  which substitutes a placeholder wherever they occur; environment-variable
-  values passed on argv are never logged (names only); a structural URL
-  userinfo scrub runs as the second net. Redaction runs before truncation and
-  before the full-argv hash is taken.
+- **FR4** Redaction SHALL be constructive first: seams that hold secret
+  values (the AI auth token, credential-bearing remote URLs) declare those
+  exact values to the emitter, which substitutes a placeholder wherever they
+  occur in any record; environment-variable values are never logged on any
+  family (names only); a structural URL userinfo scrub and an env-span
+  (`-e NAME=value`) scrub run as second nets over every rendered argv, even
+  though after FR9 and FR14 no first-net path should produce such an argv.
+  Redaction runs before truncation and before the full-argv hash is taken.
 - **FR5** The record vocabulary SHALL use OTel `process.*` semantic-convention
   names where one exists (`process.executable.name`, `process.command_args`,
   `process.exit.code`, `error.type`), RFC3339 UTC timestamps, and a closed
@@ -140,6 +184,42 @@ naturally joins.
   `component` key where set) SHALL be copied from the MDC at the emission
   seam; where the outcome resolves on a different thread than the launch, the
   MDC SHALL be captured at launch and applied at emission.
+- **FR9** For gnome-product processes the environment-family record SHALL be
+  the sole access record of the execution and SHALL describe the logical
+  in-box command, carrying a `mechanism` token (`host | container`), the
+  container identity where one exists, and a generated execution id for
+  correlation with the session's other artifacts; the physical `docker exec`
+  wrapper argv SHALL NOT be logged by any family.
+- **FR10** The container file channel's `docker exec` spawns SHALL each emit
+  one docker-family record at the channel's own wait resolution, handing
+  structured facts to the shared emitter like every other site.
+- **FR11** A spawn that fails to start (no process ever exists) SHALL emit
+  one record whose termination is `start_failed`, with no exit code; the
+  termination vocabulary and its round-trip spec extend to this
+  emitter-owned token.
+- **FR12** The auditing decorator SHALL be applied directly around each raw
+  environment adapter (innermost, at all four wiring points), and the
+  environment self-check SHALL exec through the decorated seam, so probe
+  executions — the first commands a new box runs — are recorded.
+- **FR13** The no-fifth-path claim SHALL be enforced mechanically: the
+  process-spawn boundary gate enumerates every allowed spawn site (the two
+  environment adapters, `DockerCli`, `CaptureRunner`'s consumers,
+  `GitExec`, the container file channel) and fails the build on any other
+  `ProcessBuilder` use; the sole-seam wording in the port javadoc and the
+  capability spec SHALL name the disclosed bypasses (file channel, git
+  `ext::` grandchild).
+- **FR14** The container exec seam SHALL NOT render environment values into
+  argv: env entries pass as value-less flags with values supplied through
+  the docker client process's own environment, or an equivalent no-argv
+  mechanism, so the wrapper argv is secret-free at the source.
+- **FR15** The factory's git and docker client subprocesses SHALL start from
+  a cleared environment carrying only the variables each client needs,
+  instead of inheriting the factory's full environment with every credential
+  in it.
+- **FR16** The judge-verdict extraction WARN SHALL sanitize the raw model
+  message through the logging choke point (strip, cap, flatten), and the
+  untrusted-log-text gate SHALL be extended to catch the local-string shape
+  that let this site bypass it.
 
 ### Non-Functional Reliability
 
@@ -147,6 +227,12 @@ naturally joins.
   SHALL never fail the command, the check, the round, or the take, burn a
   stage attempt, or block the launching thread beyond the appender's queue
   hand-off; the failure itself leaves a trace per the logging policy.
+- **NFR-R2** No silently unbounded wait on the covered seams: the container
+  file channel's waits, the environment self-check probes, and in-box
+  service git commands SHALL be bounded with deadlines whose expiry follows
+  each seam's standard timeout handling; the docker runtime probe SHALL use
+  the operator-configured docker-command timeout; any wait that remains
+  unbounded SHALL carry a written justification at the call site.
 
 ### Non-Functional Observability
 
@@ -166,6 +252,11 @@ naturally joins.
   commands only; agent-spawned in-box processes are documented as out of
   scope together with the mechanisms that bound them (egress guard, boundary
   checks, ff-only harvest).
+- **NFR-S3** Host-mode posture is documented where operators read it: the
+  in-box reachability of the origin remote credential through the worktree's
+  git config (absent in container mode, where the seed clone removes the
+  remote) SHALL be stated alongside the capability-passport wording and the
+  observability operator guide.
 
 ### Non-Functional Performance
 
@@ -199,6 +290,13 @@ only budgets this change touches); no separate cost requirement.
   at 100%.
 - **M4** Zero access-log lines in the operator's human log file and zero
   written by `./gradlew check` to the operator's log directory.
+- **M5** Zero env values on the container exec argv: a spec over the
+  composed `docker exec` argv finds value-less env flags only, and the E2E
+  fake-token run finds zero token occurrences in any process argv the
+  factory composed.
+- **M6** Every newly bounded wait goes red on virtual time: a spec per seam
+  (file channel, self-check probes, in-box git, runtime probe) proves the
+  deadline expires instead of hanging.
 
 ## Open Questions
 
@@ -216,12 +314,17 @@ only budgets this change touches); no separate cost requirement.
 - **Modules touched**: `:logtext` (emitter, redactor, record value —
   introduced by `harden-logging-observability`; this change sequences after
   it or coordinates on that module's landing), `bootstrap` (Logback appender,
-  logger routing, test config, gitobjects hook wiring), `:adapters:git`
-  (`GitProcessRunner` emission, secret-value declaration for remote URLs),
-  `:sandbox:docker` (`DockerCli` emission, `AuditedEnvironment` decorator,
-  env-value redaction hand-off), `:gitobjects` (JDK-only observer hook on the
-  public entry point — no dependency added), `:adapters:agent` (AI-seam
-  secret-value declaration).
+  logger routing, test config, gitobjects hook wiring, widened
+  process-spawn boundary gate, extended untrusted-log-text gate),
+  `:adapters:git` (`GitProcessRunner` emission and child-env minimization,
+  secret-value declaration for remote URLs), `:sandbox:docker` (`DockerCli`
+  emission and child-env minimization, `AuditedEnvironment` decorator
+  applied innermost, `DockerCommands.exec` env-off-argv, file-channel
+  emission and deadlines, self-check probes through the decorated seam,
+  runtime-probe configured timeout), `:gitobjects` (JDK-only observer hook
+  on the public entry point — no dependency added), `:adapters:agent`
+  (AI-seam secret-value declaration, judge-verdict WARN sanitization),
+  `docs` (host-posture and scope statements).
 - **Dependencies**: no new external dependencies; `:logtext` stays
   slf4j-api-only (JSON lines are composed by hand, no Jackson below the
   application layer).
