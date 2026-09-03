@@ -34,8 +34,14 @@ Provide read-only `status` and `usage` commands that inspect a task's git-persis
 
 ### Requirement: Task list mode
 `gnomish status --dir <clone>` without a task argument SHALL print a minimal table over all `gnomish/*` branches — local and remote-tracking, deduplicated per task with the local tip preferred when both exist — task, stage, attempts, outcome — with a `--json` variant. Every branch SHALL yield exactly one row whatever its shape: delivered, freshly created (no completed round yet), in-flight, and parked branches all render; a `Corrupt`, `UnsupportedVersion`, or `Unknown` branch renders as one row naming its shape and diagnosis. A branch that cannot be classified or read SHALL degrade to its own diagnostic row and SHALL NOT fail the listing of the other tasks. No sorting or filtering options.
+
+Per-branch degradation SHALL NOT extend to the enumeration itself: when the
+branch enumeration fails (the ref listing exits non-zero), the command SHALL
+fail with the git evidence rather than print an empty table — an empty table
+means "verified: no tasks", never "could not look".
 <!-- implements FR13 of add-git-workflow -->
 <!-- implements FR16 of harden-task-branch-contract -->
+<!-- implements FR13 of harden-logging-observability -->
 
 #### Scenario: Overview of all tasks
 - **WHEN** the clone has three `gnomish/*` branches
@@ -52,6 +58,11 @@ Provide read-only `status` and `usage` commands that inspect a task's git-persis
 #### Scenario: One bad branch never kills the listing
 - **WHEN** one `gnomish/*` branch carries an unparseable `state.json` while two others are healthy
 - **THEN** the two healthy tasks render normally and the bad branch renders as a single diagnostic row naming its shape
+
+#### Scenario: A failed enumeration is an error, not an empty table
+- **WHEN** the ref listing behind the table cannot be obtained at all
+- **THEN** the command fails naming the git failure, and no empty "no tasks"
+  table is printed
 
 ### Requirement: Usage report
 `gnomish usage --dir <clone> <task> [--json]` SHALL reconstruct per-stage/per-round usage from the git history of `state.json`: a chronological walk emitting a row per new `AttemptRecord`; salvage, cleanup, and `task.json`-only commits produce no rows. A historical commit whose state file cannot be read or parsed SHALL be skipped with a warning naming the commit — the walk continues and the report renders from the readable commits instead of failing. Text output: a stage/round table with result, tokens (in/out/cache summed over models), and wall time, plus totals; `--json`: full granularity (tokensByModel, judge votes per vote) under its own `"version": 1` mini-contract following the same JSON conventions. Git mode only; every recorded round of every stage visit — including failed attempts — is accounted.

@@ -8,20 +8,23 @@ Defines the layered Gradle module tree of the factory — which modules exist, t
 
 ### Requirement: Layered Gradle module tree
 The build SHALL be organized into layered Gradle modules by hexagonal layer:
-`domain`, `subprocess`, `atomicfile`, `gitobjects`, `gnomish-plugin-api`,
-`application`, one or more `adapters` modules, `sandbox` modules, and
-`bootstrap`. `atomicfile` is the dependency-free leaf holding the shared
-atomic file writer (temp file + atomic rename) consumed by the host-side
+`domain`, `subprocess`, `atomicfile`, `logtext`, `gitobjects`,
+`gnomish-plugin-api`, `application`, one or more `adapters` modules, `sandbox`
+modules, and `bootstrap`. `atomicfile` is the dependency-free leaf holding the
+shared atomic file writer (temp file + atomic rename) consumed by the host-side
 `.gnomish-task/` writers and the dashboard writer; the container-side
 persisters reach durability at commit granularity — round state committed
 in-box, lifecycle commits built from bare objects — so neither consumes the
-writer.
+writer. `logtext` is the logging-support leaf holding the untrusted-text
+sanitizer, the repeat suppressor, and the MDC-propagation helper — the pieces
+every layer's log emitters share.
 <!-- implements FR9 of bound-subprocess-commands; originally FR1 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
+<!-- implements FR4, FR6, FR8 of harden-logging-observability -->
 
 #### Scenario: Modules resolve as distinct Gradle projects
 - **WHEN** `./gradlew projects` is run
-- **THEN** `:domain`, `:subprocess`, `:atomicfile`, `:gitobjects`,
+- **THEN** `:domain`, `:subprocess`, `:atomicfile`, `:logtext`, `:gitobjects`,
   `:gnomish-plugin-api`, `:application`, the adapter module(s),
   `:sandbox:core`, `:sandbox:docker`, and `:bootstrap` each appear as a
   separate project
@@ -29,26 +32,31 @@ writer.
 
 ### Requirement: Enforced acyclic dependency direction
 The module dependency direction SHALL be acyclic and enforced by the build:
-`domain`, `subprocess`, and `atomicfile` depend on nothing internal;
-`gitobjects` depends only on `subprocess`; `gnomish-plugin-api` depends only
-on `domain`; `:sandbox:core` depends only on `domain` / `gitobjects`;
-`application` depends only on `domain`, `subprocess`, `atomicfile`,
-`gitobjects`, `gnomish-plugin-api`, and `:sandbox:core`; each adapter module
-depends on `gnomish-plugin-api` and `application` (plus `subprocess` where it
-launches OS processes, `atomicfile` where it writes factory-owned files
-atomically, `:sandbox:core` where it bridges to the execution environment,
+`domain`, `subprocess`, `atomicfile`, and `logtext` depend on nothing
+internal; `gitobjects` depends only on `subprocess`; `gnomish-plugin-api`
+depends only on `domain`; `:sandbox:core` depends only on `domain` /
+`gitobjects`; `application` depends only on `domain`, `subprocess`,
+`atomicfile`, `logtext`, `gitobjects`, `gnomish-plugin-api`, and
+`:sandbox:core`; each adapter module depends on `gnomish-plugin-api` and
+`application` (plus `subprocess` where it launches OS processes, `atomicfile`
+where it writes factory-owned files atomically, `logtext` where it logs
+untrusted text, `:sandbox:core` where it bridges to the execution environment,
 and a sandbox backend module where it drives that backend) but never on a
 sibling adapter's internals — with one declared exception: `:adapters:agent`
 depends on the coarse `:adapters` remainder for the shared pipeline-law and
 briefing packages, narrowed to exactly those packages by a named ArchUnit
 rule; sandbox backend modules depend on `:sandbox:core` and `subprocess`,
-plus `application` where the backend realizes an application-owned port; no
-production module depends on the test-fixtures module; `bootstrap` is the
-only module that wires adapters together and the only one that reaches every
-adapter. `subprocess` and `atomicfile` SHALL never acquire a dependency —
-their emptiness is what keeps their consumers free of transitive coupling.
+plus `logtext` where they log untrusted text, plus `application` where the
+backend realizes an application-owned port; no production module depends on
+the test-fixtures module; `bootstrap` is the only module that wires adapters
+together and the only one that reaches every adapter. `subprocess` and
+`atomicfile` SHALL never acquire a dependency — their emptiness is what keeps
+their consumers free of transitive coupling. `logtext` SHALL declare no
+internal module dependency and at most the logging API (`slf4j-api`) — never
+an implementation, framework, or any other external library.
 <!-- implements FR9, NFR-S3 of bound-subprocess-commands; originally FR2 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
+<!-- implements FR4, FR6, FR8 of harden-logging-observability -->
 
 #### Scenario: A vendor adapter reaches the tenure record through the contract
 - **WHEN** a vendor adapter module stamps its writes with the claim epoch of
@@ -84,6 +92,11 @@ their emptiness is what keeps their consumers free of transitive coupling.
 #### Scenario: The atomicfile leaf stays empty of dependencies
 - **WHEN** the dependency gates run against `:atomicfile`
 - **THEN** it declares no internal module or framework dependency
+
+#### Scenario: The logtext leaf carries only the logging API
+- **WHEN** the dependency gates run against `:logtext`
+- **THEN** it declares no internal module dependency and no external
+  dependency beyond `slf4j-api`
 
 #### Scenario: Host-side writers and the dashboard writer share one atomic writer
 - **WHEN** the host persister and the dashboard writer perform an atomic file
