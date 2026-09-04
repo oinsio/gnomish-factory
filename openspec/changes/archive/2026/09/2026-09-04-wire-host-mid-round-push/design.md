@@ -64,22 +64,40 @@ rounds-accepting constructor. *Rationale:* smallest seam; the package-private cl
 `HostRoundEnvironmentSource` public — it would leak `DecisionFileTransport` construction
 details into two modules for no gain.
 
-**D3 — Attachment mirrors `withSandbox`: an optional host-git piece on the run assembly,
-attached only by git-mode host runners.** `application` gains a
-`RunAssembly.withHostGitPush(...)` (name final in implementation) carrying the executor rounds
-source, realized in `ManualRunAssembly` and consumed by `ExecutorAdapterSelector` when
-`sandbox == null`; the attachment call sites are the git-mode host control flows
-(`GitModeRunner`, `GitResumeRunner`, and the host take execution), mirroring how
-`ContainerTerminalDrive` / `TakeContainerEngineExecution` call `withSandbox`. In-place mode
-never calls it, satisfying FR3 with absence rather than a mode flag. *Rationale:* the
-mode-knowledge already lives in exactly those runners; reusing the idiom keeps one pattern for
-"this run carries extra adapter pieces". *Alternative rejected:* threading a `gitMode` boolean
-down to `ExecutorAdapterSelector` — a flag plus a nullable runner parameter is a shotgun
-signature change through code that otherwise doesn't care, and it puts git-adapter
-construction knowledge into the selector.
+**D3 — Attachment is a decorator-as-value:
+`RunAssembly.withHostGitPush(UnaryOperator<RoundEnvironmentSource>)`, attached only by
+git-mode host control flows, carried to them by `TaskGit`.** `application` gains the
+`withHostGitPush(decoration)` copy method mirroring `withSandbox`'s idiom, realized in
+`ManualRunAssembly` with `UnaryOperator.identity()` as the default (a Null Object:
+`ExecutorAdapterSelector` applies the decoration unconditionally inside its existing
+`sandbox == null` branch — no mode conditional appears, and the previous host construction is
+exactly the identity application). The decoration travels as a fourth `TaskGit` component
+(working name `midRoundPush`), defaulted to identity by a three-component convenience
+constructor so the existing construction sites stay untouched; the real operator is built in
+exactly one named place — `ManualRunConfiguration.taskGit(...)`, which already builds the
+`GitProcessRunner` from `factoryProperties.gitNetworkTimeout()`. The attachment call sites are
+the git-mode host control flows: `GitModeRunner.run`, `GitResumeContinuation`, and
+`TakeEngineExecution.run` — the last covers both take entry points (fresh via
+`TakeFreshClaim`, resume via `TakeResumeRunner`) in one place, since both funnel through it.
+In-place mode never calls it, satisfying FR3 with absence rather than a mode flag. The
+operator itself is stateless: per-task state (D4's shared suppressor) lives in the
+`MidRoundPushRounds` instance each `apply` creates — one per `assemble`, i.e. one per run.
+*Rationale:* the decorator-as-value shape is the established middleware idiom (Go
+`func(Handler) Handler`, Tower `Layer`, OkHttp interceptors) and composition-root
+interception per Seemann: mode knowledge stays in the mode-aware runners (type dispatch, not
+a flag), git-adapter knowledge stays in `bootstrap`, and the operator's ride in `TaskGit` is
+cohesive — the push decoration is a git capability co-travelling with the other git
+capabilities (a future non-git decoration wanting the same ride is the signal the bundle is
+degrading, not a precedent to follow). *Alternatives rejected:* a no-arg `withHostGitPush()`
+flag — control coupling (the caller names the branch to take instead of handing the behavior)
+and it moves git-adapter construction knowledge into the selector; threading the built
+`RoundEnvironmentSource` down the take call chain — `TakeFreshClaim.claim` already takes 14
+parameters and `TakeEngineExecution` 8 record components, so the ninth/fifteenth addition is
+exactly the cascade the parameter-count rule exists to stop, and no surveyed middleware
+system ships that shape.
 
 **D4 — One `RepeatSuppressor` per task, held by the decorator.** The decorator is constructed
-once per run (per task) and hands the same suppressor to every round's listener, mirroring the
+once per run (one `apply` of the D3 operator per `assemble`, per task) and hands the same suppressor to every round's listener, mirroring the
 `harvestSuppressor` rationale recorded in `SandboxRoundEnvironmentSource` (NFR-O1): a tip that
 cannot be resolved is one fault whether it spans polls of one round or rounds of one task.
 *Alternative rejected:* per-round suppressors — they would re-announce a persistent failure

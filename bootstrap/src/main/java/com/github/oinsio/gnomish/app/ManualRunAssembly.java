@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -19,6 +20,7 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -67,6 +69,9 @@ public final class ManualRunAssembly implements RunAssembly {
     final SandboxProperties sandboxProperties;
     final @Nullable EngineEventListener extraListener;
     final @Nullable SandboxRunPieces sandbox;
+    // Identity by default (design D3 of wire-host-mid-round-push): consumers apply the decoration
+    // unconditionally, so "no decoration" needs no null check and no mode conditional.
+    final UnaryOperator<RoundEnvironmentSource> hostGitPush;
 
     private ManualRunAssembly(
             SystemConsoleIO systemConsoleIO,
@@ -79,7 +84,8 @@ public final class ManualRunAssembly implements RunAssembly {
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties,
             @Nullable EngineEventListener extraListener,
-            @Nullable SandboxRunPieces sandbox) {
+            @Nullable SandboxRunPieces sandbox,
+            UnaryOperator<RoundEnvironmentSource> hostGitPush) {
         this.systemConsoleIO = systemConsoleIO;
         this.filesExistCheckRunner = filesExistCheckRunner;
         this.shellCommandCheckRunner = shellCommandCheckRunner;
@@ -91,6 +97,7 @@ public final class ManualRunAssembly implements RunAssembly {
         this.sandboxProperties = sandboxProperties;
         this.extraListener = extraListener;
         this.sandbox = sandbox;
+        this.hostGitPush = hostGitPush;
     }
 
     /**
@@ -119,7 +126,8 @@ public final class ManualRunAssembly implements RunAssembly {
                 factoryProperties,
                 sandboxProperties,
                 null,
-                null);
+                null,
+                UnaryOperator.identity());
     }
 
     /**
@@ -131,11 +139,14 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withExtraListener(EngineEventListener listener) {
-        return copyWith(listener, sandbox);
+        return copyWith(listener, sandbox, hostGitPush);
     }
 
-    /** Shared copy construction: collaborators carried over, the two optional seams supplied. */
-    private ManualRunAssembly copyWith(@Nullable EngineEventListener listener, @Nullable SandboxRunPieces pieces) {
+    /** Shared copy construction: collaborators carried over, the three optional seams supplied. */
+    private ManualRunAssembly copyWith(
+            @Nullable EngineEventListener listener,
+            @Nullable SandboxRunPieces pieces,
+            UnaryOperator<RoundEnvironmentSource> decoration) {
         return new ManualRunAssembly(
                 systemConsoleIO,
                 filesExistCheckRunner,
@@ -147,7 +158,8 @@ public final class ManualRunAssembly implements RunAssembly {
                 factoryProperties,
                 sandboxProperties,
                 listener,
-                pieces);
+                pieces,
+                decoration);
     }
 
     /**
@@ -163,7 +175,22 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withSandbox(SandboxRunPieces pieces) {
-        return copyWith(extraListener, pieces);
+        return copyWith(extraListener, pieces, hostGitPush);
+    }
+
+    /**
+     * Returns a copy of this assembly whose host executor rounds are decorated by {@code
+     * decoration} (FR1, FR3, design D3 of wire-host-mid-round-push) — the git-mode host control
+     * flows attach the composition root's mid-round push operator here; see {@link
+     * RunAssembly#withHostGitPush}. {@link ExecutorAdapterSelector} applies it only on the
+     * host branch, so sandbox pieces win by construction.
+     *
+     * @param decoration the round-source decoration the composition root built; never null
+     * @return a new assembly identical but for the decoration; never null
+     */
+    @Override
+    public ManualRunAssembly withHostGitPush(UnaryOperator<RoundEnvironmentSource> decoration) {
+        return copyWith(extraListener, sandbox, decoration);
     }
 
     /**

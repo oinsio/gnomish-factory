@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 /**
@@ -46,12 +47,51 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     def "stageExecutor selects a real host CliStageExecutor when the executor is non-interactive and host-mode"() {
         when:
         def executor = ExecutorAdapterSelector.stageExecutor(
-                console, RunArguments.InteractiveMode.NONE, holder, testProperties(),
-                new SystemClock(), childEnv, law, null)
+                console, RunArguments.InteractiveMode.NONE, holder, newAssembly(), childEnv, law)
 
         then:
         executor != null
         executor instanceof CliStageExecutor
+    }
+
+    // FR3 of wire-host-mid-round-push (design D3): the assembly's host-git decoration is applied
+    // to the host rounds exactly once when no sandbox pieces are attached — the operator sees the
+    // real host source and its return is what the executor is built over.
+    def "stageExecutor applies the host-git decoration to the host rounds when no sandbox is attached"() {
+        given:
+        def applied = []
+        def decoration = { rounds ->
+            applied << rounds; rounds
+        } as UnaryOperator<RoundEnvironmentSource>
+        def assembly = newAssembly().withHostGitPush(decoration)
+
+        when:
+        def executor = ExecutorAdapterSelector.stageExecutor(
+                console, RunArguments.InteractiveMode.NONE, holder, assembly, childEnv, law)
+
+        then:
+        executor instanceof CliStageExecutor
+        applied.size() == 1
+        applied[0] instanceof RoundEnvironmentSource
+    }
+
+    // FR3, design D3/Risks: sandbox pieces win by construction — a run carrying both seams
+    // consults only the sandbox rounds, so the host-git decoration is never applied.
+    def "sandbox pieces win by construction over the host-git decoration"() {
+        given:
+        def applied = []
+        def decoration = { rounds ->
+            applied << rounds; rounds
+        } as UnaryOperator<RoundEnvironmentSource>
+        def assembly = newAssembly().withHostGitPush(decoration).withSandbox(pieces())
+
+        when:
+        def executor = ExecutorAdapterSelector.stageExecutor(
+                console, RunArguments.InteractiveMode.NONE, holder, assembly, childEnv, law)
+
+        then:
+        executor instanceof ResumeVerificationStageExecutor
+        applied.isEmpty()
     }
 
     // FR21, D15: with sandbox pieces supplied, the CLI executor is wrapped by
@@ -60,8 +100,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     def "stageExecutor wraps the CLI executor with ResumeVerificationStageExecutor in container mode"() {
         when:
         def executor = ExecutorAdapterSelector.stageExecutor(
-                console, RunArguments.InteractiveMode.NONE, holder, testProperties(),
-                new SystemClock(), childEnv, law, pieces())
+                console, RunArguments.InteractiveMode.NONE, holder, newAssembly().withSandbox(pieces()), childEnv, law)
 
         then:
         executor != null
@@ -73,8 +112,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     def "stageExecutor selects the interactive adapter when the executor role is interactive"() {
         when:
         def executor = ExecutorAdapterSelector.stageExecutor(
-                console, RunArguments.InteractiveMode.ALL, holder, testProperties(),
-                new SystemClock(), childEnv, law, null)
+                console, RunArguments.InteractiveMode.ALL, holder, newAssembly(), childEnv, law)
 
         then:
         executor instanceof InteractiveStageExecutor

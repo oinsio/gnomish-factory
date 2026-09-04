@@ -22,15 +22,15 @@ import org.jspecify.annotations.Nullable;
  * branch name and worktree path <em>before</em> anything else runs (UX1 — "the operator always
  * knows where the work lives"; both names are pure functions of {@code cloneDir}/{@code taskId},
  * computed without any git call, see {@link #branchName}/{@link #worktreePath}), then record task
- * start via {@link GitTaskRepository#createTask} — the single call that actually creates the
+ * start via {@code GitTaskRepository#createTask} — the single call that actually creates the
  * branch off {@code --base} (or the clone's current {@code HEAD} when absent, design D7) and
- * materializes the worktree — then assemble {@code EnginePorts} with a fresh {@link
+ * materializes the worktree — then assemble {@code EnginePorts} with a fresh {@code
  * GitAttemptPersistence} rooted at the worktree — not {@code --dir} — as the workspace (FR7: "the
- * clone itself is untouched"). {@link GitTaskRepository#createTask} is deliberately the only
+ * clone itself is untouched"). {@code GitTaskRepository#createTask} is deliberately the only
  * caller of branch/worktree creation in this sequence: a second, independent creation attempt
  * here would race it and see a spurious "already exists" on its own first call.
  *
- * <p>{@link GitTaskRepository#createTask} throws {@link GitTaskRepositoryException} for both an
+ * <p>{@code GitTaskRepository#createTask} throws {@link GitTaskRepositoryException} for both an
  * already-existing branch and an unresolved {@code --base}; {@link #run} remaps that exception to
  * a {@link UsageException} (exit code 2) here: this is a fresh run, not a resume, so either
  * condition names an operator mistake the run cannot proceed past, not a resumable one.
@@ -45,14 +45,14 @@ import org.jspecify.annotations.Nullable;
  * GitModeWorkspaceHygieneSpec} for the regression proof: a real round's commit tree contains only
  * the gnome's own change and {@code .gnomish-task/}.
  *
- * <p>Two boundaries are recorded through {@link GitTaskRepository} and cleaned up through {@link
+ * <p>Two boundaries are recorded through {@code GitTaskRepository} and cleaned up through {@code
  * TaskWorktreeCleanup} here, both via the shared {@link GitOutcomeRecorder} (task 4.7): {@code
  * Completed} — a normal return from {@link RunnerOutcomeLoop#run} means the pipeline reached its
- * end, and the worktree's last-persisted {@code state.json} — already durably committed by {@link
+ * end, and the worktree's last-persisted {@code state.json} — already durably committed by {@code
  * GitAttemptPersistence} — is read back as the final {@link TaskState} rather than threaded
  * through a return value; and {@code Aborted} — {@link RunnerOutcomeLoop#run} throws {@link
  * AbortedException} carrying the full {@link TaskOutcome.Aborted}, which is recorded and then
- * {@link TaskWorktreeCleanup} unconditionally keeps the worktree for forensics (design D6) — the
+ * {@code TaskWorktreeCleanup} unconditionally keeps the worktree for forensics (design D6) — the
  * write itself is safe even though durability just broke, since it targets {@code task.json}
  * (the {@code TaskRepository} seam, design D1), a file the broken {@code AttemptPersistence}
  * round never touches.
@@ -114,8 +114,11 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
 
         var persistence = git.store().attemptPersistence(worktree, taskId);
         var workspace = new DirectoryWorkspace(worktree);
-        var assembled =
-                assembly.assemble(definition, context, initialState, interactiveMode, persistence, List.of(), cloneDir);
+        // The host half of the mid-round push (FR1, FR3, design D3 of wire-host-mid-round-push):
+        // this runner is git-mode by type, so attaching here needs no flag; in-place mode never
+        // reaches this line and keeps the assembly's identity default.
+        var assembled = assembly.withHostGitPush(git.midRoundPush())
+                .assemble(definition, context, initialState, interactiveMode, persistence, List.of(), cloneDir);
 
         try {
             assembled.loop().run(definition, context, initialState, workspace, assembled.ports());

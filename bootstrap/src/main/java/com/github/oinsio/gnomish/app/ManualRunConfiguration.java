@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches;
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore;
 import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees;
+import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource;
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
@@ -115,7 +116,13 @@ public class ManualRunConfiguration {
         return new TaskGit(
                 new GitTaskStore(gitProcessRunner, claimEpochBook),
                 new GitTaskBranches(gitProcessRunner, claimEpochBook),
-                new GitTaskWorktrees(gitProcessRunner, claimEpochBook));
+                new GitTaskWorktrees(gitProcessRunner, claimEpochBook),
+                // The mid-round push decoration (FR1, design D3 of wire-host-mid-round-push),
+                // built in exactly this one place: git-mode host control flows attach it via
+                // RunAssembly.withHostGitPush, and the selector applies it to the host rounds.
+                // The operator is stateless; per-task state (the shared poll suppressor) lives
+                // in the MidRoundPushRounds instance each application creates.
+                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner));
     }
 
     /**

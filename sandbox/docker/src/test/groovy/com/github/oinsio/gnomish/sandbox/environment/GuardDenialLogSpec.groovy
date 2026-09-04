@@ -16,7 +16,8 @@ import spock.lang.Specification
  */
 class GuardDenialLogSpec extends Specification {
 
-    private static final String KEY = 'gnomish-PROJ-9'
+    // An environment key (see the glossary), not a credential.
+    private static final String KEY = 'gnomish-PROJ-9' // gitleaks:allow
 
     def "NFR-O1: a CONNECT denial parses into a finding with host and port"() {
         given:

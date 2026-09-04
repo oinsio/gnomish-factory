@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -12,10 +13,12 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
+import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -50,6 +53,35 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         Files.createDirectories(cloneDir)
         Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-1'))
         Files.createDirectories(TaskWorktreePath.resolve(worktreesRoot, cloneDir, 'PROJ-9'))
+    }
+
+    // FR1, FR3 of wire-host-mid-round-push (design D3): the host take execution attaches the
+    // TaskGit bundle's mid-round push decoration — one place that covers both take entry points,
+    // since fresh and resume funnel through TakeEngineExecution.run.
+    def "attaches the task-git mid-round push decoration to the take run"() {
+        given:
+        def tracker = Mock(Tracker)
+        def lifecycleStore = Mock(TaskLifecycleStore)
+        def store = Stub(TaskStoreGit) {
+            taskRepository(_, _) >> lifecycleStore
+            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            readTaskRecord(_) >> freshRecord()
+        }
+        tracker.fetchTask(_) >> heldByUs()
+        def attached = []
+        UnaryOperator<RoundEnvironmentSource> marker = { rounds -> rounds }
+        def git = new TaskGit(store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), marker)
+
+        when:
+        TakeFreshClaim.claim(
+                assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached),
+                git, worktreesRoot,
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, completingPipeline(),
+                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag())
+
+        then:
+        attached.size() == 1
+        attached[0].is(marker)
     }
 
     // FR9, FR11: the whole fresh path, end to end. The three things only this class sequences are

@@ -97,7 +97,8 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * that keeps a whole-run scenario a unit spec. The persistence the caller assembled with is
      * passed straight through, so the run's own revocation-checking wrapper still applies.
      */
-    RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass()) {
+    RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(),
+            List hostGitPushAttached = []) {
         def clock = new VirtualClock()
         // A hand-written fake rather than a Spock Stub: mock creation is only legal inside a
         // feature's own lifetime, and this is built by a trait helper.
@@ -113,9 +114,15 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 throw new UnsupportedOperationException('no console in this spec')
             },
             withExtraListener: { listener ->
-                assemblyRunning(executor, verdict)
+                assemblyRunning(executor, verdict, hostGitPushAttached)
             },
-            withSandbox: { pieces -> assemblyRunning(executor, verdict) },
+            withSandbox: { pieces ->
+                assemblyRunning(executor, verdict, hostGitPushAttached)
+            },
+            withHostGitPush: { decoration ->
+                hostGitPushAttached << decoration
+                assemblyRunning(executor, verdict, hostGitPushAttached)
+            },
         ] as RunAssembly
     }
 
@@ -126,7 +133,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * that wants to assert what the dialog PRINTED passes its own and reads {@code io.printed}.
      */
     RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(['']),
-            Verdict verdict = new Verdict.Pass()) {
+            Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = []) {
         def clock = new VirtualClock()
         def console = new DialogConsole(io, { json ->
             'unused'
@@ -144,6 +151,10 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             dialogConsole: { context, state -> console },
             withExtraListener: { listener -> self },
             withSandbox: { pieces -> self },
+            withHostGitPush: { decoration ->
+                hostGitPushAttached << decoration
+                self
+            },
         ] as RunAssembly
         return self
     }

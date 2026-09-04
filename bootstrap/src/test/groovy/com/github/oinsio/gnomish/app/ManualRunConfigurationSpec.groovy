@@ -4,8 +4,11 @@ import com.github.oinsio.gnomish.FactoryApplication
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
@@ -97,6 +100,18 @@ class ManualRunConfigurationSpec extends Specification {
         expect: 'the discovered providers reached the loader, github among them'
         source.checkProviderRegistry().containsKey('github')
         source.checkProviderRegistry().keySet() == context.getBean('checkClientRegistry', Map).keySet()
+    }
+
+    // FR1, design D3 of wire-host-mid-round-push: the TaskGit bean carries the real mid-round
+    // push decoration — applying it to a round source yields the MidRoundPushRounds decorator,
+    // never null and never the undecorated source.
+    def "the TaskGit bean's mid-round push decoration builds the push decorator"() {
+        given:
+        def git = context.getBean(TaskGit)
+        def source = Stub(RoundEnvironmentSource)
+
+        expect:
+        git.midRoundPush().apply(source) instanceof MidRoundPushRounds
     }
 
     def "context-independent beans are singletons: repeated lookups return the same instance"() {

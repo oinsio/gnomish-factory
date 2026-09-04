@@ -117,15 +117,7 @@ final class RunAssembler {
             commandRunner = commandRunner.withEnvironments(sandbox.checkEnvironments());
         }
         var ports = new EnginePorts(
-                ExecutorAdapterSelector.stageExecutor(
-                        console,
-                        interactiveMode,
-                        holder,
-                        assembly.factoryProperties,
-                        assembly.systemClock,
-                        childEnv,
-                        law,
-                        sandbox),
+                ExecutorAdapterSelector.stageExecutor(console, interactiveMode, holder, assembly, childEnv, law),
                 builtinRunner,
                 commandRunner,
                 externalCheckClient(

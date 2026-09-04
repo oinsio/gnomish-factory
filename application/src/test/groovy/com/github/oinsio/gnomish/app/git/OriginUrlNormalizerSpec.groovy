@@ -107,7 +107,8 @@ class OriginUrlNormalizerSpec extends Specification {
     // NFR-S1: the stripped userinfo must not survive anywhere the output travels.
     def "NFR-S1: no removed userinfo survives into the normalized URL or the derived identity"() {
         given:
-        def secret = 'ghp_s3cr3tT0k3n'
+        // A fabricated token shape; the point of the spec is that it is stripped.
+        def secret = 'ghp_s3cr3tT0k3n' // gitleaks:allow
         def url = "https://alice:${secret}@github.com/acme/widgets.git".toString()
 
         when:

@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import java.util.function.UnaryOperator;
+
 /**
  * The task-git capability set a use case is handed as one injected value: the task store, the
  * branch-level operations, and the worktree-level operations. The three travel together everywhere
@@ -19,5 +22,23 @@ package com.github.oinsio.gnomish.app.port.git;
  *     never null
  * @param worktrees the worktree-level operations: materialization, reconciliation, salvage,
  *     cleanup; never null
+ * @param midRoundPush the executor-rounds decoration git-mode host control flows attach via
+ *     {@code RunAssembly.withHostGitPush} (FR1, FR3, design D3 of wire-host-mid-round-push) —
+ *     a git capability co-travelling with the other git capabilities, so no runner signature
+ *     grows for it; identity by default, the real operator is built by the composition root
+ *     beside the rest of this bundle; never null
  */
-public record TaskGit(TaskStoreGit store, TaskBranchGit branches, TaskWorktreeGit worktrees) {}
+public record TaskGit(
+        TaskStoreGit store,
+        TaskBranchGit branches,
+        TaskWorktreeGit worktrees,
+        UnaryOperator<RoundEnvironmentSource> midRoundPush) {
+
+    /**
+     * The dominant construction: no mid-round push decoration (identity). Keeps every
+     * pre-existing construction site — and any spec that needs no push wiring — untouched.
+     */
+    public TaskGit(TaskStoreGit store, TaskBranchGit branches, TaskWorktreeGit worktrees) {
+        this(store, branches, worktrees, UnaryOperator.identity());
+    }
+}

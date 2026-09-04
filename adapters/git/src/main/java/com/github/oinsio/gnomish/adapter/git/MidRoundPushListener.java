@@ -34,9 +34,11 @@ import org.slf4j.LoggerFactory;
  * <p>Per {@link AgentProgressListener}'s contract, {@link #onProgress} never throws and returns
  * promptly: the only git work it does is one cheap {@code rev-parse} per event, escalating to the
  * already-bounded, already-synchronous {@link BestEffortPush#pushBestEffort} only on an actual tip
- * change. Wiring this listener into a running {@code CliStageExecutor} (e.g. via {@code
- * com.github.oinsio.gnomish.adapter.agent.CompositeAgentProgressListener}) is section 4's job, not
- * this class's.
+ * change. Wiring is {@link MidRoundPushRounds}'s job, not this class's: that decorator builds one
+ * fresh listener per opened round and hands it back through the {@code
+ * RoundEnvironmentSource.Round#roundListener()} seam; git-mode host control flows attach the
+ * decoration to the run via {@code RunAssembly.withHostGitPush} (design D1, D3 of
+ * wire-host-mid-round-push).
  *
  * <p>An observation is only ever a fact when git said so (FR13 of harden-logging-observability).
  * This is the <b>read-only poll</b> reading of a tip resolution, not the durable-baseline one: a
