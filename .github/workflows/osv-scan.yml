@@ -55,7 +55,7 @@ jobs:
     # workflows must be pinned to a full ref anyway; Dependabot bumps it.
     # Note: GitHub does not allow `timeout-minutes` on reusable-workflow jobs;
     # the scan is a seconds-fast lockfile read, bounded by the callee's steps.
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.5.0
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.5.1
     with:
       # `-r ./` is the reusable workflow's own default, restated because
       # supplying `scan-args` replaces it wholesale; `--config` is the addition
