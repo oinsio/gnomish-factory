@@ -126,6 +126,14 @@ criteria, follow-up spawning) are `.gnomish/` authoring shipped as a
 documented example; the engine gains nothing research-specific. This keeps
 the routing change mechanism-only and the taxonomy operator-owned.
 
+The same holds for a `factory-config` type — tasks whose work edits the
+target repo's own `.gnomish/` tree (fixing a stage prompt, adjusting the
+routing table itself). It is plain routing-table authoring: the task routes
+to its own pipeline, runs under the law frozen from the *pre-edit* config,
+and its edits become law only for later tasks once a human merges them (the
+D14 law-freeze of add-sandbox-core). No engine special-casing exists or is
+needed; the example belongs in the operator guide beside the research one.
+
 ## Risks / Trade-offs
 
 - [Hash-mismatch escalations after every `.gnomish/` edit annoy operators
@@ -147,5 +155,5 @@ the routing change mechanism-only and the taxonomy operator-owned.
 ## Open Questions
 
 - Example starter table shipped in docs (`feature` default, `bugfix`,
-  `research`) — exact example stage lists to be settled when writing the
-  operator guide during implementation.
+  `research`, `factory-config`) — exact example stage lists to be settled
+  when writing the operator guide during implementation.

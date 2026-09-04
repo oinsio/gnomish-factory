@@ -5,8 +5,9 @@
 Every task today runs the same single pipeline: the definition is loaded once
 per process before the tracker is even consulted, `PipelineDefinition` has no
 name, and neither `task.json` nor `state.json` records which pipeline a task
-runs — so a research task, a feature, and a bugfix are forced through one
-conveyor built for one of them. The design session of 2026-08-29 settled the
+runs — so a research task, a feature, a bugfix, and a task that fixes the
+project's own factory configuration (its `.gnomish/` tree) are forced through
+one conveyor built for one of them. The design session of 2026-08-29 settled the
 shape from CI/tracker practice (Jira workflow schemes, Argo pin-at-submission,
 Temporal pinned versioning; no shipped issue-driven agent routes by LLM):
 pipelines stay linear, and variation is **routing** — several named linear
