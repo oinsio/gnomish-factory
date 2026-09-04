@@ -72,6 +72,7 @@ class AbortCauseCapWiringSpec extends Specification {
         given:
         def cause = 'persist failed\n' + ('f' * 200_000) + '\nCaused by: disk full'
         def facts = new AbortFacts(THRESHOLD - 1, null)
+        def logs = LogCaptureSupport.attach(AbortHandler)
         String captured = null
         tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report ->
             captured = report
@@ -85,6 +86,9 @@ class AbortCauseCapWiringSpec extends Specification {
         !captured.contains(cause)
         captured.contains('Caused by: disk full')
         (result as TakeResult.AwaitingHuman).report() == captured
+
+        cleanup:
+        logs.detach()
     }
 
     // NFR-R1 of cap-abort-cause-length: the finished park report — the capped
@@ -94,6 +98,7 @@ class AbortCauseCapWiringSpec extends Specification {
     def "the complete fuse-trip report fits the smallest tracker comment limit"() {
         given: 'a maximal cause and the wordiest framing the builder can produce'
         def facts = new AbortFacts(999_999, Instant.parse('2026-07-17T09:00:00Z'), 999_998)
+        def logs = LogCaptureSupport.attach(AbortHandler)
         String captured = null
         tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String report ->
             captured = report
@@ -104,6 +109,9 @@ class AbortCauseCapWiringSpec extends Specification {
 
         then:
         captured.length() < 32_767
+
+        cleanup:
+        logs.detach()
     }
 
     // FR1 of cap-abort-cause-length: a cause within the budget reaches both
@@ -111,6 +119,7 @@ class AbortCauseCapWiringSpec extends Specification {
     def "a within-budget cause reaches the tracker writes unchanged"() {
         given:
         def cause = 'connection reset by peer'
+        def logs = LogCaptureSupport.attach(AbortHandler)
         String parked = null
         AbortRecord recorded = null
         tracker.recordAbort(REF, _ as AbortRecord) >> { TaskRef ref, AbortRecord record ->
@@ -128,5 +137,8 @@ class AbortCauseCapWiringSpec extends Specification {
         recorded.cause() == cause
         parked.contains(cause)
         !parked.contains('characters omitted')
+
+        cleanup:
+        logs.detach()
     }
 }
