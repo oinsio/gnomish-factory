@@ -107,6 +107,12 @@ record FeedCycle(
             slotLedger.abandon();
         } else {
             slotLedger.assign(claimed);
+            // One occupancy snapshot for both the anchor and the Full vantage point, taken before
+            // startSlot(): the slot thread releases its permit when the task finishes, so reading
+            // freeSlots() after the launch races that release — a fast task turns "this claim spent
+            // the last slot" into "a slot is free", and the FULL line is silently lost (observed as
+            // a CI-only flake in FeedAutomatonSpec).
+            int freeSlotsAfterClaim = slotLedger.freeSlots();
             // FR2 of harden-logging-observability: the claim anchor is emitted before the slot
             // thread starts, so it precedes every engine event of that task in the file — the
             // "claim is the first correlated line" scenario. Both claim paths call the same
@@ -117,10 +123,10 @@ record FeedCycle(
             // thread sets the key itself, and a context left open across the launch would leak the
             // finished task's id into the feed thread's next cycle.
             try (var taskScope = MdcAwareThread.taskScope(claimed.id())) {
-                AnchorLog.claimAcquired(claimed.id(), slotLedger.freeSlots(), slotLedger.totalSlots());
+                AnchorLog.claimAcquired(claimed.id(), freeSlotsAfterClaim, slotLedger.totalSlots());
             }
             startSlot(claimed);
-            stateLogger.onSlotFilled(slotLedger.freeSlots(), selection.wipLimit());
+            stateLogger.onSlotFilled(freeSlotsAfterClaim, selection.wipLimit());
         }
     }
 
