@@ -21,7 +21,11 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
 
     ScriptedSandboxDocker() {
         onRun = { List<String> args ->
-            if (args[0] == 'inspect' && args.contains('{{.State.Running}} {{.State.FinishedAt}}')) {
+            // Matched against the production command itself, never a copy of its format string:
+            // the container-state inspect grows fields over time, and a stale copy here would
+            // silently stop matching and turn the fresh-materialize path into the reattach path
+            // (a green fixture answering the wrong question).
+            if (args[0] == 'inspect' && args == DockerCommands.inspectContainerState(args.last())) {
                 return new DockerResult(1, '', 'No such object') // fresh materialize path
             }
             if (args[0] == 'inspect' && args.contains('{{.Id}}')) {
