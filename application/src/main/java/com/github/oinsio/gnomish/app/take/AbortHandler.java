@@ -44,7 +44,17 @@ import org.slf4j.LoggerFactory;
  * dead tracker must not suppress the one observability signal an operator has
  * when the coordination layer itself is unreachable.
  *
- * <p>Implements FR14, NFR-R2, NFR-C1 of add-tracker-port.
+ * <p>Every cause byte that reaches a tracker write — the {@code recordAbort}
+ * marker and the fuse-trip {@code park(INFRA)} report — passes {@link
+ * AbortCauseBudget} first (FR1, NFR-R1 of cap-abort-cause-length): the dominant
+ * producer renders a whole exception chain, and a comment body over the
+ * tracker's limit is rejected, which a best-effort write swallows — losing the
+ * abort marker and, with it, the honesty of the consecutive-abort accounting.
+ * The ERROR log and the returned {@link TakeResult} keep the full uncapped text:
+ * the bound is the tracker's, not the diagnostic record's.
+ *
+ * <p>Implements FR14, NFR-R2, NFR-C1 of add-tracker-port; FR1, NFR-R1 of
+ * cap-abort-cause-length.
  *
  * @param tracker the tracker port used for the best-effort {@code
  *     recordAbort}/{@code park(INFRA)} write; never null
@@ -65,11 +75,13 @@ public record AbortHandler(Tracker tracker, Clock clock) {
      * propagate; {@code handle} always returns the matching {@link TakeResult}
      * (NFR-R2).
      *
-     * <p>Implements FR14, NFR-R2, NFR-C1 of add-tracker-port.
+     * <p>Implements FR14, NFR-R2, NFR-C1 of add-tracker-port; FR1, NFR-R1 of
+     * cap-abort-cause-length.
      *
      * @param ref the aborting task's identity; never null
      * @param finalState the last known task state; never null
-     * @param cause free-text description of what went wrong; never blank
+     * @param cause free-text description of what went wrong, of any length — capped to the
+     *     abort-cause budget before either tracker write; never blank
      * @param facts the task's current abort facts, already fetched by the
      *     caller; never null
      * @param threshold the configured abort-fuse threshold (K); positive
@@ -93,14 +105,18 @@ public record AbortHandler(Tracker tracker, Clock clock) {
                 category.wireValue(),
                 cause);
 
+        // Everything tracker-bound goes through the budget first (FR1, NFR-R1 of
+        // cap-abort-cause-length); the ERROR log above and the returned result keep the full text.
+        var trackerCause = AbortCauseBudget.cap(cause);
+
         var nextCount = facts.count() + 1;
         if (nextCount >= threshold) {
-            var report = AbortReportBuilder.build(cause, category, facts, threshold);
+            var report = AbortReportBuilder.build(trackerCause, category, facts, threshold);
             parkBestEffort(ref, report);
             return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, report);
         }
 
-        recordAbortBestEffort(ref, cause, instanceId, category);
+        recordAbortBestEffort(ref, trackerCause, instanceId, category);
         return new TakeResult.Aborted(finalState, cause);
     }
 
