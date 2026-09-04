@@ -15,7 +15,13 @@ label-declarative routing in every shipped issue-driven agent, no-silent-
 fallback lesson from k8s classes. User decision: task type is a core entity;
 adapters map it; GitHub + in-memory use labels with the `type:*` default,
 operator-configurable; native issue types are a possible future adapter
-extension. Context: driven by FR1–FR6, NFR-R1 from proposal.
+extension. Revised 2026-09-04: `add-base-ref-resolution` lands first and
+introduces the kind-generic label-derived designator mechanism (adapters
+report raw labels; a configured one-capture-group rule classifies
+absent | single | conflict, core-side — its design D5) and the `task.json`
+pin-extension precedent (version gate + wire round-trip). This change
+consumes both: kind `type` rides the mechanism, and the pipeline pin follows
+the pin pattern. Context: driven by FR1–FR6, NFR-R1 from proposal.
 
 ## Goals / Non-Goals
 
@@ -36,14 +42,23 @@ extension. Context: driven by FR1–FR6, NFR-R1 from proposal.
 
 ## Decisions
 
-### D1. TaskType is a core value; adapters report it as a fact
+### D1. TaskType is designator kind `type` on the shared mechanism
 
 A small domain value (designator string, plus the conflict shape) rides the
-task facts like abort/claim facts do. Rejected — label parsing in core: the
-core would then know GitHub label conventions, breaking the ports rule that
-adapters speak tracker dialects. Rejected — closed enum in core: the
-taxonomy belongs to the operator's repo (routing table), not the factory
-binary; an enum would force a factory release per new type.
+task facts as kind `type` of the label-derived designator mechanism that
+`add-base-ref-resolution` builds: adapters report raw labels, the
+kind-generic extractor applies the configured rule (default `type:` prefix,
+one capture group) and classifies absent | single | conflict. This
+supersedes the earlier sketch of adapter-side derivation — the objection to
+"label parsing in core" was hardcoded tracker conventions in core code,
+which the mechanism avoids: the convention is operator configuration, one
+extraction implementation serves every kind, and a future Jira adapter can
+still fulfill the three-shape contract from a native field (the port fixes
+the shapes, not the source). Rejected — adapter-side mapping per adapter:
+one regex implementation per adapter plus config plumbed into each, for the
+same observable contract. Rejected — closed enum in core: the taxonomy
+belongs to the operator's repo (routing table), not the factory binary; an
+enum would force a factory release per new type.
 
 ### D2. Routing lives in `.gnomish/` beside the pipelines
 
@@ -75,7 +90,10 @@ commit — no unpinned durable task exists). Resume loads by pinned name and
 verifies the hash against the freshly frozen law source; mismatch escalates
 (extends the existing `PipelineMismatch` family). Legacy files read as
 default-pinned with absent hash → verification skipped, matching today's
-behavior. Rejected — pin by name only: silent drift when the definition
+behavior. The wire growth follows the pin precedent set by
+`add-base-ref-resolution` (its base pin bumps the version gate first; this
+pin lands as the next additive field with its own round-trip coverage).
+Rejected — pin by name only: silent drift when the definition
 changes under a parked task is exactly the bug class the audit flagged.
 Rejected — snapshotting the whole definition onto the branch (full Argo
 copy): heavier, duplicates the law source, and the hash gives the same
@@ -101,7 +119,10 @@ touches, and mirrored edits are in scope:
   recipe gains "resolve type → pin" — implemented once in the shared
   resolver/pin step and called from both twins; the mirrored edit per twin
   is the call site, with a parity spec asserting both produce an identical
-  pin.
+  pin. `add-base-ref-resolution` edits the same pair first (its
+  fetch+resolve step between `harden()` and `createTask()`); this change's
+  step layers after it in both twins, and the pair's `Kept in sync with`
+  invariant line grows once more.
 - **`TakeResumeRunner`/`TakeContainerResumeRunner`** and
   **`GitResumeRunner`/`ContainerResumeRunner`** (resume control flow): both
   gain the read-pin + hash-verify bootstrap via the shared resolver; call
@@ -115,9 +136,10 @@ touches, and mirrored edits are in scope:
   writer and reader are one class, no new pair. Snapshot/ledger pairs are
   untouched (observability field is a non-goal).
 - **No new parallel implementation**: routing logic exists exactly once
-  (the resolver); the GitHub and in-memory adapters implementing the type
-  fact are governed by the port contract suite (shared abstraction), same
-  as `add-tracker-task-hierarchy` D6.
+  (the resolver), and type extraction reuses the one designator mechanism
+  from `add-base-ref-resolution` — the GitHub and in-memory adapters only
+  report raw labels, governed by the port contract suite (shared
+  abstraction), same as `add-tracker-task-hierarchy` D6.
 
 ### D7. Spike pipeline content is examples, not engine features
 
@@ -148,12 +170,18 @@ needed; the example belongs in the operator guide beside the research one.
   fact] → confined to the resolver; the port type makes the three shapes
   exhaustive (sealed), so the compiler enforces handling.
 - [Version bump of `task.json` while three other proposed changes also
-  touch it] → additive fields each; apply order decides who bumps first;
-  the round-trip spec grows with each — flagged for the roadmap's apply
-  sequencing.
+  touch it] → additive fields each; the apply order is now fixed for the
+  first two — `add-base-ref-resolution` bumps first (base pin), this change
+  follows — and the round-trip spec grows with each; the remaining changes
+  stay flagged for the roadmap's apply sequencing.
 
 ## Open Questions
 
 - Example starter table shipped in docs (`feature` default, `bugfix`,
   `research`, `factory-config`) — exact example stage lists to be settled
   when writing the operator guide during implementation.
+- Type-derived base defaults (the "rule by task type" tier that
+  `add-base-ref-resolution` defers as its NG2): one column mapping type →
+  base default atop both mechanisms. Lands either in this change's routing
+  table or as a small follow-up — decide when this change is applied,
+  without reshaping either mechanism.

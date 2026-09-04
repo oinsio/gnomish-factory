@@ -19,10 +19,13 @@ would silently continue on the wrong pipeline.
 ## What Changes
 
 - ADDED: **task type as a core entity**: an operator-defined type designator
-  carried as a task fact. How a tracker stores it is adapter business — the
-  GitHub and in-memory adapters derive it from labels, with a configurable
-  mapping defaulting to the `type:*` prefix; future adapters (or a GitHub
-  extension to native issue types) plug into the same fact. Multiple
+  carried as a task fact — kind `type` of the label-derived designator
+  mechanism that `add-base-ref-resolution` introduces (this change is
+  sequenced after it, per the 2026-09-04 session). Label-backed adapters
+  (GitHub, in-memory) report raw labels; the kind-generic extraction applies
+  a configured rule defaulting to the `type:` prefix; future adapters (or a
+  GitHub extension to native issue types) may fulfill the same
+  absent | single | conflict contract from native fields. Multiple
   conflicting type designators on one task are a routing error, not a pick.
   (FR2)
 - ADDED: **named pipelines and a routing table** in `.gnomish/`: multiple
@@ -60,20 +63,21 @@ would silently continue on the wrong pipeline.
 
 ### New Capabilities
 
-- `pipeline-routing`: the routing contract — task-type entity and its
-  adapter mapping duty, routing table semantics (explicit default, loud
-  no-match), claim-time selection, pipeline pinning and resume
-  verification, and the retype policy.
+- `pipeline-routing`: the routing contract — task-type entity as designator
+  kind `type` with its configurable selection rule, routing table semantics
+  (explicit default, loud no-match), claim-time selection, pipeline pinning
+  and resume verification, and the retype policy.
 
 ### Modified Capabilities
 
 - `pipeline-config`: named pipelines sharing the stage pool; routing table
   loading and validation; per-pipeline artifact-id scope; union dangling
   check; legacy shape compatibility.
-- `tracker-port`: task facts carry the type designator; the contract suite
-  covers it for both adapters.
-- `github-tracker`: label→type mapping with the configurable `type:*`
-  default; conflicting labels reported as a fact, not resolved by pick.
+- `tracker-port`: designator kind `type` joins the label-derived designator
+  mechanism (introduced by `add-base-ref-resolution`); the contract suite
+  covers its three shapes for both adapters. No adapter-side mapping code:
+  the GitHub and in-memory adapters already report raw labels after that
+  change, and the `type:` extraction rule is core-side configuration.
 - `tracker-take`: post-claim selection, typeless→default, unknown-type
   escalation without attempt burn; resume runs the pinned pipeline.
 - `git-task-persistence`: pipeline pin (name + definition hash) in
@@ -88,10 +92,19 @@ would silently continue on the wrong pipeline.
 - `application`: selection point after claim in take/serve/run flows (both
   host and container mode twins — mirrored edits in scope), law-per-pipeline
   assembly, tracker config decoupled from the pipeline object.
-- `adapters`: loader (multi-pipeline + routing table), GitHub + in-memory
-  label mapping, `task.json`/`state.json` mapper growth behind the version
-  gate.
+- `adapters`: loader (multi-pipeline + routing table + selection rule),
+  `task.json`/`state.json` mapper growth behind the version gate; no
+  adapter-side label mapping (labels are reported raw per
+  `add-base-ref-resolution`).
 - Requirement IDs FR1–FR6, NFR-R1, NG1–NG5, scoped to
   `add-pipeline-routing`. Independent of the task-hierarchy trio; combines
   naturally with it later (an epic's children may route to different
   pipelines).
+- Sequencing (revised 2026-09-04): this change lands **after**
+  `add-base-ref-resolution` and consumes two of its products — the
+  kind-generic label-derived designator mechanism (this change adds kind
+  `type`) and the `task.json` pin-extension precedent (version gate +
+  wire round-trip; that change bumps first, this one follows the pattern).
+  The type-derived tier of the base-ref priority chain (a type→base-default
+  column atop both mechanisms) is explicitly deferred there (its NG2) and
+  lands in this change or a small follow-up — see design Open Questions.

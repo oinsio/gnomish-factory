@@ -9,24 +9,36 @@ the task branch with resume-time verification, and the retype policy.
 
 ## ADDED Requirements
 
-### Requirement: Task type is a core entity reported by adapters
+### Requirement: Task type is designator kind `type`
 The task type SHALL be a core value — an operator-defined designator string —
-carried as an adapter-reported task fact. Each tracker adapter SHALL define
-how the type is stored in its tracker and report it; the core SHALL never
-parse tracker-specific representations. A task whose tracker data yields
-more than one conflicting designator SHALL be reported as a type-conflict
-fact, not resolved by picking one.
+obtained as kind `type` of the label-derived designator mechanism
+(`add-base-ref-resolution`): the routing configuration carries an
+operator-configurable selection rule, a label pattern with one capture group
+defaulting to the `type:` prefix (`type:bugfix` → designator `bugfix`);
+labels not matching the rule are ignored for typing; changing the rule is
+configuration only, no adapter code. An invalid rule SHALL be a located load
+error. A task whose data yields more than one designator SHALL surface as
+the conflict shape and be treated as a routing error, not resolved by
+picking one. Tracker-specific storage stays behind the port contract: label
+conventions live in the configured rule, not in core code and not in
+per-adapter parsers.
 <!-- implements FR2 of add-pipeline-routing -->
 
 #### Scenario: Type flows as a fact
-- **WHEN** a claimed task carries the designator `bugfix` in its tracker
-- **THEN** the core sees the type fact `bugfix` without knowing how the
-  adapter stored it
+- **WHEN** a claimed task carries the label `type:bugfix` under the default
+  rule
+- **THEN** selection sees the type designator `bugfix` without knowing how
+  the tracker stored it
+
+#### Scenario: Operator remaps the rule
+- **WHEN** the routing configuration maps the `kind/` prefix instead
+- **THEN** an issue labeled `kind/bug` yields designator `bug` and
+  `type:bug` is ignored
 
 #### Scenario: Conflict is a fact, not a pick
-- **WHEN** a task's tracker data yields both `bugfix` and `research`
-- **THEN** the adapter reports a type conflict and the core treats it as a
-  routing error
+- **WHEN** a task's labels yield both `bugfix` and `research`
+- **THEN** selection sees the conflict shape listing both and treats it as
+  a routing error
 
 ### Requirement: Routing table with explicit default
 The routing configuration SHALL map type designators to named pipelines and

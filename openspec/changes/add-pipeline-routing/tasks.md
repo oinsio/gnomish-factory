@@ -2,9 +2,11 @@
 
 ## 1. Domain model
 
-- [ ] 1.1 Add the task-type value (absent / designator / conflict, sealed)
-      to the domain and the type fact to the tracker port's task facts;
-      verify the module compiles and existing port specs stay green (FR2)
+- [ ] 1.1 Add designator kind `type` on the label-derived designator
+      mechanism from `add-base-ref-resolution` (sealed
+      absent / designator / conflict shapes reused, no parallel type);
+      verify the module compiles and the existing designator and port specs
+      stay green (FR2, design D1)
 - [ ] 1.2 Add `name` and content hash to `PipelineDefinition` and move
       tracker config off the definition onto the tree-wide load outcome;
       verify board/dashboard/take reach tracker config through the new seam
@@ -21,15 +23,17 @@
       missing-manifest per pipeline; verify each scenario of the
       pipeline-config delta with data-driven specs (FR5)
 
-## 3. Adapters — type fact
+## 3. Type extraction — selection rule
 
-- [ ] 3.1 Extend the port contract suite with the three type-fact shapes;
-      verify it runs red against both adapters first (TDD) (FR2)
-- [ ] 3.2 Implement the label→type mapping in the GitHub adapter
-      (configurable rule in the adapter config subsection, `type:*` prefix
-      default, conflict on multiple matches) and mirror in the in-memory
-      adapter's seeding; verify both pass the extended contract suite and a
-      WireMock spec covers the remapped-prefix case (FR2)
+- [ ] 3.1 Extend the port contract suite with the three shapes of kind
+      `type` (through the extraction seam over raw label facts); verify it
+      runs red first (TDD) and then green for both adapters with no
+      adapter code change (FR2)
+- [ ] 3.2 Add the selection rule to the routing configuration (label
+      pattern with one capture group, `type:` prefix default, located load
+      error on an invalid rule) and wire it into the kind-generic
+      extractor; verify loader specs cover the default, the remapped
+      `kind/` prefix, and the invalid-rule error (FR2, design D1)
 
 ## 4. Resolver and pinning
 
