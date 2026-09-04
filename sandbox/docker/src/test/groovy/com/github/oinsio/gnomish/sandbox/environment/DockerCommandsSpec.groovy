@@ -153,9 +153,27 @@ class DockerCommandsSpec extends Specification {
         DockerCommands.inspectContainerState('n') == [
             'inspect',
             '-f',
-            '{{.State.Running}} {{.State.FinishedAt}}',
+            '{{.State.Running}} {{.State.FinishedAt}} {{.State.OOMKilled}}',
             'n'
         ]
+    }
+
+    // FR1 of polish-sandbox-forensics: the OOM flag is what tells an exit 137 killed by the
+    // container's memory limit apart from an ordinary forced terminate.
+    def "FR1: the state line's OOMKilled field reads back, and an unreadable line claims nothing"() {
+        expect:
+        DockerCommands.oomKilled(line) == oom
+
+        where:
+        line || oom
+        'false 2026-08-07T10:00:00Z true' || true
+        'false 2026-08-07T10:00:00Z true\n' || true
+        '  false 2026-08-07T10:00:00Z true  ' || true
+        'false 2026-08-07T10:00:00Z false' || false
+        'false 2026-08-07T10:00:00Z TRUE' || false
+        'false 2026-08-07T10:00:00Z' || false
+        'true' || false
+        '' || false
     }
 
     def "FR11: remove commands use the derived names"() {

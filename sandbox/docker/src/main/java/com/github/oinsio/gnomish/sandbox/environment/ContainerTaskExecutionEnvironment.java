@@ -131,7 +131,11 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         Process process = docker.start(argv, command.mergeStderr());
         Instant startedAt = clock.now();
         ChildProcessStdin.feed(process, command.stdin());
-        return new HostExecHandle(process, startedAt);
+        // FR1 of polish-sandbox-forensics: the container handle annotates an exit 137 with the
+        // container's own OOM state — advisory only, and only at this one seam every in-box
+        // process passes through.
+        return new OomAnnotatedExecHandle(
+                new HostExecHandle(process, startedAt), docker, FactoryDockerLabels.containerName(key));
     }
 
     @Override

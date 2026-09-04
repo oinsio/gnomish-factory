@@ -139,6 +139,31 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         docker.runs == [INSPECT]
     }
 
+    // FR1 of polish-sandbox-forensics: the state inspect grew an OOMKilled field. It is appended,
+    // so the reattach branch's leading-field parse must be untouched by it — asserted against the
+    // real three-field output the extended command now returns.
+    def "FR1: the reattach branch still recognizes running and stopped from the extended state line"() {
+        given:
+        docker.onRun = { List<String> args ->
+            args[0] == 'inspect' ? new DockerResult(0, stateLine, '') : new DockerResult(0, '', '')
+        }
+
+        when:
+        env().materialize('gnomish/task-x', null)
+
+        then:
+        docker.runs == expected
+
+        where:
+        stateLine || expected
+        'true 0001-01-01T00:00:00Z false\n' || [INSPECT]
+        'true 0001-01-01T00:00:00Z true\n' || [INSPECT]
+        'false 2026-08-07T10:00:00Z true\n' || [
+            INSPECT,
+            DockerCommands.startContainer('gnomish-box-' + KEY)
+        ]
+    }
+
     def "FR6: a commit pin on reattach runs the idempotent seed helper to reset the working copy"() {
         given:
         docker.onRun = { List<String> args ->
@@ -236,6 +261,41 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         then:
         def ex = thrown(IllegalStateException)
         ex.message.contains('no space left on device')
+    }
+
+    // FR2, UX1, M2 of polish-sandbox-forensics: an operator diagnosing a failed materialize must
+    // be able to paste a name into `docker logs` / `docker cp` straight from the message. M2 is
+    // "every touched failure site", so this covers each of the materializer's throw sites, not one.
+    def "FR2: every materialize failure names the task container ready-to-paste"() {
+        given: 'the named management step is the one the daemon refuses'
+        docker.onRun = { List<String> args ->
+            args[0] == 'inspect'
+            ? new DockerResult(1, '', 'No such object')
+            : (refuse(args) ? new DockerResult(1, '', 'no space left on device') : new DockerResult(0, '', ''))
+        }
+
+        when:
+        env().materialize('task/x', null)
+
+        then:
+        def ex = thrown(IllegalStateException)
+        ex.message.contains('gnomish-box-' + KEY)
+        ex.message.contains('no space left on device')
+
+        and: 'NFR-S1: nothing but object names and the runtime\'s own answer is in the message'
+        !ex.message.contains('/factory/project-clone')
+
+        where: 'each of the two throw sites — the network branch and the shared management step'
+        step | refuse
+        'create network' | { List<String> args -> args[0] == 'network' }
+        'create volume' | { List<String> args -> args[0] == 'volume' }
+        'seed clone' | { List<String> args ->
+            args[0] == 'run' && args.contains('--rm')
+        }
+        'run container' | { List<String> args ->
+            args[0] == 'run' && !args.contains('--rm')
+        }
+        'create scratch' | { List<String> args -> args[0] == 'exec' }
     }
 
     def "NFR-R1: a daemon outage at materialize propagates as an infrastructure failure, not a quality failure"() {

@@ -172,7 +172,10 @@ public enum OperatorEvent {
     // sustained-outage roll-ups (FR4): the periodic counted reminder beside each first-occurrence
     FEED_TRACKER_OUTAGE_ROLLUP("GF126"),
     HEARTBEAT_BEAT_FAILING_ROLLUP("GF127"),
-    HEARTBEAT_TICK_FAILING_ROLLUP("GF128");
+    HEARTBEAT_TICK_FAILING_ROLLUP("GF128"),
+    // sandbox forensics (polish-sandbox-forensics)
+    CONTAINER_EXEC_LIKELY_OOM_KILLED("GF129"),
+    SELF_CHECK_BOX_KEEP_FAILED("GF130");
 
     private final String code;
     private final String head;

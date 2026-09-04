@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import org.jspecify.annotations.Nullable
 import spock.lang.Specification
 
@@ -91,13 +92,48 @@ class FreshJudgeEnvironmentsSpec extends Specification {
         created[0].disposeCalls == 1
     }
 
+    // FR3 of polish-sandbox-forensics: a judge box rejected by its own self-check is evidence —
+    // the container adapter has already stopped and kept it. Today nothing here disposes it, because
+    // a failed materialize is never assigned to `current` (disposeCurrent runs BEFORE materialize).
+    // This pins that: a refactor that started tracking half-built boxes would destroy the evidence.
+    def "FR3: a judge box whose self-check failed is left kept — nothing here disposes it"() {
+        given: 'the previous attempt has a live judge box, and the next box fails its self-check'
+        def environments = source()
+        environments.environmentFor(workspaceAt('abc123'))
+        RecordingEnvironment.failMaterialize = true
+
+        when:
+        environments.environmentFor(workspaceAt('def456'))
+
+        then: 'the rejection propagates unchanged as the infrastructure failure it is'
+        thrown(SelfCheckFailedException)
+
+        and: 'and the rejected box is untouched — it is the evidence, kept for the operator'
+        created.size() == 2
+        !created[1].disposed
+
+        when: 'the stage ends and the source tears down what it still owns'
+        environments.disposeCurrent()
+
+        then: 'still nothing reaches the kept box: it was never tracked as current'
+        !created[1].disposed
+
+        cleanup:
+        RecordingEnvironment.failMaterialize = false
+    }
+
     private static final class RecordingEnvironment implements TaskExecutionEnvironment {
+        static boolean failMaterialize = false
+
         String materializedBranch
         String materializedPin
         boolean disposed = false
         int disposeCalls = 0
 
         void materialize(String branch, @Nullable String commitPin) {
+            if (failMaterialize) {
+                throw new SelfCheckFailedException('non-root', 'the in-box user is root (uid 0)')
+            }
             materializedBranch = branch
             materializedPin = commitPin
         }

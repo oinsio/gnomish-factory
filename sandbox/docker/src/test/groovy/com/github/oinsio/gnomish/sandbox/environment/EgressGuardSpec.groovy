@@ -219,6 +219,39 @@ class EgressGuardSpec extends Specification {
         failure.message.contains('image not found')
     }
 
+    // FR2, UX1, M2 of polish-sandbox-forensics: an operator whose guard will not start pastes the
+    // guard container's name into `docker logs` straight from the exception message — asserted at
+    // each of the three sites that can throw it, which is what M2 counts.
+    def "FR2: every guard-unavailable failure names the guard container ready-to-paste"() {
+        given:
+        docker.onRun = refuse
+
+        when:
+        guard().ensureRunning()
+
+        then:
+        def failure = thrown(GuardUnavailableException)
+        failure.message.contains('gnomish-guard-k1')
+
+        and: 'NFR-S1: only object names and the runtime answer — no config path, no allowlist entry'
+        !failure.message.contains(tempDir.toString())
+        !failure.message.contains('registry.example.com')
+
+        where: 'each of the three throw sites'
+        site | refuse
+        'never comes up' | { List<String> args ->
+            args == GuardCommands.inspectGuardRunning('k1') ? new DockerResult(0, 'false\n', '') : new DockerResult(0, '', '')
+        }
+        'run refused' | { List<String> args ->
+            args[0] == 'run' ? new DockerResult(1, '', 'image not found') : new DockerResult(1, '', 'No such object')
+        }
+        'bridge refused' | { List<String> args ->
+            args == GuardCommands.connectBridge('k1')
+            ? new DockerResult(1, '', 'network not found')
+            : (args == GuardCommands.inspectGuardRunning('k1') ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
+        }
+    }
+
     def "FR7: an already-connected bridge leg is not an error"() {
         given: 'run succeeds and the bridge connect reports the endpoint already exists'
         docker.onRun = { List<String> args ->

@@ -30,7 +30,14 @@ import org.slf4j.LoggerFactory;
  * (NFR-R2). Denials are read back as structured findings via {@link
  * #denialFindings()} (NFR-O1).
  *
- * <p>Implements FR7, NFR-O1, NFR-R1 of add-sandbox-core.
+ * <p>Every {@link GuardUnavailableException} names the guard container concretely ({@code
+ * gnomish-guard-<key>}), so an operator starts {@code docker logs} from the message alone
+ * rather than deriving the name from the environment key (FR2, UX1 of
+ * polish-sandbox-forensics). Only object names and the runtime's own answer reach the message —
+ * never an environment value or a credential (NFR-S1).
+ *
+ * <p>Implements FR7, NFR-O1, NFR-R1 of add-sandbox-core; FR2, NFR-S1 of
+ * polish-sandbox-forensics.
  */
 public final class EgressGuard {
 
@@ -103,7 +110,8 @@ public final class EgressGuard {
         create();
         DockerResult recreated = docker.run(GuardCommands.inspectGuardRunning(key));
         if (!recreated.ok() || !running(recreated)) {
-            throw new GuardUnavailableException("egress guard for " + key + " could not be started: "
+            throw new GuardUnavailableException("egress guard for " + key + " (container "
+                    + FactoryDockerLabels.guardName(key) + ") could not be started: "
                     + recreated.stderr().strip());
         }
     }
@@ -183,6 +191,25 @@ public final class EgressGuard {
         reads.restore(cursor);
     }
 
+    /**
+     * The environment key this guard belongs to — the same key that names the guarded box, its
+     * volume and its network. Package-private and deliberately not on the public surface: its one
+     * consumer is {@link SelfCheckedEnvironment}, which needs the key of the box it must keep when
+     * a self-check rejects it (FR3 of polish-sandbox-forensics) and holds no other handle on it.
+     */
+    String key() {
+        return key;
+    }
+
+    /**
+     * The docker seam this guard runs through — the same seam the guarded box runs through, since
+     * both are built from one {@code DockerCli} per environment. Package-private for the same one
+     * consumer as {@link #key()}: keeping a rejected box needs a runtime to stop it with.
+     */
+    DockerCli docker() {
+        return docker;
+    }
+
     /** The fresh-create path: run the guard on the task network, then give it its bridge leg. */
     private void create() {
         // A new container is a new denial source: its id, and any cursor matched against it, differ.
@@ -190,12 +217,14 @@ public final class EgressGuard {
         DockerResult run = docker.run(GuardCommands.runGuard(
                 key, guardImage, configDir.toAbsolutePath().toString(), ownership));
         if (!run.ok()) {
-            throw new GuardUnavailableException("docker run of the egress guard for " + key + " failed: "
+            throw new GuardUnavailableException("docker run of the egress guard for " + key + " (container "
+                    + FactoryDockerLabels.guardName(key) + ") failed: "
                     + run.stderr().strip());
         }
         DockerResult bridge = docker.run(GuardCommands.connectBridge(key));
         if (!bridge.ok() && !bridge.stderr().contains("already exists")) {
-            throw new GuardUnavailableException("connecting the egress guard for " + key + " to the bridge failed: "
+            throw new GuardUnavailableException("connecting the egress guard for " + key + " (container "
+                    + FactoryDockerLabels.guardName(key) + ") to the bridge failed: "
                     + bridge.stderr().strip());
         }
     }

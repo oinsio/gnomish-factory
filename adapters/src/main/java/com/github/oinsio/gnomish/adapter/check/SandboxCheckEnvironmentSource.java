@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
+import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException;
 import java.util.function.Supplier;
 
 /**
@@ -20,7 +21,13 @@ import java.util.function.Supplier;
  * surfaces as {@link CheckEnvironmentUnavailableException} → {@code
  * CannotVerify}: an infrastructure failure, no stage attempt burned (NFR-R1).
  *
- * <p>Implements FR8, FR13, NFR-R1 of add-sandbox-core.
+ * <p>A fresh box whose <em>self-check</em> failed is the one materialize failure that is not
+ * disposed (FR3 of polish-sandbox-forensics): the container adapter has already stopped and kept
+ * it so an operator can inspect why the cage check refused it, and disposing it here would
+ * destroy that evidence. Its retention is bounded by the existing {@code sandbox-lifecycle}
+ * sweep, as for any other kept environment of its role.
+ *
+ * <p>Implements FR8, FR13, NFR-R1 of add-sandbox-core; FR3 of polish-sandbox-forensics.
  */
 public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSource {
 
@@ -84,6 +91,11 @@ public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSour
         TaskExecutionEnvironment fresh = freshEnvironments.get();
         try {
             fresh.materialize(branch, attemptWorkspace.attemptCommitSha());
+        } catch (SelfCheckFailedException e) {
+            // FR3 of polish-sandbox-forensics: the box the self-check rejected IS the evidence —
+            // the adapter already stopped and kept it, so disposing it here would destroy exactly
+            // what the operator needs. Every other materialize failure still disposes below.
+            throw new CheckEnvironmentUnavailableException("fresh-box environment could not be materialized: " + e, e);
         } catch (RuntimeException e) {
             fresh.dispose();
             throw new CheckEnvironmentUnavailableException("fresh-box environment could not be materialized: " + e, e);

@@ -1,11 +1,17 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
+import java.time.Duration
+import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -34,6 +40,82 @@ class SelfCheckedEnvironmentSpec extends Specification {
         1 * delegate.materialize('gnomish/t', null)
         thrown(GuardUnavailableException)
         0 * delegate.exec(_)
+    }
+
+    // FR3, UX3 of polish-sandbox-forensics: a failed self-check is the failure whose evidence
+    // lives inside the box, so the box is stopped and kept — never disposed — and the operator
+    // reads its concrete name from the keep notice at the failure site.
+    def "FR3: a rejected box is stopped and kept, and the rejection propagates untouched"() {
+        given: 'the guard is up, but the in-box user is root — the first probe fails closed'
+        docker.onRun = runningGuard
+        delegate.exec(_) >> probeHandle(0, '0')
+        def capture = LogCaptureSupport.attach(ContainerEnvironmentKeeper)
+
+        when:
+        checkedEnvironment().materialize('gnomish/t', null)
+
+        then: 'the self-check failure reaches the caller exactly as before, naming its probe'
+        def failure = thrown(SelfCheckFailedException)
+        failure.message.contains('non-root')
+
+        and: 'the box was stopped — and nothing else: volume and network stay for inspection'
+        docker.runs.contains(DockerCommands.stop('gnomish-box-k1'))
+        !docker.runs.any {
+            it[0] == 'rm' || it[0] == 'volume' && it[1] == 'rm' || it[0] == 'network' && it[1] == 'rm'
+        }
+
+        and: 'and the operator-facing keep notice names the kept container'
+        def notice = capture.list.find { it.level == Level.INFO }
+        notice != null
+        notice.formattedMessage.contains('gnomish-box-k1')
+
+        cleanup:
+        capture.detach()
+    }
+
+    // NFR-R1: forensics never mask the failure they are collecting evidence for.
+    def "NFR-R1: a keep-stop the runtime refuses is warned about, and still does not mask the rejection"() {
+        given: 'the guard is up, the probe fails, and the stop is refused by the daemon'
+        docker.onRun = { List<String> args ->
+            args[0] == 'stop' ? new DockerResult(1, '', 'daemon gone') : runningGuard.call(args)
+        }
+        delegate.exec(_) >> probeHandle(0, '0')
+        def capture = LogCaptureSupport.attach(SelfCheckedEnvironment)
+
+        when:
+        checkedEnvironment().materialize('gnomish/t', null)
+
+        then: 'the reported failure is still the self-check failure, naming the failed probe'
+        def failure = thrown(SelfCheckFailedException)
+        failure.message.contains('non-root')
+
+        and: 'and the un-kept evidence is on the operator plane, naming the box'
+        def warning = capture.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.SELF_CHECK_BOX_KEEP_FAILED.head())
+        }
+        warning != null
+        warning.level == Level.WARN
+        warning.formattedMessage.contains('gnomish-box-k1')
+
+        cleanup:
+        capture.detach()
+    }
+
+    def "FR3: a passing self-check keeps nothing — the box stays running for the round"() {
+        given: 'every probe passes and the isolation metadata matches the passport'
+        docker.onRun = runningGuard
+        delegate.exec(_) >> { ExecCommand c ->
+            c.command() == ['id', '-u'] ? probeHandle(0, '1000')
+            : (c.command().contains('--noproxy') ? probeHandle(7, '') : probeHandle(0, '403'))
+        }
+        delegate.passport() >> CapabilityPassport.container()
+
+        when:
+        checkedEnvironment().materialize('gnomish/t', null)
+
+        then:
+        noExceptionThrown()
+        !docker.runs.any { it[0] == 'stop' }
     }
 
     def "FR9: exec merges the guard proxy fragment under the caller's factory-set variables and returns the delegate's handle"() {
@@ -158,6 +240,49 @@ class SelfCheckedEnvironmentSpec extends Specification {
         resumed.denialFindings()*.message() == [
             'egress denied: evil.example.com:443'
         ]
+    }
+
+    /** The environment under test: the real self-check over the mocked delegate and the guard. */
+    private SelfCheckedEnvironment checkedEnvironment() {
+        new SelfCheckedEnvironment(
+                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+    }
+
+    /** A daemon that reports the guard running and accepts everything else. */
+    def runningGuard = { List<String> args ->
+        args == GuardCommands.inspectGuardRunning('k1')
+        ? new DockerResult(0, 'true\n', '')
+        : (args == GuardCommands.inspectNetworkInternal('k1')
+        ? new DockerResult(0, 'true\n', '')
+        : (args == GuardCommands.inspectRuntime('k1')
+        ? new DockerResult(0, 'runc\n', '')
+        : new DockerResult(0, '', '')))
+    }
+
+    /** One scripted in-box probe answer, in the shape the self-check captures it. */
+    private static ExecHandle probeHandle(int code, String out) {
+        new ExecHandle() {
+
+                    @Override
+                    InputStream output() {
+                        new ByteArrayInputStream(out.getBytes('UTF-8'))
+                    }
+
+                    @Override
+                    Instant startedAt() {
+                        Instant.EPOCH
+                    }
+
+                    @Override
+                    ExecHandle.Wait waitForExitOrTimeout(Duration timeout, Clock clock) {
+                        throw new UnsupportedOperationException('not used by the self-check')
+                    }
+
+                    @Override
+                    int waitForExit() {
+                        code
+                    }
+                }
     }
 
     // NFR-R1: denial observability never takes a healthy round down

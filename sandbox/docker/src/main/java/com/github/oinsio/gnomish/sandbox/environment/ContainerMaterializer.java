@@ -18,6 +18,10 @@ import org.slf4j.LoggerFactory;
  * of harden-logging-observability) — the remote end of the lifecycle a {@code taskId} grep
  * otherwise loses sight of, logged here at its own choke point rather than pulled through the
  * application's anchor vocabulary, which this module cannot see (design D2).
+ *
+ * <p>Every failure thrown from here names the task container concretely ({@code
+ * gnomish-box-<key>}) beside the environment key, so an operator pastes it into {@code docker
+ * logs} / {@code docker cp} without deriving it by hand (FR2, UX1 of polish-sandbox-forensics).
  */
 final class ContainerMaterializer {
 
@@ -76,7 +80,8 @@ final class ContainerMaterializer {
         // any other network-create failure is real. Volume create is idempotent by docker itself.
         DockerResult network = docker.run(DockerCommands.createNetwork(key, ownership));
         if (!network.ok() && !network.stderr().contains("already exists")) {
-            throw new IllegalStateException("docker create network for " + key + " failed: "
+            throw new IllegalStateException("docker create network for " + key + " (container "
+                    + FactoryDockerLabels.containerName(key) + ") failed: "
                     + network.stderr().strip());
         }
         management(docker, key, DockerCommands.createVolume(key, ownership), "create volume");
@@ -116,10 +121,18 @@ final class ContainerMaterializer {
         log.info("container environment {} created for branch {} (image {})", key, branch, image);
     }
 
+    /**
+     * Runs one management command and fails loudly on a non-zero answer, naming the task
+     * container the operator would pass to {@code docker logs} / {@code docker cp} — not only
+     * the environment key it is derivable from (FR2, UX1 of polish-sandbox-forensics). Only the
+     * derived object name and the runtime's own answer reach the message; no environment value
+     * or credential does (NFR-S1).
+     */
     private static void management(DockerCli docker, String key, List<String> argv, String what) {
         DockerResult result = docker.run(argv);
         if (!result.ok()) {
-            throw new IllegalStateException("docker " + what + " for " + key + " failed: "
+            throw new IllegalStateException("docker " + what + " for " + key + " (container "
+                    + FactoryDockerLabels.containerName(key) + ") failed: "
                     + result.stderr().strip());
         }
     }

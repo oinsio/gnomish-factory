@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
+import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import java.nio.file.Path
 import java.util.function.Supplier
 import spock.lang.Specification
@@ -132,5 +133,29 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
         1 * fresh.dispose()
         def e = thrown(CheckEnvironmentUnavailableException)
         e.message.contains('could not be materialized')
+    }
+
+    // FR3 of polish-sandbox-forensics: the box a self-check rejected IS the evidence — the
+    // container adapter already stopped and kept it, so disposing it here would destroy exactly
+    // what the operator needs to see. The classification is unchanged: still cannot-verify.
+    def "FR3: a fresh box rejected by its own self-check is kept, not disposed"() {
+        given:
+        def fresh = Mock(TaskExecutionEnvironment)
+        def source = new SandboxCheckEnvironmentSource(
+                leased(Mock(TaskExecutionEnvironment)),
+                ({ -> fresh } as Supplier<TaskExecutionEnvironment>),
+                'gnomish/t')
+
+        when:
+        source.acquire(new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
+
+        then:
+        1 * fresh.materialize('gnomish/t', SHA) >> {
+            throw new SelfCheckFailedException('non-root', 'the in-box user is root (uid 0)')
+        }
+        0 * fresh.dispose()
+        def e = thrown(CheckEnvironmentUnavailableException)
+        e.message.contains('could not be materialized')
+        e.cause instanceof SelfCheckFailedException
     }
 }

@@ -146,13 +146,32 @@ final class DockerCommands {
     }
 
     /**
-     * {@code inspect} the container's running state and finished-at timestamp, so
-     * the aged-environment reaper measures age by runtime metadata — never by
-     * file mtimes inside the volume (factory-serve delta). Output is one line:
-     * {@code <running> <finishedAt>}, e.g. {@code false 2026-08-07T10:00:00Z}.
+     * {@code inspect} the container's running state, finished-at timestamp and OOM
+     * flag, so the aged-environment reaper measures age by runtime metadata — never
+     * by file mtimes inside the volume (factory-serve delta) — and an exit 137 can be
+     * told apart from a plain kill. Output is one line: {@code <running> <finishedAt>
+     * <oomKilled>}, e.g. {@code false 2026-08-07T10:00:00Z true}.
+     *
+     * <p>{@code OOMKilled} is appended rather than inserted on purpose: the reattach
+     * branch reads the leading field with a {@code startsWith("true")} prefix check,
+     * so a field added at the end cannot change how a running container is
+     * recognized (FR1, design D1 of polish-sandbox-forensics).
      */
     static List<String> inspectContainerState(String name) {
-        return List.of("inspect", "-f", "{{.State.Running}} {{.State.FinishedAt}}", name);
+        return List.of("inspect", "-f", "{{.State.Running}} {{.State.FinishedAt}} {{.State.OOMKilled}}", name);
+    }
+
+    /**
+     * The {@code OOMKilled} field of an {@link #inspectContainerState} line: {@code true}
+     * only when the runtime reported the container's cgroup OOM killer fired (FR1). A short,
+     * malformed or absent line reads as {@code false} — the annotation is one-directional, so
+     * an unreadable state degrades to no claim rather than a wrong one (NFR-R1).
+     *
+     * @param stateLine the raw stdout of {@link #inspectContainerState}; never null
+     */
+    static boolean oomKilled(String stateLine) {
+        String[] fields = stateLine.strip().split("\\s+");
+        return fields.length >= 3 && "true".equals(fields[2]);
     }
 
     /** {@code rm -f} the container by name (force removes it even while running). */

@@ -32,6 +32,9 @@
  * subprocess, like git) with argv assembled by {@link
  * com.github.oinsio.gnomish.sandbox.environment.DockerCommands} and {@link
  * com.github.oinsio.gnomish.sandbox.environment.GuardCommands}, labelled by
+ * {@link com.github.oinsio.gnomish.sandbox.environment.OomAnnotatedExecHandle} as its process
+ * handle (the host handle plus the exit-137 OOM annotation, FR1 of
+ * polish-sandbox-forensics), labelled by
  * {@link com.github.oinsio.gnomish.sandbox.environment.FactoryDockerLabels} for
  * disposal and the {@link
  * com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleSweep}; {@link
