@@ -43,8 +43,9 @@ final class AbortReportBuilder {
      * instance are recorded — so a human can diagnose the underlying
      * infrastructure problem across the whole streak, not just its last link.
      *
-     * @param cause free-text description of the abort that tripped the fuse;
-     *     never blank
+     * @param cause free-text description of the abort that tripped the fuse, already capped to
+     *     the abort-cause budget by {@link AbortHandler} — this builder adds framing to it and
+     *     never re-checks the bound; never blank
      * @param category which category the tripping attempt belongs to; never null
      * @param facts the accounting as it stood BEFORE this attempt — the tripping
      *     attempt is added to its own category here; never null
