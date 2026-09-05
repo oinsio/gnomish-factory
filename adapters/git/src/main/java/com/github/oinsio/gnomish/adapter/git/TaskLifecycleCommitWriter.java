@@ -1,13 +1,13 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
-import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,10 +55,6 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
                         taskId, event, "locating task branch", "no branch \"" + ref + "\" exists"));
     }
 
-    TaskRecord readCurrent(String taskId, ObjectId tip, TaskLifecycleEvent event) {
-        return TaskJsonMapper.fromDto(readCurrentDto(taskId, tip, event));
-    }
-
     /**
      * The tip's {@code task.json} as its raw wire DTO. The marker-clearing rewrite reads it this way
      * rather than through the domain record: the recorded outcome, decisions, and escalation are
@@ -88,17 +85,54 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
      * the {@code state.json} beside it (FR3, FR4 of harden-task-branch-contract) — the synthesized
      * initial state at STARTED, the attempt-counter reset at RESUMED. Mutually-implied fields land
      * in one commit, so no kill window freezes a branch carrying one without the other.
+     *
+     * <p>{@code egressCursor} is the position the tip already carries, handed back in (FR5 of
+     * fix-denial-attribution-durability). A lifecycle rewrite performs no denial read, so it has no
+     * position of its own — and regenerating {@code state.json} without one erases what the last
+     * attempt committed, sending the resumed run back to a full log re-read on a branch that knew
+     * exactly where it stopped. The caller reads it from the tip through {@link #tipStateCursor};
+     * a branch being created has none and passes {@code null}.
      */
-    List<TreeEdit> putTaskAndState(String taskId, TaskJsonDto dto, TaskState state) {
+    List<TreeEdit> putTaskAndState(
+            String taskId, TaskJsonDto dto, TaskState state, @Nullable EgressCursorDto egressCursor) {
         try {
             byte[] stateJson = TaskStateJson.mapper()
-                    .writeValueAsString(StateJsonMapper.toDto(state))
+                    .writeValueAsString(StateJsonMapper.toDto(state, egressCursor))
                     .getBytes(StandardCharsets.UTF_8);
             List<TreeEdit> edits = new ArrayList<>(putTaskJson(taskId, dto));
             edits.add(new TreeEdit.PutFile(STATE_JSON_PATH, stateJson));
             return List.copyOf(edits);
         } catch (JsonProcessingException e) {
             throw new GitTaskRepositoryException(taskId, TaskLifecycleEvent.STARTED, "serializing state.json", e);
+        }
+    }
+
+    /**
+     * The denial cursor the tip's {@code state.json} carries, for a lifecycle rewrite to carry
+     * forward (FR5 of fix-denial-attribution-durability).
+     *
+     * <p>Best-effort: a tip with no state file, no cursor in it, or a state file this factory
+     * cannot parse yields none, and the rewrite proceeds cursorless — losing the position costs the
+     * next run a full re-read of the guard's log tail, never a denial, so it must not fail a
+     * transition that is otherwise sound.
+     *
+     * @param taskId the task being rewritten; for the trace of a degraded read
+     * @param tip the commit the rewrite builds on
+     * @return the tip's committed cursor, or {@code null} when there is none to carry
+     */
+    @Nullable
+    EgressCursorDto tipStateCursor(String taskId, ObjectId tip) {
+        try {
+            byte[] bytes = gitObjects.readBlob(tip, STATE_JSON_PATH, TASK_JSON_SIZE_CAP);
+            return StateJsonMapper.readDto(new String(bytes, StandardCharsets.UTF_8))
+                    .egressCursor();
+        } catch (RuntimeException e) {
+            log.debug(
+                    "no committed denial cursor to carry forward for task {}: the tip's state.json is absent or"
+                            + " unreadable; the next run reads its denial source from the start",
+                    taskId,
+                    e);
+            return null;
         }
     }
 

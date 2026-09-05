@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
@@ -49,7 +50,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         gitOutput(work, 'push', 'origin', 'HEAD:refs/heads/base')
         Path index = root.resolve('index')
         Files.createDirectories(index)
-        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), ClaimEpochSource.NONE), 'base')
+        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), ClaimEpochSource.NONE, DenialCursorSource.NONE), 'base')
     }
 
     /**

@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * — persist strictly before the finish event and any next attempt (FR11). At the top of each
  * round — the moment the round begins, where {@link EngineEvent.AttemptStarted} is emitted — the
  * loop reads {@code clock.now()} once and threads that single instant through {@link
- * RoundExecution} onto the round's {@link AttemptRecord#startedAt} (FR15 of add-manual-run,
+ * RoundExecution} onto the round's {@link AttemptRecord#startedAt()} (FR15 of add-manual-run,
  * design D11), so the begin time is carried in state rather than derived from a later reading. One
  * {@code StageAttemptLoop} is constructed per run from the run's {@link EnginePorts}, holding
  * only immutable collaborators so the engine stays reentrant (NFR-R1).
@@ -32,8 +32,10 @@ import org.jspecify.annotations.Nullable;
  * to advance (FR8). A {@link RoundOutcome.NeedsDecision} records the round
  * unburned and escalates {@link EscalationReport.DecisionNeeded} verbatim, without burning an
  * attempt (FR6, design D6). A {@link RoundOutcome.CannotExecute} — the executor port
- * threw — escalates {@link EscalationReport.CannotExecute} from the entry state: no round ran,
- * so nothing is recorded, persisted or emitted and no attempt is burned (FR10, NFR-O1). A
+ * threw — escalates {@link EscalationReport.CannotExecute} from the entry state, carrying the
+ * failed round's drained egress denials onto the report: no round ran, so nothing is recorded,
+ * persisted or emitted and no attempt is burned (FR10, NFR-O1; FR1 of
+ * fix-denial-attribution-durability). A
  * thrown {@code persist} instead ends the run as {@link TaskOutcome.Aborted} through the
  * journal (FR11, NFR-O1).
  *
@@ -41,7 +43,7 @@ import org.jspecify.annotations.Nullable;
  * harden-task-branch-contract), so no kill can freeze "passed, but still at it".
  *
  * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13, NFR-O1 of add-stage-engine; FR4 of
- * harden-task-branch-contract.
+ * harden-task-branch-contract; FR1 of fix-denial-attribution-durability.
  */
 final class StageAttemptLoop {
 
@@ -80,13 +82,15 @@ final class StageAttemptLoop {
      * state back as {@link StageResult.Passed} for the {@link Engine} to advance (FR8); a {@link
      * RoundOutcome.NeedsDecision} escalates {@link EscalationReport.DecisionNeeded}
      * without burning an attempt (FR6); a {@link RoundOutcome.CannotExecute} escalates
-     * {@link EscalationReport.CannotExecute} from the entry state with nothing recorded, persisted
-     * or emitted (FR10). Every result but {@code Passed} is a {@link StageResult.Terminal} the
+     * {@link EscalationReport.CannotExecute} — carrying that round's drained egress denials —
+     * from the entry state with nothing recorded, persisted or emitted (FR10, FR1 of
+     * fix-denial-attribution-durability). Every result but {@code Passed} is a {@link StageResult.Terminal} the
      * engine returns verbatim. A completed round is recorded and committed (persist →
      * AttemptFinished) before it routes; the loop threads {@code state} through one local
      * variable, so the engine stays reentrant (NFR-R1).
      *
-     * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13 of add-stage-engine.
+     * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13 of add-stage-engine; FR1 of
+     * fix-denial-attribution-durability.
      *
      * @param context the task's identity and human decisions; never null
      * @param state the recorded state this stage resumes from; never null
@@ -124,8 +128,12 @@ final class StageAttemptLoop {
                             newState, new EscalationReport.DecisionNeeded(decision.question(), decision.options())));
                 }
                 case RoundOutcome.CannotExecute ce -> {
-                    return new StageResult.Terminal(
-                            new TaskOutcome.Escalated(current, new EscalationReport.CannotExecute(ce.cause())));
+                    // FR1 of fix-denial-attribution-durability: the failed round left no
+                    // attempt record, so its denials ride the escalation report instead. A
+                    // pure copy — the list is carried, never consulted, so nothing about the
+                    // classification changes.
+                    return new StageResult.Terminal(new TaskOutcome.Escalated(
+                            current, new EscalationReport.CannotExecute(ce.cause(), ce.denials())));
                 }
             }
         }

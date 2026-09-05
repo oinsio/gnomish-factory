@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Clock
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -120,8 +121,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     def "FR9: exec merges the guard proxy fragment under the caller's factory-set variables and returns the delegate's handle"() {
         given:
-        def environment = new SelfCheckedEnvironment(
-                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+        def environment = checkedEnvironment()
         def handle = Mock(ExecHandle)
         ExecCommand seen = null
 
@@ -140,8 +140,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     def "the remaining operations pass through untouched, carrying the delegate's real values"() {
         given:
-        def environment = new SelfCheckedEnvironment(
-                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+        def environment = checkedEnvironment()
         def passport = CapabilityPassport.container()
         def content = 'real-bytes'.bytes
 
@@ -168,7 +167,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     // FR1 of fix-denial-report-attachment: the guard is reachable ONLY through the port contract —
     // a consumer holding the port type gets the denials without knowing this adapter exists
-    def "FR1: denialFindings surfaces the guard's denials through the port type"() {
+    def "FR1: readDenials surfaces the guard's denials through the port type"() {
         given: 'a guard whose log holds one denied destination'
         docker.onRun = { List<String> args ->
             args[0] == 'logs'
@@ -176,11 +175,10 @@ class SelfCheckedEnvironmentSpec extends Specification {
             + '{"kind":"connect","host":"evil.example.com","port":443}\n', '')
             : new DockerResult(0, '', '')
         }
-        TaskExecutionEnvironment environment = new SelfCheckedEnvironment(
-                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+        TaskExecutionEnvironment environment = checkedEnvironment()
 
         expect: 'the denial reads back through the port, with no downcast to the adapter type'
-        environment.denialFindings()*.message() == [
+        environment.readDenials().denials()*.finding()*.message() == [
             'egress denied: evil.example.com:443'
         ]
     }
@@ -198,11 +196,10 @@ class SelfCheckedEnvironmentSpec extends Specification {
                     + '{"kind":"connect","host":"evil.example.com","port":443}\n', '')
                     : new DockerResult(0, '', '')
         }
-        TaskExecutionEnvironment environment = new SelfCheckedEnvironment(
-                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+        TaskExecutionEnvironment environment = checkedEnvironment()
 
         when: 'a round reads its denials'
-        environment.denialFindings()
+        environment.readDenials().denials()*.finding()
 
         then: 'the position to commit is reachable through the contract'
         environment.denialCursor().orElseThrow()
@@ -214,8 +211,8 @@ class SelfCheckedEnvironmentSpec extends Specification {
                 delegate,
                 new EnvironmentSelfCheck(delegate, continuingGuard, docker, 'k1', 'runc', [], { d -> }),
                 continuingGuard)
-        continuing.restoreDenialCursor(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
-        continuing.denialFindings()
+        continuing.restoreDenials(DenialRestoration.at(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z')))
+        continuing.readDenials().denials()*.finding()
 
         then: 'the offer reached the guard: the read starts at the committed position'
         docker.runs.last() == [
@@ -234,10 +231,9 @@ class SelfCheckedEnvironmentSpec extends Specification {
                 delegate,
                 new EnvironmentSelfCheck(delegate, resumedGuard, docker, 'k1', 'runc', [], { d -> }),
                 resumedGuard)
-        resumed.restoreDenialCursor(new DenialCursor('sha256:container-elsewhere', '2026-08-19T11:00:00Z'))
-
+        resumed.restoreDenials(DenialRestoration.at(new DenialCursor('sha256:container-elsewhere', '2026-08-19T11:00:00Z')))
         then: 'the offer reached the guard, which dropped it and read the live log from its start'
-        resumed.denialFindings()*.message() == [
+        resumed.readDenials().denials()*.finding()*.message() == [
             'egress denied: evil.example.com:443'
         ]
     }
@@ -291,10 +287,9 @@ class SelfCheckedEnvironmentSpec extends Specification {
         docker.onRun = { List<String> args ->
             new DockerResult(1, '', 'No such container')
         }
-        TaskExecutionEnvironment environment = new SelfCheckedEnvironment(
-                delegate, new EnvironmentSelfCheck(delegate, guard, docker, 'k1', 'runc', [], { d -> }), guard)
+        TaskExecutionEnvironment environment = checkedEnvironment()
 
         expect:
-        environment.denialFindings() == []
+        environment.readDenials().denials()*.finding() == []
     }
 }

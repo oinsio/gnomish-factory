@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
+import com.github.oinsio.gnomish.sandbox.DenialRead;
+import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -30,7 +32,14 @@ import org.slf4j.LoggerFactory;
  * by another machine's daemon clock, or by a container since recreated, could
  * filter real denials out of the report instead.
  *
- * <p>Implements NFR-O1, NFR-R1, FR5 of fix-denial-report-attachment.
+ * <p>A lost position is therefore cheap, not lossy: the fallback re-read is merged against the
+ * identities the branch already records ({@link RecordedDenialMerge}, FR7), and the two losses
+ * this class can actually see — a read that filled its tail window, and a committed position
+ * whose source is gone — are reported in-band as {@link DenialLossMarker} denials rather than as
+ * a WARN no reader of the task report will ever see (FR8, design D6).
+ *
+ * <p>Implements NFR-O1, NFR-R1, FR5 of fix-denial-report-attachment; FR4, FR7, FR8 of
+ * fix-denial-attribution-durability.
  */
 final class GuardDenialReads {
 
@@ -44,20 +53,26 @@ final class GuardDenialReads {
     /** The daemon-side lower bound of the next read — null means "from container start" (D3). */
     private @Nullable String since;
 
-    /** A cursor committed by an earlier lease, awaiting the source match of the first read (FR5). */
-    private @Nullable DenialCursor offered;
+    /** What a resume brought — the offered position, the recorded identities, the loss they reveal. */
+    private final RestoredDenials restored;
 
-    /** The live container's runtime id, re-probed after {@link #sourceRecreated()}. */
-    private @Nullable String sourceId;
+    /** The live guard container's identity as a denial source — what stamps every read (FR5, FR7). */
+    private final GuardSourceIdentity identity;
 
     GuardDenialReads(DockerCli docker, String key) {
         this.docker = docker;
         this.key = key;
+        this.restored = new RestoredDenials(key);
+        this.identity = new GuardSourceIdentity(docker, key);
     }
 
-    /** Accepts a cursor from an earlier lease; applied — or rejected — at the first read (FR5). */
-    synchronized void restore(DenialCursor cursor) {
-        offered = cursor;
+    /**
+     * Accepts what an earlier lease recorded: the position, applied — or rejected — at the first
+     * read (FR5), and the identities of the denials committed with it, which every read merges
+     * against so a rejected position costs a merge rather than a duplicated report (FR7).
+     */
+    synchronized void restore(DenialRestoration restoration) {
+        restored.restore(restoration);
     }
 
     /**
@@ -77,15 +92,29 @@ final class GuardDenialReads {
 
     /** Invalidates the cached container id: a recreated guard is a different denial source. */
     synchronized void sourceRecreated() {
-        sourceId = null;
+        identity.recreated();
     }
 
-    /** The denials recorded since the previous read; see {@link EgressGuard#denialFindings()}. */
-    synchronized List<Finding> findings() {
-        applyOfferedCursor();
+    /** The live guard container's identity as a denial source, or null when it cannot be read. */
+    private @Nullable String sourceId() {
+        return identity.current();
+    }
+
+    /**
+     * The denials recorded since the previous read, paired with the position that stands after it
+     * (design D7 of fix-denial-attribution-durability); see {@link EgressGuard#readDenials()}.
+     * Every arm answers with the position as it stands — an unreadable log leaves the cursor where
+     * it was, so the pair a caller commits still delimits exactly the findings beside it.
+     */
+    synchronized DenialRead read() {
+        String applied = restored.positionFor(this::sourceId);
+        if (applied != null) {
+            since = applied;
+        }
+        String window = since;
         DockerResult logs;
         try {
-            logs = docker.run(GuardCommands.guardLogs(key, LOG_TAIL_LINES, since));
+            logs = docker.run(GuardCommands.guardLogs(key, LOG_TAIL_LINES, window));
         } catch (DockerUnavailableException e) {
             // The runtime outage classification (NFR-R1) applies to work the factory still owes;
             // a denial read is pure observability of work already finished, so an unreachable
@@ -94,15 +123,16 @@ final class GuardDenialReads {
                     OperatorEvent.GUARD_DENIAL_LOG_UNREADABLE.head() + "could not read egress guard log for {}",
                     key,
                     e);
-            return List.of();
+            return new DenialRead(restored.owedLoss(), cursor());
         }
         if (!logs.ok()) {
             log.warn(
                     OperatorEvent.GUARD_DENIAL_LOG_READ_FAILED.head() + "could not read egress guard log for {}: {}",
                     key,
                     LogText.forLog(logs.stderr()));
-            return List.of();
+            return new DenialRead(restored.owedLoss(), cursor());
         }
+        List<Denial> denials = restored.owedLoss();
         if (GuardLogCursor.saturated(logs.stdout(), LOG_TAIL_LINES)) {
             log.warn(
                     OperatorEvent.GUARD_DENIAL_TAIL_WINDOW_FULL.head()
@@ -110,63 +140,18 @@ final class GuardDenialReads {
                             + " window were dropped before parsing and are not in the findings (NFR-O1)",
                     key,
                     LOG_TAIL_LINES);
+            denials.add(DenialLossMarker.tailWindowFull(key, LOG_TAIL_LINES, window));
         }
         String advanced = GuardLogCursor.advance(logs.stdout());
         if (advanced != null) {
             since = advanced;
         }
-        return GuardDenialLog.findings(key, logs.stdout());
-    }
-
-    /**
-     * Consumes a restored cursor once, before the first read: applied when it names
-     * the live container, dropped with a log line when it names another source (a
-     * resume on a different machine, or onto a recreated container) — reading that
-     * source from its start is then correct, since its log holds no round the
-     * factory already reported.
-     */
-    private void applyOfferedCursor() {
-        DenialCursor cursor = offered;
-        if (cursor == null) {
-            return;
-        }
-        offered = null;
-        String source = sourceId();
-        if (cursor.source().equals(source)) {
-            since = cursor.position();
-            return;
-        }
-        log.info(
-                "committed denial cursor for {} was read from guard container {}, not the live {} —"
-                        + " reading its log from the start (FR5)",
-                key,
-                cursor.source(),
-                source == null ? "(unreadable)" : source);
-    }
-
-    /** The guard container's runtime id, cached; null when it cannot be read (best-effort, NFR-R1). */
-    private @Nullable String sourceId() {
-        String cached = sourceId;
-        if (cached != null) {
-            return cached;
-        }
-        DockerResult probe;
-        try {
-            probe = docker.run(GuardCommands.inspectGuardId(key));
-        } catch (DockerUnavailableException e) {
-            // No source id means no committable cursor: the next lease replays every denial still
-            // in this guard's log rather than reading its own slice (FR5). DEBUG — the round's
-            // own findings are unaffected, only the cross-process de-duplication is.
-            log.debug("egress guard id for {} is unreadable; this attempt commits no denial cursor", key, e);
-            return null;
-        }
-        String id = probe.stdout().strip();
-        if (!probe.ok() || id.isEmpty()) {
-            // throwable-not-subject: docker answered; the answer is simply not an id.
-            log.debug("egress guard id for {} came back empty; this attempt commits no denial cursor", key);
-            return null;
-        }
-        sourceId = id;
-        return id;
+        // One source resolution per read, and the same one for both uses: the position is
+        // committable exactly when the source is identifiable, so a read that cannot name its
+        // source stamps no identity either — both degrade together, and the daemon is probed once.
+        Optional<DenialCursor> position = cursor();
+        denials.addAll(restored.merge(
+                GuardDenialLog.denials(key, position.map(DenialCursor::source).orElse(null), logs.stdout())));
+        return new DenialRead(denials, position);
     }
 }

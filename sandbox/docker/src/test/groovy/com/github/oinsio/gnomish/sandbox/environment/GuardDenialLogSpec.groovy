@@ -19,12 +19,17 @@ class GuardDenialLogSpec extends Specification {
     // An environment key (see the glossary), not a credential.
     private static final String KEY = 'gnomish-PROJ-9' // gitleaks:allow
 
+    /** The parsed findings alone — what every scenario about the parse itself is about. */
+    private static List denialFindings(String guardStdout) {
+        GuardDenialLog.denials(KEY, null, guardStdout)*.finding()
+    }
+
     def "NFR-O1: a CONNECT denial parses into a finding with host and port"() {
         given:
         def log = 'GNOMISH-EGRESS-DENY {"kind":"connect","host":"evil.example.com","port":443}\n'
 
         when:
-        def findings = GuardDenialLog.findings(KEY, log)
+        def findings = denialFindings(log)
 
         then:
         findings.size() == 1
@@ -39,7 +44,7 @@ class GuardDenialLogSpec extends Specification {
                 '"method":"POST","path":"/exfil"}\n'
 
         when:
-        def findings = GuardDenialLog.findings(KEY, log)
+        def findings = denialFindings(log)
 
         then:
         findings[0].message() == 'egress denied: evil.example.com:80'
@@ -56,7 +61,7 @@ class GuardDenialLogSpec extends Specification {
                 '"method":"GET","path":"/upload?token=s3cret&body=stolen"}\n'
 
         when:
-        def findings = GuardDenialLog.findings(KEY, log)
+        def findings = denialFindings(log)
 
         then: 'the operator still sees where the gnome went, never what it tried to send'
         findings[0].location() == 'evil.example.com:80/upload'
@@ -68,7 +73,7 @@ class GuardDenialLogSpec extends Specification {
                 '"method":"GET","path":"?token=s3cret"}\n'
 
         expect: 'stripping leaves an empty path, which reports as the bare destination'
-        GuardDenialLog.findings(KEY, log)*.location() == ['evil.example.com:80']
+        denialFindings(log)*.location() == ['evil.example.com:80']
     }
 
     def "NFR-O1: a denial forwarded through mitmproxy's event log keeps its prefix and still parses"() {
@@ -76,7 +81,7 @@ class GuardDenialLogSpec extends Specification {
         def log = '[10:02:33.123][info] GNOMISH-EGRESS-DENY {"kind":"connect","host":"evil.example.com","port":443}\n'
 
         expect: 'the marker is matched anywhere in the line'
-        GuardDenialLog.findings(KEY, log)*.message() == [
+        denialFindings(log)*.message() == [
             'egress denied: evil.example.com:443'
         ]
     }
@@ -90,7 +95,7 @@ class GuardDenialLogSpec extends Specification {
         ].join('\n')
 
         expect:
-        GuardDenialLog.findings(KEY, log)*.message() == [
+        denialFindings(log)*.message() == [
             'egress denied: a.example.com:443'
         ]
     }
@@ -104,7 +109,7 @@ class GuardDenialLogSpec extends Specification {
         ].join('\n')
 
         expect: 'the unparseable and host-less events vanish, the good one survives'
-        GuardDenialLog.findings(KEY, log)*.message() == [
+        denialFindings(log)*.message() == [
             'egress denied: ok.example.com:443'
         ]
     }
@@ -116,7 +121,7 @@ class GuardDenialLogSpec extends Specification {
         }.join('\n')
 
         expect:
-        GuardDenialLog.findings(KEY, log).size() == GuardDenialLog.MAX_EVENTS
+        denialFindings(log).size() == GuardDenialLog.MAX_EVENTS
     }
 
     def "NFR-C1: oversized string fields are length-capped, not carried whole"() {
@@ -127,7 +132,7 @@ class GuardDenialLogSpec extends Specification {
                 "\"method\":\"GET\",\"path\":\"${hugePath}\"}"
 
         when:
-        def findings = GuardDenialLog.findings(KEY, log)
+        def findings = denialFindings(log)
 
         then: 'the location stays bounded'
         findings[0].location().length() < 700
@@ -135,14 +140,14 @@ class GuardDenialLogSpec extends Specification {
 
     def "FR5, D4: a read that drops many events reports them once, with counts and the key"() {
         given: 'a read in which every marked line is unparseable, in both ways'
-        def logs = LogCaptureSupport.attach(GuardDenialLog)
+        def logs = LogCaptureSupport.attach(GuardDenialDrops)
         def log = ((1..20).collect { 'GNOMISH-EGRESS-DENY {not json' }
         + (1..5).collect {
             'GNOMISH-EGRESS-DENY {"kind":"connect","port":443}'
         }).join('\n')
 
         when:
-        def findings = GuardDenialLog.findings(KEY, log)
+        def findings = denialFindings(log)
 
         then: 'nothing was parseable, and nothing was silently lost either'
         findings.isEmpty()
@@ -165,14 +170,14 @@ class GuardDenialLogSpec extends Specification {
     // it never saw.
     def "FR5, D4: one malformed and one host-less event still report as two drops"() {
         given:
-        def logs = LogCaptureSupport.attach(GuardDenialLog)
+        def logs = LogCaptureSupport.attach(GuardDenialDrops)
         def log = [
             'GNOMISH-EGRESS-DENY {not json',
             'GNOMISH-EGRESS-DENY {"kind":"connect","port":443}'
         ].join('\n')
 
         when:
-        GuardDenialLog.findings(KEY, log)
+        denialFindings(log)
 
         then:
         def warnings = logs.list.findAll { it.level == Level.WARN }
@@ -186,14 +191,14 @@ class GuardDenialLogSpec extends Specification {
 
     def "FR5, D4: the first malformed reason is the one that rides along, not the last"() {
         given: 'two unparseable lines whose parser messages differ in the character they name'
-        def logs = LogCaptureSupport.attach(GuardDenialLog)
+        def logs = LogCaptureSupport.attach(GuardDenialDrops)
         def log = [
             'GNOMISH-EGRESS-DENY {oops',
             'GNOMISH-EGRESS-DENY @@@'
         ].join('\n')
 
         when:
-        GuardDenialLog.findings(KEY, log)
+        denialFindings(log)
 
         then:
         def warnings = logs.list.findAll { it.level == Level.WARN }
@@ -211,10 +216,10 @@ class GuardDenialLogSpec extends Specification {
 
     def "FR5, D4: a read that lost only host-less events names no malformed reason"() {
         given:
-        def logs = LogCaptureSupport.attach(GuardDenialLog)
+        def logs = LogCaptureSupport.attach(GuardDenialDrops)
 
         when:
-        GuardDenialLog.findings(KEY, 'GNOMISH-EGRESS-DENY {"kind":"connect","port":443}')
+        denialFindings('GNOMISH-EGRESS-DENY {"kind":"connect","port":443}')
 
         then:
         def warnings = logs.list.findAll { it.level == Level.WARN }
@@ -228,10 +233,10 @@ class GuardDenialLogSpec extends Specification {
 
     def "FR5: a read that loses nothing says nothing"() {
         given:
-        def logs = LogCaptureSupport.attach(GuardDenialLog)
+        def logs = LogCaptureSupport.attach(GuardDenialDrops)
 
         when:
-        GuardDenialLog.findings(KEY, 'GNOMISH-EGRESS-DENY {"kind":"connect","host":"a.example.com","port":443}')
+        denialFindings('GNOMISH-EGRESS-DENY {"kind":"connect","host":"a.example.com","port":443}')
 
         then:
         logs.list.isEmpty()
@@ -248,7 +253,7 @@ class GuardDenialLogSpec extends Specification {
         }.join('\n')
 
         when:
-        GuardDenialLog.findings(KEY, log)
+        denialFindings(log)
 
         then:
         logs.list.find { it.level == Level.WARN }.formattedMessage
@@ -261,7 +266,57 @@ class GuardDenialLogSpec extends Specification {
 
     def "NFR-O1: an empty or denial-free log yields no findings"() {
         expect:
-        GuardDenialLog.findings(KEY, '') == []
-        GuardDenialLog.findings(KEY, 'Proxy server listening at http://*:8080\n') == []
+        denialFindings('') == []
+        denialFindings('Proxy server listening at http://*:8080\n') == []
+    }
+
+    // FR7, D5 of fix-denial-attribution-durability: the daemon already stamps every line, and
+    //     GuardLogCursor was consuming that stamp for the read position and discarding it. Keeping
+    //     it is what lets a re-read after a lost position merge instead of duplicate.
+    def "FR7: a parsed denial keeps the daemon stamp of its line as its identity"() {
+        given:
+        def log = '2026-08-19T10:00:00.000000001Z GNOMISH-EGRESS-DENY ' +
+                '{"kind":"connect","host":"evil.example.com","port":443}\n'
+
+        when:
+        def denials = GuardDenialLog.denials(KEY, 'sha256:container-1', log)
+
+        then:
+        denials.size() == 1
+        denials[0].finding().message() == 'egress denied: evil.example.com:443'
+        denials[0].identity().source() == 'sha256:container-1'
+        denials[0].identity().eventAt() == '2026-08-19T10:00:00.000000001Z'
+    }
+
+    // FR7: two denials to the same destination are two events — identity comes from the source's
+    //     coordinates, never from the finding's content, because repeats ARE the signal
+    def "FR7: repeated denials to one destination get distinct identities"() {
+        given:
+        def event = 'GNOMISH-EGRESS-DENY {"kind":"connect","host":"evil.example.com","port":443}'
+        def log = "2026-08-19T10:00:00.000000001Z ${event}\n2026-08-19T10:00:02.000000001Z ${event}\n"
+
+        when:
+        def denials = GuardDenialLog.denials(KEY, 'sha256:container-1', log)
+
+        then:
+        denials.size() == 2
+        denials[0].finding() == denials[1].finding()
+        denials*.identity()*.eventAt() == [
+            '2026-08-19T10:00:00.000000001Z',
+            '2026-08-19T10:00:02.000000001Z'
+        ]
+    }
+
+    // FR7: "unknown, keep" — an unidentified denial matches nothing on a merge, so it is attached
+    //     rather than dropped (design D3: duplicates over silence)
+    def "FR7: a denial the source could not stamp carries no identity"() {
+        expect:
+        GuardDenialLog.denials(KEY, source, line)[0].identity() == null
+
+        where:
+        source | line
+        null | '2026-08-19T10:00:00.000000001Z GNOMISH-EGRESS-DENY {"host":"a.example.com"}'
+        'sha256:container-1' | 'GNOMISH-EGRESS-DENY {"host":"a.example.com"}'
+        'sha256:container-1' | 'not-a-timestamp GNOMISH-EGRESS-DENY {"host":"a.example.com"}'
     }
 }

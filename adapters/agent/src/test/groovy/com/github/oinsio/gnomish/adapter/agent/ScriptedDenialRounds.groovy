@@ -2,9 +2,11 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.DenialRead
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -16,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * environment's denial answer substituted, so what a spec drives is the
  * production round wiring rather than a hand-built stand-in for it.
  *
- * <p>Answers are consumed one per {@code denialFindings()} call, standing in for
+ * <p>Answers are consumed one per {@code readDenials()} call, standing in for
  * the guard's per-round delta read (D3): the second read sees the second round's
  * denials, never the first round's again. The last answer repeats once the script
  * is exhausted; a {@code null} answer stands for a read that cannot be served at
@@ -51,11 +53,11 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         new ScriptedRound(delegate.openRound(request), this)
     }
 
-    private static final class ScriptedRound implements RoundEnvironmentSource.Round {
-        private final RoundEnvironmentSource.Round delegate
+    private static final class ScriptedRound implements Round {
+        private final Round delegate
         private final ScriptedDenialRounds source
 
-        ScriptedRound(RoundEnvironmentSource.Round delegate, ScriptedDenialRounds source) {
+        ScriptedRound(Round delegate, ScriptedDenialRounds source) {
             this.delegate = delegate
             this.source = source
         }
@@ -147,8 +149,10 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        List<Finding> denialFindings() {
-            source.nextAnswer()
+        DenialRead readDenials() {
+            new DenialRead(source.nextAnswer().collect {
+                Denial.unidentified(it)
+            }, Optional.empty())
         }
     }
 }

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git.state;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code task.json} contract's escalation-report shape, used both nested
@@ -66,8 +67,35 @@ public sealed interface EscalationReportDto {
     /**
      * An executor infrastructure failure prevented running the stage.
      *
+     * <p>{@code denials} carries the egress denials of the round that could not
+     * execute (FR2 of fix-denial-attribution-durability). That round died before its
+     * close, so it left no attempt record to hang them on: this escalation is their
+     * only place in {@code task.json}. The field is additive under contract v1 — a
+     * document written before it existed binds the component to null, which the
+     * canonical constructor normalizes to empty, so every pre-existing {@code
+     * task.json} stays readable. The denials influence no derived field and never
+     * appear in the attempt history.
+     *
      * @param type the discriminator, always {@code "cannotExecute"}
      * @param cause the failure detail, stack trace preserved
+     * @param denials the egress denials of the round that could not execute; possibly
+     *     empty, and absent in documents written before the field existed
      */
-    record CannotExecute(String type, String cause) implements EscalationReportDto {}
+    record CannotExecute(String type, String cause, List<StateDenialDto> denials) implements EscalationReportDto {
+
+        public CannotExecute {
+            denials = absentAsEmpty(denials);
+        }
+
+        /**
+         * An absent {@code denials} field reads as an empty list (FR2 of
+         * fix-denial-attribution-durability). Kept as an explicit static method rather
+         * than inline in the compact constructor — PIT's record filter suppresses
+         * mutations inside a record's canonical constructor, which would exempt this
+         * default from the mutation gate (same shape as {@link StateAttemptDto}).
+         */
+        private static List<StateDenialDto> absentAsEmpty(@Nullable List<StateDenialDto> denials) {
+            return denials == null ? List.of() : List.copyOf(denials);
+        }
+    }
 }

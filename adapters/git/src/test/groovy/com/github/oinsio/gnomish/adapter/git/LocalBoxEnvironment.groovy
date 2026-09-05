@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.sandbox.DenialRead
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -117,5 +119,25 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment {
     @Override
     Optional<DenialCursor> denialCursor() {
         Optional.ofNullable(denialCursor)
+    }
+
+    /**
+     * Positions this box's denial source at the offered cursor, the way a live guard does when the
+     * offer names its own source — so a spec can observe a restore that actually landed, rather
+     * than only that a call was made (FR6 of fix-denial-attribution-durability).
+     */
+    @Override
+    void restoreDenials(DenialRestoration restoration) {
+        restoration.position().ifPresent { denialCursor = it }
+    }
+
+    /**
+     * This box's denial read, paired with whatever position a spec scripted (design D7 of
+     * fix-denial-attribution-durability): a local box has no egress guard, so the findings are
+     * always empty while the position is the one under test.
+     */
+    @Override
+    DenialRead readDenials() {
+        new DenialRead(List.of(), denialCursor())
     }
 }

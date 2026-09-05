@@ -74,8 +74,9 @@
 - [ ] 5.2 Insert config-refresh + resolve + base-refresh between `harden()`
       and `createTask()` in `TakeFreshClaim` and
       `TakeContainerFreshClaim`; update both `Kept in sync with` markers'
-      invariant line; mirrored specs cover both media (FR2, FR6, D6,
-      sync surface)
+      invariant line; mirrored specs cover both media; extend the law-source
+      contract test to pin the default-branch source of the `base:` section
+      (FR2, FR6, D6, sync surface)
 - [ ] 5.3 TDD the pin: mapper writes `(ref, sha, rule)` in the
       task-creation commit behind the version gate; legacy `baseCommit`-only
       files read as unpinned; data-driven round-trip spec over every rule

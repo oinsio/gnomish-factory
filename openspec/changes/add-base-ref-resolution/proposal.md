@@ -56,6 +56,11 @@ supersedes the D7 wording in `git-task-persistence` while preserving the manual
 - MODIFIED: `git-task-persistence` "Task branch naming and base" — the
   "SHALL NOT fetch or pull the base" and "never fetching anything else"
   wording is superseded; pull remains forbidden everywhere. (FR6, FR8)
+- MODIFIED: `pipeline-config` "Pipeline law binds per invocation" — an
+  explicit carve-out: the `base:` section of `config.yaml` binds from the
+  refreshed default branch before the base is chosen; the rest of the law,
+  including the remainder of `config.yaml`, binds from the chosen base as
+  before. (FR2, NFR-S1)
 - Preserved: manual `gnomish run` without `--base` still branches from the
   local HEAD with no fetch; `--base <sha>` and clones without an origin work
   exactly as before. (FR8)

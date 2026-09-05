@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
@@ -18,10 +19,15 @@ import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
+import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The sandboxed-mode realization of {@link TaskRepository} (design D19): the same four lifecycle
@@ -51,6 +57,8 @@ import java.util.List;
  */
 public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
+    private static final Logger log = LoggerFactory.getLogger(GitObjectsTaskRepository.class);
+
     private static final String REF_PREFIX = "refs/heads/";
 
     /** The factory identity that authors lifecycle commits when none is supplied (design D19). */
@@ -61,15 +69,19 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     private final CommitIdentity identity;
     private final Clock clock;
     private final ClaimEpochSource epochs;
+    private final DenialCursorSource denialCursors;
 
     /**
      * @param gitObjects the bare-object facade opened against the factory clone (git dir + a
      *     factory-private temp dir for indexes)
      * @param epochs the tenure every lifecycle commit is stamped with (FR13 of
      *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} where no claim is held
+     * @param denialCursors where a {@code cannotExecute} park reads the position its drained
+     *     denials were read up to (FR3 of fix-denial-attribution-durability);
+     *     {@link DenialCursorSource#NONE} where the run has no environment to ask
      */
-    public GitObjectsTaskRepository(GitObjects gitObjects, ClaimEpochSource epochs) {
-        this(gitObjects, DEFAULT_IDENTITY, Clock.systemUTC(), epochs);
+    public GitObjectsTaskRepository(GitObjects gitObjects, ClaimEpochSource epochs, DenialCursorSource denialCursors) {
+        this(gitObjects, DEFAULT_IDENTITY, Clock.systemUTC(), epochs, denialCursors);
     }
 
     /**
@@ -78,13 +90,20 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
      * @param clock the source of commit timestamps and {@code createdAt} — injectable so specs pin
      *     deterministic commit ids (design D19)
      * @param epochs the tenure every lifecycle commit is stamped with (FR13)
+     * @param denialCursors the escalation park's denial-position source (FR3 of
+     *     fix-denial-attribution-durability)
      */
     public GitObjectsTaskRepository(
-            GitObjects gitObjects, CommitIdentity identity, Clock clock, ClaimEpochSource epochs) {
+            GitObjects gitObjects,
+            CommitIdentity identity,
+            Clock clock,
+            ClaimEpochSource epochs,
+            DenialCursorSource denialCursors) {
         this.gitObjects = gitObjects;
         this.identity = identity;
         this.clock = clock;
         this.epochs = epochs;
+        this.denialCursors = denialCursors;
     }
 
     @Override
@@ -107,7 +126,13 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         var writer = new TaskLifecycleCommitWriter(gitObjects, identity, now, epochs);
         TaskJsonDto dto = TaskJsonMapper.toDto(context, base.hex(), now, null, null, false);
         writer.commit(
-                taskId, ref, true, base, writer.putTaskAndState(taskId, dto, initialState), TaskLifecycleEvent.STARTED);
+                taskId,
+                ref,
+                true,
+                base,
+                // A branch being created has no tip and so no committed cursor to carry forward.
+                writer.putTaskAndState(taskId, dto, initialState, null),
+                TaskLifecycleEvent.STARTED);
     }
 
     @Override
@@ -115,7 +140,8 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         String ref = refFor(taskId);
         var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
-        TaskRecord current = writer.readCurrent(taskId, tip, TaskLifecycleEvent.RESUMED);
+        TaskJsonDto currentDto = writer.readCurrentDto(taskId, tip, TaskLifecycleEvent.RESUMED);
+        TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 
         List<Decision> decisions = new ArrayList<>(current.context().decisions());
         decisions.add(decision);
@@ -126,21 +152,32 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
                 decisions);
 
         // Appending the resume decision resets outcome to null in the same commit (FR5/D9 contract).
+        // Both envelopes' denial cursors are carried forward unchanged (FR5 of
+        // fix-denial-attribution-durability): a RESUMED rewrite is a lifecycle transition, not a
+        // denial read, so it has no position of its own to record and must not erase the one the
+        // tip carries — that erasure is what sent every resumed run back to a full log re-read.
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                updated, current.baseCommit(), current.createdAt(), null, current.lastEscalation(), false);
+                        updated, current.baseCommit(), current.createdAt(), null, current.lastEscalation(), false)
+                .withEgressCursor(currentDto.egressCursor());
         // One transition, one commit (FR4): the decision and its attempt-counter reset are two
         // tree edits of a single bare-object commit, never two tips.
         writer.commit(
-                taskId, ref, false, tip, writer.putTaskAndState(taskId, dto, resetState), TaskLifecycleEvent.RESUMED);
+                taskId,
+                ref,
+                false,
+                tip,
+                writer.putTaskAndState(taskId, dto, resetState, writer.tipStateCursor(taskId, tip)),
+                TaskLifecycleEvent.RESUMED);
     }
 
     @Override
     public void recordOutcome(String taskId, TaskOutcome outcome) {
-        TaskLifecycleEvent event = eventFor(outcome);
+        TaskLifecycleEvent event = TaskOutcomeLifecycleEvent.of(outcome);
         String ref = refFor(taskId);
         var writer = new TaskLifecycleCommitWriter(gitObjects, identity, Instant.now(clock), epochs);
         ObjectId tip = writer.requireTip(taskId, ref, event);
-        TaskRecord current = writer.readCurrent(taskId, tip, event);
+        TaskJsonDto currentDto = writer.readCurrentDto(taskId, tip, event);
+        TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 
         EscalationReport lastEscalation =
                 outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : current.lastEscalation();
@@ -150,8 +187,43 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         // tracker write follows. Aborted's tracker write is best-effort and carries no marker.
         boolean pending = !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending);
+                        current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending)
+                .withEgressCursor(cursorFor(lastEscalation, currentDto.egressCursor()));
         writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto), event);
+    }
+
+    /**
+     * The cursor this lifecycle commit records: the position the environment's last denial read
+     * left behind when the escalation being written is a {@code cannotExecute} carrying denials,
+     * and the tip's own cursor carried forward otherwise (FR3, FR5 of
+     * fix-denial-attribution-durability).
+     *
+     * <p>Only that one escalation kind moves the cursor, because it is the only record on this
+     * write path that carries denials: the round died before its close, so no attempt record was
+     * built and no {@code state.json} commit will delimit them. Recording a position on any other
+     * park would put a position on the branch ahead of the record it delimits — the one failure
+     * mode design D3 rules out, since it silences the gap instead of duplicating it.
+     *
+     * <p>Best-effort (NFR-R1): an environment that cannot answer leaves the escalation cursorless
+     * and the park succeeds. Losing the position costs a re-read, never a denial.
+     */
+    private @Nullable EgressCursorDto cursorFor(
+            @Nullable EscalationReport lastEscalation, @Nullable EgressCursorDto tipCursor) {
+        if (!(lastEscalation instanceof EscalationReport.CannotExecute cannotExecute)
+                || cannotExecute.denials().isEmpty()) {
+            return tipCursor;
+        }
+        Optional<DenialCursor> drained;
+        try {
+            drained = denialCursors.currentPosition();
+        } catch (RuntimeException e) {
+            log.debug(
+                    "the environment could not answer its denial position while parking a cannotExecute"
+                            + " escalation; recording the escalation without one",
+                    e);
+            return tipCursor;
+        }
+        return drained.map(c -> new EgressCursorDto(c.source(), c.position())).orElse(tipCursor);
     }
 
     /**
@@ -188,14 +260,5 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
     private static String refFor(String taskId) {
         return REF_PREFIX + TaskIdSanitizer.branchName(taskId);
-    }
-
-    private static TaskLifecycleEvent eventFor(TaskOutcome outcome) {
-        return switch (outcome) {
-            case TaskOutcome.Completed ignored -> TaskLifecycleEvent.COMPLETED;
-            case TaskOutcome.Paused ignored -> TaskLifecycleEvent.PAUSED;
-            case TaskOutcome.Escalated ignored -> TaskLifecycleEvent.ESCALATED;
-            case TaskOutcome.Aborted ignored -> TaskLifecycleEvent.ABORTED;
-        };
     }
 }

@@ -62,7 +62,7 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
         }
         Path indexDir = tempDir.resolve("index-${clone.fileName}")
         Files.createDirectories(indexDir)
-        def bare = new GitObjectsTaskRepository(GitObjects.open(clone.resolve('.git'), indexDir), ClaimEpochSource.NONE)
+        def bare = new GitObjectsTaskRepository(GitObjects.open(clone.resolve('.git'), indexDir), ClaimEpochSource.NONE, DenialCursorSource.NONE)
         new PushBestEffortTaskLifecycleStore(bare, runner, clone)
     }
 

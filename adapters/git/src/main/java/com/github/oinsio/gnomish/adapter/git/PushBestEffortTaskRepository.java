@@ -73,19 +73,10 @@ public final class PushBestEffortTaskRepository implements TaskRepository {
     @Override
     public void recordOutcome(String taskId, TaskOutcome outcome) {
         delegate.recordOutcome(taskId, outcome);
-        pushFor(taskId, eventFor(outcome).name());
+        pushFor(taskId, TaskOutcomeLifecycleEvent.of(outcome).name());
     }
 
     private void pushFor(String taskId, String event) {
         push.pushAfter(taskId, event, cloneDir, TaskIdSanitizer.branchName(taskId));
-    }
-
-    private static TaskLifecycleEvent eventFor(TaskOutcome outcome) {
-        return switch (outcome) {
-            case TaskOutcome.Completed ignored -> TaskLifecycleEvent.COMPLETED;
-            case TaskOutcome.Paused ignored -> TaskLifecycleEvent.PAUSED;
-            case TaskOutcome.Escalated ignored -> TaskLifecycleEvent.ESCALATED;
-            case TaskOutcome.Aborted ignored -> TaskLifecycleEvent.ABORTED;
-        };
     }
 }

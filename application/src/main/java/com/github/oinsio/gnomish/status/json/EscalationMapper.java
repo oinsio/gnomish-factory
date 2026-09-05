@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.status.json;
 
+import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 
 /**
@@ -35,7 +36,15 @@ final class EscalationMapper {
             case EscalationReport.PipelineMismatch pipelineMismatch ->
                 new EscalationDto.PipelineMismatch("pipelineMismatch", null, null, pipelineMismatch.staleStage());
             case EscalationReport.CannotExecute cannotExecute ->
-                new EscalationDto.CannotExecute("cannotExecute", null, null, cannotExecute.cause());
+                // The denials of a round that left no attempt record ride the escalation
+                // itself (FR2 of fix-denial-attribution-durability), through the one
+                // finding shape a check's findings and an attempt's denials already use.
+                new EscalationDto.CannotExecute(
+                        "cannotExecute",
+                        null,
+                        null,
+                        cannotExecute.cause(),
+                        AttemptMapper.toFindings(Denial.findings(cannotExecute.denials())));
         };
     }
 }

@@ -71,10 +71,61 @@ class EscalationReportSpec extends Specification {
     // FR10: CannotExecute exposes the preserved cause as constructed
     def "CannotExecute exposes its cause as constructed"() {
         when: 'a CannotExecute report is created'
-        def report = new EscalationReport.CannotExecute('network error: java.net.ConnectException ...')
+        def report = new EscalationReport.CannotExecute('network error: java.net.ConnectException ...', [])
 
         then: 'the cause is exposed exactly as constructed'
         report.cause() == 'network error: java.net.ConnectException ...'
+    }
+
+    // FR1 of fix-denial-attribution-durability: the report carries the denials drained from
+    //     the round that could not execute — the round left no attempt record to hold them.
+    def "CannotExecute exposes the denials of the round that could not execute"() {
+        given: 'a denial the guard recorded before the round died'
+        def denial = Denial.unidentified(new Finding('egress denied: POST paste.example/api', 'paste.example', null))
+
+        when: 'a CannotExecute report is created carrying it'
+        def report = new EscalationReport.CannotExecute('boom', [denial])
+
+        then: 'the denial is exposed exactly as constructed'
+        report.denials() == [denial]
+    }
+
+    // FR1 of fix-denial-attribution-durability: an executor with no execution environment
+    //     reports no denials, and the empty list is the normal case.
+    def "CannotExecute accepts an empty denials list"() {
+        when: 'a CannotExecute report is created with no denials'
+        def report = new EscalationReport.CannotExecute('boom', [])
+
+        then: 'the denials list is empty'
+        report.denials().isEmpty()
+    }
+
+    // FR1: denials are copied on construction — later source mutation cannot leak in
+    def "CannotExecute denials are defensively copied from the source"() {
+        given: 'a mutable source list holding one denial'
+        def denial = Denial.unidentified(new Finding('egress denied: POST paste.example/api', null, null))
+        def source = [denial]
+
+        when: 'a CannotExecute is created and the source is then mutated'
+        def report = new EscalationReport.CannotExecute('boom', source)
+        source.add(Denial.unidentified(new Finding('sneaked in', null, null)))
+
+        then: 'the report keeps its original single denial'
+        report.denials() == [denial]
+    }
+
+    // FR1: the exposed denials list is unmodifiable — it is carried verbatim
+    def "CannotExecute denials are unmodifiable"() {
+        given: 'a CannotExecute report carrying one denial'
+        def report = new EscalationReport.CannotExecute('boom', [
+            Denial.unidentified(new Finding('egress denied', null, null))
+        ])
+
+        when: 'a caller tries to add a denial'
+        report.denials().add(Denial.unidentified(new Finding('another', null, null)))
+
+        then: 'the modification is rejected'
+        thrown(UnsupportedOperationException)
     }
 
     // FR10: an attempt limit below one makes no sense — zero and negative are rejected
@@ -175,7 +226,7 @@ class EscalationReportSpec extends Specification {
     // FR10: CannotExecute.cause is required — the preserved stack trace must be present
     def "CannotExecute rejects a blank cause with the component named"() {
         when: 'a CannotExecute is created with a blank cause'
-        new EscalationReport.CannotExecute(cause)
+        new EscalationReport.CannotExecute(cause, [])
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)

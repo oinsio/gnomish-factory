@@ -26,7 +26,7 @@ class EscalationReportSealedSpec extends Specification {
         new EscalationReport.DecisionNeeded('Q?', []) | 'decision: Q?'
         new EscalationReport.CannotVerify(sampleCheck(), 'down', '') | 'cannot-verify: down'
         new EscalationReport.PipelineMismatch('legacy') | 'mismatch: legacy'
-        new EscalationReport.CannotExecute('boom') | 'cannot-execute: boom'
+        new EscalationReport.CannotExecute('boom', []) | 'cannot-execute: boom'
     }
 
     // FR10: reports are values — equal content means equal reports
@@ -37,7 +37,7 @@ class EscalationReportSealedSpec extends Specification {
         new EscalationReport.CannotVerify(sampleCheck(), 'r', 'd') ==
                 new EscalationReport.CannotVerify(sampleCheck(), 'r', 'd')
         new EscalationReport.PipelineMismatch('s') == new EscalationReport.PipelineMismatch('s')
-        new EscalationReport.CannotExecute('c') == new EscalationReport.CannotExecute('c')
+        new EscalationReport.CannotExecute('c', []) == new EscalationReport.CannotExecute('c', [])
 
         and: 'differing content makes them unequal'
         new EscalationReport.AttemptsExhausted(1) != new EscalationReport.AttemptsExhausted(2)

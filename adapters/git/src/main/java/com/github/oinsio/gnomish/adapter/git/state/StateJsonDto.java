@@ -43,4 +43,4 @@ public record StateJsonDto(
         int attemptsUsed,
         List<StateAttemptDto> attempts,
         StateUsageDto totals,
-        @Nullable StateEgressCursorDto egressCursor) {}
+        @Nullable EgressCursorDto egressCursor) {}

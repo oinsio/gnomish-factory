@@ -71,7 +71,7 @@ public record AttemptRecord(
         List<CheckResult> checkResults,
         ExecutorUsage executorUsage,
         JudgeUsage judgeUsage,
-        List<Finding> denials) {
+        List<Denial> denials) {
 
     /**
      * How a recorded round ended, set explicitly by the engine when it records the

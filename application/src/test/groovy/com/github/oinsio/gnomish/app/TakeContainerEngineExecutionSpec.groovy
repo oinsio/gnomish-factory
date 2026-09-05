@@ -11,7 +11,9 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -42,7 +44,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         {} as Workspace
     }
 
-    private ExecutionResult.DecisionNeeded decisionRound(String taskId = 'PROJ-1') {
+    private static ExecutionResult.DecisionNeeded decisionRound(String taskId = 'PROJ-1') {
         new ExecutionResult.DecisionNeeded(
                 'which way?', [], ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
     }
@@ -57,7 +59,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
     }
 
-    private TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker) {
+    private static TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker) {
         new TakeContainerEngineExecution(
                 assembly, new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag(), CLONE_DIR)
     }
@@ -85,7 +87,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         // so a third, verdict-less pass here would only ever touch another session's manual
         // objects, outside the daemon's ledger, while a slot waits on it.
         0 * support.sweepOrphans()
-        1 * support.restoreDenialCursor()
+        1 * support.restoreDenials()
         1 * support.completeAndDispose(_)
         0 * support.keepStopped()
         0 * support.recordAborted(_)
@@ -218,11 +220,11 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         result instanceof TakeResult.Revoked
     }
 
-    private static com.github.oinsio.gnomish.domain.engine.TaskContext trackerContext(String taskId = 'PROJ-1') {
-        new com.github.oinsio.gnomish.domain.engine.TaskContext(taskId, 'title', 'body', [])
+    private static TaskContext trackerContext(String taskId = 'PROJ-1') {
+        new TaskContext(taskId, 'title', 'body', [])
     }
 
-    private static com.github.oinsio.gnomish.domain.engine.TaskState trackerState() {
-        com.github.oinsio.gnomish.domain.engine.TaskState.atStageStart('build')
+    private static TaskState trackerState() {
+        TaskState.atStageStart('build')
     }
 }

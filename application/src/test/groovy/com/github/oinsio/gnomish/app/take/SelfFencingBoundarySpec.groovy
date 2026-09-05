@@ -1,12 +1,10 @@
 package com.github.oinsio.gnomish.app.take
 
+import com.github.oinsio.gnomish.app.TrackerTaskFixtures
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -33,21 +31,17 @@ class SelfFencingBoundarySpec extends Specification {
     private RevocationCheckingAttemptPersistence persistence =
     new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, flag)
 
-    private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
-    }
-
     // FR13: an unfenced boundary costs no extra read — the freeze is the exception, not the rule
     def "a confirmed claim makes no re-verification read of its own"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
 
         then: 'exactly one fetchTask — the ordinary post-persist revocation check, no second read'
         1 * delegate.persist('PROJ-1', STATE, TRACE)
-        1 * tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        1 * tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
     }
 
     // FR13: connectivity returned and the claim is still ours — the freeze lifts and the round is
@@ -55,7 +49,7 @@ class SelfFencingBoundarySpec extends Specification {
     def "a re-verified claim lifts the freeze and the round is written"() {
         given:
         flag.claimUnconfirmed(REF)
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -73,7 +67,7 @@ class SelfFencingBoundarySpec extends Specification {
     def "a claim that moved freezes the round: nothing is written"() {
         given:
         flag.claimUnconfirmed(REF)
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working('gnomish-other-99'))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working('gnomish-other-99'))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -91,7 +85,7 @@ class SelfFencingBoundarySpec extends Specification {
     def "a task no longer Working freezes the round too"() {
         given:
         flag.claimUnconfirmed(REF)
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Ready())
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Ready())
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -107,7 +101,7 @@ class SelfFencingBoundarySpec extends Specification {
         given:
         flag.claimUnconfirmed(REF)
         flag.claimLost(REF)
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Ready())
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Ready())
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)

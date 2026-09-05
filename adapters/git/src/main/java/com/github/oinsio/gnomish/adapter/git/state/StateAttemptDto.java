@@ -15,7 +15,9 @@ import org.jspecify.annotations.Nullable;
  * <p>{@code denials} is additive under contract v1 (D5 of
  * fix-denial-report-attachment): a state file written before the field existed
  * binds the component to null, which the canonical constructor normalizes to
- * empty, so every pre-existing document stays readable.
+ * empty, so every pre-existing document stays readable. Each entry additionally
+ * carries the identity its denial source assigned it, itself additive and absent
+ * on entries written before it existed (FR7 of fix-denial-attribution-durability).
  *
  * <p>Implements FR3, FR4 of add-git-workflow; FR4 of fix-denial-report-attachment.
  *
@@ -34,7 +36,7 @@ public record StateAttemptDto(
         String result,
         String startedAt,
         List<StateCheckDto> checks,
-        List<StateFindingDto> denials,
+        List<StateDenialDto> denials,
         StateUsageDto executorUsage,
         StateJudgeUsageDto judgeUsage) {
 
@@ -50,7 +52,7 @@ public record StateAttemptDto(
      * filter suppresses mutations inside a record's canonical constructor, which
      * would exempt this default from the mutation gate.
      */
-    private static List<StateFindingDto> absentAsEmpty(@Nullable List<StateFindingDto> denials) {
+    private static List<StateDenialDto> absentAsEmpty(@Nullable List<StateDenialDto> denials) {
         return denials == null ? List.of() : List.copyOf(denials);
     }
 }

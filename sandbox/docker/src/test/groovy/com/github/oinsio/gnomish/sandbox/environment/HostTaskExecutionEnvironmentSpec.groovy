@@ -46,10 +46,6 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
         new HostTaskExecutionEnvironment(workingCopy, clock, allowlist)
     }
 
-    private static String readFully(InputStream stream) {
-        new String(stream.readAllBytes(), StandardCharsets.UTF_8)
-    }
-
     // FR2: the host passport declares no isolation
     def "passport declares no isolation, no egress control, no task-to-task boundary"() {
         expect:

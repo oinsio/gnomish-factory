@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import spock.lang.Specification
 
 /**
@@ -26,7 +27,7 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
         judge.passport() == CapabilityPassport.container()
 
         and: 'the denial read reaches this role\'s own guard container (FR1 of fix-denial-report-attachment)'
-        judge.denialFindings() == []
+        judge.readDenials().denials() == []
         docker.runs.last() == GuardCommands.guardLogs(KEY + '-j', 1000, null)
     }
 
@@ -40,7 +41,7 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
         round.passport() == CapabilityPassport.container()
 
         and:
-        round.denialFindings() == []
+        round.readDenials().denials() == []
         docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, null)
     }
 
@@ -55,7 +56,7 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
         verification.passport() == CapabilityPassport.container()
 
         and:
-        verification.denialFindings() == []
+        verification.readDenials().denials() == []
         docker.runs.last() == GuardCommands.guardLogs(KEY + '-v', 1000, null)
     }
 
@@ -71,8 +72,8 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
         def seam = environments(KEY)
 
         when:
-        seam.restoreDenialCursor(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
-        seam.roundEnvironment().denialFindings()
+        seam.restoreDenials(DenialRestoration.at(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00.000000001Z')))
+        seam.roundEnvironment().readDenials().denials()*.finding()
 
         then: 'the round box reads its guard log from the committed position, not from the start'
         docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T10:00:00.000000001Z')

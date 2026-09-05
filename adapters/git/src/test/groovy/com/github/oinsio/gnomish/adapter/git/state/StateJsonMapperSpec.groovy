@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionExcepti
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
+import com.github.oinsio.gnomish.domain.engine.Denial
+import com.github.oinsio.gnomish.domain.engine.DenialIdentity
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
@@ -273,7 +275,7 @@ class StateJsonMapperSpec extends Specification {
     def "FR5: toDto carries the environment's denial cursor into the document"() {
         given:
         def state = TaskState.atStageStart("implement")
-        def cursor = new StateEgressCursorDto("sha256:guard-container", "2026-08-19T10:00:00.000000001Z")
+        def cursor = new EgressCursorDto("sha256:guard-container", "2026-08-19T10:00:00.000000001Z")
 
         when:
         def json = TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state, cursor))
@@ -356,7 +358,13 @@ class StateJsonMapperSpec extends Specification {
                 "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
         def check = new CheckResult(new CheckRef(0, "command:./gradlew test"), new Verdict.Pass(), Duration.ofMillis(9))
         def record = new AttemptRecord(
-                0, AttemptRecord.Result.PASSED, startedAt, [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+                0,
+                AttemptRecord.Result.PASSED,
+                startedAt,
+                [check],
+                ExecutorUsage.none(),
+                JudgeUsage.none(),
+                [Denial.unidentified(denial)])
         def state = new TaskState(new Position.AtStage("implement"), 1, [record], ExecutorUsage.none())
 
         when:
@@ -365,8 +373,8 @@ class StateJsonMapperSpec extends Specification {
 
         then: 'the denial rides its own field, in the same shape a check finding uses (NFR-S1: no body)'
         dto.attempts()[0].denials() == [
-            new StateFindingDto(
-            "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
+            new StateDenialDto(
+            "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST", null)
         ]
         json.contains('"denials":[{"message":"egress denied: paste.example.com:443"')
 
@@ -404,5 +412,58 @@ class StateJsonMapperSpec extends Specification {
 
         then: 'the document is readable and the absent field is an empty list, never null'
         state.attempts()[0].denials() == []
+    }
+
+    // FR7 of fix-denial-attribution-durability: the identity is what makes a re-read a merge
+    //     rather than a doubled report, so it must survive the same round-trip the finding does
+    def "FR7: an attempt denial's identity survives the state-file round-trip"() {
+        given: 'a round whose denial the guard stamped with its own source and event time'
+        def denial = new Denial(
+                new Finding("egress denied: paste.example.com:443", "paste.example.com:443", "kind=connect"),
+                new DenialIdentity('sha256:container-1', '2026-08-19T10:00:00.000000001Z'))
+        def record = new AttemptRecord(
+                0, AttemptRecord.Result.PASSED, startedAt, [], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+        def state = new TaskState(new Position.AtStage("implement"), 1, [record], ExecutorUsage.none())
+
+        when:
+        def json = TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state))
+
+        then: 'the identity rides the denial entry, not the shared finding shape'
+        json.contains('"identity":{"source":"sha256:container-1","at":"2026-08-19T10:00:00.000000001Z"}')
+
+        and: 'and comes back identical, so the merge can recognize the event again'
+        StateJsonMapper.fromDto(TaskStateJson.mapper().readValue(json, StateJsonDto)) == state
+    }
+
+    // FR7: additive under contract v1 — "unknown, keep": an entry written before identities
+    //     existed matches nothing on a merge and is therefore re-read rather than dropped
+    def "FR7: a denial entry written before identities existed reads as unidentified"() {
+        given: 'a v1 attempt whose denial carries the finding fields only'
+        def json = '''
+        {
+          "version": 1,
+          "position": {"type": "atStage", "stage": "implement"},
+          "attemptsUsed": 1,
+          "attempts": [{
+            "round": 0,
+            "result": "passed",
+            "startedAt": "2026-07-18T09:00:00Z",
+            "checks": [],
+            "denials": [{"message": "egress denied: paste.example.com:443"}],
+            "executorUsage": {"wallMillis": null, "tokensByModel": {}, "byTool": []},
+            "judgeUsage": {"perVote": []}
+          }],
+          "totals": {"wallMillis": null, "tokensByModel": {}, "byTool": []}
+        }
+        '''
+
+        when:
+        def state = StateJsonMapper.fromDto(StateJsonMapper.readDto(json))
+
+        then:
+        state.attempts()[0].denials()*.finding()*.message() == [
+            'egress denied: paste.example.com:443'
+        ]
+        state.attempts()[0].denials()*.identity() == [null]
     }
 }

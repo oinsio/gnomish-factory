@@ -21,18 +21,18 @@ The predecessor's cursor feature is dead in production: `LeasedEnvironment`
 forwards none of the port's three denial default methods, and no spec drives
 the production wiring. This block revives it and closes the defect class.
 
-- [ ] 1.1 `LeasedEnvironment`: forward `denialFindings()`, `denialCursor()`,
+- [x] 1.1 `LeasedEnvironment`: forward `denialFindings()`, `denialCursor()`,
       and `restoreDenialCursor(...)` to the leased delegate; extend
       `LeasedEnvironmentSpec` to assert all three forwards.
-- [ ] 1.2 Production-wiring spec (M4): build `EnvironmentAttemptPersistence`
+- [x] 1.2 Production-wiring spec (M4): build `EnvironmentAttemptPersistence`
       over a real `LeasedEnvironment` (supplier returning a denial-bearing
       double) and assert the committed `state.json` carries the cursor; drive
       the restore half through the same view. This is the spec whose absence
       let the feature ship dead.
-- [ ] 1.3 `ObservedSandboxLifecyclePass`: override the three-arg `run` so the
+- [x] 1.3 `ObservedSandboxLifecyclePass`: override the three-arg `run` so the
       caller's extra sink joins the fanout instead of being dropped by the
       inherited default; spec the three-arg path.
-- [ ] 1.4 Architecture rule (M5): `DelegatingDecoratorCompletenessSpec` in the
+- [x] 1.4 Architecture rule (M5): `DelegatingDecoratorCompletenessSpec` in the
       bootstrap architecture package — a production class implementing
       interface `I` and holding a same-type delegate (fields, constructor
       params, record components, `Supplier<I>`) must override every default
@@ -44,42 +44,52 @@ the production wiring. This block revives it and closes the defect class.
 
 ## 2. Failure channel — denials leave a round that throws (FR1, NFR-O1, D1)
 
-- [ ] 2.1 Add `ExecutorFailure` to the engine port package: a
+- [x] 2.1 Add `ExecutorFailure` to the engine port package: a
       `RuntimeException` carrying the original failure as its cause and an
       immutable `List<Finding> denials()`; javadoc traces FR1 and states that
       any other `RuntimeException` stays an empty-denial `CannotExecute`.
-- [ ] 2.2 Add `List<Finding> denials` to `EscalationReport.CannotExecute`
+- [x] 2.2 Add `List<Finding> denials` to `EscalationReport.CannotExecute`
       (defensively copied, possibly empty); update every construction and
       render site, keeping the escalation text unchanged.
-- [ ] 2.3 In `RoundExecution` (engine), map a caught `ExecutorFailure` to
+- [x] 2.3 In `RoundExecution` (engine), map a caught `ExecutorFailure` to
       `RoundOutcome.CannotExecute` — which gains a denials component — with the
       rendered **cause** (not the wrapper); in `StageAttemptLoop`, copy the
       outcome's denials onto `EscalationReport.CannotExecute`; every other
       `RuntimeException` keeps today's behavior with an empty list.
-- [ ] 2.4 In `ExecutorRoundExecution` (agent adapter — distinct from the
+- [x] 2.4 In `ExecutorRoundExecution` (agent adapter — distinct from the
       engine's `RoundExecution`), wrap the original exception in
       `ExecutorFailure` with the drained denials instead of only logging
       them; the round is still discarded exactly once by the caller.
-- [ ] 2.5 Spec the channel end to end at the engine level (FR1): a round whose
+- [x] 2.5 Spec the channel end to end at the engine level (FR1): a round whose
       executor throws with denials escalates `CannotExecute` carrying them,
       `attemptsUsed` and the attempt history unchanged, and the escalation text
       identical to the same failure without denials.
 
 ## 3. Report surfaces (FR2, NFR-S1, UX1, UX2, D4)
 
-- [ ] 3.1 `TaskJsonMapper`: serialize the escalation's `denials` with the
+- [x] 3.1 `TaskJsonMapper`: serialize the escalation's `denials` with the
       finding DTO shape under `lastEscalation`; an absent field reads as empty
       (existing `task.json` documents parse unchanged).
-- [ ] 3.2 `StatusReportJsonMapper`: the same field on the `cannotExecute`
-      escalation; update `status-report-v1.reference.json`, which needs its
-      first `cannotExecute` escalation sample (the current `lastEscalation`
-      sample is `decisionNeeded`; the equivalence contract pins the document).
-- [ ] 3.3 Text renderer: list the escalation's denials beside the escalation
+- [x] 3.2 `StatusReportJsonMapper`: the same field on the `cannotExecute`
+      escalation, pinned byte-exactly. The canonical document cannot carry the
+      sample — its single `lastEscalation` slot holds `decisionNeeded`, which
+      the spec's canonical example and the equivalence contract both pin, so
+      writing `cannotExecute` there would move the pin rather than add one. Add
+      a second anchor instead: `status-report-v1.escalations.reference.jsonl`,
+      one compact line per escalation kind (the `ledger-v1.reference.jsonl`
+      shape), with a completeness check over `EscalationReport`'s permitted
+      subclasses so a future kind cannot ship unpinned. The canonical document
+      is untouched.
+- [x] 3.3 Text renderer: list the escalation's denials beside the escalation
       reason, through the funnel-fenced finding line; zero denials render
       nothing (UX2).
-- [ ] 3.4 Keep the state↔live report equivalence contract green with escalation
-      denials present, and extend it with a `cannotExecute` case.
-- [ ] 3.5 Spec M1: a round killed on its round timeout with a denial shows that
+- [x] 3.4 Keep the state↔live report equivalence contract green with escalation
+      denials present, and extend it with a `cannotExecute` case. Fold out the
+      hand-copied reference sample while there: the equivalence spec duplicates
+      `StatusReportJsonMapperSpec#referenceReport` by hand across a module
+      boundary — give both one owner in `:test-fixtures`, beside the reference
+      document they anchor against (precedent: `BoardReferenceFixture`).
+- [x] 3.5 Spec M1: a round killed on its round timeout with a denial shows that
       denial under the escalation in both documents, while `attemptsUsed` and
       `attempts` are unchanged.
 
@@ -95,25 +105,25 @@ and does not touch the guard's cursor mechanics. The read stays bounded by
 the existing guard log tail cap (NFR-C1 — no new task; D6 makes its
 saturation visible).
 
-- [ ] 4.1 One owner for the pair (D7): the environment read hands back
+- [x] 4.1 One owner for the pair (D7): the environment read hands back
       `(findings, positionAfter)` as one value, and the position becomes
       durable only through the same call that persists the record; fold the
       failure-path drain and the attempt path onto this seam.
-- [ ] 4.2 Add the cursor field to `task.json` — same DTO shape as
+- [x] 4.2 Add the cursor field to `task.json` — same DTO shape as
       `state.json`'s `egressCursor` (opaque position + source identity) —
       additive under contract v1; an absent field reads as "no cursor".
-- [ ] 4.3 On the park that records a `CannotExecute` escalation with denials,
+- [x] 4.3 On the park that records a `CannotExecute` escalation with denials,
       the drained position rides the same lifecycle commit as the escalation,
       written through the shared atomic writer (`TaskLifecycleCommitWriter`) —
       best-effort on the environment read: an unanswerable cursor writes none
       and never fails the park (NFR-R1), so the position can lag the record
       but never lead it (FR3).
-- [ ] 4.4 Cursor preservation (FR5): no lifecycle rewrite of `state.json`
+- [x] 4.4 Cursor preservation (FR5): no lifecycle rewrite of `state.json`
       drops a committed cursor — `putTaskAndState` carries the tip's
       `egressCursor` forward (`harden-task-branch-contract` archived
       2026-08-30 with the cursorless rewrite in place, so this change
       carries both the code and the kill-point spec).
-- [ ] 4.5 Teach the resume restore to read the branch tip through the
+- [x] 4.5 Teach the resume restore to read the branch tip through the
       branch-shape classifier of the `task-branch-contract` capability:
       positions are offered only for shapes that carry one, a quarantining
       shape yields none, and the newest source-matching position across
@@ -121,7 +131,7 @@ saturation visible).
       timestamps, totally ordered). The environment's existing stamp check
       keeps dropping a position of a recreated or foreign container with a
       log line and a full tail read (FR4, NFR-O2, NFR-R2).
-- [ ] 4.6 Spec the restore choice daemon-free against the docker fake: an
+- [x] 4.6 Spec the restore choice daemon-free against the docker fake: an
       escalation cursor newer than the attempt cursor wins; attempt-only and
       escalation-only tips restore what they have; a mismatched stamp still
       falls back to a full read and logs; a tip with neither cursor reads
@@ -129,63 +139,63 @@ saturation visible).
       does not lose the cursor (4.4). (If `polish-sandbox-forensics` has
       landed, the docker fake's `inspectContainerState` output carries its
       third `OOMKilled` field.)
-- [ ] 4.7 Mirror of 4.4 for `task.json` (D8): no lifecycle rewrite by either
+- [x] 4.7 Mirror of 4.4 for `task.json` (D8): no lifecycle rewrite by either
       `TaskLifecycleStore` implementation (`GitTaskRepository`,
       `GitObjectsTaskRepository`) drops a committed `task.json` cursor —
       carry the cursor inside the DTO the mapper returns rather than as a
       new positional `toDto` argument, and spec preservation per end.
-- [ ] 4.8 Spec M2 at the environment level: a fresh wrapper standing in for a
+- [x] 4.8 Spec M2 at the environment level: a fresh wrapper standing in for a
       second factory process, resuming after a `CannotExecute` park, reports
       neither the attempts' nor the escalation's already-recorded denials.
 
 ## 5. Identity and loss visibility (FR7, FR8, NFR-O3, UX3, G6, D5, D6)
 
-- [ ] 5.1 `GuardDenialLog`: keep the daemon nanosecond timestamp when parsing
+- [x] 5.1 `GuardDenialLog`: keep the daemon nanosecond timestamp when parsing
       a denial line — each parsed denial pairs the finding with
       `(source id, event timestamp)`; the shared domain `Finding` type is
       untouched.
-- [ ] 5.2 Persistence DTOs: denial entries in `state.json` and `task.json`
+- [x] 5.2 Persistence DTOs: denial entries in `state.json` and `task.json`
       gain the identity additively (absent reads as "unknown, keep");
       `status.json` and the text render do not carry it.
-- [ ] 5.3 Idempotent attach (FR7): merging denials onto a record dedupes by
+- [x] 5.3 Idempotent attach (FR7): merging denials onto a record dedupes by
       identity against the denials already recorded at the branch tip; the
       FR4 fallback logs "re-read: N already present, M recovered".
-- [ ] 5.4 Loss marker (FR8, D6): on `GuardLogCursor` saturation, or a
+- [x] 5.4 Loss marker (FR8, D6): on `GuardLogCursor` saturation, or a
       committed cursor naming a source that no longer holds its log, emit a
       synthetic funnel-fenced loss finding into the same denials list; spec
       that it reaches both documents and the text render (UX3), and that a
       quiet task emits nothing.
-- [ ] 5.5 Spec the merge across processes: a resume whose position is lost
+- [x] 5.5 Spec the merge across processes: a resume whose position is lost
       but whose identities survive re-reads the log and records zero
       duplicates; a resume that lost both reports duplicates plus the NFR-O2
       log line — never silence.
 
 ## 6. API compatibility (D1, predecessor precedent)
 
-- [ ] 6.1 `EscalationReport.CannotExecute` is re-exposed by
+- [x] 6.1 `EscalationReport.CannotExecute` is re-exposed by
       `gnomish-plugin-api`: bump the api version 0.4.0 → 0.5.0 (pre-1.0
       breaking = MINOR) and regenerate both `compat-baseline/` jars in this
       change's diff.
 
 ## 7. Verification and closure
 
-- [ ] 7.1 Full build green: `./gradlew check` including the PIT 100% gate and
+- [x] 7.1 Full build green: `./gradlew check` including the PIT 100% gate and
       the new architecture rule.
-- [ ] 7.2 Verify FR/NFR/UX traceability coverage per
+- [x] 7.2 Verify FR/NFR/UX traceability coverage per
       `.claude/rules/traceability.md`; confirm the predecessor's design D1a is
       superseded by this change's D1 (its "log only" outcome no longer holds).
-- [ ] 7.3 `docs/glossary.md`: update **Denial cursor** (restore now offers the
+- [x] 7.3 `docs/glossary.md`: update **Denial cursor** (restore now offers the
       newest committed position across both documents; lifecycle rewrites
       preserve it) and add **Denial identity** and **Loss marker** entries.
-- [ ] 7.4 `docs/adr/0003-crash-consistency.md`: add the consumed-stream
+- [x] 7.4 `docs/adr/0003-crash-consistency.md`: add the consumed-stream
       principle — a read position becomes durable only with the record it
       delimits, recorded events carry source-assigned identity for idempotent
       re-reads, and known loss is reported in-band — so later transitions
       cite the ADR (provenance: this change).
-- [ ] 7.5 `.claude/rules/manual-sync-pairs.md` (D8): append to the
+- [x] 7.5 `.claude/rules/manual-sync-pairs.md` (D8): append to the
       `GitAttemptPersistence` / `EnvironmentAttemptPersistence` row that the
       denial cursor and identity are deliberately environment-side only —
       host mode has no egress guard, so no denial source exists to mirror
       (provenance: `fix-denial-attribution-durability`).
-- [ ] 7.6 Recommend a Conventional Commits message referencing
+- [x] 7.6 Recommend a Conventional Commits message referencing
       fix-denial-attribution-durability.

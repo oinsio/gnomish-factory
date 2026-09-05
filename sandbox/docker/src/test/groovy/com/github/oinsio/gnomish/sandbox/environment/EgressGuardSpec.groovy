@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -283,7 +284,7 @@ class EgressGuardSpec extends Specification {
         }
 
         when:
-        def findings = guard().denialFindings()
+        def findings = guard().readDenials().denials()*.finding()
 
         then:
         findings*.message() == [
@@ -296,7 +297,7 @@ class EgressGuardSpec extends Specification {
         docker.onRun = { List<String> args -> failed('No such container') }
 
         expect:
-        guard().denialFindings() == []
+        guard().readDenials().denials()*.finding() == []
     }
 
     // D3 of fix-denial-report-attachment: the guard container outlives a lease's rounds, so a
@@ -310,11 +311,11 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when: 'the first round closes and reads'
-        def first = g.denialFindings()
+        def first = g.readDenials().denials()*.finding()
 
         and: 'a second denial is recorded, then the second round closes and reads'
         log << denialLine('2026-08-19T10:05:00.000000000Z', 'second.example.com')
-        def second = g.denialFindings()
+        def second = g.readDenials().denials()*.finding()
 
         then: 'each read carries only its own round\'s denial'
         first*.message() == [
@@ -325,7 +326,7 @@ class EgressGuardSpec extends Specification {
         ]
 
         and: 'the second read asked the daemon for everything past the first read\'s last line'
-        docker.runs.last() == GuardCommands.guardLogs('k1', 1000, '2026-08-19T10:00:00.000000001Z')
+        lastLogRead() == GuardCommands.guardLogs('k1', 1000, '2026-08-19T10:00:00.000000001Z')
     }
 
     def "D3: a read with no new denials is empty"() {
@@ -337,8 +338,8 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when: 'nothing new happened between the two reads'
-        g.denialFindings()
-        def second = g.denialFindings()
+        g.readDenials().denials()*.finding()
+        def second = g.readDenials().denials()*.finding()
 
         then: 'the quiet round reports nothing (UX2)'
         second == []
@@ -355,14 +356,14 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when: 'a first read moves the cursor, then a quiet round reads nothing'
-        g.denialFindings()
-        g.denialFindings()
+        g.readDenials().denials()*.finding()
+        g.readDenials().denials()*.finding()
 
         and: 'a third round reads again'
-        def third = g.denialFindings()
+        def third = g.readDenials().denials()*.finding()
 
         then: 'the quiet round left the cursor untouched — the third read still asks past line one'
-        docker.runs.last() == GuardCommands.guardLogs('k1', 1000, '2026-08-19T10:00:00.000000001Z')
+        lastLogRead() == GuardCommands.guardLogs('k1', 1000, '2026-08-19T10:00:00.000000001Z')
 
         and: 'so the already-reported denial is not handed out a second time'
         third == []
@@ -384,15 +385,15 @@ class EgressGuardSpec extends Specification {
 
         and: 'the previous instance read them round by round and committed its cursor'
         def before = guard()
-        before.denialFindings()
-        before.denialFindings()
+        before.readDenials().denials()*.finding()
+        before.readDenials().denials()*.finding()
         def committed = before.denialCursor().orElseThrow()
 
         when: 'the factory restarts, attaches to the same container, and is handed that cursor'
         def afterResume = guard()
-        afterResume.restoreDenialCursor(committed)
+        afterResume.restoreDenials(DenialRestoration.at(committed))
         afterResume.ensureRunning()
-        def firstRoundAfterResume = afterResume.denialFindings()
+        def firstRoundAfterResume = afterResume.readDenials().denials()*.finding()
 
         then: 'the resumed round reports only what happened after the committed position — nothing'
         firstRoundAfterResume == []
@@ -401,7 +402,52 @@ class EgressGuardSpec extends Specification {
         log << denialLine('2026-08-19T10:10:00.000000000Z', 'third.example.com')
 
         then: 'that one, and only that one, is its own'
-        afterResume.denialFindings()*.message() == [
+        afterResume.readDenials().denials()*.finding()*.message() == [
+            'egress denied: third.example.com:443'
+        ]
+    }
+
+    // M2 of fix-denial-attribution-durability: the failure path is the one with no attempt record
+    //     to carry its denials — they were drained onto a cannotExecute escalation, and the
+    //     position that drain advanced to rode the park's own commit. A second factory process
+    //     resuming over the surviving container must report neither those nor the attempts'.
+    def "M2: a resume after a cannotExecute park replays neither the attempts' nor the escalation's denials"() {
+        given: 'a guard container whose log holds the denial of a round that closed normally'
+        def log = [
+            denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
+        ]
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, log, 'sha256:container-1')
+        }
+
+        and: 'the first process closed that round, committing its denial and position with the attempt'
+        def before = guard()
+        before.readDenials().denials()*.finding()
+
+        and: 'then a round denied something and died before its close, and the park drained it'
+        log << denialLine('2026-08-19T10:05:00.000000000Z', 'drained.example.com')
+        def parked = before.readDenials()
+
+        expect: 'the drain took the failed round\'s denial and the position that delimits it'
+        parked.denials()*.finding()*.message() == [
+            'egress denied: drained.example.com:443'
+        ]
+        parked.positionAfter().isPresent()
+
+        when: 'a second factory process attaches to the surviving container with the parked position'
+        def resumed = guard()
+        resumed.restoreDenials(DenialRestoration.at(parked.positionAfter().orElseThrow()))
+        resumed.ensureRunning()
+        def firstRoundAfterResume = resumed.readDenials()
+
+        then: 'neither the attempt\'s denial nor the escalation\'s comes back'
+        firstRoundAfterResume.denials() == []
+
+        when: 'the resumed round denies something of its own'
+        log << denialLine('2026-08-19T10:10:00.000000000Z', 'third.example.com')
+
+        then: 'only that one is reported'
+        resumed.readDenials().denials()*.finding()*.message() == [
             'egress denied: third.example.com:443'
         ]
     }
@@ -423,8 +469,8 @@ class EgressGuardSpec extends Specification {
 
         when:
         def g = guard()
-        g.restoreDenialCursor(foreign)
-        def findings = g.denialFindings()
+        g.restoreDenials(DenialRestoration.at(foreign))
+        def findings = g.readDenials().denials()*.finding()
 
         then: 'the foreign position is dropped and the local log is read from its start'
         findings*.message() == [
@@ -447,7 +493,7 @@ class EgressGuardSpec extends Specification {
         g.denialCursor().isEmpty()
 
         when:
-        g.denialFindings()
+        g.readDenials().denials()*.finding()
 
         then: 'the read position is paired with the container identity it belongs to'
         g.denialCursor().orElseThrow() == new DenialCursor('sha256:container-3', '2026-08-19T10:00:00.000000001Z')
@@ -463,11 +509,10 @@ class EgressGuardSpec extends Specification {
         }
         def g = guard()
 
-        when:
+        when: 'the read hands back its findings and the position that stands after them (D7)'
         def cursor = null
-        def logged = captureDebug(GuardDenialReads) {
-            g.denialFindings()
-            cursor = g.denialCursor()
+        def logged = captureDebug(GuardSourceIdentity) {
+            cursor = g.readDenials().positionAfter()
         }
 
         then: 'a position with no identifiable source is one a later lease must not apply'
@@ -490,7 +535,7 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when: 'several reads and cursor reports happen over the same container'
-        g.denialFindings()
+        g.readDenials().denials()*.finding()
         g.denialCursor()
         g.denialCursor()
 
@@ -522,12 +567,12 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         and: 'a read against the original container caches its identity'
-        g.denialFindings()
+        g.readDenials().denials()*.finding()
         assert g.denialCursor().orElseThrow().source() == 'sha256:container-old'
 
         when: 'the guard is recreated and a later round reads again'
         g.ensureRunning()
-        g.denialFindings()
+        g.readDenials().denials()*.finding()
 
         then: 'the cursor names the container that actually produced the position'
         g.denialCursor().orElseThrow().source() == 'sha256:container-new'
@@ -544,8 +589,8 @@ class EgressGuardSpec extends Specification {
 
         when:
         def g = guard()
-        g.restoreDenialCursor(new DenialCursor('sha256:container-old', '2026-08-19T10:05:00Z'))
-        def logged = capture { g.denialFindings() }
+        g.restoreDenials(DenialRestoration.at(new DenialCursor('sha256:container-old', '2026-08-19T10:05:00Z')))
+        def logged = captureRestore { g.readDenials().denials()*.finding() }
 
         then: 'the unmatched position is not applied — the log is read from its start'
         docker.runs.any { it == GuardCommands.guardLogs('k1', 1000, null) }
@@ -567,11 +612,10 @@ class EgressGuardSpec extends Specification {
         }
         def g = guard()
 
-        when:
+        when: 'the read hands back its findings and the position that stands after them (D7)'
         def cursor = null
-        def logged = captureDebug(GuardDenialReads) {
-            g.denialFindings()
-            cursor = g.denialCursor()
+        def logged = captureDebug(GuardSourceIdentity) {
+            cursor = g.readDenials().positionAfter()
         }
 
         then: 'no source to pair the position with, and no exception out of an observability read'
@@ -584,6 +628,16 @@ class EgressGuardSpec extends Specification {
         }
         traces.size() == 1
         traces[0].throwableProxy != null
+    }
+
+    /**
+     * The last {@code docker logs} the guard issued. Since design D7 of
+     * fix-denial-attribution-durability a read ends by pairing its findings with the position —
+     * which probes the container identity — so the last docker call of a read is the identity
+     * probe, not the log read this assertion is about.
+     */
+    private List<String> lastLogRead() {
+        docker.runs.findAll { it.first() == 'logs' }.last()
     }
 
     /** A daemon that answers the running probe, the identity probe, and --since-filtered logs. */
@@ -605,7 +659,7 @@ class EgressGuardSpec extends Specification {
         docker.onRun = { List<String> args -> ok(chatter(1000)) }
 
         when:
-        def warnings = capture { guard().denialFindings() }
+        def warnings = capture { guard().readDenials().denials()*.finding() }
 
         then:
         warnings.any {
@@ -619,7 +673,7 @@ class EgressGuardSpec extends Specification {
         docker.onRun = { List<String> args -> ok(chatter(999)) }
 
         when:
-        def warnings = capture { guard().denialFindings() }
+        def warnings = capture { guard().readDenials().denials()*.finding() }
 
         then:
         warnings.findAll { it.level == Level.WARN }.isEmpty()
@@ -634,6 +688,17 @@ class EgressGuardSpec extends Specification {
     /** Captures a logger's DEBUG-and-above events through the shared helper (`.claude/rules/logging.md`). */
     private static List<ILoggingEvent> captureDebug(Class<?> owner, Closure emit) {
         def logs = LogCaptureSupport.attach(owner, Level.DEBUG)
+        try {
+            emit()
+            return List.copyOf(logs.list)
+        } finally {
+            logs.detach()
+        }
+    }
+
+    /** Captures what consuming a restored position logs — that decision lives in {@link RestoredDenials}. */
+    private static List<ILoggingEvent> captureRestore(Closure emit) {
+        def logs = LogCaptureSupport.attach(RestoredDenials)
         try {
             emit()
             return List.copyOf(logs.list)
@@ -670,10 +735,12 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when:
-        g.denialFindings()
+        g.readDenials().denials()*.finding()
         refuse = true
         def duringOutage = null
-        def events = capture { duringOutage = g.denialFindings() }
+        def events = capture {
+            duringOutage = g.readDenials().denials()*.finding()
+        }
 
         then: 'the outage is silence to the caller, but not to the log'
         duringOutage == []
@@ -689,7 +756,7 @@ class EgressGuardSpec extends Specification {
         when: 'the daemon recovers and a denial arrived while it was down'
         refuse = false
         log << denialLine('2026-08-19T10:05:00.000000000Z', 'second.example.com')
-        def afterOutage = g.denialFindings()
+        def afterOutage = g.readDenials().denials()*.finding()
 
         then: 'the cursor never moved during the outage, so nothing was lost'
         afterOutage*.message() == [
@@ -714,10 +781,12 @@ class EgressGuardSpec extends Specification {
         def g = guard()
 
         when:
-        g.denialFindings()
+        g.readDenials().denials()*.finding()
         down = true
         def duringOutage = null
-        def events = capture { duringOutage = g.denialFindings() }
+        def events = capture {
+            duringOutage = g.readDenials().denials()*.finding()
+        }
 
         then: 'the outage yields no findings and no exception'
         noExceptionThrown()
@@ -735,7 +804,7 @@ class EgressGuardSpec extends Specification {
         when: 'the daemon comes back and a denial arrived while it was down'
         down = false
         log << denialLine('2026-08-19T10:05:00.000000000Z', 'second.example.com')
-        def afterOutage = g.denialFindings()
+        def afterOutage = g.readDenials().denials()*.finding()
 
         then: 'the cursor never moved during the outage, so nothing was lost'
         afterOutage*.message() == [
@@ -771,5 +840,188 @@ class EgressGuardSpec extends Specification {
             http_proxy : 'http://gnomish-guard:8080',
             https_proxy: 'http://gnomish-guard:8080',
         ]
+    }
+
+    // FR7, M2 of fix-denial-attribution-durability: the position is an optimization, the identity
+    //     is the correctness. A resume that lost its position but knows what the branch already
+    //     records re-reads the whole tail and attaches nothing that is already there.
+    def "FR7: a resume that lost its position but kept the identities records no duplicates"() {
+        given: 'a guard whose log holds two denials the first process already recorded'
+        def log = [
+            denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com'),
+            denialLine('2026-08-19T10:05:00.000000000Z', 'second.example.com')
+        ]
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, log, 'sha256:container-1')
+        }
+        def recorded = guard().readDenials().denials()*.identity() as Set
+
+        when: 'a second process attaches with no position at all, only what the branch records'
+        def resumed = guard()
+        resumed.restoreDenials(new DenialRestoration(Optional.empty(), recorded))
+        def afterResume = resumed.readDenials()
+
+        then: 'the full re-read is merged away entirely — duplicates become a no-op'
+        afterResume.denials() == []
+
+        and: 'the read really did go back to the start; nothing was filtered by a position'
+        docker.runs.any { it == GuardCommands.guardLogs('k1', 1000, null) }
+    }
+
+    // FR7: the merge is reported, so a reviewer can tell a recovered tail from a quiet one
+    def "FR7: a merged re-read says how many were already present and how many were recovered"() {
+        given: 'a guard log the branch records only the first half of'
+        def log = [
+            denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
+        ]
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, log, 'sha256:container-1')
+        }
+        def recorded = guard().readDenials().denials()*.identity() as Set
+        log << denialLine('2026-08-19T10:05:00.000000000Z', 'second.example.com')
+
+        when: 'a resume with no position re-reads the whole tail'
+        def logs = LogCaptureSupport.attach(RecordedDenialMerge)
+        def resumed = guard()
+        resumed.restoreDenials(new DenialRestoration(Optional.empty(), recorded))
+        def afterResume = resumed.readDenials()
+
+        then: 'only the unrecorded event is attached'
+        afterResume.denials()*.finding()*.message() == [
+            'egress denied: second.example.com:443'
+        ]
+
+        and: 'and the merge outcome is on the record'
+        logs.list.any {
+            it.level == Level.INFO && it.formattedMessage.contains('1 already present, 1 recovered')
+        }
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR7: an unstamped denial matches nothing, so it is kept — duplicates over silence (D3)
+    def "FR7: a denial with no identity is never merged away"() {
+        given: 'a guard whose daemon stamped no line, so nothing can be recognized again'
+        def log = [
+            'GNOMISH-EGRESS-DENY {"kind":"connect","host":"first.example.com","port":443}\n'
+        ]
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, log, 'sha256:container-1')
+        }
+        def first = guard().readDenials()
+
+        when:
+        def resumed = guard()
+        resumed.restoreDenials(new DenialRestoration(Optional.empty(), first.denials()*.identity().findAll() as Set))
+        def afterResume = resumed.readDenials()
+
+        then: 'the unidentified denial is reported again rather than silently dropped'
+        first.denials()*.identity() == [null]
+        afterResume.denials()*.finding()*.message() == [
+            'egress denied: first.example.com:443'
+        ]
+    }
+
+    // FR8, D6: a read that fills its tail window lost older lines of that window permanently —
+    //     the report must be able to say "no data" rather than imply "no denials"
+    def "FR8: a saturated tail window is reported as a loss marker beside the denials"() {
+        given: 'a guard log longer than the tail window the read asks for'
+        def log = (1..1000).collect {
+            denialLine("2026-08-19T10:00:0${it % 10}.00000000${it % 9}Z", "h${it}.example.com")
+        }
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, log, 'sha256:container-1')
+        }
+
+        when:
+        def read = guard().readDenials()
+
+        then: 'the loss travels on the findings channel, naming the window it can bound'
+        def marker = read.denials()*.finding().find {
+            it.message().startsWith('egress denial log truncated')
+        }
+        marker != null
+        marker.message().contains('1000-line window')
+        marker.details().contains("the guard container's start")
+
+        and: 'a marker stands for events whose identities are exactly what was lost'
+        read.denials().find { it.finding() == marker }.identity() == null
+    }
+
+    // FR8: the other visible loss — the source that recorded what the branch holds is gone
+    def "FR8: a recorded source that is no longer the live guard is reported as a loss marker"() {
+        given: 'a branch recording denials of a guard container this box no longer runs'
+        def log = [
+            denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
+        ]
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, log, 'sha256:container-live')
+        }
+        def recorded = [
+            new com.github.oinsio.gnomish.domain.engine.DenialIdentity(
+            'sha256:container-gone', '2026-08-19T09:00:00.000000000Z')
+        ] as Set
+
+        when:
+        def g = guard()
+        g.restoreDenials(new DenialRestoration(
+                        Optional.of(new DenialCursor('sha256:container-gone', '2026-08-19T09:30:00Z')), recorded))
+        def read = g.readDenials()
+
+        then: 'the live guard\'s own denial is read, and the dead source\'s silence is named'
+        read.denials()*.finding()*.message().contains('egress denied: first.example.com:443')
+        def marker = read.denials()*.finding().find {
+            it.message().startsWith('egress denials may be lost')
+        }
+        marker != null
+        marker.details().contains('sha256:container-gone')
+        marker.details().contains('sha256:container-live')
+    }
+
+    // FR8: "no denials" and "no data" are different answers, and a quiet task gives the first
+    def "FR8: a quiet task emits neither a denial nor a loss marker"() {
+        given: 'a guard that blocked nothing, resumed with a position of its own live container'
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, [], 'sha256:container-1')
+        }
+
+        when:
+        def g = guard()
+        g.restoreDenials(DenialRestoration.at(new DenialCursor('sha256:container-1', '2026-08-19T10:00:00Z')))
+
+        then:
+        g.readDenials().denials() == []
+    }
+
+    // M2, NFR-O2 of fix-denial-attribution-durability: losing BOTH the position and the identities
+    //     is the one case that still duplicates — and it must never be the case that goes quiet.
+    //     The report repeats, and the reason it repeats is on the record (design D3).
+    def "FR4: a resume that lost position and identities alike duplicates, and says why"() {
+        given: 'a guard whose log still holds the denial the previous process recorded'
+        def log = [
+            denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
+        ]
+        docker.onRun = { List<String> args ->
+            guardDaemon(args, log, 'sha256:container-live')
+        }
+        guard().readDenials()
+
+        when: 'a resume offers a position of a source that is gone, and knows of no recorded denial'
+        def resumed = guard()
+        def logged = captureRestore {
+            resumed.restoreDenials(DenialRestoration.at(
+                    new DenialCursor('sha256:container-gone', '2026-08-19T10:30:00Z')))
+            resumed.readDenials()
+        }
+
+        then: 'the already-recorded denial comes back — a duplicate a reviewer can see, never silence'
+        resumed.readDenials()
+        docker.runs.any { it == GuardCommands.guardLogs('k1', 1000, null) }
+
+        and: 'and the fallback is explainable rather than mysterious'
+        logged.any {
+            it.formattedMessage.contains('reading its log from the start (FR5)')
+        }
     }
 }

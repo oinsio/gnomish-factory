@@ -1,14 +1,12 @@
 package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.TrackerTaskFixtures
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -36,13 +34,9 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     private RevocationCheckingAttemptPersistence persistence =
     new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE)
 
-    private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
-    }
-
     def "persist delegates first, then passes when the task is still Working held by this instance"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -57,7 +51,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "persist throws RevocationDetectedException when the task is Gone"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Gone())
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Gone())
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -75,7 +69,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "a Gone closure reason is folded into the revocation context"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Gone('completed'))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Gone('completed'))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -88,7 +82,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "persist throws RevocationDetectedException when the claim is held by another instance"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working('other-instance-xyz'))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working('other-instance-xyz'))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -101,7 +95,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "persist throws RevocationDetectedException when the task was parked by a human"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -113,7 +107,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "persist throws RevocationDetectedException when the task was released back to Ready"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Ready())
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Ready())
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -125,7 +119,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "persist throws RevocationDetectedException when the task is already Finished"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Finished())
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Finished())
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -152,7 +146,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "the first persist call records progress exactly once"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -163,7 +157,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "a second and third persist call do not re-emit progress"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when: 'three rounds of the same run persist in sequence'
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -226,7 +220,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     def "an unset claim-loss flag leaves the fetchTask check as the sole boundary decision"() {
         given:
         def guarded = new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, new ClaimLossFlag())
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         guarded.persist('PROJ-1', STATE, TRACE)
@@ -240,7 +234,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
     def "a recordProgress throw is swallowed and the round proceeds as if it succeeded"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def logs = LogCaptureSupport.attach(RevocationCheckingAttemptPersistence)
 
         when:

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
+import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -22,7 +23,11 @@ import org.slf4j.LoggerFactory;
  *
  * <p>When the executor port itself throws — its own retries exhausted — the round never
  * completes: this catches the throw, logs it at ERROR, and shapes it into {@link
- * RoundOutcome.CannotExecute}, no round recorded and no verify chain run (FR10, NFR-O1); a
+ * RoundOutcome.CannotExecute}, no round recorded and no verify chain run (FR10, NFR-O1). An
+ * {@link ExecutorFailure} is the same path with attribution: the adapter drained the failed
+ * round's egress denials and handed them over on the wrapper, so they ride the outcome to the
+ * escalation report while the CAUSE — not the wrapper — is what is logged and rendered, leaving
+ * the escalation text unchanged (FR1 of fix-denial-attribution-durability, design D1). A
  * check-adapter throw, by contrast, is {@link VerifyOrchestrator}'s to handle. A successful
  * executor return — either variant, both carrying {@code usage()} — emits {@link
  * EngineEvent.ExecutionFinished} through the shared {@link Events#emit} helper BEFORE the verify
@@ -41,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * never enters a retry's feedback (FR2, FR3 of fix-denial-report-attachment).
  *
  * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
- * FR2, FR3 of fix-denial-report-attachment.
+ * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability.
  *
  * <p>Kept in sync with {@code com.github.oinsio.gnomish.logtext.OperatorEvent}: this class's
  * operator line repeats catalog code {@code GF112} as a literal head, because {@code :domain}
@@ -81,7 +86,9 @@ final class RoundExecution {
      * ExecutionResult.Completed} verifies to {@link RoundOutcome.Verified}, {@link
      * ExecutionResult.DecisionNeeded} skips verification to {@link RoundOutcome.NeedsDecision}. A
      * {@link RuntimeException} the executor throws is caught, logged at ERROR naming the round
-     * key, and shaped into {@link RoundOutcome.CannotExecute} (FR10, NFR-O1). A successful return
+     * key, and shaped into {@link RoundOutcome.CannotExecute} (FR10, NFR-O1) — carrying the
+     * denials of an {@link ExecutorFailure}, or an empty list for any other throw (FR1 of
+     * fix-denial-attribution-durability). A successful return
      * emits {@link EngineEvent.ExecutionFinished} before the switch, so only executed rounds
      * signal "execution done" (FR12).
      *
@@ -104,8 +111,15 @@ final class RoundExecution {
         try {
             result = executor.execute(new StageExecutor.Request(context, stage, workspace, number, feedback));
         } catch (RuntimeException ex) {
-            log.error("[GF112] executor threw for {}", key, ex);
-            return new RoundOutcome.CannotExecute(key, StackTraces.render(ex));
+            // FR1 of fix-denial-attribution-durability: an ExecutorFailure means the adapter
+            // drained the round's denials and handed them over on the wrapper. The CAUSE is what
+            // is logged and rendered, so the escalation text of a failure with denials is
+            // identical to the same failure without them — the wrapper adds attribution, not a
+            // failure mode, and this stays ONE fault with one operator line (rules/logging.md:
+            // one code, one call site).
+            Throwable cause = ex instanceof ExecutorFailure failure ? failure.cause() : ex;
+            log.error("[GF112] executor threw for {}", key, cause);
+            return new RoundOutcome.CannotExecute(key, StackTraces.render(cause), denialsOf(ex));
         }
         Events.emit(listener, new EngineEvent.ExecutionFinished(key, result.usage()));
         return switch (result) {
@@ -113,6 +127,16 @@ final class RoundExecution {
                 verified(context, workspace, stage, key, number, startedAt, completed);
             case ExecutionResult.DecisionNeeded decision -> needsDecision(key, number, startedAt, decision);
         };
+    }
+
+    /**
+     * The denials the adapter drained from the environment of a round that died before its
+     * close, when the failure carries them; every other {@link RuntimeException} reports none —
+     * an executor with no execution environment has nothing to drain (FR1, design D1 of
+     * fix-denial-attribution-durability).
+     */
+    private static List<Denial> denialsOf(RuntimeException failure) {
+        return failure instanceof ExecutorFailure executorFailure ? executorFailure.denials() : List.of();
     }
 
     /**

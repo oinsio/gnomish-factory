@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
-import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
@@ -15,14 +15,13 @@ import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.domain.engine.ToolUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.status.Activity
 import com.github.oinsio.gnomish.status.LiveActivity
+import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
+import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
 import java.nio.file.Path
 import java.time.Duration
@@ -36,8 +35,9 @@ import spock.lang.TempDir
  * read can never reconstruct ({@code activity}, {@code attemptLimit}, see {@link
  * BranchStateReader}'s class javadoc) — to a {@link StatusReport} rendered from the same task's
  * persisted {@code .gnomish-task/} state files. Both renderings are anchored against the same
- * task/attempt data that backs {@code status-report-v1.reference.json}
- * ({@code StatusReportJsonMapperSpec#referenceReport}), so the fixture stays the ground truth
+ * task/attempt data that backs {@code status-report-v1.reference.json} ({@link
+ * StatusReportReferenceFixture}, the one owner of that sample since FR2 of
+ * fix-denial-attribution-durability — this spec rebuilt it by hand until then), so it stays the ground truth
  * for the JSON contract shape on both sides (design D5): state-file DTOs are a separate
  * contract, kept aligned with the status-report view by this content-equivalence test rather
  * than by DTO reuse.
@@ -63,19 +63,12 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
 
     def "FR4: StatusReport rendered from state files is equivalent to the live-rendered report, anchored by status-report-v1.reference.json"() {
         given: 'the same task/attempt data that backs the reference fixture, rendered live'
-        def taskId = 'manual-20260716-143502-x7'
-        def context = new TaskContext(taskId, 'Fix flaky OrderServiceSpec', 'body',
-                [
-                    new Decision('patch in place', 'plan', 'operator', Instant.parse('2026-07-16T14:21:30Z'))
-                ])
-        def state = referenceTaskState()
+        def taskId = StatusReportReferenceFixture.TASK_ID
+        def context = StatusReportReferenceFixture.referenceContext()
+        def state = StatusReportReferenceFixture.referenceTaskState()
 
-        def escalation = new EscalationReport.DecisionNeeded(
-                'Refactor the retry helper or patch in place?', ['refactor', 'patch'])
-        def liveActivity = new LiveActivity(
-                new Activity.Verifying(new CheckRef(0, 'command:./gradlew test'), Instant.parse('2026-07-16T14:41:02Z')),
-                escalation, null)
-        def liveReport = StatusReport.build(context, state, 3, liveActivity)
+        def escalation = StatusReportReferenceFixture.referenceEscalation()
+        def liveReport = StatusReportReferenceFixture.referenceReport()
 
         and: 'the equivalent task.json + state.json content, committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
@@ -114,8 +107,8 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
     def "FR4: a passing attempt's denial survives the state file and renders identically on both sides"() {
         given: 'a passing round that recorded one egress denial'
         def taskId = 'manual-20260716-143502-d1'
-        def denial = new Finding(
-                'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
+        def denial = Denial.unidentified(new Finding(
+                        'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
         def check = new CheckResult(
                 new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
         def attempt = new AttemptRecord(
@@ -144,37 +137,39 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         mapper.serialize(stateFileReport) == mapper.serialize(withoutLiveOnlyFields(liveReport))
     }
 
-    /** Same attempt/state shape as {@code StatusReportJsonMapperSpec#referenceReport}. */
-    private static TaskState referenceTaskState() {
-        def passCheck = new CheckResult(
-                new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
-        def failFinding = new Finding('command exited with 1', null, '…output tail…')
-        def failCheck = new CheckResult(
-                new CheckRef(1, 'command:./gradlew test'), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))
+    // FR2, M1 of fix-denial-attribution-durability: the round that could not execute left no
+    //     attempt record, so its denials ride the escalation. The equivalence has to hold for
+    //     them too — a resuming instance reading task.json must see the same blocked egress the
+    //     live run reported, and the attempt history must stay untouched by their presence.
+    def "FR2: a cannotExecute escalation's denials survive task.json and render identically on both sides"() {
+        given: 'a task parked after a round was killed on its round timeout, having tried a denied egress'
+        def taskId = 'manual-20260716-143502-c1'
+        def denial = Denial.unidentified(new Finding(
+                        'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
+        def escalation = new EscalationReport.CannotExecute('round timed out after 15m', [denial])
+        def state = TaskState.atStageStart('implement')
+        def context = new TaskContext(taskId, 'Fix flaky OrderServiceSpec', 'body', [])
+        def liveReport = StatusReport.build(
+                context, state, 3, new LiveActivity(null, escalation, new Outcome.Escalated(escalation)))
 
-        def attemptUsage = new ExecutorUsage(
-                Duration.ofMillis(183000),
-                [
-                    new ToolUsage('Edit', 4, Duration.ofMillis(2100))
-                ],
-                ['claude-sonnet-5': new TokenUsage(1200, 5400, 30000, 410000)])
+        and: 'the park committed to the task branch exactly as the git adapters would'
+        def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        taskRepository.createTask(context, null, state)
+        taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
 
-        def attempt = new AttemptRecord(
-                1,
-                AttemptRecord.Result.QUALITY_FAILURE,
-                Instant.parse('2026-07-16T14:35:10Z'),
-                [passCheck, failCheck],
-                attemptUsage,
-                JudgeUsage.none(), [])
+        when: 'the branch is read back and both renderings go through the same mapper'
+        def result = new BranchStateReader(runner).read(cloneDir, taskId)
+        def stateFileReport = (result as BranchStateResult.Found).report()
 
-        def totalsUsage = new ExecutorUsage(
-                Duration.ofMillis(232000),
-                [
-                    new ToolUsage('Edit', 4, Duration.ofMillis(2100))
-                ],
-                ['claude-sonnet-5': new TokenUsage(1450, 6100, 30000, 512000)])
+        then: 'the escalation came back carrying its denial'
+        (stateFileReport.lastEscalation() as EscalationReport.CannotExecute).denials() == [denial]
 
-        new TaskState(new Position.AtStage('implement'), 1, [attempt], totalsUsage)
+        and: 'the round that could not execute burned no attempt and recorded none (FR1)'
+        stateFileReport.attemptsUsed() == 0
+        stateFileReport.attempts().isEmpty()
+
+        and: 'the two renderings are byte-identical, escalation denials included'
+        mapper.serialize(stateFileReport) == mapper.serialize(withoutLiveOnlyFields(liveReport))
     }
 
     /**

@@ -4,11 +4,12 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
-import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
+import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
@@ -28,7 +29,8 @@ import org.slf4j.LoggerFactory;
  * concurrently through a {@link StreamDrain}, waits for exit within {@code roundTimeout}, closes
  * the round, and reads the decision file. Extracted from {@link CliStageExecutor} for file size.
  *
- * <p>Implements FR1, FR2, FR3, FR6, NFR-R1, NFR-R2 of fix-round-stdout-drain.
+ * <p>Implements FR1, FR2, FR3, FR6, NFR-R1, NFR-R2 of fix-round-stdout-drain; FR1 of
+ * fix-denial-attribution-durability.
  */
 final class ExecutorRoundExecution {
 
@@ -42,6 +44,11 @@ final class ExecutorRoundExecution {
      * RuntimeException} to {@code RoundOutcome.CannotExecute} without burning a stage attempt
      * (NFR-R1); this method itself never discards the round on failure — the caller does, so the
      * discard happens exactly once regardless of where in this method the failure occurred.
+     *
+     * <p>The throw is an {@link ExecutorFailure} wrapping the original exception together with
+     * the denials drained from the dead round, so a gnome that hung while attempting a blocked
+     * egress reports that denial on the escalation instead of only in the factory log (FR1 of
+     * fix-denial-attribution-durability, design D1).
      */
     static ExecutionResult run(
             FactoryProperties factoryProperties,
@@ -97,15 +104,18 @@ final class ExecutorRoundExecution {
             // FR3, D1 of fix-denial-report-attachment: the environment's denials are round-close
             // data, read once the gnome half is over and carried out on the ExecutionResult
             // exactly like usage and trace.
-            List<Finding> denials = denialsOf(round);
+            List<Denial> denials = denialsOf(round);
 
             Optional<DecisionFileReader.Decision> decision = decisionFileReader.read(round.readDecision());
             return decision.map(d -> (ExecutionResult)
                             new ExecutionResult.DecisionNeeded(d.question(), d.options(), usage, trace, denials))
                     .orElseGet(() -> new ExecutionResult.Completed(usage, trace, denials));
         } catch (RuntimeException e) {
-            drainDenials(round);
-            throw e;
+            // FR1 of fix-denial-attribution-durability: the drained denials leave the round
+            // with the failure instead of only reaching the log. The original exception stays
+            // the cause, so the engine's escalation text is unchanged; the round is still
+            // discarded exactly once by the caller.
+            throw new ExecutorFailure(e, drainDenials(round));
         }
     }
 
@@ -117,9 +127,9 @@ final class ExecutorRoundExecution {
      * read must not be what discards it. Same best-effort stance as {@link #drainDenials}, on the
      * side where there IS an attempt record to carry the result.
      */
-    private static List<Finding> denialsOf(RoundEnvironmentSource.Round round) {
+    private static List<Denial> denialsOf(RoundEnvironmentSource.Round round) {
         try {
-            return round.environment().denialFindings();
+            return round.environment().readDenials().denials();
         } catch (RuntimeException e) {
             log.warn(
                     OperatorEvent.ROUND_DENIALS_UNREADABLE_ON_FINISH.head()
@@ -130,28 +140,37 @@ final class ExecutorRoundExecution {
     }
 
     /**
-     * Reads and logs the denials of a round that died before its close — a {@code roundTimeout}
-     * kill, a missing result event (D1 of fix-denial-report-attachment). Such a round produces no
-     * {@code AttemptRecord} (the engine shapes the throw into {@code RoundOutcome.CannotExecute}),
-     * so there is nothing to attach them to; draining them anyway is what keeps them from becoming
-     * the NEXT round's report, since the guard's per-round delta cursor advances only on a read and
-     * an in-process resume reuses the same environment. Best-effort squared: the read is already
+     * Drains the denials of a round that died before its close — a {@code roundTimeout} kill, a
+     * missing result event (D1 of fix-denial-report-attachment). Such a round produces no
+     * {@code AttemptRecord}, so the caller carries what this returns out on an {@link
+     * ExecutorFailure} instead: the engine copies it onto the {@code CannotExecute} escalation,
+     * which is the failed round's only place to land denials (FR1 of
+     * fix-denial-attribution-durability). Draining is also what keeps them from becoming the
+     * NEXT round's report, since the guard's per-round delta cursor advances only on a read and
+     * an in-process resume reuses the same environment. The position that read leaves behind is
+     * the one the park commits with the escalation these denials land on (FR3 of
+     * fix-denial-attribution-durability) — the environment holds it until then, so the drain
+     * cannot advance a position past a record that never gets written. Best-effort squared: the read is already
      * best-effort (NFR-R1) and a throw out of it here would mask the infrastructure failure that
-     * brought the round down, so it is caught and logged.
+     * brought the round down, so it is caught, logged, and reported as no denials.
+     *
+     * @return the failed round's denials, or an empty list when the environment cannot answer
      */
-    private static void drainDenials(RoundEnvironmentSource.Round round) {
+    private static List<Denial> drainDenials(RoundEnvironmentSource.Round round) {
         try {
-            List<Finding> denials = round.environment().denialFindings();
+            List<Denial> denials = round.environment().readDenials().denials();
             log.warn(
                     OperatorEvent.ROUND_DENIALS_ORPHANED_ON_FAILURE.head()
-                            + "round failed before close; {} egress denial(s) drained, attached to no attempt: {}",
+                            + "round failed before close; {} egress denial(s) drained onto the escalation: {}",
                     denials.size(),
                     denials);
+            return denials;
         } catch (RuntimeException e) {
             log.warn(
                     OperatorEvent.ROUND_DENIALS_UNREADABLE_ON_FAILURE.head()
                             + "could not read the egress denials of a failed round",
                     e);
+            return List.of();
         }
     }
 

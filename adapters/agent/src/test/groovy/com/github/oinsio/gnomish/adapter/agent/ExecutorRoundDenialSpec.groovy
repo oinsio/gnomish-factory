@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.logtext.OperatorEvent
@@ -34,7 +35,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
 
         then:
         result instanceof ExecutionResult.Completed
-        result.denials() == [DENIAL]
+        result.denials() == [Denial.unidentified(DENIAL)]
     }
 
     // FR3, D1: a DecisionNeeded round had a live round too — its denials must not be dropped
@@ -44,7 +45,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
 
         then:
         result instanceof ExecutionResult.DecisionNeeded
-        result.denials() == [DENIAL]
+        result.denials() == [Denial.unidentified(DENIAL)]
     }
 
     // NFR-R1: the denial read is observability of work the gnome already finished — a source that

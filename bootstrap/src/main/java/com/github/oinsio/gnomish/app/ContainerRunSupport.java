@@ -30,8 +30,10 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
+import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
+import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
 import com.github.oinsio.gnomish.sandbox.environment.LeasedEnvironment;
@@ -99,10 +101,24 @@ final class ContainerRunSupport implements SandboxRunSupport {
         // (FR1, FR6, design D1 of fix-lifecycle-push): every write through this repository is
         // replicated best-effort before it returns, so no caller here pushes by hand.
         this.taskRepository = new PushBestEffortTaskLifecycleStore(
-                new GitObjectsTaskRepository(gitObjects, epochs), runner, cloneDir);
+                new GitObjectsTaskRepository(gitObjects, epochs, this::currentDenialPosition), runner, cloneDir);
         this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BranchPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
+    }
+
+    /**
+     * The position the run's live environment last read its denial source up to — what a {@code
+     * cannotExecute} park commits beside the escalation carrying the denials that read drained
+     * (FR3 of fix-denial-attribution-durability). Asked through the same leased view every other
+     * collaborator uses, so it follows the stage in flight across segment boundaries.
+     *
+     * <p>Empty whenever no environment is currently leased: a park recorded after disposal, or
+     * before the first stage started, has no source to ask and records no position — the resumed
+     * run then re-reads the guard's log tail, which duplicates a denial rather than losing one.
+     */
+    private Optional<DenialCursor> currentDenialPosition() {
+        return lease.currentIfLeased().flatMap(TaskExecutionEnvironment::denialCursor);
     }
 
     /**
@@ -275,10 +291,13 @@ final class ContainerRunSupport implements SandboxRunSupport {
         return ContainerTipReader.readTaskJson(this);
     }
 
-    /** Restores the branch tip's denial cursor (FR5). Delegated to {@link ContainerTipReader}. */
+    /**
+     * Restores what the branch tip records about denials — position and identities (FR5, FR7).
+     * Delegated to {@link ContainerTipReader}.
+     */
     @Override
-    public void restoreDenialCursor() {
-        ContainerTipReader.restoreDenialCursor(this);
+    public void restoreDenials() {
+        ContainerTipReader.restoreDenials(this);
     }
 
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */

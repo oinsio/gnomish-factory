@@ -8,11 +8,13 @@ import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
@@ -48,14 +50,16 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
         given: 'a process that exited normally but whose stdout never ends'
         def handle = new ExitedExecHandle(nonEndingStream(stuck))
         def environment = Stub(TaskExecutionEnvironment) {
-            exec(_) >> handle
+            exec(_ as ExecCommand) >> handle
         }
 
         when:
         runRound(environment, Duration.ofMillis(100))
 
         then: 'the round fails on the grace, naming the property an operator would raise'
-        def e = thrown(StreamDrainTimeoutException)
+        def failure = thrown(ExecutorFailure)
+        def e = failure.cause()
+        e instanceof StreamDrainTimeoutException
         e.message.contains('tail-drain-grace')
     }
 
@@ -65,7 +69,7 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
         given:
         def handle = new ExitedExecHandle(nonEndingStream(stuck))
         def environment = Stub(TaskExecutionEnvironment) {
-            exec(_) >> handle
+            exec(_ as ExecCommand) >> handle
         }
 
         and: 'the round thread carries a pending interrupt when it comes to await the drain'
@@ -75,7 +79,9 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
         runRound(environment, Duration.ofSeconds(30))
 
         then:
-        def e = thrown(StreamDrainInterruptedException)
+        def failure = thrown(ExecutorFailure)
+        def e = failure.cause()
+        e instanceof StreamDrainInterruptedException
         !e.message.contains('tail-drain-grace')
 
         cleanup:

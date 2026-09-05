@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
+import com.github.oinsio.gnomish.sandbox.DenialRead;
+import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,7 @@ import org.slf4j.LoggerFactory;
  * and task labels, so disposal ({@code ContainerEnvironmentDisposal}) and the
  * startup orphan sweep reclaim it exactly like the box, volume, and network
  * (NFR-R2). Denials are read back as structured findings via {@link
- * #denialFindings()} (NFR-O1).
+ * #readDenials()} (NFR-O1).
  *
  * <p>Every {@link GuardUnavailableException} names the guard container concretely ({@code
  * gnomish-guard-<key>}), so an operator starts {@code docker logs} from the message alone
@@ -160,12 +161,17 @@ public final class EgressGuard {
      * <p>Across processes the cursor is durable (FR5): the guard container
      * outlives a lease, so a resumed lease that reattached to a surviving
      * container would otherwise replay every round still in its log. See {@link
-     * #restoreDenialCursor} and {@link #denialCursor()}.
+     * #restoreDenials} and {@link #denialCursor()}.
      *
-     * @return the denial findings recorded since the previous call, capped; never null
+     * <p>The findings and the read position that stands after them come back as one
+     * value (design D7 of fix-denial-attribution-durability), so the position can
+     * only ever be committed together with the record carrying these findings.
+     *
+     * @return the denials recorded since the previous call and the position after
+     *     them, capped; never null
      */
-    public List<Finding> denialFindings() {
-        return reads.findings();
+    public DenialRead readDenials() {
+        return reads.read();
     }
 
     /**
@@ -180,15 +186,17 @@ public final class EgressGuard {
     }
 
     /**
-     * Offers the cursor an earlier lease committed, applied at the first read and
-     * only if it names this guard's live container (FR5) — a position stamped by
-     * another machine's daemon, or by a container since recreated, is dropped
-     * rather than used to filter a log it does not describe.
+     * Offers what an earlier lease recorded (FR5, FR7): the position, applied at the
+     * first read and only if it names this guard's live container — a position stamped
+     * by another machine's daemon, or by a container since recreated, is dropped rather
+     * than used to filter a log it does not describe — and the identities committed with
+     * it, which every read merges against so a dropped position costs a merge rather
+     * than a duplicated report.
      *
-     * @param cursor the committed cursor; never null
+     * @param restoration what the branch tip records about denials already reported; never null
      */
-    public void restoreDenialCursor(DenialCursor cursor) {
-        reads.restore(cursor);
+    public void restoreDenials(DenialRestoration restoration) {
+        reads.restore(restoration);
     }
 
     /**

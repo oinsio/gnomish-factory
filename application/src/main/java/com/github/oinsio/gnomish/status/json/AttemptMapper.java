@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.status.json;
 
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
+import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import java.util.List;
@@ -27,7 +28,7 @@ final class AttemptMapper {
                 toResult(record.result()),
                 record.startedAt().toString(),
                 toChecks(record.checkResults()),
-                toFindings(record.denials()),
+                toFindings(Denial.findings(record.denials())),
                 UsageMapper.toUsage(record.executorUsage()),
                 UsageMapper.toJudgeUsage(record.judgeUsage()));
     }
@@ -69,12 +70,14 @@ final class AttemptMapper {
     }
 
     /**
-     * The one finding shape the contract uses, shared by a failed check's findings and
-     * an attempt's denials — a denial reads exactly like any other finding, so a
-     * reviewer needs to know nothing about guard logs to read one (FR4, UX1 of
-     * fix-denial-report-attachment).
+     * The one finding shape the contract uses, shared by a failed check's findings, an
+     * attempt's denials, and a {@code cannotExecute} escalation's denials — a denial
+     * reads exactly like any other finding, so a reviewer needs to know nothing about
+     * guard logs to read one (FR4, UX1 of fix-denial-report-attachment; FR2 of
+     * fix-denial-attribution-durability). Package-private rather than private so {@link
+     * EscalationMapper} renders the escalation's denials through this same one shape.
      */
-    private static List<FindingDto> toFindings(List<Finding> findings) {
+    static List<FindingDto> toFindings(List<Finding> findings) {
         return findings.stream()
                 .map(finding -> new FindingDto(finding.message(), finding.location(), finding.details()))
                 .toList();

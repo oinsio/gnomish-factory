@@ -86,13 +86,24 @@ public sealed interface EscalationDto {
     /**
      * An executor infrastructure failure prevented running the stage.
      *
+     * <p>{@code denials} carries the egress denials of the round that could not
+     * execute (FR2 of fix-denial-attribution-durability). That round died before its
+     * close and left no attempt record, so this escalation is the only place in the
+     * document those denials can appear — a gnome that hung while attempting a blocked
+     * egress would otherwise report nothing but the hang. Additive under contract v1:
+     * an empty array when the round recorded none, and read as empty in documents
+     * written before the field existed. It influences no other field.
+     *
      * @param type the discriminator, always {@code "cannotExecute"}
      * @param stage the stage the escalation pertains to; {@code null} — not
      *     available from the reachable domain data (see type-level note)
      * @param at ISO-8601 UTC instant of the escalation; {@code null} — not
      *     available from the reachable domain data (see type-level note)
      * @param cause the failure detail, stack trace preserved
+     * @param denials the egress denials of the round that could not execute;
+     *     possibly empty, never null
      */
     record CannotExecute(
-            String type, @Nullable String stage, @Nullable String at, String cause) implements EscalationDto {}
+            String type, @Nullable String stage, @Nullable String at, String cause, List<FindingDto> denials)
+            implements EscalationDto {}
 }

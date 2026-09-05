@@ -57,6 +57,13 @@ adapters that have no environment need no change.
 *Rationale:* the smallest blast radius that keeps the port's "throws on
 infrastructure failure" contract intact — one new domain type, one adapter
 touch point, every other executor adapter untouched.
+*Supersedes* `fix-denial-report-attachment`'s D1a: its outcome — a failed
+round's denials reach the operator log and nothing else, because "the
+escalation model has no findings slot, and adding one is beyond this
+change's scope" — no longer holds. This change adds that slot (FR1) and the
+scope objection is what it exists to pay. D1a's drain-on-the-failure-path
+mechanics and its NFR-R1 wrapping stay in force; only the "log only"
+destination is replaced.
 *Alternative rejected:* making the failure a value on the sealed
 `ExecutionResult` (`CannotExecute(cause, denials)`) — cleaner in the abstract
 and worth doing if the port is ever reworked, but it rewrites every executor

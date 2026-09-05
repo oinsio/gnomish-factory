@@ -8,13 +8,13 @@ import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
-import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
@@ -112,8 +112,9 @@ class CliStageExecutorSpec extends Specification {
         when:
         executor.execute(requestFor([roundTimeout: 1]))
 
-        then:
-        thrown(RoundTimeoutException)
+        then: 'FR1 of fix-denial-attribution-durability: wrapped, with the timeout as its cause'
+        def failure = thrown(ExecutorFailure)
+        failure.cause() instanceof RoundTimeoutException
     }
 
     // FR3, NFR-R3, D1: an infrastructure failure mid-round still cleans up the round's
@@ -132,7 +133,8 @@ class CliStageExecutorSpec extends Specification {
         executor.execute(requestFor([roundTimeout: 1]))
 
         then:
-        thrown(RoundTimeoutException)
+        def failure = thrown(ExecutorFailure)
+        failure.cause() instanceof RoundTimeoutException
 
         and: 'NFR-R3, D1: no round directory survives under the injected root'
         Files.list(decisionRoot).withCloseable { it.count() == 0L }
@@ -146,8 +148,9 @@ class CliStageExecutorSpec extends Specification {
         when:
         executor.execute(requestFor())
 
-        then:
-        thrown(MissingResultEventException)
+        then: 'FR1 of fix-denial-attribution-durability: wrapped, with the missing event as its cause'
+        def failure = thrown(ExecutorFailure)
+        failure.cause() instanceof MissingResultEventException
     }
 
     // FR7, D10, task 9.4: a supplied AgentProgressListener receives the round's live progress.

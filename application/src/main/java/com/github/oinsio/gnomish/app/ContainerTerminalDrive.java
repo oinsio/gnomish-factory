@@ -42,7 +42,7 @@ final class ContainerTerminalDrive {
         // The guard container outlives the process that created it, so a resume onto a surviving
         // one continues the denial delta from the position its last attempt committed instead of
         // replaying the container's whole log onto this round (FR5 of fix-denial-report-attachment).
-        support.restoreDenialCursor();
+        support.restoreDenials();
         var assembled = assembly.withSandbox(support.pieces(pending))
                 .assemble(definition, context, state, interactiveMode, support.persistence(), List.of(), cloneDir);
 

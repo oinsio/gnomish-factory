@@ -86,7 +86,7 @@ record TakeContainerEngineExecution(
         var assembled = assembly.withSandbox(support.pieces(pending))
                 .assemble(definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, cloneDir);
 
-        support.restoreDenialCursor();
+        support.restoreDenials();
 
         TaskOutcome outcome = new Engine().run(definition, context, state, support.workspace(), assembled.ports());
 

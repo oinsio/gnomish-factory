@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 
@@ -15,6 +17,11 @@ import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
  * and environment, so an undrained failed round hands its denials to the next
  * round's attempt — the hung round's blocked exfiltration reported as the next
  * attempt's.
+ *
+ * <p>FR1 of fix-denial-attribution-durability: the drain no longer ends in the log. Each
+ * failure leaves this adapter wrapped in an {@code ExecutorFailure} carrying what was drained,
+ * with the original infrastructure failure as its cause, so the engine can copy the denials
+ * onto the {@code CannotExecute} escalation the round left no attempt record to hold.
  */
 class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
 
@@ -33,8 +40,12 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         when:
         executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
-        then:
-        thrown(RoundTimeoutException)
+        then: 'FR1: the timeout leaves the adapter wrapped, carrying the drained denial'
+        def failure = thrown(ExecutorFailure)
+        failure.cause() instanceof RoundTimeoutException
+        failure.denials() == [
+            Denial.unidentified(HUNG_ROUND_DENIAL)
+        ]
 
         and: 'the hung round asked its environment for denials exactly once'
         source.reads() == 1
@@ -59,8 +70,12 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         when:
         executorFor('missing-result-event', source).execute(requestFor())
 
-        then:
-        thrown(MissingResultEventException)
+        then: 'FR1: same wrapper, this time over the missing result event'
+        def failure = thrown(ExecutorFailure)
+        failure.cause() instanceof MissingResultEventException
+        failure.denials() == [
+            Denial.unidentified(HUNG_ROUND_DENIAL)
+        ]
 
         and:
         source.reads() == 1
@@ -79,14 +94,16 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
         then:
-        thrown(RoundTimeoutException)
+        thrown(ExecutorFailure)
 
         when: 'the same environment runs the next round to completion'
         def result = executorFor('plain-round', source).execute(requestFor())
 
         then: 'only its own denial lands on the result'
         result instanceof ExecutionResult.Completed
-        result.denials() == [NEXT_ROUND_DENIAL]
+        result.denials() == [
+            Denial.unidentified(NEXT_ROUND_DENIAL)
+        ]
     }
 
     // NFR-R1: the drain is best-effort — a read that throws must not mask the round's own
@@ -99,8 +116,10 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         when:
         executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
-        then:
-        thrown(RoundTimeoutException)
+        then: 'NFR-R1: the round\'s own failure still comes out, with no denials to report'
+        def failure = thrown(ExecutorFailure)
+        failure.cause() instanceof RoundTimeoutException
+        failure.denials().isEmpty()
 
         and: 'FR15 of harden-logging-observability: the undrained cursor is a coded WARN of its own'
         def warned = logs.list.find {

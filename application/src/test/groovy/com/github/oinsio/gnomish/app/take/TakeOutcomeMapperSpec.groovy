@@ -69,7 +69,7 @@ class TakeOutcomeMapperSpec extends Specification {
         new EscalationReport.AttemptsExhausted(3) || ParkReason.ESCALATION
         new EscalationReport.DecisionNeeded('proceed?', ['yes', 'no']) || ParkReason.ESCALATION
         new EscalationReport.CannotVerify(new CheckRef(0, 'tests'), 'timeout', '') || ParkReason.INFRA
-        new EscalationReport.CannotExecute('executor crashed') || ParkReason.INFRA
+        new EscalationReport.CannotExecute('executor crashed', []) || ParkReason.INFRA
         new EscalationReport.PipelineMismatch('stale-stage') || ParkReason.INFRA
     }
 }

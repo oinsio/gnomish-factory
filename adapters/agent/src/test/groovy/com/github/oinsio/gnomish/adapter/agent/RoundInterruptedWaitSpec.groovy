@@ -6,12 +6,14 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Clock
+import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
@@ -36,7 +38,7 @@ class RoundInterruptedWaitSpec extends Specification {
     def "FR11: an interrupted wait fails the executor round without blaming the round timeout"() {
         given:
         def environment = Stub(TaskExecutionEnvironment) {
-            exec(_) >> new InterruptedWaitExecHandle()
+            exec(_ as ExecCommand) >> new InterruptedWaitExecHandle()
         }
 
         when:
@@ -51,7 +53,9 @@ class RoundInterruptedWaitSpec extends Specification {
                 new StandInRound(environment, workspaceDir.resolve('decision.json')))
 
         then:
-        def e = thrown(RoundInterruptedException)
+        def failure = thrown(ExecutorFailure)
+        def e = failure.cause()
+        e instanceof RoundInterruptedException
         e.message.contains('interrupted')
         !e.message.contains('roundTimeout')
     }
@@ -60,7 +64,7 @@ class RoundInterruptedWaitSpec extends Specification {
     def "FR11: an interrupted wait yields CannotVerify naming the interruption, not the timeout"() {
         given:
         def environment = Stub(TaskExecutionEnvironment) {
-            exec(_) >> new InterruptedWaitExecHandle()
+            exec(_ as ExecCommand) >> new InterruptedWaitExecHandle()
         }
 
         when:

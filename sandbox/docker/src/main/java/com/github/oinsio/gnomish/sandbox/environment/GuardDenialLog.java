@@ -3,9 +3,12 @@ package com.github.oinsio.gnomish.sandbox.environment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.domain.engine.Denial;
+import com.github.oinsio.gnomish.domain.engine.DenialIdentity;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -32,8 +35,17 @@ import org.slf4j.LoggerFactory;
  * so it aggregates locally and emits a single line naming the environment key and what it lost —
  * the aggregate-per-call invariant, deliberately not the cross-call {@code RepeatSuppressor}.
  *
+ * <p>Each parsed denial keeps the daemon's own nanosecond timestamp of the line it came from,
+ * paired with the guard container's runtime id as its {@link DenialIdentity} (FR7, design D5 of
+ * fix-denial-attribution-durability). The stamp is already on every line — {@code docker logs
+ * --timestamps} — and {@link GuardLogCursor} was consuming it for the read position and throwing
+ * it away; keeping it is what lets a re-read after a lost position merge instead of duplicate.
+ * A line the daemon did not stamp, or a read whose source could not be identified, yields a
+ * denial with no identity: "unknown, keep".
+ *
  * <p>Implements NFR-O1, NFR-C1, NFR-S3, UX3 of add-sandbox-core; NFR-S1 of
- * fix-denial-report-attachment; FR5, FR12 of harden-logging-observability.
+ * fix-denial-report-attachment; FR5, FR12 of harden-logging-observability; FR7 of
+ * fix-denial-attribution-durability.
  */
 final class GuardDenialLog {
 
@@ -48,17 +60,19 @@ final class GuardDenialLog {
     private GuardDenialLog() {}
 
     /**
-     * The denial findings in {@code guardStdout}, in log order, capped at
-     * {@link #MAX_EVENTS}.
+     * The denials in {@code guardStdout}, in log order, capped at {@link #MAX_EVENTS}, each
+     * paired with the identity its source assigned it.
      *
      * @param key the environment key whose guard produced this output, so an aggregate warning
      *     names the box it concerns; never blank
+     * @param source the runtime id of the guard container the output was read from, or {@code
+     *     null} when it could not be resolved — every denial of this read is then unidentified
      * @param guardStdout the raw guard container log output; never null
-     * @return one finding per parseable denial event; never null
+     * @return one denial per parseable denial event; never null
      */
-    static List<Finding> findings(String key, String guardStdout) {
-        List<Finding> findings = new ArrayList<>();
-        var drops = new Drops();
+    static List<Denial> denials(String key, @Nullable String source, String guardStdout) {
+        List<Denial> denials = new ArrayList<>();
+        var drops = new GuardDenialDrops();
         for (String line : guardStdout.split("\n")) {
             // The marker is matched anywhere in the line: mitmproxy forwards addon print output
             // through its own event log, which may prepend a timestamp/level prefix.
@@ -66,7 +80,7 @@ final class GuardDenialLog {
             if (marker < 0) {
                 continue;
             }
-            if (findings.size() == MAX_EVENTS) {
+            if (denials.size() == MAX_EVENTS) {
                 log.warn(
                         OperatorEvent.GUARD_DENIAL_LOG_TRUNCATED.head()
                                 + "guard denial log for {} holds more than {} events; further denials are truncated",
@@ -79,50 +93,26 @@ final class GuardDenialLog {
                             .strip(),
                     drops);
             if (finding != null) {
-                findings.add(finding);
+                denials.add(new Denial(finding, identityOf(source, line)));
             }
         }
         drops.report(key);
-        return List.copyOf(findings);
+        return List.copyOf(denials);
     }
 
     /**
-     * The two ways one marked line fails to become a finding, counted across a single read. One
-     * line per read, whatever the volume: the count is what tells an operator whether they are
-     * looking at one odd event or a guard whose whole output the factory no longer parses. The
-     * first malformed line's reason rides along so the aggregate is still diagnosable.
+     * The identity of the event this line recorded: the daemon's own nanosecond stamp on the
+     * line, paired with the source that stamped it (FR7). Null — "unknown, keep" — when the read
+     * could not identify its source, or when the daemon did not stamp the line (a guard log read
+     * without {@code --timestamps}, a truncated line): an unidentified denial merges away against
+     * nothing, which is the duplicate-over-silence stance of design D3.
      */
-    private static final class Drops {
-
-        private int malformed;
-        private int withoutHost;
-        private @Nullable String firstReason;
-
-        void malformed(String reason) {
-            malformed++;
-            if (firstReason == null) {
-                firstReason = reason;
-            }
+    private static @Nullable DenialIdentity identityOf(@Nullable String source, String line) {
+        if (source == null) {
+            return null;
         }
-
-        void withoutHost() {
-            withoutHost++;
-        }
-
-        void report(String key) {
-            if (malformed + withoutHost == 0) {
-                return;
-            }
-            log.warn(
-                    OperatorEvent.GUARD_DENIAL_EVENTS_DROPPED.head()
-                            + "dropped {} unparseable guard denial event(s) for {} ({} malformed, {} without a host);"
-                            + " these denials are missing from the findings. First malformed reason: {}",
-                    malformed + withoutHost,
-                    key,
-                    malformed,
-                    withoutHost,
-                    firstReason == null ? "none" : firstReason);
-        }
+        Instant stamp = GuardLogCursor.timestampOf(line);
+        return stamp == null ? null : new DenialIdentity(source, stamp.toString());
     }
 
     /**
@@ -137,7 +127,7 @@ final class GuardDenialLog {
      * gnome's own exfiltration payload, and the finding is committed to the task
      * branch, so only the destination-side part of the path travels.
      */
-    private static @Nullable Finding parse(String json, Drops drops) {
+    private static @Nullable Finding parse(String json, GuardDenialDrops drops) {
         JsonNode event;
         try {
             event = MAPPER.readTree(json);

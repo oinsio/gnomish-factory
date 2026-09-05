@@ -45,8 +45,18 @@ sealed interface RoundOutcome permits RoundOutcome.Verified, RoundOutcome.NeedsD
      * all (FR10): no {@link AttemptRecord}, no verify chain, no persisted state. The loop
      * escalates it as {@link EscalationReport.CannotExecute} without burning an attempt.
      *
+     * <p>{@code denials} carries the egress denials the failed round's environment recorded,
+     * drained by the executor adapter and handed over on a {@link
+     * com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure} (FR1 of
+     * fix-denial-attribution-durability). Because this round leaves no {@link AttemptRecord},
+     * the list travels straight onto the escalation report. Any other {@link RuntimeException}
+     * yields an empty list. No defensive copy here: the only two producers hand over an already
+     * unmodifiable list, and the {@link EscalationReport.CannotExecute} this feeds copies again.
+     *
      * @param key the correlation key of the round that could not run; never null
      * @param cause the executor failure's preserved stack trace (NFR-O1); never null
+     * @param denials the failed round's egress denials; already unmodifiable when built (the
+     *     wrapper copies, and a non-wrapper throw yields {@link List#of()}), possibly empty
      */
-    record CannotExecute(AttemptKey key, String cause) implements RoundOutcome {}
+    record CannotExecute(AttemptKey key, String cause, List<Denial> denials) implements RoundOutcome {}
 }
