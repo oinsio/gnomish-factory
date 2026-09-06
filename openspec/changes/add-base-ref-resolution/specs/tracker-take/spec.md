@@ -6,7 +6,7 @@
 For a fresh start, `take` (explicit, batch, and auto forms alike) SHALL
 resolve the base after the factory clone is hardened (the branch hardening
 step that precedes task creation today) and before the task is created on
-the branch: take the `base:` configuration from the trusted tier bound at
+the branch: take the `task-branch.base` configuration from the trusted tier bound at
 startup from the refreshed default branch (never re-read per claim),
 evaluate the task's `base` designator, apply the priority order, and
 refresh the resolved ref (see base-ref-resolution and git-task-persistence),
@@ -45,7 +45,7 @@ exception; the abort protocol itself is unchanged. Only reachability
 failures are this class, classified by cause and never by the step that
 observed them: a ref that does not exist, an authentication refusal, a
 diverging local tag, a remote refusing fetch-by-SHA, and underdetermined
-input (an out-of-menu or conflicting designator) park the task with a
+input (a disallowed or conflicting designator) park the task with a
 report per base-ref-resolution. Every fetch a take performs at claim time,
 of whatever ref, SHALL classify under this same rule.
 <!-- implements FR9 of add-base-ref-resolution -->

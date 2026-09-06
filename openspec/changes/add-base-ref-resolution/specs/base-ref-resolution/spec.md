@@ -2,49 +2,53 @@
 
 ## Purpose
 
-Decide which ref a new task branch starts from: a project-configured menu of
+Decide which ref a new task branch starts from: a project-configured list of
 allowed bases (patterns with roles), a per-task selection carried as tracker
 metadata, a fixed source-priority order with fail-closed escalation when the
-choice is ambiguous or outside the menu, remote-driven default-branch
+choice is ambiguous or not allowed, remote-driven default-branch
 discovery, and the base pin that makes the decision durable for the task's
 lifetime.
 
 ## ADDED Requirements
 
-### Requirement: Base menu governs allowed bases
-The base menu SHALL be a list of patterns, each with a role — `development` or
-`release`, defaulting to `development` — that names the set of refs a task may
-branch from. A per-task selection SHALL be accepted only when it matches a
-menu pattern; a selection matching no pattern SHALL be rejected as
-underdetermined input, never silently replaced by another base. An empty menu
-— the `base:` section absent or declaring no entries — accepts no per-task
-selection: configuration that could deliver one is refused at load (see
+### Requirement: Allowed bases govern per-task selection
+The allowed bases (`task-branch.base.allowed`) SHALL be a list of patterns,
+each with a role — `development` or `release`, defaulting to `development` —
+that names the set of refs a task may branch from. A per-task selection SHALL
+be accepted only when it matches an allowed pattern; a selection matching no
+pattern SHALL be rejected as underdetermined input, never silently replaced
+by another base. No allowed bases — the `task-branch.base` section absent or
+declaring no `allowed` entries — accepts no per-task selection:
+configuration that could deliver one is refused at load (see
 pipeline-config), and should a designator reach resolution regardless, it is
-underdetermined input like any out-of-menu selection. Environment-style
-deploy pointers are not
-menu material: the menu classifies branch roles precisely so later changes can
-gate on them, and no role beyond the two named ones exists in this version.
+underdetermined input like any disallowed selection. Environment-style
+deploy pointers do not belong in the allowed list: the list classifies
+branch roles precisely so later changes can gate on them, and no role beyond
+the two named ones exists in this version.
 <!-- implements FR1, FR4 of add-base-ref-resolution -->
 
-#### Scenario: Selection inside the menu is accepted
-- **WHEN** the menu holds `release/*` and the task selects `release/1.18`
+#### Scenario: An allowed selection is accepted
+- **WHEN** the allowed bases hold `release/*` and the task selects
+  `release/1.18`
 - **THEN** resolution accepts `release/1.18` as the base and records the
-  menu rule that matched it
+  allowed rule that matched it
 
-#### Scenario: Selection outside the menu escalates
-- **WHEN** the task selects `experiments/foo` and no menu pattern matches it
+#### Scenario: A disallowed selection escalates
+- **WHEN** the task selects `experiments/foo` and no allowed pattern matches
+  it
 - **THEN** the task parks with a report naming the selected value and the
-  configured menu, no branch is created, and no stage attempt is burned
+  configured allowed bases, no branch is created, and no stage attempt is
+  burned
 
-#### Scenario: Empty menu with a designator is refused, not resolved
-- **WHEN** the menu is empty and a `base` designator nevertheless reaches
+#### Scenario: No allowed bases with a designator is refused, not resolved
+- **WHEN** no base is allowed and a `base` designator nevertheless reaches
   resolution (the load-time check was bypassed)
-- **THEN** resolution treats the designator as outside the (empty) menu and
-  escalates rather than branching from an unvetted ref
+- **THEN** resolution treats the designator as disallowed and escalates
+  rather than branching from an unvetted ref
 
 ### Requirement: Resolution follows one priority order
 Base resolution SHALL follow exactly one priority order: an explicit `--base`
-argument; else the task's `base` designator validated against the menu; else
+argument; else the task's `base` designator validated against the allowed bases; else
 the configured `default`; else the repository default branch discovered from
 the remote. Manual `run` without `--base` SHALL alone fall through to the
 local HEAD of the clone, with no network interaction; autonomous paths SHALL
@@ -63,11 +67,11 @@ human-readable reason.
 
 #### Scenario: Designator wins over the configured default
 - **WHEN** the config declares `default: develop` and the task carries the
-  designator for `release/1.18` matching the menu
+  designator for `release/1.18` matching an allowed pattern
 - **THEN** the branch starts from the refreshed `release/1.18`
 
 #### Scenario: Zero configuration resolves to the remote default branch
-- **WHEN** a project with no `base:` block is taken autonomously and the
+- **WHEN** a project with no `task-branch.base` section is taken autonomously and the
   remote reports `trunk` as its default branch
 - **THEN** the branch starts from the refreshed `trunk`, never from a
   hardcoded name and never from the clone's local HEAD
@@ -81,8 +85,8 @@ human-readable reason.
 ### Requirement: Designator conflicts and ambiguity escalate
 A conflicting base designator (more than one value found on the task) SHALL
 escalate with a report listing every value found; resolution SHALL never pick
-one. All escalations of underdetermined base input — conflict or out-of-menu
-— SHALL be quality-of-input escalations that park the task for a human,
+one. All escalations of underdetermined base input — conflict or disallowed
+selection — SHALL be quality-of-input escalations that park the task for a human,
 without burning a stage attempt, and the report SHALL name what was found and
 what the configuration allows.
 <!-- implements FR3, FR4 of add-base-ref-resolution -->
@@ -108,7 +112,7 @@ never as a fallback to a guessed name.
   with no configuration change
 
 ### Requirement: Base configuration is read from the refreshed default branch only
-The `base:` configuration SHALL be read factory-side from the repository
+The `task-branch.base` configuration SHALL be read factory-side from the repository
 default branch, refreshed by fetch, and never from a task branch or a
 gnome-writable working copy. Copies of the configuration in a gnome's working
 copy are project content — law only after a human merge. The read SHALL go
@@ -116,31 +120,32 @@ through the git-objects law source at the refreshed default-branch tip, never
 through a checkout, and SHALL happen once at startup as part of the trusted
 tier (see pipeline-config, "Definition validated at startup, bound per task
 from the base"); a claim SHALL NOT re-fetch the default branch or re-read
-the block. The `base:` block is trusted-tier configuration; the task
+the section. The `task-branch.base` section is trusted-tier configuration; the task
 tier of the law binds from the chosen base's law commit (see pipeline-config,
 "Pipeline law binds per invocation"). This requirement is what breaks the
 "the config picks the base, but which ref holds the config" cycle.
 <!-- implements FR2, NFR-S1, NFR-P1 of add-base-ref-resolution -->
 
-#### Scenario: A gnome edit to the base block has no effect
-- **WHEN** a gnome branch modifies the `base:` block in its working copy and
+#### Scenario: A gnome edit to the task-branch section has no effect
+- **WHEN** a gnome branch modifies the `task-branch.base` section in its working copy and
   another task is claimed afterwards
 - **THEN** the new task resolves under the default-branch configuration, and
   the gnome's edit participates only after a human merges it
 
-#### Scenario: A merged menu change waits for the next start
-- **WHEN** a human merges a new `base.menu` entry to the default branch while
-  `serve` is running, and a task selecting that new entry is claimed
-- **THEN** the running daemon still resolves under the menu bound at its
-  startup (the task parks as out-of-menu), no default-branch fetch runs on
-  the claim path, and the next start of `serve` accepts the entry
+#### Scenario: A merged change to the allowed bases waits for the next start
+- **WHEN** a human merges a new `task-branch.base.allowed` entry to the
+  default branch while `serve` is running, and a task selecting that new
+  entry is claimed
+- **THEN** the running daemon still resolves under the allowed bases bound at
+  its startup (the task parks as disallowed), no default-branch fetch runs
+  on the claim path, and the next start of `serve` accepts the entry
 
 ### Requirement: The base decision is pinned at claim and never re-resolved
 The resolved base — ref, commit SHA, and source rule — SHALL be pinned into
 the task's durable state in the task-creation commit, before any agent runs.
 Every resume, on any instance and in any execution mode, SHALL read the pin
 and SHALL NOT re-resolve the base from tracker metadata or configuration; a
-designator or menu change after the pin affects only tasks not yet pinned.
+designator or allowed-bases change after the pin affects only tasks not yet pinned.
 Before the pin exists, re-resolution from scratch is the recovery of every
 crash window, and a later resolution answering differently is legal — nothing
 durable references the earlier answer.
@@ -169,7 +174,7 @@ which is a law-freshness matter, not a re-resolution of the base.
 
 ### Requirement: Resolution is declarative and executes no repository code
 Base resolution SHALL be deterministic pattern matching over values — the
-menu, the task's designators, the discovered default branch, and the
+allowed bases, the task's designators, the discovered default branch, and the
 invocation mode. No repository-provided executable, hook, or script SHALL
 run to choose a base. External automation that computes a base and records
 it as task metadata is the supported customization path and SHALL be
@@ -185,5 +190,5 @@ documented in the operator guide.
 #### Scenario: Automation-set label drives the choice
 - **WHEN** an external job computes the base for a task and sets the
   corresponding label before the task is claimed
-- **THEN** the factory validates the label against the menu and branches
+- **THEN** the factory validates the label against the allowed bases and branches
   accordingly, with no factory-side custom code involved

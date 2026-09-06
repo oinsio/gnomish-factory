@@ -23,8 +23,8 @@ sanitizer, the repeat suppressor, the MDC-propagation helper, and the
 subprocess access-log emitter with its argv redactor — the pieces every
 layer's log emitters share, so the access-record format and redaction have
 exactly one owner reachable from every spawn family. `baseref` is the base-resolution leaf
-holding the pure resolution policy — menu pattern grammar, designator
-validation against the menu, source priority, and the decision value types —
+holding the pure resolution policy — allowed-bases pattern grammar, designator
+validation against the allowed bases, source priority, and the decision value types —
 a function
 from values to a decision, with no subprocess, no port, and no factory type
 inside; extractability is a declared property.

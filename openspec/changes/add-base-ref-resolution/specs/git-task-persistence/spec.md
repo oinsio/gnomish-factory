@@ -70,6 +70,19 @@ task-level park. Pull remains forbidden on every path.
 - **THEN** the task branch starts from origin's current `develop` tip, and
   the clone's own local branches and HEAD are unchanged
 
+#### Scenario: A name origin holds as both a branch and a tag parks the task
+- **WHEN** the resolution decision names `hotfix` and origin holds both
+  `refs/heads/hotfix` and `refs/tags/hotfix`
+- **THEN** the task parks with a report naming both commits, no fetch of
+  either is attempted, and neither namespace is preferred over the other
+
+#### Scenario: A ref origin holds in neither namespace parks the task
+- **WHEN** the resolution decision names a ref origin answers about and
+  holds under neither `refs/heads/` nor `refs/tags/`
+- **THEN** the task parks with a report naming the ref, and absence is
+  recorded only because origin answered — an unanswered remote stays an
+  infrastructure failure
+
 #### Scenario: Tag base lands in refs/tags without force
 - **WHEN** the resolution decision names tag `v2.3.0` and the clone holds
   no such tag

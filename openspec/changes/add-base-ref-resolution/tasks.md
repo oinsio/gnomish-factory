@@ -2,41 +2,45 @@
 
 ## 1. `:baseref` leaf module — pure resolution policy
 
-- [ ] 1.1 Create the `:baseref` Gradle module with the project conventions
+- [x] 1.1 Create the `:baseref` Gradle module with the project conventions
       (PIT 100%, `layering { allowedProjects = [] }`, no external deps) and
       verify `./gradlew projects` lists it and `:baseref:check` passes empty
       (FR10, module-layering delta)
-- [ ] 1.2 TDD the menu value types and pattern grammar: menu entry
+- [x] 1.2 TDD the menu value types and pattern grammar: menu entry
       (pattern + role `development`/`release`, role defaults to
       development), pattern compile/match semantics for literal names and
       `*` series; Spock data tables over match/no-match cases (FR1)
-- [ ] 1.3 TDD the module's own base-designator input value
+- [x] 1.3 TDD the module's own base-designator input value
       (absent | single | conflict) and its validation against the menu;
       the classification from candidates is NOT here (task 3.1) (FR3)
-- [ ] 1.4 TDD `BaseRefResolver`: priority order (explicit base > designator
+- [x] 1.4 TDD `BaseRefResolver`: priority order (explicit base > designator
       validated against menu > configured default > repo default branch >
       local HEAD in manual mode only), decision value
       `(ref, rule, reason)`, underdetermined classification (out-of-menu,
       conflict, autonomous with no remote/default); data-driven spec over
       the full priority matrix including the defensive
       empty-menu-with-designator escalation (FR4, FR5)
-- [ ] 1.5 Verify `:baseref:check` is green with 100% mutation score and the
+- [x] 1.5 Verify `:baseref:check` is green with 100% mutation score and the
       layering gate rejects a probe dependency (revert the probe); run
       `./gradlew :baseref:check`
 
 ## 2. Config: `base:` block in `.gnomish/config.yaml`
 
-- [ ] 2.1 TDD the loader DTO + validation for the `base:` section per the
+> Landed under the pre-D16 vocabulary (root-level `base:`, `menu`). The
+> items below stay checked as history; section 9 moves the section to
+> `task-branch.base` / `allowed` and renames the concept in code.
+
+- [x] 2.1 TDD the loader DTO + validation for the `base:` section per the
       pipeline-config delta: `type` discriminator (only `patterns`,
       defaulting when absent), `default`, `menu`; located `ConfigError`s
       for unknown type, unknown keys (including a stray `select`), invalid
       pattern, bad role, default outside the menu; absent section loads as
       empty config (FR1, UX1)
-- [ ] 2.2 Map the DTO into `:baseref` value types (compiled at load) and
+- [x] 2.2 Map the DTO into `:baseref` value types (compiled at load) and
       verify via loader specs that the typed definition exposes menu,
       roles, and default; aggregation with unrelated core errors covered
       (FR1)
-- [ ] 2.3 TDD the trusted-tier startup check: when the tracker adapter
+- [x] 2.3 TDD the trusted-tier startup check: when the tracker adapter
       factory reports designator kind `base` among its configured kinds
       and the menu is empty, loading fails with a located `ConfigError`
       naming the rule's location and `base.menu`; a rule with a non-empty
@@ -45,25 +49,25 @@
 
 ## 3. Tracker port: designator facts and contract suite
 
-- [ ] 3.1 TDD the designator vocabulary and the one classification function
+- [x] 3.1 TDD the designator vocabulary and the one classification function
       in `:gnomish-plugin-api` (candidates → absent | single | conflict,
       equal duplicates collapse, conflicts keep every value); add
       `designators` to `TrackerTask` and the configured-kinds query to the
       `TrackerAdapterFactory` seam (default: no kinds) (FR3)
-- [ ] 3.2 TDD the GitHub adapter end: `tracker.github.designators` map
+- [x] 3.2 TDD the GitHub adapter end: `tracker.github.designators` map
       validated on the subsection seam (kind → regex compiles, exactly one
       capture group, located errors like `labels`), candidate extraction
       from issue labels in `GithubTaskFetcher`, configured kinds reported
       through the factory; in-memory adapter: a test operation that sets a
       task's designators, no subsection (FR3)
-- [ ] 3.3 Add the three-shape designator coverage to the contract suite
+- [x] 3.3 Add the three-shape designator coverage to the contract suite
       (absent / single / conflict / equal duplicates for kind `base`) and
       verify both adapters pass it unchanged; map the port shape onto the
       `:baseref` input value in `:application` (FR3)
 
 ## 4. Git adapter: discovery and refresh fetch
 
-- [ ] 4.1 TDD default-branch discovery (`ls-remote --symref` parse) in
+- [x] 4.1 TDD default-branch discovery (`ls-remote --symref` parse) in
       `:adapters:git` under the bounded-network rules; specs cover a
       renamed default branch, a no-origin clone (refusal result, not a
       guess), and scrubbed failure output (FR5, NFR-P1)
@@ -138,7 +142,7 @@
       `createTask()` in `TakeFreshClaim` and `TakeContainerFreshClaim`; add
       the `Kept in sync with` markers to both ends (invariant line includes
       the new resolve step) and remove their `manual-sync-pairs.md` registry
-      row; mirrored specs cover both media; the `base:` block comes from the
+      row; mirrored specs cover both media; the `task-branch.base` section comes from the
       trusted tier bound at startup (task 5.5) — read through the
       git-objects law source at the refreshed default-branch tip, never
       re-read per claim (a spec asserts no default-branch fetch and no
@@ -158,9 +162,9 @@
       branch ref; the reaper restores `Ready` on virtual-time TTL, a second
       reaper pass is a no-op, and the next claimant re-resolves from
       scratch (FR7, NFR-R1, NFR-R2)
-- [ ] 6.5 TDD underdetermined-input escalation: out-of-menu and conflict
-      park the task with a report naming the found values and the menu, no
-      stage attempt burned; manual `run` without `--base` still branches
+- [ ] 6.5 TDD underdetermined-input escalation: a disallowed selection and a
+      conflict park the task with a report naming the found values and the
+      allowed bases, no stage attempt burned; manual `run` without `--base` still branches
       from local HEAD offline with zero network calls (specs assert no
       remote invocation) (FR4, FR8, UX2, UX3)
 
@@ -218,16 +222,19 @@
 
 ## 8. Documentation and verification
 
-- [ ] 8.1 Add glossary entries (base ref, base menu, designator — written
+- [ ] 8.1 Add glossary entries (base ref, allowed bases —
+      `task-branch.base.allowed`, *Never:* menu — designator — written
       kind-generic: a per-task selection of a given kind carried as
       tracker metadata in one of three shapes, with `base` as the first
       kind and `type` named as the next — base pin,
-      law commit, trusted tier, task tier, remote outage gate) and the
-      operator-guide section: `base:` block reference, the
+      law commit, trusted tier, task tier, remote outage gate); extend the
+      existing *Task branch* entry with the `task-branch:` configuration
+      section it names (D16); and the
+      operator-guide section: `task-branch.base` section reference, the
       `tracker.github.designators` rule reference (and the adapter author
       guide's designator obligations), the external-automation escape
       hatch, the two configuration tiers (the trusted tier binds at
-      startup — a merged menu change needs a restart of `serve`), the
+      startup — a merged change to the allowed bases needs a restart of `serve`), the
       unchanged `run` behavior (and `--base` reading law from git objects
       at the given ref), and the outage gate (its log lines, snapshot
       section, and exit code 16); verify by docs build/lint conventions
@@ -250,3 +257,30 @@
       landed: exact flags, exit code, event codes, the flapping-remote
       reset; flip their status to accepted-and-implemented; reference them
       from the glossary entries (D9, D11)
+
+## 9. Vocabulary rename: `task-branch.base` / `allowed` (D16)
+
+> Sequenced first: finish this section before resuming 4.2, so every later
+> item builds on the settled names. Sections 1–3 stay checked; their specs
+> are updated in place here, not re-done.
+
+- [ ] 9.1 Move the config section: `ConfigDto` gains a `taskBranch` field
+      (a `TaskBranchDto` holding `base`), the `base` subsection keeps `type`
+      and `default` and takes `allowed` in place of `menu`; a root-level
+      `base:` and a `task-branch.base.menu` key are unknown keys — located
+      errors, no alias; error locations become
+      `task-branch.base.allowed[i]` and `task-branch.base.default`, and the
+      designator-without-allowed-bases error of 2.3 names
+      `task-branch.base.allowed`; the loader specs of 2.1–2.3 assert the
+      new shape and the two rejected draft keys (FR1, UX1, pipeline-config
+      "The earlier draft shape is not an alias")
+- [ ] 9.2 Rename the concept in code and specs: `BaseMenu` → `AllowedBases`,
+      `BaseMenuEntry` → `AllowedBase`, `BaseMenuEntryDto` → `AllowedBaseDto`,
+      `DesignatorMenuSeam` → `DesignatorAllowedBasesSeam`, every `menu`
+      field, parameter, constant (including the underdetermined cause for a
+      disallowed selection), javadoc, error text, and Spock feature name;
+      grep gate: `menu` is absent from `src/main` and `src/test` of
+      `:baseref`, `:adapters`, `:application` (D16, no-jargon rule)
+- [ ] 9.3 `./gradlew :baseref:check :adapters:check :application:check`
+      green with 100% mutation score after the rename, and every checked
+      item of sections 1–3 still holds under the new names

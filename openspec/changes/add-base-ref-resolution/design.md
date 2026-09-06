@@ -28,7 +28,7 @@ literal `"HEAD"` (`RunAssembler`). `GitObjects` already reads blobs and checks
 existence at a commit but cannot list a tree. Every consumer of instructions
 and criteria (prompt builders, judge voter) takes frozen strings, never
 paths. `add-pipeline-routing` D3/D5 assume "same tree per task", which the
-base menu falsifies.
+allowed-bases list falsifies.
 
 ## Goals / Non-Goals
 
@@ -54,7 +54,7 @@ rejected:* resolving in each mode runner — exactly the duplicated-default
 bug this change removes, multiplied.
 
 **D2 — Pure policy in a new leaf module `:baseref`.** The module holds the
-menu pattern grammar, selection validation, source priority, the
+allowed-bases pattern grammar, selection validation, source priority, the
 underdetermined-input classification, and the decision value types
 `(ref, rule, reason)` — a function from values to a value, zero internal and
 zero external dependencies, gated by `layering { allowedProjects = [] }`.
@@ -62,7 +62,7 @@ The base designator enters it as an already-classified input value
 (absent | single | conflict, the module's own type); `:application` maps the
 port's designator shape onto it, because the module may import nothing.
 Fetch, `rev-parse`, and `ls-remote --symref` stay in `:adapters:git`; the
-`base:` DTO parsing stays in the pipeline loader (`:adapters`), mapping into
+`task-branch.base` DTO parsing stays in the pipeline loader (`:adapters`), mapping into
 `:baseref` value types; orchestration and pinning stay in `:application`.
 *Rationale:* change 2 (propagation obligations) is a planned second consumer
 of the same pattern grammar; the empty-allowlist gate constructively
@@ -73,8 +73,8 @@ the policy is dense decision logic that benefits from its own 100% PIT scope.
 implementation time the policy degenerates into a trivial conditional, fold
 it back into `:application` without loss.
 
-**D3 — The `base:` block is trusted-tier law read from the refreshed default
-branch.** Shape per pipeline-config delta (FR1). The block is read
+**D3 — The `task-branch.base` section is trusted-tier law read from the refreshed default
+branch.** Shape per pipeline-config delta (FR1) and naming per D16. The section is read
 factory-side, by ref (D12), from the repository default branch only
 (Renovate's model: config on the default branch, no per-branch drift, and
 selector fields re-asserted from the default branch even when the base
@@ -82,7 +82,7 @@ branch's config is merged in), bound once at startup and never re-read per
 claim (D15); it picks the base; the task tier of the law
 then binds from the chosen base's law commit. This ordering is what breaks
 the "config chooses the base, but which ref holds the config" cycle (FR2,
-NFR-S1). *Alternative rejected:* reading `base:` from the base branch itself
+NFR-S1). *Alternative rejected:* reading `task-branch.base` from the base branch itself
 — circular; per-branch configs — the drift Renovate explicitly designed
 away.
 
@@ -111,11 +111,12 @@ field (fixVersion). The rule lives in the adapter's own subsection —
 validated on the adapter's config seam exactly as `tracker.github.labels` is
 today. The `TrackerAdapterFactory` seam gains a query for the kinds an
 adapter is configured to extract (the `credentialEnvVars` shape); the
-trusted-tier startup validation turns "kind `base` extracted, `base.menu`
-empty" into a located `ConfigError` naming both places, because such a rule
-can only ever reject (the Kubernetes "selector cannot match its template"
-class of error). The resolver keeps its defensive arm — empty menu plus a
-designator is underdetermined — so the runtime stays fail-closed if the
+trusted-tier startup validation turns "kind `base` extracted,
+`task-branch.base.allowed` empty" into a located `ConfigError` naming both
+places, because such a rule can only ever reject (the Kubernetes "selector
+cannot match its template" class of error). The resolver keeps its defensive
+arm — no allowed base plus a designator is underdetermined — so the runtime
+stays fail-closed if the
 startup check is bypassed. This resolves proposal Q1. *Rationale:* the port
 spec's own rule ("port vocabulary is the factory's; no core class references
 a tracker concept such as label") and the ports-and-adapters literature
@@ -211,14 +212,15 @@ binds every claim-time fetch of any ref, which is what
 `add-decision-inheritance` adopts for the epic branch.
 
 **D10 — Security model: the gnome gets no new levers.** Two rules carry the
-whole model: (1) the `base:` block is read only from the default branch —
+whole model: (1) the `task-branch.base` section is read only from the default branch —
 in-branch or working-copy edits are project content until a human merges
 them (the `PipelineLaw` reward-hacking rule); (2) the base is pinned at
 claim, before any agent runs, and resume never re-resolves from
 gnome-writable data. Remaining vectors are human-permission questions
 (triage rights pick a *valid* but wrong base — visible in the PR target,
-bounded by the operator's menu; push rights can mint a menu-matching branch
-— inherent to pattern menus, gated by merge review; a gnome PR editing
+bounded by the operator's allowed bases; push rights can mint a branch that
+matches an allowed pattern — inherent to pattern lists, gated by merge
+review; a gnome PR editing
 `.gnomish/` — law only after human merge). *Alternative rejected
 (permanently):* an executable selector shipped in the target repo's
 `.gnomish/` (the `command`-check pattern) — the selector would run on the
@@ -250,6 +252,52 @@ park. The git facts, the tool survey, and the rejected alternatives
 branch-only bases, shallow fetch) are `docs/adr/0006-base-refresh-fetch.md`.
 This resolves proposal Q2.
 
+**D11a — The kind is a fact origin states, and a name that is both a branch
+and a tag on origin parks the task.** A base ref carries no kind: the allowed
+list and the designator name `develop` or `v2.3.0`, and only the remote knows
+which namespace holds it. So the refresh classifies before it fetches, with
+one `ls-remote origin refs/heads/<n> refs/tags/<n>` — a bare SHA is
+recognized lexically first and never asked about. Four answers: only a head
+→ branch; only a tag → tag; neither → the task-level park "origin holds no
+such ref"; **both → a task-level park naming the head commit and the tag
+commit**. Never a preference between them.
+
+*Rationale:* absence must be a fact a remote stated, not an inference from a
+failed fetch — the rule `TaskBranchLocator` and `RemoteBranchTip.Carriage`
+already carry, and the one whose violation forked a duplicate branch once
+already. The collision arm is the security half: git itself resolves an
+unqualified ambiguous name **to the tag**, silently, and that exact
+preference is how a tag named after a protected branch drew that branch's CI
+secrets in GitLab (gitlab-foss#53477, gitlab#219583); `actions/checkout`
+carries a tail of the same class from fetching `refs/heads/<ref>*` and
+`refs/tags/<ref>*` together. A factory that picked either side would let
+whoever can push a tag redirect a task's base. Jenkins' own advice — spell
+the ref fully — is the escape hatch below.
+
+*Cost:* one remote refs read plus one narrow fetch, which is NFR-P1's budget
+exactly: the read that classifies a named base and the `ls-remote --symref`
+that discovers the default branch are alternatives, never both — a task
+whose base came from the allowed list, a designator, or `--base` never asks for the
+default branch, and a task that fell through to the default branch learns
+from that same read that it is a head.
+
+*Deferred, not now:* accepting a fully qualified `refs/heads/<n>` or
+`refs/tags/<n>` in the allowed list, a designator, or `--base` as the documented way
+past a collision (Jenkins' "safest specifier" rule). `RefNameSyntax` already
+admits the syntax; what is missing is only the classification short-circuit
+and the matching semantics of a qualified allowed pattern. Left out because the
+collision is rare, the park names both commits so the operator can rename or
+re-tag, and a half-specified qualified form would be a second grammar to
+keep in step with the allowed list.
+
+*Alternative rejected:* a `kind` field on the allowed-base entry. The kind is a
+property of the remote, not of project policy, so a declared kind is a
+second source of truth that can only ever drift from what origin holds; and
+it would have to be repeated for every entry to pay off in the one case that
+matters. Propagation obligations (NG1) may later want to know "this base is
+a tag, so there is nothing to merge back" — that fact is available from the
+classification at resolution time and needs no configuration.
+
 **D12 — Law is read by ref from git objects; the working tree is never a law
 source once a ref is resolved.** A law source abstraction (read a file, test
 a regular file, list a directory — all relative to a root) gets exactly two
@@ -273,7 +321,7 @@ worktree at the base as the law root:* three classes instead of ten, every
 path-based reader untouched, the existing binding spec passes as is; but a
 worktree is a create-plus-delete durable pair (a new kill window, orphan
 sweeping, a project tree materialized on the host that `FactoryCloneHardening`
-deliberately neutralizes), the `base:` block must be read by ref anyway, and
+deliberately neutralizes), the `task-branch.base` section must be read by ref anyway, and
 the `"HEAD"` pin stays wrong unless fixed separately. *Rejected outright:*
 checking the base out in the shared clone — mutates state that concurrent
 serve slots share and breaks the FR7 invariant D4 preserves.
@@ -315,10 +363,10 @@ buys nothing (same tree)" and D5 "one law per pipeline at startup" become
 "one law per (pipeline, law commit)", cached per pair if measured to matter.
 
 **D15 — The trusted tier binds once at startup; a claim never re-reads it.**
-The `base:` block (and the rest of the trusted tier) is read from the
+The `task-branch.base` section (and the rest of the trusted tier) is read from the
 refreshed default branch by the startup load of D14 and held for the
 process lifetime; the claim path performs only default-branch discovery,
-the base refresh, and the task-tier load. A menu change merged to the
+the base refresh, and the task-tier load. A change to the allowed bases merged to the
 default branch takes effect on the next start — the same lifecycle
 `tracker:` configuration already has (FR2, FR13, NFR-P1). *Rationale:*
 policy and network cost stay startup-scoped: the claim path keeps exactly
@@ -332,6 +380,34 @@ change between two slots of one daemon, and a startup definition that stops
 being the definition the slots resolve under. Freshness of the *base tip*
 is unaffected either way: that is the per-claim refresh of D6.
 
+**D16 — The section is `task-branch.base` with an `allowed` list; the
+designator kind stays `base`.** (Review of 2026-09-06; resolves proposal Q3.)
+A root-level `base:` key is ambiguous in an infrastructure YAML — base image,
+base URL, merge base — and reads as a sentence fragment beside `tracker:` and
+`autonomy:`, which name areas. Qualifying it under `task-branch`, an existing
+glossary term, makes the key read as "the base of the task branch" without
+inventing a word, and gives later settings of the same branch a home — a
+`task-branch.prefix` override is the first candidate (NG12) — instead of a
+new root key each time. The list key is `allowed` because it states the rule
+(a selection outside it is rejected) where `menu` was a metaphor carried over
+from the design session; it is also the word family of the egress
+allowlist. The concept is renamed wherever it appears — YAML, glossary
+(*allowed bases*), `:baseref` and loader types, error texts, spec names —
+because under the no-jargon rule renaming a concept renames the code (tasks
+9.x). The tracker's designator kind keeps the word `base`
+(`tracker.github.designators.base`): it is the same word as the subsection it
+selects for, and `designators` already scopes it. *Rationale:* the term must
+be one word in every place a reader meets it; the landed code under the old
+vocabulary is small (tasks 1–3) and cheaper to rename now than to carry as a
+second dictionary. *Alternatives rejected:* `branching:` — names the area,
+but collides with pipeline branching (routing, decisions); `start-point:` —
+git's own term, precise but unfamiliar and silent about *which* branch;
+`base-ref:` — matches the capability name yet leaves the ambiguity intact;
+renaming the designator kind to `task-branch-base` — fully qualified, but a
+longer name carrying no new information and a rework of the landed adapter
+seam; keeping `menu` in code while the YAML says `allowed` — two words for
+one thing, the drift this decision exists to prevent.
+
 **Design note (NG7):** base freshness at the merge end — whether the target
 moved while the task ran — is the host merge queue's concern; the factory
 does not re-validate or speculatively merge at delivery time.
@@ -340,7 +416,7 @@ does not re-validate or speculatively merge at delivery time.
 
 ```mermaid
 flowchart LR
-    Start["startup: fetch default branch,<br/>bind trusted tier (base: block)"] -.-> Resolve
+    Start["startup: fetch default branch,<br/>bind trusted tier (task-branch: section)"] -.-> Resolve
     Claim["claim + harden"] --> Resolve["resolve:<br/>--base > designator > default > repo default"]
     Resolve -->|underdetermined| Park["park with report<br/>(no attempt burned)"]
     Resolve --> Fetch["narrow fetch of the base"]
@@ -449,12 +525,12 @@ extend `RestartBackoff`, do not fork it.
 - [A single bad ref or a revoked credential opens the gate for every task]
   → classification by cause (FR9): only reachability failures open it; the
   rest park the one task they belong to.
-- [A menu change on the default branch is invisible to a running serve
-  until restart] → accepted (D15): the trusted tier is startup-scoped like
-  `tracker:`; the operator guide names the restart, and base *tips* are
-  still refreshed per claim.
-- [Menu patterns admit any branch a pattern matches, including one minted
-  by a hostile push] → inherent to pattern menus (Renovate has the same
+- [A change to the allowed bases on the default branch is invisible to a
+  running serve until restart] → accepted (D15): the trusted tier is
+  startup-scoped like `tracker:`; the operator guide names the restart, and
+  base *tips* are still refreshed per claim.
+- [Allowed patterns admit any branch a pattern matches, including one minted
+  by a hostile push] → inherent to pattern lists (Renovate has the same
   property); gated by merge review and named in D10 as a permission
   question, not a factory lever.
 
@@ -462,11 +538,14 @@ extend `RestartBackoff`, do not fork it.
 
 No deployed-state migration: legacy `task.json` files read as unpinned
 (D7) and resume behaves exactly as before for them; projects without a
-`base:` block get remote-default-branch behavior only for *newly created*
-tasks. Rollback is removing the config block — zero-config semantics remain
-valid indefinitely. Glossary gains the new terms (base ref, base menu,
-designator, base pin, law commit, trusted tier, task tier, remote outage
-gate) in this change, per the no-jargon rule. The principle behind D9 — a
+`task-branch.base` section get remote-default-branch behavior only for
+*newly created* tasks. Rollback is removing the config section — zero-config
+semantics remain valid indefinitely. No deployed project carries the
+pre-D16 `base:`/`menu` shape (the change has not shipped), so no alias is
+kept: a root-level `base:` is an unknown key. Glossary gains the new terms
+(base ref, allowed bases, designator, base pin, law commit, trusted tier,
+task tier, remote outage gate) and the existing *task branch* entry names
+its configuration section, in this change, per the no-jargon rule. The principle behind D9 — a
 shared-dependency outage is charged to the daemon and never to a task's
 failure budget — outlives this change and lands as
 `docs/adr/0005-dependency-outage-accounting.md`, and the fetch mechanics

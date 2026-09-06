@@ -2,49 +2,53 @@
 
 ## ADDED Requirements
 
-### Requirement: Optional base section with pattern menu
-`.gnomish/config.yaml` SHALL support an optional `base:` section: `type` (a
-discriminator; `patterns` is the only supported value in this version, and it
-is the default when absent), `default` (optional ref name), and `menu` (a list
-of entries, each `pattern` plus optional `role` of `development` | `release`,
-defaulting to `development`). Patterns SHALL compile at load. Located
-`ConfigError`s under the existing aggregation contract SHALL cover: an
-unknown `type` value, an unknown key anywhere in the section, an invalid
-pattern, an unknown `role`, and a `default` that matches no menu pattern when
-a menu is declared. The section holds no tracker-specific selection rule: how
-a task names its base is the tracker adapter's own configuration
-(`tracker.<type>.designators`, owned and validated by the adapter per
-tracker-port). An absent section SHALL be valid: an empty menu, no configured
-default, and all previously specified loading behavior unchanged. The loader
-parses and validates only — resolution semantics belong to
-base-ref-resolution.
+### Requirement: Optional task-branch base section with allowed patterns
+`.gnomish/config.yaml` SHALL support an optional `task-branch:` section — the
+root key is the glossary term for the branch it configures — holding a `base`
+subsection: `type` (a discriminator; `patterns` is the only supported value in
+this version, and it is the default when absent), `default` (optional ref
+name), and `allowed` (a list of entries, each `pattern` plus optional `role`
+of `development` | `release`, defaulting to `development`). Patterns SHALL
+compile at load. Located `ConfigError`s under the existing aggregation
+contract SHALL cover: an unknown `type` value, an unknown key anywhere in the
+section — a root-level `base:` and a `menu` key included, since the earlier
+draft shape has no alias — an invalid pattern, an unknown `role`, and a
+`default` that matches no allowed pattern when any is declared. The
+subsection holds no tracker-specific selection rule: how a task names its
+base is the tracker adapter's own configuration (`tracker.<type>.designators`,
+owned and validated by the adapter per tracker-port). An absent section SHALL
+be valid: no allowed bases, no configured default, and all previously
+specified loading behavior unchanged. The loader parses and validates only —
+resolution semantics belong to base-ref-resolution. The `task-branch:`
+section is reserved for settings of the task branch itself; a name-prefix
+override is a named candidate for a later change, not part of this one.
 <!-- implements FR1 of add-base-ref-resolution -->
 <!-- implements UX1 of add-base-ref-resolution -->
 
 #### Scenario: Settled shape loads
-- **WHEN** the section declares `type: patterns`, `default: main`, and a menu
-  of `main` and `release/*` (role `release`)
+- **WHEN** `task-branch.base` declares `type: patterns`, `default: main`, and
+  `allowed` entries `main` and `release/*` (role `release`)
 - **THEN** loading succeeds and the typed definition exposes the compiled
-  menu, the default, and the roles
+  allowed bases, the default, and the roles
 
-#### Scenario: No base section
-- **WHEN** a `.gnomish/` without a `base:` section is loaded
-- **THEN** loading succeeds exactly as before and the definition reports an
-  empty menu with no default
+#### Scenario: No task-branch section
+- **WHEN** a `.gnomish/` without a `task-branch:` section is loaded
+- **THEN** loading succeeds exactly as before and the definition reports no
+  allowed bases and no default
 
-#### Scenario: Selection rule without a menu is a load error
+#### Scenario: Selection rule without allowed bases is a load error
 - **WHEN** the tracker adapter reports that it extracts designator kind
   `base` (for GitHub, a `tracker.github.designators.base` rule) and the
-  `base:` section is absent or declares no menu entry
+  `task-branch.base` section is absent or declares no `allowed` entry
 - **THEN** loading fails with a located error naming the rule's location and
-  `base.menu`, stating that the rule can only ever reject a selection — add a
-  menu or remove the rule
+  `task-branch.base.allowed`, stating that the rule can only ever reject a
+  selection — allow a base or remove the rule
 
-#### Scenario: Default outside the menu is a load error
-- **WHEN** the section declares `default: develop` and a menu containing
+#### Scenario: Default outside the allowed bases is a load error
+- **WHEN** the section declares `default: develop` and `allowed` containing
   only `release/*`
-- **THEN** loading fails with a located error naming `base.default` and the
-  menu it failed to match
+- **THEN** loading fails with a located error naming
+  `task-branch.base.default` and the allowed patterns it failed to match
 
 #### Scenario: Unknown discriminator is a load error
 - **WHEN** the section declares `type: script`
@@ -55,6 +59,12 @@ base-ref-resolution.
 #### Scenario: Unknown keys are not ignored
 - **WHEN** the section contains a misspelled key such as `defualt:`
 - **THEN** loading fails with a located error naming the unknown key
+
+#### Scenario: The earlier draft shape is not an alias
+- **WHEN** `config.yaml` carries a root-level `base:` key, or
+  `task-branch.base` carries a `menu` key
+- **THEN** loading fails with a located error naming the unknown key, and
+  nothing is silently read from it
 
 ### Requirement: Definition validated at startup, bound per task from the base
 `serve` and `take` SHALL load and validate the full definition from the
@@ -91,7 +101,7 @@ that resolved a ref (tracker-driven modes, manual `run` with `--base`), and
 the **working tree** in the git-less in-place mode and in manual `run`
 without `--base`. Where a ref was resolved, the factory clone's working tree,
 index, and `HEAD` SHALL play no part in the law. Configuration has two tiers:
-the trusted tier (`tracker:`, `base:`, and future selector sections) binds
+the trusted tier (`tracker:`, `task-branch:`, and future selector sections) binds
 once at startup from the refreshed repository default branch and is never
 re-read per task; the task tier (stages,
 instructions, criteria, the remainder of `config.yaml`) binds from the base's
@@ -150,9 +160,9 @@ source of the trusted tier.
 - **THEN** the task parks with a report naming the pinned ref and SHA, and
   no law is bound from the pinned SHA silently
 
-#### Scenario: The chosen base's own `base:` block plays no part in choosing it
+#### Scenario: The chosen base's own `task-branch.base` section plays no part in choosing it
 - **WHEN** a task resolves to base `release/1.18`, whose `.gnomish/config.yaml`
-  carries a `base:` block differing from the default branch's
-- **THEN** resolution used the default-branch `base:` block, and the rest of
+  carries a `task-branch.base` section differing from the default branch's
+- **THEN** resolution used the default-branch `task-branch.base` section, and the rest of
   the law — including the remainder of `release/1.18`'s `config.yaml` —
   binds from `release/1.18`'s law commit

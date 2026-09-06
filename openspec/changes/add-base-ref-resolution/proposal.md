@@ -13,7 +13,7 @@ an ever-older base. Separately, "where to branch from" is hardwired to one
 implicit answer, while real projects branch features from `develop`, hotfixes
 from `release/1.18`-style series, and the like; the design session of
 2026-09-04 (canonical branching models, backport/cherry-pick automation, coding
-agents, CI systems) settled the shape: a **project-configured menu of allowed
+agents, CI systems) settled the shape: a **project-configured list of allowed
 bases** (patterns), a **per-task selection** (task metadata), and a
 **fail-closed refresh fetch** of the chosen base before the branch is created.
 
@@ -24,7 +24,7 @@ absolute — resume narrow-fetches exactly `gnomish/<task>` (D9). This change
 supersedes the D7 wording in `git-task-persistence` while preserving the manual
 `gnomish run` behavior it protected.
 
-A review of 2026-09-05 found a second gap the base menu opens: pipeline law is
+A review of 2026-09-05 found a second gap the allowed-bases list opens: pipeline law is
 read from the factory clone's **working tree** (`PipelineLawReader` over a
 directory, the definition loaded once per process, the external-check pin
 guard comparing against the literal `HEAD`). That equivalence — "clone working
@@ -44,15 +44,18 @@ and the rest from the ref being built. This change adopts that mechanism.
   hardcoded `main`) > (manual run only) local HEAD. The two duplicated
   defaults in the adapters collapse; below the funnel everything speaks
   resolved refs. (FR4, FR10)
-- ADDED: **`base:` block in `.gnomish/config.yaml`**: a menu of allowed bases
-  as patterns with roles (`development` | `release`), an optional configured
-  default, and a `type: patterns` discriminator for forward compatibility. The
-  block is domain policy only; how a tracker encodes a per-task selection is
-  the tracker adapter's configuration (`tracker.<type>.designators`). Zero
-  configuration stays valid and resolves to the repository default branch.
-  The block is read **only from the refreshed default branch, once at
-  startup** — a gnome or task branch can never alter it, and a claim never
-  re-reads it. (FR1, FR2)
+- ADDED: **`task-branch.base` section in `.gnomish/config.yaml`**: the
+  allowed bases as patterns with roles (`development` | `release`), an
+  optional configured default, and a `type: patterns` discriminator for
+  forward compatibility. The section sits under `task-branch:` — the glossary
+  term for the branch it configures — so the key reads as "the base of the
+  task branch", and later settings of the same branch land beside it instead
+  of as new root keys (NG12). The section is domain policy only; how a
+  tracker encodes a per-task selection is the tracker adapter's configuration
+  (`tracker.<type>.designators`). Zero configuration stays valid and resolves
+  to the repository default branch. The section is read **only from the
+  refreshed default branch, once at startup** — a gnome or task branch can
+  never alter it, and a claim never re-reads it. (FR1, FR2)
 - ADDED: **generalized designator mechanism** on the tracker port: the
   `fetchTask` facts carry, per kind, a designator in one of three shapes —
   absent, single, or conflict — classified by one shared function and
@@ -60,8 +63,8 @@ and the rest from the ref being built. This change adopts that mechanism.
   label rule; a future Jira adapter: a native field). Kind `base` is the
   first user; `add-pipeline-routing` later adds kind `type` on the same
   mechanism (dependency direction reversed versus the earlier plan: this
-  change lands first). A designator rule for kind `base` with no menu to
-  match against is a located load error. (FR3)
+  change lands first). A designator rule for kind `base` with no allowed
+  bases to match against is a located load error. (FR3)
 - ADDED: **fail-closed refresh fetch** of the resolved base (branch, tag, or
   SHA) between claim hardening and task creation in the autonomous paths; an
   unreachable remote is an infrastructure failure — bounded retries, no stage
@@ -85,7 +88,7 @@ and the rest from the ref being built. This change adopts that mechanism.
 - MODIFIED: `pipeline-config` "Pipeline law binds per invocation" — the law
   source in git modes becomes **git objects at a resolved commit** (the law
   commit), never the clone's working tree; two configuration tiers: the
-  **trusted tier** (`tracker:`, `base:`, later `routing:`) binds from the
+  **trusted tier** (`tracker:`, `task-branch:`, later `routing:`) binds from the
   refreshed default branch, the **task tier** (stages, instructions,
   criteria, the rest of `config.yaml`) binds from the chosen base. (FR2, FR11,
   NFR-S1)
@@ -111,8 +114,8 @@ and the rest from the ref being built. This change adopts that mechanism.
 
 ### New Capabilities
 
-- `base-ref-resolution`: the resolution contract — base menu grammar and
-  roles, per-task selection via the designator mechanism, source priority,
+- `base-ref-resolution`: the resolution contract — allowed-bases pattern
+  grammar and roles, per-task selection via the designator mechanism, source priority,
   fail-closed validation and escalation on underdetermined input, default
   branch discovery, refresh-fetch policy, and the base pin lifecycle.
 
@@ -121,7 +124,7 @@ and the rest from the ref being built. This change adopts that mechanism.
 - `git-task-persistence`: the branch-base requirement is rewritten (supersedes
   D7 wording); the base pin extends `task.json` behind the version gate; the
   refresh fetch joins the bounded-network rules.
-- `pipeline-config`: the optional `base:` section loads and validates into the
+- `pipeline-config`: the optional `task-branch.base` section loads and validates into the
   typed definition (patterns compiled at load, unknown keys are located
   errors); the law-source requirement is rewritten around the law commit and
   the two configuration tiers; resume law source and per-task binding join it.
@@ -164,7 +167,7 @@ and the rest from the ref being built. This change adopts that mechanism.
 - G2: zero configuration keeps working and means "the repository's default
   branch as the remote reports it".
 - G3: the allowed bases are project configuration (patterns), the choice is
-  per-task (tracker metadata), and an out-of-menu or ambiguous choice
+  per-task (tracker metadata), and a disallowed or ambiguous choice
   escalates instead of guessing.
 - G4: the designator mechanism and the `task.json` pin precedent land in a
   form `add-pipeline-routing` consumes without reshaping.
@@ -202,16 +205,20 @@ and the rest from the ref being built. This change adopts that mechanism.
 - NG11: sharing gate state across factory instances — instances are
   stateless, probes are tracker-free, so N instances cost N cheap probes and
   nothing else.
+- NG12: a configurable task-branch name prefix. The `gnomish/` prefix stays
+  fixed by `git-task-persistence`; when a project needs an override, the
+  `task-branch:` section introduced here is its home (`task-branch.prefix`,
+  beside `task-branch.base`) — a follow-up change, not this one.
 
 ## Users & Scenarios
 
 - U1: an operator runs `gnomish serve` on a project that develops on
-  `develop`; the project sets `base.default: develop` once, and every task
+  `develop`; the project sets `task-branch.base.default: develop` once, and every task
   branches from the freshly fetched `develop`.
 - U2: a triager routes a hotfix by putting the `base:release-1.18` label on
-  the task; the factory validates it against the menu, fetches the branch,
-  and pins the choice. A label naming a branch outside the menu parks the
-  task with a report instead of branching.
+  the task; the factory validates it against the allowed bases, fetches the
+  branch, and pins the choice. A label naming a branch outside the allowed
+  bases parks the task with a report instead of branching.
 - U3: an operator uses manual `gnomish run` offline exactly as today — local
   HEAD, no network, no new failure modes.
 - U4: external automation (Jira automation, a GitHub Action, a cron job)
@@ -222,19 +229,21 @@ and the rest from the ref being built. This change adopts that mechanism.
 
 ### Functional
 
-- FR1: `.gnomish/config.yaml` SHALL support an optional `base:` section: a
-  `type` discriminator (only `patterns` supported now), an optional `default`
-  ref, and a `menu` of patterns each with an optional role (`development` |
-  `release`; default `development`). Patterns compile at load; unknown keys,
-  an invalid pattern, or a `default` matching no menu entry are located
-  `ConfigError`s. An absent section is valid and means an empty menu with no
-  configured default. The section holds no tracker-specific selection rule:
-  how a task names its base is adapter configuration (FR3).
-- FR2: the `base:` section SHALL be read only from the repository's default
+- FR1: `.gnomish/config.yaml` SHALL support an optional `task-branch`
+  section holding a `base` subsection: a `type` discriminator (only
+  `patterns` supported now), an optional `default` ref, and `allowed` — a
+  list of patterns each with an optional role (`development` | `release`;
+  default `development`). Patterns compile at load; unknown keys (a
+  root-level `base:` included — there is no alias), an invalid pattern, or a
+  `default` matching no allowed pattern are located `ConfigError`s. An
+  absent section is valid and means no allowed bases and no configured
+  default. The subsection holds no tracker-specific selection rule: how a
+  task names its base is adapter configuration (FR3).
+- FR2: the `task-branch.base` section SHALL be read only from the repository's default
   branch, refreshed by fetch, on the factory side — never from a task branch
   or a gnome-writable working copy. It belongs to the trusted tier of
   configuration (FR11), which binds **once at startup** (FR13) and is not
-  re-read per claim: a menu change merged to the default branch takes effect
+  re-read per claim: a change to the allowed bases merged to the default branch takes effect
   on the next start of `serve`/`take`, exactly as a `tracker:` change does.
   The task tier binds from the chosen base's law commit.
 - FR3: the `fetchTask` facts SHALL carry designators per kind: absent, a
@@ -246,16 +255,16 @@ and the rest from the ref being built. This change adopts that mechanism.
   shared function published by the port module, so no regex or shape logic is
   duplicated per adapter and no tracker concept (label) reaches core. The
   adapter factory seam SHALL report the kinds an adapter is configured to
-  extract; a `base` rule configured while the menu is empty SHALL be a
+  extract; a `base` rule configured while no base is allowed SHALL be a
   located load error at startup, because such a rule can only ever reject.
   Kind `base` is introduced by this change; the mechanism is kind-generic so
   `type` (routing) plugs in later. The tracker contract suite SHALL cover all
   three shapes for every adapter.
 - FR4: base resolution SHALL follow one priority order — explicit `--base`,
-  else the task's `base` designator validated against the menu, else the
+  else the task's `base` designator validated against the allowed bases, else the
   configured `default`, else the repository default branch; manual `run`
   without `--base` alone falls through to the local HEAD. A designator conflict
-  or a designator naming a ref outside the menu SHALL escalate (park with a
+  or a designator naming a ref outside the allowed bases SHALL escalate (park with a
   report) without burning a stage attempt and without silently substituting
   another base.
 - FR5: the repository default branch SHALL be discovered from the remote at
@@ -308,7 +317,7 @@ and the rest from the ref being built. This change adopts that mechanism.
   an uncaught exception. The take run ends with a typed result naming the
   infrastructure cause and carrying its own exit code.
 - FR10: the resolution policy SHALL be a pure component — inputs are values
-  (menu, designators, default-branch name, mode), output is a decision
+  (allowed bases, designators, default-branch name, mode), output is a decision
   `(ref, rule, reason)`; it executes no subprocess and holds no port. All
   four fresh-start paths (host/container × run/take) consume it through the
   single existing funnel.
@@ -317,7 +326,7 @@ and the rest from the ref being built. This change adopts that mechanism.
   abstraction with exactly two realizations: working tree (in-place mode,
   manual `run` without `--base`) and git objects at a commit. The clone's
   working tree, index, and `HEAD` SHALL play no part in such a path. Two
-  tiers: the trusted tier (`tracker:`, `base:`, and future selector blocks)
+  tiers: the trusted tier (`tracker:`, `task-branch:`, and future selector blocks)
   binds from the refreshed default branch; the task tier (stages, stage
   instructions, judge criteria, the remainder of `config.yaml`) binds from
   the base's law commit — the pinned SHA on a fresh start. Manual `run` with
@@ -367,7 +376,7 @@ and the rest from the ref being built. This change adopts that mechanism.
   re-resolves from scratch. The kill windows of claim → fetch → resolve →
   create join the crash-consistency checklist in design.
 - NFR-R2: re-resolution before the pin exists is idempotent in effect (the
-  menu and metadata are re-read; a different answer simply wins before
+  allowed bases and metadata are re-read; a different answer simply wins before
   anything durable references the old one); after the pin exists it never
   happens.
 - NFR-R3: the kill window between a failed base refresh and the claim release
@@ -397,8 +406,8 @@ and the rest from the ref being built. This change adopts that mechanism.
 
 ### Non-Functional — Security
 
-- NFR-S1: the gnome cannot influence any future task's base: the `base:`
-  block is read from the default branch only, and working-copy or task-branch
+- NFR-S1: the gnome cannot influence any future task's base: the
+  `task-branch.base` section is read from the default branch only, and working-copy or task-branch
   copies are project content, never law. Reading law by ref also closes the
   serve drift where a `git pull` in the clone silently changed the law between
   tasks.
@@ -423,15 +432,16 @@ and the rest from the ref being built. This change adopts that mechanism.
 
 ## Operator Experience Criteria
 
-- UX1: the `base:` block reads as the settled YAML shape — `type`, `default`,
-  `menu` with `pattern`/`role` — and the selection rule sits beside the
+- UX1: the `task-branch.base` section reads as the settled YAML shape —
+  `type`, `default`, `allowed` with `pattern`/`role` — under a root key that
+  names the branch it configures; the selection rule sits beside the
   tracker's other label configuration (`tracker.github.designators`),
   consistent with the `tracker.github.labels` precedent; config mistakes,
-  including a selection rule with no menu to match, surface as located load
-  errors, not runtime surprises.
-- UX2: an escalation for an out-of-menu or conflicting designator names the
-  offending label value(s) and the configured menu, so the human fixes the
-  label or the menu, not a stack trace.
+  including a selection rule with no allowed base to match, surface as
+  located load errors, not runtime surprises.
+- UX2: an escalation for a disallowed or conflicting designator names the
+  offending label value(s) and the configured allowed bases, so the human
+  fixes the label or the list, not a stack trace.
 - UX3: `gnomish run` users notice nothing: identical commands, identical
   offline behavior, uncommitted `.gnomish/` edits still apply without
   `--base`.
@@ -478,3 +488,9 @@ and the rest from the ref being built. This change adopts that mechanism.
   fetch. Branches land in their remote-tracking ref, tags in `refs/tags/`
   without force, bare SHAs as objects only; the SHA is read back from the
   destination.
+- Q3 (resolved 2026-09-06, design D16): the section was first specified as a
+  root-level `base:` key with a `menu` list, and tasks 1–3 landed under that
+  vocabulary. The review of 2026-09-06 found the root key ambiguous outside a
+  git context and the list name a metaphor; the section is now
+  `task-branch.base` with `allowed`, the concept is renamed in code and
+  glossary alike (tasks 9.x), and the designator kind keeps the word `base`.
