@@ -15,10 +15,11 @@ Define `StatusReport`, a single pure model of a task's progress built from `(Tas
 - **THEN** both outputs derive from the same `StatusReport` instance
 
 ### Requirement: JSON contract v1
-The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 UTC timestamps, millisecond durations, and a lowerCamel `"type"` discriminator for sealed variants. Sections: `task` (id, title), `position` (`atStage(stage)` | `pipelineEnd`), `activity` (live-only, nullable: `executing` | `verifying(checkRef)` | `awaitingInput(prompt)`; every variant carries `since`; `executing` additionally carries nullable live executor detail — `currentTool`, `toolCalls`), `outcome` (nullable mid-run: `completed` | `paused(passedStage)` | `escalated(report)` | `aborted(failedAt, cause)`), `currentStage` (nullable: null at `pipelineEnd`, where the attempt history has been reset by advancement; otherwise attemptsUsed, attemptLimit, attempts with `round`, `result` = `passed` | `qualityFailure` | `cannotVerify` | `decisionNeeded`, `startedAt`, checks with ref/verdict/findings/duration, `denials` with the finding shape, executor `usage`, and `judgeUsage` with per-vote token maps), `totals` (cumulative executor usage for the whole task; judge tokens stay per-attempt in `judgeUsage`), `lastEscalation` (nullable; the five report kinds, including question and options for `decisionNeeded`), `lastDecision` (nullable; text, author, stage, time). Usage objects SHALL carry `wallMillis`, `byTool`, and `tokensByModel` — a map from resolved model id to an object with `input`, `output`, `cacheCreation`, `cacheRead`; an empty map means unreported. Findings SHALL be carried in full — truncation is a text-render concern.
+The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 UTC timestamps, millisecond durations, and a lowerCamel `"type"` discriminator for sealed variants. Sections: `task` (id, title), `position` (`atStage(stage)` | `pipelineEnd`), `activity` (live-only, nullable: `executing` | `verifying(checkRef)` | `awaitingInput(prompt)`; every variant carries `since`; `executing` additionally carries nullable live executor detail — `currentTool`, `toolCalls`), `outcome` (nullable mid-run: `completed` | `paused(passedStage)` | `escalated(report)` | `aborted(failedAt, cause)`), `currentStage` (nullable: null at `pipelineEnd`, where the attempt history has been reset by advancement; otherwise attemptsUsed, attemptLimit, attempts with `round`, `result` = `passed` | `qualityFailure` | `cannotVerify` | `decisionNeeded`, `startedAt`, checks with ref/verdict/findings/duration, `denials` with the finding shape, executor `usage`, and `judgeUsage` with per-vote token maps), `totals` (cumulative executor usage for the whole task; judge tokens stay per-attempt in `judgeUsage`), `lastEscalation` (nullable; the five report kinds, including question and options for `decisionNeeded`, and `denials` for `cannotExecute`), `lastDecision` (nullable; text, author, stage, time). Usage objects SHALL carry `wallMillis`, `byTool`, and `tokensByModel` — a map from resolved model id to an object with `input`, `output`, `cacheCreation`, `cacheRead`; an empty map means unreported. Findings SHALL be carried in full — truncation is a text-render concern.
 <!-- implements FR11 of add-manual-run -->
 <!-- implements FR5, FR7, FR9 of add-agent-executor -->
 <!-- implements FR4 of fix-denial-report-attachment -->
+<!-- implements FR2 of fix-denial-attribution-durability -->
 
 #### Scenario: Canonical mid-run document
 - **WHEN** a run is verifying attempt 2 after an earlier decision escalation
@@ -82,6 +83,22 @@ Each attempt in the JSON document SHALL carry a `denials` array of finding objec
 - **WHEN** a task ran with zero guard denials
 - **THEN** every attempt's `denials` array is empty
 
+### Requirement: Escalation denials in the report
+A `cannotExecute` escalation in the JSON document SHALL carry a `denials` array of finding objects — same shape as check findings and attempt denials — holding the egress denials of the round that could not execute. The round left no attempt behind, so this is that round's only place in the report. The field is additive under contract v1: present as an empty array when there were none, and read as empty in documents written before this addition. It SHALL NOT influence the outcome kind, `attemptsUsed`, the attempt history, or any other derived field, and SHALL carry only structured metadata — never request bodies. The text render SHALL list these denials beside the escalation reason, through the same findings funnel the attempt denials pass.
+<!-- implements FR1, FR2, NFR-O1, NFR-S1, UX1, UX2 of fix-denial-attribution-durability -->
+
+#### Scenario: A hung round's blocked exfiltration is visible
+- **WHEN** a reviewer reads `status.json` for a task parked after a round was killed on its round timeout having attempted a denied egress request
+- **THEN** `lastEscalation` is of kind `cannotExecute` and carries a `denials` entry naming the denied host, path, and method, while `attemptsUsed` and `attempts` are unchanged
+
+#### Scenario: Escalations without denials stay quiet
+- **WHEN** a task is parked with a `cannotExecute` escalation and the failed round recorded no denial
+- **THEN** the escalation's `denials` array is empty and the text render shows no denial line
+
+#### Scenario: State and live renders agree
+- **WHEN** the same task history is rendered from live events and from the persisted files
+- **THEN** both carry the same escalation denials, per the reference equivalence contract
+
 ### Requirement: Fields partitioned by derivability
 Every field SHALL be classified as state-derivable (computable from `TaskContext` + `TaskState` alone — required) or live-only (`activity`, pending prompt — nullable). A consumer building the report from a persisted state file SHALL produce a document equal to the live, event-built report at any attempt boundary, where no live activity exists.
 <!-- implements FR11 of add-manual-run -->
@@ -100,9 +117,10 @@ Token and tool-aggregate fields SHALL be optional everywhere in the contract: `t
 - **THEN** the document is contract-valid with empty `tokensByModel` maps and empty `byTool`
 
 ### Requirement: Reference anchor and versioning policy
-The contract SHALL be anchored by `status-report-v1.reference.json` in test resources: serializing the reference `StatusReport` (built with an injected clock and a deterministic sample) SHALL be byte-identical to that file. Additive fields SHALL NOT bump `version`; renaming, removal, or semantic change SHALL — once a version has been released; a contract whose only consumer ships in this repository and which no archived change has published MAY be amended in place with its reference file regenerated. Future consumers (the external `gnomish status` of the git-workflow change) SHALL verify against the same reference file.
+The contract SHALL be anchored by two reference documents in test resources, and serializing the deterministic samples (built with an injected clock) SHALL be byte-identical to each: `status-report-v1.reference.json`, one whole canonical document that pins the envelope and every section of a mid-run report; and `status-report-v1.escalations.reference.jsonl`, one compact line per `lastEscalation` kind that pins each sealed variant's own serialized form. Two documents rather than one because the canonical document's `lastEscalation` slot holds exactly one kind: a variant absent from it has nowhere else to be pinned byte-exactly, and replacing the kind the canonical document carries would move the pin rather than add one. The corpus SHALL be complete — a check SHALL fail when the committed line count does not match the number of `EscalationReport` variants — so a newly added kind cannot ship unpinned. Additive fields SHALL NOT bump `version`; renaming, removal, or semantic change SHALL — once a version has been released; a contract whose only consumer ships in this repository and which no archived change has published MAY be amended in place with its reference file regenerated. Future consumers (the external `gnomish status` of the git-workflow change) SHALL verify against the same reference files.
 <!-- implements FR11 of add-manual-run -->
 <!-- implements FR5 of add-agent-executor -->
+<!-- implements FR2 of fix-denial-attribution-durability -->
 
 #### Scenario: Contract drift caught
 - **WHEN** a field is renamed in the serializer
@@ -111,3 +129,11 @@ The contract SHALL be anchored by `status-report-v1.reference.json` in test reso
 #### Scenario: Pre-release amendment stays v1
 - **WHEN** this change reshapes usage fields and regenerates the reference file
 - **THEN** the document still carries `"version": 1` and the reference test passes against the regenerated file
+
+#### Scenario: Every escalation kind is pinned byte-exactly
+- **WHEN** the escalation corpus is serialized
+- **THEN** each of the five `EscalationReport` kinds has its own committed line, and the `cannotExecute` line carries a populated `denials` array
+
+#### Scenario: A new escalation kind cannot ship unpinned
+- **WHEN** a sixth `EscalationReport` variant is added without a corpus line
+- **THEN** the completeness check fails, naming the count mismatch
