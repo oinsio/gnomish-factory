@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.gitobjects.CommitIdentity;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.StaleTipException;
+import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import java.time.Clock;
 import java.time.Instant;
@@ -217,9 +218,11 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         try {
             drained = denialCursors.currentPosition();
         } catch (RuntimeException e) {
-            log.debug(
-                    "the environment could not answer its denial position while parking a cannotExecute"
-                            + " escalation; recording the escalation without one",
+            log.warn(
+                    OperatorEvent.ESCALATION_DENIAL_POSITION_UNREADABLE.head()
+                            + "the environment could not answer its denial position while parking a"
+                            + " cannotExecute escalation; recording the escalation without one, so the"
+                            + " next lease re-reads the guard log from where the last commit left it",
                     e);
             return tipCursor;
         }

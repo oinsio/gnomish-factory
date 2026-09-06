@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.domain.engine.Denial;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import java.util.ArrayList;
@@ -74,12 +75,15 @@ final class RestoredDenials {
         if (cursor.source().equals(source)) {
             return cursor.position();
         }
+        // Both identities are docker's own stdout — one read live, one read back from a branch
+        // document that took it from a daemon this process never spoke to — so both reach the
+        // record through LogText (FR6 of harden-logging-observability).
         log.info(
                 "committed denial cursor for {} was read from guard container {}, not the live {} —"
                         + " reading its log from the start (FR5)",
                 key,
-                cursor.source(),
-                source == null ? "(unreadable)" : source);
+                LogText.forLog(cursor.source()),
+                source == null ? "(unreadable)" : LogText.forLog(source));
         // Only where the branch actually records denials of that source: with nothing recorded
         // there is nothing the dead source can have lost, and a marker would make a quiet task
         // look damaged.
