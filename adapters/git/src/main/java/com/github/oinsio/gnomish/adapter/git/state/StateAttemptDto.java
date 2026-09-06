@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code state.json} contract's per-attempt shape carried under {@code
@@ -41,18 +40,6 @@ public record StateAttemptDto(
         StateJudgeUsageDto judgeUsage) {
 
     public StateAttemptDto {
-        denials = absentAsEmpty(denials);
-    }
-
-    /**
-     * An absent {@code denials} field reads as an empty list (FR4 of
-     * fix-denial-report-attachment): the field is additive under contract v1, so a
-     * state file written before it existed must keep parsing. Kept as an explicit
-     * static method rather than inline in the compact constructor — PIT's record
-     * filter suppresses mutations inside a record's canonical constructor, which
-     * would exempt this default from the mutation gate.
-     */
-    private static List<StateDenialDto> absentAsEmpty(@Nullable List<StateDenialDto> denials) {
-        return denials == null ? List.of() : List.copyOf(denials);
+        denials = StateDenialMapper.absentAsEmpty(denials);
     }
 }

@@ -45,7 +45,27 @@ final class StateDenialMapper {
         return identity == null ? null : new DenialIdentityDto(identity.source(), identity.eventAt());
     }
 
-    private static @Nullable DenialIdentity fromIdentity(@Nullable DenialIdentityDto dto) {
+    /**
+     * The one wire-to-domain identity conversion of this envelope pair — shared with {@link
+     * RecordedDenialIdentities}, which reads the same field out of the same DTOs without needing
+     * the findings around it. Two copies of this line are two places a renamed DTO field can be
+     * fixed in only one.
+     */
+    static @Nullable DenialIdentity fromIdentity(@Nullable DenialIdentityDto dto) {
         return dto == null ? null : new DenialIdentity(dto.source(), dto.at());
+    }
+
+    /**
+     * An absent {@code denials} field reads as an empty list (FR4 of fix-denial-report-attachment,
+     * FR2 of fix-denial-attribution-durability): the field is additive under contract v1, so a
+     * document written before it existed must keep parsing. Shared by {@link StateAttemptDto} and
+     * {@link EscalationReportDto.CannotExecute}, the two envelopes that carry denials.
+     *
+     * <p>Kept as an explicit static method rather than inline in either compact constructor — PIT's
+     * record filter suppresses mutations inside a record's canonical constructor, which would
+     * exempt this default from the mutation gate.
+     */
+    static List<StateDenialDto> absentAsEmpty(@Nullable List<StateDenialDto> denials) {
+        return denials == null ? List.of() : List.copyOf(denials);
     }
 }

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.domain.engine.port;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import java.io.Serial;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The infrastructure failure of one executor round, carrying the egress denials the round's
@@ -23,7 +24,9 @@ import java.util.List;
  *
  * <p>{@code denials} is defensively copied and unmodifiable; it may be empty (a round that
  * failed with nothing blocked), in which case throwing this type is equivalent to throwing
- * the cause itself.
+ * the cause itself. It is {@code transient} because a {@link Denial} is not serializable: this
+ * type travels one stack, from the adapter that throws it to the engine frame that catches it,
+ * and a deserialized instance would carry no denials. Do not serialize it.
  *
  * <p>Implements FR1 of fix-denial-attribution-durability.
  */
@@ -32,7 +35,6 @@ public final class ExecutorFailure extends RuntimeException {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private final transient Throwable failure;
     private final transient List<Denial> denials;
 
     /**
@@ -46,20 +48,19 @@ public final class ExecutorFailure extends RuntimeException {
      */
     public ExecutorFailure(Throwable cause, List<Denial> denials) {
         super(cause);
-        this.failure = cause;
         this.denials = List.copyOf(denials);
     }
 
     /**
-     * The original infrastructure failure this wraps — the same object {@link #getCause()}
-     * returns, re-declared here as never-null so the engine can render it without a nullness
-     * check that could never fire: an {@code ExecutorFailure} without a cause cannot be
-     * constructed.
+     * The original infrastructure failure this wraps — {@link #getCause()} narrowed to
+     * never-null, so the engine can render it without a nullness check that could never fire:
+     * the constructor's {@code cause} is non-null under JSpecify and is the only way an
+     * {@code ExecutorFailure} comes into being.
      *
      * @return the wrapped failure; never null
      */
     public Throwable cause() {
-        return failure;
+        return Objects.requireNonNull(getCause());
     }
 
     /**

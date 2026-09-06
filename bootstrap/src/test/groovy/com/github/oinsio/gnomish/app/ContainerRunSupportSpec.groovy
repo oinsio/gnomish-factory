@@ -15,10 +15,14 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Denial
+import com.github.oinsio.gnomish.domain.engine.DenialIdentity
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -37,6 +41,7 @@ import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -555,6 +560,63 @@ exit 0
             it.level == Level.INFO && it.formattedMessage.contains('sha256:guard-elsewhere')
         }
     }
+
+    // FR7, NFR-O2, M2 of fix-denial-attribution-durability: the identities half of the same
+    //     wiring the cursor scenarios above pin, and the half a mutation to Set.of() used to
+    //     survive. A tip that records an identified denial but no usable position sends the read
+    //     over the guard's whole surviving tail; the recorded identity is what turns that
+    //     fallback into a merge instead of a second copy in the resumed run's report.
+    def "FR7: a tip's recorded identities keep a full re-read from duplicating the report"() {
+        given: 'a guard whose surviving log still holds the denial the previous process recorded'
+        docker.guardLog = DENIAL_LINE
+        def support = support()
+        createTask(support)
+
+        and: 'a tip recording that denial under an attempt, with no position to continue from'
+        commitState(StateJsonMapper.toDto(TaskState.atStageStart('build').recordUnburnedRound(
+                        new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.parse('2026-08-19T09:00:00Z'), [],
+                        ExecutorUsage.none(), JudgeUsage.none(), [
+                            new Denial(
+                                    new Finding('egress denied: paste.example.com:443', null, null),
+                                    new DenialIdentity('sha256:guard-container', DENIAL_STAMP))
+                        ]))))
+
+        when:
+        support.restoreDenials()
+        def denials = support.environments.roundEnvironment().readDenials().denials()
+
+        then: 'the guard log is re-read whole, since no position was committed'
+        lastGuardLogRead() == guardLogsArgv(null)
+
+        and: 'and the denial the branch already records is merged away rather than attached twice'
+        denials == []
+    }
+
+    // FR7: the control of the scenario above — an unrecorded denial in the same re-read is
+    //     recovered, so the merge is a merge and not a blanket silencing of the fallback.
+    def "FR7: a denial the tip does not record survives the same merge"() {
+        given:
+        docker.guardLog = DENIAL_LINE
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(TaskState.atStageStart('build')))
+
+        when:
+        support.restoreDenials()
+        def denials = support.environments.roundEnvironment().readDenials().denials()
+
+        then:
+        denials*.finding()*.message() == [
+            'egress denied: paste.example.com:443'
+        ]
+    }
+
+    /** The daemon stamp of {@link #DENIAL_LINE}, in the {@code Instant.toString()} form an identity carries. */
+    private static final String DENIAL_STAMP = '2026-08-19T10:00:00.123456789Z'
+
+    /** One {@code docker logs --timestamps} line of the guard's own denial output. */
+    private static final String DENIAL_LINE =
+    DENIAL_STAMP + ' GNOMISH-EGRESS-DENY {"kind":"connect","host":"paste.example.com","port":443}\n'
 
     // FR5: a RESUMED commit between the attempt that committed the position and the resume that
     //     reads it back rewrites both envelopes — and must carry the positions through

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.domain.engine.DenialIdentity
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
@@ -61,9 +62,9 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
     }
 
     // FR5 of fix-denial-report-attachment: a resume hands the run the cursor its last attempt
-    // committed, and every environment built afterwards offers it to its own guard — so a round
-    // box reattaching to the surviving guard container continues the delta instead of replaying it
-    def "FR5: a restored cursor reaches the guard of every environment built afterwards"() {
+    // committed, and the round environment offers it to its own guard — so a round box
+    // reattaching to the surviving guard container continues the delta instead of replaying it
+    def "FR5: a restored cursor reaches the guard of the round environment"() {
         given: 'the guard container named by the committed cursor is the live one'
         docker.onRun = { List<String> args ->
             args == GuardCommands.inspectGuardId(KEY) ? new DockerResult(0, 'sha256:container-1\n', '')
@@ -77,6 +78,40 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
 
         then: 'the round box reads its guard log from the committed position, not from the start'
         docker.runs.last() == GuardCommands.guardLogs(KEY, 1000, '2026-08-19T10:00:00.000000001Z')
+    }
+
+    // FR5 of fix-denial-report-attachment: the offer names the ROUND box's guard container, so
+    // only the round box can ever match it. A judge or verification box consuming it would reject
+    // it on every read — a foreign-source INFO line and a synthetic "denials may be lost" marker
+    // in that box's own findings, both false: its guard simply is a different container.
+    def "FR5: a restored cursor is offered to the round box alone, not to the #role box"() {
+        given: 'the guard container named by the committed cursor is the round box\'s, not this role\'s'
+        docker.onRun = { List<String> args ->
+            args == GuardCommands.inspectGuardId(KEY + suffix) ? new DockerResult(0, 'sha256:role-box\n', '')
+            : new DockerResult(0, '', '')
+        }
+        def seam = environments(KEY)
+
+        when:
+        seam.restoreDenials(new DenialRestoration(
+                        Optional.of(new DenialCursor('sha256:round-box', '2026-08-19T10:00:00Z')),
+                        [
+                            new DenialIdentity('sha256:round-box', '2026-08-19T09:00:00Z')
+                        ] as Set))
+        def read = freshBox(seam, role).readDenials()
+
+        then: 'no loss marker is minted, and the log is read from the start like any fresh box'
+        read.denials() == []
+        docker.runs.last() == GuardCommands.guardLogs(KEY + suffix, 1000, null)
+
+        where:
+        role | suffix
+        'judge' | '-j'
+        'verification' | '-v'
+    }
+
+    private static SelfCheckedEnvironment freshBox(ContainerEnvironments seam, String role) {
+        role == 'judge' ? seam.judgeEnvironment() : seam.verificationEnvironment()
     }
 
     // FR6: the round key is exposed verbatim for keep/dispose bookkeeping

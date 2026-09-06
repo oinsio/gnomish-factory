@@ -71,6 +71,25 @@ class TipRecordedDenialsSpec extends Specification {
         '2026-09-05T10:00:00.000000001Z' | '2026-09-05T10:05:00.000000001Z' || '2026-09-05T10:05:00.000000001Z'
         '2026-09-05T10:05:00.000000001Z' | '2026-09-05T10:00:00.000000001Z' || '2026-09-05T10:05:00.000000001Z'
         '2026-09-05T10:05:00.000000001Z' | '2026-09-05T10:05:00.000000001Z' || '2026-09-05T10:05:00.000000001Z'
+        // FR4: Instant.toString() renders 0, 3, 6 or 9 fractional digits, so two positions of one
+        //     daemon can differ in width; the later one must still win, in either envelope
+        '2026-09-05T10:05:00Z' | '2026-09-05T10:05:00.500Z' || '2026-09-05T10:05:00.500Z'
+        '2026-09-05T10:05:00.500Z' | '2026-09-05T10:05:00Z' || '2026-09-05T10:05:00.500Z'
+        '2026-09-05T10:05:00.100Z' | '2026-09-05T10:05:00.100000100Z' || '2026-09-05T10:05:00.100000100Z'
+        '2026-09-05T10:05:00.100000100Z' | '2026-09-05T10:05:00.100Z' || '2026-09-05T10:05:00.100000100Z'
+    }
+
+    // FR4: a position that is not an instant cannot be ordered against one that is, so the pair
+    //     falls back to the attempt-side envelope exactly as a mismatched source does
+    def "a position that is not an instant falls back to the attempt-side one"() {
+        expect:
+        cursors.restorable(tip(taskJson(cursor('guard-1', escalation)), stateJson(cursor('guard-1', attempt))))
+                .position().orElseThrow().position() == attempt
+
+        where:
+        attempt | escalation
+        'not-an-instant' | '2026-09-05T10:05:00.000000001Z'
+        '2026-09-05T10:00:00.000000001Z' | 'not-an-instant'
     }
 
     def "a tip carrying only one of the two positions offers that one"() {

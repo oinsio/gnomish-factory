@@ -19,8 +19,14 @@ package com.github.oinsio.gnomish.sandbox;
  * SHALL otherwise ignore the position rather than risk filtering real denials
  * out of the report (NFR-O1).
  *
- * <p>Both components are opaque to every consumer: the factory stores and
- * returns them, and only the environment that minted them interprets them.
+ * <p>{@code source} is opaque to every consumer — matched for equality, never
+ * parsed. {@code position} is opaque in meaning but not in shape: the factory
+ * holds two of them at a resume (one committed with the last attempt, one with
+ * the last escalation) and must offer the later, so a denial source SHALL mint
+ * positions that are RFC-3339 instants of its own clock. A consumer orders them
+ * by parsing, never by comparing the strings — {@code Instant#toString} renders
+ * 0, 3, 6 or 9 fractional digits depending on the value, so lexicographic order
+ * is not time order across two widths.
  *
  * @param source the identity of the denial source the position was read from
  *     (the guard container's runtime id); never blank

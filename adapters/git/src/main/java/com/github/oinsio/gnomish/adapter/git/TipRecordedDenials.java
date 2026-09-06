@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.RecordedDenialIdentities;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
@@ -11,6 +10,8 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -73,8 +74,8 @@ public final class TipRecordedDenials {
     /**
      * The position to offer of the two the tip carries.
      *
-     * <p>Positions minted by one denial source are that daemon's own timestamps and totally
-     * ordered, so when both name the same source the later one wins outright — that is the whole
+     * <p>Positions minted by one denial source are that daemon's own timestamps, so when both name
+     * the same source the later of the two instants wins outright — that is the whole
      * point of committing the escalation's position: it stands past denials the attempt-side cursor
      * does not cover.
      *
@@ -101,16 +102,34 @@ public final class TipRecordedDenials {
     }
 
     /**
-     * The later of two positions of the same source — daemon timestamps, so totally ordered.
+     * The later of two positions of the same source — daemon timestamps, ordered as instants.
      *
-     * <p>PIT documented exception (`.claude/rules/testing.md`, provably equivalent mutant):
-     * {@code @DoNotMutate} because the boundary mutant ({@code >=} for {@code >}) is equivalent —
-     * at equal positions both arms return the same value, two records of the same source and the
-     * same position being equal by construction, so no covering spec can tell them apart. The
-     * ordering itself is asserted in both directions by {@code TipRecordedDenialsSpec}.
+     * <p>Ordered by parsing, never by string comparison: a position is {@code Instant#toString}'s
+     * rendering, whose fraction is 0, 3, 6 or 9 digits wide depending on the value, so two stamps
+     * of one daemon can differ in width and lexicographic order then disagrees with time — {@code
+     * 10:05:00Z} sorts <em>after</em> the later {@code 10:05:00.500Z}. Getting it wrong is not
+     * symmetric and not caught downstream: both positions name the live source, so the environment
+     * applies whichever arrives, and one too far forward silences every denial between the two.
+     *
+     * <p>A position that does not parse cannot be ordered here at all, and is treated exactly like
+     * a position of a different source: the attempt-side one is offered, {@code state.json} being
+     * the fresher envelope in every ordinary progression (FR4).
      */
-    @DoNotMutate
     private static EgressCursorDto later(EgressCursorDto attempt, EgressCursorDto escalation) {
-        return escalation.position().compareTo(attempt.position()) > 0 ? escalation : attempt;
+        Instant attemptAt = instantOf(attempt);
+        Instant escalationAt = instantOf(escalation);
+        if (attemptAt == null || escalationAt == null) {
+            return attempt;
+        }
+        return escalationAt.isAfter(attemptAt) ? escalation : attempt;
+    }
+
+    /** The position as the instant its source stamped it, or null when it is not one. */
+    private static @Nullable Instant instantOf(EgressCursorDto cursor) {
+        try {
+            return Instant.parse(cursor.position());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 }

@@ -53,7 +53,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
     //     empty answer, but a round is far too expensive to stake on a collaborator keeping it.
     def "NFR-R1: a throwing denial read still yields a completed round"() {
         given:
-        def logs = LogCaptureSupport.attach(ExecutorRoundExecution)
+        def logs = LogCaptureSupport.attach(RoundDenialRead)
 
         when: 'the round finishes and its environment cannot serve the denial read at all'
         def result = runWith('plain-round', null)

@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.DenialRead
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
@@ -23,16 +24,22 @@ import java.util.concurrent.atomic.AtomicInteger
  * denials, never the first round's again. The last answer repeats once the script
  * is exhausted; a {@code null} answer stands for a read that cannot be served at
  * all (the daemon-outage shape) and throws.
+ *
+ * <p>{@code launchFails} additionally stands in for an environment that cannot start the
+ * process at all — the third shape of a round that dies before its close, beside the
+ * {@code roundTimeout} kill and the missing result event.
  */
 final class ScriptedDenialRounds implements RoundEnvironmentSource {
 
     private final RoundEnvironmentSource delegate
     private final List<List<Finding>> answers
+    private final boolean launchFails
     private final AtomicInteger reads = new AtomicInteger()
 
-    ScriptedDenialRounds(RoundEnvironmentSource delegate, List<List<Finding>> answers) {
+    ScriptedDenialRounds(RoundEnvironmentSource delegate, List<List<Finding>> answers, boolean launchFails = false) {
         this.delegate = delegate
         this.answers = new ArrayList<>(answers)
+        this.launchFails = launchFails
     }
 
     /** The number of denial reads so far, across every round opened from this source. */
@@ -46,6 +53,10 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
             throw new IllegalStateException('the guard log cannot be read')
         }
         answer
+    }
+
+    private boolean launchFails() {
+        launchFails
     }
 
     @Override
@@ -115,6 +126,9 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
 
         @Override
         ExecHandle exec(ExecCommand command) {
+            if (source.launchFails()) {
+                throw new ProcessStartException('no such binary', new IOException('boom'))
+            }
             delegate.exec(command)
         }
 

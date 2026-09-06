@@ -25,7 +25,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Guard output is environment-adjacent data and is treated as inert
  * (NFR-S3): unmarked lines are skipped, a malformed marked line is dropped (never a failure —
- * losing one event must not fail a check), string fields are length-capped, the path is cut at
+ * losing one event must not fail a check), string fields are length-capped ({@link
+ * DenialFieldCap}), the path is cut at
  * its query string, and the number of parsed events is capped (NFR-C1); the findings funnel
  * (task 8.1) applies the publication-side sanitization on top.
  *
@@ -51,8 +52,6 @@ final class GuardDenialLog {
 
     /** The most denial events one read turns into findings; a storm beyond this is truncated with a warning. */
     static final int MAX_EVENTS = 200;
-
-    private static final int MAX_FIELD_LENGTH = 300;
 
     private static final Logger log = LoggerFactory.getLogger(GuardDenialLog.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -137,15 +136,15 @@ final class GuardDenialLog {
             drops.malformed(LogText.forLog(String.valueOf(e.getOriginalMessage())));
             return null;
         }
-        String host = capped(event.path("host").asText(""));
+        String host = DenialFieldCap.capped(event.path("host").asText(""));
         if (host.isBlank()) {
             drops.withoutHost();
             return null;
         }
         String destination = host + portSuffix(event);
-        String path = capped(withoutQuery(event.path("path").asText("")));
-        String method = capped(event.path("method").asText(""));
-        String kind = capped(event.path("kind").asText("connect"));
+        String path = DenialFieldCap.capped(withoutQuery(event.path("path").asText("")));
+        String method = DenialFieldCap.capped(event.path("method").asText(""));
+        String kind = DenialFieldCap.capped(event.path("kind").asText("connect"));
         return new Finding(
                 "egress denied: " + destination,
                 path.isEmpty() ? destination : destination + path,
@@ -164,12 +163,5 @@ final class GuardDenialLog {
     private static String portSuffix(JsonNode event) {
         JsonNode port = event.path("port");
         return port.canConvertToInt() ? ":" + port.asInt() : "";
-    }
-
-    // Branch-free on purpose: a length conditional here only spawns boundary mutants that are
-    // behaviorally equivalent at exactly MAX_FIELD_LENGTH (substring of the full length is the
-    // same string), which the mutation gate cannot kill.
-    private static String capped(String value) {
-        return value.substring(0, Math.min(value.length(), MAX_FIELD_LENGTH));
     }
 }

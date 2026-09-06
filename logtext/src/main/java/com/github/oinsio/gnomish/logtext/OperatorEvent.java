@@ -175,7 +175,9 @@ public enum OperatorEvent {
     HEARTBEAT_TICK_FAILING_ROLLUP("GF128"),
     // sandbox forensics (polish-sandbox-forensics)
     CONTAINER_EXEC_LIKELY_OOM_KILLED("GF129"),
-    SELF_CHECK_BOX_KEEP_FAILED("GF130");
+    SELF_CHECK_BOX_KEEP_FAILED("GF130"),
+    // denial-position durability (fix-denial-attribution-durability)
+    ESCALATION_DENIAL_POSITION_UNREADABLE("GF131");
 
     private final String code;
     private final String head;

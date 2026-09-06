@@ -18,7 +18,14 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Markers gate nothing, exactly like the denials they stand in for (proposal NG1).
  *
- * <p>Implements FR8, NFR-O3, UX3 of fix-denial-attribution-durability.
+ * <p>A marker quotes environment-derived text — docker's own stdout for the live source, and a
+ * branch document's recorded strings for the source and position an earlier lease committed —
+ * so every quoted component passes {@link DenialFieldCap} first, exactly as the parsed events'
+ * fields do (NFR-C1 of add-sandbox-core). A finding is committed to the branch and published to
+ * the tracker; neither bounds its own volume, so an unbounded identity would travel whole.
+ *
+ * <p>Implements FR8, NFR-O3, UX3 of fix-denial-attribution-durability; NFR-C1 of
+ * add-sandbox-core.
  */
 final class DenialLossMarker {
 
@@ -39,7 +46,8 @@ final class DenialLossMarker {
                 "egress denial log truncated: the read filled its " + tailLines
                         + "-line window, so older denials inside it are lost",
                 key,
-                "loss window: after " + (since == null ? "the guard container's start" : since)
+                "loss window: after "
+                        + (since == null ? "the guard container's start" : DenialFieldCap.capped(since))
                         + ", before the oldest line this read returned"));
     }
 
@@ -58,7 +66,7 @@ final class DenialLossMarker {
         return Denial.unidentified(new Finding(
                 "egress denials may be lost: the recorded denial source is no longer this box's live guard",
                 key,
-                "recorded source " + recordedSource + ", live source "
-                        + (liveSource == null ? "(unreadable)" : liveSource)));
+                "recorded source " + DenialFieldCap.capped(recordedSource) + ", live source "
+                        + (liveSource == null ? "(unreadable)" : DenialFieldCap.capped(liveSource))));
     }
 }

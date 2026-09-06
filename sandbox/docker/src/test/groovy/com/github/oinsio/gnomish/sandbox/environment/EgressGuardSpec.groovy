@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
+import com.github.oinsio.gnomish.domain.engine.DenialIdentity
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
+import com.github.oinsio.gnomish.sandbox.DenialRead
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -959,7 +961,7 @@ class EgressGuardSpec extends Specification {
             guardDaemon(args, log, 'sha256:container-live')
         }
         def recorded = [
-            new com.github.oinsio.gnomish.domain.engine.DenialIdentity(
+            new DenialIdentity(
             'sha256:container-gone', '2026-08-19T09:00:00.000000000Z')
         ] as Set
 
@@ -1009,14 +1011,17 @@ class EgressGuardSpec extends Specification {
 
         when: 'a resume offers a position of a source that is gone, and knows of no recorded denial'
         def resumed = guard()
+        DenialRead read = null
         def logged = captureRestore {
             resumed.restoreDenials(DenialRestoration.at(
                     new DenialCursor('sha256:container-gone', '2026-08-19T10:30:00Z')))
-            resumed.readDenials()
+            read = resumed.readDenials()
         }
 
         then: 'the already-recorded denial comes back — a duplicate a reviewer can see, never silence'
-        resumed.readDenials()
+        read.denials()*.finding()*.message() == [
+            'egress denied: first.example.com:443'
+        ]
         docker.runs.any { it == GuardCommands.guardLogs('k1', 1000, null) }
 
         and: 'and the fallback is explainable rather than mysterious'

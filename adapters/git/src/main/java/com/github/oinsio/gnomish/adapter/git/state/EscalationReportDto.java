@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.git.state;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code task.json} contract's escalation-report shape, used both nested
@@ -84,18 +83,7 @@ public sealed interface EscalationReportDto {
     record CannotExecute(String type, String cause, List<StateDenialDto> denials) implements EscalationReportDto {
 
         public CannotExecute {
-            denials = absentAsEmpty(denials);
-        }
-
-        /**
-         * An absent {@code denials} field reads as an empty list (FR2 of
-         * fix-denial-attribution-durability). Kept as an explicit static method rather
-         * than inline in the compact constructor — PIT's record filter suppresses
-         * mutations inside a record's canonical constructor, which would exempt this
-         * default from the mutation gate (same shape as {@link StateAttemptDto}).
-         */
-        private static List<StateDenialDto> absentAsEmpty(@Nullable List<StateDenialDto> denials) {
-            return denials == null ? List.of() : List.copyOf(denials);
+            denials = StateDenialMapper.absentAsEmpty(denials);
         }
     }
 }

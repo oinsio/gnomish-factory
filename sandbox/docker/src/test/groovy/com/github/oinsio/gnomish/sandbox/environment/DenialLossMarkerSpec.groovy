@@ -40,4 +40,28 @@ class DenialLossMarkerSpec extends Specification {
         'sha256:container-live' || 'sha256:container-live'
         null || '(unreadable)'
     }
+
+    def "NFR-C1: an oversized source identity is length-capped, not carried whole"() {
+        given: 'identities far beyond the field cap, as a tampered branch document could hold'
+        def huge = 'sha256:' + ('a' * 5000)
+
+        when:
+        def marker = DenialLossMarker.sourceGone(KEY, huge, huge)
+
+        then: 'both quoted identities are bounded, and the head is what survives'
+        marker.finding().details().length() < 4 * DenialFieldCap.MAX_FIELD_LENGTH
+        marker.finding().details().contains('recorded source sha256:aaa')
+    }
+
+    def "NFR-C1: an oversized read position is length-capped, not carried whole"() {
+        given: 'a restored position far beyond the field cap'
+        def huge = '2026-08-19T10:00:00Z' + ('z' * 5000)
+
+        when:
+        def marker = DenialLossMarker.tailWindowFull(KEY, 1000, huge)
+
+        then:
+        marker.finding().details().length() < 4 * DenialFieldCap.MAX_FIELD_LENGTH
+        marker.finding().details().contains('after 2026-08-19T10:00:00Z')
+    }
 }

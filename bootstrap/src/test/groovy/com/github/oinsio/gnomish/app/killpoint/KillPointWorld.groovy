@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
@@ -58,9 +59,18 @@ class KillPointWorld implements BareGitRepoFixture {
     }
 
     /**
+     * The read position the tip's {@code task.json} carries, or {@code null} when it carries none
+     * (FR5 of fix-denial-attribution-durability).
+     */
+    EgressCursorDto tipCursor() {
+        tipTask()?.egressCursor()
+    }
+
+    /**
      * Everything a second recovery pass must leave untouched: the branch's non-service commit
      * subjects, the tip's recorded outcome and pending marker, the decisions it carries, the
-     * tracker state the effect landed on, and the replies still pending there.
+     * committed denial read position, the tracker state the effect landed on, and the replies still
+     * pending there.
      *
      * <p>Service commits are excluded deliberately — a conservatively classified interrupt may cost
      * one re-run service commit and never paid work (design D13, NFR-C1).
@@ -72,6 +82,7 @@ class KillPointWorld implements BareGitRepoFixture {
             outcome: tip?.outcome()?.toString(),
             pending: tip?.trackerWritePending(),
             decisions: tip?.decisions()?.collect { it.body() },
+            cursor: tip?.egressCursor()?.toString(),
             tracker: tracker.fetchTask(ref).state().toString(),
             replies: tracker.collectDecisions(ref).collect { it.body() },
         ]

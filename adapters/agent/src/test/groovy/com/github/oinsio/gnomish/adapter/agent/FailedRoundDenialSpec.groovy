@@ -35,7 +35,7 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
     def "a timed-out round drains its environment's denials"() {
         given:
         def source = scriptedSource([[HUNG_ROUND_DENIAL]])
-        def logs = LogCaptureSupport.attach(ExecutorRoundExecution)
+        def logs = LogCaptureSupport.attach(RoundDenialRead)
 
         when:
         executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
@@ -81,6 +81,26 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         source.reads() == 1
     }
 
+    // FR1: "a process that would not start" is the third failure ExecutorFailure names
+    //      (ExecutorFailure.java:11) — the launch is inside the wrapped region like the rest
+    def "a round whose process will not start drains its environment's denials"() {
+        given:
+        def source = new ScriptedDenialRounds(hostSource(), [[HUNG_ROUND_DENIAL]], true)
+
+        when:
+        executorFor('plain-round', source).execute(requestFor())
+
+        then: 'FR1: the start failure leaves the adapter wrapped, carrying what the box had recorded'
+        def failure = thrown(ExecutorFailure)
+        failure.cause() instanceof IllegalStateException
+        failure.denials() == [
+            Denial.unidentified(HUNG_ROUND_DENIAL)
+        ]
+
+        and:
+        source.reads() == 1
+    }
+
     // FR3, D1, UX2: the round after a failed one reports its own denials, never the failed
     // round's — the misattribution an undrained round causes on an in-process resume
     def "the round after a failed round carries only its own denials"() {
@@ -106,12 +126,45 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         ]
     }
 
+    // FR6 of harden-logging-observability: the denied destination is the guard's record of what
+    //      the gnome asked for, so the orphan WARN renders it through LogText — a raw toString()
+    //      of the list would let a chosen hostname forge a log record of its own
+    def "the orphaned-denial warning renders its destinations through the sanitizer"() {
+        given: 'a denial whose destination carries an escape sequence and a forged record'
+        def forged = new Finding(
+                'egress denied: \u001b[2Jevil.example.com\nJan 01 00:00 INFO all clear',
+                'evil.example.com:443/x', 'kind=connect')
+        def source = scriptedSource([[forged, NEXT_ROUND_DENIAL]])
+        def logs = LogCaptureSupport.attach(RoundDenialRead)
+
+        when:
+        executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
+
+        then:
+        thrown(ExecutorFailure)
+
+        and: 'the line counts the denials and names every destination'
+        def warned = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.ROUND_DENIALS_ORPHANED_ON_FAILURE.head())
+        }
+        warned.formattedMessage.contains('2 egress denial')
+        warned.formattedMessage.contains('evil.example.com')
+        warned.formattedMessage.contains(NEXT_ROUND_DENIAL.message())
+
+        and: 'FR6: one event stays one line, with no escape sequence left in the record'
+        !warned.formattedMessage.contains('\n')
+        !warned.formattedMessage.contains('\u001b')
+
+        cleanup:
+        logs.detach()
+    }
+
     // NFR-R1: the drain is best-effort — a read that throws must not mask the round's own
     // infrastructure failure, which is what the engine escalates on
     def "a throwing denial read does not mask the round's failure"() {
         given: 'an environment that cannot serve a denial read at all'
         def source = scriptedSource([null])
-        def logs = LogCaptureSupport.attach(ExecutorRoundExecution)
+        def logs = LogCaptureSupport.attach(RoundDenialRead)
 
         when:
         executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))

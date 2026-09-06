@@ -1,15 +1,14 @@
 package com.github.oinsio.gnomish.architecture
 
+import static com.github.oinsio.gnomish.architecture.DelegatingDecoratorRule.params
+import static com.github.oinsio.gnomish.architecture.DelegatingDecoratorRule.unforwardedDefaults
+
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
-import java.lang.reflect.Method
-import java.lang.reflect.Modifier
-import java.lang.reflect.ParameterizedType
-import java.lang.reflect.Type
 import java.nio.file.Path
 import java.util.function.Supplier
 import spock.lang.Shared
@@ -19,6 +18,7 @@ import spock.lang.Specification
  * Delegating-decorator completeness gate (FR9, M5, design D7 of
  * fix-denial-attribution-durability): a production class that implements an interface AND holds a
  * delegate of that same interface must override every default method the interface declares.
+ * {@link DelegatingDecoratorRule} holds the rule; this spec owns the allowlist and the assertions.
  *
  * <p>For a leaf implementation a constant default is a truthful "I do not have this". For a
  * delegating one it is a lie about someone else's capability: the delegate may well answer, but
@@ -30,21 +30,23 @@ import spock.lang.Specification
  * what keeps the third from being written.
  *
  * <p>"Holds a delegate" is read broadly, since the shape varies: a field, a record component, a
- * constructor parameter, or a {@link Supplier} of the interface.
+ * constructor parameter, or any container naming the interface as a type argument — a {@link
+ * Supplier}, a {@code List}, an {@code Optional}.
  *
  * <p>Exemptions are named in {@link #EXEMPT}, each with its reason — never a blanket pattern.
  */
 class DelegatingDecoratorCompletenessSpec extends Specification {
 
     /**
-     * Justified exemptions, one entry per class AND method, each with its reason — never a
+     * Justified exemptions, one entry per class AND signature, each with its reason — never a
      * pattern, and never a whole class: a delegator exempted for one default stays gated on
-     * every other default its interfaces declare.
+     * every other default its interfaces declare, its same-named overloads included.
      */
     static final List<Map<String, String>> EXEMPT = [
         [
             type: 'com.github.oinsio.gnomish.adapter.tracker.EpochRecordingTrackerFactory',
             method: 'create',
+            params: 'SecretsProvider,TrackerConfig,String,ClaimEpochSource',
             reason: 'the unforwarded 4-parameter create default self-delegates into the 3-parameter' +
             ' form this class does override, so forwarding it would bypass the epoch recording' +
             ' the decorator exists to do'
@@ -59,6 +61,11 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
     // FR9, M5: the rule over the whole production tree — every delegating implementer is complete.
     def "no production delegating implementer leaves an interface default unforwarded"() {
         given: 'every named production class ArchUnit can reflect on'
+        // Named classes only, and the exclusion is a limitation worth stating: a generated body
+        // ($$ for a CGLIB-style proxy, $_ for a Groovy closure), a synthetic class and an
+        // anonymous one have no name an EXEMPT entry could hold and no declaration a reader could
+        // open, so a finding against one would be unactionable. A decorator meant to be gated is
+        // therefore a named class — an anonymous delegator is outside this gate's reach.
         def classes = productionClasses
                 .findAll {
                     !it.isInterface() && !it.name.contains('$$') && !it.name.contains('$_')
@@ -67,121 +74,74 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
                 .findAll { !it.synthetic && !it.anonymousClass }
 
         expect: 'no delegator inherits a default that would answer for its delegate'
-        unforwardedDefaults(classes) == []
+        unforwardedDefaults(classes, EXEMPT) == []
     }
 
     // M5: the rule's own teeth — a seeded delegator that forgets one default is reported, and the
     //     complete twin beside it is not, so a rule that reported nothing could not pass this.
     def "a seeded delegator that forgets a default fails the rule"() {
         expect:
-        unforwardedDefaults([ForgetfulDelegator]).size() == 1
-        unforwardedDefaults([ForgetfulDelegator])[0].contains('SandboxLifecyclePass.run')
+        unforwardedDefaults([ForgetfulDelegator], EXEMPT).size() == 1
+        unforwardedDefaults([ForgetfulDelegator], EXEMPT)[0]
+        .endsWith('SandboxLifecyclePass.run(Path,LivenessVerdict,SweepVerdictListener)')
 
         and: 'the same shape with the default forwarded is clean'
-        unforwardedDefaults([CompleteDelegator]) == []
-
-        and: 'a supplier-held delegate counts as a delegate too'
-        unforwardedDefaults([SupplierDelegator]).size() == 1
+        unforwardedDefaults([CompleteDelegator], EXEMPT) == []
 
         and: 'a leaf that merely implements the interface is untouched — the default is truthful there'
-        unforwardedDefaults([Leaf]) == []
+        unforwardedDefaults([Leaf], EXEMPT) == []
     }
 
-    // FR9: the allowlist is a list of names with reasons, not a pattern — and every entry still
-    //     names a class that exists, so a rename cannot silently widen the exemption.
-    def "every exemption names a class that exists and states its reason"() {
+    // FR9, M5: the delegate shapes the rule recognises — held directly, or named as a type
+    //     argument of whatever holds it. A container hides a delegate no less than a field does.
+    def "a delegate held in a #shape counts as a delegate"() {
+        expect:
+        unforwardedDefaults([delegator], EXEMPT).size() == 1
+
+        where:
+        shape | delegator
+        'supplier' | SupplierDelegator
+        'list' | ListDelegator
+        'optional' | OptionalDelegator
+    }
+
+    // FR9: the allowlist is a list of signatures with reasons, not a pattern — and every entry
+    //     still names a default that exists, so a rename or a changed parameter list cannot
+    //     silently widen the exemption; it turns the build red instead.
+    def "every exemption names a default that exists and states its reason"() {
         expect:
         EXEMPT.every { entry ->
             def type = productionClasses.find { it.name == entry.type }
             type != null && type.reflect().interfaces.any { iface ->
-                iface.methods.any { it.isDefault() && it.name == entry.method }
+                iface.methods.any {
+                    it.isDefault() && it.name == entry.method && params(it) == entry.params
+                }
             } && !entry.reason.isBlank()
         }
     }
 
-    /**
-     * The rule itself: for each class, each interface it implements that it also holds a delegate
-     * of, every default method of that interface must be declared by the class (or a superclass).
-     */
-    private static List<String> unforwardedDefaults(Collection<Class<?>> classes) {
-        classes.collectMany { Class<?> type ->
-            allInterfaces(type).collectMany { Class<?> iface ->
-                if (!holdsDelegateOf(type, iface)) {
-                    return []
-                }
-                iface.methods
-                        .findAll {
-                            it.isDefault() && !declares(type, it) && !exempt(type, it)
-                        }
-                        .collect {
-                            "${type.name} does not forward ${iface.simpleName}.${it.name}" as String
-                        }
-            }
-        }
-        .sort()
-    }
-
-    private static boolean exempt(Class<?> type, Method method) {
-        EXEMPT.any { it.type == type.name && it.method == method.name }
-    }
-
-    /**
-     * The interfaces the rule judges: the project's own seams. The Groovy runtime's {@code
-     * GroovyObject} is excluded — every Groovy class implements it, its defaults are the
-     * metaclass plumbing the compiler generates, and no author ever "forgot" to forward them.
-     */
-    private static Set<Class<?>> allInterfaces(Class<?> type) {
-        Set<Class<?>> found = [] as Set<Class<?>>
-        for (Class<?> c = type; c != null && c != Object; c = c.superclass) {
-            c.interfaces.each { collectInterfaces(it, found) }
-        }
-        found.findAll {
-            !it.name.startsWith('groovy.') && !it.name.startsWith('org.codehaus.groovy.')
-        } as Set<Class<?>>
-    }
-
-    private static void collectInterfaces(Class<?> iface, Set<Class<?>> found) {
-        if (found.add(iface)) {
-            iface.interfaces.each { collectInterfaces(it, found) }
-        }
-    }
-
-    /** A field, record component, constructor parameter, or Supplier of the interface. */
-    private static boolean holdsDelegateOf(Class<?> type, Class<?> iface) {
-        List<List<Object>> held = (type.declaredFields.findAll {
-            !Modifier.isStatic(it.modifiers)
-        }
-        .collect { [it.type, it.genericType] } as List<List<Object>>) +
-        (type.declaredConstructors.collectMany { ctor ->
+    // FR9, M5: the exemption is matched by signature, not by bare name. The near-miss below is
+    //     the real hazard: SandboxLifecyclePass already declares a two-parameter run beside the
+    //     three-parameter default, so a bare-name match would hand one method's exemption to the
+    //     other — and to every same-named default either seam gains later.
+    def "an exemption is matched by signature, not by the method name alone"() {
+        given: 'an exemption naming the right class and method name but a sibling overload\'s shape'
+        def nearMiss = [
             [
-                ctor.parameterTypes.toList(),
-                ctor.genericParameterTypes.toList()
-            ].transpose()
-        } as List<List<Object>>)
-        held.any { raw, generic ->
-            isDelegate(raw as Class<?>, generic as Type, iface)
-        }
-    }
+                type: ForgetfulDelegator.name,
+                method: 'run',
+                params: 'Path,LivenessVerdict',
+                reason: 'seeded: names the abstract sibling, not the default'
+            ]
+        ]
 
-    private static boolean isDelegate(Class<?> raw, Type generic, Class<?> iface) {
-        if (iface.isAssignableFrom(raw)) {
-            return true
-        }
-        Supplier.isAssignableFrom(raw) && generic instanceof ParameterizedType &&
-                (generic as ParameterizedType).actualTypeArguments.any {
-                    it instanceof Class && iface.isAssignableFrom(it as Class)
-                }
-    }
+        expect: 'the default it does not name stays gated'
+        unforwardedDefaults([ForgetfulDelegator], nearMiss).size() == 1
 
-    private static boolean declares(Class<?> type, Method method) {
-        for (Class<?> c = type; c != null && c != Object; c = c.superclass) {
-            if (c.declaredMethods.any {
-                        it.name == method.name && it.parameterTypes == method.parameterTypes
-                    }) {
-                return true
-            }
-        }
-        false
+        and: 'the same entry carrying the default\'s own signature exempts it'
+        unforwardedDefaults([ForgetfulDelegator], [
+            nearMiss[0] + [params: 'Path,LivenessVerdict,SweepVerdictListener']
+        ]) == []
     }
 
     /**
@@ -235,6 +195,36 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
         @Override
         String run(Path cloneDir, LivenessVerdict liveness) {
             current.get().run(cloneDir, liveness)
+        }
+    }
+
+    /** A fan-out: the unforwarded default drops the capability for every element at once. */
+    static class ListDelegator implements SandboxLifecyclePass {
+
+        private final List<SandboxLifecyclePass> passes
+
+        ListDelegator(List<SandboxLifecyclePass> passes) {
+            this.passes = passes
+        }
+
+        @Override
+        String run(Path cloneDir, LivenessVerdict liveness) {
+            passes.collect { it.run(cloneDir, liveness) }.last()
+        }
+    }
+
+    /** An absent delegate is still a delegate: the default answers for it while it is present. */
+    static class OptionalDelegator implements SandboxLifecyclePass {
+
+        private final Optional<SandboxLifecyclePass> delegate
+
+        OptionalDelegator(Optional<SandboxLifecyclePass> delegate) {
+            this.delegate = delegate
+        }
+
+        @Override
+        String run(Path cloneDir, LivenessVerdict liveness) {
+            delegate.map { it.run(cloneDir, liveness) }.orElse('none')
         }
     }
 

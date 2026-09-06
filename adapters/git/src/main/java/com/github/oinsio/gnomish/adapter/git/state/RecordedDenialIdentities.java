@@ -45,9 +45,11 @@ public final class RecordedDenialIdentities {
 
     private static void collect(List<StateDenialDto> denials, Set<DenialIdentity> into) {
         for (StateDenialDto denial : denials) {
-            DenialIdentityDto identity = denial.identity();
+            // Through the envelope's own mapper (StateDenialMapper), so this set is built from
+            // exactly the identity conversion the records themselves are read with.
+            DenialIdentity identity = StateDenialMapper.fromIdentity(denial.identity());
             if (identity != null) {
-                into.add(new DenialIdentity(identity.source(), identity.at()));
+                into.add(identity);
             }
         }
     }

@@ -55,6 +55,14 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds {
             ParkKillPoints.transition('container', {
                 containerWorld(nextRoot())
             }),
+            // Container only: the drained read position exists where an egress guard does, and host
+            // mode has no guard — its lifecycle rewrites are specced for preservation in
+            // GitTaskRepositorySpec instead (FR5 of fix-denial-attribution-durability).
+            ParkKillPoints.denialTransition('container', {
+                containerWorld(nextRoot(), {
+                    Optional.of(ParkKillPoints.DRAINED)
+                })
+            }),
             FinishKillPoints.transition('host', { hostWorld(nextRoot()) }),
             FinishKillPoints.transition('container', {
                 containerWorld(nextRoot())

@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -217,15 +218,24 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                     Denial.unidentified(
                             new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
                 ])
+        def logs = LogCaptureSupport.attach(GitObjectsTaskRepository)
 
         when:
         parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+        def events = List.copyOf(logs.list)
+        logs.detach()
 
         then: 'the escalation and its denials are recorded; only the position is missing'
         noExceptionThrown()
         def dto = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
         dto.lastEscalation().denials().size() == 1
         dto.egressCursor() == null
+
+        and: 'the degraded position is on the operator plane, not buried at DEBUG'
+        events.size() == 1
+        events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.ESCALATION_DENIAL_POSITION_UNREADABLE.head())
+        events[0].throwableProxy.message == 'no environment leased yet'
     }
 
     // FR3: a position may lag the record carrying its denials, never lead it — so a park with no
