@@ -21,9 +21,11 @@ The predecessor's cursor feature is dead in production: `LeasedEnvironment`
 forwards none of the port's three denial default methods, and no spec drives
 the production wiring. This block revives it and closes the defect class.
 
-- [x] 1.1 `LeasedEnvironment`: forward `denialFindings()`, `denialCursor()`,
-      and `restoreDenialCursor(...)` to the leased delegate; extend
-      `LeasedEnvironmentSpec` to assert all three forwards.
+- [x] 1.1 `LeasedEnvironment`: forward the port's three denial default methods
+      — `readDenials()`, `denialCursor()` and `restoreDenials(...)` (D7 renamed
+      the read and the restore while folding the pair onto one seam) — to the
+      leased delegate; extend `LeasedEnvironmentSpec` to assert all three
+      forwards.
 - [x] 1.2 Production-wiring spec (M4): build `EnvironmentAttemptPersistence`
       over a real `LeasedEnvironment` (supplier returning a denial-bearing
       double) and assert the committed `state.json` carries the cursor; drive
@@ -46,9 +48,10 @@ the production wiring. This block revives it and closes the defect class.
 
 - [x] 2.1 Add `ExecutorFailure` to the engine port package: a
       `RuntimeException` carrying the original failure as its cause and an
-      immutable `List<Finding> denials()`; javadoc traces FR1 and states that
+      immutable `List<Denial> denials()` (D5's identity-bearing wrapper of a
+      `Finding`); javadoc traces FR1 and states that
       any other `RuntimeException` stays an empty-denial `CannotExecute`.
-- [x] 2.2 Add `List<Finding> denials` to `EscalationReport.CannotExecute`
+- [x] 2.2 Add `List<Denial> denials` to `EscalationReport.CannotExecute`
       (defensively copied, possibly empty); update every construction and
       render site, keeping the escalation text unchanged.
 - [x] 2.3 In `RoundExecution` (engine), map a caught `ExecutorFailure` to
@@ -97,7 +100,8 @@ the production wiring. This block revives it and closes the defect class.
 
 The attempt-path mechanics (`GuardDenialReads`,
 `EnvironmentAttemptPersistence`, and the restore in `ContainerTipReader`
-behind `SandboxRunSupport.restoreDenialCursor`)
+behind `ContainerRunSupport.restoreDenialCursor`, since renamed to
+`restoreDenials` by D7)
 exist and are revived by block 1. This block extends the
 position-with-the-record pattern to the escalation path over the atomic
 commit machinery of `harden-task-branch-contract`; it builds no new storage
@@ -164,7 +168,10 @@ saturation visible).
       committed cursor naming a source that no longer holds its log, emit a
       synthetic funnel-fenced loss finding into the same denials list; spec
       that it reaches both documents and the text render (UX3), and that a
-      quiet task emits nothing.
+      quiet task emits nothing. The identities and positions a marker quotes
+      are environment-derived text and pass the same field cap the parsed
+      events' fields do (NFR-C1 of add-sandbox-core, shared as
+      `DenialFieldCap`).
 - [x] 5.5 Spec the merge across processes: a resume whose position is lost
       but whose identities survive re-reads the log and records zero
       duplicates; a resume that lost both reports duplicates plus the NFR-O2
@@ -199,3 +206,9 @@ saturation visible).
       (provenance: `fix-denial-attribution-durability`).
 - [x] 7.6 Recommend a Conventional Commits message referencing
       fix-denial-attribution-durability.
+- [x] 7.7 `docs/guides/operator-guide-sandbox.md` (UX1, UX3): extend the
+      egress-allowlist section's "Where to look" with
+      `lastEscalation.denials[]` — the denials of a round that produced no
+      attempt record (FR1) — and add a "Loss markers" paragraph telling the
+      reviewer how to read the two markers (FR8) so an empty list is never
+      mistaken for a complete one.

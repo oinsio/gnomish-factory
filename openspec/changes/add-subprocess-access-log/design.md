@@ -101,7 +101,9 @@ cannot import `:logtext` (extraction contract: JDK + `:subprocess` only), so
 functional interface taking the execution facts as JDK types — with a no-op
 default; `bootstrap` wires the factory's implementation, which forwards to
 the D1 emitter. The module acquires no dependency (module-layering delta
-pins this with a scenario). *Rationale:* keeps the format owner single while
+pins this with a scenario; `add-base-ref-resolution` MODIFIES the same two
+layering requirements and is sequenced after this change, its delta layered
+on this one's text — if it syncs first, merge this delta by hand). *Rationale:* keeps the format owner single while
 honoring extraction-readiness; a no-op default means standalone extraction
 just loses records, not compilation. *Alternative rejected:* direct SLF4J
 JSON emission inside `GitExec` — duplicates the format and redaction into a

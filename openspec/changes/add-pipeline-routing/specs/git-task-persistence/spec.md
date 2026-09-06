@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Pipeline pin is task identity on the branch
-`task.json` SHALL carry the pinned pipeline name and definition content
+`task.json` SHALL carry the pinned pipeline name and definition structural
 hash, written in the same commit that creates the task on the branch —
 mutually-implied facts landing together. The wire format change SHALL ride
 the existing version gate; pre-routing task files SHALL read as pinned to

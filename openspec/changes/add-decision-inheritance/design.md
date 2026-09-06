@@ -96,8 +96,15 @@ prevented by single-mapper and single-append-owner construction.
 ## Risks / Trade-offs
 
 - [Epic-branch fetch at every subtask claim adds latency and a failure
-  mode] → one fetch of one branch, conditional (remembered tip); failure is
-  a loud infrastructure escalation, never silent bare rounds (spec'd).
+  mode] → one fetch of one branch, conditional (remembered tip); failure
+  never yields a silent bare round, and it takes the claim-time fetch rule
+  of `add-base-ref-resolution` (ADR 0005) rather than a rule of its own: a
+  dead remote is the daemon's condition (claim released, gate opened, no
+  attempt or comment charged to the task), a missing epic branch is the
+  task's (parked with a report). An earlier draft escalated every fetch
+  failure; that classified by step, not by cause, and would have parked
+  the whole subtask backlog for an outage the gate exists to wait out
+  (spec'd).
 - [Append-gate question matching is fuzzy (same question, different words)]
   → the gate matches on the inherited record ids the gnome must cite when
   touching a decided area; the briefing instructs citing; an uncited

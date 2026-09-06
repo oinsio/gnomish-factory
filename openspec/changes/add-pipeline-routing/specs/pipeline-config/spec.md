@@ -9,8 +9,10 @@ each an explicit linear sequence of stage names drawing from the shared
 is validated within each referencing pipeline's graph. A legacy `.gnomish/`
 with the single-pipeline shape SHALL load unchanged as one pipeline with a
 defined default name, routed for every task. Each loaded definition SHALL
-carry its name and a deterministic content hash covering everything the law
-freeze reads for it.
+carry its name and a deterministic structural hash covering the stage
+names and order, each stage's verify checks and executor kind, and its
+artifact declarations — and excluding stage instruction and judge criteria
+content, which the law source lets a human revise under a parked task.
 <!-- implements FR1, FR5 of add-pipeline-routing -->
 
 #### Scenario: Two pipelines share a stage
@@ -26,7 +28,38 @@ freeze reads for it.
 
 #### Scenario: Definition hash is stable
 - **WHEN** the same `.gnomish/` content is loaded twice
-- **THEN** each pipeline's content hash is identical across loads
+- **THEN** each pipeline's structural hash is identical across loads
+
+#### Scenario: Instruction edits leave the hash unchanged
+- **WHEN** only a stage's instructions file or a judge criteria file changes
+- **THEN** the pipeline's structural hash is unchanged, while renaming,
+  reordering, or adding a stage or a verify check changes it
+
+### Requirement: Type rule and routing table must exist together
+The trusted-tier startup validation SHALL treat the tracker adapter's
+configured designator kinds (reported through the adapter factory seam, per
+tracker-port) and the routing table as a pair: kind `type` extracted while
+no routing table exists, and a routing table carrying type entries while no
+adapter extracts kind `type`, are each a located `ConfigError` naming both
+places — either configuration can only ever miss. A legacy single-pipeline
+tree with no rule and no table loads unchanged.
+<!-- implements FR2, FR5 of add-pipeline-routing -->
+
+#### Scenario: Rule without a table is a load error
+- **WHEN** `tracker.github.designators.type` is declared and `.gnomish/`
+  has no routing table
+- **THEN** loading fails with a located error naming the rule and the
+  missing table
+
+#### Scenario: Table without a rule is a load error
+- **WHEN** the routing table maps `bugfix` to a pipeline and no adapter
+  extracts kind `type`
+- **THEN** loading fails with a located error naming the table entry and
+  the adapter's `designators` location
+
+#### Scenario: Matching pair loads
+- **WHEN** the rule and a routing table with a default are both declared
+- **THEN** loading succeeds and typed tasks route by the table
 
 ## MODIFIED Requirements
 

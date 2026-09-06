@@ -5,7 +5,8 @@ slot, its durable per-round cursor, and its finding DTO are this change's
 starting point). A 2026-08-28 architecture session found that predecessor's
 cursor feature **inert in production**: the `LeasedEnvironment` view forwards
 only six of the port's methods, so the interface's constant defaults swallow
-`denialCursor()` / `denialFindings()` / `restoreDenialCursor()` — no cursor is
+`denialCursor()` / `denialFindings()` / `restoreDenialCursor()` (this change
+renames the latter two to `readDenials()` / `restoreDenials()`, D7) — no cursor is
 ever committed and no restore ever runs in a real container run, while both
 spec halves stay green over hand-rolled doubles. Repairing that wiring — and
 closing the defect class it belongs to — is in this change's scope (FR6, FR9).

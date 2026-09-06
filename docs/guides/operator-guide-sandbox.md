@@ -164,6 +164,12 @@ bodies) and attached to the round that caused it. Where to look:
 - `gnomish status` — an `egress denial:` line under the round's summary
 - `status.json` / the task branch's `state.json` — `attempts[].denials[]`,
   one entry per denial, in the same shape a failed check's `findings[]` uses
+- `status.json` / the task branch's `task.json` — `lastEscalation.denials[]`,
+  the denials of a round that never finished. A round killed on its
+  `roundTimeout`, or one whose executor died, produces no attempt record at
+  all, so what its guard blocked is under the escalation rather than under
+  `attempts[]`. Read both: an exfiltration attempt is *more* likely on the
+  round that hung than on the ones that completed
 
 Denials are observability, never a gate: a round that denied something still
 passes if its checks pass. Reading them (UX3):
@@ -173,6 +179,24 @@ passes if its checks pass. Reading them (UX3):
 - **A denied host you don't recognize, mid-round, unrelated to any tool** —
   treat as a possible exfiltration attempt or injected instruction; read the
   round trace before returning anything.
+
+**Loss markers.** An empty `denials[]` means "nothing was blocked". Where the
+factory can see that denial data was *lost* instead, it says so in the same
+list, as an entry whose message starts with `egress denial log truncated` or
+`egress denials may be lost` — so "no denials" is never confused with "no
+data". Two cases produce one:
+
+- *truncated* — the read filled its tail window, so the guard's own log
+  dropped older lines of that window before anything parsed them. The entry
+  names the window it can bound. Expect it after a denial storm; the denials
+  you can see are a floor, not a total.
+- *may be lost* — the box's guard container was replaced while denials of the
+  previous one were already recorded, and its log went with it. The entry
+  names the recorded source and the live one.
+
+Neither gates anything, and neither means the task misbehaved — it means the
+denial record for that stretch is incomplete. Treat an unrecognized-host
+judgement call under a loss marker as unresolved, not as clean.
 
 Keep the list minimal — every entry is a channel. Wildcards are supported by
 the guard config but name no single destination, so the self-check's

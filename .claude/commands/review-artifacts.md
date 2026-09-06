@@ -96,6 +96,11 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 - Vs implemented functionality: proposed behavior must not silently break invariants the
   code already enforces (search for the touched entities in code and tests); when the change
   intends to break one, that must be stated explicitly as MODIFIED/REMOVED, never implied.
+- Vs other active changes, MODIFIED-requirement overlap: for every `### Requirement:` under a
+  `## MODIFIED` header in this change's deltas, grep the other active deltas for the same
+  heading. Each hit without a fixed order in both proposals and a `Layered on ... (sequenced
+  before this change)` preamble on the later delta is a WARNING (`delta-specs.md`): the second
+  sync silently replaces the first
 - Vs other active changes: overlapping files/specs/capabilities → flag the collision and the
   needed ordering.
 - Vs project rules and ADRs: tech choices match ADR 0001 and `.claude/rules/`; scope fits
