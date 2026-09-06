@@ -50,8 +50,9 @@ and the rest from the ref being built. This change adopts that mechanism.
   block is domain policy only; how a tracker encodes a per-task selection is
   the tracker adapter's configuration (`tracker.<type>.designators`). Zero
   configuration stays valid and resolves to the repository default branch.
-  The block is read **only from the refreshed default branch** — a gnome or
-  task branch can never alter it. (FR1, FR2)
+  The block is read **only from the refreshed default branch, once at
+  startup** — a gnome or task branch can never alter it, and a claim never
+  re-reads it. (FR1, FR2)
 - ADDED: **generalized designator mechanism** on the tracker port: the
   `fetchTask` facts carry, per kind, a designator in one of three shapes —
   absent, single, or conflict — classified by one shared function and
@@ -103,7 +104,8 @@ and the rest from the ref being built. This change adopts that mechanism.
 - Preserved: manual `gnomish run` without `--base` still branches from the
   local HEAD with no fetch and still reads law from the working tree, so
   uncommitted `.gnomish/` edits keep driving the pipeline author's loop;
-  `--base <sha>` and clones without an origin work exactly as before. (FR8)
+  `--base <ref>` and clones without an origin still need no network, and
+  with `--base` the law comes from git objects at that ref (FR8, FR11)
 
 ## Capabilities
 
@@ -231,7 +233,10 @@ and the rest from the ref being built. This change adopts that mechanism.
 - FR2: the `base:` section SHALL be read only from the repository's default
   branch, refreshed by fetch, on the factory side — never from a task branch
   or a gnome-writable working copy. It belongs to the trusted tier of
-  configuration (FR11); the task tier binds from the chosen base's law commit.
+  configuration (FR11), which binds **once at startup** (FR13) and is not
+  re-read per claim: a menu change merged to the default branch takes effect
+  on the next start of `serve`/`take`, exactly as a `tracker:` change does.
+  The task tier binds from the chosen base's law commit.
 - FR3: the `fetchTask` facts SHALL carry designators per kind: absent, a
   single value, or a conflict listing all values found; the adapter never
   resolves conflicts. Each adapter derives the candidate values from its own
@@ -278,11 +283,13 @@ and the rest from the ref being built. This change adopts that mechanism.
   `baseCommit` stay readable. Resume — any instance, any mode — SHALL read
   the pin and never re-resolve the base from tracker data or configuration.
 - FR8: manual `gnomish run` behavior is preserved: without `--base` it
-  branches from the local HEAD with no fetch and no remote query; with
-  `--base` the given ref wins everywhere it is accepted today; a clone
-  without an origin remote keeps working offline, and its law source stays
-  the working tree, so uncommitted `.gnomish/` edits apply. `git pull` remains
-  forbidden on every path.
+  branches from the local HEAD with no fetch and no remote query, and its
+  law source stays the working tree, so uncommitted `.gnomish/` edits apply;
+  with `--base` the given ref wins everywhere it is accepted today, is
+  resolved locally with no fetch, and — because a ref was resolved — its
+  law is read from git objects at that ref (FR11). A clone without an origin
+  remote keeps working offline in both forms. `git pull` remains forbidden
+  on every path.
 - FR9: a failure to discover, fetch, or resolve the base in take/serve SHALL
   classify as an infrastructure failure, distinguished **by cause, never by
   the step that observed it**, from task-level failures (a ref that does not
@@ -313,7 +320,9 @@ and the rest from the ref being built. This change adopts that mechanism.
   tiers: the trusted tier (`tracker:`, `base:`, and future selector blocks)
   binds from the refreshed default branch; the task tier (stages, stage
   instructions, judge criteria, the remainder of `config.yaml`) binds from
-  the base's law commit — the pinned SHA on a fresh start. The external-check
+  the base's law commit — the pinned SHA on a fresh start. Manual `run` with
+  `--base` is such a path: it resolves the ref locally, fetches nothing, and
+  reads its law from git objects at that ref, offline. The external-check
   pin guard SHALL compare against the law commit, never against `HEAD`.
 - FR12: on resume the task tier SHALL bind from the current tip of the pinned
   ref **name** (for a tag or SHA base this equals the pin), so a human fix to
@@ -402,8 +411,10 @@ and the rest from the ref being built. This change adopts that mechanism.
 
 - NFR-P1: the claim path grows by at most one remote refs read (default
   branch discovery) plus one narrow single-ref fetch, both bounded by the
-  existing git network deadline; autonomous resume grows by one narrow fetch
-  of the pinned ref name; manual run gains zero network calls.
+  existing git network deadline; the trusted-tier fetch of the default
+  branch happens once at startup, outside the claim path; autonomous resume
+  grows by one narrow fetch of the pinned ref name; manual run gains zero
+  network calls.
 
 ### Non-Functional — Cost
 

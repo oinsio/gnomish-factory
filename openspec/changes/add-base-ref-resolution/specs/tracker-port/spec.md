@@ -54,21 +54,18 @@ that yields no candidate at all (absent).
 ### Requirement: Task facts from fetchTask
 `fetchTask` SHALL return the task snapshot (id, title, body), the logical state
 with its holder (for `Working`) or reason (for `AwaitingHuman`), the abort
-facts (count since last durable progress, last abort time), the `finished`
-fact (the recorded history contains a finish report), and the task's
+facts (count since last durable progress, last abort time), and the task's
 designators per kind (absent | single | conflict, see "Designators are
 classified once and derived per adapter"). Closed or nonexistent tasks SHALL
 be reported as `Gone`, not as errors.
 <!-- implements FR1 of add-tracker-port -->
-<!-- implements FR1 of enforce-finish-terminality -->
 <!-- implements FR3 of add-base-ref-resolution -->
 
 #### Scenario: Full fact set for a working task
 - **WHEN** `fetchTask` is called for a task claimed by instance A with two
   recorded aborts and one `base` designator
 - **THEN** the result carries the snapshot, `Working(A)`, abort facts
-  (count 2 with the last abort time), `finished` false, and the single
-  `base` designator
+  (count 2 with the last abort time), and the single `base` designator
 
 #### Scenario: Closed task is Gone
 - **WHEN** `fetchTask` is called for a closed or nonexistent task

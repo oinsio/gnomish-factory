@@ -134,15 +134,16 @@
       duplicate; all four fresh-start paths receive resolved refs; verify
       by existing suites plus a grep gate that no `"HEAD"` default remains
       outside the manual-run tier (FR4, FR10, M2)
-- [ ] 6.2 Insert config-refresh + resolve + base-refresh between `harden()`
-      and `createTask()` in `TakeFreshClaim` and
-      `TakeContainerFreshClaim`; add the `Kept in sync with` markers to
-      both ends (invariant line includes the new resolve step) and remove
-      their `manual-sync-pairs.md` registry row; mirrored specs cover both
-      media; the `base:` block is
-      read through the git-objects law source at the refreshed default-branch
-      tip, and the law-source contract test pins that source (FR2, FR6, D6,
-      sync surface)
+- [ ] 6.2 Insert resolve + base-refresh between `harden()` and
+      `createTask()` in `TakeFreshClaim` and `TakeContainerFreshClaim`; add
+      the `Kept in sync with` markers to both ends (invariant line includes
+      the new resolve step) and remove their `manual-sync-pairs.md` registry
+      row; mirrored specs cover both media; the `base:` block comes from the
+      trusted tier bound at startup (task 5.5) — read through the
+      git-objects law source at the refreshed default-branch tip, never
+      re-read per claim (a spec asserts no default-branch fetch and no
+      config read on the claim path), and the law-source contract test pins
+      that source (FR2, FR6, D6, D15, sync surface)
 - [ ] 6.3 TDD the pin: mapper writes `(ref, sha, rule)` in the
       task-creation commit behind the version gate; the pin flows through
       both ends of the `GitTaskRepository` / `GitObjectsTaskRepository`
@@ -225,10 +226,12 @@
       operator-guide section: `base:` block reference, the
       `tracker.github.designators` rule reference (and the adapter author
       guide's designator obligations), the external-automation escape
-      hatch, the two configuration tiers, the
-      unchanged `run` behavior, and the outage gate (its log lines, snapshot
+      hatch, the two configuration tiers (the trusted tier binds at
+      startup — a merged menu change needs a restart of `serve`), the
+      unchanged `run` behavior (and `--base` reading law from git objects
+      at the given ref), and the outage gate (its log lines, snapshot
       section, and exit code 16); verify by docs build/lint conventions
-      (UX1, UX4, UX6, D10, D12)
+      (UX1, UX4, UX6, D10, D12, D15)
 - [ ] 8.2 Write `docs/adr/0007-pipeline-law-source.md`: law by ref from git
       objects, the two tiers, resume from the pinned ref tip as a recorded
       deviation from the re-run model, the rejected worktree and checkout

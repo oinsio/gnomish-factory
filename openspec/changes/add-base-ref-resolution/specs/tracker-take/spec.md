@@ -6,8 +6,9 @@
 For a fresh start, `take` (explicit, batch, and auto forms alike) SHALL
 resolve the base after the factory clone is hardened (the branch hardening
 step that precedes task creation today) and before the task is created on
-the branch: read the `base:` configuration from the refreshed default
-branch, evaluate the task's `base` designator, apply the priority order, and
+the branch: take the `base:` configuration from the trusted tier bound at
+startup from the refreshed default branch (never re-read per claim),
+evaluate the task's `base` designator, apply the priority order, and
 refresh the resolved ref (see base-ref-resolution and git-task-persistence),
 then load the task tier of the law from the refreshed base's commit (see
 pipeline-config) — a load error parks the task with a configuration report.
@@ -30,8 +31,8 @@ from the tip of the pinned ref name.
 
 ### Requirement: Base infrastructure failure releases the claim outside the abort accounting
 When base resolution or the base refresh fails infrastructurally in a
-tracker-driven start — default-branch discovery, configuration refresh, or
-the base fetch exhausting its bounded retries — the take SHALL release the
+tracker-driven start — default-branch discovery or the base fetch
+exhausting its bounded retries — the take SHALL release the
 claim through the plain claim-release path and end without creating a
 branch: the task returns to Ready for any instance to claim later, no stage
 attempt is burned, no escalation is posted to the tracker, and the run ends

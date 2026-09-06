@@ -92,7 +92,8 @@ the **working tree** in the git-less in-place mode and in manual `run`
 without `--base`. Where a ref was resolved, the factory clone's working tree,
 index, and `HEAD` SHALL play no part in the law. Configuration has two tiers:
 the trusted tier (`tracker:`, `base:`, and future selector sections) binds
-from the refreshed repository default branch; the task tier (stages,
+once at startup from the refreshed repository default branch and is never
+re-read per task; the task tier (stages,
 instructions, criteria, the remainder of `config.yaml`) binds from the base's
 law commit — the pinned SHA on a fresh start, the current tip of the pinned
 ref name on resume (a tag or SHA base makes these equal). The external-check
@@ -136,6 +137,12 @@ source of the trusted tier.
 - **WHEN** `gnomish run` starts without `--base` in a clone with uncommitted
   `.gnomish/` edits
 - **THEN** the edited files are the law, exactly as before this change
+
+#### Scenario: Manual run with a base reads that ref's law offline
+- **WHEN** `gnomish run --base v1.2.3` starts in a clone with no reachable
+  remote and uncommitted `.gnomish/` edits
+- **THEN** no fetch runs, the law is read from git objects at `v1.2.3`, and
+  the uncommitted edits play no part
 
 #### Scenario: Resume after the pinned ref disappeared
 - **WHEN** a task pinned to `release/1.18` is resumed after that branch was

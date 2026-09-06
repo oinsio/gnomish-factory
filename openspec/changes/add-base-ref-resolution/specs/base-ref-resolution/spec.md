@@ -113,17 +113,27 @@ default branch, refreshed by fetch, and never from a task branch or a
 gnome-writable working copy. Copies of the configuration in a gnome's working
 copy are project content — law only after a human merge. The read SHALL go
 through the git-objects law source at the refreshed default-branch tip, never
-through a checkout. The `base:` block is trusted-tier configuration; the task
+through a checkout, and SHALL happen once at startup as part of the trusted
+tier (see pipeline-config, "Definition validated at startup, bound per task
+from the base"); a claim SHALL NOT re-fetch the default branch or re-read
+the block. The `base:` block is trusted-tier configuration; the task
 tier of the law binds from the chosen base's law commit (see pipeline-config,
 "Pipeline law binds per invocation"). This requirement is what breaks the
 "the config picks the base, but which ref holds the config" cycle.
-<!-- implements FR2, NFR-S1 of add-base-ref-resolution -->
+<!-- implements FR2, NFR-S1, NFR-P1 of add-base-ref-resolution -->
 
 #### Scenario: A gnome edit to the base block has no effect
 - **WHEN** a gnome branch modifies the `base:` block in its working copy and
   another task is claimed afterwards
 - **THEN** the new task resolves under the default-branch configuration, and
   the gnome's edit participates only after a human merges it
+
+#### Scenario: A merged menu change waits for the next start
+- **WHEN** a human merges a new `base.menu` entry to the default branch while
+  `serve` is running, and a task selecting that new entry is claimed
+- **THEN** the running daemon still resolves under the menu bound at its
+  startup (the task parks as out-of-menu), no default-branch fetch runs on
+  the claim path, and the next start of `serve` accepts the entry
 
 ### Requirement: The base decision is pinned at claim and never re-resolved
 The resolved base — ref, commit SHA, and source rule — SHALL be pinned into

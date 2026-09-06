@@ -78,7 +78,8 @@ branch.** Shape per pipeline-config delta (FR1). The block is read
 factory-side, by ref (D12), from the repository default branch only
 (Renovate's model: config on the default branch, no per-branch drift, and
 selector fields re-asserted from the default branch even when the base
-branch's config is merged in); it picks the base; the task tier of the law
+branch's config is merged in), bound once at startup and never re-read per
+claim (D15); it picks the base; the task tier of the law
 then binds from the chosen base's law commit. This ordering is what breaks
 the "config chooses the base, but which ref holds the config" cycle (FR2,
 NFR-S1). *Alternative rejected:* reading `base:` from the base branch itself
@@ -160,8 +161,9 @@ rejected:* a separate pin file — splits mutually-implied facts across
 writes, violating the one-commit rule.
 
 **D8 — Crash consistency of claim → refresh → resolve → create.** Durable
-steps in order: tracker claim; (no durable step: config fetch, discovery,
-base fetch, resolution — all reads); task-creation commit carrying the pin;
+steps in order: tracker claim; (no durable step: discovery, base fetch,
+resolution — all reads; the trusted tier was bound at startup, D15);
+task-creation commit carrying the pin;
 first push. Kill windows and shapes:
 1. *After claim, before the creation commit.* Tracker medium: the
    `claim-heartbeat` shape `Claimed` (working label, live claim footprint)
@@ -259,9 +261,10 @@ and `PipelineLawReader` read through it; `GitObjects` gains tree listing
 `PathSafety` is the whole traversal guard there). The pin guard receives the
 law commit instead of `"HEAD"`, so law and pin come from one SHA by
 construction. Selection is by *fact*, not by mode: any path that resolved a
-ref uses git objects (take, serve, manual `run` with `--base`); in-place mode
-and manual `run` without `--base` keep the working tree, which preserves the
-pipeline author's edit-and-run loop on uncommitted files (FR8, UX3). This is
+ref uses git objects (take, serve, manual `run` with `--base` — the latter
+resolving locally, offline, with no fetch); in-place mode and manual `run`
+without `--base` keep the working tree, which preserves the pipeline
+author's edit-and-run loop on uncommitted files (FR8, UX3). This is
 the industry mechanism (GitLab through Gitaly, Jenkins `SCMFileSystem`,
 GitHub Actions and Renovate through content APIs; OWASP CICD-SEC-4 names the
 principle) and adds **no durable step** — reads only — so D8's kill-window
@@ -311,6 +314,24 @@ a configuration report through the same path as underdetermined base input
 buys nothing (same tree)" and D5 "one law per pipeline at startup" become
 "one law per (pipeline, law commit)", cached per pair if measured to matter.
 
+**D15 — The trusted tier binds once at startup; a claim never re-reads it.**
+The `base:` block (and the rest of the trusted tier) is read from the
+refreshed default branch by the startup load of D14 and held for the
+process lifetime; the claim path performs only default-branch discovery,
+the base refresh, and the task-tier load. A menu change merged to the
+default branch takes effect on the next start — the same lifecycle
+`tracker:` configuration already has (FR2, FR13, NFR-P1). *Rationale:*
+policy and network cost stay startup-scoped: the claim path keeps exactly
+one refs read plus one narrow fetch, the trusted tier has one source and
+one binding time (no "which tip did this claim see" question), and the
+`board`/`dashboard`/routing consumers of the startup definition read the
+same tier the resolver does. *Alternative rejected:* refreshing the default
+branch and re-reading the block on every claim — a second narrow fetch per
+claim whenever the base is not the default branch, a trusted tier that can
+change between two slots of one daemon, and a startup definition that stops
+being the definition the slots resolve under. Freshness of the *base tip*
+is unaffected either way: that is the per-claim refresh of D6.
+
 **Design note (NG7):** base freshness at the merge end — whether the target
 moved while the task ran — is the host merge queue's concern; the factory
 does not re-validate or speculatively merge at delivery time.
@@ -319,8 +340,8 @@ does not re-validate or speculatively merge at delivery time.
 
 ```mermaid
 flowchart LR
-    Claim["claim + harden"] --> Cfg["fetch default branch,<br/>read base: block"]
-    Cfg --> Resolve["resolve:<br/>--base > designator > default > repo default"]
+    Start["startup: fetch default branch,<br/>bind trusted tier (base: block)"] -.-> Resolve
+    Claim["claim + harden"] --> Resolve["resolve:<br/>--base > designator > default > repo default"]
     Resolve -->|underdetermined| Park["park with report<br/>(no attempt burned)"]
     Resolve --> Fetch["narrow fetch of the base"]
     Fetch -->|infra failure| Release["release claim,<br/>open remote gate<br/>(task back to Ready)"]
@@ -428,6 +449,10 @@ extend `RestartBackoff`, do not fork it.
 - [A single bad ref or a revoked credential opens the gate for every task]
   → classification by cause (FR9): only reachability failures open it; the
   rest park the one task they belong to.
+- [A menu change on the default branch is invisible to a running serve
+  until restart] → accepted (D15): the trusted tier is startup-scoped like
+  `tracker:`; the operator guide names the restart, and base *tips* are
+  still refreshed per claim.
 - [Menu patterns admit any branch a pattern matches, including one minted
   by a hostile push] → inherent to pattern menus (Renovate has the same
   property); gated by merge review and named in D10 as a permission
