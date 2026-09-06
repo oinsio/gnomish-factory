@@ -59,6 +59,28 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
 - **WHEN** a CLI executor round is mid-flight on its third tool call
 - **THEN** the `activity` section reads `{ "type": "executing", "since": …, "currentTool": "Edit", "toolCalls": 3 }`
 
+### Requirement: Reference anchor and versioning policy
+The contract SHALL be anchored by two reference documents in test resources, and serializing the deterministic samples (built with an injected clock) SHALL be byte-identical to each: `status-report-v1.reference.json`, one whole canonical document that pins the envelope and every section of a mid-run report; and `status-report-v1.escalations.reference.jsonl`, one compact line per `lastEscalation` kind that pins each sealed variant's own serialized form. Two documents rather than one because the canonical document's `lastEscalation` slot holds exactly one kind: a variant absent from it has nowhere else to be pinned byte-exactly, and replacing the kind the canonical document carries would move the pin rather than add one. The corpus SHALL be complete — a check SHALL fail when the committed line count does not match the number of `EscalationReport` variants — so a newly added kind cannot ship unpinned. Additive fields SHALL NOT bump `version`; renaming, removal, or semantic change SHALL — once a version has been released; a contract whose only consumer ships in this repository and which no archived change has published MAY be amended in place with its reference file regenerated. Future consumers (the external `gnomish status` of the git-workflow change) SHALL verify against the same reference files.
+<!-- implements FR11 of add-manual-run -->
+<!-- implements FR5 of add-agent-executor -->
+<!-- implements FR2 of fix-denial-attribution-durability -->
+
+#### Scenario: Contract drift caught
+- **WHEN** a field is renamed in the serializer
+- **THEN** the reference comparison fails showing the exact JSON diff
+
+#### Scenario: Pre-release amendment stays v1
+- **WHEN** this change reshapes usage fields and regenerates the reference file
+- **THEN** the document still carries `"version": 1` and the reference test passes against the regenerated file
+
+#### Scenario: Every escalation kind is pinned byte-exactly
+- **WHEN** the escalation corpus is serialized
+- **THEN** each of the five `EscalationReport` kinds has its own committed line, and the `cannotExecute` line carries a populated `denials` array
+
+#### Scenario: A new escalation kind cannot ship unpinned
+- **WHEN** a sixth `EscalationReport` variant is added without a corpus line
+- **THEN** the completeness check fails, naming the count mismatch
+
 ## ADDED Requirements
 
 ### Requirement: Escalation denials in the report

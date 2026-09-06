@@ -66,7 +66,7 @@ class TakeLoadedBranchRoutesSpec extends Specification {
         label | outcome | report || decision
         'Escalated + AttemptsExhausted' | escalated() | new EscalationReport.AttemptsExhausted(3) || true
         'Escalated + DecisionNeeded' | escalated() | new EscalationReport.DecisionNeeded('Q?', ['a', 'b']) || true
-        'Escalated + INFRA CannotExecute' | escalated() | new EscalationReport.CannotExecute('adapter crashed') || false
+        'Escalated + INFRA CannotExecute' | escalated() | new EscalationReport.CannotExecute('adapter crashed', []) || false
         'Escalated + no report' | escalated() | null || false
         'Paused + stale AttemptsExhausted' | paused() | new EscalationReport.AttemptsExhausted(3) || false
         'null outcome + AttemptsExhausted' | null | new EscalationReport.AttemptsExhausted(3) || false

@@ -1,12 +1,9 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -30,14 +27,10 @@ class TakeEscalationExitSpec extends Specification {
 
     Tracker tracker = Mock()
 
-    private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
-    }
-
     // FR13, D12: AttemptsExhausted needs a human decision — ESCALATION reason, reply-and-return message.
     def "exit parks AttemptsExhausted escalation as ESCALATION with a reply-and-return report"() {
         given: 'the claim is still ours, so the pre-write guard lets the park through (FR7)'
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def escalated = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
@@ -62,7 +55,7 @@ class TakeEscalationExitSpec extends Specification {
     // FR13, D12, UX3: DecisionNeeded's report must also carry the rendered question/options text.
     def "exit parks DecisionNeeded escalation as ESCALATION with the rendered question and a reply-and-return report"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def report = new EscalationReport.DecisionNeeded('Which approach?', ['A', 'B'])
         def escalated = new TaskOutcome.Escalated(STATE, report)
 
@@ -84,7 +77,7 @@ class TakeEscalationExitSpec extends Specification {
     // FR13, D12, UX3: infra-kind escalations need a fix, not a reply — distinct return-path wording.
     def "exit parks #kind escalation as INFRA with a fix-and-return report, no reply wording"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         def result = TakeEscalationExit.exit(new TaskOutcome.Escalated(STATE, escalationReport), tracker, REF, INSTANCE)
@@ -102,7 +95,7 @@ class TakeEscalationExitSpec extends Specification {
         where:
         kind | escalationReport
         'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, 'command:test'), 'timed out', '')
-        'CannotExecute' | new EscalationReport.CannotExecute('executor crashed')
+        'CannotExecute' | new EscalationReport.CannotExecute('executor crashed', [])
         'PipelineMismatch' | new EscalationReport.PipelineMismatch('old-stage')
     }
 
@@ -110,7 +103,7 @@ class TakeEscalationExitSpec extends Specification {
     // mid-run must NOT overwrite the new holder's state — the pre-write guard skips the park.
     def "exit skips the park when the claim is no longer ours (#state)"() {
         given: 'the pre-write check sees the claim is not held by this instance'
-        tracker.fetchTask(REF) >> taskWith(state)
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, state)
         def escalated = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:

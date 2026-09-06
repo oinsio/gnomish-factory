@@ -78,7 +78,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
         // FR1 of fix-denial-report-attachment: the consumer at the round boundary holds
         // TaskExecutionEnvironment, never this adapter — the denials must arrive that way.
         TaskExecutionEnvironment port = new SelfCheckedEnvironment(env, selfCheck, guard)
-        def findings = port.denialFindings()
+        def findings = port.readDenials().denials()*.finding()
 
         then: 'the blocked destination is a visible structured finding (NFR-O1, UX3)'
         findings.any {
@@ -86,7 +86,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
         }
 
         when: 'a second round closes with no new denial in between'
-        def secondRound = port.denialFindings()
+        def secondRound = port.readDenials().denials()*.finding()
 
         then: 'the delta cursor kept the first round\'s denial off the second attempt (D3, UX2)'
         secondRound == []

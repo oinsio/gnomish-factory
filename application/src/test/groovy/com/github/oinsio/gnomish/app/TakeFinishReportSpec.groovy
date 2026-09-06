@@ -48,10 +48,6 @@ class TakeFinishReportSpec extends Specification {
 
     Tracker tracker = Mock()
 
-    private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
-    }
-
     private static List<ILoggingEvent> capture(Closure<?> emit) {
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(TakeFinishReport)
         ListAppender<ILoggingEvent> appender = new ListAppender<>()
@@ -69,7 +65,7 @@ class TakeFinishReportSpec extends Specification {
     // FR18, D11: finish is called with a non-blank summary rendered from StatusReport.
     def "finish renders a full report and calls tracker.finish"() {
         given: 'the claim is still ours, so the pre-write guard lets the finish through (FR7)'
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def completed = new TaskOutcome.Completed(STATE)
 
         when:
@@ -93,7 +89,7 @@ class TakeFinishReportSpec extends Specification {
     // FR18, D11: the returned TakeResult carries exactly the summary text passed to tracker.finish.
     def "finish returns a Delivered result whose summary matches the tracker.finish call"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def completed = new TaskOutcome.Completed(STATE)
         String captured = null
 
@@ -113,7 +109,7 @@ class TakeFinishReportSpec extends Specification {
     // mid-run must NOT overwrite the new holder's state — the pre-write guard skips the finish.
     def "finish skips the tracker write when the claim is no longer ours (#state)"() {
         given: 'the pre-write check sees the claim is not held by this instance'
-        tracker.fetchTask(REF) >> taskWith(state)
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, state)
         def completed = new TaskOutcome.Completed(STATE)
 
         when:
@@ -141,11 +137,11 @@ class TakeFinishReportSpec extends Specification {
         def now = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
         Clock clock = { -> now.get() } as Clock
         Sleeper sleeper = { Duration d ->
-            now.set(now.get().plus(d))
+            now.set(now.get() + d)
         } as Sleeper
         def retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
         def attempts = new AtomicInteger()
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.finish(REF, _ as String) >> {
             if (attempts.getAndIncrement() < 2) {
                 throw new TrackerUnavailableException('tracker down')
@@ -168,16 +164,8 @@ class TakeFinishReportSpec extends Specification {
         // bound is reached in a bounded number of polls even when a mutant drops sleeper.sleep or halves
         // the backoff — the give-up loop terminates instead of hanging. The killing tests for those
         // mutants live in TerminalWriteRetrySpec (exact backoff schedule + transient-outage confirm).
-        def ticking = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
-        Clock clock = {
-            ->
-            def t = ticking.get()
-            ticking.set(t.plus(Duration.ofMinutes(2)))
-            t
-        } as Clock
-        Sleeper sleeper = { Duration d -> } as Sleeper
-        def retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        def retry = RetryFixtures.givingUpRetry()
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.finish(REF, _ as String) >> {
             throw new TrackerUnavailableException('still down')
         }
@@ -199,19 +187,6 @@ class TakeFinishReportSpec extends Specification {
         errors[0].formattedMessage.contains('PROJ-1')
         errors[0].formattedMessage.contains('could not be written before the retry bound')
         errors[0].formattedMessage.contains('reconcile')
-    }
-
-    /** A retry whose clock self-advances past the bound, so a persistent outage gives up promptly. */
-    private static TerminalWriteRetry givingUpRetry() {
-        def ticking = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
-        Clock clock = {
-            ->
-            def t = ticking.get()
-            ticking.set(t.plus(Duration.ofMinutes(2)))
-            t
-        } as Clock
-        Sleeper sleeper = { Duration d -> } as Sleeper
-        new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
     }
 
     // FR10 of harden-task-branch-contract: a recovered completion probes the tracker before
@@ -241,14 +216,15 @@ class TakeFinishReportSpec extends Specification {
     def "an unconfirmed finish leaves the cleanup undone"() {
         given:
         def cleaned = new AtomicInteger()
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.finish(REF, _ as String) >> {
             throw new TrackerUnavailableException('tracker down')
         }
 
         when:
         TakeFinishReport.finish(
-                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, tracker, REF, INSTANCE, givingUpRetry(),
+                new TaskOutcome.Completed(STATE), CONTEXT, BRANCH, tracker, REF, INSTANCE,
+                RetryFixtures.givingUpRetry(),
                 new FinishTransition.Fresh({}, { cleaned.incrementAndGet() }))
 
         then:

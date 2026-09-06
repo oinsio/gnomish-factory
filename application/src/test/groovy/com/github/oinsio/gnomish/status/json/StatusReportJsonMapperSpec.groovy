@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
-import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.status.Activity
 import com.github.oinsio.gnomish.status.LiveActivity
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
+import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -46,6 +47,34 @@ class StatusReportJsonMapperSpec extends Specification {
 
         expect:
         mapper.serialize(referenceReport()) == referenceText
+    }
+
+    // FR2, M3 of fix-denial-attribution-durability: the canonical document's single
+    //     lastEscalation slot can pin exactly one kind, so every kind gets a compact line
+    //     of its own here — including the denials this change adds to cannotExecute, whose
+    //     serialized form has no other place to be pinned byte-exactly.
+    def "reference anchor: each escalation kind is byte-identical to its line in status-report-v1.escalations.reference.jsonl"() {
+        given:
+        def referenceLines = corpusLines()
+        def json = StatusJson.mapper()
+
+        expect: "one committed line per sample, in the fixture's order"
+        StatusReportReferenceFixture.referenceEscalations().eachWithIndex { escalation, index ->
+            assert json.writeValueAsString(EscalationMapper.toDto(escalation)) == referenceLines[index]
+        }
+    }
+
+    // FR2 of fix-denial-attribution-durability: completeness by construction — a sixth
+    //     EscalationReport variant fails here until it has a committed line, so a new kind
+    //     cannot ship with its wire form unpinned (the rule testing.md states for wire
+    //     vocabularies: iterate the variants, never a hand-listed subset).
+    def "the escalation corpus pins every EscalationReport kind"() {
+        given:
+        def kinds = EscalationReport.permittedSubclasses.length
+
+        expect:
+        StatusReportReferenceFixture.referenceEscalations().size() == kinds
+        corpusLines().length == kinds
     }
 
     def "position renders atStage with the stage name"() {
@@ -215,8 +244,23 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def "escalation cannotExecute renders cause"() {
         expect:
-        EscalationMapper.toDto(new EscalationReport.CannotExecute("adapter crashed")) ==
-                new EscalationDto.CannotExecute("cannotExecute", null, null, "adapter crashed")
+        EscalationMapper.toDto(new EscalationReport.CannotExecute("adapter crashed", [])) ==
+        new EscalationDto.CannotExecute("cannotExecute", null, null, "adapter crashed", [])
+    }
+
+    // FR2, NFR-S1 of fix-denial-attribution-durability: the round that could not execute
+    //     left no attempt record, so its denials ride the escalation — through the same
+    //     finding shape a check's findings use, structured metadata only.
+    def "escalation cannotExecute carries the denials of the round that could not execute"() {
+        given:
+        def denial = new Finding(
+                "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
+
+        expect:
+        EscalationMapper.toDto(new EscalationReport.CannotExecute("round timed out", [Denial.unidentified(denial)])) ==
+        new EscalationDto.CannotExecute("cannotExecute", null, null, "round timed out", [
+            new FindingDto("egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
+        ])
     }
 
     def "null fields render as JSON null, not omitted"() {
@@ -350,7 +394,7 @@ class StatusReportJsonMapperSpec extends Specification {
         def check = new CheckResult(new CheckRef(0, "builtin:files_exist"), new Verdict.Pass(), Duration.ofMillis(3))
         def attempt = new AttemptRecord(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
-                [check], ExecutorUsage.none(), JudgeUsage.none(), [denial])
+                [check], ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
 
         when:
         def dto = mapper.toDto(reportOf(attempt)).currentStage().attempts()[0]
@@ -388,56 +432,20 @@ class StatusReportJsonMapperSpec extends Specification {
         return StatusReport.build(context, state, 3, new LiveActivity(null, null, outcome))
     }
 
+    private static String[] corpusLines() {
+        StatusReportJsonMapperSpec.getResourceAsStream('/status-report-v1.escalations.reference.jsonl')
+                .getText('UTF-8').split('\n')
+    }
+
     /**
-     * The deterministic sample used both by the reference-anchor spec and to
-     * (re)generate {@code status-report-v1.reference.json} — built with fixed
-     * {@code Instant} values (an injected-clock style sample, FR11), in the shape
-     * of the spec's canonical example: non-null activity, an attempt with
-     * findings, totals, lastEscalation, lastDecision.
+     * The deterministic sample, owned by {@link StatusReportReferenceFixture} in {@code
+     * :test-fixtures} so this spec and {@code StatusReportEquivalenceContractSpec} anchor
+     * against one sample rather than two hand-synced copies (FR2 of
+     * fix-denial-attribution-durability). Regenerating {@code
+     * status-report-v1.reference.json} means editing that fixture and pasting what this
+     * spec's anchor feature then reports as the actual value.
      */
-    static StatusReport referenceReport() {
-        def decision = new Decision("patch in place", "plan", "operator", Instant.parse("2026-07-16T14:21:30Z"))
-        def context = new TaskContext("manual-20260716-143502-x7", "Fix flaky OrderServiceSpec", "body", [decision])
-
-        def passCheck = new CheckResult(
-                new CheckRef(0, "builtin:files_exist"), new Verdict.Pass(), Duration.ofMillis(3))
-        def failFinding = new Finding("command exited with 1", null, "…output tail…")
-        def failCheck = new CheckResult(
-                new CheckRef(1, "command:./gradlew test"), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))
-
-        def attemptUsage = new ExecutorUsage(
-                Duration.ofMillis(183000),
-                [
-                    new ToolUsage("Edit", 4, Duration.ofMillis(2100))
-                ],
-                ["claude-sonnet-5": new TokenUsage(1200, 5400, 30000, 410000)])
-
-        def attempt = new AttemptRecord(
-                1,
-                AttemptRecord.Result.QUALITY_FAILURE,
-                Instant.parse("2026-07-16T14:35:10Z"),
-                [passCheck, failCheck],
-                attemptUsage,
-                JudgeUsage.none(), [])
-
-        def totalsUsage = new ExecutorUsage(
-                Duration.ofMillis(232000),
-                [
-                    new ToolUsage("Edit", 4, Duration.ofMillis(2100))
-                ],
-                ["claude-sonnet-5": new TokenUsage(1450, 6100, 30000, 512000)])
-
-        def state = new TaskState(
-                new Position.AtStage("implement"),
-                1,
-                [attempt],
-                totalsUsage)
-
-        def escalation = new EscalationReport.DecisionNeeded(
-                "Refactor the retry helper or patch in place?", ["refactor", "patch"])
-        def activity = new Activity.Verifying(
-                new CheckRef(0, "command:./gradlew test"), Instant.parse("2026-07-16T14:41:02Z"))
-
-        return StatusReport.build(context, state, 3, new LiveActivity(activity, escalation, null))
+    private static StatusReport referenceReport() {
+        StatusReportReferenceFixture.referenceReport()
     }
 }

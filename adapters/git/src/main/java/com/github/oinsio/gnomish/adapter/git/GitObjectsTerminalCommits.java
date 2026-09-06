@@ -46,18 +46,8 @@ final class GitObjectsTerminalCommits {
             log.debug("pending-marker clear for task {} is a no-op: the tip carries no envelope", taskId);
             return;
         }
-        TaskJsonDto current = writer.readCurrentDto(taskId, tip, TaskLifecycleEvent.RESUMED);
-        TaskJsonDto cleared = new TaskJsonDto(
-                current.version(),
-                current.taskId(),
-                current.title(),
-                current.body(),
-                current.createdAt(),
-                current.baseCommit(),
-                current.decisions(),
-                current.outcome(),
-                current.lastEscalation(),
-                null);
+        TaskJsonDto cleared =
+                writer.readCurrentDto(taskId, tip, TaskLifecycleEvent.RESUMED).withTrackerWritePending(null);
         writer.build(
                 taskId,
                 new CommitRequest(

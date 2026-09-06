@@ -31,7 +31,10 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
  * MissingResultEventException}) — all propagate uncaught: {@code
  * RoundExecution#execute} catches any {@link RuntimeException} this port
  * throws and shapes it into {@code RoundOutcome.CannotExecute} without
- * burning a stage attempt (NFR-R1). Both {@link ExecutionResult.Completed}
+ * burning a stage attempt (NFR-R1). A failure of a round that had already been
+ * opened propagates wrapped in {@code ExecutorFailure}, which carries the
+ * round's drained egress denials alongside the original cause onto that
+ * escalation (FR1 of fix-denial-attribution-durability). Both {@link ExecutionResult.Completed}
  * and {@link ExecutionResult.DecisionNeeded} carry the exact same {@code
  * usage}/{@code trace} pair — telemetry is collected from the stream
  * regardless of the round's outcome (FR3).

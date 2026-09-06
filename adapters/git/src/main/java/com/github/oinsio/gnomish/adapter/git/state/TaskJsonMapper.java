@@ -58,7 +58,15 @@ public final class TaskJsonMapper {
      * @param trackerWritePending {@code true} to record the durable "tracker-write
      *     pending" marker for a terminal park whose tracker write has not confirmed
      *     (FR10 of add-claim-heartbeat); {@code false} to leave no marker
-     * @return the equivalent {@code task.json} DTO tree
+     * <p>The document's {@code egressCursor} is not a parameter here (design D8 of
+     * fix-denial-attribution-durability): it is environment bookkeeping no caller of
+     * this mapper holds, and one more positional argument on an already-six-wide
+     * signature is exactly the shape whose cursorless variant erased {@code
+     * state.json}'s cursor on every RESUMED commit. A writer that has a position
+     * attaches it to the returned document through {@link
+     * TaskJsonDto#withEgressCursor}, and one that has none leaves it absent.
+     *
+     * @return the equivalent {@code task.json} DTO tree, with no egress cursor
      */
     public static TaskJsonDto toDto(
             TaskContext context,
@@ -77,7 +85,8 @@ public final class TaskJsonMapper {
                 toDecisions(context.decisions()),
                 outcome == null ? null : toOutcome(outcome),
                 lastEscalation == null ? null : toEscalation(lastEscalation),
-                trackerWritePending ? Boolean.TRUE : null);
+                trackerWritePending ? Boolean.TRUE : null,
+                null);
     }
 
     /**
@@ -163,7 +172,8 @@ public final class TaskJsonMapper {
             case EscalationReport.PipelineMismatch pipelineMismatch ->
                 new EscalationReportDto.PipelineMismatch("pipelineMismatch", pipelineMismatch.staleStage());
             case EscalationReport.CannotExecute cannotExecute ->
-                new EscalationReportDto.CannotExecute("cannotExecute", cannotExecute.cause());
+                new EscalationReportDto.CannotExecute(
+                        "cannotExecute", cannotExecute.cause(), StateDenialMapper.toDtos(cannotExecute.denials()));
         };
     }
 
@@ -182,7 +192,8 @@ public final class TaskJsonMapper {
             case EscalationReportDto.PipelineMismatch pipelineMismatch ->
                 new EscalationReport.PipelineMismatch(pipelineMismatch.staleStage());
             case EscalationReportDto.CannotExecute cannotExecute ->
-                new EscalationReport.CannotExecute(cannotExecute.cause());
+                new EscalationReport.CannotExecute(
+                        cannotExecute.cause(), StateDenialMapper.fromDtos(cannotExecute.denials()));
         };
     }
 }

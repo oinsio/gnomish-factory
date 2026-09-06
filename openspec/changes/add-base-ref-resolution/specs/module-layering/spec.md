@@ -1,5 +1,12 @@
 # module-layering — delta for add-base-ref-resolution
 
+Layered on the module tree as modified by `add-subprocess-access-log`
+(sequenced before this change): both requirements below are written over
+that delta's text, so syncing in that order merges cleanly. If this change
+syncs first, the later access-log sync must merge by hand — its `:logtext`
+access-log sentences and its `:gitobjects` observer-hook sentence and
+scenario — instead of replacing the requirement.
+
 ## MODIFIED Requirements
 
 ### Requirement: Layered Gradle module tree
@@ -12,15 +19,19 @@ shared atomic file writer (temp file + atomic rename) consumed by the host-side
 persisters reach durability at commit granularity — round state committed
 in-box, lifecycle commits built from bare objects — so neither consumes the
 writer. `logtext` is the logging-support leaf holding the untrusted-text
-sanitizer, the repeat suppressor, and the MDC-propagation helper — the pieces
-every layer's log emitters share. `baseref` is the base-resolution leaf
+sanitizer, the repeat suppressor, the MDC-propagation helper, and the
+subprocess access-log emitter with its argv redactor — the pieces every
+layer's log emitters share, so the access-record format and redaction have
+exactly one owner reachable from every spawn family. `baseref` is the base-resolution leaf
 holding the pure resolution policy — menu pattern grammar, designator
-classification, source priority, and the decision value types — a function
+validation against the menu, source priority, and the decision value types —
+a function
 from values to a decision, with no subprocess, no port, and no factory type
 inside; extractability is a declared property.
 <!-- implements FR9 of bound-subprocess-commands; originally FR1 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
 <!-- implements FR4, FR6, FR8 of harden-logging-observability -->
+<!-- implements FR2, FR3 of add-subprocess-access-log -->
 <!-- implements FR10 of add-base-ref-resolution -->
 
 #### Scenario: Modules resolve as distinct Gradle projects
@@ -41,14 +52,15 @@ nothing internal; `gitobjects` depends only on `subprocess`;
 `:sandbox:core`; each adapter module depends on `gnomish-plugin-api` and
 `application` (plus `subprocess` where it launches OS processes, `atomicfile`
 where it writes factory-owned files atomically, `logtext` where it logs
-untrusted text, `baseref` where it maps configuration into the resolution
+untrusted text or emits subprocess access-log records, `baseref` where it maps configuration into the resolution
 policy's value types, `:sandbox:core` where it bridges to the execution
 environment, and a sandbox backend module where it drives that backend) but
 never on a sibling adapter's internals — with one declared exception:
 `:adapters:agent` depends on the coarse `:adapters` remainder for the shared
 pipeline-law and briefing packages, narrowed to exactly those packages by a
 named ArchUnit rule; sandbox backend modules depend on `:sandbox:core` and
-`subprocess`, plus `logtext` where they log untrusted text, plus `application`
+`subprocess`, plus `logtext` where they log untrusted text or emit
+subprocess access-log records, plus `application`
 where the backend realizes an application-owned port; no production module
 depends on the test-fixtures module; `bootstrap` is the only module that wires
 adapters together and the only one that reaches every adapter. `subprocess`
@@ -59,10 +71,14 @@ an implementation, framework, or any other external library. `baseref` SHALL
 declare no internal module dependency and no external library — not Jackson,
 not slf4j: its inputs and outputs are plain values, which is what
 constructively guarantees the resolution policy can know nothing of
-subprocesses, trackers, or configuration formats.
+subprocesses, trackers, or configuration formats. `gitobjects` SHALL
+likewise acquire no dependency for access-log emission: it reports
+execution facts through a JDK-only observer hook on its own public API,
+wired to the emitter by `bootstrap`, defaulting to a no-op.
 <!-- implements FR9, NFR-S3 of bound-subprocess-commands; originally FR2 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
 <!-- implements FR4, FR6, FR8 of harden-logging-observability -->
+<!-- implements FR2, FR3 of add-subprocess-access-log -->
 <!-- implements FR10, NFR-S3 of add-base-ref-resolution -->
 
 #### Scenario: A vendor adapter reaches the tenure record through the contract
@@ -117,3 +133,10 @@ subprocesses, trackers, or configuration formats.
   copy of the temp-file-plus-rename discipline — while the container-side
   persisters reach durability at commit granularity and consume no host
   filesystem writer
+
+#### Scenario: Access-log emission adds no edge to gitobjects
+- **WHEN** the dependency gates run against `:gitobjects` after the access
+  log lands
+- **THEN** its production dependency set is unchanged (`:subprocess` only),
+  and its access-record reporting reaches the emitter only through the
+  caller-supplied observer hook

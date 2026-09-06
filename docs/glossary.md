@@ -175,10 +175,25 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 - **Denial cursor** — the read position in a guard's denial log, paired with
   the identity of the guard container it was read from. It defines which
   denials belong to the round asking: each read starts where the previous one
-  ended. Committed in `state.json` with the attempt it delimits, because the
-  guard container outlives the factory process; a resuming instance offers it
-  back, and the guard applies it only if it names the container now live.
-  *Never:* offset, bookmark, watermark.
+  ended. It becomes durable only in the same commit as the record it
+  delimits — `state.json` with the attempt, `task.json` with a
+  `cannotExecute` escalation — because the guard container outlives the
+  factory process. A resuming instance offers back the newest committed
+  position across both documents, and no lifecycle rewrite of either
+  document drops a committed cursor; the guard applies the offered position
+  only if it names the container now live. *Never:* offset, bookmark,
+  watermark.
+- **Denial identity** — the source-assigned event timestamp the guard's own
+  denial log carries for each denial, recorded beside the finding. It makes a
+  re-read idempotent: denials already recorded at the branch tip are matched
+  by identity and attached once, so a lost cursor degrades to a no-op rather
+  than to duplicates. *Never:* denial id, event key.
+- **Loss marker** — a synthetic finding emitted into the denials list when
+  the factory can see that denials were lost: the guard log tail cap
+  saturated a read, or a committed cursor names a source that no longer holds
+  its log. It travels the same findings channel as denials, so a reader tells
+  "this task had no denials" from "this task's denial data was lost" without
+  leaving the report. *Never:* gap record, loss counter.
 - **Artifact depot** — a host-side proxy for package registries; the box
   talks only to it, and it alone talks to the upstream registries.
 - **Docker-strategy ladder** — the ordered escalation of ways to give a task

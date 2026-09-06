@@ -5,7 +5,8 @@ slot, its durable per-round cursor, and its finding DTO are this change's
 starting point). A 2026-08-28 architecture session found that predecessor's
 cursor feature **inert in production**: the `LeasedEnvironment` view forwards
 only six of the port's methods, so the interface's constant defaults swallow
-`denialCursor()` / `denialFindings()` / `restoreDenialCursor()` — no cursor is
+`denialCursor()` / `denialFindings()` / `restoreDenialCursor()` (this change
+renames the latter two to `readDenials()` / `restoreDenials()`, D7) — no cursor is
 ever committed and no restore ever runs in a real container run, while both
 spec halves stay green over hand-rolled doubles. Repairing that wiring — and
 closing the defect class it belongs to — is in this change's scope (FR6, FR9).
@@ -157,9 +158,13 @@ None — every gap is a requirement change in an existing capability.
 - `:adapters:git` — the task JSON mapper, and the escalation write that now
   carries the drained read position; denial DTO gains the identity field
 - `:application` — status JSON mapper, text renderer,
-  `ObservedSandboxLifecyclePass`; `:test-fixtures` — the
-  `status-report-v1.reference.json` reference document (gains a
-  `cannotExecute` escalation sample)
+  `ObservedSandboxLifecyclePass`, and the new
+  `status-report-v1.escalations.reference.jsonl` corpus (one pinned line per
+  escalation kind — the canonical document's single escalation slot cannot
+  hold a second kind); `:test-fixtures` — the deterministic reference sample
+  gains an owner shared by the mapper spec and the equivalence contract,
+  which hand-copied it across a module boundary until now. The canonical
+  `status-report-v1.reference.json` is unchanged
 - `:bootstrap` — the resume restore offers the newest committed position
   through the branch-shape classifier; the new architecture spec
   (decorator-completeness gate) joins the existing nine
@@ -315,8 +320,9 @@ None — every gap is a requirement change in an existing capability.
   parked on a `CannotExecute` escalation over a surviving guard container
   and its first round's report carries none of the denials already recorded
   by the first process — neither the attempts' nor the escalation's.
-- M3: build green including the PIT 100% gate;
-  `status-report-v1.reference.json` updated; the state/live report
+- M3: build green including the PIT 100% gate; every escalation kind pinned
+  by the new `status-report-v1.escalations.reference.jsonl` corpus with the
+  canonical `status-report-v1.reference.json` unchanged; the state/live report
   equivalence contract still holds.
 - M4: a spec is green that drives the cursor round-trip through the real
   `LeasedEnvironment` (production wiring), committing and restoring a

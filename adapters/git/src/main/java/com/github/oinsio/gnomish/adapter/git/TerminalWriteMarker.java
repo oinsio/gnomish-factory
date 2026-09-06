@@ -48,18 +48,7 @@ final class TerminalWriteMarker {
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, TaskLifecycleEvent.RESUMED, "reading task.json", e);
         }
-        TaskJsonDto current = TaskJsonMapper.readDto(json);
-        TaskJsonDto cleared = new TaskJsonDto(
-                current.version(),
-                current.taskId(),
-                current.title(),
-                current.body(),
-                current.createdAt(),
-                current.baseCommit(),
-                current.decisions(),
-                current.outcome(),
-                current.lastEscalation(),
-                null);
+        TaskJsonDto cleared = TaskJsonMapper.readDto(json).withTrackerWritePending(null);
         try {
             AtomicFileWriter.write(taskJson, TaskStateJson.mapper().writeValueAsString(cleared));
         } catch (IOException e) {

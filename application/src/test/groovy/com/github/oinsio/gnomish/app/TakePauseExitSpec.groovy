@@ -27,16 +27,12 @@ class TakePauseExitSpec extends Specification {
 
     Tracker tracker = Mock()
 
-    private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
-    }
-
     // FR5, UX2 of fix-lifecycle-push: an exhausted delivery fence hands the exit a one-line note,
     // which the checkpoint report the human reads must carry — and nothing must be appended when the
     // fence reported the park delivered.
     def "the delivery fence's note is appended to the checkpoint report, and only when there is one"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def paused = new TaskOutcome.Paused(STATE, 'build')
 
         when:
@@ -70,7 +66,7 @@ class TakePauseExitSpec extends Specification {
     // FR13, FR18, D12: the checkpoint park is written for real when the claim is still ours.
     def "finish parks CHECKPOINT with a rendered report when the claim is still ours"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def paused = new TaskOutcome.Paused(STATE, 'build')
 
         when:
@@ -95,7 +91,7 @@ class TakePauseExitSpec extends Specification {
     // holder's state — the pre-write guard skips the checkpoint park.
     def "finish skips the checkpoint park when the claim is no longer ours (#state)"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(state)
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, state)
         def paused = new TaskOutcome.Paused(STATE, 'build')
 
         when:

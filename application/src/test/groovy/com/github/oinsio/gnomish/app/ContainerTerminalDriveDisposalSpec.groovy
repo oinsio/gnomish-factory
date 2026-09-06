@@ -74,7 +74,7 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
         drive()
 
         then:
-        1 * support.restoreDenialCursor()
+        1 * support.restoreDenials()
 
         then: 'only afterwards does the run assemble and drive the engine'
         1 * support.completeAndDispose(_ as TaskState)

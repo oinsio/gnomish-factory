@@ -1,12 +1,10 @@
 package com.github.oinsio.gnomish.app.take
 
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.TrackerTaskFixtures
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import spock.lang.Specification
 
@@ -22,14 +20,10 @@ class ClaimGuardSpec extends Specification {
 
     private Tracker tracker = Mock()
 
-    private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
-    }
-
     // FR7: the only "still ours" verdict is Working held by this instance's own id.
     def "stillOurs is true only when the task is Working held by this instance"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         expect:
         ClaimGuard.stillOurs(tracker, REF, INSTANCE)
@@ -38,7 +32,7 @@ class ClaimGuardSpec extends Specification {
     // FR7: a foreign holder or any non-Working state is NOT ours — the write must be skipped.
     def "stillOurs is false for #label"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(state)
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, state)
 
         expect:
         !ClaimGuard.stillOurs(tracker, REF, INSTANCE)
@@ -58,6 +52,6 @@ class ClaimGuardSpec extends Specification {
         ClaimGuard.stillOurs(tracker, REF, INSTANCE)
 
         then:
-        1 * tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        1 * tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
     }
 }

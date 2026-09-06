@@ -11,27 +11,29 @@ the task branch with resume-time verification, and the retype policy.
 
 ### Requirement: Task type is designator kind `type`
 The task type SHALL be a core value — an operator-defined designator string —
-obtained as kind `type` of the label-derived designator mechanism
-(`add-base-ref-resolution`): the routing configuration carries an
-operator-configurable selection rule, a label pattern with one capture group
-defaulting to the `type:` prefix (`type:bugfix` → designator `bugfix`);
-labels not matching the rule are ignored for typing; changing the rule is
-configuration only, no adapter code. An invalid rule SHALL be a located load
-error. A task whose data yields more than one designator SHALL surface as
-the conflict shape and be treated as a routing error, not resolved by
-picking one. Tracker-specific storage stays behind the port contract: label
-conventions live in the configured rule, not in core code and not in
-per-adapter parsers.
+obtained as kind `type` of the designator mechanism
+(`add-base-ref-resolution`, tracker-port): the adapter derives it from its
+own representation and the port delivers it classified. For the GitHub
+adapter the operator declares the rule explicitly in the adapter's own
+subsection, `tracker.github.designators.type`, a label pattern with one
+capture group (`"type:(.+)"` types `type:bugfix` as `bugfix`); there is no
+built-in default rule; labels not matching the rule are ignored for typing;
+changing the rule is configuration only, no adapter code. An invalid rule is
+the adapter subsection's located load error. A task whose data yields more
+than one designator SHALL surface as the conflict shape and be treated as a
+routing error, not resolved by picking one. Tracker-specific storage stays
+behind the port contract: label conventions live in the adapter's
+configured rule, never in core code.
 <!-- implements FR2 of add-pipeline-routing -->
 
 #### Scenario: Type flows as a fact
-- **WHEN** a claimed task carries the label `type:bugfix` under the default
-  rule
+- **WHEN** a claimed task carries the label `type:bugfix` under the rule
+  `"type:(.+)"`
 - **THEN** selection sees the type designator `bugfix` without knowing how
   the tracker stored it
 
 #### Scenario: Operator remaps the rule
-- **WHEN** the routing configuration maps the `kind/` prefix instead
+- **WHEN** `tracker.github.designators.type` is `"kind/(.+)"` instead
 - **THEN** an issue labeled `kind/bug` yields designator `bug` and
   `type:bug` is ignored
 
@@ -84,13 +86,16 @@ table is fixed.
 - **THEN** the next claim selects the now-mapped pipeline and pins it
 
 ### Requirement: Pipeline pin at first claim, verified on every resume
-The resolved pipeline name and the content hash of its definition SHALL land
-in the task's branch identity file in the same commit that creates the task
-on the branch. Every subsequent invocation SHALL load the pinned pipeline by
-name from the current law source and verify the hash before running; a
-missing pipeline name or a hash mismatch SHALL escalate as a pipeline
-mismatch, never run on a differing definition, and never re-resolve the
-type. The pin SHALL be immutable for the task's lifetime.
+The resolved pipeline name and the structural hash of its definition (see
+pipeline-config) SHALL land in the task's branch identity file in the same
+commit that creates the task on the branch. Every subsequent invocation
+SHALL load the pinned pipeline by name from the task's law commit — the
+law source of the base pin, the pinned ref's tip on resume — and verify the
+structural hash before running; a pipeline name the law commit does not
+define, or a hash mismatch, SHALL escalate as a pipeline mismatch, never run
+on a differing structure, and never re-resolve the type. Instruction and
+criteria edits on the base SHALL NOT trip the check. The pin SHALL be
+immutable for the task's lifetime.
 <!-- implements FR4, NFR-R1 of add-pipeline-routing -->
 
 #### Scenario: Pin lands atomically with task creation
@@ -103,11 +108,17 @@ type. The pin SHALL be immutable for the task's lifetime.
   maps its type elsewhere
 - **THEN** the resume runs the pinned pipeline, ignoring the new table
 
-#### Scenario: Changed definition escalates, never silently runs
-- **WHEN** the pinned pipeline's definition hash differs from the current
-  `.gnomish/` content
+#### Scenario: Changed structure escalates, never silently runs
+- **WHEN** a stage was added to the pinned pipeline on the base after the
+  pin, so the structural hash differs at the resumed task's law commit
 - **THEN** the invocation escalates a pipeline mismatch naming the pipeline
   and no round runs
+
+#### Scenario: Fixed criteria resume without a mismatch
+- **WHEN** a human fixes a judge criteria file of the pinned pipeline on the
+  base and returns the parked task
+- **THEN** the structural hash matches, the resume binds the corrected
+  criteria, and no mismatch is raised
 
 ### Requirement: Retype affects only unpinned tasks
 Changing a task's type in the tracker SHALL take effect only for tasks not

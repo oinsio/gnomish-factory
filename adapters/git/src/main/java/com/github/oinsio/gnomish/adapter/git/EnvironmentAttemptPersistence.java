@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto;
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
@@ -186,11 +186,16 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
      * on the state being written, so committing the position that delimits them in
      * the same commit is what lets a resuming instance continue the delta instead of
      * replaying the guard container's whole surviving log onto its first round.
+     *
+     * <p>The position asked for here is the one the round's own {@code readDenials} left behind
+     * (design D7 of fix-denial-attribution-durability): asking does not advance it, so the cursor
+     * this commit carries delimits exactly the denials the state beside it records — it can lag
+     * that record after a lost commit, never lead it.
      */
     private byte[] renderState(String taskId, AttemptKey key, TaskState state) {
-        StateEgressCursorDto cursor = environment
+        EgressCursorDto cursor = environment
                 .denialCursor()
-                .map(c -> new StateEgressCursorDto(c.source(), c.position()))
+                .map(c -> new EgressCursorDto(c.source(), c.position()))
                 .orElse(null);
         try {
             return TaskStateJson.mapper()

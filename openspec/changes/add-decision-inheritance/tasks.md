@@ -38,9 +38,13 @@
 
 - [ ] 4.1 Implement inherited-context materialization at claim/resume
       bootstrap (epic-file binding view + plan brief, frozen per invocation;
-      fetch failure → infrastructure escalation); verify freeze semantics
-      (mid-invocation epic-file change invisible) and the
-      unreachable-branch escalation spec (FR4)
+      fetch failure classified through the branch locate step's three-way
+      answer: unreachable remote → plain claim release + remote outage
+      gate, exactly the base-refresh path of `add-base-ref-resolution`;
+      branch absent on origin → park with report); verify freeze semantics
+      (mid-invocation epic-file change invisible), the dead-remote release
+      spec (no marker, no comment, abort facts unchanged, gate open in
+      serve) and the missing-branch park spec (FR4)
 - [ ] 4.2 Enforce the binding-set bound with escalate-on-oversize; verify
       the oversize spec asserts escalation and that no truncated round runs
       (NFR-C1)

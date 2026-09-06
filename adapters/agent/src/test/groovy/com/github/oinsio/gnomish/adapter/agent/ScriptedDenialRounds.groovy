@@ -2,11 +2,14 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
+import com.github.oinsio.gnomish.sandbox.DenialRead
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
@@ -16,21 +19,27 @@ import java.util.concurrent.atomic.AtomicInteger
  * environment's denial answer substituted, so what a spec drives is the
  * production round wiring rather than a hand-built stand-in for it.
  *
- * <p>Answers are consumed one per {@code denialFindings()} call, standing in for
+ * <p>Answers are consumed one per {@code readDenials()} call, standing in for
  * the guard's per-round delta read (D3): the second read sees the second round's
  * denials, never the first round's again. The last answer repeats once the script
  * is exhausted; a {@code null} answer stands for a read that cannot be served at
  * all (the daemon-outage shape) and throws.
+ *
+ * <p>{@code launchFails} additionally stands in for an environment that cannot start the
+ * process at all — the third shape of a round that dies before its close, beside the
+ * {@code roundTimeout} kill and the missing result event.
  */
 final class ScriptedDenialRounds implements RoundEnvironmentSource {
 
     private final RoundEnvironmentSource delegate
     private final List<List<Finding>> answers
+    private final boolean launchFails
     private final AtomicInteger reads = new AtomicInteger()
 
-    ScriptedDenialRounds(RoundEnvironmentSource delegate, List<List<Finding>> answers) {
+    ScriptedDenialRounds(RoundEnvironmentSource delegate, List<List<Finding>> answers, boolean launchFails = false) {
         this.delegate = delegate
         this.answers = new ArrayList<>(answers)
+        this.launchFails = launchFails
     }
 
     /** The number of denial reads so far, across every round opened from this source. */
@@ -46,16 +55,20 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         answer
     }
 
+    private boolean launchFails() {
+        launchFails
+    }
+
     @Override
     Round openRound(StageExecutor.Request request) {
         new ScriptedRound(delegate.openRound(request), this)
     }
 
-    private static final class ScriptedRound implements RoundEnvironmentSource.Round {
-        private final RoundEnvironmentSource.Round delegate
+    private static final class ScriptedRound implements Round {
+        private final Round delegate
         private final ScriptedDenialRounds source
 
-        ScriptedRound(RoundEnvironmentSource.Round delegate, ScriptedDenialRounds source) {
+        ScriptedRound(Round delegate, ScriptedDenialRounds source) {
             this.delegate = delegate
             this.source = source
         }
@@ -113,6 +126,9 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
 
         @Override
         ExecHandle exec(ExecCommand command) {
+            if (source.launchFails()) {
+                throw new ProcessStartException('no such binary', new IOException('boom'))
+            }
             delegate.exec(command)
         }
 
@@ -147,8 +163,10 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        List<Finding> denialFindings() {
-            source.nextAnswer()
+        DenialRead readDenials() {
+            new DenialRead(source.nextAnswer().collect {
+                Denial.unidentified(it)
+            }, Optional.empty())
         }
     }
 }

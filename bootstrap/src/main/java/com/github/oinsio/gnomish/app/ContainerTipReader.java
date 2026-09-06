@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto;
+import com.github.oinsio.gnomish.adapter.git.RefTipSource;
+import com.github.oinsio.gnomish.adapter.git.TipRecordedDenials;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
@@ -8,7 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
-import com.github.oinsio.gnomish.sandbox.DenialCursor;
+import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,23 +75,29 @@ final class ContainerTipReader {
     }
 
     /**
-     * Hands the run's environments the denial cursor the branch tip's {@code state.json} recorded
-     * (FR5 of fix-denial-report-attachment). Best-effort by design: a branch with no state file,
-     * no cursor in it, or an unreadable tip leaves the environments reading their denial source
-     * from its start — the behavior of every run before the cursor existed, and correct whenever
-     * the source is new. A cursor naming a different source is dropped by the environment itself.
+     * Hands the run's environments what the branch tip records about denials already reported —
+     * the newest committed position across {@code state.json}'s attempt-side cursor and {@code
+     * task.json}'s escalation-side cursor, and the identities of the denials recorded with them
+     * (FR4, FR5, FR7 of fix-denial-attribution-durability). The choice, and the shape
+     * classification that gates it, belong to {@link TipRecordedDenials}; this method owns only
+     * the medium the tip is read through.
+     *
+     * <p>Best-effort by design: a branch with no envelopes, no cursor in them, or an unreadable tip
+     * leaves the environments reading their denial source from its start — the behavior of every
+     * run before the cursor existed, and correct whenever the source is new. A cursor naming a
+     * different source is dropped by the environment itself, which then merges its full re-read
+     * against the identities offered here rather than duplicating what the branch already holds.
      */
-    static void restoreDenialCursor(ContainerRunSupport support) {
-        StateEgressCursorDto cursor;
+    static void restoreDenials(ContainerRunSupport support) {
+        DenialRestoration offer;
         try {
-            cursor = readStateDto(support).egressCursor();
+            offer = new TipRecordedDenials()
+                    .restorable(new RefTipSource(support.runner, support.cloneDir, "refs/heads/" + support.branch));
         } catch (RuntimeException e) {
             log.debug("no recorded denial cursor to restore", e);
             return;
         }
-        if (cursor != null) {
-            support.environments.restoreDenialCursor(new DenialCursor(cursor.source(), cursor.position()));
-        }
+        support.environments.restoreDenials(offer);
     }
 
     private static ObjectId tip(ContainerRunSupport support) {

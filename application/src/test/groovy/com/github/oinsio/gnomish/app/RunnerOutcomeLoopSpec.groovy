@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -493,7 +494,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         new EscalationReport.DecisionNeeded('proceed?', ['yes', 'no']) | 'proceed?'
         new EscalationReport.CannotVerify(new CheckRef(0, 'command:./gradlew test'), 'timeout', 'trace') | 'command:./gradlew test'
         new EscalationReport.PipelineMismatch('stale-stage') | 'stale-stage'
-        new EscalationReport.CannotExecute('agent crashed') | 'agent crashed'
+        new EscalationReport.CannotExecute('agent crashed', []) | 'agent crashed'
     }
 
     def "CannotVerify details are published fenced with mentions escaped and ANSI stripped"() {
@@ -520,7 +521,7 @@ class RunnerOutcomeLoopSpec extends Specification {
             new EscalationReport.DecisionNeeded('proceed?', ['yes', 'no']),
             new EscalationReport.CannotVerify(new CheckRef(0, 'command:./gradlew test'), 'timeout', 'trace'),
             new EscalationReport.PipelineMismatch('stale-stage'),
-            new EscalationReport.CannotExecute('agent crashed'),
+            new EscalationReport.CannotExecute('agent crashed', []),
         ]
 
         when:
@@ -538,7 +539,7 @@ class RunnerOutcomeLoopSpec extends Specification {
      * DialogConsole#inputExhausted()} — that flag stays latched {@code true} even once this fake
      * has more lines to give.
      */
-    private static class ReExhaustibleConsoleIO implements com.github.oinsio.gnomish.app.port.console.ConsoleIO {
+    private static class ReExhaustibleConsoleIO implements ConsoleIO {
         private final List<String> script = []
         final List<String> printed = []
 
@@ -549,7 +550,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         @Override
         String readLine() {
             if (script.isEmpty()) {
-                throw new com.github.oinsio.gnomish.app.port.console.ConsoleClosedException()
+                throw new ConsoleClosedException()
             }
             script.removeFirst()
         }

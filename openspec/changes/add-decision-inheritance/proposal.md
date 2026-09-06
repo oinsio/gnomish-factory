@@ -82,5 +82,9 @@ owner) and `add-epic-decomposition` (the plan, briefs, and hierarchy).
   fetch of a second branch at claim.
 - `adapters/agent`: briefing section rendering.
 - Depends on: `add-decision-arbiter`, `add-epic-decomposition` (and
-  transitively `add-tracker-task-hierarchy`). Requirement IDs FR1–FR5,
+  transitively `add-tracker-task-hierarchy`), and `add-base-ref-resolution`
+  for the claim-time fetch failure rule (ADR 0005): the epic-branch fetch
+  classifies by cause exactly as the base refresh does — a dead remote
+  releases the claim and opens the remote outage gate, a missing branch
+  parks the task. Requirement IDs FR1–FR5,
   NFR-R1, NFR-C1, NG1–NG4, scoped to `add-decision-inheritance`.

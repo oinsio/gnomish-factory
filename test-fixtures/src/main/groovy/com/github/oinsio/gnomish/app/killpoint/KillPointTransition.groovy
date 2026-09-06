@@ -42,6 +42,14 @@ class KillPointTransition {
      */
     Closure fingerprint
 
+    /**
+     * {@code (world) -> void}: optional extra assertions the converged state must satisfy, run once
+     * per kill window after the pickup. Null where the shape and the fingerprint say everything a
+     * window has to say; a transition whose durable payload is neither (a committed read position,
+     * say) states it here.
+     */
+    Closure invariant
+
     /** The expected frozen shape per kill point; one entry per step, in step order. */
     List<String> frozenShapes
 

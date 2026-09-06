@@ -1,0 +1,5 @@
+{"type":"attemptsExhausted","stage":null,"at":null,"limit":3}
+{"type":"decisionNeeded","stage":null,"at":null,"question":"Refactor the retry helper or patch in place?","options":["refactor","patch"]}
+{"type":"cannotVerify","stage":null,"at":null,"check":"external:ci","reason":"timeout","details":"poll exceeded 5m"}
+{"type":"pipelineMismatch","stage":null,"at":null,"staleStage":"removed-stage"}
+{"type":"cannotExecute","stage":null,"at":null,"cause":"round timed out after 15m","denials":[{"message":"egress denied: paste.example.com:443","location":"paste.example.com:443/upload","details":"kind=http method=POST"}]}

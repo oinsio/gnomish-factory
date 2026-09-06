@@ -30,12 +30,15 @@ class UntrustedLogTextGateSpec extends Specification {
      * in-box capture {@code CapturedExec} carries, which is the sandbox self-check's and the
      * guard probes' whole subject), Jackson's echo of the
      * offending untrusted bytes ({@code getOriginalMessage}), the agent-CLI session banner
-     * fields the agent process itself chooses ({@code sessionId}, {@code model}), and the verify
+     * fields the agent process itself chooses ({@code sessionId}, {@code model}), the verify
      * check's identity ({@code label}), which {@code CheckRef.of} derives from the target
-     * repository's own {@code .gnomish/} manifest.
+     * repository's own {@code .gnomish/} manifest, and the denial source ({@code source} on
+     * {@code DenialCursor} / {@code DenialIdentity}), which is the guard container id as docker
+     * printed it — read back from a branch document written by a daemon this process never
+     * spoke to.
      */
     private static final Pattern UNTRUSTED =
-    Pattern.compile('\\.(?:stderr|stdout|output|getOriginalMessage|sessionId|model|label)\\s*\\(\\s*\\)')
+    Pattern.compile('\\.(?:stderr|stdout|output|getOriginalMessage|sessionId|model|label|source)\\s*\\(\\s*\\)')
 
     // FR6: every untrusted accessor reaching a log line goes through the sanitizing choke point.
     def "untrusted text enters log lines only through LogText"() {
@@ -78,7 +81,8 @@ class UntrustedLogTextGateSpec extends Specification {
             'getOriginalMessage',
             'sessionId',
             'model',
-            'label'
+            'label',
+            'source'
         ]
     }
 

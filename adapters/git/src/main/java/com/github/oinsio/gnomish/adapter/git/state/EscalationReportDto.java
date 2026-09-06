@@ -66,8 +66,24 @@ public sealed interface EscalationReportDto {
     /**
      * An executor infrastructure failure prevented running the stage.
      *
+     * <p>{@code denials} carries the egress denials of the round that could not
+     * execute (FR2 of fix-denial-attribution-durability). That round died before its
+     * close, so it left no attempt record to hang them on: this escalation is their
+     * only place in {@code task.json}. The field is additive under contract v1 — a
+     * document written before it existed binds the component to null, which the
+     * canonical constructor normalizes to empty, so every pre-existing {@code
+     * task.json} stays readable. The denials influence no derived field and never
+     * appear in the attempt history.
+     *
      * @param type the discriminator, always {@code "cannotExecute"}
      * @param cause the failure detail, stack trace preserved
+     * @param denials the egress denials of the round that could not execute; possibly
+     *     empty, and absent in documents written before the field existed
      */
-    record CannotExecute(String type, String cause) implements EscalationReportDto {}
+    record CannotExecute(String type, String cause, List<StateDenialDto> denials) implements EscalationReportDto {
+
+        public CannotExecute {
+            denials = StateDenialMapper.absentAsEmpty(denials);
+        }
+    }
 }

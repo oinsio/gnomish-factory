@@ -20,7 +20,10 @@ start. Constraints that shape the approach:
   harvest) exists in `SandboxCheckEnvironmentSource` and `FreshJudgeEnvironments`.
 - `harden-task-branch-contract` (implemented, unarchived) makes the task-creation
   commit carry both `task.json` and an initial `state.json`; the baseline SHA is
-  `task.json`'s `baseCommit`.
+  the `sha` of the base pin in `task.json` — a structured `(ref, sha, rule)`
+  value once `add-base-ref-resolution` (sequenced before this change) lands,
+  read through the versioned task mapper; legacy files carry a flat
+  `baseCommit` that the same mapper reads as an unpinned base.
 - `add-pipeline-routing` (active) pins the pipeline definition (name + content
   hash) at first claim; `add-stage-iteration` also adds additive `state.json`
   fields.
@@ -73,9 +76,10 @@ permits, DTO mappers, and sync pairs is unjustified; extending the set remains
 possible later if a consumer needs machine-level discrimination beyond the reason
 prefix.
 
-**D4 — Fresh-box probe at `baseCommit`, generalized from the existing model.**
-(FR3, NFR-S1) The probe materializes a fresh environment pinned at `task.json`'s
-`baseCommit`, execs the command with the declared timeout, reads the exit code and
+**D4 — Fresh-box probe at the pinned base SHA, generalized from the existing
+model.** (FR3, NFR-S1) The probe materializes a fresh environment pinned at the
+task's base SHA — the pin's `sha` read through the versioned task mapper (see
+Context; `add-base-ref-resolution` owns the pin's shape) — execs the command with the declared timeout, reads the exit code and
 bounded tail, disposes without harvest — the exact fresh-box verify shape.
 `SandboxCheckEnvironmentSource.freshBox` is keyed to an attempt-commit workspace
 and cannot be reused unchanged; the probe gets its own small environment source
@@ -98,7 +102,7 @@ retry forever against a hanging baseline and never tell the owner.
 (FR6, NFR-C1) A new optional `entryPrecondition` component on the state DTO,
 following the `egressCursor` precedent: additive under contract v1, no domain
 `TaskState` counterpart, read off the DTO by the entry step directly. Key = the
-task's `baseCommit` + an environment image identity token supplied by the bound
+task's pinned base SHA (same read as D4) + an environment image identity token supplied by the bound
 adapter (container: the configured image reference; host: a fixed host token — no
 image-digest concept exists in the codebase today, and inventing one is not this
 change's job; the `add-sandbox-hardening` fingerprint can strengthen the token
@@ -148,9 +152,11 @@ exists, so the rule's preference order is satisfied by shared abstraction at the
 step level. What remains mode-specific is the call site inside each recipe:
 
 - `TakeFreshClaim` ↔ `TakeContainerFreshClaim` — the declared recipe invariant
-  changes at both ends to "harden → synthesize → createTask → **entry
-  precondition** → run"; the registry row's invariant wording in
-  `.claude/rules/manual-sync-pairs.md` is updated in the same change.
+  changes at both ends to "harden → fetch+resolve → synthesize → createTask →
+  **entry precondition** → run" (fetch+resolve is `add-base-ref-resolution`'s
+  step, sequenced before this change; by then the pair carries `Kept in sync
+  with` markers instead of a registry row, so the invariant line in both
+  markers is what this change updates).
 - `TakeResumeRunner` ↔ `TakeContainerResumeRunner` (and the manual-mode
   `GitResumeRunner` ↔ `ContainerResumeRunner`, `GitModeRunner` ↔
   `ContainerGitModeRunner` if their pre-first-round paths bypass the take

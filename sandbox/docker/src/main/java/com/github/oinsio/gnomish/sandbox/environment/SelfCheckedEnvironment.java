@@ -1,14 +1,14 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
 import com.github.oinsio.gnomish.sandbox.DenialCursor;
+import com.github.oinsio.gnomish.sandbox.DenialRead;
+import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * same values, but processes must see them even under a stripped-down image.
  * Explicit caller-set variables win over the proxy fragment.
  *
- * <p>The guard is also this environment's denial source: {@link #denialFindings()}
+ * <p>The guard is also this environment's denial source: {@link #readDenials()}
  * delegates to it, so a consumer holding the port type reaches the round's
  * denials through the contract and never by downcasting to this class. The guard
  * itself is deliberately NOT exposed as a public accessor (FR1 of
@@ -140,12 +140,13 @@ public final class SelfCheckedEnvironment implements TaskExecutionEnvironment {
 
     /**
      * The guard's denials since the previous call — the per-round delta the guard's
-     * own cursor maintains, best-effort (an unreadable log reads as empty, never a
-     * failure; NFR-R1 of fix-denial-report-attachment).
+     * own cursor maintains — paired with the position after them (design D7 of
+     * fix-denial-attribution-durability), best-effort (an unreadable log reads as
+     * empty, never a failure; NFR-R1 of fix-denial-report-attachment).
      */
     @Override
-    public List<Finding> denialFindings() {
-        return guard.denialFindings();
+    public DenialRead readDenials() {
+        return guard.readDenials();
     }
 
     /**
@@ -158,11 +159,13 @@ public final class SelfCheckedEnvironment implements TaskExecutionEnvironment {
     }
 
     /**
-     * Offers a committed cursor to the guard, which applies it only if it names
-     * the guard's live container (FR5 of fix-denial-report-attachment).
+     * Offers the branch tip's recorded denial position and identities to the guard,
+     * which applies the position only if it names the guard's live container (FR5 of
+     * fix-denial-report-attachment) and merges every read against the identities (FR7
+     * of fix-denial-attribution-durability).
      */
     @Override
-    public void restoreDenialCursor(DenialCursor cursor) {
-        guard.restoreDenialCursor(cursor);
+    public void restoreDenials(DenialRestoration restoration) {
+        guard.restoreDenials(restoration);
     }
 }

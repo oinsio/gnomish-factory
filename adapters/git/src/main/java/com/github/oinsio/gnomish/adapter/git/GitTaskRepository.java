@@ -107,7 +107,8 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
         Path worktree = ensureWorktree(taskId);
-        TaskRecord current = readCurrent(taskId, worktree, TaskLifecycleEvent.RESUMED);
+        TaskJsonDto currentDto = readCurrentDto(taskId, worktree, TaskLifecycleEvent.RESUMED);
+        TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 
         List<Decision> decisions = new ArrayList<>(current.context().decisions());
         decisions.add(decision);
@@ -118,7 +119,13 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                 decisions);
 
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                updatedContext, current.baseCommit(), current.createdAt(), null, current.lastEscalation(), false);
+                        updatedContext,
+                        current.baseCommit(),
+                        current.createdAt(),
+                        null,
+                        current.lastEscalation(),
+                        false)
+                .withEgressCursor(currentDto.egressCursor());
         // One transition, one commit (FR4): the decision and the attempt-counter reset it implies
         // are staged together, so no tip ever shows one without the other.
         StateFileWrite.write(worktree, taskId, resetState, TaskLifecycleEvent.RESUMED);
@@ -127,9 +134,10 @@ public final class GitTaskRepository implements TaskLifecycleStore {
 
     @Override
     public void recordOutcome(String taskId, TaskOutcome outcome) {
-        TaskLifecycleEvent event = eventFor(outcome);
+        TaskLifecycleEvent event = TaskOutcomeLifecycleEvent.of(outcome);
         Path worktree = ensureWorktree(taskId);
-        TaskRecord current = readCurrent(taskId, worktree, event);
+        TaskJsonDto currentDto = readCurrentDto(taskId, worktree, event);
+        TaskRecord current = TaskJsonMapper.fromDto(currentDto);
         var lastEscalation =
                 outcome instanceof TaskOutcome.Escalated escalated ? escalated.report() : current.lastEscalation();
 
@@ -141,7 +149,8 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         // write is best-effort and carries no marker.
         boolean pending = !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending);
+                        current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending)
+                .withEgressCursor(currentDto.egressCursor());
         writeAndCommit(taskId, worktree, dto, event);
     }
 
@@ -180,7 +189,14 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         return worktreeManager.ensureWorktree(cloneDir, taskId, branchName);
     }
 
-    private TaskRecord readCurrent(String taskId, Path worktree, TaskLifecycleEvent event) {
+    /**
+     * The worktree's current {@code task.json} as its raw wire DTO — read this way rather than as a
+     * domain record so a rewrite can carry forward the fields the domain does not model, the denial
+     * cursor among them (design D8 of fix-denial-attribution-durability). Host mode has no egress
+     * guard and so never writes a cursor of its own, but a branch that ran in container mode before
+     * this resume carries one, and a host-side lifecycle rewrite must not be what erases it.
+     */
+    private TaskJsonDto readCurrentDto(String taskId, Path worktree, TaskLifecycleEvent event) {
         Path taskJson = worktree.resolve(".gnomish-task").resolve("task.json");
         String json;
         try {
@@ -188,7 +204,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "reading task.json", e);
         }
-        return TaskJsonMapper.fromDto(TaskJsonMapper.readDto(json));
+        return TaskJsonMapper.readDto(json);
     }
 
     private void writeAndCommit(String taskId, Path worktree, TaskJsonDto dto, TaskLifecycleEvent event) {
@@ -229,14 +245,5 @@ public final class GitTaskRepository implements TaskLifecycleStore {
             throw new GitTaskRepositoryException(taskId, event, "git commit", commit.stderr());
         }
         log.info("task lifecycle commit written for task {}: event={}", taskId, event);
-    }
-
-    private static TaskLifecycleEvent eventFor(TaskOutcome outcome) {
-        return switch (outcome) {
-            case TaskOutcome.Completed ignored -> TaskLifecycleEvent.COMPLETED;
-            case TaskOutcome.Paused ignored -> TaskLifecycleEvent.PAUSED;
-            case TaskOutcome.Escalated ignored -> TaskLifecycleEvent.ESCALATED;
-            case TaskOutcome.Aborted ignored -> TaskLifecycleEvent.ABORTED;
-        };
     }
 }

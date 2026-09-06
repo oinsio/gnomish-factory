@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
@@ -7,7 +8,11 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The lifecycle store's writes of {@code state.json} (FR3, FR4 of harden-task-branch-contract):
@@ -27,6 +32,8 @@ import java.nio.file.Path;
  */
 final class StateFileWrite {
 
+    private static final Logger log = LoggerFactory.getLogger(StateFileWrite.class);
+
     private StateFileWrite() {}
 
     /**
@@ -40,9 +47,34 @@ final class StateFileWrite {
     static void write(Path worktree, String taskId, TaskState state, TaskLifecycleEvent event) {
         Path target = worktree.resolve(".gnomish-task").resolve("state.json");
         try {
-            AtomicFileWriter.write(target, TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state)));
+            AtomicFileWriter.write(
+                    target,
+                    TaskStateJson.mapper().writeValueAsString(StateJsonMapper.toDto(state, currentCursor(target))));
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "writing state.json", e);
+        }
+    }
+
+    /**
+     * The denial cursor the file being rewritten already carries, carried forward unchanged (FR5 of
+     * fix-denial-attribution-durability). A lifecycle rewrite reads no denial source, so it has no
+     * position of its own; regenerating the file without one would erase what the last attempt
+     * committed. Host mode never writes a cursor itself — it has no egress guard — but a branch
+     * that ran in container mode before this resume carries one.
+     *
+     * <p>Best-effort: an absent or unparseable file yields none and the write proceeds cursorless,
+     * costing the next run a full re-read of the guard's log tail rather than a denial.
+     */
+    private static @Nullable EgressCursorDto currentCursor(Path stateJson) {
+        try {
+            return StateJsonMapper.readDto(Files.readString(stateJson)).egressCursor();
+        } catch (IOException | RuntimeException e) {
+            log.debug(
+                    "no committed denial cursor to carry forward from {}: absent or unreadable;"
+                            + " the next run reads its denial source from the start",
+                    stateJson,
+                    e);
+            return null;
         }
     }
 }

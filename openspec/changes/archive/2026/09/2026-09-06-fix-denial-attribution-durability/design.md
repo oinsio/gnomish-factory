@@ -16,7 +16,8 @@ Second, the read position is *designed* to be durable along the attempt path
 (predecessor FR5: committed in `state.json` with the attempt, stamped with
 the guard container's runtime id, offered back on resume through
 `GuardDenialReads`, `EnvironmentAttemptPersistence`, and `ContainerTipReader`
-behind `SandboxRunSupport.restoreDenialCursor`) — but the 2026-08-28 audit found the design
+behind `ContainerRunSupport.restoreDenialCursor`, since renamed to
+`restoreDenials` by D7) — but the 2026-08-28 audit found the design
 disconnected in production: `LeasedEnvironment`, the view both writers are
 built over, forwards none of the port's three denial default methods, so the
 constant defaults answer instead of the guard, no cursor is ever committed,
@@ -48,7 +49,10 @@ is scoped to one denial source's log).
 
 **D1 — Denials ride a dedicated executor-failure exception.**
 The domain gains an `ExecutorFailure extends RuntimeException` carrying the
-original failure as its cause plus `List<Finding> denials()`. The agent
+original failure as its cause plus `List<Denial> denials()` — `Denial` being
+D5's guard-side wrapper of a `Finding` with the identity its source assigned
+it, so the failure channel carries the same value the attempt channel does and
+the escalation merges by identity like every other record. The agent
 adapter's existing failure path drains the denials and rethrows the original
 wrapped in it; `RoundExecution` renders the *cause* (so the escalation text is
 unchanged) and copies the denials onto `EscalationReport.CannotExecute`. Any
@@ -57,6 +61,13 @@ adapters that have no environment need no change.
 *Rationale:* the smallest blast radius that keeps the port's "throws on
 infrastructure failure" contract intact — one new domain type, one adapter
 touch point, every other executor adapter untouched.
+*Supersedes* `fix-denial-report-attachment`'s D1a: its outcome — a failed
+round's denials reach the operator log and nothing else, because "the
+escalation model has no findings slot, and adding one is beyond this
+change's scope" — no longer holds. This change adds that slot (FR1) and the
+scope objection is what it exists to pay. D1a's drain-on-the-failure-path
+mechanics and its NFR-R1 wrapping stay in force; only the "log only"
+destination is replaced.
 *Alternative rejected:* making the failure a value on the sealed
 `ExecutionResult` (`CannotExecute(cause, denials)`) — cleaner in the abstract
 and worth doing if the port is ever reworked, but it rewrites every executor

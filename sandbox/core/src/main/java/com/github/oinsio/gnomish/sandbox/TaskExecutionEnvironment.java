@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.sandbox;
 
-import com.github.oinsio.gnomish.domain.engine.Finding;
-import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -120,28 +118,42 @@ public interface TaskExecutionEnvironment {
     /**
      * The egress denials this environment recorded since the previous call —
      * the per-round delta, so a consumer asking at round close receives exactly
-     * that round's denials and never an earlier round's again.
+     * that round's denials and never an earlier round's again — together with
+     * the read position that stands after it.
+     *
+     * <p>Findings and position come back as one value on purpose (design D7 of
+     * fix-denial-attribution-durability): the position may become durable only
+     * through the same call that persists the record carrying these findings, so
+     * it can lag that record but never lead it. A caller that persists the
+     * findings without the position degrades to a re-read; a caller that could
+     * persist the position without the findings would lose them silently, and
+     * this shape denies it the chance.
      *
      * <p>Host-agnostic by construction: an environment without an egress guard
-     * has nothing to report and answers with an empty list, which is a truthful
-     * answer rather than a missing capability. Read-back is best-effort — an
-     * unreadable or missing denial source yields an empty list and SHALL never
-     * fail the round, the attempt, or the report (NFR-R1); denial observability
-     * must not take a healthy round down.
+     * has nothing to report and answers with {@link DenialRead#none()}, which is
+     * a truthful answer rather than a missing capability. Read-back is
+     * best-effort — an unreadable or missing denial source yields no findings and
+     * SHALL never fail the round, the attempt, or the report (NFR-R1); denial
+     * observability must not take a healthy round down.
      *
-     * <p>Implements FR1, NFR-R1 of fix-denial-report-attachment.
+     * <p>Implements FR1, NFR-R1 of fix-denial-report-attachment; FR3 of
+     * fix-denial-attribution-durability.
      *
-     * @return the denials recorded since the previous call; never null, possibly
-     *     empty
+     * @return the denials recorded since the previous call and the position after
+     *     it; never null, possibly empty
      */
-    default List<Finding> denialFindings() {
-        return List.of();
+    default DenialRead readDenials() {
+        return DenialRead.none();
     }
 
     /**
-     * The environment's current denial read position, for the factory to commit
-     * alongside the attempt whose denials it delimits and to hand back on resume
-     * ({@link #restoreDenialCursor}).
+     * The environment's current denial read position — the position the last
+     * {@link #readDenials()} left behind, unchanged by asking. Read by a writer
+     * that persists a record whose denials were drained earlier in the round (the
+     * {@code cannotExecute} escalation park, FR3 of
+     * fix-denial-attribution-durability), so the position rides that record's own
+     * commit; a fresh read here would consume denials no record is going to carry
+     * ({@link #restoreDenials}).
      *
      * <p>Empty when the environment has no denial source, or has not read one yet
      * — there is then no position a later lease could resume from, and reading
@@ -156,22 +168,29 @@ public interface TaskExecutionEnvironment {
     }
 
     /**
-     * Offers a cursor committed by an earlier lease, so the first read of this one
-     * reports the round's own denials instead of replaying every denial the source
-     * still holds. Valid only before the first {@link #denialFindings()} call of
+     * Offers what an earlier lease already recorded on the task branch — the read
+     * position it committed and the identities of the denials it committed with it
+     * — so this lease reports its own denials instead of replaying every denial the
+     * source still holds. Valid only before the first {@link #readDenials()} call of
      * this environment.
      *
      * <p>An offer is not an instruction: the environment SHALL apply the position
      * only if {@link DenialCursor#source()} identifies its own live denial source,
      * and SHALL ignore it otherwise (a resume on another machine, or onto a
      * recreated source) — a foreign position could silently filter out real
-     * denials. An environment without a denial source ignores the offer entirely.
+     * denials. When the position does not apply, the recorded identities still do:
+     * the read falls back to the source's whole tail and merges away exactly the
+     * events already recorded (FR7, design D3), so a lost position costs a re-read
+     * rather than a duplicated report. An environment without a denial source
+     * ignores the offer entirely.
      *
-     * <p>Implements FR5 of fix-denial-report-attachment.
+     * <p>Implements FR5 of fix-denial-report-attachment; FR4, FR7 of
+     * fix-denial-attribution-durability.
      *
-     * @param cursor the cursor an earlier lease committed; never null
+     * @param restoration what the branch tip records about denials already reported; never null
      */
-    default void restoreDenialCursor(DenialCursor cursor) {
-        // No denial source: nothing to position. Overridden by guarded environments.
+    default void restoreDenials(DenialRestoration restoration) {
+        // No denial source: nothing to position and nothing to merge against. Overridden by
+        // guarded environments.
     }
 }

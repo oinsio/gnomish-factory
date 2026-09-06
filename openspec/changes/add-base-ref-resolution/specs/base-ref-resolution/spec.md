@@ -17,8 +17,11 @@ The base menu SHALL be a list of patterns, each with a role — `development` or
 branch from. A per-task selection SHALL be accepted only when it matches a
 menu pattern; a selection matching no pattern SHALL be rejected as
 underdetermined input, never silently replaced by another base. An empty menu
-(no `base:` configuration) SHALL accept no per-task selection and resolve
-through the default tiers only. Environment-style deploy pointers are not
+— the `base:` section absent or declaring no entries — accepts no per-task
+selection: configuration that could deliver one is refused at load (see
+pipeline-config), and should a designator reach resolution regardless, it is
+underdetermined input like any out-of-menu selection. Environment-style
+deploy pointers are not
 menu material: the menu classifies branch roles precisely so later changes can
 gate on them, and no role beyond the two named ones exists in this version.
 <!-- implements FR1, FR4 of add-base-ref-resolution -->
@@ -33,9 +36,9 @@ gate on them, and no role beyond the two named ones exists in this version.
 - **THEN** the task parks with a report naming the selected value and the
   configured menu, no branch is created, and no stage attempt is burned
 
-#### Scenario: No menu means no per-task selection
-- **WHEN** a project has no `base:` configuration and a task carries a base
-  designator
+#### Scenario: Empty menu with a designator is refused, not resolved
+- **WHEN** the menu is empty and a `base` designator nevertheless reaches
+  resolution (the load-time check was bypassed)
 - **THEN** resolution treats the designator as outside the (empty) menu and
   escalates rather than branching from an unvetted ref
 
@@ -108,17 +111,29 @@ never as a fallback to a guessed name.
 The `base:` configuration SHALL be read factory-side from the repository
 default branch, refreshed by fetch, and never from a task branch or a
 gnome-writable working copy. Copies of the configuration in a gnome's working
-copy are project content — law only after a human merge. The rest of pipeline
-law continues to bind from the already-chosen base per the existing law
-semantics; this requirement is what breaks the "the config picks the base,
-but which ref holds the config" cycle.
-<!-- implements FR2, NFR-S1 of add-base-ref-resolution -->
+copy are project content — law only after a human merge. The read SHALL go
+through the git-objects law source at the refreshed default-branch tip, never
+through a checkout, and SHALL happen once at startup as part of the trusted
+tier (see pipeline-config, "Definition validated at startup, bound per task
+from the base"); a claim SHALL NOT re-fetch the default branch or re-read
+the block. The `base:` block is trusted-tier configuration; the task
+tier of the law binds from the chosen base's law commit (see pipeline-config,
+"Pipeline law binds per invocation"). This requirement is what breaks the
+"the config picks the base, but which ref holds the config" cycle.
+<!-- implements FR2, NFR-S1, NFR-P1 of add-base-ref-resolution -->
 
 #### Scenario: A gnome edit to the base block has no effect
 - **WHEN** a gnome branch modifies the `base:` block in its working copy and
   another task is claimed afterwards
 - **THEN** the new task resolves under the default-branch configuration, and
   the gnome's edit participates only after a human merges it
+
+#### Scenario: A merged menu change waits for the next start
+- **WHEN** a human merges a new `base.menu` entry to the default branch while
+  `serve` is running, and a task selecting that new entry is claimed
+- **THEN** the running daemon still resolves under the menu bound at its
+  startup (the task parks as out-of-menu), no default-branch fetch runs on
+  the claim path, and the next start of `serve` accepts the entry
 
 ### Requirement: The base decision is pinned at claim and never re-resolved
 The resolved base — ref, commit SHA, and source rule — SHALL be pinned into
@@ -129,6 +144,9 @@ designator or menu change after the pin affects only tasks not yet pinned.
 Before the pin exists, re-resolution from scratch is the recovery of every
 crash window, and a later resolution answering differently is legal — nothing
 durable references the earlier answer.
+The pinned SHA is the law commit of the fresh start; on resume the law commit
+is the current tip of the pinned ref name (pipeline-config owns that rule),
+which is a law-freshness matter, not a re-resolution of the base.
 <!-- implements FR7, NFR-R2, NFR-S2 of add-base-ref-resolution -->
 
 #### Scenario: Retargeting a pinned task has no effect
@@ -136,6 +154,12 @@ durable references the earlier answer.
   and the task is later resumed
 - **THEN** the resume continues on the pinned base and the label change is
   reflected nowhere in the run
+
+#### Scenario: Pin guard and law share one commit
+- **WHEN** an external check with pinned law paths runs on a fresh task
+- **THEN** the guard compares the attempt's law files against the pinned
+  base SHA — the same commit the law was frozen from — never against the
+  clone's `HEAD`
 
 #### Scenario: A crash before the pin re-resolves cleanly
 - **WHEN** an instance dies after refreshing the base but before the

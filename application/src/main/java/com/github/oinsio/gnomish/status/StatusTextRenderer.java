@@ -2,9 +2,11 @@ package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.Decision;
+import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -99,8 +101,24 @@ public final class StatusTextRenderer {
      * empty heading, no "0 denials" noise (UX2).
      */
     private void appendDenials(StringBuilder out, AttemptRecord attempt) {
-        for (Finding denial : attempt.denials()) {
-            out.append("    egress denial: ")
+        appendDenials(out, Denial.findings(attempt.denials()), "    ");
+    }
+
+    /**
+     * The one denial-listing shape, used for an attempt's round and for a {@code
+     * CannotExecute} escalation's round alike (FR2, UX2 of
+     * fix-denial-attribution-durability). Both pass through {@link
+     * StatusLineFormatter#findingLine} and therefore through the findings funnel, so a
+     * gnome-chosen host or path cannot rewrite the operator's terminal (NFR-S1). An empty
+     * list renders nothing at all — no heading, no "0 denials" noise.
+     *
+     * @param indent the leading indent, which differs by where the denial hangs: under an
+     *     attempt's own indented summary line, or under the flush-left escalation line
+     */
+    private void appendDenials(StringBuilder out, List<Finding> denials, String indent) {
+        for (Finding denial : denials) {
+            out.append(indent)
+                    .append("egress denial: ")
                     .append(StatusLineFormatter.findingLine(denial))
                     .append('\n');
         }
@@ -145,6 +163,12 @@ public final class StatusTextRenderer {
         out.append("Last escalation: ")
                 .append(StatusLineFormatter.escalationLine(escalation))
                 .append('\n');
+        if (escalation instanceof EscalationReport.CannotExecute cannotExecute) {
+            // The round that could not execute left no attempt line to hang its denials
+            // under, so they hang under the escalation instead — the only place in the
+            // render they can appear (FR2, UX1 of fix-denial-attribution-durability).
+            appendDenials(out, Denial.findings(cannotExecute.denials()), "  ");
+        }
     }
 
     private void appendLastDecision(StringBuilder out, @Nullable Decision decision) {

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
@@ -63,7 +64,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         Path index = tempDir.resolve('index')
         Files.createDirectories(index)
         gitObjects = GitObjects.open(cloneDir.resolve('.git'), index)
-        repository = new GitObjectsTaskRepository(gitObjects, ClaimEpochSource.NONE)
+        repository = new GitObjectsTaskRepository(gitObjects, ClaimEpochSource.NONE, DenialCursorSource.NONE)
     }
 
     protected static StageDefinition stage() {

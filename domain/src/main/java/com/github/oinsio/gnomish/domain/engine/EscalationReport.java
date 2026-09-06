@@ -160,14 +160,26 @@ public sealed interface EscalationReport
      * preserved stack trace (NFR-O1) and is required non-blank, since a report with
      * no cause cannot be diagnosed.
      *
-     * <p>Implements FR10 of add-stage-engine.
+     * <p>{@code denials} holds the egress denials drained from the environment of the
+     * round that could not execute (FR1 of fix-denial-attribution-durability). Such a
+     * round leaves no {@link AttemptRecord} to carry them, so this report is their only
+     * place to land — without it a gnome that hung while attempting a blocked egress
+     * reports nothing but the hang. Carrying them changes no classification: the outcome
+     * stays an infrastructure failure, no attempt is burned, no round is recorded, and no
+     * verdict is derived from the list. Defensively copied, unmodifiable, and usually
+     * empty — an executor with no execution environment always reports none.
+     *
+     * <p>Implements FR10 of add-stage-engine; FR1 of fix-denial-attribution-durability.
      *
      * @param cause the failure detail, stack trace preserved; never blank
+     * @param denials the egress denials of the round that could not execute; defensively
+     *     copied, unmodifiable, possibly empty; never an input to any verdict
      */
-    record CannotExecute(String cause) implements EscalationReport {
+    record CannotExecute(String cause, List<Denial> denials) implements EscalationReport {
 
         public CannotExecute {
             cause = requireNonBlank(cause, "cause");
+            denials = List.copyOf(denials);
         }
 
         /**

@@ -1,19 +1,28 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.state.StateEgressCursorDto
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
+import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.AttemptCommitRef
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.Denial
+import com.github.oinsio.gnomish.domain.engine.DenialIdentity
+import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -29,8 +38,10 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -359,20 +370,76 @@ exit 0
     // FR5 of fix-denial-report-attachment: the guard container outlives the process that made it,
     // so a resume reads the cursor its last attempt committed and hands it to the environments —
     // without it the first read after resume replays the container's whole surviving log
-    def "FR5: restoreDenialCursor hands the branch tip's committed cursor to the environments"() {
+    def "FR5: restoreDenials hands the branch tip's committed cursor to the environments"() {
         given: 'a task branch whose state.json records a cursor naming the live guard container'
         def support = support()
         createTask(support)
         commitState(StateJsonMapper.toDto(
                         TaskState.atStageStart('build'),
-                        new StateEgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
+                        new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
 
         when:
-        support.restoreDenialCursor()
-        support.environments.roundEnvironment().denialFindings()
+        support.restoreDenials()
+        support.environments.roundEnvironment().readDenials().denials()*.finding()
 
         then: 'the round box reads its guard log from the committed position, not from the start'
         docker.runs.last() == guardLogsArgv('2026-08-19T10:00:00.000000001Z')
+    }
+
+    // FR3, M4 of fix-denial-attribution-durability: the write half of the same wiring — the park
+    //     that records a cannotExecute escalation asks the run's leased environment for the
+    //     position its drain left behind, and commits it beside the escalation carrying those
+    //     denials. Driven through the production bundle, which is what the predecessor's dead
+    //     feature proved specs over doubles cannot show.
+    def "FR3: a cannotExecute park commits the leased environment's position beside the escalation"() {
+        given: 'a run whose leased round environment has read its guard log up to a known position'
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
+        support.restoreDenials()
+        support.lease().environmentFor('build').readDenials()
+
+        when: 'the round dies before its close and the park records the escalation it earned'
+        support.recordPark(new TaskOutcome.Escalated(
+                        TaskState.atStageStart('build'),
+                        new EscalationReport.CannotExecute('round timed out', [
+                            Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
+                        ])))
+
+        then: 'task.json carries the escalation, its denials, and the position they were read up to'
+        def dto = TaskJsonMapper.readDto(taskJsonAtTip())
+        dto.lastEscalation().denials()*.message() == [
+            'egress denied: paste.example.com:443'
+        ]
+        dto.egressCursor() == new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')
+    }
+
+    // NFR-R1: a park before any stage leased an environment has no source to ask — it records the
+    //     escalation cursorless rather than failing, and the resumed run re-reads the guard tail.
+    def "NFR-R1: a park with no environment leased records the escalation without a position"() {
+        given:
+        def support = support()
+        createTask(support)
+
+        when:
+        support.recordPark(new TaskOutcome.Escalated(
+                        TaskState.atStageStart('build'),
+                        new EscalationReport.CannotExecute('round timed out', [
+                            Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
+                        ])))
+
+        then:
+        noExceptionThrown()
+        def dto = TaskJsonMapper.readDto(taskJsonAtTip())
+        dto.lastEscalation().denials().size() == 1
+        dto.egressCursor() == null
+    }
+
+    /** The task branch tip's {@code task.json}, read out of the bare objects the park committed. */
+    private String taskJsonAtTip() {
+        gitOutput(cloneDir, 'show', 'gnomish/T-1:.gnomish-task/task.json')
     }
 
     def "FR5: a branch with no committed cursor leaves the environments reading from the start"() {
@@ -382,8 +449,8 @@ exit 0
         commitState(StateJsonMapper.toDto(TaskState.atStageStart('build')))
 
         when:
-        support.restoreDenialCursor()
-        support.environments.roundEnvironment().denialFindings()
+        support.restoreDenials()
+        support.environments.roundEnvironment().readDenials().denials()*.finding()
 
         then:
         docker.runs.last() == guardLogsArgv(null)
@@ -409,10 +476,188 @@ exit 0
         createTask(support)
 
         when:
-        support.restoreDenialCursor()
+        support.restoreDenials()
 
         then:
         noExceptionThrown()
+    }
+
+    // FR4 of fix-denial-attribution-durability: the escalation park's position stands past denials
+    //     the last attempt's cursor does not cover, so the newer of the two is what a resume
+    //     continues from — same source, so the two are that daemon's own totally ordered timestamps
+    def "FR4: the newer escalation position wins over the attempt position at the same tip"() {
+        given: 'a tip carrying an attempt cursor and a newer escalation cursor of the same guard'
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
+        commitTaskCursor(new EgressCursorDto('sha256:guard-container', '2026-08-19T10:05:00.000000001Z'))
+
+        when:
+        support.restoreDenials()
+        support.environments.roundEnvironment().readDenials().denials()*.finding()
+
+        then:
+        lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')
+    }
+
+    def "FR4: an older escalation position loses to the newer attempt position"() {
+        given:
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new EgressCursorDto('sha256:guard-container', '2026-08-19T10:05:00.000000001Z')))
+        commitTaskCursor(new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z'))
+
+        when:
+        support.restoreDenials()
+        support.environments.roundEnvironment().readDenials().denials()*.finding()
+
+        then:
+        lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')
+    }
+
+    // FR3: a task killed in its very first round has an escalation position and no attempt one
+    def "FR3: an escalation position alone is restored when no attempt ever committed one"() {
+        given:
+        def support = support()
+        createTask(support)
+        commitTaskCursor(new EgressCursorDto('sha256:guard-container', '2026-08-19T10:05:00.000000001Z'))
+
+        when:
+        support.restoreDenials()
+        support.environments.roundEnvironment().readDenials().denials()*.finding()
+
+        then:
+        lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')
+    }
+
+    // FR4, NFR-O2, NFR-R2: a position of a guard this run is not attached to is dropped by the
+    //     environment's own stamp check — the read falls back to the whole tail and says so, since
+    //     a foreign position would filter real denials out of the report
+    def "FR4: a position naming another guard container falls back to a full read and logs it"() {
+        given:
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new EgressCursorDto('sha256:guard-elsewhere', '2026-08-19T10:00:00.000000001Z')))
+
+        when:
+        def logged = LogCaptureSupport.capture(
+                Class.forName('com.github.oinsio.gnomish.sandbox.environment.RestoredDenials'), Level.INFO) {
+                    support.restoreDenials()
+                    support.environments.roundEnvironment().readDenials().denials()*.finding()
+                }
+
+        then: 'the guard reads its own log from the start'
+        lastGuardLogRead() == guardLogsArgv(null)
+
+        and: 'and the fallback is explainable to whoever sees a duplicated denial'
+        logged.any {
+            it.level == Level.INFO && it.formattedMessage.contains('sha256:guard-elsewhere')
+        }
+    }
+
+    // FR7, NFR-O2, M2 of fix-denial-attribution-durability: the identities half of the same
+    //     wiring the cursor scenarios above pin, and the half a mutation to Set.of() used to
+    //     survive. A tip that records an identified denial but no usable position sends the read
+    //     over the guard's whole surviving tail; the recorded identity is what turns that
+    //     fallback into a merge instead of a second copy in the resumed run's report.
+    def "FR7: a tip's recorded identities keep a full re-read from duplicating the report"() {
+        given: 'a guard whose surviving log still holds the denial the previous process recorded'
+        docker.guardLog = DENIAL_LINE
+        def support = support()
+        createTask(support)
+
+        and: 'a tip recording that denial under an attempt, with no position to continue from'
+        commitState(StateJsonMapper.toDto(TaskState.atStageStart('build').recordUnburnedRound(
+                        new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.parse('2026-08-19T09:00:00Z'), [],
+                        ExecutorUsage.none(), JudgeUsage.none(), [
+                            new Denial(
+                                    new Finding('egress denied: paste.example.com:443', null, null),
+                                    new DenialIdentity('sha256:guard-container', DENIAL_STAMP))
+                        ]))))
+
+        when:
+        support.restoreDenials()
+        def denials = support.environments.roundEnvironment().readDenials().denials()
+
+        then: 'the guard log is re-read whole, since no position was committed'
+        lastGuardLogRead() == guardLogsArgv(null)
+
+        and: 'and the denial the branch already records is merged away rather than attached twice'
+        denials == []
+    }
+
+    // FR7: the control of the scenario above — an unrecorded denial in the same re-read is
+    //     recovered, so the merge is a merge and not a blanket silencing of the fallback.
+    def "FR7: a denial the tip does not record survives the same merge"() {
+        given:
+        docker.guardLog = DENIAL_LINE
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(TaskState.atStageStart('build')))
+
+        when:
+        support.restoreDenials()
+        def denials = support.environments.roundEnvironment().readDenials().denials()
+
+        then:
+        denials*.finding()*.message() == [
+            'egress denied: paste.example.com:443'
+        ]
+    }
+
+    /** The daemon stamp of {@link #DENIAL_LINE}, in the {@code Instant.toString()} form an identity carries. */
+    private static final String DENIAL_STAMP = '2026-08-19T10:00:00.123456789Z'
+
+    /** One {@code docker logs --timestamps} line of the guard's own denial output. */
+    private static final String DENIAL_LINE =
+    DENIAL_STAMP + ' GNOMISH-EGRESS-DENY {"kind":"connect","host":"paste.example.com","port":443}\n'
+
+    // FR5: a RESUMED commit between the attempt that committed the position and the resume that
+    //     reads it back rewrites both envelopes — and must carry the positions through
+    def "FR5: a RESUMED commit between the attempt and the restore does not lose the position"() {
+        given: 'a tip carrying both positions, then the human answer that rewrites both envelopes'
+        def support = support()
+        createTask(support)
+        commitState(StateJsonMapper.toDto(
+                        TaskState.atStageStart('build'),
+                        new EgressCursorDto('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')))
+        commitTaskCursor(new EgressCursorDto('sha256:guard-container', '2026-08-19T10:05:00.000000001Z'))
+        support.taskRepository().appendDecision(
+                'T-1', new Decision('proceed', 'build', 'operator', null), TaskState.atStageStart('build'))
+
+        when:
+        support.restoreDenials()
+        support.environments.roundEnvironment().readDenials().denials()*.finding()
+
+        then: 'the resumed run still continues from the newest committed position'
+        lastGuardLogRead() == guardLogsArgv('2026-08-19T10:05:00.000000001Z')
+    }
+
+    /**
+     * The last {@code docker logs} argv the run issued. A denial read ends by pairing its findings
+     * with the position it advanced to (design D7), which probes the container identity, so the
+     * run's last docker call is that probe rather than the log read these scenarios are about.
+     */
+    private List<String> lastGuardLogRead() {
+        docker.runs.findAll { it.first() == 'logs' }.last()
+    }
+
+    /** Commits {@code task.json} carrying {@code cursor}, as a cannotExecute park would have. */
+    private void commitTaskCursor(EgressCursorDto cursor) {
+        def originalBranch = gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()
+        gitOutput(cloneDir, 'checkout', 'gnomish/T-1')
+        Path taskJson = cloneDir.resolve('.gnomish-task/task.json')
+        Files.writeString(taskJson, TaskStateJson.mapper().writeValueAsString(
+                        TaskJsonMapper.readDto(Files.readString(taskJson)).withEgressCursor(cursor)))
+        gitOutput(cloneDir, 'add', '.gnomish-task/task.json')
+        gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '-m', 'park')
+        gitOutput(cloneDir, 'checkout', originalBranch)
     }
 
     /** Commits {@code state.json} on the task branch, as a finished round would have. */

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
@@ -41,6 +42,16 @@ trait KillPointWorlds implements BareGitRepoFixture {
 
     /** The container medium: a real bare repo written through {@link GitObjectsTaskRepository}. */
     KillPointWorld containerWorld(Path root) {
+        containerWorld(root, DenialCursorSource.NONE)
+    }
+
+    /**
+     * The container medium with an environment that answers a denial read position, so a {@code
+     * cannotExecute} park mints a committed cursor to preserve (FR5 of
+     * fix-denial-attribution-durability). Host mode has no counterpart: it has no egress guard, so
+     * no denial source exists to ask (`.claude/rules/manual-sync-pairs.md`).
+     */
+    KillPointWorld containerWorld(Path root, DenialCursorSource cursors) {
         Path work = initWorkingRepo(root, 'seed-work')
         Files.writeString(work.resolve('a.txt'), 'first')
         commitAll(work, 'init')
@@ -49,7 +60,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         gitOutput(work, 'push', 'origin', 'HEAD:refs/heads/base')
         Path index = root.resolve('index')
         Files.createDirectories(index)
-        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), ClaimEpochSource.NONE), 'base')
+        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), ClaimEpochSource.NONE, cursors), 'base')
     }
 
     /**

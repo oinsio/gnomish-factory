@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code state.json} contract's per-attempt shape carried under {@code
@@ -15,7 +14,9 @@ import org.jspecify.annotations.Nullable;
  * <p>{@code denials} is additive under contract v1 (D5 of
  * fix-denial-report-attachment): a state file written before the field existed
  * binds the component to null, which the canonical constructor normalizes to
- * empty, so every pre-existing document stays readable.
+ * empty, so every pre-existing document stays readable. Each entry additionally
+ * carries the identity its denial source assigned it, itself additive and absent
+ * on entries written before it existed (FR7 of fix-denial-attribution-durability).
  *
  * <p>Implements FR3, FR4 of add-git-workflow; FR4 of fix-denial-report-attachment.
  *
@@ -34,23 +35,11 @@ public record StateAttemptDto(
         String result,
         String startedAt,
         List<StateCheckDto> checks,
-        List<StateFindingDto> denials,
+        List<StateDenialDto> denials,
         StateUsageDto executorUsage,
         StateJudgeUsageDto judgeUsage) {
 
     public StateAttemptDto {
-        denials = absentAsEmpty(denials);
-    }
-
-    /**
-     * An absent {@code denials} field reads as an empty list (FR4 of
-     * fix-denial-report-attachment): the field is additive under contract v1, so a
-     * state file written before it existed must keep parsing. Kept as an explicit
-     * static method rather than inline in the compact constructor — PIT's record
-     * filter suppresses mutations inside a record's canonical constructor, which
-     * would exempt this default from the mutation gate.
-     */
-    private static List<StateFindingDto> absentAsEmpty(@Nullable List<StateFindingDto> denials) {
-        return denials == null ? List.of() : List.copyOf(denials);
+        denials = StateDenialMapper.absentAsEmpty(denials);
     }
 }

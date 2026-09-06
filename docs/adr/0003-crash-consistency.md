@@ -59,6 +59,40 @@ flowchart LR
    sweep universe first, the label removing it last, truth markers between —
    so every kill window freezes a state the sweeper's own query enumerates.
 
+### Consumed streams: the position rides the record
+
+A factory instance also reads *external append-only streams* it does not own —
+today the egress guard's denial log, whose container outlives the process that
+reads it. Consuming such a stream advances a read position, which is durable
+state of exactly the kind the media-are-the-journal principle governs: a
+position that outlives its record re-attributes events to the wrong record, and
+a position that dies with the process re-reports events already recorded.
+Three rules, in the order a transition applies them (provenance:
+`fix-denial-attribution-durability`; precedent: Kafka/Flink offset-with-output,
+auditd/Falco loss counters):
+
+1. **The position becomes durable only with the record it delimits**, in the
+   same commit — never as a write of its own. It may lag the record after a
+   kill, never lead it, so the worst frozen state re-reads events rather than
+   losing them. Every record kind that consumes the stream carries a position:
+   here the attempt in `state.json` and the `cannotExecute` escalation in
+   `task.json`, and a lifecycle rewrite of either document carries the
+   committed position forward rather than dropping it.
+2. **Recorded events carry a source-assigned identity**, so a re-read merges
+   idempotently: events already recorded at the tip are matched by identity and
+   attached once. This is what turns rule 1's worst case from duplicates into a
+   no-op, and it is why losing a position is recoverable without a second
+   durable store.
+3. **Known loss is reported in-band.** When the reader can see it lost events —
+   a saturated tail cap, a source that no longer holds its log — it records a
+   marker through the same channel the events use, so a reader distinguishes
+   "nothing happened" from "no data". A counter or a log line is not enough:
+   the report a human reads is the surface that must say it.
+
+Reading the position is best-effort — an unanswerable position falls back to a
+full re-read, which rule 2 makes cheap — while writing it inherits the
+atomicity of the commit it rides.
+
 ### Recovery disposition per branch shape
 
 Shape *meanings* are owned by the `task-branch-contract` capability spec, and

@@ -19,6 +19,14 @@ import java.time.Instant
  */
 class ScriptedSandboxDocker extends RecordingDockerCli {
 
+    /**
+     * What {@code docker logs} of the guard container answers with — the guard's own stdout, one
+     * {@code --timestamps} line per denial. Empty by default, so a scenario that is not about
+     * denials sees a guard that blocked nothing; a scenario that is about them scripts the lines
+     * whose parse it wants to assert on.
+     */
+    String guardLog = ''
+
     ScriptedSandboxDocker() {
         onRun = { List<String> args ->
             // Matched against the production command itself, never a copy of its format string:
@@ -39,6 +47,9 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
             }
             if (args[0] == 'inspect' && args.contains('{{.HostConfig.Runtime}}')) {
                 return new DockerResult(0, 'runc\n', '') // runtime matches the configured default
+            }
+            if (args[0] == 'logs') {
+                return new DockerResult(0, guardLog, '') // the guard's denial log, scripted per scenario
             }
             new DockerResult(0, '', '')
         }

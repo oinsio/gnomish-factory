@@ -69,7 +69,9 @@ naturally joins.
 
 - `module-layering`: the `:logtext` consumer grant is widened to access-log
   emission, and the `:gitobjects` extraction contract is pinned against the
-  new hook (no new dependency edge).
+  new hook (no new dependency edge). The same two requirements are MODIFIED
+  by the active `add-base-ref-resolution`, sequenced after this change; its
+  delta is layered on this one's text, so this change syncs first.
 - `execution-environment`: secret-free container exec argv, probes through
   the decorated seam, honest and gate-enforced sole-seam wording.
 - `subprocess-supervision`: bounded file-channel/probe/in-box-git waits,

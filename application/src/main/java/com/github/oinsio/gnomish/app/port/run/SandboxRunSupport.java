@@ -77,15 +77,18 @@ public interface SandboxRunSupport {
     void sweepOrphans();
 
     /**
-     * Hands the run's environments the denial read position recorded at the task branch tip, so a
-     * resume that reattaches to a surviving egress guard reports its own rounds' denials instead of
-     * replaying every denial the guard still holds (FR5 of fix-denial-report-attachment).
+     * Hands the run's environments what the task branch tip records about denials already reported
+     * — the read position committed with them, so a resume that reattaches to a surviving egress
+     * guard reports its own rounds' denials instead of replaying every denial the guard still holds
+     * (FR5 of fix-denial-report-attachment), and their identities, so a resume that cannot use the
+     * position merges its re-read instead of doubling the report (FR7 of
+     * fix-denial-attribution-durability).
      *
      * <p>Best-effort and always safe to call: a branch with no recorded cursor — a fresh run, a
      * task whose rounds ran host-side — is a no-op, and a cursor that does not name the live denial
      * source is dropped by the environment rather than applied.
      */
-    void restoreDenialCursor();
+    void restoreDenials();
 
     /**
      * Completed terminal boundary (D19): dispose the box, then record the {@code Completed} outcome

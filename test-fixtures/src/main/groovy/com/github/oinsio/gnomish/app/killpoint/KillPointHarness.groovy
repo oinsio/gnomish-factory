@@ -46,6 +46,8 @@ final class KillPointHarness {
         assert converged == transition.converged:
         "${where}: the pickup left the ${converged} shape, expected ${transition.converged}"
 
+        transition.invariant?.call(world)
+
         def afterFirst = transition.fingerprint.call(world)
         transition.pickup.call(world)
         assert transition.fingerprint.call(world) == afterFirst:

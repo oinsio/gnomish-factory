@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
@@ -161,7 +162,7 @@ class StatusTextRendererSpec extends Specification {
         new EscalationReport.DecisionNeeded('Refactor?', ['a', 'b']) | 'decision needed'
         new EscalationReport.CannotVerify(new CheckRef(0, 'command:x'), 'network error', '') | 'cannot verify'
         new EscalationReport.PipelineMismatch('stale-stage') | 'pipeline mismatch'
-        new EscalationReport.CannotExecute('agent crashed') | 'cannot execute'
+        new EscalationReport.CannotExecute('agent crashed', []) | 'cannot execute'
     }
 
     // FR11, D7: renderFull renders every Activity kind without throwing
@@ -222,7 +223,7 @@ class StatusTextRendererSpec extends Specification {
                 'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
         def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [denial])
+        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:
@@ -248,7 +249,7 @@ class StatusTextRendererSpec extends Specification {
                 'kind=http method=POST')
         def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
         def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [denial])
+        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)])
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
 
         when:
@@ -263,6 +264,67 @@ class StatusTextRendererSpec extends Specification {
                 + '(evil.example.com:443/x\\nRound 9:\\tpassedHIDDEN)')
     }
 
+    // FR2, UX1 of fix-denial-attribution-durability: the round that could not execute left
+    //     no attempt line, so its denials hang under the escalation — the reviewer sees the
+    //     blocked exfiltration beside the reason the round died, without reading any log.
+    def "renderFull lists a cannotExecute escalation's denials under the escalation line"() {
+        given: 'an escalation for a round killed on its timeout after a denied egress'
+        def denial = new Finding(
+                'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
+        def escalation = new EscalationReport.CannotExecute('round timed out after 15m', [Denial.unidentified(denial)])
+        def state = TaskState.atStageStart('implement')
+
+        when:
+        def text = new StatusTextRenderer().renderFull(
+                StatusReport.build(context(), state, 3, new LiveActivity(null, escalation, null)))
+
+        then: 'the reason and the denial read together, and no attempt was invented to hold it'
+        text.contains('Last escalation: cannot execute: round timed out after 15m')
+        text.contains('egress denial: egress denied: paste.example.com:443 (paste.example.com:443/upload)')
+        !text.contains('Attempts:')
+    }
+
+    // NFR-S1 of fix-denial-attribution-durability: the escalation's denials are gnome-chosen
+    //     text like an attempt's, so they pass the same findings funnel — the escalation path
+    //     must not be the one that skips it.
+    def "renderFull neutralizes escape sequences in an escalation denial's text"() {
+        given:
+        def esc = '\u001B'
+        def denial = new Finding(
+                "egress denied: evil.example.com:443${esc}[31m",
+                "evil.example.com:443/x${esc}[2K\nLast escalation:\tforged",
+                'kind=http method=POST')
+        def escalation = new EscalationReport.CannotExecute('round timed out', [Denial.unidentified(denial)])
+
+        when:
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(
+                        context(), TaskState.atStageStart('implement'), 3, new LiveActivity(null, escalation, null)))
+
+        then: 'no control character survives and the denial stays one line'
+        !text.contains(esc)
+        !text.contains('\t')
+        text.readLines().count { it.contains('egress denial:') } == 1
+
+        and: 'the forged escalation head stays inside the denial line instead of becoming one'
+        text.readLines().count { it.startsWith('Last escalation:') } == 1
+        text.contains('(evil.example.com:443/x\\nLast escalation:\\tforged)')
+    }
+
+    // UX2: an escalation whose round recorded no denial renders exactly as it did before
+    //     this change — no heading, no empty list.
+    def "renderFull renders nothing extra for a cannotExecute escalation with no denials"() {
+        given:
+        def escalation = new EscalationReport.CannotExecute('adapter crashed', [])
+
+        when:
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(
+                        context(), TaskState.atStageStart('implement'), 3, new LiveActivity(null, escalation, null)))
+
+        then:
+        text.contains('Last escalation: cannot execute: adapter crashed')
+        !text.contains('denial')
+    }
+
     // UX2: zero denials render nothing at all — no heading, no empty list
     def "renderFull renders nothing for a round with no denials"() {
         given:
@@ -274,5 +336,34 @@ class StatusTextRendererSpec extends Specification {
         then:
         text.contains('Round 0: passed')
         !text.contains('denial')
+    }
+
+    // FR8, UX3 of fix-denial-attribution-durability: the factory's own loss travels the findings
+    //     channel, so the render must show it exactly like a denial — that is what lets a report
+    //     say "no data" instead of implying "no denials". The wording is DenialLossMarker's; this
+    //     spec pins the channel, not the sentence.
+    def "UX3: a loss marker renders beside the denials it stands in for"() {
+        given: 'a round reporting one real denial and one synthetic loss marker, neither identified'
+        def denial = Denial.unidentified(
+                new Finding('egress denied: paste.example.com:443', 'paste.example.com:443', 'kind=connect'))
+        def marker = Denial.unidentified(new Finding(
+                        'egress denial log truncated: older denials inside the read window are lost',
+                        'gnomish-PROJ-9',
+                        'loss window: after the guard container\'s start'))
+        def check = new CheckResult(new CheckRef(0, 'builtin:files_exist'), new Verdict.Pass(), Duration.ofMillis(3))
+        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
+        ExecutorUsage.none(), JudgeUsage.none(), [denial, marker])
+        def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
+
+        when:
+        def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, 3, LiveActivity.idle()))
+
+        then: 'both lines are there, in read order, through the one funnel-fenced finding line'
+        text.readLines().count { it.contains('egress denial:') } == 2
+        text.contains('egress denial: egress denied: paste.example.com:443')
+        text.contains('egress denial: egress denial log truncated: older denials inside the read window are lost')
+
+        and: 'the marker gates nothing — the round is still passed (proposal NG1)'
+        text.contains('Round 0: passed')
     }
 }

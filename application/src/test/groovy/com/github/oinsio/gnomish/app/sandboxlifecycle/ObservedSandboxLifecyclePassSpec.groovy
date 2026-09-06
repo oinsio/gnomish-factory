@@ -14,6 +14,9 @@ import spock.lang.Specification
  * tick brackets — reset the tally, fan every verdict out to the vitals log and the ledger, then
  * hand the completed record to the tick sink — and the deliberate absence of a completed tick when
  * the pass fails.
+ *
+ * <p>FR6 of fix-denial-attribution-durability: the sink-taking overload is the wrapper's own, so a
+ * caller's extra sink joins the fanout instead of vanishing through the interface's default.
  */
 class ObservedSandboxLifecyclePassSpec extends Specification {
 
@@ -100,6 +103,30 @@ class ObservedSandboxLifecyclePassSpec extends Specification {
             [(SweepVerdictCategory.DISPOSED_AGED): 1],
             [(SweepVerdictCategory.CHECKED_ALIVE): 1]
         ]
+    }
+
+    // FR6: the caller's own sink joins the fanout — the inherited default would drop it, leaving a
+    //     caller that wraps an observed pass silently sinkless.
+    def "a caller's extra sink receives every verdict beside the tick log and the ledger"() {
+        given:
+        def emitted = verdict(SweepVerdictCategory.DISPOSED_AGED)
+        def callerVerdicts = []
+        def delegate = passEmitting { dir, liveness, sink ->
+            sink.onVerdict(emitted)
+            'sweep: 1 disposed-aged'
+        }
+
+        when:
+        def summary = observing(delegate).run(CLONE_DIR, new LivenessVerdict.NoVerdict(), { SweepVerdict v ->
+            callerVerdicts << v
+        } as SweepVerdictListener)
+
+        then:
+        summary == 'sweep: 1 disposed-aged'
+        callerVerdicts == [emitted]
+        ledgerVerdicts == [emitted]
+        tickLog.lastTick().counts() == [(SweepVerdictCategory.DISPOSED_AGED): 1]
+        completedTicks.size() == 1
     }
 
     // NFR-O3: a failed pass completes NO tick — a partial tally published as a finished tick would

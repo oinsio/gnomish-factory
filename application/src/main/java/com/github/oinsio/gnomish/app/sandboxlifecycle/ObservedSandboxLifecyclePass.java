@@ -20,7 +20,14 @@ import java.util.List;
  * A partial tally published as a completed tick would read as a healthy sweep that found less
  * work, which is exactly the silent stall the tick-overdue alert exists to catch (NFR-O3).
  *
- * <p>Implements NFR-O1, NFR-O2 of add-serve-sandbox-lifecycle.
+ * <p>The sink-taking overload is overridden rather than inherited (FR6 of
+ * fix-denial-attribution-durability): the interface's default forwards to the
+ * two-argument form and drops its {@code extraSink}, so a caller that wraps an
+ * already-observed pass would lose its own sink silently. Here the caller's
+ * sink joins the fanout beside the tick log and the ledger.
+ *
+ * <p>Implements NFR-O1, NFR-O2 of add-serve-sandbox-lifecycle; FR6 of
+ * fix-denial-attribution-durability.
  */
 public final class ObservedSandboxLifecyclePass implements SandboxLifecyclePass {
 
@@ -48,8 +55,17 @@ public final class ObservedSandboxLifecyclePass implements SandboxLifecyclePass 
 
     @Override
     public String run(Path cloneDir, LivenessVerdict liveness) {
+        return observing(cloneDir, liveness, sink);
+    }
+
+    @Override
+    public String run(Path cloneDir, LivenessVerdict liveness, SweepVerdictListener extraSink) {
+        return observing(cloneDir, liveness, new SweepVerdictFanout(List.of(sink, extraSink)));
+    }
+
+    private String observing(Path cloneDir, LivenessVerdict liveness, SweepVerdictListener verdicts) {
         tickLog.beginTick();
-        String summary = delegate.run(cloneDir, liveness, sink);
+        String summary = delegate.run(cloneDir, liveness, verdicts);
         tickSink.onTickCompleted(tickLog.endTick());
         return summary;
     }

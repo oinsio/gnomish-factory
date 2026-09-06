@@ -5,13 +5,10 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.app.take.ParkTransition
@@ -53,10 +50,6 @@ class TakeParkRetrySpec extends Specification {
     TerminalWriteRetry retry = new TerminalWriteRetry(sleeper, clock, Duration.ofMinutes(10))
     AtomicInteger confirmed = new AtomicInteger()
 
-    private static TrackerTask taskWith(TrackerTaskState state) {
-        new TrackerTask(REF, new TaskSnapshot(REF.id(), 'title', 'body'), state, AbortFacts.none(), false)
-    }
-
     /** Runs {@code emit} with a {@link ListAppender} attached to {@code exitClass}'s logger, returning the events. */
     private static List<ILoggingEvent> capture(Class<?> exitClass, Closure<?> emit) {
         Logger logbackLogger = (Logger) LoggerFactory.getLogger(exitClass)
@@ -77,24 +70,6 @@ class TakeParkRetrySpec extends Specification {
     }
 
     /**
-     * A retry whose clock self-advances two minutes on each read, independently of the sleeper, so the
-     * ~10-min bound is reached in a bounded number of polls even when a mutant drops {@code sleeper.sleep}
-     * or halves the backoff — the give-up loop terminates (DEFERRED) instead of hanging. Mirrors the
-     * self-ticking clock in {@code TerminalWriteRetrySpec}, where the killing tests for those mutants live.
-     */
-    private static TerminalWriteRetry givingUpRetry() {
-        def ticking = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))
-        Clock advancingClock = {
-            ->
-            def t = ticking.get()
-            ticking.set(t + Duration.ofMinutes(2))
-            t
-        } as Clock
-        Sleeper noop = { Duration d -> } as Sleeper
-        new TerminalWriteRetry(noop, advancingClock, Duration.ofMinutes(10))
-    }
-
-    /**
      * A fresh park whose intent is already recorded by the caller and whose fence saw origin holding
      * the park (FR10 of harden-task-branch-contract): what remains under test is the receipt.
      */
@@ -109,7 +84,7 @@ class TakeParkRetrySpec extends Specification {
     // out and only the owed receipt is recorded.
     def "a recovered park whose write already landed records the receipt without re-parking"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION))
 
         when:
         def result = TakeEscalationExit.exit(
@@ -127,7 +102,7 @@ class TakeParkRetrySpec extends Specification {
     // FR10: an intent whose effect is genuinely absent is re-driven, then receipted.
     def "a recovered park whose write never landed is re-driven and receipted"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         TakeEscalationExit.exit(
@@ -152,7 +127,7 @@ class TakeParkRetrySpec extends Specification {
                 probed = true
                 throw new TrackerUnavailableException('tracker unreachable')
             }
-            taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+            TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         }
 
         when:
@@ -170,7 +145,7 @@ class TakeParkRetrySpec extends Specification {
     // FR10, D10: an escalation park that lands clears the pending marker exactly once.
     def "escalation park that lands runs the marker-clear callback once"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
 
         when:
         def result = TakeEscalationExit.exit(
@@ -188,7 +163,7 @@ class TakeParkRetrySpec extends Specification {
     def "escalation park retries a transient outage then confirms and clears the marker"() {
         given: 'the park fails as unreachable twice, then lands'
         def attempts = new AtomicInteger()
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.park(REF, ParkReason.ESCALATION, _ as String) >> {
             if (attempts.getAndIncrement() < 2) {
                 throw new TrackerUnavailableException('tracker down')
@@ -214,7 +189,7 @@ class TakeParkRetrySpec extends Specification {
     // past the ~10-min bound, and the sole channel PIT does not mutate (avoidCallsTo slf4j).
     def "escalation park give-up leaves the marker set, logs the unreconciled state, and still returns AwaitingHuman"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.park(REF, ParkReason.ESCALATION, _ as String) >> {
             throw new TrackerUnavailableException('still down')
         }
@@ -223,7 +198,7 @@ class TakeParkRetrySpec extends Specification {
         when:
         def events = capture(TakeEscalationExit) {
             result = TakeEscalationExit.exit(
-            escalated(), tracker, REF, INSTANCE, givingUpRetry(), freshPark {
+            escalated(), tracker, REF, INSTANCE, RetryFixtures.givingUpRetry(), freshPark {
                 confirmed.incrementAndGet()
             })
         }
@@ -245,7 +220,7 @@ class TakeParkRetrySpec extends Specification {
     // FR7 + FR10: a claim reaped/taken over mid-run skips the park AND the marker clear.
     def "escalation park skipped by the claim guard never clears the marker"() {
         given: 'the claim is no longer ours'
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working('other-instance'))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working('other-instance'))
 
         when:
         def result = TakeEscalationExit.exit(
@@ -262,7 +237,7 @@ class TakeParkRetrySpec extends Specification {
     // FR10, D10: the checkpoint (Paused) park follows the same retry + marker-clear contract.
     def "checkpoint park that lands runs the marker-clear callback once"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         def paused = new TaskOutcome.Paused(STATE, 'build')
 
         when:
@@ -282,7 +257,7 @@ class TakeParkRetrySpec extends Specification {
     // state — the operator's only trace of a checkpoint that never reached the tracker.
     def "checkpoint park give-up leaves the marker set, logs the unreconciled state, and still returns AwaitingHuman"() {
         given:
-        tracker.fetchTask(REF) >> taskWith(new TrackerTaskState.Working(INSTANCE.value()))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
         tracker.park(REF, ParkReason.CHECKPOINT, _ as String) >> {
             throw new TrackerUnavailableException('down')
         }
@@ -292,7 +267,7 @@ class TakeParkRetrySpec extends Specification {
         when:
         def events = capture(TakePauseExit) {
             result = TakePauseExit.finish(
-            paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, givingUpRetry(), freshPark {
+            paused, CONTEXT, 'gnomish/PROJ-1', tracker, REF, INSTANCE, RetryFixtures.givingUpRetry(), freshPark {
                 confirmed.incrementAndGet()
             })
         }

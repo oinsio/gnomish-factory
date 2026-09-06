@@ -65,8 +65,15 @@ final class GuardLogCursor {
      * conditional only spawns boundary mutants that are behaviorally equivalent
      * here (a line with no leading timestamp fails the parse either way), which
      * the mutation gate cannot kill.
+     *
+     * <p>Package-private rather than private because the same stamp serves two
+     * purposes the design deliberately separates (D2, D5 of
+     * fix-denial-attribution-durability): the read <em>position</em> derived here,
+     * and the per-event <em>identity</em> {@link GuardDenialLog} pairs with each
+     * parsed finding. One parse for both, so the two can never disagree about
+     * which line an event came from.
      */
-    private static @Nullable Instant timestampOf(String line) {
+    static @Nullable Instant timestampOf(String line) {
         try {
             return Instant.parse(line.split(" ", 2)[0]);
         } catch (DateTimeParseException e) {

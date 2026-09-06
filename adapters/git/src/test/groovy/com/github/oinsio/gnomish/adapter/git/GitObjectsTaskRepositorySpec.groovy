@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
+import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
@@ -10,8 +13,10 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -19,6 +24,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -57,7 +64,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def gitObjects = GitObjects.open(bareDir, indexDir)
         def identity = new CommitIdentity('gnomish-factory', 'gnomish-factory@localhost')
         def clock = Clock.fixed(Instant.ofEpochSecond(1_700_000_000L), ZoneOffset.UTC)
-        repository = new GitObjectsTaskRepository(gitObjects, identity, clock, ClaimEpochSource.NONE)
+        repository = new GitObjectsTaskRepository(gitObjects, identity, clock, ClaimEpochSource.NONE, DenialCursorSource.NONE)
     }
 
     private static TaskContext sampleContext(String taskId = 'PROJ-1', List<Decision> decisions = []) {
@@ -173,6 +180,201 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         (state.position() as Position.AtStage).name() == 'implement'
     }
 
+    // FR3 of fix-denial-attribution-durability: the round died before its close, so no attempt
+    //     record exists to carry its denials — the escalation carries them, and the position that
+    //     drain left behind rides the very same lifecycle commit
+    def "FR3: a cannotExecute park commits the drained position beside the escalation it delimits"() {
+        given: 'a task branch and an environment that read its denial source up to a known position'
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        def parking = parkingRepository({
+            Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:00:00.000000001Z'))
+        })
+        def report = new EscalationReport.CannotExecute('round timed out',
+                [
+                    Denial.unidentified(
+                            new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
+                ])
+
+        when:
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+
+        then: 'one commit carries the escalation, its denials, and the position they were read up to'
+        def dto = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
+        dto.lastEscalation().denials()*.message() == [
+            'egress denied: paste.example.com:443'
+        ]
+        dto.egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00.000000001Z')
+    }
+
+    // NFR-R1: denial bookkeeping never takes a park down — losing the position costs a re-read
+    def "NFR-R1: an unanswerable position leaves the escalation cursorless and the park succeeds"() {
+        given:
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        def parking = parkingRepository({
+            throw new IllegalStateException('no environment leased yet')
+        })
+        def report = new EscalationReport.CannotExecute('round timed out',
+                [
+                    Denial.unidentified(
+                            new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
+                ])
+        def logs = LogCaptureSupport.attach(GitObjectsTaskRepository)
+
+        when:
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'the escalation and its denials are recorded; only the position is missing'
+        noExceptionThrown()
+        def dto = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
+        dto.lastEscalation().denials().size() == 1
+        dto.egressCursor() == null
+
+        and: 'the degraded position is on the operator plane, not buried at DEBUG'
+        events.size() == 1
+        events[0].level == Level.WARN
+        events[0].formattedMessage.startsWith(OperatorEvent.ESCALATION_DENIAL_POSITION_UNREADABLE.head())
+        events[0].throwableProxy.message == 'no environment leased yet'
+    }
+
+    // FR3: a position may lag the record carrying its denials, never lead it — so a park with no
+    //     denials of its own records no position, whatever the environment would answer
+    def "FR3: a park that carries no drained denials records no position of its own"() {
+        given:
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        def parking = parkingRepository({
+            Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:00:00.000000001Z'))
+        })
+
+        when: 'a park whose escalation carries nothing the environment drained'
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
+
+        then:
+        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() == null
+
+        where:
+        escalation << [
+            new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']),
+            new EscalationReport.CannotExecute('round timed out', [])
+        ]
+    }
+
+    // FR5, D8 of fix-denial-attribution-durability: a lifecycle rewrite reads no denial source, so
+    //     it has no position of its own — and must not erase the one the tip carries
+    def "FR5: a RESUMED commit carries both envelopes' committed cursors forward"() {
+        given: 'a tip whose task.json carries an escalation cursor and whose state.json carries an attempt cursor'
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        def parking = parkingRepository({
+            Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
+        })
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
+                new EscalationReport.CannotExecute('round timed out',
+                [
+                    Denial.unidentified(
+                            new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
+                ])))
+        writeStateCursor('PROJ-1', new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z'))
+
+        when: 'the human answer is appended, rewriting both envelopes'
+        repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', Instant.EPOCH),
+                TaskState.atStageStart('implement'))
+
+        then: 'both positions survive the rewrite, so the restore still has them to compare'
+        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() ==
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
+        StateJsonMapper.readDto(gitOutput(bareDir, 'show', "${refFor('PROJ-1')}:.gnomish-task/state.json"))
+                .egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z')
+    }
+
+    // FR10 of add-claim-heartbeat + FR5: clearing the pending marker is a rewrite like any other
+    def "FR5: confirmTerminalWrite keeps the escalation cursor it finds at the tip"() {
+        given:
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        def parking = parkingRepository({
+            Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
+        })
+        parking.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
+                new EscalationReport.CannotExecute('round timed out',
+                [
+                    Denial.unidentified(
+                            new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
+                ])))
+
+        when:
+        repository.confirmTerminalWrite('PROJ-1')
+
+        then:
+        def dto = TaskJsonMapper.readDto(readTaskJson('PROJ-1'))
+        dto.trackerWritePending() == null
+        dto.egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
+    }
+
+    // FR5, D8: a later park has no position of its own — it must carry the tip's forward rather
+    //     than blank it, or the resume re-reads denials the branch already records
+    def "FR5: a park with nothing to record keeps the escalation cursor already at the tip"() {
+        given: 'a tip whose task.json carries a committed escalation cursor'
+        repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))
+        parkingRepository({
+            Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
+        }).recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
+        new EscalationReport.CannotExecute('round timed out',
+        [
+            Denial.unidentified(
+                    new Finding('egress denied: paste.example.com:443', 'paste.example.com:443/upload', null))
+        ])))
+
+        when: 'a later park records an escalation that drained nothing'
+        parkingRepository(source).recordOutcome('PROJ-1',
+                new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
+
+        then: 'the committed position stands: this park had none to replace it with'
+        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() ==
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
+
+        where: 'neither a denial-less escalation nor an unanswerable environment erases it'
+        scenario | escalation | source
+        'a decision request' | new EscalationReport.DecisionNeeded('continue?', ['yes', 'no']) |
+        ({
+            Optional.of(new DenialCursor('sha256:guard', '2026-09-05T11:00:00Z'))
+        } as DenialCursorSource)
+        'an escalation with no denials' | new EscalationReport.CannotExecute('round timed out', []) |
+        ({
+            Optional.of(new DenialCursor('sha256:guard', '2026-09-05T11:00:00Z'))
+        } as DenialCursorSource)
+        'an environment that cannot answer' | new EscalationReport.CannotExecute('round timed out', [
+            Denial.unidentified(new Finding('egress denied: paste.example.com:443', null, null))
+        ]) | ({
+            throw new IllegalStateException('no environment leased yet')
+        } as DenialCursorSource)
+    }
+
+    /** A repository whose parks read their denial position from {@code source} (FR3). */
+    private GitObjectsTaskRepository parkingRepository(DenialCursorSource source) {
+        new GitObjectsTaskRepository(
+                GitObjects.open(bareDir, Files.createDirectories(tempDir.resolve('index-park-' + System.identityHashCode(source)))),
+                new CommitIdentity('gnomish-factory', 'gnomish-factory@localhost'),
+                Clock.fixed(Instant.ofEpochSecond(1_700_000_100L), ZoneOffset.UTC),
+                ClaimEpochSource.NONE,
+                source)
+    }
+
+    /**
+     * Stamps an attempt-side cursor into the tip's {@code state.json} the way a sandboxed round's
+     * state commit would, without needing a live environment to produce one.
+     */
+    private void writeStateCursor(String taskId, EgressCursorDto cursor) {
+        Path work = tempDir.resolve('cursor-work-' + taskId.toLowerCase())
+        gitOutput(tempDir, 'clone', bareDir.toString(), work.toString())
+        gitOutput(work, 'checkout', '-B', 'gnomish/' + taskId, 'origin/gnomish/' + taskId)
+        Path stateJson = work.resolve('.gnomish-task').resolve('state.json')
+        def dto = StateJsonMapper.readDto(Files.readString(stateJson))
+        Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(
+                        new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor)))
+        commitAll(work, 'round state')
+        gitOutput(work, 'push', 'origin', "HEAD:refs/heads/gnomish/${taskId}")
+    }
+
     def "FR25: createTask commit ids are deterministic for fixed metadata"() {
         given: 'a second, identical bare repo seeded from the same base tree'
         Path work2 = initWorkingRepo(tempDir, 'seed-work-2')
@@ -188,7 +390,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def repo2 = new GitObjectsTaskRepository(
                 GitObjects.open(bare2, index2),
                 new CommitIdentity('gnomish-factory', 'gnomish-factory@localhost'),
-                Clock.fixed(Instant.ofEpochSecond(1_700_000_000L), ZoneOffset.UTC), ClaimEpochSource.NONE)
+                Clock.fixed(Instant.ofEpochSecond(1_700_000_000L), ZoneOffset.UTC),
+                ClaimEpochSource.NONE,
+                DenialCursorSource.NONE)
 
         when:
         repository.createTask(sampleContext(), 'base', TaskState.atStageStart('implement'))

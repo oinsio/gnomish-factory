@@ -183,7 +183,10 @@ BEFORE the first agent round, and route a red baseline to the project owner.
   host/container declared pairs; see design D6), `adapters` (a baseline probe beside
   the existing fresh-box check environment source), `adapters/git` (state DTO +
   mapper, additive), `domain` config model (declaration type), `docs/glossary.md`.
-- **Coordination**: `add-pipeline-routing` (the declaration is part of the pinned
+- **Coordination**: `add-base-ref-resolution` (sequenced before this change: the
+  probe runs after its fetch+resolve so it probes the refreshed base, and the
+  baseline SHA is read from its structured pin `(ref, sha, rule)` through the
+  versioned task mapper — never as a flat `baseCommit`), `add-pipeline-routing` (the declaration is part of the pinned
   per-pipeline definition and its content hash; `state.json`/`task.json` fields land
   in the same region), `add-stage-iteration` and `harden-task-branch-contract`
   (additive `state.json` fields under contract v1 — apply order decides version-gate

@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
-import com.github.oinsio.gnomish.sandbox.DenialCursor;
+import com.github.oinsio.gnomish.sandbox.DenialRestoration;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -47,8 +47,8 @@ public final class ContainerEnvironments {
     private final OwnershipMode mode;
     private final String projectId;
 
-    /** The cursor a previous lease committed, offered to every environment built here; see {@link #restoreDenialCursor}. */
-    private @Nullable DenialCursor restoredCursor;
+    /** What a previous lease recorded, offered to every environment built here; see {@link #restoreDenials}. */
+    private @Nullable DenialRestoration restoredDenials;
 
     /**
      * The production construction: a fresh docker subprocess seam per task. Exists because
@@ -141,9 +141,18 @@ public final class ContainerEnvironments {
         return mode;
     }
 
-    /** The round-box environment for this task's key; self-checked on every materialize (FR8). */
+    /**
+     * The round-box environment for this task's key; self-checked on every materialize (FR8).
+     * The one role that carries a resume's restored denials (see {@link #restoreDenials}): its
+     * guard is the container the committed position was read from.
+     */
     public SelfCheckedEnvironment roundEnvironment() {
-        return environment(baseKey);
+        SelfCheckedEnvironment round = environment(baseKey);
+        DenialRestoration restoration = restoredDenials;
+        if (restoration != null) {
+            round.restoreDenials(restoration);
+        }
+        return round;
     }
 
     /** A fresh judge-box environment ({@code <key>-j}, D9), pinned by its caller at the attempt commit. */
@@ -192,20 +201,28 @@ public final class ContainerEnvironments {
     }
 
     /**
-     * Hands this run the denial cursor the task's last attempt committed (FR5 of
-     * fix-denial-report-attachment), so a resume onto a surviving guard container reports
-     * only its own rounds' denials instead of replaying the container's whole log. Offered
-     * to every environment built afterwards; a guard whose live container is not the one
-     * the cursor names ignores it, which is what a fresh role box always does.
+     * Hands this run what the task branch already records about its denials (FR5 of
+     * fix-denial-report-attachment; FR7 of fix-denial-attribution-durability): the position
+     * committed with them, so a resume onto a surviving guard container reports only its own
+     * rounds' denials instead of replaying the container's whole log, and their identities, so
+     * a resume that cannot use the position merges its re-read instead of doubling the report.
      *
-     * @param cursor the committed cursor; never null
+     * <p>Offered to the round environment alone. The committed position and identities name the
+     * round box's guard container, and only the round box can ever reattach to it; a judge or
+     * verification box is a different key with a guard of its own, so the offer could never
+     * apply there — while consuming it would cost that box a rejection: an INFO line about a
+     * foreign source and, where the branch records denials, a synthetic "denials may be lost"
+     * marker in that box's own findings. Neither role reads denials today, so the offer was
+     * inert rather than wrong; not making it is what keeps it that way.
+     *
+     * @param restoration what the branch tip records about denials already reported; never null
      */
-    public void restoreDenialCursor(DenialCursor cursor) {
-        restoredCursor = cursor;
+    public void restoreDenials(DenialRestoration restoration) {
+        restoredDenials = restoration;
     }
 
     private SelfCheckedEnvironment environment(String key) {
-        var built = ContainerEnvironmentBuilder.build(
+        return ContainerEnvironmentBuilder.build(
                 docker,
                 key,
                 sourceClone,
@@ -216,9 +233,5 @@ public final class ContainerEnvironments {
                 sleeper,
                 guardConfigRoot,
                 new ObjectOwnership(mode, projectId));
-        if (restoredCursor != null) {
-            built.restoreDenialCursor(restoredCursor);
-        }
-        return built;
     }
 }

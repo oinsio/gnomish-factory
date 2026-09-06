@@ -63,4 +63,14 @@ Errors:
 - In the Entity format, use YAML-like notation for field definitions
 - Keep specs focused: one capability per spec file
 - Delta specs are temporary — they describe the change, not the full state
+- **Overlapping MODIFIED requirements are declared and ordered.** Before writing a
+  MODIFIED requirement, check whether another active change under `openspec/changes/`
+  already MODIFIES the same requirement (`grep -rln "### Requirement: <name>"` over the
+  active deltas). If one does: fix the sync order in both changes' proposals (the
+  later one names the earlier one), open the later delta with a `Layered on ... as
+  modified by <change> (sequenced before this change)` preamble, and write its text
+  over the earlier delta's text, not over `openspec/specs/`. Reason: the OpenSpec
+  MODIFIED merge is replace-only — a delta records no base, so the second sync
+  silently discards the first one's edit. If the order is ever inverted at sync time,
+  the later sync merges by hand; the preamble says what must survive
 - After `/opsx:archive`, deltas merge into `openspec/specs/` — never edit archived specs directly

@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
+import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
+import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
@@ -19,6 +22,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
@@ -444,6 +448,47 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         def worktree = worktreeFor('PROJ-1')
         runner.run(worktree, 'log', '-1', '--format=%s').stdout().trim() ==
                 ServiceCommitMessages.trackerWriteConfirmed()
+    }
+
+    // FR5, D8 of fix-denial-attribution-durability: host mode has no egress guard and so mints no
+    //     position of its own — but a branch whose earlier rounds ran in a box carries one, and a
+    //     host-side lifecycle rewrite must not be what erases it (the mirrored half of task 4.7)
+    def "FR5: host lifecycle rewrites carry both envelopes' committed cursors forward"() {
+        given: 'a task branch whose envelopes carry the positions a container-mode run committed'
+        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        stampCursors('PROJ-1',
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z'),
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z'))
+
+        when: 'a park and the resume that answers it both rewrite the envelopes'
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
+        repository.confirmTerminalWrite('PROJ-1')
+        repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
+                TaskState.atStageStart('implement'))
+
+        then: 'both positions are still at the tip for the next run to be offered'
+        TaskJsonMapper.readDto(readTaskJson('PROJ-1')).egressCursor() ==
+                new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z')
+        StateJsonMapper.readDto(
+                runner.run(worktreeFor('PROJ-1'), 'show', 'HEAD:.gnomish-task/state.json').stdout())
+                .egressCursor() == new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z')
+    }
+
+    /**
+     * Writes an attempt-side cursor into {@code state.json} and an escalation-side one into
+     * {@code task.json}, as a container-mode run would have left them, and commits both.
+     */
+    private void stampCursors(String taskId, EgressCursorDto attempt, EgressCursorDto escalation) {
+        Path worktree = worktreeFor(taskId)
+        Path stateJson = worktree.resolve('.gnomish-task').resolve('state.json')
+        Path taskJson = worktree.resolve('.gnomish-task').resolve('task.json')
+        def state = StateJsonMapper.readDto(Files.readString(stateJson))
+        Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(new StateJsonDto(
+                        state.version(), state.position(), state.attemptsUsed(), state.attempts(), state.totals(), attempt)))
+        Files.writeString(taskJson, TaskStateJson.mapper()
+                .writeValueAsString(TaskJsonMapper.readDto(Files.readString(taskJson)).withEgressCursor(escalation)))
+        runner.run(worktree, 'add', '-A')
+        runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'round state')
     }
 
     private int commitCount(Path worktree) {

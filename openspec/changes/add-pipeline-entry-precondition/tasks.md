@@ -20,10 +20,11 @@ TDD per `.claude/rules/testing.md`: every task's spec is written red first.
 ## 2. Probe execution (shared component, D4/D5)
 
 - [ ] 2.1 Implement the baseline probe environment source: fresh environment
-      keyed per the lifecycle decision matrix, `materialize(branch, baseCommit)`,
+      keyed per the lifecycle decision matrix, `materialize(branch, baseSha)` with the
+      pinned base SHA read through the versioned task mapper (D4),
       dispose without harvest, following the `SandboxCheckEnvironmentSource`
       pattern but keyed to the baseline commit, not an attempt commit (FR3,
-      NFR-S1); verify with Spock specs: materialize pin equals `baseCommit`,
+      NFR-S1); verify with Spock specs: materialize pin equals the pinned base SHA,
       dispose always called, harvest never called (including on exceptions)
 - [ ] 2.2 Implement probe execution and classification: exec with declared
       timeout, exit 0 → green; 126/127, materialize failure, runtime outage,
@@ -66,9 +67,11 @@ TDD per `.claude/rules/testing.md`: every task's spec is written red first.
       pre-first-round paths bypass the take recipes — confirm and cover or state
       why not) (FR2, D8); verify with resume specs: unprobed created task probes,
       cached green skips, both modes
-- [ ] 4.4 Update `.claude/rules/manual-sync-pairs.md`: fresh-claim recipe rows'
-      invariant becomes "harden → synthesize → createTask → entry precondition →
-      run", and add/refresh `Kept in sync with` markers on every touched pair end
+- [ ] 4.4 Update the fresh-claim recipe invariant to "harden → fetch+resolve →
+      synthesize → createTask → entry precondition → run" wherever it is declared —
+      the `Kept in sync with` markers `add-base-ref-resolution` puts on both pair
+      ends, or the `.claude/rules/manual-sync-pairs.md` registry row if that
+      change has not landed — and add/refresh markers on every touched pair end
       (D8); verify `grep -rn "Kept in sync with"` enumerates each touched end
 
 ## 5. Red-baseline escalation (D3)

@@ -59,7 +59,7 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
      *
      * @return the round's denial findings; never null, possibly empty
      */
-    List<Finding> denials();
+    List<Denial> denials();
 
     /**
      * The executor finished the stage's work normally; the engine proceeds to
@@ -74,7 +74,7 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
      * @param denials the round's egress denials; defensively copied,
      *     unmodifiable, possibly empty
      */
-    record Completed(ExecutorUsage usage, ToolTrace trace, List<Finding> denials) implements ExecutionResult {
+    record Completed(ExecutorUsage usage, ToolTrace trace, List<Denial> denials) implements ExecutionResult {
 
         public Completed {
             denials = List.copyOf(denials);
@@ -102,7 +102,7 @@ public sealed interface ExecutionResult permits ExecutionResult.Completed, Execu
      *     unmodifiable, possibly empty
      */
     record DecisionNeeded(
-            String question, List<String> options, ExecutorUsage usage, ToolTrace trace, List<Finding> denials)
+            String question, List<String> options, ExecutorUsage usage, ToolTrace trace, List<Denial> denials)
             implements ExecutionResult {
 
         public DecisionNeeded {

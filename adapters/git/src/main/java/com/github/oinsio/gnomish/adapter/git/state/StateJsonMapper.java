@@ -77,7 +77,7 @@ public final class StateJsonMapper {
      * @param egressCursor the environment's denial cursor, or null when it has none
      * @return the equivalent {@code state.json} DTO tree
      */
-    public static StateJsonDto toDto(TaskState state, @Nullable StateEgressCursorDto egressCursor) {
+    public static StateJsonDto toDto(TaskState state, @Nullable EgressCursorDto egressCursor) {
         return new StateJsonDto(
                 1,
                 toPosition(state.position()),
@@ -122,7 +122,7 @@ public final class StateJsonMapper {
                 toResult(record.result()),
                 record.startedAt().toString(),
                 record.checkResults().stream().map(StateJsonMapper::toCheck).toList(),
-                StateFindingMapper.toDtos(record.denials()),
+                StateDenialMapper.toDtos(record.denials()),
                 StateUsageMapper.toUsage(record.executorUsage()),
                 StateUsageMapper.toJudgeUsage(record.judgeUsage()));
     }
@@ -145,7 +145,7 @@ public final class StateJsonMapper {
                 dto.checks().stream().map(StateJsonMapper::fromCheck).toList(),
                 StateUsageMapper.fromUsage(dto.executorUsage()),
                 StateUsageMapper.fromJudgeUsage(dto.judgeUsage()),
-                StateFindingMapper.fromDtos(dto.denials()));
+                StateDenialMapper.fromDtos(dto.denials()));
     }
 
     private static String toResult(AttemptRecord.Result result) {
