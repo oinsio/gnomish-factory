@@ -24,7 +24,7 @@ plugins {
     // Version literal for the same reason as foojay above: the version catalog
     // is not available to the settings plugins block. Kept in step with
     // `[versions].dependency-analysis` in gradle/libs.versions.toml.
-    id 'com.autonomousapps.build-health' version '3.18.0'
+    id 'com.autonomousapps.build-health' version '3.19.1'
 }
 
 rootProject.name = 'gnomish-factory'
