@@ -136,8 +136,8 @@ task-branch:
 
         then:
         renderedErrors(outcome) == [
-            'config.yaml: task-branch.base.default: '
-            + "default 'develop' matches no task-branch.base.allowed pattern; the allowed bases are release/*"
+            'config.yaml: task-branch.base.default: ' +
+            "default 'develop' matches no task-branch.base.allowed pattern; the allowed bases are release/*"
         ]
     }
 
@@ -224,8 +224,8 @@ task-branch:
 
         then:
         renderedErrors(outcome) == [
-            'config.yaml: task-branch.base.allowed[0].role: '
-            + "unknown allowed-base role 'staging'; known roles are development, release"
+            'config.yaml: task-branch.base.allowed[0].role: ' +
+            "unknown allowed-base role 'staging'; known roles are development, release"
         ]
     }
 
@@ -245,8 +245,8 @@ task-branch:
 
         then:
         renderedErrors(outcome) == [
-            'config.yaml: task-branch.base.allowed[0].role: '
-            + "unknown allowed-base role 'RELEASE'; known roles are development, release"
+            'config.yaml: task-branch.base.allowed[0].role: ' +
+            "unknown allowed-base role 'RELEASE'; known roles are development, release"
         ]
     }
 
