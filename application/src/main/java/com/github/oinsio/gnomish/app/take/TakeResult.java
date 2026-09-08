@@ -13,15 +13,19 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
  * mid-run (task 5.5); {@link EmptyQueue} — bare auto mode's queue had nothing
  * eligible at all, the clean cron no-op (design D16); {@link Skipped} — no engine
  * run happened for any other reason, e.g. every eligible candidate lost its claim
- * race (later tasks).
+ * race (later tasks); {@link InfrastructureUnavailable} — a configured dependency the claim needs
+ * before any engine run could start never answered, so the claim was released plain with no
+ * penalty (FR9 of add-base-ref-resolution; today produced only by the fresh-claim base-refresh
+ * step, and the type task 7.3's remote outage gate will consult to learn a slot hit an
+ * infrastructure failure).
  *
  * <p>This is deliberately a runner-level type, not a {@code TaskOutcome} variant
  * (design D2): the engine knows nothing about trackers, claims, or revocation: those
  * are external events of the run, layered on top by {@code app.take}. Every variant
- * carries the final {@link TaskState} it was produced from (except {@link EmptyQueue}
- * and {@link Skipped}, which have none, since no engine run happened) so a later
- * reporting step (task 5.11) can render a summary from the result alone, mirroring
- * how {@code TaskOutcome} carries {@code finalState} for the same reason.
+ * carries the final {@link TaskState} it was produced from (except {@link EmptyQueue},
+ * {@link Skipped} and {@link InfrastructureUnavailable}, which have none, since no engine run
+ * happened) so a later reporting step (task 5.11) can render a summary from the result alone,
+ * mirroring how {@code TaskOutcome} carries {@code finalState} for the same reason.
  *
  * <p>Inert value data compared by content.
  *
@@ -33,7 +37,8 @@ public sealed interface TakeResult
                 TakeResult.Aborted,
                 TakeResult.Revoked,
                 TakeResult.EmptyQueue,
-                TakeResult.Skipped {
+                TakeResult.Skipped,
+                TakeResult.InfrastructureUnavailable {
 
     /**
      * The engine reached {@code Completed}: the task was (or is about to be)
@@ -149,6 +154,25 @@ public sealed interface TakeResult
     record Skipped(String reason) implements TakeResult {
 
         public Skipped {
+            reason = requireNonBlank(reason, "reason");
+        }
+    }
+
+    /**
+     * A configured dependency the claim needed before any engine run could start never answered —
+     * the daemon's infrastructure condition, not the task's — so the claim was released plain, back
+     * to {@code Ready}, with no abort marker and no comment: distinct from {@link Skipped}, which
+     * covers a genuine refusal of the task itself (design D9, FR9 of add-base-ref-resolution).
+     * Carries no {@link TaskState}: no engine run happened, the same boundary {@link Skipped} draws.
+     *
+     * <p>Named for task 7.3's remote outage gate to consult later: a slot ending here is exactly
+     * "this slot's infrastructure failure" the gate opens on.
+     *
+     * @param reason free-text description of what did not answer; never blank
+     */
+    record InfrastructureUnavailable(String reason) implements TakeResult {
+
+        public InfrastructureUnavailable {
             reason = requireNonBlank(reason, "reason");
         }
     }

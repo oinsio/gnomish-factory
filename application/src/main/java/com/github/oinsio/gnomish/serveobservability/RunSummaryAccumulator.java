@@ -17,7 +17,8 @@ import java.util.Map;
  * <p>Mirrors {@link TaskOutcomeLineAssembler}'s vocabulary derivation from {@link TakeResult}
  * (design D6): only the four variants carrying a {@code finalState} — {@code Delivered}, {@code
  * AwaitingHuman}, {@code Aborted}, {@code Revoked} — contribute; {@code EmptyQueue}/{@code
- * Skipped} are no-ops, matching "engine run happened iff spend happened". {@link #counts()} and
+ * Skipped}/{@code InfrastructureUnavailable} are no-ops, matching "engine run happened iff spend
+ * happened". {@link #counts()} and
  * {@link #tokensByModel()} are read once, at the {@code runSummary} write point, when the drain
  * run completes — the ledger is never read back to build them (design D5).
  *
@@ -33,8 +34,8 @@ public final class RunSummaryAccumulator {
 
     /**
      * Records {@code result}'s contribution to the run's totals, or does nothing for {@link
-     * TakeResult.EmptyQueue}/{@link TakeResult.Skipped}. Safe to call from any number of
-     * concurrently-finishing slot threads.
+     * TakeResult.EmptyQueue}/{@link TakeResult.Skipped}/{@link TakeResult.InfrastructureUnavailable}.
+     * Safe to call from any number of concurrently-finishing slot threads.
      *
      * @param result the slot's terminal result; never null
      */
@@ -57,8 +58,7 @@ public final class RunSummaryAccumulator {
                         revoked++;
                         yield r.finalState();
                     }
-                    case TakeResult.EmptyQueue emptyQueue -> null;
-                    case TakeResult.Skipped skipped -> null;
+                    case TakeResult.EmptyQueue _, TakeResult.Skipped _, TakeResult.InfrastructureUnavailable _ -> null;
                 };
         if (finalState == null) {
             return;

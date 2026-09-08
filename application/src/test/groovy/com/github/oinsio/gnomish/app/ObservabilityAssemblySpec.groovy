@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -14,6 +15,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGate
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.SlotRunner
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
@@ -72,7 +74,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 notifier)
     }
 
-    private InstanceHeartbeat newHeartbeat(Tracker tracker, com.github.oinsio.gnomish.domain.engine.port.Clock clock) {
+    private static InstanceHeartbeat newHeartbeat(Tracker tracker, com.github.oinsio.gnomish.domain.engine.port.Clock clock) {
         new InstanceHeartbeat(
                 tracker,
                 new HeartbeatProgress(),
@@ -115,7 +117,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
             -> clock.instant()
         } as com.github.oinsio.gnomish.domain.engine.port.Clock, dirtyNotifier)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
-        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0, null)
+        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofMillis(20), 0, null, null, null)
         def engineClock = {
             -> clock.instant()
         } as com.github.oinsio.gnomish.domain.engine.port.Clock
@@ -136,13 +138,15 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 newStandingReaper(engineClock),
                 newWorktreeJanitor(engineClock),
                 new SweepTickLog(Duration.ofDays(7), clock, 20),
-                clock)
+                clock,
+                RemoteOutageGate.system(
+                        BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
 
         then: 'a genuine, non-null wiring is returned'
         observability != null
 
         and: 'the dirty notifier is now bound to the real writer, not the NOOP default'
-        dirtyNotifier.@delegate != DirtyNotifier.NOOP
+        dirtyNotifier.isBound()
 
         when: 'started, beside the worktree janitor in production'
         observability.start()
@@ -186,7 +190,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
         slotLedger.acquire()
         slotLedger.assign(ref)
         def automaton = newAutomaton(slotLedger, tracker, instanceId, dirtyNotifier)
-        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0, null)
+        def serveProperties = new ServeProperties(0, null, null, null, Duration.ofSeconds(30), 0, null, null, null)
         def engineClock = {
             -> clock.instant()
         } as com.github.oinsio.gnomish.domain.engine.port.Clock
@@ -207,9 +211,14 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 newStandingReaper(engineClock),
                 newWorktreeJanitor(engineClock),
                 new SweepTickLog(Duration.ofDays(7), clock, 20),
-                clock)
+                clock,
+                RemoteOutageGate.system(
+                        BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
+
+        then: 'the remoteOutage write point exists too (NFR-O1, NFR-O3 of add-base-ref-resolution)'
+        observability.remoteOutageLedgerWriter() != null
 
         then: 'a taskOutcome line lands for the SAME ref this test assigned to the slot ledger'
         def ledgerFile = ObservabilityPaths.ledgerFile(homeDir, INSTANCE_NAME, LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import java.io.UncheckedIOException
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -33,7 +32,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
     }
 
     private String createTaskBranch(String taskId) {
-        def result = branchCreator.createBranch(cloneDir, taskId, null)
+        def result = branchCreator.createBranch(cloneDir, taskId, 'HEAD')
         (result as BranchCreationResult.Created).branchName()
     }
 
@@ -42,7 +41,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         def branchName = createTaskBranch('PROJ-1')
 
         when:
-        def path = manager.ensureWorktree(cloneDir, 'PROJ-1', branchName)
+        Path path = manager.ensureWorktree(cloneDir, 'PROJ-1', branchName)
 
         then:
         path == worktreesRoot.resolve('my-project').resolve('PROJ-1')
@@ -77,7 +76,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         assert !firstPath.toFile().exists()
 
         when: 'resume calls ensureWorktree again with the same taskId/branch'
-        def resumedPath = manager.ensureWorktree(cloneDir, 'PROJ-2', branchName)
+        Path resumedPath = manager.ensureWorktree(cloneDir, 'PROJ-2', branchName)
 
         then:
         resumedPath == firstPath

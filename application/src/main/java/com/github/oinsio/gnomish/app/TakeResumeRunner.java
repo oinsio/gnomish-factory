@@ -7,14 +7,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.engine.Decision;
-import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,18 +29,18 @@ import java.util.List;
  * {@link #appendDecision} has already committed when there was a reply to commit — mirroring {@code
  * EscalationResumeDialog#handleResumable}'s exact reset formula.
  *
- * <p>Implements FR9, FR12, D3 of add-tracker-port.
+ * <p>Kept in sync with {@link TakeContainerResumeRunner}: both resolve the resumed law binding
+ * through {@link ResumeLawBinding} (pinned-ref tip resolution) before building their execution
+ * tail.
+ *
+ * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution.
  */
 final class TakeResumeRunner {
 
-    private final RunAssembly assembly;
     private final TaskGit git;
     private final Path worktreesRoot;
-    private final AbortHandler abortHandler;
-    private final int abortThreshold;
-    private final List<String> credentialEnvVarsToScrub;
-    private final ClaimLossFlag claimLossFlag;
     private final TakeResumeBootstrap resumeBootstrap;
+    private final TakeResumeExecution execution;
 
     /**
      * @param assembly the shared engine/ports assembly, reused from the manual-run path — builds
@@ -59,14 +55,13 @@ final class TakeResumeRunner {
      *     matching {@link GitResumeRunner}'s own key
      * @param abortHandler the infrastructure-abort protocol (task 5.3), applied when a resumed
      *     engine run returns {@code Aborted}; never null
-     * @param abortThreshold the configured abort-fuse threshold (K) passed to {@code
-     *     abortHandler}; positive
+     * @param abortThreshold the configured abort-fuse threshold (K) passed to {@code abortHandler}; positive
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
-     *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into
-     *     every {@link TakeEngineExecution} this runner constructs; never null
+     *     environment variable names (design D17, NFR-S1 of add-tracker-port), forwarded to
+     *     {@link TakeResumeExecution} for every engine execution it builds; never null
      * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
-     *     add-claim-heartbeat), threaded into every {@link TakeEngineExecution} this runner
-     *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
+     *     add-claim-heartbeat), forwarded to {@link TakeResumeExecution} so the round boundary
+     *     reacts to a beat-detected loss as a revocation; never null
      */
     TakeResumeRunner(
             RunAssembly assembly,
@@ -77,14 +72,11 @@ final class TakeResumeRunner {
             int abortThreshold,
             List<String> credentialEnvVarsToScrub,
             ClaimLossFlag claimLossFlag) {
-        this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
-        this.abortHandler = abortHandler;
-        this.abortThreshold = abortThreshold;
-        this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
-        this.claimLossFlag = claimLossFlag;
         this.resumeBootstrap = new TakeResumeBootstrap(git, worktreesRoot, taskIdMdcKey);
+        this.execution = new TakeResumeExecution(
+                assembly, git, worktreesRoot, abortHandler, abortThreshold, credentialEnvVarsToScrub, claimLossFlag);
     }
 
     /**
@@ -105,11 +97,9 @@ final class TakeResumeRunner {
     }
 
     /**
-     * Resumes a {@code null} (process died mid-visit), {@code CHECKPOINT}, or {@code INFRA} park:
-     * none of these carry a decision or need the attempt-counter reset, since none of them burned
-     * an attempt (only quality-failure rounds do, per {@code TaskState.recordQualityFailure} vs
-     * {@code recordUnburnedRound}). Salvages (default) or discards ({@code --discard-work}) the
-     * interrupted round's uncommitted leftovers exactly as {@link
+     * Resumes a {@code null} (process died mid-visit), {@code CHECKPOINT}, or {@code INFRA} park —
+     * none needs the attempt-counter reset, since none burned an attempt. Salvages (default) or
+     * discards ({@code --discard-work}) the interrupted round's leftovers exactly as {@link
      * GitResumeContinuation#resumeFromRecordedPosition} does, then runs the engine once.
      *
      * <p>Implements FR9 of add-tracker-port.
@@ -143,32 +133,37 @@ final class TakeResumeRunner {
             salvage.salvage(bootstrap.taskId());
         }
 
-        return newExecution(cloneDir)
-                .run(definition, bootstrap, bootstrap.context(), finalState, interactiveMode, tracker, ref, instanceId);
+        return execution.run(
+                cloneDir,
+                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                finalState,
+                ref,
+                tracker,
+                eng -> eng.run(
+                        definition,
+                        bootstrap,
+                        bootstrap.context(),
+                        finalState,
+                        interactiveMode,
+                        tracker,
+                        ref,
+                        instanceId));
     }
 
     /**
      * Resumes an {@code ESCALATION} park ({@code AttemptsExhausted} or {@code DecisionNeeded}):
      * resets {@code attemptsUsed} to 0 with an empty attempt history — {@code
-     * EscalationResumeDialog#handleResumable}'s formula — then runs the engine once. {@code
-     * decisionText} is the already-collected human reply (task 5.7 collects it) or {@code null}:
-     * an {@code AttemptsExhausted} park may resume on the return alone (design D12). Non-blank, it
-     * is appended via {@link com.github.oinsio.gnomish.app.port.TaskRepository#appendDecision}
-     * (author {@code "tracker"}, since the reply is a tracker comment, not a console answer);
-     * {@code null}/blank appends nothing, mirroring {@code handleResumable}'s blank-answer case.
+     * EscalationResumeDialog#handleResumable}'s formula — then runs the engine once. The already
+     * -collected human reply, when non-blank, is appended by the caller before this is invoked
+     * (design D12); an {@code AttemptsExhausted} park may resume on the return alone.
      *
-     * <p>Implements FR9, FR12, D3, D12 of add-tracker-port.
+     * <p>Implements FR9, FR12, D3, D12 of add-tracker-port. Parameters shared with {@link
+     * #resumeWithoutDecision} carry the same meaning there; only the ones specific to a decided
+     * resume are documented here.
      *
-     * @param cloneDir the project clone; never mutated
-     * @param bootstrap the located/materialized bundle from {@link #bootstrap}
-     * @param definition the pipeline the run advances through
      * @param context the task context the run continues from — the human's decision included when
      *     one was committed, the branch's own otherwise (design D12)
      * @param resetState the escalated state with its attempt counter reset
-     * @param interactiveMode which role(s) use the interactive adapter
-     * @param tracker the tracker port, for the revocation check wrapped around persistence
-     * @param ref the task's tracker identity
-     * @param instanceId this factory instance's identity
      * @return the mapped {@link TakeResult} for the engine run
      */
     public TakeResult resumeDecided(
@@ -181,8 +176,13 @@ final class TakeResumeRunner {
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        return newExecution(cloneDir)
-                .run(definition, bootstrap, context, resetState, interactiveMode, tracker, ref, instanceId);
+        return execution.run(
+                cloneDir,
+                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                resetState,
+                ref,
+                tracker,
+                eng -> eng.run(definition, bootstrap, context, resetState, interactiveMode, tracker, ref, instanceId));
     }
 
     /**
@@ -193,24 +193,8 @@ final class TakeResumeRunner {
     TaskContext appendDecision(
             Path cloneDir, ResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        String stage = finalState.position() instanceof Position.AtStage(String name) ? name : null;
-        var decision = new Decision(text, stage, "tracker", Clock.systemUTC().instant());
+        var decision = ResumeDecisionCommit.decisionFor(finalState, text);
         taskRepository.appendDecision(bootstrap.taskId(), decision, resetState);
-        var decisions = new ArrayList<>(bootstrap.context().decisions());
-        decisions.add(decision);
-        var context = bootstrap.context();
-        return new TaskContext(context.taskId(), context.title(), context.body(), decisions);
-    }
-
-    private TakeEngineExecution newExecution(Path cloneDir) {
-        return new TakeEngineExecution(
-                assembly,
-                git,
-                cloneDir,
-                worktreesRoot,
-                abortHandler,
-                abortThreshold,
-                credentialEnvVarsToScrub,
-                claimLossFlag);
+        return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
     }
 }

@@ -46,8 +46,9 @@ final class SlotOutcomeLog {
      * with the summary now stating it at the level the outcome warrants would be two lines saying
      * the same thing about one task — and for an infrastructure abort, a third one under
      * {@code AbortHandler}'s own WARN/ERROR naming the cause. One outcome, one level-bearing line:
-     * the summary. {@code Skipped} keeps its WARN because no summary is written for it — nothing
-     * ran, yet an operator still wants to know the slot declined the task.
+     * the summary. {@code Skipped} and {@code InfrastructureUnavailable} keep their WARN because no
+     * summary is written for either — nothing ran, yet an operator still wants to know the slot
+     * declined the task (FR9 of add-base-ref-resolution for the latter).
      *
      * @param claimed the task the slot ran; never null
      * @param result the terminal result of that run; never null
@@ -69,6 +70,11 @@ final class SlotOutcomeLog {
                         OperatorEvent.SLOT_SKIPPED.head() + "slot for task {} skipped: {}",
                         claimed.id(),
                         skipped.reason());
+            case TakeResult.InfrastructureUnavailable infrastructureUnavailable ->
+                log.warn(
+                        OperatorEvent.SLOT_BASE_INFRASTRUCTURE_UNAVAILABLE.head() + "slot for task {} released: {}",
+                        claimed.id(),
+                        infrastructureUnavailable.reason());
             case TakeResult.EmptyQueue _ ->
                 log.debug("slot for task {} reported an unexpected empty-queue result", claimed.id());
         }
@@ -76,8 +82,8 @@ final class SlotOutcomeLog {
 
     /**
      * FR3: the canonical task summary, emitted last so a {@code grep taskId=<id>} ends on it.
-     * {@code EmptyQueue}/{@code Skipped} assemble to no summary — no run happened, so there is
-     * nothing to summarize (the same boundary the ledger draws).
+     * {@code EmptyQueue}/{@code Skipped}/{@code InfrastructureUnavailable} assemble to no summary —
+     * no run happened, so there is nothing to summarize (the same boundary the ledger draws).
      *
      * @param result the terminal result to summarize; never null
      * @param wall the slot's wall time; never null

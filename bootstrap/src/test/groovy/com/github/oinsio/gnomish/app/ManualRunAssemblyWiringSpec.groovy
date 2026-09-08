@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
-import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -73,8 +72,8 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
-                // No round runs in this spec, so the law source is never read; any path suffices.
-                Path.of('.'))
+                // No round runs in this spec, so the law source is never read; any binding suffices.
+                LawBinding.workingTree(Path.of('.')))
     }
 
     // FR10, D6: the holder is seeded with the STARTING stage's own attempt limit when the position
@@ -144,7 +143,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
         def console = assembly.dialogConsole(context(), TaskState.atStageStart('build'))
 
         when:
-        def client = assembly.externalCheckClient(console, Path.of('.'), githubRegistry())
+        def client = assembly.externalCheckClient(console, LawBinding.workingTree(Path.of('.')), githubRegistry())
 
         then:
         client instanceof PinCheckedExternalCheckClient
@@ -179,7 +178,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
-                Path.of('.'))
+                LawBinding.workingTree(Path.of('.')))
 
         then:
         resolved.isEmpty()
@@ -212,7 +211,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 RunArguments.InteractiveMode.NONE,
                 new InMemoryAttemptPersistence(),
                 [],
-                Path.of('.'))
+                LawBinding.workingTree(Path.of('.')))
 
         then:
         def e = thrown(IllegalArgumentException)

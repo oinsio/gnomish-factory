@@ -83,4 +83,45 @@ class RestartBackoffSpec extends Specification {
         backoff.restartCount() == 2
         backoff.restartCount() == 2
     }
+
+    // FR14 of add-base-ref-resolution (task 7.3): a configured cap, independent of the reaper's
+    // fixed MAX_BACKOFF — the remote outage gate's opt-in reuse of this class rather than a fork.
+    def "a configured cap replaces MAX_BACKOFF for this instance"() {
+        given:
+        def backoff = new RestartBackoff(Duration.ofMinutes(2))
+
+        expect:
+        backoff.nextBackoff(BASE) == Duration.ofMinutes(1)
+        backoff.nextBackoff(BASE) == Duration.ofMinutes(2)
+        backoff.nextBackoff(BASE) == Duration.ofMinutes(2)
+    }
+
+    // FR14: nextJitteredBackoff adds a uniform [0, jitterMaxFraction] jitter on top of the doubled,
+    // capped backoff — deterministic under a seeded Random, so the exact jittered value is pinned.
+    def "nextJitteredBackoff adds up to the configured jitter fraction on top of the doubled backoff"() {
+        given:
+        def backoff = new RestartBackoff(Duration.ofMinutes(10))
+        def random = new Random(0)
+        // Pin the exact jitter fraction this seed produces at its first draw, so the scenario
+        // reads as "jitter lands somewhere in [base, base*1.2]" rather than a magic constant.
+        def expectedFraction = new Random(0).nextDouble() * 0.20
+
+        when:
+        def jittered = backoff.nextJitteredBackoff(BASE, random, 0.20)
+
+        then:
+        jittered >= BASE
+        jittered <= BASE.multipliedBy(120).dividedBy(100)
+        jittered == BASE.plusNanos((long) (BASE.toNanos() * expectedFraction))
+    }
+
+    // FR14: zero jitter is a no-op — the gate's own tests can drive the schedule deterministically
+    // without a jitter source affecting the exact instant.
+    def "nextJitteredBackoff with zero jitter fraction returns the plain backoff"() {
+        given:
+        def backoff = new RestartBackoff(Duration.ofMinutes(10))
+
+        expect:
+        backoff.nextJitteredBackoff(BASE, new Random(0), 0.0) == BASE
+    }
 }

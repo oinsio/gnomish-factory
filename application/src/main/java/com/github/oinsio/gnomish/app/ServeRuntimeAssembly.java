@@ -11,6 +11,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
+import com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink;
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecycleTick;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
@@ -64,7 +66,8 @@ final class ServeRuntimeAssembly {
             com.github.oinsio.gnomish.domain.engine.port.Clock feedClock,
             SandboxLifecyclePass sandboxLifecyclePass,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase) {
         // FR8, D12: shared by every downstream caller (heartbeat, slot runner, feed automaton).
         TrackerHealthTracker trackerHealth = new TrackerHealthTracker(liveTracker, feedClock);
         Tracker tracker = trackerHealth;
@@ -80,6 +83,22 @@ final class ServeRuntimeAssembly {
         RunAssembly serveAssembly = assembly.withExtraListener(heartbeat.progress());
 
         SlotLedger slotLedger = new SlotLedger(effectiveSlots, feedClock, dirtyNotifier);
+        // FR14, NFR-R3 of add-base-ref-resolution (task 7.3): ONE gate instance shared by the slot
+        // runner (which opens it on an InfrastructureUnavailable result) and the feed automaton
+        // (which consults it before every claim) — a fresh daemon starts closed (FR14).
+        // FR14, NFR-O1, NFR-O3 of add-base-ref-resolution (task 7.4): the gate is built before
+        // ObservabilityAssembly constructs the ledger appender its remoteOutage line needs, so the
+        // ledger sink is a forwarding stand-in — same construction-order cycle ForwardingDirtyNotifier
+        // already breaks for the snapshot writer, bound below once ObservabilityAssembly returns.
+        ForwardingRemoteOutageLedgerSink remoteOutageLedgerSink = new ForwardingRemoteOutageLedgerSink();
+        RemoteOutageGate remoteOutageGate = RemoteOutageGate.system(
+                git.baseRefs(),
+                serveArguments.dir(),
+                serveProperties.idlePollInterval(),
+                serveProperties.remoteProbeIntervalCap(),
+                serveProperties.remoteSustainedOpenThreshold(),
+                dirtyNotifier::markDirty,
+                remoteOutageLedgerSink);
         TakeSlotRunner slotRunner = ServeAssembly.slotRunner(
                 serveArguments,
                 worktreesRoot,
@@ -94,7 +113,9 @@ final class ServeRuntimeAssembly {
                 heartbeat,
                 clock,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase,
+                remoteOutageGate);
         FeedAutomaton automaton = ServeAssembly.feedAutomaton(
                 factoryProperties,
                 serveProperties,
@@ -104,7 +125,8 @@ final class ServeRuntimeAssembly {
                 instanceId,
                 slotLedger,
                 slotRunner,
-                dirtyNotifier);
+                dirtyNotifier,
+                remoteOutageGate);
         ServeShutdown shutdown =
                 ServeAssembly.shutdown(slotLedger, heartbeat.flag(), serveProperties, heartbeat.standingReaper());
         WorktreeJanitor worktreeJanitor =
@@ -133,7 +155,11 @@ final class ServeRuntimeAssembly {
                 heartbeat.standingReaper(),
                 worktreeJanitor,
                 sweepTickLog,
-                clock);
+                clock,
+                remoteOutageGate);
+        // NFR-O1, NFR-O3 of add-base-ref-resolution: only now, with the ledger appender built, can
+        // the gate's stand-in ledger sink be rebound to the real remoteOutage write point.
+        remoteOutageLedgerSink.bind(observability.remoteOutageLedgerWriter());
         SandboxLifecycleTick sandboxLifecycleTick = ServeAssembly.sandboxLifecycleTick(
                 serveArguments,
                 serveProperties,

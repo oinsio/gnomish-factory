@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
+import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -23,6 +25,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -52,6 +55,20 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     TaskWorktreeGit worktrees = Stub(TaskWorktreeGit)
     TaskStoreGit store = Stub(TaskStoreGit)
 
+    /**
+     * FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so the
+     * port-fake chain needs a working {@link BaseRefGit} rather than {@link BaseRefGit#UNWIRED} —
+     * the resolved tip echoes the pinned ref back, which is exactly today's placeholder SHA input.
+     * A field, not a per-call helper: Spock's ordered {@code then:} verification tracks every
+     * mock/stub invocation, and creating the stub lazily inside the routing chain (i.e. during
+     * {@code when:}) misfiles its background interaction into the ordered sequence.
+     */
+    BaseRefGit baseRefGit = Stub(BaseRefGit) {
+        resolveForResume(_, _) >> { cloneDir, ref ->
+            new ResumeBaseOutcome.Bound(ref, ref)
+        }
+    }
+
     def setup() {
         worktreesRoot = tempDir.resolve('worktrees')
         worktree = worktreesRoot.resolve('PROJ-1')
@@ -67,7 +84,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     }
 
     private TaskGit git() {
-        new TaskGit(store, branches, worktrees)
+        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)
     }
 
     /** The real routing chain over the ports above; {@code verdict} decides whether a run parks. */

@@ -40,7 +40,7 @@ record TakeCommandSeams(
             new ThreadSleeper(),
             new SystemMonotonicTime(),
             ConsoleTakeoverConfirmation.systemTty(),
-            new ServeProperties(0, null, null, null, null, null, null),
+            new ServeProperties(0, null, null, null, null, null, null, null, null),
             new ClaimEpochBook());
 
     TakeCommandSeams withHeartbeatSleeper(Sleeper heartbeatSleeper) {

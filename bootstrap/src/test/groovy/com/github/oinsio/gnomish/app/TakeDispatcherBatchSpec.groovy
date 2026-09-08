@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -69,8 +70,35 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish/stages/build'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        // FR13, D14 of add-base-ref-resolution: a fresh claim reads its task tier from git objects
+        // at the resolved base commit, so this clone carries a real, loadable pipeline too,
+        // alongside the root-level instructions.md #stage() names.
+        Files.writeString(cloneDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
+purpose: purpose
+executor:
+  type: agent-cli
+  model: model-x
+instructions: stages/build/instructions.md
+advancement: auto
+''')
+        Files.writeString(cloneDir.resolve('.gnomish/config.yaml'), '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+    repo: acme/widgets
+''')
         commitAll(cloneDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(cloneDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
         tracker.listOpen() >> []
     }
@@ -96,7 +124,9 @@ class TakeDispatcherBatchSpec extends Specification implements BareGitRepoFixtur
 
     private TakeDispatcher newDispatcher(TakeoverConfirmation confirmation = TakeoverConfirmation.UNAVAILABLE) {
         new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation,
-        ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
+        ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
+        new TrustedBaseContext(BaseDefinition.none(),
+        gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD')))
     }
 
     private static TakeHeartbeat noopHeartbeat() {

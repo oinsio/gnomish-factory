@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import java.nio.file.Files
@@ -18,7 +19,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision runs the engine once and maps a Completed outcome to Delivered, worktree removed"() {
         given: 'a task with one persisted round — resuming drives it straight to the pipeline end'
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
 
@@ -42,7 +43,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision without discardWork salvages interrupted leftovers as a service commit"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def runner = newTakeResumeRunner()
@@ -63,7 +64,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision with discardWork discards interrupted leftovers, no salvage commit"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def runner = newTakeResumeRunner()
@@ -86,7 +87,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision with discardWork leaves the worktree wiped of leftovers, observable after a kept worktree"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-3b'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def runner = newTakeResumeRunner()
@@ -108,7 +109,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision maps a Paused outcome to AwaitingHuman(CHECKPOINT), worktree kept"() {
         given: 'a manual-checkpoint pipeline, positioned so the single stage passes and pauses'
         def taskId = 'PROJ-4'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def runner = newTakeResumeRunner()

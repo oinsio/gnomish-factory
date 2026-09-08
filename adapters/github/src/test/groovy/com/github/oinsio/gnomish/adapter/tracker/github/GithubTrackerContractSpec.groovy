@@ -9,8 +9,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerDesignatorContract
 import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerEpochContract
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerShapeFactsContract
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
@@ -72,12 +72,19 @@ import java.net.http.HttpResponse
  * <p>Implements FR4, NFR-R1 of add-tracker-port; FR1, FR4, FR5, FR8, NFR-R2,
  * M1 of add-claim-heartbeat (the extended contract passes on the GitHub adapter).
  */
-class GithubTrackerContractSpec extends TrackerShapeFactsContract {
+class GithubTrackerContractSpec extends TrackerDesignatorContract {
 
     private static final String OWNER = 'acme'
     private static final String REPO = 'widgets'
     private static final String INSTANCE_ID = 'gnomish-factory-contract'
     private static final String HOLDER_INSTANCE_ID = 'instance-a'
+    /**
+     * The configured {@code tracker.github.designators.base} rule the contract suite runs the real
+     * adapter with (FR3 of add-base-ref-resolution). The optional {@code -<n>} suffix is what lets a
+     * single issue present the same candidate value twice — GitHub refuses a duplicate label name —
+     * so the "equal duplicates collapse" property has a fixture a real issue could actually hold.
+     */
+    private static final String DESIGNATOR_RULE = 'base(?:-[0-9]+)?:(.+)'
 
     private WireMockServer wireMock
     private GithubTrackerFixtureAdapter fixtureAdapter
@@ -97,7 +104,8 @@ class GithubTrackerContractSpec extends TrackerShapeFactsContract {
 
         def realTracker = new GithubTracker(
                 new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
-                new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL),
+                new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
+                FixtureSeeder.DELIVERED_LABEL, GithubDesignatorRules.from([designators: [base: DESIGNATOR_RULE]])),
                 new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL),
                 new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID),
                 FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
@@ -171,7 +179,12 @@ class GithubTrackerContractSpec extends TrackerShapeFactsContract {
         fixtureAdapter.postedTexts(ref)
     }
 
-    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+    @Override
+    protected void seedDesignatorCandidates(Tracker adapter, TaskRef ref, String kind, List<String> values) {
+        fixtureAdapter.seedDesignatorCandidates(ref, kind, values)
+    }
+
+    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
         new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

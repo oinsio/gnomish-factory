@@ -245,6 +245,118 @@ tune per machine you run `serve` on; the WIP limit is a project-wide
 agreement everyone running against that project shares, so it lives beside
 the heartbeat constants in the repo, not in any one instance's config.
 
+## Base Ref Resolution: `task-branch.base` and the Remote Outage Gate
+
+<!-- implements UX1, UX4, UX6 of add-base-ref-resolution -->
+
+Every autonomously started task branches from a base that is resolved once,
+fetched fresh, and pinned before any gnome runs — see the glossary's *base
+ref*, *allowed bases*, and *base pin* entries for the vocabulary. This section
+is the operator reference for configuring it and reading its failure surface.
+
+### The `task-branch.base` section
+
+An optional section of `.gnomish/config.yaml`, part of the **trusted tier**
+(see below) and read only from the repository's default branch:
+
+```yaml
+task-branch:
+  base:
+    type: patterns          # optional; "patterns" is the only value today
+    default: develop        # optional; must match one of the allowed patterns
+    allowed:
+      - pattern: develop
+      - pattern: "release/*"
+        role: release        # optional, "development" | "release", default "development"
+```
+
+Zero configuration is valid and means "no allowed bases, no configured
+default" — every task branches from the repository default branch as the
+remote reports it. An `allowed` pattern is matched only against a task's own
+**designator** selection, never against `--base` or the configured `default`
+— those are project- or operator-level choices already made, not the one
+thing the list bounds. An unknown key (the pre-release draft's root-level
+`base:`/`menu` shape has no alias), an invalid pattern, or a `default` outside
+`allowed` is a located load error at startup, never a runtime surprise (UX1).
+
+### Selecting a base per task: `tracker.github.designators`
+
+How a task names its base is the tracker adapter's own configuration, not
+this section's — for the GitHub adapter:
+
+```yaml
+tracker:
+  github:
+    designators:
+      base: "base:(.+)"     # kind -> one-capture-group regex, matched against issue labels
+```
+
+A label matching the rule (`base:release/1.18`) supplies the candidate value;
+two differently-valued matches are a conflict and park the task naming both
+values and the allowed patterns (UX2). Configuring a `base` rule while
+`task-branch.base.allowed` is empty is itself a load error — such a rule
+could only ever reject. See
+[`adapter-author-guide.md`](adapter-author-guide.md#6-config-subsection-ownership)
+for what a new tracker adapter must expose to support a `base`-kind
+designator.
+
+### The external-automation escape hatch (UX4)
+
+There is no plugin point for computing a base inside the factory — no
+repository-provided code ever runs to choose one. The supported customization
+path is external: a GitHub Action, a Jira automation, or a cron job computes
+the base and sets the label (matched by `tracker.github.designators.base`);
+the factory only validates the label against `task-branch.base.allowed` and
+executes the choice.
+
+### Two configuration tiers, and the restart you need
+
+- **Trusted tier** — `tracker:`, `task-branch:` (this section), and future
+  selector sections — binds once at `serve`/`take` **startup**, from the
+  refreshed repository default branch, and is never re-read per claim.
+  **A change to `task-branch.base.allowed` merged to the default branch
+  takes effect only on the next start of `serve`/`take`** — exactly like a
+  `tracker:` change today. Base *tips* are still refreshed on every claim;
+  only the allowed-bases policy itself is startup-scoped.
+- **Task tier** — stages, stage instructions, judge criteria, the rest of
+  `config.yaml` — binds per task from that task's own base, read from git
+  objects at the base's law commit, never from the factory clone's working
+  tree.
+
+### `gnomish run` is unchanged
+
+Manual `run` keeps today's behavior exactly — see
+[`operator-guide-run.md`](operator-guide-run.md#--base-and-where-the-law-comes-from):
+without `--base` it branches from the local clone's `HEAD` with no network
+calls and its law source stays the working tree; with `--base <ref>` the ref
+is resolved locally (no fetch) and its law is read from git objects at that
+ref's commit, offline.
+
+### The remote outage gate (UX6)
+
+A base-refresh or default-branch-discovery failure classified as an
+infrastructure failure — the remote itself is unreachable, never a bad ref or
+an underdetermined designator — releases the claim and opens one **remote
+outage gate** per remote target: while open, the feed claims nothing and the
+daemon probes the remote on a jittered, growing, capped interval until the
+first successful probe closes it.
+
+Operator-visible surface:
+
+| Signal      | What you see                                                                                                                                              |
+|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Log — open  | one WARN, `[GF145] remote outage gate opened for <target>: ...`, naming the target and the cause                                                              |
+| Log — during | DEBUG-only, roll-up-suppressed lines per failed probe; no repeated WARN                                                                                      |
+| Log — sustained | one ERROR, `[GF146] remote outage gate for <target> has been open longer than <threshold>: ...`, the first time the outage crosses the configured duration |
+| Log — close | one INFO recovery line naming the outage duration and probe count                                                                                             |
+| Snapshot    | a `remote` section beside `tracker`, one entry per target: `state` (`open` \| `closed`), `openSince`, `lastError` (scrubbed), `nextProbeAt`, `consecutiveFailures`, `lastSuccessAt` — `gnomish dashboard` and the raw `snapshot.json` answer "blocked on remote X since T, next probe at T'" from this one place |
+| Exit code   | a single-shot `take` hitting the same failure ends with `TakeResult.InfrastructureUnavailable`, exit code **16**; `serve` itself has no exit code for it — the daemon stays up, the gate is its degraded-but-alive state |
+
+No task-level abort marker is written and no stage attempt is burned: the
+outage is charged to the daemon, never to the task (see the glossary's
+*remote outage gate* entry, and `docs/adr/0005-dependency-outage-accounting.md`
+for the accounting principle behind it).
+
 ## The write-budget coupling: ΣN and the beat interval
 
 Every `Working` task an instance holds gets re-beaten on the configured

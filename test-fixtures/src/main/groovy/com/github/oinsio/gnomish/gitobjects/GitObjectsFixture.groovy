@@ -16,15 +16,21 @@ trait GitObjectsFixture implements LocalGitRepoFixture {
 
     /**
      * Seeds a bare repo whose {@code refs/heads/base} points at a commit containing {@code files}
-     * (relative path → text content). Returns the bare git dir — which has no working tree, so any
+     * (relative path → text content) and {@code links} (relative path → symlink target, recorded
+     * in the tree as a symlink entry). Returns the bare git dir — which has no working tree, so any
      * later checkout would be visible.
      */
-    Path seedBareRepo(Path tempDir, Map<String, String> files) {
+    Path seedBareRepo(Path tempDir, Map<String, String> files, Map<String, String> links = [:]) {
         Path work = initWorkingRepo(tempDir, 'seed-work')
         files.each { rel, content ->
             Path target = work.resolve(rel)
             Files.createDirectories(target.parent)
             Files.writeString(target, content)
+        }
+        links.each { rel, target ->
+            Path link = work.resolve(rel)
+            Files.createDirectories(link.parent)
+            Files.createSymbolicLink(link, Path.of(target))
         }
         commitAll(work, 'base')
         Path bare = initBareRepo(tempDir, 'origin.git')

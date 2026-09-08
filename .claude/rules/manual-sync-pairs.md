@@ -64,12 +64,11 @@ audits treat these rows as if the markers were present.
 | `adapters/git/.../GitTaskRepository`             | `adapters/git/.../GitObjectsTaskRepository`                      | task lifecycle write protocol                                          |
 | `adapters/agent/.../DecisionFileTransport`       | `adapters/git/.../BranchDecisionFile`                            | `GNOMISH_DECISION_FILE` env var name, read semantics, size cap         |
 | `adapters/agent/.../RoundTimeout`                | `adapters/.../pipeline/AgentSettingsValidator`                   | accepted `roundTimeout` shapes                                         |
-| `application/.../app/TakeFreshClaim`             | `application/.../app/TakeContainerFreshClaim`                    | fresh-claim recipe (harden → synthesize → createTask → run)            |
 | `application/.../app/TakeEngineExecution`        | `application/.../app/TakeContainerEngineExecution`               | engine execution wiring per mode                                       |
 | `application/.../app/TakeResumeRunner`           | `application/.../app/TakeContainerResumeRunner`                  | resume control flow per mode                                           |
 | `application/.../app/GitModeRunner`              | `application/.../app/ContainerGitModeRunner`                     | manual-run control flow per mode                                       |
 | `application/.../app/GitResumeRunner`            | `application/.../app/ContainerResumeRunner`                      | manual-resume control flow per mode                                    |
-| `serveobservability/json/LedgerJsonMapper`       | `dashboard/LedgerAggregator` + `dashboard/SweepActionAggregator` | ledger wire tokens (`TaskOutcome`, `SweepVerdictCategory`)             |
+| `serveobservability/json/LedgerJsonMapper`       | `dashboard/LedgerAggregator` + `dashboard/SweepActionAggregator` | ledger wire tokens (`TaskOutcome`, `SweepVerdictCategory`); `add-base-ref-resolution` task 7.4 added the `remoteOutage` line, read back by `LedgerAggregator` itself (folded in rather than a third aggregator class) |
 | `serveobservability/json/SnapshotJsonMapper`     | `serveobservability/json/SnapshotJsonReader`                     | snapshot wire tokens (`FeedPhase`, `HeartbeatState`, `LifecycleState`) |
 | `application/.../app/serve/FeedState`            | `serveobservability/FeedPhase`                                   | deliberate layer decoupling: constant sets must match                  |
 | `application/.../app/serve/HeartbeatWorkerState` | `serveobservability/HeartbeatState`                              | deliberate layer decoupling: constant sets must match                  |

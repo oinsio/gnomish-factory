@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.serveobservability.json.LedgerLineReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -79,18 +80,34 @@ public final class LedgerAggregator {
                 continue;
             }
             List<JsonNode> lines = reader.read(file);
-            perDay.add(new DayOutcomeCounts(date, aggregateDay(lines, tokensByModel)));
+            perDay.add(dayRow(date, lines, tokensByModel));
         }
         return new LedgerHistoryView(perDay, tokensByModel);
     }
 
-    private static OutcomeCounts aggregateDay(List<JsonNode> lines, Map<String, LedgerTokenUsage> tokensByModel) {
+    private static DayOutcomeCounts dayRow(
+            LocalDate date, List<JsonNode> lines, Map<String, LedgerTokenUsage> tokensByModel) {
         int delivered = 0;
         int awaitingHuman = 0;
         int aborted = 0;
         int revoked = 0;
+        int outageCount = 0;
+        Duration outageDuration = Duration.ZERO;
         for (JsonNode line : lines) {
-            if (!"taskOutcome".equals(line.path("type").asText(null))) {
+            String type = line.path("type").asText(null);
+            if ("remoteOutage".equals(type)) {
+                // NFR-O3 of add-base-ref-resolution: a malformed durationMillis (missing or a
+                // newer factory version's non-numeric shape) still counts the outage but adds
+                // no duration, rather than dropping the line and crashing the render (FR6, FR3,
+                // NFR-R1 of add-dashboard-page — the same forward-compat posture as outcomes).
+                outageCount++;
+                JsonNode durationMillis = line.path("durationMillis");
+                if (durationMillis.isIntegralNumber()) {
+                    outageDuration = outageDuration.plusMillis(durationMillis.longValue());
+                }
+                continue;
+            }
+            if (!"taskOutcome".equals(type)) {
                 continue;
             }
             TaskOutcome outcome = parseOutcome(line.path("outcome").asText(null));
@@ -108,7 +125,8 @@ public final class LedgerAggregator {
             }
             accumulateTokens(line.path("tokensByModel"), tokensByModel);
         }
-        return new OutcomeCounts(delivered, awaitingHuman, aborted, revoked);
+        return new DayOutcomeCounts(
+                date, new OutcomeCounts(delivered, awaitingHuman, aborted, revoked), outageCount, outageDuration);
     }
 
     private static void accumulateTokens(JsonNode tokensNode, Map<String, LedgerTokenUsage> totals) {
@@ -116,9 +134,8 @@ public final class LedgerAggregator {
             return;
         }
         tokensNode
-                .fields()
-                .forEachRemaining(
-                        entry -> totals.merge(entry.getKey(), toTokenUsage(entry.getValue()), LedgerAggregator::sum));
+                .properties()
+                .forEach(entry -> totals.merge(entry.getKey(), toTokenUsage(entry.getValue()), LedgerAggregator::sum));
     }
 
     private static LedgerTokenUsage toTokenUsage(JsonNode node) {
@@ -140,7 +157,7 @@ public final class LedgerAggregator {
     /**
      * Maps a raw {@code taskOutcome.outcome} value to its {@link TaskOutcome}, or
      * {@code null} when the value is missing or unrecognized. Returning {@code null}
-     * (rather than throwing) lets {@link #aggregateDay} skip the offending line and
+     * (rather than throwing) lets {@link #dayRow} skip the offending line and
      * keep the window intact — a forward-compatible outcome from a newer factory
      * version must never crash the dashboard render (FR6, NFR-R1 of add-dashboard-page).
      */

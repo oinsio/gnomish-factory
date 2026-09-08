@@ -55,7 +55,14 @@ final class ContainerResumeOutcomes {
             }
         }
         ContainerTerminalDrive.run(
-                runner.assembly, support, definition, taskJson.context(), state, interactiveMode, cloneDir, pending);
+                runner.assembly,
+                support,
+                definition,
+                taskJson.context(),
+                state,
+                interactiveMode,
+                LawBinding.atCheckout(cloneDir),
+                pending);
     }
 
     /** Outcome {@code escalated}: the same dialog the in-process path uses (UX2), decision committed factory-side. */
@@ -96,7 +103,7 @@ final class ContainerResumeOutcomes {
                 resumption.context(),
                 resumption.state(),
                 interactiveMode,
-                cloneDir,
+                LawBinding.atCheckout(cloneDir),
                 null);
     }
 
@@ -118,7 +125,14 @@ final class ContainerResumeOutcomes {
             throw new CheckpointEofException(closed);
         }
         ContainerTerminalDrive.run(
-                runner.assembly, support, definition, taskJson.context(), state, interactiveMode, cloneDir, null);
+                runner.assembly,
+                support,
+                definition,
+                taskJson.context(),
+                state,
+                interactiveMode,
+                LawBinding.atCheckout(cloneDir),
+                null);
     }
 
     /** Outcome {@code completed}: the same final status summary as the host path, no engine run. */

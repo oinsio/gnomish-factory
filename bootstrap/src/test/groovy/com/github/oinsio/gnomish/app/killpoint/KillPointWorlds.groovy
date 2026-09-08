@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.GitObjects
@@ -33,11 +34,12 @@ trait KillPointWorlds implements BareGitRepoFixture {
     /** The host medium: a real working clone, worktrees, {@link GitTaskRepository}. */
     KillPointWorld hostWorld(Path root) {
         Path clone = initWorkingRepo(root, 'my-project')
-        Files.writeString(clone.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(clone.resolve('.gnomish'))
+        Files.writeString(clone.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(clone, 'init')
         def store = new GitTaskRepository(
                 new GitProcessRunner(), clone, root.resolve('worktrees-root'), ClaimEpochSource.NONE)
-        seed(clone, store, null)
+        seed(clone, store, 'HEAD')
     }
 
     /** The container medium: a real bare repo written through {@link GitObjectsTaskRepository}. */
@@ -71,7 +73,8 @@ trait KillPointWorlds implements BareGitRepoFixture {
     CreationWorld creationWorld(Path root) {
         Path origin = initBareRepo(root, 'origin.git')
         Path creating = initWorkingRepo(root, 'creating-clone')
-        Files.writeString(creating.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(creating.resolve('.gnomish'))
+        Files.writeString(creating.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(creating, 'init')
         addRemote(creating, 'origin', origin.toString())
         gitOutput(creating, 'push', 'origin', 'HEAD:refs/heads/base')
@@ -103,7 +106,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         def instanceId = new InstanceId('gnomish-factory', 'kp0001')
         def ref = new TaskRef(TASK_ID)
         trackerHarness.seedWorkingWithClaim(tracker, ref, instanceId.value())
-        store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), baseRef, TaskState.atStageStart('build'))
+        store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), baseRef, BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
         new KillPointWorld(
                 repoDir: repoDir,
                 store: store,

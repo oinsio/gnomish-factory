@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.git.GitBaseRefs
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore
@@ -7,6 +8,8 @@ import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
+import java.util.function.UnaryOperator
 
 /**
  * The real git-backed {@link TaskGit} a spec passes wherever production wiring injects the bean
@@ -33,7 +36,11 @@ final class TaskGitFixture {
      */
     static TaskGit real(ClaimEpochSource epochs) {
         def runner = new GitProcessRunner()
+        // The base-ref capability is real too (FR5, FR6 of add-base-ref-resolution): serve/take
+        // startup reads origin's default branch through it. Its retry runs on virtual time, so a
+        // dead origin in a spec exhausts the production bound instantly instead of sleeping.
         new TaskGit(new GitTaskStore(runner, epochs), new GitTaskBranches(runner, epochs),
-                new GitTaskWorktrees(runner, epochs))
+                new GitTaskWorktrees(runner, epochs), UnaryOperator.identity(),
+                new GitBaseRefs(runner, VirtualTimeRetries.gitInfrastructure()))
     }
 }

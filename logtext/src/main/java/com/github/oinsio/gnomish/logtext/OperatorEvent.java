@@ -177,7 +177,41 @@ public enum OperatorEvent {
     CONTAINER_EXEC_LIKELY_OOM_KILLED("GF129"),
     SELF_CHECK_BOX_KEEP_FAILED("GF130"),
     // denial-position durability (fix-denial-attribution-durability)
-    ESCALATION_DENIAL_POSITION_UNREADABLE("GF131");
+    ESCALATION_DENIAL_POSITION_UNREADABLE("GF131"),
+    // law by ref (add-base-ref-resolution): a base whose .gnomish/ fails to load parks its task,
+    // and a default branch that cannot be bound at startup ends serve/take before any claim
+    TASK_BASE_LAW_INVALID("GF132"),
+    BASE_LAW_PARK_FAILED("GF133"),
+    STARTUP_DEFAULT_BRANCH_UNBOUND("GF134"),
+    // resume law binding (add-base-ref-resolution): the pinned ref's current tip is rebound on
+    // resume (D13) — a ref that no longer resolves parks the task, an unreachable-but-configured
+    // remote releases the claim
+    RESUME_PINNED_REF_UNRESOLVED("GF135"),
+    RESUME_BASE_PARK_FAILED("GF136"),
+    RESUME_BASE_REFRESH_UNAVAILABLE("GF137"),
+    RESUME_BASE_RELEASE_FAILED("GF138"),
+    // fresh-claim base binding (add-base-ref-resolution, task 6.2): the resolve+refresh step a
+    // fresh claim runs before its branch is created — an underdetermined base or a refused
+    // refresh parks the task, an unreachable-but-configured remote releases the claim
+    FRESH_CLAIM_BASE_UNDERDETERMINED("GF139"),
+    FRESH_CLAIM_BASE_REFUSED("GF140"),
+    FRESH_CLAIM_BASE_PARK_FAILED("GF141"),
+    FRESH_CLAIM_BASE_REFRESH_UNAVAILABLE("GF142"),
+    FRESH_CLAIM_BASE_RELEASE_FAILED("GF143"),
+    // slot outcome log (add-base-ref-resolution, task 7.2): a slot's own claim was released because
+    // a configured dependency never answered — degraded but not a fault of the slot's, WARN like
+    // Skipped since no taskOutcome summary is written for it either
+    SLOT_BASE_INFRASTRUCTURE_UNAVAILABLE("GF144"),
+    // remote outage gate observability (add-base-ref-resolution, task 7.4): the gate's own two
+    // state-transition-shaped events — opening once per outage, and a one-shot escalation for an
+    // outage that outlives the configured sustained-open duration. Every failed probe in between
+    // is DEBUG through a RepeatSuppressor roll-up and carries no code of its own (INFO/DEBUG never
+    // take codes); the close is one uncoded INFO recovery line.
+    REMOTE_OUTAGE_GATE_OPENED("GF145"),
+    REMOTE_OUTAGE_GATE_SUSTAINED_OPEN("GF146"),
+    // remote outage gate observability (add-base-ref-resolution, task 7.4): the ledger write point
+    // for the closed-outage `remoteOutage` line, mirroring SWEEP_LEDGER_APPEND_FAILED's shape.
+    REMOTE_OUTAGE_LEDGER_APPEND_FAILED("GF147");
 
     private final String code;
     private final String head;

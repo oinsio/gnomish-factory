@@ -1,23 +1,12 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
-import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
-import com.github.oinsio.gnomish.app.console.SystemConsoleIO
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -34,7 +23,6 @@ import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.util.concurrent.TimeUnit
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.AutoCleanup
@@ -102,11 +90,9 @@ class ContainerLifecycleCoverageGapsE2ESpec extends Specification implements Bar
         given: 'a project dir with a one-stage container-bound pipeline'
         def projectRoot = initWorkingRepo(tempDir, 'manual-run-project')
         Files.createDirectories(projectRoot.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectRoot.resolve('stages/build'))
         Files.writeString(projectRoot.resolve('.gnomish/config.yaml'), 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
         Files.writeString(projectRoot.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
         Files.writeString(projectRoot.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectRoot.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectRoot.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -125,35 +111,13 @@ advancement: auto
         and: 'the real ManualRunRunner wiring, over a real image and the fake-agent binary'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
-        def runner = new ManualRunRunner(
-                new RunArgumentsParser(),
-                new PipelineStartup(TrackerValidatorStub.plainSource()),
-                new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
-                new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                factoryProps,
-                new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null),
-                new BindingProperties(null, [:]),
-                DiscoveredBindings.real(),
-                TaskGitFixture.real(),
+        def runner = newManualRunRunner(
                 tempDir.resolve('worktrees'),
                 tempDir.resolve('home'),
-                new StatusCommand(TaskGitFixture.real(), tempDir.resolve('worktrees')),
-                new UsageCommand(TaskGitFixture.real()),
-                new BoardCommand(Clock.systemUTC(), factoryProps, [:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), tempDir.resolve('home'), factoryProps, [:],
-                MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
-                Clock.systemUTC(),
-                [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null),
-                new ClaimEpochBook())
+                new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null),
+                new BindingProperties(null, [:]),
+                TaskGitFixture.real(),
+                factoryProps)
 
         when:
         taskId = 'ct-manual-1'
@@ -173,7 +137,8 @@ advancement: auto
     def "ContainerRunSupport.revocationSalvageAndPush salvages the leftover and pushes to the real remote"() {
         given: 'a project clone with a real remote, and a box carrying an un-harvested leftover'
         def cloneDir = initWorkingRepo(tempDir, 'revocation-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(cloneDir, 'init')
         // Wired per feature — see GiteaContainerFixture's sharing rule.
         def originUrl = gitea.createRepository("revocation-${System.nanoTime()}")
@@ -190,7 +155,7 @@ advancement: auto
                 AdvancementMode.AUTO)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(stage), sandboxProps,
                 new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def environment = support.lease().environmentFor('work')
         def handle = environment.exec(new ExecCommand(
                         [

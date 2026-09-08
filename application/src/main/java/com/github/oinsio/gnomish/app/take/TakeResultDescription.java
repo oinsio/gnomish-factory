@@ -27,7 +27,9 @@ public final class TakeResultDescription {
             case TakeResult.Aborted aborted -> "aborted: " + aborted.cause();
             case TakeResult.Revoked revoked -> "revoked: " + revoked.note();
             case TakeResult.Skipped skipped -> "skipped: " + skipped.reason();
-            case TakeResult.EmptyQueue emptyQueue -> "unexpected empty-queue result";
+            case TakeResult.EmptyQueue _ -> "unexpected empty-queue result";
+            case TakeResult.InfrastructureUnavailable infrastructureUnavailable ->
+                "released (infrastructure unavailable): " + infrastructureUnavailable.reason();
         };
     }
 }

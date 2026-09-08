@@ -54,6 +54,11 @@ dependencies {
     // attributed to the calling class rather than the shared helper.
     api libs.slf4j.api
 
+    // The pure base-resolution policy (FR10, design D2 of add-base-ref-resolution).
+    // `api`: the resolver's own input and decision values appear on the use cases'
+    // signatures, so the composition root compiles against them too.
+    api project(':baseref')
+
     // The two dependency-free leaves, both `implementation` because neither appears
     // on this module's api surface: the shared subprocess wait/kill/drain discipline
     // `RealProcessTreeKiller` runs the daemon's exit kill on (FR9, FR14, design
@@ -113,6 +118,9 @@ dependencies {
 layering {
     allowedProjects = [
         ':atomicfile',
+        // The base-resolution leaf: the tracker port's designator shape is mapped onto
+        // its own input value here, because that leaf may import nothing (design D2).
+        ':baseref',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',

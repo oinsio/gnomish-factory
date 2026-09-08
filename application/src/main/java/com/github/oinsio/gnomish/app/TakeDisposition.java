@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.baseref.BaseDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -75,6 +76,8 @@ final class TakeDisposition {
      *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
      * @param epochs this instance's tenure record, read by the routing point for the repair line it
      *     leaves on a non-clean pickup (NFR-O1 of harden-task-branch-contract); never null
+     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
+     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
     TakeDisposition(
             RunAssembly assembly,
@@ -90,7 +93,8 @@ final class TakeDisposition {
             Clock clock,
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -102,7 +106,8 @@ final class TakeDisposition {
                 heartbeat,
                 claimLossFlag,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
     }
 
@@ -135,7 +140,10 @@ final class TakeDisposition {
                 Clock.systemUTC(),
                 new ClaimLossFlag(),
                 ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook());
+                new ClaimEpochBook(),
+                // A placeholder trusted tier: this construction serves specs that never reach a
+                // fresh claim's base resolution (see javadoc above).
+                new TrustedBaseContext(BaseDefinition.none(), "HEAD"));
     }
 
     /**

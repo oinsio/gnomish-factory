@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -12,7 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
-import java.nio.file.Files
+import com.github.oinsio.gnomish.e2e.gitea.GiteaTaskSeedFixture
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import spock.lang.AutoCleanup
@@ -42,7 +40,7 @@ value = {
     !GiteaAvailability.dockerAvailable()
 },
 reason = 'Docker daemon unreachable — see GiteaAvailability; Docker is a dev/CI prerequisite for the Gitea E2E layer (.claude/rules/testing.md)')
-class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedFixture, AppAssemblyFixture {
 
     @Shared
     @AutoCleanup('stop')
@@ -53,7 +51,6 @@ class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFix
 
     Path cloneDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
 
     // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
     String originUrl
@@ -64,12 +61,9 @@ class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFix
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'push-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         originUrl = gitea.createRepository("best-effort-push-${System.nanoTime()}")
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', originUrl)
-        gitRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        addRemote(cloneDir, 'origin', originUrl)
+        seedAndPushGnomishTask(cloneDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 
@@ -108,18 +102,16 @@ class GiteaBestEffortPushE2ESpec extends Specification implements BareGitRepoFix
                 RunArguments.InteractiveMode.ALL)
 
         then: 'the run reached completion locally, and the round commit it made is identifiable by its fixed message'
-        def roundSha = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%H', '--grep',
-                '^gnomish: round build#0$').stdout().trim()
+        def roundSha = roundCommitSha(cloneDir, taskId, 'build')
         roundSha
 
         and: 'a fresh independent clone from Gitea, fetching just the task branch, already has that round commit'
         def freshClone = tempDir.resolve('fresh-verify-clone')
-        gitRunner.run(tempDir, 'clone', originUrl, freshClone.toString())
-        gitRunner.run(freshClone, 'fetch', 'origin', "gnomish/${taskId}:refs/remotes/origin/gnomish/${taskId}")
-        gitRunner.run(freshClone, 'cat-file', '-e', roundSha).exitCode() == 0
+        gitExitCode(tempDir, 'clone', originUrl, freshClone.toString()) == 0
+        roundReachedOrigin(freshClone, taskId, roundSha)
 
         and: 'the pushed tree really carries the round content, not just an empty ref'
-        def tree = gitRunner.run(freshClone, 'ls-tree', '-r', '--name-only', roundSha).stdout()
+        def tree = gitOutput(freshClone, 'ls-tree', '-r', '--name-only', roundSha)
         tree.contains('.gnomish-task/task.json')
     }
 }

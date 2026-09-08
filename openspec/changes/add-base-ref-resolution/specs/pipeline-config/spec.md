@@ -107,8 +107,17 @@ re-read per task; the task tier (stages,
 instructions, criteria, the remainder of `config.yaml`) binds from the base's
 law commit — the pinned SHA on a fresh start, the current tip of the pinned
 ref name on resume (a tag or SHA base makes these equal). The external-check
-pin guard SHALL compare against the law commit. A symlink entry in a git tree
-SHALL be treated as an unreadable law file. Control files and judge
+pin guard SHALL compare against the law commit as a commit id peeled once at
+binding; the guard SHALL NOT resolve a ref name itself. Both realizations SHALL be
+rooted at the **law root** — the `.gnomish/` directory of the law commit or
+of the working tree, the same root the loader validates file references
+against — so a stage file reference that validates at load reads at run in
+every medium; the repository root reaches the pin guard as a separate value
+and is never the law root. A symlink entry at any segment of a reference's
+path under the law root SHALL be refused as an unreadable law file by both
+realizations, never followed and regardless of its target; the verdict SHALL
+come from one shared walk, so both realizations report the same category
+for one tree; an absolute reference SHALL be refused by both. Control files and judge
 acceptance criteria SHALL be read from the law source, never from the
 gnome-writable working copy at use time. Copies of law files in the gnome's
 working copy are project content: editable, but never law for the current
@@ -129,6 +138,26 @@ source of the trusted tier.
 #### Scenario: Resume picks up human-fixed criteria
 - **WHEN** a human fixes acceptance criteria on the base branch and returns an escalated task to work
 - **THEN** the resuming invocation binds the corrected law from the tip of the pinned ref name, and the gnome branch content plays no part in it
+
+#### Scenario: A reference that validates at load reads at run
+- **WHEN** a stage manifest under `.gnomish/stages/work/` declares
+  `instructions: stages/work/instructions.md` and the loader accepted it
+- **THEN** the frozen law carries that file's content from the law root of
+  the same commit or working tree, in the working-tree and the git-objects
+  realization alike, and no copy at the repository root is consulted
+
+#### Scenario: Symlinked law file is refused in every medium
+- **WHEN** a law file under `.gnomish/` is a symlink entry, or an
+  intermediate directory on a law file's path is a symlink entry, in a
+  working tree or in a git tree
+- **THEN** both realizations report it unreadable without following it,
+  and the contract spec asserts the same verdict from both over one tree
+
+#### Scenario: Pin guard never re-resolves
+- **WHEN** the factory clone's `HEAD` moves after the law was bound in a
+  manual `run` without `--base`
+- **THEN** the external-check pin guard still compares against the commit
+  id peeled at binding, not against the moved `HEAD`
 
 #### Scenario: Base differs from the clone's checked-out ref
 - **WHEN** the factory clone has `main` checked out and a task resolves to

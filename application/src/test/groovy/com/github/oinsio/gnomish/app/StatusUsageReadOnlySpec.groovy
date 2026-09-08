@@ -1,18 +1,14 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
-import com.github.oinsio.gnomish.domain.engine.CheckResult
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Path
@@ -33,15 +29,13 @@ import spock.lang.TempDir
  * local branch list, and the worktree list. The only permitted mutation is the appearance of the
  * {@code refs/remotes/origin/gnomish/<task>} tracking ref.
  */
-class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixture, StdoutCaptureFixture {
+class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixture, StdoutCaptureFixture {
 
     @TempDir
     Path tempDir
 
-    def runner = new GitProcessRunner()
     Path bareOrigin
     Path clone
-    Path worktreesRoot
 
     def setup() {
         bareOrigin = initBareRepo(tempDir, 'origin.git')
@@ -64,16 +58,12 @@ class StatusUsageReadOnlySpec extends Specification implements BareGitRepoFixtur
     /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway worktree root of its own. */
     private void buildTaskBranch(Path repo, Path taskWorktrees, String taskId) {
         new GitTaskRepository(runner, repo, taskWorktrees, ClaimEpochSource.NONE).createTask(
-                new TaskContext(taskId, 'Fix the thing', 'Body', []), null, TaskState.atStageStart('implement'))
+                new TaskContext(taskId, 'Fix the thing', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def worktree = taskWorktrees.resolve(repo.fileName.toString()).resolve(taskId)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        def passed = new AttemptRecord(
-                0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-18T09:00:00Z'),
-                [] as List<CheckResult>,
-                new ExecutorUsage(Duration.ofMillis(500), [], ['claude-x': new TokenUsage(100, 10, 0, 0)]),
-                JudgeUsage.none(), [])
+        def passed = round(0, AttemptRecord.Result.PASSED, 500, 100)
         def state = TaskState.atStageStart('implement').recordUnburnedRound(passed)
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
     }

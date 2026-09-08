@@ -59,7 +59,7 @@ public record ServeShutdown(
      * by a human on the tracker who would otherwise be told the wrong thing about half the stops
      * (task 3.4 of harden-logging-observability).
      */
-    static final String SHUTDOWN_REASON = "daemon shutting down (signal)";
+    public static final String SHUTDOWN_REASON = "daemon shutting down (signal)";
 
     /**
      * @param slotLedger the shared slot ledger whose {@link SlotLedger#occupiedRefs()} names the

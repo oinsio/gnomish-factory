@@ -77,7 +77,12 @@ public class InMemoryTracker implements Tracker {
                 return new TrackerTask(ref, gone, new TrackerTaskState.Gone(), AbortFacts.none(), false);
             }
             return new TrackerTask(
-                    ref, task.snapshot(), task.state(), task.abortFacts(), TrackedTaskFacts.finished(task));
+                    ref,
+                    task.snapshot(),
+                    task.state(),
+                    task.abortFacts(),
+                    TrackedTaskFacts.finished(task),
+                    task.designators());
         });
     }
 

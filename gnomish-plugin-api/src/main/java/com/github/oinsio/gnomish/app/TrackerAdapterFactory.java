@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Constructs a live {@link Tracker} for one registered adapter {@code type} (tasks 5.13, 5.15),
@@ -162,5 +163,28 @@ public interface TrackerAdapterFactory {
      */
     default List<String> credentialEnvVars(TrackerConfig config) {
         return List.of();
+    }
+
+    /**
+     * Declares the designator kinds this adapter is configured to extract (FR3, design D5 of
+     * add-base-ref-resolution) — the kinds for which {@code fetchTask} can ever report anything but
+     * absent. A kind with no configured rule is never extracted and never declared here.
+     *
+     * <p>Core needs the answer without reading adapter keys: a project whose tracker extracts kind
+     * {@code base} while {@code task-branch.base.allowed} declares no entry has written a rule that
+     * can only ever reject, and that is worth a located load error at startup rather than a stream of parked
+     * tasks later. The adapter owns the rule and knows nothing of that list; the loader
+     * holds both, but only through this seam — the same shape {@link #credentialEnvVars} uses, and
+     * for the same reason: core must not name any vendor's own configuration keys.
+     *
+     * <p>The default returns no kinds — an adapter with no extraction rules at all (the in-memory
+     * reference, an adapter written before designators existed) needs no override.
+     *
+     * @param config the project's validated {@code tracker} section, carrying the subsection whose
+     *     rules decide the answer; never null
+     * @return the designator kinds this adapter extracts; never null, empty when it extracts none
+     */
+    default Set<String> configuredDesignatorKinds(TrackerConfig config) {
+        return Set.of();
     }
 }

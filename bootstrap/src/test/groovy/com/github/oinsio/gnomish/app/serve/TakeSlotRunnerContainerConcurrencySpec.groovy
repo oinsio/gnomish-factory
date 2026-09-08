@@ -9,14 +9,17 @@ import com.github.oinsio.gnomish.app.ContainerSupportFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
 import com.github.oinsio.gnomish.app.TaskGitFixture
+import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -34,6 +37,7 @@ import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
@@ -84,7 +88,8 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'container-slots-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(cloneDir, 'init')
         worktreesRoot = tempDir.resolve('worktrees-root')
         // Both tasks already claimed by THIS instance — the state a slot is dispatched in.
@@ -129,7 +134,9 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
         new TakeSlotRunner(
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler,
                 ABORT_THRESHOLD, MDC_KEY, [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE,
-                containerTakeSupport, new ClaimEpochBook())
+                containerTakeSupport, new ClaimEpochBook(),
+                new TrustedBaseContext(BaseDefinition.none(), 'HEAD'),
+                RemoteOutageGate.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
     }
 
     // Scenario (factory-serve): two slots hold container-bound tasks at once — each task runs in

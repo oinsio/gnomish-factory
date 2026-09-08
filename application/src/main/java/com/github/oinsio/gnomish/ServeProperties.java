@@ -47,6 +47,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param sandboxSweepInterval the sweep-lifecycle tick cadence ({@code
  *     factory.serve.sandbox-sweep-interval}, FR6 of add-serve-sandbox-lifecycle); defaults to
  *     {@code 5m} when unset; rejected if non-positive
+ * @param remoteProbeIntervalCap the remote outage gate's probe-interval ceiling ({@code
+ *     factory.serve.remote-probe-interval-cap}, FR14 of add-base-ref-resolution); defaults to
+ *     {@code 10m} when unset; rejected if non-positive
+ * @param remoteSustainedOpenThreshold how long the remote outage gate may stay open before its
+ *     one-shot sustained-open ERROR fires ({@code factory.serve.remote-sustained-open-threshold},
+ *     NFR-O1, NFR-O3 of add-base-ref-resolution); defaults to {@code 1h} when unset; rejected if
+ *     non-positive
  */
 @ConfigurationProperties("factory.serve")
 public record ServeProperties(
@@ -56,7 +63,9 @@ public record ServeProperties(
         Duration worktreeAgeThreshold,
         Duration snapshotInterval,
         Integer ledgerRetentionDays,
-        Duration sandboxSweepInterval) {
+        Duration sandboxSweepInterval,
+        Duration remoteProbeIntervalCap,
+        Duration remoteSustainedOpenThreshold) {
 
     private static final int DEFAULT_SLOTS = 2;
     private static final Duration DEFAULT_IDLE_POLL_INTERVAL = Duration.ofSeconds(30);
@@ -65,6 +74,8 @@ public record ServeProperties(
     private static final Duration DEFAULT_SNAPSHOT_INTERVAL = Duration.ofSeconds(30);
     private static final int DEFAULT_LEDGER_RETENTION_DAYS = 30;
     private static final Duration DEFAULT_SANDBOX_SWEEP_INTERVAL = Duration.ofMinutes(5);
+    private static final Duration DEFAULT_REMOTE_PROBE_INTERVAL_CAP = Duration.ofMinutes(10);
+    private static final Duration DEFAULT_REMOTE_SUSTAINED_OPEN_THRESHOLD = Duration.ofHours(1);
 
     // slots is a primitive int, so it must match the record component type exactly to remain the
     // canonical constructor (unlike the Duration components, it cannot be @Nullable); Spring's
@@ -77,7 +88,9 @@ public record ServeProperties(
             @Nullable Duration worktreeAgeThreshold,
             @Nullable Duration snapshotInterval,
             @Nullable Integer ledgerRetentionDays,
-            @Nullable Duration sandboxSweepInterval) {
+            @Nullable Duration sandboxSweepInterval,
+            @Nullable Duration remoteProbeIntervalCap,
+            @Nullable Duration remoteSustainedOpenThreshold) {
         this.slots = defaultSlots(slots);
         this.idlePollInterval = defaultIdlePollInterval(idlePollInterval);
         this.sigtermGrace = defaultSigtermGrace(sigtermGrace);
@@ -85,6 +98,8 @@ public record ServeProperties(
         this.snapshotInterval = defaultSnapshotInterval(snapshotInterval);
         this.ledgerRetentionDays = defaultLedgerRetentionDays(ledgerRetentionDays);
         this.sandboxSweepInterval = defaultSandboxSweepInterval(sandboxSweepInterval);
+        this.remoteProbeIntervalCap = defaultRemoteProbeIntervalCap(remoteProbeIntervalCap);
+        this.remoteSustainedOpenThreshold = defaultRemoteSustainedOpenThreshold(remoteSustainedOpenThreshold);
     }
 
     /**
@@ -188,5 +203,37 @@ public record ServeProperties(
             throw new IllegalArgumentException("factory.serve.sandbox-sweep-interval must be positive");
         }
         return sandboxSweepInterval;
+    }
+
+    /**
+     * Resolves the unset case to the design D9 default of 10 minutes (FR14 of
+     * add-base-ref-resolution, matching {@code RemoteOutageGate}'s prior hardcoded constant).
+     * Kept as an explicit method for the same PIT record-constructor reason as {@link
+     * #defaultSlots}.
+     */
+    private static Duration defaultRemoteProbeIntervalCap(@Nullable Duration remoteProbeIntervalCap) {
+        if (remoteProbeIntervalCap == null) {
+            return DEFAULT_REMOTE_PROBE_INTERVAL_CAP;
+        }
+        if (remoteProbeIntervalCap.isZero() || remoteProbeIntervalCap.isNegative()) {
+            throw new IllegalArgumentException("factory.serve.remote-probe-interval-cap must be positive");
+        }
+        return remoteProbeIntervalCap;
+    }
+
+    /**
+     * Resolves the unset case to a default of 1 hour (NFR-O1, NFR-O3 of add-base-ref-resolution,
+     * task 7.4): comfortably above the probe cap so a slow-to-recover remote does not trip its own
+     * backoff schedule into the sustained-open ERROR. Kept as an explicit method for the same PIT
+     * record-constructor reason as {@link #defaultSlots}.
+     */
+    private static Duration defaultRemoteSustainedOpenThreshold(@Nullable Duration remoteSustainedOpenThreshold) {
+        if (remoteSustainedOpenThreshold == null) {
+            return DEFAULT_REMOTE_SUSTAINED_OPEN_THRESHOLD;
+        }
+        if (remoteSustainedOpenThreshold.isZero() || remoteSustainedOpenThreshold.isNegative()) {
+            throw new IllegalArgumentException("factory.serve.remote-sustained-open-threshold must be positive");
+        }
+        return remoteSustainedOpenThreshold;
     }
 }

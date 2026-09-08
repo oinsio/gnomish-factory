@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability;
 
 import java.time.Instant;
+import java.util.Map;
 
 /**
  * The serve daemon's snapshot document (v1): a self-describing gauge file
@@ -30,6 +31,8 @@ import java.time.Instant;
  * @param slots slot capacity and occupancy; never null
  * @param vitals heartbeat/reaper/janitor thread health; never null
  * @param tracker tracker-port outage visibility; never null
+ * @param remote the remote outage gate section, one entry per remote target (NFR-O3, UX6 of
+ *     add-base-ref-resolution); never null, empty when no gate exists yet
  */
 public record Snapshot(
         int version,
@@ -40,7 +43,8 @@ public record Snapshot(
         FeedSnapshot feed,
         SlotsSnapshot slots,
         VitalsSnapshot vitals,
-        TrackerHealth tracker) {
+        TrackerHealth tracker,
+        Map<String, RemoteHealth> remote) {
 
     /**
      * Returns a copy with the self-description fields ({@code writtenAt},
@@ -61,6 +65,7 @@ public record Snapshot(
      *     replaced
      */
     public Snapshot withSelfDescription(Instant writtenAt, long intervalSeconds) {
-        return new Snapshot(version, writtenAt, intervalSeconds, instance, lifecycle, feed, slots, vitals, tracker);
+        return new Snapshot(
+                version, writtenAt, intervalSeconds, instance, lifecycle, feed, slots, vitals, tracker, remote);
     }
 }

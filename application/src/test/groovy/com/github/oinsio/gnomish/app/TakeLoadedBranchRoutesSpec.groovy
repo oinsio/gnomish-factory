@@ -37,7 +37,9 @@ class TakeLoadedBranchRoutesSpec extends Specification {
                 Path.of('/tmp/unused'),
                 'gnomish/PROJ-1',
                 'base-commit',
-                pending)
+                pending,
+                null,
+                null)
     }
 
     // FR10, D10, NFR-C1: a branch is an orphaned park to reconcile ONLY when the tracker-write marker

@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
@@ -20,7 +20,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -59,16 +58,22 @@ import org.jspecify.annotations.Nullable;
  * that had no park on it. The repository is a {@code TaskLifecycleStore} now, and this class drives
  * its {@code recordPark}/{@code confirmTerminalWrite} pair through the shared protocol.
  *
+ * <p>Kept in sync with {@link TakeEngineExecution}: both drive one engine run per claim through
+ * the same {@code RunAssembly.assemble} contract, and in particular both hand it the task's
+ * <em>law binding</em> — the repository and the commit its {@code .gnomish/} law and
+ * external-check pin are read from (design D12 of add-base-ref-resolution) — as a constructor
+ * argument taken from the claim, never derived per medium. A binding that changes on one side and not the other would make the
+ * same task read different law in host and container mode.
+ *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, FR13, FR15, FR18, D2, D3, D19 of
  * add-tracker-port and add-sandbox-core.
  */
 record TakeContainerEngineExecution(
         RunAssembly assembly,
-        AbortHandler abortHandler,
-        int abortThreshold,
+        AbortFuse abortFuse,
         List<String> credentialEnvVarsToScrub,
         ClaimLossFlag claimLossFlag,
-        Path cloneDir) {
+        LawBinding lawBinding) {
 
     TakeResult run(
             SandboxRunSupport support,
@@ -84,7 +89,8 @@ record TakeContainerEngineExecution(
         var persistence = new RevocationCheckingAttemptPersistence(
                 support.persistence(), tracker, ref, instanceId, claimLossFlag);
         var assembled = assembly.withSandbox(support.pieces(pending))
-                .assemble(definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, cloneDir);
+                .assemble(
+                        definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, lawBinding);
 
         support.restoreDenials();
 
@@ -128,8 +134,8 @@ record TakeContainerEngineExecution(
                 instanceId,
                 retry,
                 park,
-                abortHandler,
-                abortThreshold,
+                abortFuse.handler(),
+                abortFuse.threshold(),
                 finish);
     }
 

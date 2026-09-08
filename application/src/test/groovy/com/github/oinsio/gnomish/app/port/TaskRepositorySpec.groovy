@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port
 
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -32,7 +33,7 @@ class TaskRepositorySpec extends Specification {
         final Map<String, TaskState> resetStates = [:]
 
         @Override
-        void createTask(TaskContext context, String baseRef, TaskState initialState) {
+        void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState) {
             baseRefs[context.taskId()] = baseRef
             decisions[context.taskId()] = new ArrayList<>(context.decisions())
             initialStates[context.taskId()] = initialState
@@ -60,7 +61,7 @@ class TaskRepositorySpec extends Specification {
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
 
         when: 'the task is created from a base ref'
-        repository.createTask(context, 'abc123', TaskState.atStageStart('build'))
+        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
 
         then: 'the base ref is durably associated with the task'
         repository.baseRefs['TASK-1'] == 'abc123'
@@ -76,7 +77,7 @@ class TaskRepositorySpec extends Specification {
         def initialState = TaskState.atStageStart('build')
 
         when: 'the task is created'
-        repository.createTask(context, 'abc123', initialState)
+        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, initialState)
 
         then: 'the starting position is recorded with it'
         repository.initialStates['TASK-1'] == initialState
@@ -86,7 +87,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a repository with an existing task'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', TaskState.atStageStart('build'))
+        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
 
         when: 'a resume decision is appended'
         def decision = new Decision('proceed with plan B', 'build', 'operator', null)
@@ -100,7 +101,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a task escalated in a prior visit'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', TaskState.atStageStart('build'))
+        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         def escalation = new EscalationReport.DecisionNeeded('needs input', [])
         repository.recordOutcome('TASK-1', new TaskOutcome.Escalated(state, escalation))
@@ -122,7 +123,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a task whose stage burned its attempts before parking'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', TaskState.atStageStart('build'))
+        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
         def exhausted = TaskState.atStageStart('build').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
                         ExecutorUsage.none(), JudgeUsage.none(), []))
@@ -140,7 +141,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a repository with an existing task'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', TaskState.atStageStart('build'))
+        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
 
         when: 'the task completes'

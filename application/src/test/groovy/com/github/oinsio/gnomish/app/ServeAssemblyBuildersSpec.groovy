@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.LivenessOracle
 import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
@@ -15,6 +16,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGate
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
@@ -38,7 +40,7 @@ import spock.lang.Specification
 class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
 
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null)
+    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
 
     // FR13: the slot runner is built over the caller's tracker, so a slot it runs consults THAT
     // tracker. Driven here through the fetch that opens every slot — the runner swallows its
@@ -54,7 +56,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                 new ServeArguments(CLONE_DIR, null, false), WORKTREES_ROOT, 'taskId', pipeline(),
                 new TrackerConfig('github', 3), Stub(TrackerAdapterFactory), tracker, INSTANCE,
                 assemblyRunning(null), git, heartbeat, FIXED_CLOCK, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook())
+                new ClaimEpochBook(), DEFAULT_TRUSTED_BASE,
+                RemoteOutageGate.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
 
         then:
         slotRunner != null
@@ -80,7 +83,8 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
 
         when:
         def automaton = ServeAssembly.feedAutomaton(testProperties(), SERVE_PROPERTIES, clock, trackerConfig,
-                Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier)
+                Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier,
+                RemoteOutageGate.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
 
         then:
         automaton.view().wipLimit() == 7

@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 /**
@@ -51,6 +52,20 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     /** What the worktree's state.json read answers; reassigned by the scenario that deletes it. */
     Closure<TaskState> recordedState = { TaskState.atStageStart('build') }
 
+    /**
+     * FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so the
+     * port-fake chain needs a working {@link BaseRefGit} rather than {@link BaseRefGit#UNWIRED} —
+     * the resolved tip echoes the pinned ref back, which is exactly today's placeholder SHA input.
+     * A field, not a per-call helper: Spock's ordered {@code then:} verification tracks every
+     * mock/stub invocation, and creating the stub lazily inside the routing chain (i.e. during
+     * {@code when:}) misfiles its background interaction into the ordered sequence.
+     */
+    BaseRefGit baseRefGit = Stub(BaseRefGit) {
+        resolveForResume(_, _) >> { cloneDir, ref ->
+            new ResumeBaseOutcome.Bound(ref, ref)
+        }
+    }
+
     def setup() {
         worktreesRoot = tempDir.resolve('worktrees')
         worktree = worktreesRoot.resolve('PROJ-1')
@@ -67,7 +82,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
 
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
-        def git = new TaskGit(store, branches, worktrees)
+        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)
         def runner = new TakeResumeRunner(assemblyRunning(executor), git,
                 worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
         def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())

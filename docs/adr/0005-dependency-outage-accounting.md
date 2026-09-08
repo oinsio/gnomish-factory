@@ -1,7 +1,7 @@
 # ADR 0005: Dependency Outage Accounting
 
-Status: accepted (2026-09-06, introduced by `add-base-ref-resolution`;
-implementation pending)
+Status: accepted-and-implemented (2026-09-06, introduced by
+`add-base-ref-resolution`; implemented 2026-09-08)
 
 ## Context
 
@@ -92,23 +92,45 @@ stateDiagram-v2
 ### The separate bound
 
 An uncharged failure needs its own bound or it stalls silently. Two rules
-supply it. The probe interval resets to the idle value only on the first
+supply it, both landed exactly as designed. The probe interval — jittered,
+doubling off `RestartBackoff`, capped at `factory.serve.remote-probe-interval-cap`
+(default 10 minutes) — resets to the idle value only on the first
 *successful base refresh* after a close, never on the probe that closed the
 gate — a flapping remote that answers `ls-remote` but fails the fetch
-therefore meets a growing pause, not a restarted one. And a gate open longer
-than a configured duration logs ERROR once with its own operator-event code,
-so a sustained outage is never silent.
+therefore meets a growing pause, not a restarted one. This is `RemoteOutageGate`
+and its extracted `RemoteOutageProbeSchedule`: `openedFreshly()` arms a
+pending reset, `probeFailed()` re-arms the next interval off the *same*
+backoff instance so a gate that closes and reopens before a refresh ever
+succeeds resumes doubling from where it left off, and only
+`onSuccessfulRefresh()` clears the pending reset. And a gate open longer than
+`factory.serve.remote-sustained-open-threshold` (default 1 hour, comfortably
+above the probe cap) logs ERROR once with its own operator-event code — the
+one-shot latch is `RemoteOutageSustainedOpenWatch`, so a sustained outage is
+never silent but never repeats the ERROR either.
 
 ### The log and snapshot signal
 
-Transitions are the signal, failures are not: one WARN with an operator-event
-code on open naming the remote and the cause, one INFO recovery line on
-close with the outage duration and probe count, DEBUG with a periodic
-roll-up in between (the repeat suppressor keyed per remote target, so two
-remotes never mask each other). The serve snapshot carries a `remote`
-section beside `tracker`; the ledger records one `remoteOutage` line per
-closed outage and no task outcome for a released task, since nothing ran
-and nothing was spent.
+Transitions are the signal, failures are not: one WARN
+(`OperatorEvent.REMOTE_OUTAGE_GATE_OPENED`, `GF145`) on open naming the
+remote and the cause, one INFO recovery line on close (no code, per the
+logging rule) with the outage duration and probe count, DEBUG with a
+periodic roll-up in between via `RepeatSuppressor` keyed per remote target
+(`"remote-outage:" + target`), so two remotes never mask each other. A gate
+open past the sustained threshold additionally logs one ERROR
+(`OperatorEvent.REMOTE_OUTAGE_GATE_SUSTAINED_OPEN`, `GF146`), once per
+outage. The serve snapshot carries a `remote` section beside `tracker`
+(`RemoteOutageHealth`: `target`, `open`, `openSince`, `lastError`,
+`nextProbeAt`, `consecutiveFailures`, `lastSuccessAt`); the ledger records
+one `remoteOutage` line per closed outage (`RemoteOutageClosedOutage`:
+`target`, `openedAt`, `closedAt`, `probeCount`, `releasedClaims`,
+`lastError`) and no task outcome for a released task, since nothing ran and
+nothing was spent.
+
+Single-shot `take` never sees the gate at all: its own
+`InfrastructureUnavailable` result maps to exit code **16**
+(`TakeExitCodeMapper`), released with no gate, no snapshot, no ledger line —
+consistent with the gate's own scope, which is a `serve`-only, process-local
+state.
 
 ### A recorded deviation
 

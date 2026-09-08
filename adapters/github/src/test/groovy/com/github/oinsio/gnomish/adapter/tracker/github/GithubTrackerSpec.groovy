@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
@@ -56,9 +57,8 @@ class GithubTrackerSpec extends Specification {
         wireMock.start()
         // The find half of the FR11 find-then-upsert primitive: every factory comment write reads
         // the thread first. Specs that need a populated thread add their own, more recent stub.
-        wireMock.stubFor(com.github.tomakehurst.wiremock.client.WireMock
-                .get(com.github.tomakehurst.wiremock.client.WireMock.urlMatching('.*/comments\\?per_page=100'))
-                .willReturn(com.github.tomakehurst.wiremock.client.WireMock.aResponse()
+        wireMock.stubFor(get(urlMatching('.*/comments\\?per_page=100'))
+                .willReturn(aResponse()
                 .withStatus(200).withBody('[]')))
     }
 
@@ -100,7 +100,8 @@ class GithubTrackerSpec extends Specification {
         def cache = new GithubConditionalRequestCache(httpClient)
         new GithubTracker(
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
-                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered'),
+                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered',
+                GithubDesignatorRules.none()),
                 new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
                 new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
@@ -245,7 +246,7 @@ class GithubTrackerSpec extends Specification {
                 .withRequestBody(WireMock.containing('gnomish:ready')))
     }
 
-    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
         new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

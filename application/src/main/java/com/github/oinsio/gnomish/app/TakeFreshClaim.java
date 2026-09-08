@@ -8,9 +8,11 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
+import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TrackerTaskSynthesizer;
+import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.util.List;
@@ -28,10 +30,23 @@ import org.jspecify.annotations.Nullable;
  * since it only reads {@code worktreePath}/{@code taskId}/{@code branchName} off the bootstrap and
  * never assumes the branch pre-existed.
  *
+ * <p>The base the task branches from is resolved and freshly refreshed via {@link
+ * FreshClaimBaseBinding} (FR2, FR6, D6, D15 of add-base-ref-resolution) before anything durable is
+ * created; the definition the task runs under is then read from THAT resolved commit's law
+ * binding ({@link TaskTierLaw}, FR13), never from the startup definition the caller holds. A base
+ * that cannot be resolved or refreshed parks or releases the claim there — see {@link
+ * FreshClaimBaseBinding}'s javadoc for the classification.
+ *
  * <p>Split out of {@link TakeDisposition} purely to respect the file-size guidance
  * (`.claude/rules/process-invariants.md`).
  *
- * <p>Implements FR9, FR11, D3 of add-tracker-port.
+ * <p>Kept in sync with {@link TakeContainerFreshClaim}: both run the SAME fresh-claim recipe —
+ * harden, resolve+refresh the base, bind the task tier at that base, synthesize, create the
+ * branch, run the engine once — over their own execution medium (host worktree vs. sandbox task
+ * repository).
+ *
+ * <p>Implements FR9, FR11, D3 of add-tracker-port; FR2, FR6, FR13, D6, D15 of
+ * add-base-ref-resolution.
  */
 final class TakeFreshClaim {
 
@@ -57,15 +72,75 @@ final class TakeFreshClaim {
             TrackerTask trackerTask,
             Tracker tracker,
             InstanceId instanceId,
-            ClaimLossFlag claimLossFlag) {
+            ClaimLossFlag claimLossFlag,
+            TrustedBaseContext trustedBase) {
         String taskId = trackerTask.snapshot().id();
 
         git.worktrees().pruneWorktrees(cloneDir);
         git.branches().harden(cloneDir);
 
-        var synthesized = TrackerTaskSynthesizer.synthesize(trackerTask.snapshot(), definition);
+        TaskState notYetStarted =
+                TaskState.atStageStart(definition.stages().getFirst().name());
+        var baseRequest = new FreshClaimBaseBinding.Request(base, trackerTask, trustedBase);
+        return FreshClaimBaseBinding.resolve(
+                git.baseRefs(),
+                cloneDir,
+                baseRequest,
+                notYetStarted,
+                tracker,
+                baseBound -> claimAt(
+                        assembly,
+                        git,
+                        worktreesRoot,
+                        abortHandler,
+                        abortThreshold,
+                        credentialEnvVarsToScrub,
+                        cloneDir,
+                        taskId,
+                        definition,
+                        interactiveMode,
+                        trackerTask,
+                        tracker,
+                        instanceId,
+                        claimLossFlag,
+                        baseBound));
+    }
+
+    /**
+     * The remainder of a fresh claim once its base is resolved and refreshed: bind the task tier
+     * at that base, create the branch from the resolved ref, and run the engine once.
+     */
+    private static TakeResult claimAt(
+            RunAssembly assembly,
+            TaskGit git,
+            Path worktreesRoot,
+            AbortHandler abortHandler,
+            int abortThreshold,
+            List<String> credentialEnvVarsToScrub,
+            Path cloneDir,
+            String taskId,
+            PipelineDefinition definition,
+            RunArguments.InteractiveMode interactiveMode,
+            TrackerTask trackerTask,
+            Tracker tracker,
+            InstanceId instanceId,
+            ClaimLossFlag claimLossFlag,
+            FreshClaimBaseBinding.Bound baseBound) {
+        // FR13, D14 of add-base-ref-resolution: the task runs under the definition read from ITS
+        // resolved base's law binding, never under the startup one.
+        var law = TaskTierLaw.bind(assembly, baseBound.lawBinding(), definition, trackerTask, tracker);
+        if (law instanceof TaskTierLaw.Parked(TakeResult parked)) {
+            return parked;
+        }
+        var bound = (TaskTierLaw.Bound) law;
+        PipelineDefinition taskDefinition = bound.definition();
+
+        var synthesized = TrackerTaskSynthesizer.synthesize(trackerTask.snapshot(), taskDefinition);
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        GitFreshTaskSupport.createTask(taskRepository, taskId, synthesized.context(), base, synthesized.initialState());
+        // FR4, FR10 of add-base-ref-resolution: the resolved ref, not the raw --base argument, is
+        // what the branch is created from.
+        GitFreshTaskSupport.createTask(
+                taskRepository, taskId, synthesized.context(), baseBound.decision(), synthesized.initialState());
 
         Path worktree = TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId);
         TaskRecord content = git.store().readTaskRecord(worktree);
@@ -78,19 +153,20 @@ final class TakeFreshClaim {
                 worktree,
                 branchName,
                 content.baseCommit(),
-                content.trackerWritePending());
+                content.trackerWritePending(),
+                content.baseRef(),
+                content.baseRule());
 
         var execution = new TakeEngineExecution(
                 assembly,
                 git,
-                cloneDir,
                 worktreesRoot,
-                abortHandler,
-                abortThreshold,
+                new AbortFuse(abortHandler, abortThreshold),
                 credentialEnvVarsToScrub,
-                claimLossFlag);
+                claimLossFlag,
+                bound.lawBinding());
         return execution.run(
-                definition,
+                taskDefinition,
                 bootstrap,
                 synthesized.context(),
                 synthesized.initialState(),

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -39,7 +40,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         commitAll(cloneDir)
         worktreesRoot = tempDir.resolve('worktrees')
         repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        repository.createTask(new TaskContext('PROJ-1', 'Fix the thing', 'Body', []), null, TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext('PROJ-1', 'Fix the thing', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
     }
 
     private Path worktree(String taskId = 'PROJ-1') {
@@ -153,7 +154,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         } as ClaimEpochSource
         new GitTaskRepository(runner, cloneDir, worktreesRoot, held)
                 .createTask(new TaskContext('PROJ-2', 'Fix the other thing', 'Body', []),
-                null, TaskState.atStageStart('implement'))
+                'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         expect:
         allSources('PROJ-2').every {

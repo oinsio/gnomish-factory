@@ -39,7 +39,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
     }
 
     private String createTaskBranch(String taskId) {
-        def result = new TaskBranchCreator(runner).createBranch(cloneDir, taskId, null)
+        def result = new TaskBranchCreator(runner).createBranch(cloneDir, taskId, 'HEAD')
         (result as BranchCreationResult.Created).branchName()
     }
 

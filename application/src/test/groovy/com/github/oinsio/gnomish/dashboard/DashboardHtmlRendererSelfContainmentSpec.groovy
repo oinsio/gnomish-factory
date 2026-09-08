@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.board.WorkingRow
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.regex.Pattern
@@ -116,8 +117,8 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
     private static LedgerHistoryView fullHistory() {
         new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(2, 0, 1, 0)),
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(3, 1, 0, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(2, 0, 1, 0), 0, Duration.ZERO),
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(3, 1, 0, 0), 0, Duration.ZERO)
                 ],
                 [claude: new LedgerTokenUsage(1000, 500, 0, 0)])
     }

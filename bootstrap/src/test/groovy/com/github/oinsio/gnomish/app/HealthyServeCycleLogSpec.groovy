@@ -61,13 +61,11 @@ class HealthyServeCycleLogSpec extends Specification implements BareGitRepoFixtu
     def setup() {
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths for the same reason TakeLifecycleReadyToDeliveredSpecBase does:
-        // the loader resolves `instructions:` against the .gnomish/ root, the engine against the
-        // workspace root.
+        // One copy only, under the law root: since D12 of add-base-ref-resolution the runtime
+        // resolves `instructions:` against the same `.gnomish/` root the loader validates it
+        // against, so a project-root copy would be law in neither medium.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -87,6 +85,9 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
+        // base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
         new InMemoryTrackerHarness(tracker).seed(
@@ -103,7 +104,7 @@ tracker:
                 homeDir,
                 'taskId',
                 properties,
-                new ServeProperties(1, null, null, null, null, null, null),
+                new ServeProperties(1, null, null, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],

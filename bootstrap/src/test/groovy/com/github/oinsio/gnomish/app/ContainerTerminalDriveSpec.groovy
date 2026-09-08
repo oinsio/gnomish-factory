@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -43,8 +44,9 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        gitRunner.run(cloneDir, 'add', '.gnomish/instructions.md')
         gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
     }
 
@@ -68,7 +70,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         def environments = docker.environments(KEY, cloneDir, sandbox, tempDir.resolve('guard'))
         def support = new ContainerRunSupport(new GitProcessRunner(), cloneDir, 'T-ABORT', environments, segments, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         def context = new TaskContext('T-ABORT', 'title', 'body', List.<Decision> of())
-        support.taskRepository().createTask(context, 'HEAD', TaskState.atStageStart('build'))
+        support.taskRepository().createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def assembly = newAssembly()
         def originalErr = System.err
         System.err = new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8')
@@ -76,7 +78,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         when:
         ContainerTerminalDrive.run(
                 assembly, support, definition, context, TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL, cloneDir, null)
+                RunArguments.InteractiveMode.ALL, LawBinding.atCheckout(cloneDir), null)
 
         then: 'the durability break escapes as AbortedException, carrying the outcome'
         def e = thrown(AbortedException)

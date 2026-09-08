@@ -36,7 +36,7 @@ trait TaskRecordFakes {
         new TaskRecord(new TaskContext(taskId, 'title', 'body', [
             new Decision(body, 'build', 'tracker', NOW)
         ]),
-        'base-sha', NOW, null, null, false)
+        'base-sha', NOW, null, null, false, null, null)
     }
 
     /**
@@ -46,6 +46,6 @@ trait TaskRecordFakes {
     TaskRecord recordWith(RecordedOutcome outcome, EscalationReport escalation = null,
             boolean pendingTerminalWrite = false, String taskId = 'PROJ-1') {
         new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
-                'base-sha', NOW, outcome, escalation, pendingTerminalWrite)
+                'base-sha', NOW, outcome, escalation, pendingTerminalWrite, null, null)
     }
 }

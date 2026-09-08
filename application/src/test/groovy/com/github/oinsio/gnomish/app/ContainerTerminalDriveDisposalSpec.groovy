@@ -43,7 +43,8 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
 
     private void drive(ScriptedConsoleIO io = new ScriptedConsoleIO(['']), Verdict verdict = new Verdict.Pass()) {
         ContainerTerminalDrive.run(assemblyRunningLoop(executor, io, verdict), support, completingPipeline(),
-                CONTEXT, TaskState.atStageStart('build'), RunArguments.InteractiveMode.NONE, CLONE_DIR, null)
+                CONTEXT, TaskState.atStageStart('build'), RunArguments.InteractiveMode.NONE,
+                LawBinding.atCheckout(CLONE_DIR), null)
     }
 
     // FR11, NFR-R2: runner start sweeps environments a dead instance left labelled, BEFORE the run

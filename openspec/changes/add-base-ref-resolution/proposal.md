@@ -325,7 +325,12 @@ and the rest from the ref being built. This change adopts that mechanism.
   git objects at one commit — the **law commit** — through a law source
   abstraction with exactly two realizations: working tree (in-place mode,
   manual `run` without `--base`) and git objects at a commit. The clone's
-  working tree, index, and `HEAD` SHALL play no part in such a path. Two
+  working tree, index, and `HEAD` SHALL play no part in such a path. Both
+  realizations SHALL resolve stage file references (`instructions`,
+  `criteriaFile`) against one **law root** — the `.gnomish/` directory of
+  the law commit or of the working tree — so a reference that validates at
+  load reads at run; a symlink entry under the law root SHALL be refused by
+  both realizations, never followed. Two
   tiers: the trusted tier (`tracker:`, `task-branch:`, and future selector blocks)
   binds from the refreshed default branch; the task tier (stages, stage
   instructions, judge criteria, the remainder of `config.yaml`) binds from

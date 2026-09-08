@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -12,6 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
+import com.github.oinsio.gnomish.e2e.gitea.GiteaTaskSeedFixture
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -42,7 +41,7 @@ value = {
     !GiteaAvailability.dockerAvailable()
 },
 reason = 'Docker daemon unreachable — see GiteaAvailability; Docker is a dev/CI prerequisite for the Gitea E2E layer (.claude/rules/testing.md)')
-class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTaskSeedFixture, AppAssemblyFixture {
 
     @Shared
     @AutoCleanup('stop')
@@ -50,8 +49,6 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
 
     @TempDir
     Path tempDir
-
-    def gitRunner = new GitProcessRunner()
 
     // Wired per feature, so it gets its own repository — see GiteaContainerFixture's sharing rule.
     String originUrl
@@ -97,7 +94,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
     /** A brand-new, independent local clone of the Gitea repo — stands in for a separate machine. */
     private Path freshClone(String name) {
         Path dir = tempDir.resolve(name)
-        gitRunner.run(tempDir, 'clone', originUrl, dir.toString())
+        assert gitExitCode(tempDir, 'clone', originUrl, dir.toString()) == 0
         dir
     }
 
@@ -107,10 +104,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
     def "a second instance, in a fresh clone with no local knowledge of the first, resumes and continues the task from origin"() {
         given: 'instance A: a clone with a project history, seeded on origin'
         def instanceA = freshClone('instance-a')
-        Files.writeString(instanceA.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(instanceA, 'add', 'instructions.md')
-        gitRunner.run(instanceA, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        gitRunner.run(instanceA, 'push', 'origin', 'HEAD:refs/heads/main')
+        seedAndPushGnomishTask(instanceA)
         def worktreesA = tempDir.resolve('worktrees-a')
         def taskId = 'CROSS-1'
 
@@ -122,7 +116,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
 
         then: 'stdin exhaustion propagates — the task stopped mid-run, with only the first round durably committed'
         thrown(InputExhaustedException)
-        def tipAfterA = gitRunner.run(instanceA, 'rev-parse', "gnomish/${taskId}").stdout().trim()
+        def tipAfterA = gitOutput(instanceA, 'rev-parse', "gnomish/${taskId}")
         tipAfterA
 
         when: 'instance B: a completely separate fresh clone, made only now — after A already pushed'
@@ -134,7 +128,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
 
         then: 'instance B sees exactly the round instance A pushed, without ever touching instance A locally'
         Files.exists(bundle.worktreePath().resolve('.gnomish-task').resolve('task.json'))
-        gitRunner.run(instanceB, 'rev-parse', "gnomish/${taskId}").stdout().trim() == tipAfterA
+        gitOutput(instanceB, 'rev-parse', "gnomish/${taskId}") == tipAfterA
 
         when: 'instance B continues the task to completion, driving the second round ("verify") and pushing it'
         def twoEnters = (System.lineSeparator() * 2)
@@ -143,14 +137,12 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements BareGitRe
                 .run(instanceB, taskId, pipeline(), RunArguments.InteractiveMode.ALL, false)
 
         then: 'instance B\'s own round commit for "verify" exists, distinct from instance A\'s "build" round'
-        def verifyRoundSha = gitRunner.run(instanceB, 'log', "gnomish/${taskId}", '--format=%H', '--grep',
-                '^gnomish: round verify#0$').stdout().trim()
+        def verifyRoundSha = roundCommitSha(instanceB, taskId, 'verify')
         verifyRoundSha
         verifyRoundSha != tipAfterA
 
         and: 'a third, wholly independent clone confirms that round reached origin — proof this is not local-only (FR11 push scope is the round commit; the final Completed/cleanup commit is a separate, unpushed lifecycle write)'
         def verifyClone = freshClone('verify-clone')
-        gitRunner.run(verifyClone, 'fetch', 'origin', "gnomish/${taskId}:refs/remotes/origin/gnomish/${taskId}")
-        gitRunner.run(verifyClone, 'cat-file', '-e', verifyRoundSha).exitCode() == 0
+        roundReachedOrigin(verifyClone, taskId, verifyRoundSha)
     }
 }

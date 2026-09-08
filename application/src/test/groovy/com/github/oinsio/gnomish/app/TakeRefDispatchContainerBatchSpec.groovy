@@ -24,15 +24,13 @@ import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
-import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
-import com.github.oinsio.gnomish.sandbox.CapabilityPassport
-import com.github.oinsio.gnomish.sandbox.SandboxBindingProvider
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import java.nio.file.Path
 import java.time.Duration
+import java.util.function.UnaryOperator
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -52,29 +50,14 @@ import spock.lang.Timeout
  * <p>Implements FR1 of add-serve-sandbox-lifecycle.
  */
 @Timeout(10)
-class TakeRefDispatchContainerBatchSpec extends Specification implements RunChainFakes {
+class TakeRefDispatchContainerBatchSpec extends Specification implements RunChainFakes, SandboxBindingFixtures {
 
     private static final TrackerConfig TRACKER_CONFIG = new TrackerConfig('github', 3)
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    1, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null)
+    1, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
 
     Tracker tracker = Mock(Tracker)
     TrackerAdapterFactory factory = Stub(TrackerAdapterFactory)
-
-    private static SandboxBindingProvider containerProvider() {
-        new SandboxBindingProvider() {
-
-                    @Override
-                    String configName() {
-                        BindingNames.CONTAINER
-                    }
-
-                    @Override
-                    CapabilityPassport passport() {
-                        CapabilityPassport.container()
-                    }
-                }
-    }
 
     private SandboxRunSupport stubSupport(TaskRepository repository) {
         Stub(SandboxRunSupport) {
@@ -103,10 +86,10 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit))
+        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
                 ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
-                containerTakeSupport(repositories), new ClaimEpochBook())
+                containerTakeSupport(repositories), new ClaimEpochBook(), DEFAULT_TRUSTED_BASE)
     }
 
     private void dispatch(List<String> refs, Map<String, TaskRepository> repositories) {
@@ -138,8 +121,8 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         1 * tracker.fetchTask(new TaskRef('PROJ-1')) >> readyTask('PROJ-1')
         1 * tracker.fetchTask(new TaskRef('PROJ-2')) >> readyTask('PROJ-2')
         2 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
-        1 * repoOne.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
-        1 * repoTwo.createTask({ it.taskId() == 'PROJ-2' }, 'HEAD', _)
+        1 * repoOne.createTask({ it.taskId() == 'PROJ-1' }, 'main', _, _)
+        1 * repoTwo.createTask({ it.taskId() == 'PROJ-2' }, 'main', _, _)
 
         and:
         thrown(TakeExitCodeException)

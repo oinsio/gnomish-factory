@@ -77,7 +77,7 @@ class ThreeProviderPlatformFixture {
     }
 
     /**
-     * The check client the composition root builds (see {@code RunAssembler.externalCheckClient}):
+     * The check client the composition root builds (see {@code CheckProviderWiring.externalCheckClient}):
      * the discovered registry, the operator subsections passed through the real startup gate, and
      * the production dispatching composite — no provider stood in for.
      */
@@ -86,7 +86,7 @@ class ThreeProviderPlatformFixture {
             github: ['api-url': wireMock.baseUrl(), repo: REPO],
             http: [allowlist: allowlist],
         ]
-        def registry = CheckClientDiscovery.discover()
+        def registry = CheckClientDiscovery.discover(CheckClientDiscovery.class.classLoader)
         CheckClientConfiguration.requireValidSubsections(subsections, registry, ConnectionProfiles.none())
         new ProviderDispatchingExternalCheckClient(
                 registry,

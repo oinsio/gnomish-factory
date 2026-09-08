@@ -1,23 +1,10 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
-import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
-import com.github.oinsio.gnomish.app.console.SystemConsoleIO
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.util.function.BooleanSupplier
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -43,37 +30,12 @@ class ManualRunContainerDispatchSpec extends Specification implements AppAssembl
     Path homeDir
 
     private ManualRunRunner newContainerRunner() {
-        def runner = new ManualRunRunner(
-                new RunArgumentsParser(),
-                new PipelineStartup(TrackerValidatorStub.plainSource()),
-                new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
-                new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                testProperties(),
-                new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null),
-                // Container by default (D13): no explicit binding, image configured.
-                new BindingProperties(null, [:]),
-                DiscoveredBindings.real(),
-                TaskGitFixture.real(),
+        def runner = newManualRunRunner(
                 worktreesRoot,
                 homeDir,
-                new StatusCommand(TaskGitFixture.real(), worktreesRoot),
-                new UsageCommand(TaskGitFixture.real()),
-                new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource()),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource()),
-                Clock.systemUTC(),
-                [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null),
-                new ClaimEpochBook())
+                new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null),
+                // Container by default (D13): no explicit binding, image configured.
+                new BindingProperties(null, [:]))
         // The D13 prerequisite probe, scripted reachable — no daemon in unit tests.
         runner.@dockerProbe = { true } as BooleanSupplier
         runner

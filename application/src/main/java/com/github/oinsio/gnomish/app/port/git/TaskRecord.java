@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import java.time.Instant;
@@ -29,6 +30,11 @@ import org.jspecify.annotations.Nullable;
  * @param trackerWritePending {@code true} when a recorded terminal park's tracker write is still
  *     outstanding — the durable "tracker-write pending" marker reconcile-on-resume reads (FR10 of
  *     add-claim-heartbeat)
+ * @param baseRef the resolved ref {@code baseCommit} was resolved from, or {@code null} when the
+ *     task carries no durable pin (a legacy {@code baseCommit}-only document, FR7 of
+ *     add-base-ref-resolution)
+ * @param baseRule the tier that produced {@code baseRef}, or {@code null} together with {@code
+ *     baseRef} when unpinned (FR7 of add-base-ref-resolution)
  */
 public record TaskRecord(
         TaskContext context,
@@ -36,4 +42,6 @@ public record TaskRecord(
         Instant createdAt,
         @Nullable RecordedOutcome outcome,
         @Nullable EscalationReport lastEscalation,
-        boolean trackerWritePending) {}
+        boolean trackerWritePending,
+        @Nullable String baseRef,
+        @Nullable BaseRule baseRule) {}

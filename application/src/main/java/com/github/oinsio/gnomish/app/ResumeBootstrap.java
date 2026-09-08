@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import java.nio.file.Path;
@@ -30,10 +31,18 @@ import org.jspecify.annotations.Nullable;
  * @param worktreePath the materialized worktree's absolute path; ready to use as-is
  * @param branchName the task branch's short name, e.g. {@code gnomish/PROJ-1}
  * @param baseCommit the commit the task branch was created from, as recorded in {@code task.json}
+ *     — the resume law rebind's fallback pinned-ref-name input, used only when {@code baseRef} is
+ *     {@code null} (a legacy branch, FR7 of add-base-ref-resolution)
  * @param trackerWritePending {@code true} when the branch's recorded terminal park still has an
  *     unconfirmed tracker write — the durable "tracker-write pending" marker reconcile-on-resume
  *     reads to distinguish an orphaned park (deferred park, zero engine rounds) from a settled one
  *     (normal resume); FR10, D10 of add-claim-heartbeat
+ * @param baseRef the resolved ref {@code baseCommit} was resolved from, or {@code null} when the
+ *     branch carries no durable pin (a legacy {@code baseCommit}-only document, FR7 of
+ *     add-base-ref-resolution) — the resume law rebind's preferred pinned-ref-name input (task 6.4)
+ * @param baseRule the tier that produced {@code baseRef}, or {@code null} together with it when
+ *     unpinned (FR7 of add-base-ref-resolution); not consumed by resume law rebinding — resume only
+ *     re-resolves a ref, it does not re-derive the audit-trail rule (task 6.4)
  */
 public record ResumeBootstrap(
         String taskId,
@@ -43,5 +52,7 @@ public record ResumeBootstrap(
         Path worktreePath,
         String branchName,
         String baseCommit,
-        boolean trackerWritePending)
+        boolean trackerWritePending,
+        @Nullable String baseRef,
+        @Nullable BaseRule baseRule)
         implements ResumedBranch {}

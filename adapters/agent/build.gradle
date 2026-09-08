@@ -125,6 +125,9 @@ layering {
         // through the dependency-free atomic-write leaf (design D10 of
         // harden-task-branch-contract); no source in this module names it.
         ':atomicfile',
+        // The base-resolution leaf, reached transitively through `:adapters` (design D2
+        // of add-base-ref-resolution); no source in this module names it.
+        ':baseref',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',

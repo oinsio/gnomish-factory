@@ -3,17 +3,11 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,7 +32,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR10, D10, NFR-C1, M4 of add-claim-heartbeat.
  */
-abstract class TakeReconcileLifecycleSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture {
+abstract class TakeReconcileLifecycleSpecBase extends Specification implements BareGitRepoFixture, TakeCommandFixture, ApplicationArgumentsFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
 
@@ -53,7 +47,7 @@ abstract class TakeReconcileLifecycleSpecBase extends Specification implements B
     /** @return {@code [Tracker, TrackerAdapterFactory]} for one fresh Ready task seeded at {@link #REF} */
     abstract List seededReadyTrackerAndFactory(TaskRef ref, String title, String body)
 
-    /** @return {@code tracker}'s correspondence thread on {@code ref} as {@code "KIND: text"} lines, oldest first */
+    /** @return {@code tracker}'s correspondence thread on {@code ref} as {@code "KIND: text"} lines, oldest first  */
     abstract List<String> thread(Tracker tracker, TaskRef ref)
 
     /**
@@ -70,10 +64,8 @@ abstract class TakeReconcileLifecycleSpecBase extends Specification implements B
 
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -95,20 +87,14 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties) {
-        TakeCommandFactory.of(
-                newAssembly(factoryProperties),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                'taskId',
-                factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+        newTakeCommand(factoryProperties, worktreesRoot, [github: trackerFactory])
     }
 
     def "M4: a delivered branch with a missing tracker finish reconciles without running any stage"() {

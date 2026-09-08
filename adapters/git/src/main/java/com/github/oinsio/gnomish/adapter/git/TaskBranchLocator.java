@@ -128,12 +128,7 @@ public final class TaskBranchLocator {
     }
 
     private static String why(GitCommandResult fetch) {
-        return switch (fetch.termination()) {
-            case TIMED_OUT -> "the fetch timed out";
-            case INTERRUPTED -> "the fetch was interrupted";
-            case EXITED ->
-                "the fetch exited " + fetch.exitCode() + ": " + fetch.stderr().trim();
-        };
+        return fetch.failureDetail("fetch");
     }
 
     private boolean refExists(Path cloneDir, String ref) {

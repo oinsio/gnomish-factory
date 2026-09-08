@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -89,7 +90,8 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
 
     private Path cloneWithOrigin(String name, String originUrl) {
         def dir = initWorkingRepo(tempDir, name)
-        Files.writeString(dir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(dir.resolve('.gnomish'))
+        Files.writeString(dir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(dir)
         addRemote(dir, 'origin', originUrl)
         dir
@@ -105,7 +107,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
         // has no origin at all and the remote is restored right after.
         def originUrl = gitOutput(cloneDir, 'remote', 'get-url', 'origin').trim()
         assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         addRemote(cloneDir, 'origin', originUrl)
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"

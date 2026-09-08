@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -89,7 +90,7 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         where:
         label | delegated | write
         'started' | 'createTask' | { TaskLifecycleStore s ->
-            s.createTask(new TaskContext(TASK_ID, 't', 'b', []), 'HEAD', TaskState.atStageStart('work'))
+            s.createTask(new TaskContext(TASK_ID, 't', 'b', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('work'))
         }
         'resumed' | 'appendDecision' | { TaskLifecycleStore s ->
             s.appendDecision(TASK_ID, new Decision('go', null, null, Instant.EPOCH), TaskState.atStageStart('work'))

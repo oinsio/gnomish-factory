@@ -22,6 +22,10 @@ import org.slf4j.MDC;
  * {@link com.github.oinsio.gnomish.app.port.run.SandboxRunSupport} bundle every subsequent
  * container-mode resume step reads and writes through.
  *
+ * <p>Kept in sync with {@link TakeResumeBootstrap}: both must harden the clone, reconcile the
+ * remote on resume-start, and build the same resume bundle shape (context, outcome, last
+ * escalation, base commit/ref/rule) from the loaded task record.
+ *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9 of add-tracker-port.
  *
  * @param git the task-git capability set: clone hardening and branch reconciliation; never null
@@ -84,6 +88,9 @@ record TakeContainerResumeBootstrap(TaskGit git, ContainerTakeSupport containerT
                 content.lastEscalation(),
                 support,
                 TaskIdSanitizer.branchName(taskId),
-                content.trackerWritePending());
+                content.baseCommit(),
+                content.trackerWritePending(),
+                content.baseRef(),
+                content.baseRule());
     }
 }

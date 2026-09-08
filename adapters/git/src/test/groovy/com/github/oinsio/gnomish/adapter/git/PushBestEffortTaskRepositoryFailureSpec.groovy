@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -99,11 +100,11 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
 
         when:
         def events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD', TaskState.atStageStart('work'))
+            repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('work'))
         }
 
         then:
-        1 * delegate.createTask(_, _, _)
+        1 * delegate.createTask(_, _, _, _)
         noExceptionThrown()
         events.isEmpty()
     }

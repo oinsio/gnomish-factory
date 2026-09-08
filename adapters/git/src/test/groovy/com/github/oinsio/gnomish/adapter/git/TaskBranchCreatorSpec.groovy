@@ -5,8 +5,10 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR2, FR7 of add-git-workflow (design D7): branch creation from the clone's current state,
- * with an optional {@code --base <ref>} override, never fetching or pulling.
+ * FR2, FR7 of add-git-workflow (design D7): branch creation from a caller-supplied {@code
+ * baseRef} (the clone's current {@code HEAD}, or an explicit override), never fetching or
+ * pulling. The caller always resolves {@code baseRef} before calling — this class no longer
+ * defaults it (FR4, FR10, M2 of add-base-ref-resolution).
  */
 class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture {
 
@@ -23,13 +25,13 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
     }
 
-    def "FR7: branch created from current HEAD when no base ref is given"() {
+    def "FR7: branch created from the given HEAD ref"() {
         given:
         def repo = initWorkingRepo(tempDir)
         def head = commitAndGetSha(repo, 'a.txt', 'first')
 
         when:
-        def result = creator.createBranch(repo, 'PROJ-1', null)
+        def result = creator.createBranch(repo, 'PROJ-1', 'HEAD')
 
         then:
         result instanceof BranchCreationResult.Created
@@ -57,7 +59,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         commitAndGetSha(repo, 'a.txt', 'first')
 
         when:
-        creator.createBranch(repo, 'PROJ 42: fix/it', null)
+        creator.createBranch(repo, 'PROJ 42: fix/it', 'HEAD')
 
         then:
         def listed = runner.run(repo, 'branch', '--list', 'gnomish/PROJ-42-fix-it')
@@ -68,10 +70,10 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         given:
         def repo = initWorkingRepo(tempDir)
         commitAndGetSha(repo, 'a.txt', 'first')
-        creator.createBranch(repo, 'PROJ-3', null)
+        creator.createBranch(repo, 'PROJ-3', 'HEAD')
 
         when:
-        def result = creator.createBranch(repo, 'PROJ-3', null)
+        def result = creator.createBranch(repo, 'PROJ-3', 'HEAD')
 
         then:
         noExceptionThrown()
@@ -101,7 +103,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         def headBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
 
         when:
-        creator.createBranch(repo, 'PROJ-5', null)
+        creator.createBranch(repo, 'PROJ-5', 'HEAD')
 
         then:
         def branchAfter = runner.run(repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout().trim()

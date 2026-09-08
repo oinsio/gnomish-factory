@@ -67,6 +67,9 @@ public final class TakeClaimAndWork {
     // the epoch it runs under, and ended here at the claim-holding choke point (see
     // dispatchAfterClaim's finally). An empty book where no claim epoch is recorded.
     final ClaimEpochBook epochs;
+    // FR13, D15 of add-base-ref-resolution: the trusted tier bound once at startup, read by the
+    // routing point's fresh-claim base resolution — never re-read per claim.
+    final TrustedBaseContext trustedBase;
 
     TakeClaimAndWork(
             RunAssembly assembly,
@@ -80,7 +83,8 @@ public final class TakeClaimAndWork {
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
             TakeContainerResumeRunner containerResumeRunner,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase) {
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
@@ -94,6 +98,7 @@ public final class TakeClaimAndWork {
         this.containerTakeSupport = containerTakeSupport;
         this.containerResumeRunner = containerResumeRunner;
         this.epochs = epochs;
+        this.trustedBase = trustedBase;
     }
 
     /**

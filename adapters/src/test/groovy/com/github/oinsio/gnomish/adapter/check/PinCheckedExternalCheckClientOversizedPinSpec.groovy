@@ -37,7 +37,7 @@ class PinCheckedExternalCheckClientOversizedPinSpec extends Specification implem
         def guard = new PinCheckedExternalCheckClient(
                 delegate, { c ->
                     [c.checkId()] as Set
-                }, gitObjects, 'refs/heads/base')
+                }, gitObjects, baseTip)
 
         when:
         def status = guard.poll(check([]), workspaceAt(attempt))

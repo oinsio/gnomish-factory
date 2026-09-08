@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -55,7 +56,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     private ServeCommand newServeCommand() {
         new ServeCommand(
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
-                testProperties(), new ServeProperties(0, null, null, null, null, null, null), Clock.systemUTC(),
+                testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 new ClaimEpochBook())
@@ -124,7 +125,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
         new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'), ClaimEpochSource.NONE)
-                .createTask(new TaskContext('PROJ-1', 'T', 'B', []), null, TaskState.atStageStart('build'))
+                .createTask(new TaskContext('PROJ-1', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
 
         def args = new DefaultApplicationArguments('usage', "--dir=${cloneDir}".toString(), 'PROJ-1')
         def originalOut = System.out
@@ -171,7 +172,11 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // handled — proven by TakeCommand's own distinct failure mode (a project with no .gnomish/
     // at all fails pipeline load, never StatusCommand's/UsageCommand's own error shapes).
     def "dispatchNonRun() routes to TakeCommand for the 'take' subcommand and returns true"() {
-        given:
+        given: 'a real git repo with a real origin (FR5, FR13 of add-base-ref-resolution), but no .gnomish/ tree at all'
+        assert gitExitCode(worktreesRoot, 'init') == 0
+        Files.writeString(worktreesRoot.resolve('README.md'), 'placeholder\n')
+        commitAll(worktreesRoot)
+        addOrigin(worktreesRoot, homeDir)
         def args = new DefaultApplicationArguments('take', "--dir=${worktreesRoot}".toString())
 
         when:
@@ -211,13 +216,18 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // complete normally, exercising dispatchNonRun's `return true` for SERVE (BooleanFalseReturnValsMutator survivor).
     def "dispatchNonRun() routes to ServeCommand for the 'serve' subcommand and returns true"() {
         given: 'a serve-only dispatch, wired with a reachable tracker factory and a starter that records invocation'
+        assert gitExitCode(worktreesRoot, 'init') == 0
         writeMinimalPipeline(worktreesRoot)
+        // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
+        // base against a real 'origin' remote, never the clone's local HEAD.
+        commitAll(worktreesRoot)
+        addOrigin(worktreesRoot, homeDir)
         def starterInvoked = new AtomicBoolean(false)
         def serveDispatch = new SubcommandDispatch(
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 new ServeCommand(
                         newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
-                        testProperties(), new ServeProperties(0, null, null, null, null, null, null), Clock.systemUTC(),
+                        testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
                         new SystemClock(), [github: factoryReturning(Stub(Tracker))],
                         MapSecretsProvider.NONE,
                         TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->

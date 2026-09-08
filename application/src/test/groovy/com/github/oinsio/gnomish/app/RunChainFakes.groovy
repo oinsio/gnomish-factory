@@ -5,7 +5,12 @@ import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
+import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -14,6 +19,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
@@ -34,9 +40,11 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
+import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder
 import java.nio.file.Path
 
@@ -57,6 +65,74 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
     static final Path WORKTREES_ROOT = Path.of('/tmp/gnomish-worktrees')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
     static final TaskRef REF = new TaskRef('github:o/r#1')
+    /** The law commit the fake task-tier reads report — any well-formed id, never resolved. */
+    static final ObjectId LAW_COMMIT = ObjectId.of('0123456789abcdef0123456789abcdef01234567')
+    /**
+     * The trusted tier a port-fake fresh-claim scenario resolves against when it doesn't care
+     * about base policy specifics: no allowed bases, no configured default, and a default branch
+     * name any {@link BaseRefGit} stub's {@code refresh} may accept unconditionally.
+     */
+    static final TrustedBaseContext DEFAULT_TRUSTED_BASE = new TrustedBaseContext(BaseDefinition.none(), 'main')
+
+    /**
+     * FR13 of add-base-ref-resolution: {@link TaskTierLaw#bind} reads the task tier through {@link
+     * RunAssembly#bindTaskTier} before a fresh claim creates anything — a scenario that stubs
+     * {@code RunAssembly} bare (a plain {@code Stub(RunAssembly)}, no interactions) and still
+     * dispatches a real {@code Acquired} claim through the fresh-claim path needs this call
+     * answered, or Spock's own default response for the unstubbed method fails constructing one
+     * (the return type nests a sealed interface, which Spock cannot default-proxy). Feed this to
+     * the site's own {@code Stub(RunAssembly) { bindTaskTier(_) >> ... }} interaction — a plain
+     * value, not a Spock construct, since a trait's shared method runs outside the per-feature
+     * scope Spock's mock controller requires.
+     */
+    BoundTaskTier boundTaskTier() {
+        new BoundTaskTier(new LoadOutcome.Loaded(pipeline()), LAW_COMMIT)
+    }
+
+    /**
+     * FR2, FR6 of add-base-ref-resolution: a fresh claim resolves and refreshes its base before
+     * creating anything, so a scenario that dispatches a real Acquired claim through the
+     * fresh-claim path needs a working {@link BaseRefGit} rather than {@link
+     * BaseRefGit#UNWIRED} — this always refreshes cleanly, whatever ref resolution names. A plain
+     * closure-backed implementation, not a Spock {@code Stub}: a trait's shared method runs
+     * outside the per-feature scope Spock's mock controller requires.
+     */
+    BaseRefGit refreshingBaseRefGit() {
+        [
+            refresh: { Path cloneDir, String ref ->
+                new BaseRefreshOutcome.Refreshed(ref, ref, BaseRefKind.BRANCH)
+            },
+            discoverDefaultBranch: { Path cloneDir ->
+                throw new UnsupportedOperationException('never called on the claim path (FR13)')
+            },
+            resolveForResume: { Path cloneDir, String ref ->
+                throw new UnsupportedOperationException('not exercised by a fresh-claim scenario')
+            },
+        ] as BaseRefGit
+    }
+
+    /**
+     * FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so a
+     * port-fake chain that reaches the resume path needs a working {@link BaseRefGit} rather than
+     * {@link BaseRefGit#UNWIRED} — the resolved tip echoes the pinned ref back, which is exactly
+     * today's placeholder SHA input. Shared by the host and container resume-routing specs, which
+     * assign it to a field rather than calling it lazily: Spock's ordered {@code then:}
+     * verification tracks every mock/stub invocation, and building the stub during {@code when:}
+     * would misfile its background interaction into the ordered sequence.
+     */
+    BaseRefGit resumingBaseRefGit() {
+        [
+            refresh: { Path cloneDir, String ref ->
+                throw new UnsupportedOperationException('not exercised by a resume scenario')
+            },
+            discoverDefaultBranch: { Path cloneDir ->
+                throw new UnsupportedOperationException('not exercised by a resume scenario')
+            },
+            resolveForResume: { Path cloneDir, String ref ->
+                new ResumeBaseOutcome.Bound(ref, ref)
+            },
+        ] as BaseRefGit
+    }
 
     /** A tracker task in {@code state} — the one shape the three named inputs below differ within. */
     TrackerTask trackerTask(TrackerTaskState state, String taskId = 'PROJ-1') {
@@ -103,7 +179,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         // A hand-written fake rather than a Spock Stub: mock creation is only legal inside a
         // feature's own lifetime, and this is built by a trait helper.
         [
-            assemble: { definition, context, state, interactiveMode, AttemptPersistence persistence, credentials, cloneDir ->
+            assemble: { definition, context, state, interactiveMode, AttemptPersistence persistence, credentials, lawBinding ->
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
@@ -123,6 +199,14 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 hostGitPushAttached << decoration
                 assemblyRunning(executor, verdict, hostGitPushAttached)
             },
+            withPipelineSource: { source ->
+                assemblyRunning(executor, verdict, hostGitPushAttached)
+            },
+            // FR13 of add-base-ref-resolution: the task tier a fresh claim binds is the completing
+            // pipeline these chains run, read at a fixed law commit.
+            bindTaskTier: { binding ->
+                new BoundTaskTier(new LoadOutcome.Loaded(completingPipeline()), LAW_COMMIT)
+            },
         ] as RunAssembly
     }
 
@@ -140,7 +224,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         })
         def self = null
         self = [
-            assemble: { definition, context, state, interactiveMode, AttemptPersistence persistence, credentials, cloneDir ->
+            assemble: { definition, context, state, interactiveMode, AttemptPersistence persistence, credentials, lawBinding ->
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
@@ -154,6 +238,10 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             withHostGitPush: { decoration ->
                 hostGitPushAttached << decoration
                 self
+            },
+            withPipelineSource: { source -> self },
+            bindTaskTier: { binding ->
+                new BoundTaskTier(new LoadOutcome.Loaded(completingPipeline()), LAW_COMMIT)
             },
         ] as RunAssembly
         return self
@@ -176,10 +264,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     TakeClaimAndWork claimAndWork(TaskGit git, Tracker tracker, RunAssembly assembly,
             ClaimBeat beat = ClaimBeat.NONE, ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
-            Path root = WORKTREES_ROOT, ClaimEpochBook epochs = new ClaimEpochBook()) {
+            Path root = WORKTREES_ROOT, ClaimEpochBook epochs = new ClaimEpochBook(),
+            TrustedBaseContext trustedBase = DEFAULT_TRUSTED_BASE) {
         TakeClaimAndWorkFactory.forSlot(
                 assembly, git, root, 'taskId',
                 new AbortHandler(tracker, FIXED_CLOCK), 3, [], beat, claimLossFlag, ContainerTakeSupport.hostOnly(),
-                epochs)
+                epochs, trustedBase)
     }
 }

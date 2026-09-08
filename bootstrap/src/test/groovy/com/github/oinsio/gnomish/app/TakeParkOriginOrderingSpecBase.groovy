@@ -45,9 +45,9 @@ abstract class TakeParkOriginOrderingSpecBase extends Specification implements T
 
     def setup() {
         writeTwoInstanceProjectFixture()
-        origin = initBareRepo(tempDir, 'origin.git')
-        gitOutput(projectDir, 'remote', 'add', 'origin', origin.toString())
-        gitOutput(projectDir, 'push', '-q', 'origin', 'HEAD:refs/heads/main')
+        // writeTwoInstanceProjectFixture already wired a real 'origin' remote (FR5, FR13 of
+        // add-base-ref-resolution); this spec only needs its path back to read origin directly.
+        origin = Path.of(gitOutput(projectDir, 'remote', 'get-url', 'origin'))
 
         def reading = new OriginReadingTracker(
                 seededReadyTracker(REF, 'Add widgets', 'please add widgets'), {

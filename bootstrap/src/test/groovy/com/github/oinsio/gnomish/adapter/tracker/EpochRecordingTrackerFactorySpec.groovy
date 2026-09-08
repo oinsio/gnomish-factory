@@ -48,6 +48,7 @@ class EpochRecordingTrackerFactorySpec extends Specification {
         def refusal = wrapped.refuseForeignRef(MapSecretsProvider.NONE, CONFIG, REF)
         def subsection = wrapped.subsectionValidator()
         def credentials = wrapped.credentialEnvVars(CONFIG)
+        def kinds = wrapped.configuredDesignatorKinds(CONFIG)
 
         then:
         1 * delegate.type() >> 'demo'
@@ -55,6 +56,7 @@ class EpochRecordingTrackerFactorySpec extends Specification {
         1 * delegate.refuseForeignRef(MapSecretsProvider.NONE, CONFIG, REF) >> Optional.of('foreign')
         1 * delegate.subsectionValidator() >> Optional.of(validator)
         1 * delegate.credentialEnvVars(CONFIG) >> ['DEMO_TOKEN']
+        1 * delegate.configuredDesignatorKinds(CONFIG) >> ['base'].toSet()
 
         and:
         type == 'demo'
@@ -62,5 +64,6 @@ class EpochRecordingTrackerFactorySpec extends Specification {
         refusal == Optional.of('foreign')
         subsection == Optional.of(validator)
         credentials == ['DEMO_TOKEN']
+        kinds == ['base'].toSet()
     }
 }

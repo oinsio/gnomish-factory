@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -19,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -63,9 +66,22 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         tracker.fetchTask(_) >> heldByUs()
     }
 
+    /**
+     * FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so the
+     * port-fake chain needs a working {@link BaseRefGit} rather than {@link BaseRefGit#UNWIRED} —
+     * the resolved tip echoes the pinned ref back, which is exactly today's placeholder SHA input.
+     */
+    private BaseRefGit resolvingBaseRefGit() {
+        Stub(BaseRefGit) {
+            resolveForResume(_, _) >> { cloneDir, ref ->
+                new ResumeBaseOutcome.Bound(ref, ref)
+            }
+        }
+    }
+
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
-        def git = new TaskGit(store, branches, worktrees)
+        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), resolvingBaseRefGit())
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])), git,
         worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
         def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())

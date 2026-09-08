@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.TaskListRow
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -47,7 +48,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
     }
 
     private void createLocalTask(String taskId, String stage = 'implement', int attemptsUsed = 0) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
         def state = new TaskState(new Position.AtStage(stage), attemptsUsed, [], ExecutorUsage.none())
         def trace = new ToolTrace(new AttemptKey(taskId, stage, 0), [
@@ -95,7 +96,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
 
         def seedWorktrees = tempDir.resolve('seed-worktrees')
         // Task REMOTE-ONLY: created and pushed from the seed clone, never checked out locally by the observer.
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('REMOTE-ONLY', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('REMOTE-ONLY', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('REMOTE-ONLY'), 'REMOTE-ONLY', ClaimEpochSource.NONE)
                 .persist('REMOTE-ONLY', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('REMOTE-ONLY', 'implement', 0), [
@@ -104,7 +105,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         runner.run(seedWorktrees.resolve('seed-clone').resolve('REMOTE-ONLY'), 'push', 'origin', 'gnomish/REMOTE-ONLY')
 
         // Task BOTH: pushed from the seed clone too, so origin carries it.
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('BOTH', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('BOTH', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('BOTH'), 'BOTH', ClaimEpochSource.NONE)
                 .persist('BOTH', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('BOTH', 'implement', 0), [
@@ -122,7 +123,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
 
         def observerWorktrees = tempDir.resolve('observer-worktrees')
         // BOTH also gets a local branch in the observer clone, at a further-along stage than origin.
-        new GitTaskRepository(runner, observerClone, observerWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('BOTH', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, observerClone, observerWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('BOTH', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def state = new TaskState(new Position.AtStage('verify'), 0, [], ExecutorUsage.none())
         new GitAttemptPersistence(runner, observerWorktrees.resolve('observer-clone').resolve('BOTH'), 'BOTH', ClaimEpochSource.NONE)
                 .persist('BOTH', state,
@@ -236,7 +237,7 @@ exec git "\$@"
         createLocalTask('DELIVERED-1')
         repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('DELIVERED-1')
-        repository.createTask(new TaskContext('FRESH-1', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext('FRESH-1', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         createLocalTask('FLIGHT-1')
         recordRound('FLIGHT-1')
         createLocalTask('PARKED-1')
@@ -296,7 +297,7 @@ exec git "\$@"
     def "FR16: a pre-contract branch (task.json without state.json) is one row carrying its shape"() {
         given:
         new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-                .createTask(new TaskContext('PRE-1', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+                .createTask(new TaskContext('PRE-1', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def worktree = worktreesRoot.resolve('clone').resolve('PRE-1')
         runner.run(worktree, 'rm', '-f', '.gnomish-task/state.json')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'drop state')

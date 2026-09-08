@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -39,10 +40,10 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         String recorded = null
 
         when:
-        repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD', TaskState.atStageStart('work'))
+        repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('work'))
 
         then:
-        1 * delegate.createTask(_, 'HEAD', _) >> {
+        1 * delegate.createTask(_, 'HEAD', BaseRule.LOCAL_HEAD, _) >> {
             recorded = commitOnTaskBranch('started')
         }
         remoteTip() == Optional.of(recorded)

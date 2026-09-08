@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
+import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
@@ -53,6 +54,21 @@ final class InMemoryTrackerSeeding {
     /** The first {@code recoveryCount} replayed attempts are the recovery share; the rest are crashes. */
     private static RecoveryCause categoryOf(int index, int recoveryCount) {
         return index < recoveryCount ? RecoveryCause.RECOVERY_FAILURE : RecoveryCause.INSTANCE_CRASH;
+    }
+
+    /**
+     * Sets an already-seeded task's designator facts (FR3 of add-base-ref-resolution). This is the
+     * reference adapter's test operation for designators: it has no labels or native fields to derive
+     * candidates from, so the classified shapes are set directly — which is also why it needs no
+     * config subsection to declare a rule in, unlike the GitHub adapter.
+     */
+    static void seedDesignators(InMemoryTracker adapter, TaskRef ref, TaskDesignators designators) {
+        adapter.lock.lock();
+        try {
+            requireSeeded(adapter, ref).designators(designators);
+        } finally {
+            adapter.lock.unlock();
+        }
     }
 
     /** Injects a pending human reply directly, as if a human had just replied in the tracker (FR12). */

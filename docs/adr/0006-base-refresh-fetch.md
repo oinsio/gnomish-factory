@@ -1,7 +1,7 @@
 # ADR 0006: Base Refresh Fetch
 
-Status: accepted (2026-09-06, introduced by `add-base-ref-resolution`;
-implementation pending)
+Status: accepted-and-implemented (2026-09-06, introduced by
+`add-base-ref-resolution`; implemented 2026-09-08)
 
 ## Context
 
@@ -74,12 +74,49 @@ bind the law from its current tip, with the same destinations and flags. A
 SHA base needs no fetch at all: the object is already in the task branch's
 history.
 
+### Auth refusal vs. genuine outage: the origin probe
+
+*Landed wider than this ADR originally scoped it.* At planning time (design
+D11) the probe-based disambiguation was sketched only for the SHA path,
+where a fetch is asked for blind with no prior refs read to lean on. Task
+7.1 generalized it: a fetch that exits zero but leaves no object at the
+named destination is ambiguous on **every** kind, not only SHA — a remote
+that answered a `refs/heads/<n>`/`refs/tags/<n>` read a moment earlier can
+still refuse the fetch itself (most often an authentication or permission
+problem scoped to that ref), and git's own exit detail cannot tell that
+apart from the remote going dark in between. `OriginProbe` (one bounded
+`git ls-remote origin HEAD`, no object transfer, no ref written) answers
+that second, simpler question directly instead of parsing git's localized
+wording. It is now the single mechanism behind all three undelivered-fetch
+paths:
+
+- **Branch and tag** — `RefreshedTip.of`, shared by `BaseRefresh.fetchBranch`
+  and `TagBaseFetch.fetch`, probes on an undelivered fetch and returns a
+  task-level `Refused` (probe answers) or an `Unavailable` (probe fails or
+  the invocation itself did not exit).
+- **Commit SHA** — `CommitBaseFetch`'s own `OriginProbe` instance, same
+  classification, since a SHA fetch has no prior refs read to lean on at
+  all.
+- **The remote outage gate's own probe** — `GitBaseRefs.probe`
+  (`BaseRefGit.probe`, task 7.3) reuses the identical `OriginProbe.answers`
+  call for the gate's tracker-free reachability check; it deliberately runs
+  outside the bounded infrastructure retry the other three reads share,
+  since the probe *is* the outage/recovery signal and retrying it here would
+  double-count against the gate's own jittered schedule.
+
+Each fetch path constructs its own `OriginProbe` (package-private, over the
+same `GitProcessRunner`) rather than sharing one instance — it is stateless,
+so there is nothing to share; what is shared is the classification rule
+itself.
+
 ### Failure classes
 
-A remote that never answers is a reachability failure, charged to the
-daemon per ADR 0005. A diverging local tag, a remote that refuses
-fetch-by-SHA (the report names the `uploadpack.allow*SHA1InWant` option),
-and a ref origin reports absent are the task's, and park it with a report.
+A remote that never answers a fetch or a probe is a reachability failure,
+charged to the daemon per ADR 0005. A diverging local tag, a remote that
+refuses fetch-by-SHA (the report names the `uploadpack.allow*SHA1InWant`
+option), a remote that answers but refuses a branch or tag fetch after
+confirming the ref exists, and a ref origin reports absent are the task's,
+and park it with a report.
 
 ## Alternatives Considered
 

@@ -5,17 +5,15 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -32,11 +30,18 @@ import org.jspecify.annotations.Nullable;
  * involved; {@link #resumeDecided} for an {@code ESCALATION} return, from a context {@link
  * #appendDecision} has already committed when there was a reply to commit.
  *
- * <p>Implements FR1, NFR-R4 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port.
+ * <p>Kept in sync with {@link TakeResumeRunner}: both resolve the resumed law binding through
+ * {@link ResumeLawBinding} (pinned-ref tip resolution) before building their execution tail — the
+ * current tip of the pinned base ref, narrow-fetched or read locally, parking or releasing the
+ * claim exactly alike on the two failure branches.
+ *
+ * <p>Implements FR1, NFR-R4 of add-serve-sandbox-lifecycle; FR9, FR12, D3 of add-tracker-port; FR12,
+ * D13 of add-base-ref-resolution.
  */
 final class TakeContainerResumeRunner {
 
     private final RunAssembly assembly;
+    private final TaskGit git;
     private final AbortHandler abortHandler;
     private final int abortThreshold;
     private final List<String> credentialEnvVarsToScrub;
@@ -53,6 +58,7 @@ final class TakeContainerResumeRunner {
             ClaimLossFlag claimLossFlag,
             String taskIdMdcKey) {
         this.assembly = assembly;
+        this.git = git;
         this.abortHandler = abortHandler;
         this.abortThreshold = abortThreshold;
         this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
@@ -102,18 +108,25 @@ final class TakeContainerResumeRunner {
                 support.salvageLeftovers(bootstrap.taskId());
             }
         }
-        return newExecution(cloneDir)
-                .run(
-                        support,
-                        definition,
-                        bootstrap.context(),
-                        finalState,
-                        interactiveMode,
-                        tracker,
-                        ref,
-                        instanceId,
-                        bootstrap.taskId(),
-                        pending);
+        return ResumeLawBinding.resolve(
+                git.baseRefs(),
+                cloneDir,
+                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                finalState,
+                ref,
+                tracker,
+                lawBinding -> newExecution(lawBinding)
+                        .run(
+                                support,
+                                definition,
+                                bootstrap.context(),
+                                finalState,
+                                interactiveMode,
+                                tracker,
+                                ref,
+                                instanceId,
+                                bootstrap.taskId(),
+                                pending));
     }
 
     /**
@@ -132,18 +145,25 @@ final class TakeContainerResumeRunner {
             Tracker tracker,
             TaskRef ref,
             InstanceId instanceId) {
-        return newExecution(cloneDir)
-                .run(
-                        bootstrap.support(),
-                        definition,
-                        context,
-                        resetState,
-                        interactiveMode,
-                        tracker,
-                        ref,
-                        instanceId,
-                        bootstrap.taskId(),
-                        null);
+        return ResumeLawBinding.resolve(
+                git.baseRefs(),
+                cloneDir,
+                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                resetState,
+                ref,
+                tracker,
+                lawBinding -> newExecution(lawBinding)
+                        .run(
+                                bootstrap.support(),
+                                definition,
+                                context,
+                                resetState,
+                                interactiveMode,
+                                tracker,
+                                ref,
+                                instanceId,
+                                bootstrap.taskId(),
+                                null));
     }
 
     /**
@@ -155,18 +175,18 @@ final class TakeContainerResumeRunner {
      */
     TaskContext appendDecision(
             ContainerResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
-        String stage = finalState.position() instanceof Position.AtStage(String name) ? name : null;
-        var decision = new Decision(text, stage, "tracker", Clock.systemUTC().instant());
+        var decision = ResumeDecisionCommit.decisionFor(finalState, text);
         bootstrap.support().disposeExistingEnvironment();
         bootstrap.support().taskRepository().appendDecision(bootstrap.taskId(), decision, resetState);
-        var decisions = new ArrayList<>(bootstrap.context().decisions());
-        decisions.add(decision);
-        var context = bootstrap.context();
-        return new TaskContext(context.taskId(), context.title(), context.body(), decisions);
+        return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
     }
 
-    private TakeContainerEngineExecution newExecution(Path cloneDir) {
+    private TakeContainerEngineExecution newExecution(LawBinding lawBinding) {
         return new TakeContainerEngineExecution(
-                assembly, abortHandler, abortThreshold, credentialEnvVarsToScrub, claimLossFlag, cloneDir);
+                assembly,
+                new AbortFuse(abortHandler, abortThreshold),
+                credentialEnvVarsToScrub,
+                claimLossFlag,
+                lawBinding);
     }
 }

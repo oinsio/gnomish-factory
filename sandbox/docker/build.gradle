@@ -95,6 +95,9 @@ layering {
         // Reached here only for its `@NonAtomicWrite` marker; the writer itself is used by
         // `:application`, which renames its snapshot and dashboard writes through it.
         ':atomicfile',
+        // The base-resolution leaf, transitive through `:application` (design D2 of
+        // add-base-ref-resolution); no source in this module names it.
+        ':baseref',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',

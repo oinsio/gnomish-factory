@@ -57,14 +57,11 @@ class TakeCommandCredentialScrubSpec extends Specification implements BareGitRep
     def setup() {
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths: the runtime now reads control files from the frozen pipeline law
-        // (D14 of add-sandbox-core), resolved — like the loader's referenced-file existence check
-        // (ReferencedFiles, FR6 of load-pipeline-config) — relative to the clone's .gnomish/ root;
-        // the project-root copy is retained but no longer consulted at run time.
+        // One copy only, under the law root: since D12 of add-base-ref-resolution the runtime
+        // resolves `instructions:` against the same `.gnomish/` root the loader validates it
+        // against, so a project-root copy would be law in neither medium.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -86,6 +83,9 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import java.nio.file.Files
 
@@ -27,7 +28,7 @@ class TakeResumeRunnerRevocationSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision returns Revoked when the tracker reports the claim lost mid-run, and skips outcome recording"() {
         given: 'a single-stage AUTO pipeline — one round completes the whole task in one persist'
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def runner = newTakeResumeRunner()
@@ -64,7 +65,7 @@ class TakeResumeRunnerRevocationSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision reacts to a set claim-loss flag as a revocation, even while fetchTask still reports the claim ours"() {
         given: 'a single-stage AUTO pipeline and a flag the beat has already set for this task'
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def flag = new ClaimLossFlag()

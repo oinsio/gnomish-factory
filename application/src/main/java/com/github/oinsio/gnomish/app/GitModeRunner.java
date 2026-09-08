@@ -110,7 +110,8 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
         printBanner(branchName, worktree);
 
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        GitFreshTaskSupport.createTask(taskRepository, taskId, context, base, initialState);
+        var baseDecision = GitFreshTaskSupport.resolveManualBase(base);
+        GitFreshTaskSupport.createTask(taskRepository, taskId, context, baseDecision, initialState);
 
         var persistence = git.store().attemptPersistence(worktree, taskId);
         var workspace = new DirectoryWorkspace(worktree);
@@ -118,7 +119,14 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
         // this runner is git-mode by type, so attaching here needs no flag; in-place mode never
         // reaches this line and keeps the assembly's identity default.
         var assembled = assembly.withHostGitPush(git.midRoundPush())
-                .assemble(definition, context, initialState, interactiveMode, persistence, List.of(), cloneDir);
+                .assemble(
+                        definition,
+                        context,
+                        initialState,
+                        interactiveMode,
+                        persistence,
+                        List.of(),
+                        ManualRunLawBinding.of(cloneDir, base));
 
         try {
             assembled.loop().run(definition, context, initialState, workspace, assembled.ports());

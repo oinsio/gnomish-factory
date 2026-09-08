@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -69,7 +70,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         def context = sampleContext()
 
         when:
-        repository.createTask(context, null, TaskState.atStageStart('implement'))
+        repository.createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         then: 'the branch exists in the clone'
         runner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1').exitCode() == 0
@@ -95,7 +96,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         def capture = LogCaptureSupport.attach(GitTaskRepository)
 
         when: 'a task is created and then carried through a second transition'
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
 
         then: 'one anchor per transition, in order, each naming its event and its task'
@@ -118,7 +119,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // still leaves a branch the next resume can read, which is the crash loop FR3 closes.
     def "FR3: the STARTED commit carries the initial state.json beside task.json"() {
         when:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         then: 'the STARTED commit itself — not a later one — holds state.json'
         def worktree = worktreeFor('PROJ-1')
@@ -139,7 +140,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // exhausted", which a resume would turn straight back into an escalation.
     def "FR4: the decision commit carries the attempt-counter reset"() {
         given: 'a task whose stage burned an attempt before parking, recorded on the branch'
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-1')
         def burned = TaskState.atStageStart('implement').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
@@ -177,19 +178,55 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'second')
 
         when:
-        repository.createTask(sampleContext(), firstHead, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), firstHead, BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
 
         then:
         def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
         content.baseCommit() == firstHead
     }
 
-    def "FR1: createTask throws when the branch already exists for the taskId"() {
+    // FR7 of add-base-ref-resolution: createTask pins the REAL rule that produced the ref, not a
+    // stand-in — the ref and the rule land in the STARTED commit's task.json.
+    def "FR7: createTask pins the resolved ref and its rule in the STARTED commit"() {
+        when:
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.DESIGNATOR, TaskState.atStageStart('implement'))
+
+        then:
+        def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        content.baseRef() == 'HEAD'
+        content.baseRule() == BaseRule.DESIGNATOR
+    }
+
+    // FR7: the pin is not re-derived on later lifecycle commits — appendDecision and recordOutcome
+    // carry the SAME (ref, rule) forward unchanged, exactly like baseCommit already does.
+    def "FR7: the pin survives appendDecision and recordOutcome unchanged"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.DESIGNATOR, TaskState.atStageStart('implement'))
 
         when:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
+                TaskState.atStageStart('implement'))
+
+        then:
+        def afterDecision = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
+        afterDecision.baseRef() == 'HEAD'
+        afterDecision.baseRule() == BaseRule.DESIGNATOR
+
+        when:
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
+
+        then:
+        def afterOutcome = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1', 'HEAD')))
+        afterOutcome.baseRef() == 'HEAD'
+        afterOutcome.baseRule() == BaseRule.DESIGNATOR
+    }
+
+    def "FR1: createTask throws when the branch already exists for the taskId"() {
+        given:
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+
+        when:
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         then:
         thrown(GitTaskRepositoryException)
@@ -197,7 +234,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def "FR5/D9: appendDecision appends to decisions[], resets outcome to null, commits with RESUMED"() {
         given: 'a task parked with a non-null outcome'
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
         def decision = new Decision('proceed to verify', 'implement', 'operator', null)
 
@@ -217,7 +254,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def "FR1: recordOutcome commits the matching message and content for each outcome variant"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         when:
         repository.recordOutcome('PROJ-1', outcome)
@@ -246,7 +283,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def "FR1: recordOutcome for Escalated populates lastEscalation"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
 
         when:
@@ -259,8 +296,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def "FR5: parked and interrupted tasks are distinguishable by outcome, side by side"() {
         given: 'two tasks escalated with a question, both resumed by a decision'
-        repository.createTask(sampleContext('PROJ-PARKED'), null, TaskState.atStageStart('implement'))
-        repository.createTask(sampleContext('PROJ-INTERRUPTED'), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext('PROJ-PARKED'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext('PROJ-INTERRUPTED'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
         repository.recordOutcome('PROJ-PARKED', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
         repository.recordOutcome(
@@ -291,7 +328,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // follow — the CompletedUncleaned shape a kill in that window freezes.
     def "FR10: recordOutcome(Completed) leaves the envelope at the tip for finishCleanup to remove"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         when:
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
@@ -307,7 +344,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // distinguishes "already done" from "never ran".
     def "FR10: finishCleanup on an already-cleaned tip changes nothing"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('PROJ-1')
         def worktree = worktreeFor('PROJ-1')
@@ -330,7 +367,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def "FR15/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, full history preserved"() {
         given: 'a task with at least one round commit before completion, to prove earlier history stays reachable'
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null), TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-1')
         def commitCountBeforeCompletion = commitCount(worktree)
@@ -363,7 +400,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     def "FR15/M4: recordOutcome for non-Completed outcomes never adds a cleanup commit, .gnomish-task/ stays"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-1')
 
         when:
@@ -393,7 +430,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // orphaned park from a settled one.
     def "FR10: recordOutcome for a park (#event) sets the tracker-write pending marker, round-tripping the branch"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         when:
         repository.recordOutcome('PROJ-1', outcome)
@@ -413,7 +450,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // Completed's reconcile is decided by cleanup-detection, not the marker).
     def "FR10: recordOutcome for Aborted leaves the tracker-write pending marker unset"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         when:
         repository.recordOutcome(
@@ -429,7 +466,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // new commit, preserving the recorded outcome and escalation.
     def "FR10: confirmTerminalWrite clears the pending marker while preserving the recorded park outcome"() {
         given:
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
         repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
@@ -455,7 +492,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     //     host-side lifecycle rewrite must not be what erases it (the mirrored half of task 4.7)
     def "FR5: host lifecycle rewrites carry both envelopes' committed cursors forward"() {
         given: 'a task branch whose envelopes carry the positions a container-mode run committed'
-        repository.createTask(sampleContext(), null, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         stampCursors('PROJ-1',
                 new EgressCursorDto('sha256:guard', '2026-09-05T10:00:00Z'),
                 new EgressCursorDto('sha256:guard', '2026-09-05T10:05:00Z'))

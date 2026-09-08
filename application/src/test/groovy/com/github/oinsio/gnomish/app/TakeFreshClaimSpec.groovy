@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
@@ -16,6 +17,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.pipeline.ConfigError
+import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -70,14 +73,15 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         tracker.fetchTask(_) >> heldByUs()
         def attached = []
         UnaryOperator<RoundEnvironmentSource> marker = { rounds -> rounds }
-        def git = new TaskGit(store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), marker)
+        def git = new TaskGit(store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), marker, refreshingBaseRefGit())
 
         when:
         TakeFreshClaim.claim(
                 assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached),
                 git, worktreesRoot,
                 new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, completingPipeline(),
-                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag())
+                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
+                DEFAULT_TRUSTED_BASE)
 
         then:
         attached.size() == 1
@@ -105,11 +109,16 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         // The run's own revocation check re-reads the task each persist: still Working, held by us.
         tracker.fetchTask(_) >> heldByUs()
 
+        and:
+        def git = new TaskGit(
+                store, branches, worktrees, UnaryOperator.identity(), refreshingBaseRefGit())
+
         when:
         def result = TakeFreshClaim.claim(
-                assemblyRunning(executor), new TaskGit(store, branches, worktrees), worktreesRoot,
+                assemblyRunning(executor), git, worktreesRoot,
                 new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, definition,
-                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag())
+                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
+                DEFAULT_TRUSTED_BASE)
 
         then: 'run-start hygiene runs before anything is created (FR17, design D11)'
         1 * worktrees.pruneWorktrees(cloneDir)
@@ -117,8 +126,8 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         then:
         1 * branches.harden(cloneDir)
 
-        then: 'the branch is created once, then the run reaches its terminal boundary'
-        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
+        then: 'the branch is created once from the trusted-tier default branch, then the run reaches its terminal boundary'
+        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'main', _, _)
         1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
         1 * tracker.finish(REF, _)
 
@@ -148,17 +157,59 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         and:
         tracker.fetchTask(_) >> heldByUs('PROJ-9')
 
+        and:
+        def git = new TaskGit(
+                store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+
         when:
         TakeFreshClaim.claim(
                 assemblyRunning(new ScriptedExecutor([completedRound()])),
-                new TaskGit(store, Stub(TaskBranchGit), Stub(TaskWorktreeGit)), worktreesRoot,
+                git, worktreesRoot,
                 new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, 'release/1.2', completingPipeline(),
-                RunArguments.InteractiveMode.NONE, readyTask('PROJ-9'), tracker, INSTANCE, new ClaimLossFlag())
+                RunArguments.InteractiveMode.NONE, readyTask('PROJ-9'), tracker, INSTANCE, new ClaimLossFlag(),
+                DEFAULT_TRUSTED_BASE)
 
         then: 'the explicit --base is passed through, and the context carries the tracker taskId'
         1 * lifecycleStore.createTask({
             it.taskId() == 'PROJ-9'
-        }, 'release/1.2', _)
+        }, 'release/1.2', _, _)
         1 * tracker.finish(REF, _)
+    }
+
+    // FR13 of add-base-ref-resolution: once the base is resolved and refreshed, the task tier is
+    // read from ITS law binding — an invalid load there parks the task instead of creating
+    // anything, the same way TaskTierLawSpec proves for TaskTierLaw.bind directly, but exercised
+    // here through the fresh-claim call site that has to route that outcome (TakeFreshClaim.claimAt).
+    def "parks the task when the resolved base's own law fails to load, creating nothing"() {
+        given:
+        def tracker = Mock(Tracker)
+        def lifecycleStore = Mock(TaskLifecycleStore)
+        def store = Stub(TaskStoreGit) {
+            taskRepository(_, _) >> lifecycleStore
+        }
+        def errors = [
+            new ConfigError('config.yaml', 'pipeline', 'broken pipeline.yaml')
+        ]
+        def invalidAssembly = [
+            bindTaskTier: { binding ->
+                new BoundTaskTier(new LoadOutcome.Invalid(errors), LAW_COMMIT)
+            },
+        ] as RunAssembly
+
+        and:
+        def git = new TaskGit(
+                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+
+        when:
+        def result = TakeFreshClaim.claim(
+                invalidAssembly, git, worktreesRoot,
+                new AbortHandler(tracker, FIXED_CLOCK), 3, [], cloneDir, null, completingPipeline(),
+                RunArguments.InteractiveMode.NONE, readyTask(), tracker, INSTANCE, new ClaimLossFlag(),
+                DEFAULT_TRUSTED_BASE)
+
+        then: 'parked, never having created the branch or reached the engine'
+        0 * lifecycleStore.createTask(*_)
+        1 * tracker.park(REF, _, _)
+        result instanceof TakeResult.AwaitingHuman
     }
 }

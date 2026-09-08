@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -21,7 +22,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome null continues from the recorded position and records Completed"() {
         given: 'a task with one persisted round but no recorded outcome — the process died mid-visit'
         def taskId = 'PROJ-10'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
 
         when: 'resuming drives one more round to completion (a bare Enter via the interactive executor)'
@@ -39,7 +40,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() without --discard-work salvages an interrupted round's uncommitted leftovers as a service commit"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-30'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
@@ -61,7 +62,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with --discard-work discards an interrupted round's uncommitted leftovers, no salvage commit"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-31'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
@@ -84,7 +85,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with --discard-work removes uncommitted leftovers from the worktree before continuing"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-32'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('half-done.txt'), 'interrupted work')
@@ -103,7 +104,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome escalated drives the decision dialog then continues to completion"() {
         given: 'a task escalated after one persisted round'
         def taskId = 'PROJ-11'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -145,7 +146,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome paused confirms then continues to completion"() {
         given: 'a task paused after "build" passed — its recorded position already advanced to PipelineEnd'
         def taskId = 'PROJ-12'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def endState = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
         persistOneRound(taskId, endState)
         repository().recordOutcome(taskId, new TaskOutcome.Paused(endState, 'build'))
@@ -180,7 +181,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome completed reports and exits without further touching the worktree or branch"() {
         given: 'a task whose task.json already records Completed, before FR15 cleanup ran'
         def taskId = 'PROJ-13'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def finalState = TaskState.atStageStart('build')
         persistOneRound(taskId, finalState)
         writeCompletedTaskJson(taskId)
@@ -212,7 +213,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     def "run() with outcome null records an Aborted outcome and keeps the worktree when the round-boundary protocol is violated"() {
         given: 'a task with one persisted round, resumed onto a worktree checked out to the wrong branch'
         def taskId = 'PROJ-33'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         gitExitCode(cloneDir, 'worktree', 'remove', '--force', worktree.toString())

@@ -22,7 +22,7 @@ class RecordedDenialIdentitiesSpec extends Specification {
     }
 
     private static TaskJsonDto taskWith(EscalationReportDto escalation) {
-        new TaskJsonDto(1, 'T-1', 't', 'b', '2026-08-19T09:00:00Z', 'abc123', [], null, escalation, null, null)
+        new TaskJsonDto(1, 'T-1', 't', 'b', '2026-08-19T09:00:00Z', 'abc123', [], null, escalation, null, null, null, null)
     }
 
     def "FR7: identities are gathered from both envelopes"() {

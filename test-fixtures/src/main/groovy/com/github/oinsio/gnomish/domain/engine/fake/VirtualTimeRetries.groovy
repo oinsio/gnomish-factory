@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine.fake
 
+import com.github.oinsio.gnomish.adapter.git.GitInfrastructureRetry
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 
 /**
@@ -34,5 +35,15 @@ final class VirtualTimeRetries {
     static TerminalWriteRetry terminalWrite() {
         def clock = new VirtualClock()
         new TerminalWriteRetry(new VirtualSleeper(clock), clock, TerminalWriteRetry.DEFAULT_BOUND)
+    }
+
+    /**
+     * The bounded git infrastructure retry (default-branch discovery, base refresh, remote reads),
+     * with the production attempt count and backoff measured on a virtual clock.
+     */
+    static GitInfrastructureRetry gitInfrastructure() {
+        def clock = new VirtualClock()
+        new GitInfrastructureRetry(new VirtualSleeper(clock), GitInfrastructureRetry.DEFAULT_ATTEMPTS,
+                GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF)
     }
 }

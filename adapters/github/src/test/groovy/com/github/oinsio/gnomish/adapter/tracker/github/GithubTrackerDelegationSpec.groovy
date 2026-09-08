@@ -81,7 +81,8 @@ class GithubTrackerDelegationSpec extends Specification {
         def cache = new GithubConditionalRequestCache(httpClient)
         new GithubTracker(
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
-                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered'),
+                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered',
+                GithubDesignatorRules.none()),
                 new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
                 new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, 'gnomish-factory-x7k2q1'),
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready'),
@@ -208,7 +209,7 @@ class GithubTrackerDelegationSpec extends Specification {
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('"kind":"progress"'))))
     }
 
-    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
         new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

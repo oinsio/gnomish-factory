@@ -61,10 +61,20 @@ terms) live in `.claude/rules/process-invariants.md`.
   checkpoint); **release** — give the claim up so any instance may take over.
 - **Escalation** — handing a task to a human via tracker status, with the
   findings history attached.
+- **Abort fuse** — the bound on infrastructure aborts a task may accumulate
+  before it is quarantined: the abort protocol (the handler that releases or
+  parks an aborted task) together with its threshold *K*, carried as one
+  value because the protocol is never run without the threshold. *Not:* the
+  stage attempt limit, which counts quality failures.
 - **Resume** — any instance continuing a task from its branch and state file;
   requires no hand-off from the previous holder.
 - **Task branch** — the git branch holding the task's artifacts and state
-  file; the single source of truth for task progress.
+  file; the single source of truth for task progress. Its configuration lives
+  under the `task-branch:` section of `.gnomish/config.yaml` — the `base`
+  subsection (see **Allowed bases**, below) is its first member, and later
+  settings of the same branch (a name-prefix override is the first named
+  candidate) join it rather than becoming new root keys (D16 of
+  `add-base-ref-resolution`).
 - **State file** — the machine-readable task state committed to the task
   branch after every attempt.
 - **Round** — one iteration of the factory's execution loop for a task; round
@@ -151,6 +161,77 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   `manual` (park at a checkpoint until a human returns the task).
 - **Reference file** — an approved sample committed for equivalence tests
   (e.g. `status-report-v1.reference.json`). *Never:* golden.
+
+## Base ref resolution
+
+The vocabulary of "which ref does this task branch from, and where does its
+law come from" — introduced by `add-base-ref-resolution`. See
+`docs/adr/0005-dependency-outage-accounting.md` and
+`docs/adr/0006-base-refresh-fetch.md` for the mechanisms behind the remote
+outage gate and the refresh fetch, and
+`docs/adr/0007-pipeline-law-source.md` for the law-source abstraction, the
+trusted/task tier split, and the law-root rule.
+
+- **Base ref** — the git ref (branch, tag, or commit SHA) a task branch is
+  created from, decided by one fixed priority order: an explicit `--base`
+  argument, else the task's `base` **designator** validated against the
+  **allowed bases**, else the configured `task-branch.base.default`, else the
+  repository default branch as the remote reports it, else — manual `run`
+  only — the clone's local `HEAD`. Recorded as a **base pin** at task
+  creation; resume reads the pin and never re-resolves.
+- **Allowed bases** — the project-configured list of ref-name patterns (each
+  with an optional `development` | `release` role) a task's `base`
+  designator is validated against, under `task-branch.base.allowed`. It
+  bounds only the per-task selection: an explicit `--base` and the
+  configured `default` are not matched against it. A `default` outside the
+  list, or a selection rule declared for a kind with no allowed bases, is a
+  located load error. *Never:* menu.
+- **Designator** — a per-task selection of a given kind, carried in the
+  `fetchTask` facts in one of three shapes: absent, a single value, or a
+  conflict listing every value found — classified by one function shared
+  across tracker adapters, which supply only the candidate values from their
+  own representation (a GitHub label rule, a future Jira native field).
+  `base` is the first kind; `type` (task routing) is the next, added by a
+  later change on the same mechanism.
+- **Base pin** — the `(resolved ref, SHA, source rule)` triple written into
+  `task.json` at task creation. Resume reads the pin and never re-resolves
+  the base from tracker data or configuration.
+- **Law commit** — the commit a task's pipeline law (`.gnomish/` stage
+  manifests, stage instructions, judge criteria) is read from once a ref has
+  been resolved for it: the pinned SHA on a fresh start, the current tip of
+  the pinned ref name on resume (a tag or SHA base makes the two equal). Read
+  through git objects; the factory clone's working tree, index, and `HEAD`
+  play no part in it.
+- **Law root** — the one root every stage file reference (`instructions`,
+  `criteriaFile`) resolves against, in every medium: the `.gnomish/`
+  directory of the law commit, or of the working tree in in-place mode and
+  manual `run` without `--base`. Distinct from the **working copy root**,
+  which the external-check pin guard and artifact output paths resolve
+  against instead:
+
+  | Manifest field                                    | Relative to                     |
+  |----------------------------------------------------|----------------------------------|
+  | `instructions`, `criteriaFile`                      | law root (`.gnomish/`)          |
+  | external-check pin paths, artifact output paths     | working copy root               |
+
+  A symlink entry at any segment of a reference's path under the law root is
+  refused as unreadable, never followed, regardless of its target.
+- **Trusted tier** — the half of pipeline configuration (`tracker:`,
+  `task-branch:`, and future selector sections) bound once at `serve`/`take`
+  startup, from the refreshed repository default branch, and never re-read
+  per claim: a merged change to it takes effect only on the next start.
+- **Task tier** — the half of pipeline configuration (stages, stage
+  instructions, judge criteria, the remainder of `config.yaml`) bound per
+  task from the task's own law commit.
+- **Remote outage gate** — the one daemon-level state per remote target that
+  a slot's base-refresh (or default-branch-discovery) reachability failure
+  opens: while open, the feed claims nothing and the daemon probes the
+  remote with a tracker-free reachability check on a jittered, growing,
+  capped interval; the first successful probe closes it. Transitions are
+  operator events and a `remote` snapshot section beside `tracker`; the probe
+  interval resets to idle only after the first successful base refresh
+  following a close, never on the probe itself. The outage is charged to the
+  daemon, never to any task's abort accounting.
 
 ## Sandbox
 

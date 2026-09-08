@@ -71,7 +71,7 @@
       `:adapters:git` under the bounded-network rules; specs cover a
       renamed default branch, a no-origin clone (refusal result, not a
       guess), and scrubbed failure output (FR5, NFR-P1)
-- [ ] 4.2 TDD the narrow base refresh per D11: branch →
+- [x] 4.2 TDD the narrow base refresh per D11: branch →
       `+refs/heads/<n>:refs/remotes/origin/<n>`; tag →
       `refs/tags/<n>:refs/tags/<n>` without force, a diverging local tag
       yielding the task-level refusal with both commits; SHA →
@@ -83,49 +83,89 @@
       `refs/heads/*`, pre-existing `refs/tags/*` and unrelated
       `refs/remotes/origin/*` are untouched, and that a non-standard
       `remote.origin.fetch` moves nothing extra (FR6, D11)
-- [ ] 4.3 Wrap discovery + refresh in `GitInfrastructureRetry` with the
+- [x] 4.3 Wrap discovery + refresh in `GitInfrastructureRetry` with the
       infrastructure-failure outcome and verify on virtual time that
       retries are bounded and a dead remote yields the typed failure, not
       an exception leak (FR9, NFR-R1)
 
 ## 5. Law source by ref (D12–D14)
 
-- [ ] 5.1 TDD tree listing in `:gitobjects`: `listTree(commit, path)` over
+- [x] 5.1 TDD tree listing in `:gitobjects`: `listTree(commit, path)` over
       `git ls-tree` reporting regular files, directories, and symlink
       entries distinctly; spec covers an absent path and a blob-vs-tree
       mismatch (FR11)
-- [ ] 5.2 TDD the law source abstraction (read file / is regular file /
+- [x] 5.2 TDD the law source abstraction (read file / is regular file /
       list directory, relative to a root) with the working-tree and
       git-objects realizations; one contract spec runs both over identical
       trees; the git-objects realization refuses symlink entries and applies
       the lexical half of `PathSafety` as its whole traversal guard (FR11,
       D12)
-- [ ] 5.3 Route `GnomishFiles`, `ReferencedFiles`, `PipelineLoader`, and
+- [x] 5.3 Route `GnomishFiles`, `ReferencedFiles`, `PipelineLoader`, and
       `PipelineLawReader.freeze` through the law source; existing loader and
       reader specs pass unchanged over the working-tree realization; add
       the git-objects twin of `PipelineLawReaderSpec` (FR11)
-- [ ] 5.4 Replace the `"HEAD"` pin ref in `RunAssembler` with the law commit
-      carried by the assembly; every `assemble` call site passes a law
-      commit (take/serve/container/resume paths) or the working tree
-      (in-place, manual `run` without `--base`); add the `Kept in sync
-      with` markers to both ends of `TakeEngineExecution` /
-      `TakeContainerEngineExecution` (invariant line names the law-commit
-      argument) and remove their `manual-sync-pairs.md` registry row; grep
-      gate: no `"HEAD"` literal in law-source or pin wiring (FR11, M5)
-- [ ] 5.5 TDD startup-plus-per-task loading in `serve`/`take`: the default
+- [x] 5.4 Replace the `"HEAD"` pin ref in `RunAssembler` with the law commit
+      carried by the assembly: `assemble` takes a law binding (working tree
+      at a project root, or git objects at a law commit) and, separately, the
+      repository root for the pin guard — two typed arguments, never one
+      `Path`; the binding is the one owner of the law-root rule
+      (`workingTree(root)` → `WorkingTreeLawSource(root/.gnomish)`,
+      `atCommit(repoRoot, lawCommit)` → `GitObjectsLawSource(git, lawCommit,
+      ".gnomish")`), no call site resolves `.gnomish` itself; every
+      `assemble` call site passes a law commit (take/serve/container/resume
+      paths) or the working tree (in-place, manual `run` without `--base`);
+      amend `WorkingTreeLawSource` to refuse symlink entries like the
+      git-objects realization and extend `LawSourceContractSpec` to assert
+      the same verdict from both over one tree; delete the duplicated
+      clone-root law files from the 15 fixture sites (e.g.
+      `TwoInstanceTakeFixture`, `TakeDeathAndRecoverySpecBase`,
+      `.gnomish-fixtures/e2e/stages/`) and re-point the in-code
+      `StageDefinition` specs (`GitModeLawBindingSpec`,
+      `ResumeSpecFixtureBase`, `ContainerGitModeRunnerSpec`,
+      `SandboxLifecycle*E2ESpec`, `KillPointWorlds`, …) at
+      `.gnomish/instructions.md`; give `ollama-e2e` its single `.gnomish/`
+      copy and a real assertion; add the `Kept in sync with` markers to both
+      ends of `TakeEngineExecution` / `TakeContainerEngineExecution`
+      (invariant line names the law-binding argument) and remove their
+      `manual-sync-pairs.md` registry row; build gates: no `"HEAD"` literal
+      in law-source or pin wiring, and no production reader opens
+      `.gnomish/**` except through `LawSource` (FR11, M5, D12)
+- [x] 5.8 Close the 5.4 review findings before 5.5 (sequenced here because
+      5.5–5.6 build on the binding's shape): (a) `LawBinding` carries its
+      repository root (`workingTree(repoRoot)`, `atRevision(repoRoot, rev)`,
+      `atCheckout(repoRoot)`); `assemble` and the `Take*EngineExecution`
+      records drop the separate `repositoryRoot` and return under the
+      seven-parameter rule; the binding is the one owner of both the law-root
+      rule and the "law belongs to this repository" invariant, asserted by
+      `LawBindingSpec`; (b) the pin is a typed peeled commit id: `LawSources`
+      returns it, `PinCheckedExternalCheckClient` takes it and performs no
+      `resolveRef` of its own — a spec moves the clone's `HEAD` after binding
+      and asserts the guard still compares against the bound commit; (c) one
+      shared segment walk classifies a law path for both realizations over
+      per-realization tree entries (the `ResumeMechanics<B>` shape), any
+      symlink entry at any segment is REFUSED regardless of target;
+      `GitObjectsLawSource` no longer reports a symlinked directory as
+      ABSENT; `LawSourceContractSpec` gains the symlinked-directory case
+      asserting one verdict from both, and `WorkingTreeLawSource`'s javadoc
+      claim of parity becomes true; (d) extract the "open git objects, open
+      law, freeze, build the pin guard" seam out of `RunAssembler` into one
+      class that owns it, bringing `RunAssembler` under the 200-line cap by
+      moving a responsibility, not lines; `LawRootBoundarySpec` gates stay
+      green (FR11, M5, D12)
+- [x] 5.5 TDD startup-plus-per-task loading in `serve`/`take`: the default
       branch definition is loaded and validated at startup as today; after
       resolution the task tier loads from the base SHA; a load error on the
       base parks the task with a report naming ref, law commit, and located
       errors, burns no attempt, releases no claim; `board`/`dashboard`
       unchanged (FR13, UX5, D14)
-- [ ] 5.6 TDD resume law binding: autonomous resume narrow-fetches the
+- [x] 5.6 TDD resume law binding: autonomous resume narrow-fetches the
       pinned ref name and binds from its tip; manual resume without a
       remote binds from the local ref tip; a ref that resolves nowhere parks
       with a report; add the `Kept in sync with` markers to both ends of
       `TakeResumeRunner` / `TakeContainerResumeRunner` (invariant line
       names pinned-ref tip resolution) and remove their
       `manual-sync-pairs.md` registry row (FR12, D13)
-- [ ] 5.7 Extend `GitModeLawBindingSpec` (or add a sibling) with: clone
+- [x] 5.7 Extend `GitModeLawBindingSpec` (or add a sibling) with: clone
       checked out at `main`, task based on `release/1.18` — law and pin
       come from the base; uncommitted clone edits play no part in take;
       manual `run` without `--base` still binds uncommitted edits (FR11,
@@ -133,12 +173,12 @@
 
 ## 6. Application: funnel wiring, pin, and failure routing
 
-- [ ] 6.1 Wire `BaseRefResolver` into `GitFreshTaskSupport`; delete the
+- [x] 6.1 Wire `BaseRefResolver` into `GitFreshTaskSupport`; delete the
       null→HEAD default there and the `TaskBranchCreator.startPoint()`
       duplicate; all four fresh-start paths receive resolved refs; verify
       by existing suites plus a grep gate that no `"HEAD"` default remains
       outside the manual-run tier (FR4, FR10, M2)
-- [ ] 6.2 Insert resolve + base-refresh between `harden()` and
+- [x] 6.2 Insert resolve + base-refresh between `harden()` and
       `createTask()` in `TakeFreshClaim` and `TakeContainerFreshClaim`; add
       the `Kept in sync with` markers to both ends (invariant line includes
       the new resolve step) and remove their `manual-sync-pairs.md` registry
@@ -148,21 +188,21 @@
       re-read per claim (a spec asserts no default-branch fetch and no
       config read on the claim path), and the law-source contract test pins
       that source (FR2, FR6, D6, D15, sync surface)
-- [ ] 6.3 TDD the pin: mapper writes `(ref, sha, rule)` in the
+- [x] 6.3 TDD the pin: mapper writes `(ref, sha, rule)` in the
       task-creation commit behind the version gate; the pin flows through
       both ends of the `GitTaskRepository` / `GitObjectsTaskRepository`
       lifecycle pair identically (serialization stays single-point in the
       shared `TaskJsonMapper`); legacy `baseCommit`-only
       files read as unpinned; data-driven round-trip spec over every rule
       constant plus the unknown-token forward-compat arm (FR7)
-- [ ] 6.4 TDD resume behavior: pinned tasks never re-resolve (no trusted-tier
+- [x] 6.4 TDD resume behavior: pinned tasks never re-resolve (no trusted-tier
       read, no designator read on resume — asserted with throwing fakes;
       the task-tier read of 5.6 is the only law read);
       a kill between claim and creation commit freezes `Claimed` with no
       branch ref; the reaper restores `Ready` on virtual-time TTL, a second
       reaper pass is a no-op, and the next claimant re-resolves from
       scratch (FR7, NFR-R1, NFR-R2)
-- [ ] 6.5 TDD underdetermined-input escalation: a disallowed selection and a
+- [x] 6.5 TDD underdetermined-input escalation: a disallowed selection and a
       conflict park the task with a report naming the found values and the
       allowed bases, no stage attempt burned; manual `run` without `--base` still branches
       from local HEAD offline with zero network calls (specs assert no
@@ -170,13 +210,13 @@
 
 ## 7. take/serve failure handling and observability
 
-- [ ] 7.1 TDD the failure classification at the fresh-claim step: a typed
+- [x] 7.1 TDD the failure classification at the fresh-claim step: a typed
       reachability failure (connect, DNS, timeout, retries exhausted) versus
       task-level causes (missing ref, auth refusal, underdetermined
       designator); only the former is the infrastructure class; the abort
       protocol's uncaught-exception arm is asserted unreached with a
       throwing-tracker fake (FR9)
-- [ ] 7.2 TDD claim release on base infrastructure failure in take: plain
+- [x] 7.2 TDD claim release on base infrastructure failure in take: plain
       `release`, task back to Ready, no abort marker, no comment, abort
       facts and backoff unchanged (seed a task with two aborts and assert
       still two); new `TakeResult` variant with exit code 16 in the exit
@@ -184,7 +224,7 @@
       ledger line, like `Skipped`); a later take
       succeeds once the fake remote recovers (FR9, M4, tracker-take
       MODIFIED exit codes)
-- [ ] 7.3 TDD the remote outage gate as one owner class on virtual time:
+- [x] 7.3 TDD the remote outage gate as one owner class on virtual time:
       open on a slot's infrastructure failure, consulted by the feed before
       every claim (no claim while open — assert zero tracker claim calls),
       tracker-free `ls-remote` probe on a jittered interval growing from the
@@ -194,7 +234,7 @@
       (flapping-remote spec: close, immediate refresh failure, reopen with
       a longer interval); in-flight slots keep running; process-local (a
       fresh daemon starts closed) (FR14, NFR-R3)
-- [ ] 7.4 TDD gate observability: one WARN with a new `OperatorEvent` code
+- [x] 7.4 TDD gate observability: one WARN with a new `OperatorEvent` code
       on open and one ERROR code for sustained-open, both registered in the
       `:logtext` catalog per factory-logging (one code per call site, never
       reused, catalog round-trip spec extended); one INFO recovery line on
@@ -210,24 +250,28 @@
       dashboard status-card alarm line while open and per-day outage count
       in history; extend the operator-event sync spec if a code lands in the
       domain emitters' pair (NFR-O1, NFR-O3, UX6)
-- [ ] 7.5 Serve end-to-end on virtual time: three slots, remote dead for an
+- [x] 7.5 Serve end-to-end on virtual time: three slots, remote dead for an
       hour, then back — at most three claims and releases total, none after
       the gate opened, one WARN and one recovery line, the first successful
       probe precedes the first post-outage claim, every task claimable
       again with zero abort facts (M4, G5)
-- [ ] 7.6 Integration spec against a local bare remote: zero-config serve
+- [x] 7.6 Integration spec against a local bare remote: zero-config serve
       claim branches from the remote default-branch tip observed at claim
       (M1); label-selected release base is fetched, validated, and pinned
       (U2)
 
 ## 8. Documentation and verification
 
-- [ ] 8.1 Add glossary entries (base ref, allowed bases —
+- [x] 8.1 Add glossary entries (base ref, allowed bases —
       `task-branch.base.allowed`, *Never:* menu — designator — written
       kind-generic: a per-task selection of a given kind carried as
       tracker metadata in one of three shapes, with `base` as the first
       kind and `type` named as the next — base pin,
-      law commit, trusted tier, task tier, remote outage gate); extend the
+      law commit, law root — `.gnomish/`, the one root of stage file
+      references in every medium — beside working copy root — the root of
+      pin paths and artifact paths — with a table naming which manifest
+      field is relative to which, trusted tier, task tier, remote outage
+      gate); extend the
       existing *Task branch* entry with the `task-branch:` configuration
       section it names (D16); and the
       operator-guide section: `task-branch.base` section reference, the
@@ -239,19 +283,24 @@
       at the given ref), and the outage gate (its log lines, snapshot
       section, and exit code 16); verify by docs build/lint conventions
       (UX1, UX4, UX6, D10, D12, D15)
-- [ ] 8.2 Write `docs/adr/0007-pipeline-law-source.md`: law by ref from git
+- [x] 8.2 Write `docs/adr/0007-pipeline-law-source.md`: law by ref from git
       objects, the two tiers, resume from the pinned ref tip as a recorded
       deviation from the re-run model, the rejected worktree and checkout
-      alternatives; reference it from D12 and the glossary (D12–D14)
-- [ ] 8.3 Traceability sweep: grep confirms every FR/NFR/UX of this change
+      alternatives; the law-root rule (`.gnomish/` in every medium, the
+      load-vs-run divergence it closes, the two-root table shared with
+      `enforce-artifact-contracts`, symlink entries refused in both
+      realizations with the Kustomize/Argo CD precedent, and the reserved
+      repository-anchored prefix as the named non-goal); reference it from
+      D12 and the glossary (D12–D14)
+- [x] 8.3 Traceability sweep: grep confirms every FR/NFR/UX of this change
       has at least one implementing spec or code reference, and the
       superseded D7 wording is gone from the merged spec view
       (`openspec validate --strict` passes)
-- [ ] 8.4 Full build green: `./gradlew check` including PIT for touched
+- [x] 8.4 Full build green: `./gradlew check` including PIT for touched
       modules; kill-point specs for the new window pass twice (recovery
       idempotence), including a kill between the failed fetch and the claim
       release (NFR-R1, NFR-R3)
-- [ ] 8.5 Reconcile `docs/adr/0005-dependency-outage-accounting.md` and
+- [x] 8.5 Reconcile `docs/adr/0005-dependency-outage-accounting.md` and
       `docs/adr/0006-base-refresh-fetch.md` (both accepted with this
       change's planning, status "implementation pending") with what
       landed: exact flags, exit code, event codes, the flapping-remote
@@ -264,7 +313,7 @@
 > item builds on the settled names. Sections 1–3 stay checked; their specs
 > are updated in place here, not re-done.
 
-- [ ] 9.1 Move the config section: `ConfigDto` gains a `taskBranch` field
+- [x] 9.1 Move the config section: `ConfigDto` gains a `taskBranch` field
       (a `TaskBranchDto` holding `base`), the `base` subsection keeps `type`
       and `default` and takes `allowed` in place of `menu`; a root-level
       `base:` and a `task-branch.base.menu` key are unknown keys — located
@@ -274,13 +323,13 @@
       `task-branch.base.allowed`; the loader specs of 2.1–2.3 assert the
       new shape and the two rejected draft keys (FR1, UX1, pipeline-config
       "The earlier draft shape is not an alias")
-- [ ] 9.2 Rename the concept in code and specs: `BaseMenu` → `AllowedBases`,
+- [x] 9.2 Rename the concept in code and specs: `BaseMenu` → `AllowedBases`,
       `BaseMenuEntry` → `AllowedBase`, `BaseMenuEntryDto` → `AllowedBaseDto`,
       `DesignatorMenuSeam` → `DesignatorAllowedBasesSeam`, every `menu`
       field, parameter, constant (including the underdetermined cause for a
       disallowed selection), javadoc, error text, and Spock feature name;
       grep gate: `menu` is absent from `src/main` and `src/test` of
       `:baseref`, `:adapters`, `:application` (D16, no-jargon rule)
-- [ ] 9.3 `./gradlew :baseref:check :adapters:check :application:check`
+- [x] 9.3 `./gradlew :baseref:check :adapters:check :application:check`
       green with 100% mutation score after the rename, and every checked
       item of sections 1–3 still holds under the new names

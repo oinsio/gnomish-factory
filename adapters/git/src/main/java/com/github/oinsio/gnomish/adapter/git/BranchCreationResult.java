@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import org.jspecify.annotations.Nullable;
-
 /**
  * The outcome of {@link TaskBranchCreator#createBranch}: exactly one of a successful creation
  * (with the resolved base commit SHA the caller records into {@code task.json}'s {@code
@@ -34,5 +32,5 @@ public sealed interface BranchCreationResult {
      *
      * @param baseRef the ref, as supplied by the caller, that failed to resolve
      */
-    record BaseRefNotResolved(@Nullable String baseRef) implements BranchCreationResult {}
+    record BaseRefNotResolved(String baseRef) implements BranchCreationResult {}
 }

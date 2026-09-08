@@ -23,7 +23,7 @@ class ModuleBuildFileSpec extends Specification {
     private static final int LINE_CAP = 200
 
     /** A mis-resolved repoRoot would make every scenario below pass over an empty file set. */
-    private static final int KNOWN_BUILD_FILES = 10
+    private static final int KNOWN_BUILD_FILES = 11
 
     // FR6: no build file grows back into a monolith — convention plugins are what absorb the bulk
     def "every build file is within the project file-size cap"() {
@@ -72,10 +72,12 @@ class ModuleBuildFileSpec extends Specification {
     /**
      * The shared leaf modules whose emptiness is load-bearing, each mapped to the exact set of
      * production-scope dependency declarations its build file may carry. {@code :subprocess} and
-     * {@code :atomicfile} declare nothing at all; {@code :logtext} declares the SLF4J API and the
-     * BOM that pins it — MDC propagation is not expressible without the API, while a logging
-     * <em>backend</em> stays the composition root's choice (module-layering scenario "The logtext
-     * leaf carries only the logging API"). The internal half of each invariant is gated by
+     * {@code :atomicfile} declare nothing at all, and so does {@code :baseref}, whose emptiness is
+     * NFR-S3's constructive half (add-base-ref-resolution): a policy that can import nothing cannot
+     * reach a tracker, a remote or a configuration format. {@code :logtext} declares the SLF4J API
+     * and the BOM that pins it — MDC propagation is not expressible without the API, while a
+     * logging <em>backend</em> stays the composition root's choice (module-layering scenario "The
+     * logtext leaf carries only the logging API"). The internal half of each invariant is gated by
      * {@code layering { allowedProjects = [] } }; this map is the external half.
      */
     private static final Map<String, Set<String>> LEAF_PRODUCTION_DEPENDENCIES = [
@@ -85,6 +87,7 @@ class ModuleBuildFileSpec extends Specification {
         ] as Set,
         subprocess: [] as Set,
         atomicfile: [] as Set,
+        baseref: [] as Set,
     ]
 
     // FR6: a shared leaf stays consumable from every layer only while it drags nothing behind it,

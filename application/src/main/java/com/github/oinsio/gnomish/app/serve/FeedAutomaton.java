@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve;
 
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -9,6 +10,7 @@ import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.domain.engine.port.Clock;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Random;
 
@@ -89,7 +91,13 @@ public final class FeedAutomaton {
 
     /**
      * As the eleven-arg constructor plus a {@link DirtyNotifier} (FR1, design D4), forwarded to
-     * {@link FeedViewTracker} and woken on every actual feed-state transition.
+     * {@link FeedViewTracker} and woken on every actual feed-state transition. Wires a
+     * {@link RemoteOutageGate} that starts closed and is never opened by anything reachable from
+     * this constructor (no {@link com.github.oinsio.gnomish.app.take.TakeResult.InfrastructureUnavailable}
+     * signal is threaded through it) — the harmless default for every caller that does not care
+     * about task 7.3's gate; {@link #FeedAutomaton(Tracker, InstanceId, SlotLedger, SlotRunner,
+     * Sleeper, Clock, Duration, Duration, Duration, int, Random, DirtyNotifier, RemoteOutageGate)}
+     * is the one the {@code serve} composition root uses.
      *
      * @param dirtyNotifier woken on a feed-state transition; {@link DirtyNotifier#NOOP} absent a writer
      */
@@ -106,6 +114,45 @@ public final class FeedAutomaton {
             int wipLimit,
             Random random,
             DirtyNotifier dirtyNotifier) {
+        this(
+                tracker,
+                instanceId,
+                slotLedger,
+                slotRunner,
+                sleeper,
+                clock,
+                backoffBase,
+                backoffCap,
+                idlePollInterval,
+                wipLimit,
+                random,
+                dirtyNotifier,
+                RemoteOutageGate.system(BaseRefGit.UNWIRED, Path.of("."), idlePollInterval));
+    }
+
+    /**
+     * As the twelve-arg constructor plus the {@link RemoteOutageGate} the feed consults before
+     * every claim (FR14, NFR-R3 of add-base-ref-resolution) — the {@code serve} composition root's
+     * own constructor, sharing the SAME gate instance a slot's {@code TakeSlotRunner} opens on an
+     * {@code InfrastructureUnavailable} result.
+     *
+     * @param remoteOutageGate the remote outage gate this feed's {@link FeedCycle} consults and
+     *     advances every cycle; never null
+     */
+    public FeedAutomaton(
+            Tracker tracker,
+            InstanceId instanceId,
+            SlotLedger slotLedger,
+            SlotRunner slotRunner,
+            Sleeper sleeper,
+            Clock clock,
+            Duration backoffBase,
+            Duration backoffCap,
+            Duration idlePollInterval,
+            int wipLimit,
+            Random random,
+            DirtyNotifier dirtyNotifier,
+            RemoteOutageGate remoteOutageGate) {
         this.slotLedger = slotLedger;
         this.sleeper = sleeper;
         this.clock = clock;
@@ -116,14 +163,14 @@ public final class FeedAutomaton {
         //     never a source of behavior, so it does not join the injected-time contract the
         //     sleeper and clock above carry.
         var outageRetry = new FeedOutageRetry(sleeper, idleTiming::jittered, RepeatSuppressor.system());
+        var resilience = new FeedResilience(outageRetry, new FinishedDecline(), remoteOutageGate);
         this.cycle = new FeedCycle(
                 new FeedTracker(tracker, instanceId),
                 slotLedger,
                 slotRunner,
                 new FeedSelection(backoffBase, backoffCap, wipLimit, random),
                 stateLogger,
-                outageRetry,
-                new FinishedDecline());
+                resilience);
         // FR5: a construction-time idle baseline, so a snapshot before step() reads a coherent view.
         this.viewTracker = new FeedViewTracker(FeedState.IDLE_EMPTY, clock.now(), wipLimit, dirtyNotifier);
     }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -56,8 +57,8 @@ public final class PushBestEffortTaskLifecycleStore implements TaskLifecycleStor
     }
 
     @Override
-    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
-        base.createTask(context, baseRef, initialState);
+    public void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState) {
+        base.createTask(context, baseRef, baseRule, initialState);
     }
 
     @Override

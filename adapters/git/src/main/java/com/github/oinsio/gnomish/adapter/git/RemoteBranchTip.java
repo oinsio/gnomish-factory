@@ -123,7 +123,7 @@ final class RemoteBranchTip {
     }
 
     private GitCommandResult lsRemote(Path repo, String branch) {
-        return runner.run(repo, "ls-remote", OriginRemote.NAME, "refs/heads/" + branch);
+        return LsRemote.refs(runner, repo, "refs/heads/" + branch);
     }
 
     private static Optional<String> tipOf(GitCommandResult lsRemote) {

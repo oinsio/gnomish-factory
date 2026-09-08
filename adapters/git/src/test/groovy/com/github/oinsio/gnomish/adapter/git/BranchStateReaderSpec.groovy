@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -60,7 +61,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
     def "FR13: a task with only task.json (no rounds yet) reads back into a StatusReport, live fields null"() {
         given:
         def context = new TaskContext('PROJ-1', 'Fix the thing', 'Body text', [])
-        taskRepository().createTask(context, null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-1', TaskState.atStageStart('implement'))
 
         when:
@@ -83,7 +84,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR13: interrupted task (rounds present, task.json outcome null) renders as in-progress, matching nullable live fields of contract v1"() {
         given: 'a task that recorded a round but crashed before any recordOutcome call'
-        taskRepository().createTask(new TaskContext('PROJ-2', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-2', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-2', TaskState.atStageStart('implement'))
 
         when:
@@ -97,7 +98,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR5: a task with a recorded terminal outcome surfaces it, unlike the interrupted case"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-3', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-3', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-3', TaskState.atStageStart('implement'))
         taskRepository().recordOutcome('PROJ-3', new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'))
 
@@ -112,7 +113,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR5: an escalated task surfaces both outcome and lastEscalation from durable state"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-4', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-4', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-4', TaskState.atStageStart('implement'))
         def escalation = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
         taskRepository().recordOutcome('PROJ-4', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation))
@@ -129,7 +130,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR13: decisions recorded on the branch round-trip into the report"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-5', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-5', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-5', TaskState.atStageStart('implement'))
         taskRepository().appendDecision('PROJ-5', new Decision('proceed', 'implement', 'operator', null), TaskState.atStageStart('implement'))
 
@@ -153,7 +154,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('seed-worktrees')
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-6', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-6', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
                 .persist('PROJ-6', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('PROJ-6', 'implement', 0), [
@@ -193,7 +194,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR16: unknown state.json version classifies as UnsupportedVersion naming the file and both versions, no exception"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-7', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-7', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-7', TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-7')
         def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
@@ -214,7 +215,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR16: unknown task.json version classifies as UnsupportedVersion naming task.json"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-8', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-8', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-8', TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-8')
         def taskFile = new File(worktree.toFile(), '.gnomish-task/task.json')
@@ -234,7 +235,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR16: an unparseable state.json classifies as Corrupt instead of failing the read"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-10', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-10', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-10', TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-10')
         new File(worktree.toFile(), '.gnomish-task/state.json').text = '{ this is not json'
@@ -253,7 +254,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR16: a delivered branch (cleanup stripped .gnomish-task/) classifies as Delivered, not a missing-file failure"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-11', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-11', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         persistRound('PROJ-11', TaskState.atStageStart('implement'))
         def repository = taskRepository()
         repository.recordOutcome('PROJ-11', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
@@ -269,7 +270,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
 
     def "FR3, FR16: a pre-contract tip (task.json without state.json) reports as Created, not an error"() {
         given: 'a task branch whose tip carries identity but no state file, as pre-contract branches do'
-        taskRepository().createTask(new TaskContext('PROJ-12', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-12', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-12')
         def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
         if (stateFile.exists()) {
@@ -296,7 +297,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('ro-seed-worktrees')
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-9', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-9', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedWorktrees.resolve('ro-seed-clone').resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
                 .persist('PROJ-9', TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey('PROJ-9', 'implement', 0), [

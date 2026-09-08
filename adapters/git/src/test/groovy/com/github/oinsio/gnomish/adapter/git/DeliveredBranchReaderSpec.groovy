@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -60,7 +61,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     // recovers the delivered context + finalState from the cleanup commit's parent.
     def "reads the delivered context and final state from the pre-cleanup commit"() {
         given: 'a branch delivered via recordOutcome(Completed), whose tip no longer carries the files'
-        repository.createTask(context('PROJ-1'), null, TaskState.atStageStart('implement'))
+        repository.createTask(context('PROJ-1'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')
         persistOneRound('PROJ-1', finalState)
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(finalState))
@@ -84,7 +85,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         def bare = initBareRepo(tempDir, 'origin.git')
         runner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
         runner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
-        repository.createTask(context('PROJ-6'), null, TaskState.atStageStart('implement'))
+        repository.createTask(context('PROJ-6'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')
         persistOneRound('PROJ-6', finalState)
         repository.recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState))
@@ -118,7 +119,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     // as BranchStateFileMissingException, distinct from "branch not found".
     def "throws BranchStateFileMissingException when the parent commit lacks the state files"() {
         given: 'a fresh task branch with a single commit — its parent is the base, carrying no .gnomish-task/'
-        repository.createTask(context('PROJ-2'), null, TaskState.atStageStart('implement'))
+        repository.createTask(context('PROJ-2'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         when:
         reader.read(cloneDir, 'PROJ-2')

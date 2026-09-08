@@ -62,6 +62,19 @@ Worktrees live outside the clone, under `~/.gnomish/worktrees/<project-name>/<sa
 
 **In-place mode (`--mode=in-place`)** is the preserved legacy behavior: no git, no worktree, in-memory state only, no resume — if the process dies, the task's progress is lost. It remains useful as a pipeline author's dry-run of a project's `.gnomish/` config in a scratch directory, where you don't want branches or worktrees created at all.
 
+### `--base` and where the law comes from
+
+`run`'s behavior around branch base and pipeline law is unchanged by
+base-ref resolution (see [`operator-guide-serve.md`](operator-guide-serve.md#base-ref-resolution-task-branchbase-and-the-remote-outage-gate)
+for the `serve`/`take` side of it). Without `--base`, git mode branches from
+the clone's local `HEAD` with no network calls, and the pipeline law
+(`.gnomish/` manifests, stage instructions, judge criteria) stays the
+working tree — uncommitted edits keep driving the pipeline-author loop. With
+`--base=<ref>`, the given ref wins as the branch's start point, is resolved
+**locally with no fetch**, and — because a ref was resolved — its law is
+read from git objects at that ref's commit instead: a clone with no
+reachable remote still works offline in both forms.
+
 ## Resuming a task
 
 `gnomish run --dir <dir> --resume <task>` locates the task branch — checking the local repo first, then a remote-tracking branch, then falling back to a narrow fetch of exactly `gnomish/<task>` — and continues from its recorded state:

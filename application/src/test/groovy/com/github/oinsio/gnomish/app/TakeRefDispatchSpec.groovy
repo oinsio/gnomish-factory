@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.time.Duration
+import java.util.function.UnaryOperator
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -48,7 +49,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
     private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(TakeRefDispatchSpec)
     private static final TrackerConfig TRACKER_CONFIG = new TrackerConfig('github', 3)
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null)
+    2, Duration.ofMillis(50), Duration.ofSeconds(30), Duration.ofHours(2), Duration.ofSeconds(5), 14, null, null, null)
 
     Tracker tracker = Mock(Tracker)
     TrackerAdapterFactory factory = Stub(TrackerAdapterFactory)
@@ -67,10 +68,10 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit))
+        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
                 ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
-                ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
+                ContainerTakeSupport.hostOnly(), new ClaimEpochBook(), DEFAULT_TRUSTED_BASE)
     }
 
     private void dispatch(List<String> refs) {

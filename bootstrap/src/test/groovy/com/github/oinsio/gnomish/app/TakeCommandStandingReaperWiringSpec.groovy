@@ -82,10 +82,8 @@ class TakeCommandStandingReaperWiringSpec extends Specification implements BareG
 
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -112,6 +110,9 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
@@ -184,7 +185,7 @@ tracker:
         def z = new TaskRef('PROJ-Z')
         harness.seedWorkingWithClaim(tracker, z, 'other-instance')
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null, null, null))
 
         when: 'take runs X on another thread, in flight for ~2s'
         Future<?> run = executor.submit({
@@ -229,7 +230,7 @@ tracker:
         harness.seed(x1, new TaskSnapshot(x1.id(), 'Add widgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         harness.seed(x2, new TaskSnapshot(x2.id(), 'Add gadgets', 'please'), new TrackerTaskState.Ready(), AbortFacts.none())
         def executor = Executors.newSingleThreadExecutor()
-        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null))
+        def command = newCommand(new ServeProperties(1, null, null, null, null, null, null, null, null))
 
         when: 'the batch runs both refs sequentially, on another thread'
         Future<?> run = executor.submit({

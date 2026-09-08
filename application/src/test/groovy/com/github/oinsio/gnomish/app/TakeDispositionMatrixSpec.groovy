@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import spock.lang.Specification
 
@@ -47,7 +48,10 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
                 new AbortHandler(tracker, FIXED_CLOCK), 3, 'taskId', [], ClaimBeat.NONE, false, { _ref, _holder, _age ->
                     TakeoverConfirmation.Decision.DECLINED
                 } as TakeoverConfirmation,
-                FIXED_CLOCK, new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
+                FIXED_CLOCK, new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
+                // The claim never reaches a fresh-claim base resolution in this spec: every Ready
+                // scenario is stopped at tracker.claim() itself (see disposition() call sites).
+                new TrustedBaseContext(BaseDefinition.none(), 'HEAD'))
     }
 
     private TakeResult dispose(TrackerTask task) {

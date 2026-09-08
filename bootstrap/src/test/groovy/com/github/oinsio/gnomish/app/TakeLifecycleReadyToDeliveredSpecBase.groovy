@@ -69,13 +69,11 @@ abstract class TakeLifecycleReadyToDeliveredSpecBase extends Specification imple
 
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths: the pipeline loader resolves `instructions:` relative to the
-        // .gnomish/ root, while the runtime engine resolves the same string relative to the
-        // workspace root (the task worktree) — see TakeCommandCredentialScrubSpec's own note.
+        // One copy only, under the law root: since D12 of add-base-ref-resolution the runtime
+        // resolves `instructions:` against the same `.gnomish/` root the loader validates it
+        // against, so a project-root copy would be law in neither medium.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -103,6 +101,9 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 

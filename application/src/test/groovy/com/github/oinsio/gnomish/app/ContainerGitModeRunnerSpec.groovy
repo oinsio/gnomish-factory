@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -86,7 +87,9 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
         run()
 
         then:
-        1 * taskRepository.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
+        1 * taskRepository.createTask({
+            it.taskId() == 'PROJ-1'
+        }, 'HEAD', BaseRule.LOCAL_HEAD, _)
 
         and:
         1 * support.sweepOrphans()
@@ -100,7 +103,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
         run(base)
 
         then:
-        1 * taskRepository.createTask(_, expected, _)
+        1 * taskRepository.createTask(_, expected, _, _)
 
         where:
         base || expected
@@ -112,7 +115,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
     // path, so the exit code and the guidance do not depend on which mode was used.
     def "remaps a creation failure into the same usage error the host path raises"() {
         given:
-        taskRepository.createTask(_, _, _) >> {
+        taskRepository.createTask(_, _, _, _) >> {
             throw new GitTaskRepositoryException('PROJ-1', TaskLifecycleEvent.STARTED, 'branch exists', 'x')
         }
 

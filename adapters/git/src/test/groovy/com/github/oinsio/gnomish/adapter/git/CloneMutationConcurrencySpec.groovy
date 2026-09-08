@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermissions
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -49,7 +50,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
         def start = new CountDownLatch(1)
         def done = new CountDownLatch(slots)
         def failures = new ConcurrentLinkedQueue()
-        def localTips = new java.util.concurrent.ConcurrentHashMap<String, String>()
+        def localTips = new ConcurrentHashMap<String, String>()
         def executor = Executors.newVirtualThreadPerTaskExecutor()
 
         when: 'all slots run their lifecycle concurrently'
@@ -63,7 +64,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     def worktreeManager = new TaskWorktreeManager(runner, worktreesRoot)
                     def push = new BranchPush(runner)
 
-                    def branchName = (branchCreator.createBranch(cloneDir, taskId, null)
+                    def branchName = (branchCreator.createBranch(cloneDir, taskId, 'HEAD')
                             as BranchCreationResult.Created).branchName()
                     def worktree = worktreeManager.ensureWorktree(cloneDir, taskId, branchName)
 
@@ -154,14 +155,15 @@ exit \$rc
     }
 
     private static Map<String, List<Double>> readIntervals(Path logFile) {
-        def intervals = [:].withDefault { [] }
+        Map<String, List<Double>> intervals = [:].withDefault {
+            []
+        } as Map<String, List<Double>>
         if (!Files.exists(logFile)) {
             return intervals
         }
         logFile.toFile().readLines().each { line ->
             def parts = line.trim().split(/\s+/)
             if (parts.size() >= 3) {
-                def kind = parts[0]
                 def ts = Double.parseDouble(parts[1])
                 def pid = parts[2]
                 intervals[pid] << ts

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -11,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -43,7 +43,6 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     Path worktreesRoot
 
     def setup() {
@@ -52,18 +51,17 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
 
     private Path freshClone(String name) {
         Path clone = initWorkingRepo(tempDir, name)
-        Files.writeString(clone.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(clone, 'add', 'instructions.md')
-        gitRunner.run(clone, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        Files.createDirectories(clone.resolve('.gnomish'))
+        commit(clone, '.gnomish/instructions.md', 'build it\n')
         clone
     }
 
     private String hooksPath(Path clone) {
-        gitRunner.run(clone, 'config', 'core.hooksPath').stdout().trim()
+        gitOutput(clone, 'config', 'core.hooksPath')
     }
 
     private String expectedHooksPath(Path clone) {
-        gitRunner.run(clone, 'rev-parse', '--absolute-git-dir').stdout().trim() + '/gnomish-empty-hooks'
+        gitOutput(clone, 'rev-parse', '--absolute-git-dir') + '/gnomish-empty-hooks'
     }
 
     private static StageDefinition stage() {
@@ -90,7 +88,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     def "GitModeRunner hardens the factory clone's hooks path at run start"() {
         given: 'a clone whose task branch already exists, refusing the run right after hardening'
         Path clone = freshClone('host-fresh')
-        gitRunner.run(clone, 'branch', 'gnomish/H-1', 'HEAD')
+        gitOutput(clone, 'branch', 'gnomish/H-1', 'HEAD')
         def runner = new GitModeRunner(newAssembly(), TaskGitFixture.real(), worktreesRoot)
 
         when:
@@ -106,7 +104,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     def "ContainerGitModeRunner hardens the factory clone's hooks path at run start"() {
         given:
         Path clone = freshClone('container-fresh')
-        gitRunner.run(clone, 'branch', 'gnomish/C-1', 'HEAD')
+        gitOutput(clone, 'branch', 'gnomish/C-1', 'HEAD')
         def runner = new ContainerGitModeRunner(
                 newAssembly(), TaskGitFixture.real(), sandboxProperties(), testProperties(), ContainerSupportFixture.real())
         def segments = [
@@ -157,7 +155,36 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     def "TakeFreshClaim hardens the factory clone's hooks path before creating the task branch"() {
         given: 'a clone whose task branch already exists, refusing the claim right after hardening'
         Path clone = freshClone('take-fresh')
-        gitRunner.run(clone, 'branch', 'gnomish/T-1', 'HEAD')
+        gitOutput(clone, 'branch', 'gnomish/T-1', 'HEAD')
+        // FR13, D14 of add-base-ref-resolution: a fresh claim reads its task tier from git objects
+        // at the resolved base commit, so the clone needs a real, loadable pipeline there too.
+        Files.writeString(clone.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
+        Files.writeString(clone.resolve('.gnomish/stages/build/instructions.md').tap {
+            Files.createDirectories(it.parent)
+        }, 'build it\n')
+        Files.writeString(clone.resolve('.gnomish/stages/build/stage.yaml'), '''\
+purpose: build it
+executor:
+  type: agent-cli
+  model: model-x
+instructions: stages/build/instructions.md
+advancement: auto
+''')
+        Files.writeString(clone.resolve('.gnomish/config.yaml'), '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+    repo: acme/widgets
+''')
+        commitAll(clone, 'pipeline')
+        // FR2, FR13 of add-base-ref-resolution: a fresh claim resolves and refreshes its base
+        // against a real 'origin' remote before it ever reaches branch creation.
+        addOrigin(clone, tempDir)
+        String defaultBranch = gitOutput(clone, 'rev-parse', '--abbrev-ref', 'HEAD')
         def tracker = Mock(Tracker)
         def trackerTask = new TrackerTask(
                 new TaskRef('T-1'), new TaskSnapshot('T-1', 'title', 'body'),
@@ -167,7 +194,8 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         TakeFreshClaim.claim(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, new AbortHandler(tracker, Clock.systemUTC()), 3, [],
                 clone, null, pipeline(), RunArguments.InteractiveMode.ALL,
-                trackerTask, tracker, InstanceId.generate('test-instance'), new ClaimLossFlag())
+                trackerTask, tracker, InstanceId.generate('test-instance'), new ClaimLossFlag(),
+                new TrustedBaseContext(BaseDefinition.none(), defaultBranch))
 
         then:
         thrown(UsageException)

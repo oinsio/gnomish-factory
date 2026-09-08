@@ -133,13 +133,19 @@ final class ServeCommand {
      * @throws UsageException if the flags are malformed or the project has no {@code tracker:}
      *     section (FR17)
      * @throws PipelineLoadFailedException if {@code .gnomish/} fails to load
-     * @throws ServeExitCodeException if the startup label-provisioning smoke test fails (FR12)
+     * @throws ServeExitCodeException if the startup label-provisioning smoke test fails (FR12), or
+     *     origin's default branch cannot be established or refreshed (FR5, FR13 of
+     *     add-base-ref-resolution) — exit code 1 either way
      * @throws InterruptedException if drain's wait for slots to empty, or the forever loop's own
      *     wait for the feed thread to stop, is itself interrupted
      */
     void run(ApplicationArguments args) throws IOException, InterruptedException {
         ServeArguments serveArguments = argumentsParser.parse(args);
-        PipelineDefinition definition = TakeCommandSupport.loadPipeline(serveArguments.dir(), pipelineSource);
+        TrustedTierStartup.StartupLaw startupLaw = bindStartupLaw(serveArguments.dir());
+        PipelineDefinition definition = startupLaw.definition();
+        // FR13, D15 of add-base-ref-resolution: bound once here, threaded to every slot's fresh
+        // claim — never re-read per claim.
+        TrustedBaseContext trustedBase = new TrustedBaseContext(startupLaw.base(), startupLaw.defaultBranch());
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
         int effectiveSlots = serveArguments.slots() != null ? serveArguments.slots() : serveProperties.slots();
         InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
@@ -159,7 +165,9 @@ final class ServeCommand {
                 liveTracker,
                 instanceId,
                 effectiveSlots,
-                assembly,
+                // The source the startup definition came from is what every slot's fresh claim
+                // reads its task tier through (FR13 of add-base-ref-resolution).
+                assembly.withPipelineSource(pipelineSource),
                 git,
                 factoryProperties,
                 serveProperties,
@@ -167,7 +175,8 @@ final class ServeCommand {
                 feedClock,
                 sandboxLifecyclePass,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
 
         // FR2 of harden-logging-observability: the start anchor names the configuration the daemon
         // actually resolved — flags, properties and defaults already folded together — so a
@@ -194,6 +203,23 @@ final class ServeCommand {
             return;
         }
         ServeShutdownWiring.runForever(runtime.automaton(), runtime.shutdown(), starter, runtime.observability());
+    }
+
+    /**
+     * FR13, D14/D15 of add-base-ref-resolution: the definition comes from the refreshed default
+     * branch of origin, read from git objects — never from the clone's checkout. A default branch
+     * that cannot be established or refreshed is startup failure of the same class as an
+     * unreachable tracker: the plain sentence on the console, exit code 1, nothing claimed.
+     */
+    private TrustedTierStartup.StartupLaw bindStartupLaw(Path dir) throws IOException {
+        try {
+            return TrustedTierStartup.bind(dir, git.baseRefs(), pipelineSource, trackerAdapterRegistry);
+        } catch (DefaultBranchUnboundException unbound) {
+            // throwable-not-subject: TrustedTierStartup logged the one ERROR of this failure; the
+            //     console line is the operator's copy of its sentence.
+            System.err.println("gnomish serve: startup failed: " + unbound.getMessage());
+            throw new ServeExitCodeException(1);
+        }
     }
 
     /**

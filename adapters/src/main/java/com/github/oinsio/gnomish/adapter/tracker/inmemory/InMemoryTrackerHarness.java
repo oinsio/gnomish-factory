@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory;
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
+import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
@@ -106,6 +107,19 @@ public record InMemoryTrackerHarness(InMemoryTracker adapter) {
     /** Loads one fixture task directly into {@code state} with {@code abortFacts} ({@link InMemoryTrackerSeeding#seed}). */
     public void seed(TaskRef ref, TaskSnapshot snapshot, TrackerTaskState state, AbortFacts abortFacts) {
         InMemoryTrackerSeeding.seed(adapter, ref, snapshot, state, abortFacts);
+    }
+
+    /**
+     * Sets an already-seeded task's designator facts, the reference adapter's test operation for
+     * them (FR3 of add-base-ref-resolution): a tracker with no labels and no native fields has no
+     * candidates to derive, so the port's classified shapes are set directly and {@code fetchTask}
+     * reports them unchanged.
+     *
+     * @param ref the already-seeded fixture task
+     * @param designators the shapes the task names per kind
+     */
+    public void seedDesignators(TaskRef ref, TaskDesignators designators) {
+        InMemoryTrackerSeeding.seedDesignators(adapter, ref, designators);
     }
 
     /**

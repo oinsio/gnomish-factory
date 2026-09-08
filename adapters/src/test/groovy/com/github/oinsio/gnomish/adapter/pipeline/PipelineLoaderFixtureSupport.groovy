@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
+import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 
 /**
@@ -34,6 +35,20 @@ trait PipelineLoaderFixtureSupport implements GnomishTreeWriter {
                 getRoot(),
                 TrackerValidatorStub.acceptingGithub(),
                 TrackerValidatorStub.discoveredGithubCheckProvider())
+    }
+
+    /**
+     * Loads the built tree for both tiers (FR1, FR2 of add-base-ref-resolution), declaring which
+     * designator kinds the configured tracker adapter extracts — empty for every caller that is not
+     * about the designator seam.
+     */
+    ConfigurationLoad loadConfigurationTree(Set<String> designatorKinds = [] as Set) {
+        PipelineLoader.loadConfiguration(
+                getRoot(),
+                TrackerValidatorStub.acceptingGithub(),
+                TrackerValidatorStub.discoveredGithubCheckProvider(),
+                ConnectionProfiles.none(),
+                designatorKinds)
     }
 
     /** Writes a complete, structurally- and semantically-valid two-stage tree. */
@@ -78,6 +93,11 @@ verify:
     votes: 1
 advancement: auto
 '''
+    }
+
+    /** Renders every located error of an invalid outcome, in order — shared by specs asserting on them. */
+    static List<String> renderedErrors(LoadOutcome outcome) {
+        (outcome as LoadOutcome.Invalid).errors().collect { it.render() }
     }
 
     /** The {@code build} manifest: consumes {@code plan-doc}, builtin + external checks, manual advancement. */

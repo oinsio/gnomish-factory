@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState
@@ -20,10 +21,12 @@ import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
 import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller
 import com.github.oinsio.gnomish.app.serve.RecordingKiller
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGate
 import com.github.oinsio.gnomish.app.serve.ServeShutdown
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -51,6 +54,7 @@ import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
+import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter
@@ -132,7 +136,8 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         new TakeSlotRunner(
                 newAssembly(), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, 3, 'taskId',
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook())
+                new ClaimEpochBook(), new TrustedBaseContext(BaseDefinition.none(), 'HEAD'),
+                RemoteOutageGate.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
     }
 
     /** A real, quick-to-drain automaton: the mocked tracker reports nothing eligible. */
@@ -176,6 +181,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 lifecycleLedgerWriter,
                 taskOutcomeLedgerWriter,
                 new SweepLedgerWriter(appender, instance, clock),
+                new RemoteOutageLedgerWriter(appender, instance),
                 appender,
                 instance,
                 clock)
@@ -210,6 +216,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 lifecycleLedgerWriter,
                 taskOutcomeLedgerWriter,
                 new SweepLedgerWriter(appender, instance, clock),
+                new RemoteOutageLedgerWriter(appender, instance),
                 appender,
                 instance,
                 clock)
@@ -250,6 +257,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 lifecycleLedgerWriter,
                 taskOutcomeLedgerWriter,
                 new SweepLedgerWriter(appender, instance, clock),
+                new RemoteOutageLedgerWriter(appender, instance),
                 appender,
                 instance,
                 clock)
@@ -263,7 +271,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 new HeartbeatVital(HeartbeatState.RUNNING, Instant.EPOCH, 0),
                 new ReaperVital(Instant.EPOCH, 0, 300L),
                 new JanitorVital(Instant.EPOCH))
-        new Snapshot(1, Instant.EPOCH, 0L, instance, LifecycleSnapshotAssembler.assemble(tracker), feed, slots, vitals, new TrackerHealth(null, 0))
+        new Snapshot(1, Instant.EPOCH, 0L, instance, LifecycleSnapshotAssembler.assemble(tracker), feed, slots, vitals, new TrackerHealth(null, 0), [:])
     }
 
     // FR10, FR11, NFR-O2, D9: proves the three void calls PIT found survived on runDrain's own

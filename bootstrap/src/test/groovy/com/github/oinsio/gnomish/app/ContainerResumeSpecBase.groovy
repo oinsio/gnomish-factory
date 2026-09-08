@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.state.BasePin
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
@@ -59,7 +60,8 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(cloneDir, 'init')
         Path index = tempDir.resolve('index')
         Files.createDirectories(index)
@@ -152,7 +154,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     protected void commitTaskJson(String taskId, TaskOutcome outcome, EscalationReport lastEscalation) {
         def dto = TaskJsonMapper.toDto(
                 context(taskId), gitOutput(cloneDir, 'rev-parse', 'HEAD').trim(), Instant.now(),
-                outcome, lastEscalation, false)
+                outcome, lastEscalation, false, BasePin.UNPINNED)
         def bytes = TaskStateJson.mapper().writeValueAsString(dto).getBytes('UTF-8')
         commitOnBranch(taskId, '.gnomish-task/task.json', bytes, 'outcome')
     }

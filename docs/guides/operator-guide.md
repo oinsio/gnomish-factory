@@ -631,6 +631,7 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 | 13   | parked as infra — abort threshold reached, or an infrastructure escalation                         |
 | 14   | revoked — claim lost mid-run (issue closed or reassigned under a working gnome)                    |
 | 15   | refused or skipped (held by another instance, already delivered, closed/nonexistent, foreign repo) |
+| 16   | infrastructure unavailable — claim released because a base-ref remote could not be reached; see [`operator-guide-serve.md`](operator-guide-serve.md#base-ref-resolution-task-branchbase-and-the-remote-outage-gate) |
 
 Codes shared with `gnomish run` (0/1/2/3/10/11/12) keep the same meaning. An
 uncaught exception during a take run always runs the abort protocol first and

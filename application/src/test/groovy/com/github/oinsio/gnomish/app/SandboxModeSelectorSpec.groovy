@@ -7,12 +7,9 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
-import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
-import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.HostBindingProvider
-import com.github.oinsio.gnomish.sandbox.SandboxBindingProvider
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.util.function.BooleanSupplier
 import spock.lang.Specification
@@ -23,7 +20,7 @@ import spock.lang.Specification
  * refusals for unmet needs, mixed bindings, and missing container
  * prerequisites, each with one clear error naming the way out.
  */
-class SandboxModeSelectorSpec extends Specification {
+class SandboxModeSelectorSpec extends Specification implements SandboxBindingFixtures {
 
     private static StageDefinition stage(String name, Sandbox sandbox = Sandbox.none()) {
         new StageDefinition(
@@ -56,21 +53,6 @@ class SandboxModeSelectorSpec extends Specification {
 
     private static AdapterBindingRegistry hostOnlyRegistry() {
         AdapterBindingRegistry.ratified([new HostBindingProvider()], BindingTrustTable.firstParty())
-    }
-
-    private static SandboxBindingProvider containerProvider() {
-        new SandboxBindingProvider() {
-
-                    @Override
-                    String configName() {
-                        BindingNames.CONTAINER
-                    }
-
-                    @Override
-                    CapabilityPassport passport() {
-                        CapabilityPassport.container()
-                    }
-                }
     }
 
     def "an explicit host default plans a host run with one segment"() {

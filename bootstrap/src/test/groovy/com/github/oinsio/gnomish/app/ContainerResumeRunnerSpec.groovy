@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 
@@ -17,7 +18,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // final status summary on stdout — no engine run, no environment.
     def "resuming a completed task prints the final status summary"() {
         given:
-        repository.createTask(context('T-COMPLETED'), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context('T-COMPLETED'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         commitTaskJson('T-COMPLETED', new TaskOutcome.Completed(pipelineEndState()), null)
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
@@ -37,7 +38,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // then drives to Completed.
     def "resuming a paused task confirms the checkpoint and completes"() {
         given:
-        repository.createTask(context('T-PAUSED'), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context('T-PAUSED'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         repository.recordOutcome('T-PAUSED', new TaskOutcome.Paused(pipelineEndState(), 'build'))
         commitStateAtPipelineEnd('T-PAUSED')
         def consoleOut = new ByteArrayOutputStream()
@@ -56,7 +57,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // volume, network) so the next materialize seeds a fresh clone, then continues from the branch.
     def "resuming an interrupted task with --discard-work disposes the kept environment"() {
         given: 'an interrupted task (no outcome) whose recorded position is PipelineEnd'
-        repository.createTask(context('T-DISC'), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context('T-DISC'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         commitStateAtPipelineEnd('T-DISC')
         def key = TaskIdSanitizer.sanitize('T-DISC')
 
@@ -94,7 +95,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // a snapshot commit — so the abort is expected and does not affect what is being asserted.
     def "resuming an interrupted task at a recorded stage leases the environment and salvages leftovers"() {
         given: 'a freshly created task: no state.json yet, so the recorded position defaults to AtStage(build)'
-        repository.createTask(context('T-SALV'), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context('T-SALV'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
 
         when:
         resume('T-SALV', lines(''), sink())
@@ -115,7 +116,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // itself still aborts here for the same reason as the sibling test above.)
     def "resuming a task with a pending interrupted verification leases the environment but skips salvage"() {
         given: 'a task whose branch tip is a snapshot commit, not a plain state commit'
-        repository.createTask(context('T-PEND'), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context('T-PEND'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         commitSnapshotStateAtStage('T-PEND', 'build', 1)
 
         when:
@@ -139,7 +140,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
     // list factory objects; it never materializes or execs, so those listings are tolerated.
     def "resuming an interrupted task already at PipelineEnd touches no environment at all"() {
         given: 'an interrupted task (no outcome) whose recorded position is already PipelineEnd'
-        repository.createTask(context('T-NOENV'), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context('T-NOENV'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         commitStateAtPipelineEnd('T-NOENV')
 
         when:

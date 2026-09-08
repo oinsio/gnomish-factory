@@ -121,7 +121,8 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         // canonical ref it was called with (see GithubTaskFetcher.fetchTask), not the
         // fixture ref this wrapper hides underneath it.
         var snapshot = new TaskSnapshot(ref.id(), result.snapshot().title(), result.snapshot().body());
-        return new TrackerTask(ref, snapshot, result.state(), result.abortFacts(), result.finished());
+        return new TrackerTask(
+                ref, snapshot, result.state(), result.abortFacts(), result.finished(), result.designators());
     }
 
     @Override
@@ -238,6 +239,26 @@ final class GithubTrackerFixtureAdapter implements Tracker {
      */
     void seedWorkingWithoutClaim(TaskRef ref) {
         issueFor(ref).addLabel(FixtureSeeder.WORKING_LABEL);
+    }
+
+    /**
+     * Writes {@code values} onto {@code ref}'s fixture issue as labels the contract spec's
+     * configured designator rule matches, per {@code
+     * TrackerDesignatorContract.seedDesignatorCandidates} (FR3 of add-base-ref-resolution) — so the
+     * REAL {@link GithubDesignatorRules} extraction and the port's shared classification are what
+     * produce the shape the property then asserts.
+     *
+     * <p>The first value takes the plain {@code <kind>:} prefix and each later one an indexed
+     * {@code <kind>-<n>:} prefix, both matched by the spec's rule. A GitHub issue cannot carry the
+     * same label twice — {@link FixtureIssue#addLabel} enforces that faithfully — so distinct
+     * prefixes are the only way a real issue can present the same candidate value twice, which is
+     * exactly the "equal duplicates collapse" row's fixture.
+     */
+    void seedDesignatorCandidates(TaskRef ref, String kind, List<String> values) {
+        FixtureIssue issue = issueFor(ref);
+        for (int i = 0; i < values.size(); i++) {
+            issue.addLabel("%s%s:%s".formatted(kind, i == 0 ? "" : "-" + i, values.get(i)));
+        }
     }
 
     /**

@@ -42,7 +42,8 @@ record TakeDispatcher(
         SecretsProvider secretsProvider,
         TakeoverConfirmation takeoverConfirmation,
         ContainerTakeSupport containerTakeSupport,
-        ClaimEpochBook epochs) {
+        ClaimEpochBook epochs,
+        TrustedBaseContext trustedBase) {
 
     TakeResult runExplicit(
             TakeArguments takeArguments,
@@ -116,7 +117,8 @@ record TakeDispatcher(
                 clock,
                 heartbeat.flag(),
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
         long startedNanos = System.nanoTime();
         TakeResult result = disposition.dispose(
                 takeArguments.dir(),
@@ -157,7 +159,8 @@ record TakeDispatcher(
                 trackerConfig.wipLimit(),
                 new Random(),
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
         long startedNanos = System.nanoTime();
         TakeResult result =
                 bareAuto.run(takeArguments.dir(), definition, takeArguments.interactiveMode(), tracker, instanceId);

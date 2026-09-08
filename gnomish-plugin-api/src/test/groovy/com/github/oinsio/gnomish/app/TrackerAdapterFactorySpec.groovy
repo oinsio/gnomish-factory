@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import java.time.Duration
 import spock.lang.Specification
 
 /**
@@ -20,7 +21,7 @@ import spock.lang.Specification
 class TrackerAdapterFactorySpec extends Specification {
 
     private static TrackerConfig config() {
-        new TrackerConfig('stand-in', 3, java.time.Duration.ofMinutes(5), 3, 1, Map.of())
+        new TrackerConfig('stand-in', 3, Duration.ofMinutes(5), 3, 1, Map.of())
     }
 
     /** An adapter that implements only the three-argument form — the "does not stamp epochs" case. */
@@ -57,6 +58,16 @@ class TrackerAdapterFactorySpec extends Specification {
 
         then: 'the very tracker the adapter built — not null, not a substitute'
         tracker.is(factory.built)
+    }
+
+    // FR3 of add-base-ref-resolution: an adapter that declares no extraction rule declares no
+    //     designator kind, so the trusted-tier allowed-bases check has nothing to object to
+    def "an adapter that declares no extraction rule reports no designator kinds"() {
+        given:
+        def factory = new EpochUnawareFactory(Stub(Tracker))
+
+        expect:
+        factory.configuredDesignatorKinds(config()).isEmpty()
     }
 
     def "an adapter that does not stamp epochs is built the same whichever form the caller uses"() {

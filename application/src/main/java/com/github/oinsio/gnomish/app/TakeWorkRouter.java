@@ -101,7 +101,8 @@ final class TakeWorkRouter {
                         trackerTask,
                         tracker,
                         instanceId,
-                        w.claimLossFlag);
+                        w.claimLossFlag,
+                        w.trustedBase);
             case CONTAINER ->
                 TakeContainerFreshClaim.claim(
                         w.assembly,
@@ -118,7 +119,8 @@ final class TakeWorkRouter {
                         trackerTask,
                         tracker,
                         instanceId,
-                        w.claimLossFlag);
+                        w.claimLossFlag,
+                        w.trustedBase);
         };
     }
 

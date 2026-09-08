@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
@@ -34,7 +34,8 @@ import java.util.List;
  * {@link AbortedException} is a {@link RunnerOutcomeLoop}-only wrapper decision, not something the
  * bare engine call produces (verified by reading {@link Engine#run}'s full body: every arm of its
  * exhaustive {@code TaskOutcome}-producing switch returns a value, nothing throws on {@code
- * Aborted}). So an {@code Aborted} return here is routed to {@link AbortHandler} — task 5.3's
+ * Aborted}). So an {@code Aborted} return here is routed to {@link
+ * com.github.oinsio.gnomish.app.take.AbortHandler} — task 5.3's
  * infrastructure-abort protocol — with fresh {@link
  * com.github.oinsio.gnomish.app.port.tracker.AbortFacts} fetched from the tracker for the K-fuse
  * decision.
@@ -53,17 +54,21 @@ import java.util.List;
  * leaves the tracker state and cleanup untouched — {@link RevocationHandler} already performs its
  * own salvage/push protocol).
  *
+ * <p>Kept in sync with {@link TakeContainerEngineExecution}: both drive one engine run per claim
+ * through the same {@code RunAssembly.assemble} contract, and in particular both hand it the
+ * task's <em>law binding</em> — the repository and the commit its {@code .gnomish/} law and
+ * external-check pin are read from (design D12 of add-base-ref-resolution) — as a constructor
+ * argument taken from the claim, never derived per medium. A binding that changes on one side and
+ * not the other would make the same task read different law in host and container mode.
+ *
  * <p>Implements FR9, FR12, D2, D3 of add-tracker-port.
  *
  * @param assembly builds the {@code EnginePorts} bundle for the run; never null
  * @param git the task-git capability set: the run's repository and round persistence, the
  *     revocation protocol's best-effort push, and salvage plus terminal cleanup; never null
- * @param cloneDir the project clone the task worktree was materialized under; never null
  * @param worktreesRoot the worktrees root the task's repository is rooted under; never null
- * @param abortHandler the infrastructure-abort protocol (task 5.3), applied when the engine
- *     returns {@code Aborted}; never null
- * @param abortThreshold the configured abort-fuse threshold (K) passed to {@code
- *     abortHandler}; positive
+ * @param abortFuse the infrastructure-abort protocol (task 5.3) and its threshold (K), applied
+ *     when the engine returns {@code Aborted}; never null
  * @param credentialEnvVarsToScrub the active tracker adapter's declared credential
  *     environment variable names (design D17, NFR-S1 of add-tracker-port), threaded into
  *     {@link RunAssembly#assemble}; never null
@@ -71,23 +76,26 @@ import java.util.List;
  *     {@link RevocationCheckingAttemptPersistence} in addition to its {@code fetchTask} check
  *     (FR8, design D7 of add-claim-heartbeat): a set flag means a beat already proved the claim
  *     gone, so the boundary reacts as a revocation; never null (an empty flag never trips)
+ * @param lawBinding which repository and tree this task's pipeline law and external-check pin
+ *     are read from (FR11, design D12 of add-base-ref-resolution) — the project clone the task
+ *     worktree was materialized under, at the task's own base commit once base resolution
+ *     supplies one and at the clone's checkout until then; never the gnome's worktree
  */
 record TakeEngineExecution(
         RunAssembly assembly,
         TaskGit git,
-        Path cloneDir,
         Path worktreesRoot,
-        AbortHandler abortHandler,
-        int abortThreshold,
+        AbortFuse abortFuse,
         List<String> credentialEnvVarsToScrub,
-        ClaimLossFlag claimLossFlag) {
+        ClaimLossFlag claimLossFlag,
+        LawBinding lawBinding) {
 
     /**
      * Runs the engine exactly once against {@code context}/{@code state}, wrapping the round
      * persistence with {@link RevocationCheckingAttemptPersistence} and recording the terminal
      * outcome through {@link GitOutcomeRecorder} — unless the run was revoked mid-flight, in which
      * case {@link RevocationHandler} owns the git-side cleanup instead, or the run aborted, in
-     * which case {@link AbortHandler} owns the tracker-side protocol. Every non-aborted, non-revoked
+     * which case {@link com.github.oinsio.gnomish.app.take.AbortHandler} owns the tracker-side protocol. Every non-aborted, non-revoked
      * outcome is carried through to a real tracker call by an exhaustive switch: a fresh {@code
      * Escalated} outcome is parked through {@link TakeEscalationExit} (task 5.8, FR13, D12), a fresh
      * {@code Completed} outcome is finished through {@link TakeFinishReport} (task 5.11, FR18, D11),
@@ -120,6 +128,9 @@ record TakeEngineExecution(
             InstanceId instanceId) {
         Path worktree = bootstrap.worktreePath();
         String taskId = bootstrap.taskId();
+        // The task's repository is the one its law is bound to (D12): the binding is the only
+        // owner of that root, so the clone dir is read from it rather than carried twice.
+        Path cloneDir = lawBinding.repositoryRoot();
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
         var delegate = git.store().attemptPersistence(worktree, taskId);
         var persistence = new RevocationCheckingAttemptPersistence(delegate, tracker, ref, instanceId, claimLossFlag);
@@ -128,7 +139,8 @@ record TakeEngineExecution(
         // of wire-host-mid-round-push): fresh (TakeFreshClaim) and resume (TakeResumeRunner) both
         // funnel through this method, so neither entry point can silently lose it.
         var assembled = assembly.withHostGitPush(git.midRoundPush())
-                .assemble(definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, cloneDir);
+                .assemble(
+                        definition, context, state, interactiveMode, persistence, credentialEnvVarsToScrub, lawBinding);
 
         TaskOutcome outcome = new Engine().run(definition, context, state, workspace, assembled.ports());
 
@@ -186,8 +198,8 @@ record TakeEngineExecution(
                 instanceId,
                 retry,
                 park,
-                abortHandler,
-                abortThreshold,
+                abortFuse.handler(),
+                abortFuse.threshold(),
                 finish);
     }
 }

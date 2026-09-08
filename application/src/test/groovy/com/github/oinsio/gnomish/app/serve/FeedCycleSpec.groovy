@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -16,11 +17,13 @@ import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
+import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -50,15 +53,24 @@ class FeedCycleSpec extends Specification {
         new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
     }
 
-    private static FeedCycle cycle(Tracker tracker, SlotLedger ledger, SlotRunner runner = { TaskRef ref -> } as SlotRunner) {
+    // FR14 of add-base-ref-resolution: a gate that starts (and, absent openOnFailure(), stays)
+    // closed — BaseRefGit.UNWIRED is safe here because a closed gate's probeIfDue() never calls it.
+    private static RemoteOutageGate closedGate() {
+        new RemoteOutageGate(
+                BaseRefGit.UNWIRED, Path.of('.'), new VirtualClock(), new Random(0), Duration.ofSeconds(1), Duration.ofMinutes(1))
+    }
+
+    private static FeedCycle cycle(
+            Tracker tracker, SlotLedger ledger, SlotRunner runner = { TaskRef ref -> } as SlotRunner, RemoteOutageGate gate = closedGate()) {
         // Budgeted: a mutant that breaks claimOrAbandon outright (e.g. assign(null) -> NPE) spins
         // FeedOutageRetry's retry-forever loop; the budget fails the spec instead of hanging it.
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
         def outageRetry = new FeedOutageRetry(sleeper, {
             Duration.ofSeconds(1)
         }, RepeatSuppressorFixture.quiet())
+        def resilience = new FeedResilience(outageRetry, new FinishedDecline(), gate)
         new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner, new FeedSelection(BASE, CAP, 2, new Random(0)),
-                new FeedStateLogger(), outageRetry, new FinishedDecline())
+                new FeedStateLogger(), resilience)
     }
 
     // FR9, D5: every candidate loses the claim race (Held) — attemptClaim falls through the
@@ -89,6 +101,74 @@ class FeedCycleSpec extends Specification {
         then: 'both candidates were raced away and the reserved permit was returned to the pool, not stranded'
         claimCalls.get() == 2
         ledger.freeSlots() == 1
+    }
+
+    // FR14, NFR-R3 of add-base-ref-resolution (task 7.3): an open remote outage gate abandons the
+    //     reserved permit with ZERO tracker.claim calls — attemptClaim (and outageRetry.run) is
+    //     never entered at all, proven here by candidates that WOULD otherwise claim successfully.
+    def "claimOrAbandon abandons the reserved permit and calls tracker.claim zero times while the gate is open"() {
+        given:
+        def ledger = new SlotLedger(1)
+        ledger.acquire()
+        def claimCalls = new AtomicInteger()
+        Tracker tracker = [
+            claim: { TaskRef ref, String instance ->
+                claimCalls.incrementAndGet(); new ClaimResult.Acquired(new ClaimEpoch(1))
+            },
+        ] as Tracker
+        def gate = closedGate()
+        gate.openOnFailure("boom")
+
+        when:
+        cycle(tracker, ledger, { TaskRef ref -> } as SlotRunner, gate).claimOrAbandon([
+            returnedTask('github:o/r#1'),
+            returnedTask('github:o/r#2')
+        ])
+
+        then:
+        claimCalls.get() == 0
+        ledger.freeSlots() == 1
+        gate.isOpen()
+    }
+
+    // FR14, NFR-O1 of add-base-ref-resolution: abandoning while the gate is open feeds the
+    //     outage's own releasedClaims count (RemoteOutageGate#claimReleasedWhileOpen), so the
+    //     eventual remoteOutage ledger line reports how many claims the outage cost — read back
+    //     here through onClosedOutage once the gate closes.
+    def "claimOrAbandon while the gate is open counts the abandoned permit toward the outage's released claims"() {
+        given:
+        def ledger = new SlotLedger(1)
+        ledger.acquire()
+        Tracker tracker = [
+            claim: { TaskRef ref, String instance ->
+                new ClaimResult.Acquired(new ClaimEpoch(1))
+            },
+        ] as Tracker
+        def open = true
+        def baseRefGit = [probe: { Path p -> open }] as BaseRefGit
+        def received = new AtomicReference<RemoteOutageClosedOutage>()
+        def clock = new VirtualClock()
+        def noJitter = new Random() {
+                    double nextDouble() {
+                        0.0
+                    }
+                }
+        def gate = new RemoteOutageGate(
+                baseRefGit, Path.of('.'), clock, noJitter, Duration.ofSeconds(1), Duration.ofMinutes(1),
+                new RemoteOutageWiring('origin', RepeatSuppressorFixture.quiet(), Duration.ofHours(1), {}, { RemoteOutageClosedOutage outage ->
+                    received.set(outage)
+                }))
+        gate.openOnFailure('boom')
+
+        when:
+        cycle(tracker, ledger, { TaskRef ref -> } as SlotRunner, gate).claimOrAbandon([returnedTask('github:o/r#1')])
+
+        and: 'the gate later closes, ending the outage'
+        clock.advance(Duration.ofSeconds(1))
+        gate.probeIfDue()
+
+        then:
+        received.get().releasedClaims() == 1
     }
 
     // FR9, D5: an empty candidate list is another way attemptClaim returns null without ever
@@ -181,7 +261,7 @@ class FeedCycleSpec extends Specification {
         }
 
         then: 'the occupied ref was never offered to claim; the next candidate was claimed instead'
-        claimedRefs == ['github:o/r#other']
+        claimedRefs.toList() == ['github:o/r#other']
 
         and: 'the skip is loud: a WARN naming the occupied ref'
         appender.list.any {
@@ -240,7 +320,7 @@ class FeedCycleSpec extends Specification {
         ])
 
         then: 'the ref was claimed, assigned, and its slot ran to completion — an ordinary fresh claim'
-        claimedRefs == ['github:o/r#zombie']
+        claimedRefs.toList() == ['github:o/r#zombie']
         // The instantly-finishing slot body may have released already; bounded drain proves the
         // assign-run-release cycle completed rather than racing occupiedRefs() directly.
         ledger.awaitDrained(Duration.ofSeconds(5))

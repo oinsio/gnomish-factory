@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import java.nio.file.Path
 
 /**
@@ -69,6 +71,49 @@ trait BareGitRepoFixture {
     void addRemote(Path repo, String name, String url) {
         def result = new GitProcessRunner().run(repo, 'remote', 'add', name, url)
         assert result.exitCode() == 0: "git remote add failed: ${result.stderr()}"
+    }
+
+    /**
+     * Wires a real {@code origin} remote for {@code repo}: a fresh local bare repo under {@code
+     * parent}, {@code repo}'s current branch pushed to it, and the bare repo's own {@code HEAD}
+     * symref pointed at that same branch name — so {@code git ls-remote --symref origin HEAD}
+     * (the real default-branch discovery {@code RemoteDefaultBranch} runs, FR5 of
+     * add-base-ref-resolution) names the branch that was actually pushed, whatever {@code
+     * init.defaultBranch} happens to be configured to in this environment.
+     *
+     * <p>Specs whose real {@code take}/{@code serve} startup resolves and refreshes a base ref
+     * (FR2, FR6, FR13 of add-base-ref-resolution) need a real, reachable {@code origin} exactly
+     * like this — an autonomous run never falls back to the clone's local {@code HEAD} (D4).
+     *
+     * @param repo the working repo whose current branch becomes origin's default; never null
+     * @param parent the directory the new bare repo is created under; never null
+     * @param originName the bare repo's directory name; defaults to {@code origin.git}
+     * @return the bare repo's path
+     */
+    Path addOrigin(Path repo, Path parent, String originName = 'origin.git') {
+        Path origin = initBareRepo(parent, originName)
+        addRemote(repo, 'origin', origin.toString())
+        String branch = gitOutput(repo, 'rev-parse', '--abbrev-ref', 'HEAD')
+        def runner = new GitProcessRunner()
+        def push = runner.run(repo, 'push', 'origin', "HEAD:refs/heads/${branch}")
+        assert push.exitCode() == 0: "git push origin failed: ${push.stderr()}"
+        def symref = runner.run(origin, 'symbolic-ref', 'HEAD', "refs/heads/${branch}")
+        assert symref.exitCode() == 0: "git symbolic-ref failed in origin: ${symref.stderr()}"
+        origin
+    }
+
+    /**
+     * Pushes {@code repo}'s current branch to its already-configured {@code origin} (see {@link
+     * #addOrigin}), asserting success — for a spec that commits MORE content into {@code repo}
+     * after {@link #addOrigin} ran (e.g. a per-test {@code config.yaml}): a real take/serve startup
+     * reads its definition from git objects at origin's refreshed tip (FR13, D14 of
+     * add-base-ref-resolution), never from the clone's own checkout, so a later local-only commit
+     * is invisible to it until this is called again.
+     */
+    void pushOrigin(Path repo) {
+        String branch = gitOutput(repo, 'rev-parse', '--abbrev-ref', 'HEAD')
+        def push = new GitProcessRunner().run(repo, 'push', 'origin', "HEAD:refs/heads/${branch}")
+        assert push.exitCode() == 0: "git push origin failed: ${push.stderr()}"
     }
 
     /** Runs an arbitrary read-only {@code git} command in {@code repo} and returns trimmed stdout. */
@@ -146,5 +191,17 @@ trait BareGitRepoFixture {
         def result = new GitProcessRunner().run(repo, 'worktree', 'add', worktreePath.toString(), '-b', branch)
         assert result.exitCode() == 0: "git worktree add failed: ${result.stderr()}"
         worktreePath
+    }
+
+    /**
+     * Builds a {@link GitBaseRefs} over a real {@link GitProcessRunner} and a {@link
+     * GitInfrastructureRetry} driven by virtual time — the standard subject construction shared
+     * by every spec exercising {@code GitBaseRefs} (delegation, probe) so its retry wiring is not
+     * hand-duplicated per spec.
+     */
+    GitBaseRefs newGitBaseRefs() {
+        def retry = new GitInfrastructureRetry(new VirtualSleeper(new VirtualClock()),
+                GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF)
+        new GitBaseRefs(new GitProcessRunner(), retry)
     }
 }

@@ -151,6 +151,6 @@ class SnapshotReaderSpec extends Specification {
         def snapshot = SnapshotJsonMapperSpec.referenceSnapshot()
         return new Snapshot(
                 snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
-                lifecycle, snapshot.feed(), snapshot.slots(), snapshot.vitals(), snapshot.tracker())
+                lifecycle, snapshot.feed(), snapshot.slots(), snapshot.vitals(), snapshot.tracker(), [:])
     }
 }

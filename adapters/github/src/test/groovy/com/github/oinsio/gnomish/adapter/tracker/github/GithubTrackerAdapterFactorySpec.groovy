@@ -250,4 +250,20 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         then: 'the hash is stripped before parsing'
         ref == new TaskRef(GithubTaskId.build(wireMock.baseUrl(), OWNER, REPO, 42).canonicalId())
     }
+
+    // FR3 of add-base-ref-resolution: the factory reports exactly the declared kinds, so core can
+    //     hold task-branch.base.allowed against them without reading any GitHub key itself
+    def "configuredDesignatorKinds reports the declared kinds and nothing else"() {
+        given:
+        def config = configFor(subsection() + [designators: ['base': 'base:(.+)', 'type': 'type:(.+)']])
+
+        expect:
+        new GithubTrackerAdapterFactory().configuredDesignatorKinds(config) == ['base', 'type'] as Set
+    }
+
+    // FR3: a kind with no rule is never reported -- an adapter with no designators map declares none
+    def "configuredDesignatorKinds reports none when no rule is declared"() {
+        expect:
+        new GithubTrackerAdapterFactory().configuredDesignatorKinds(configFor(subsection())).isEmpty()
+    }
 }

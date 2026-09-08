@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
+import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -9,7 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import java.nio.file.Path;
+import java.io.IOException;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
@@ -30,8 +32,16 @@ import java.util.function.UnaryOperator;
  * copy rather than mutating, so the shared assembly a {@code serve} instance reuses across slots is
  * never disturbed by one slot's per-run enrichment.
  *
+ * <p>The assembly is also where a task's law is read from the binding it runs under (design D14
+ * of add-base-ref-resolution): {@link #assemble} opens the law at the binding to freeze it, and
+ * {@link #bindTaskTier} reads the task tier of the definition from the same binding first, through
+ * the {@link PipelineSource} the invocation attached with {@link #withPipelineSource} — the very
+ * source the startup definition was loaded from, so the two reads share one registry of validators
+ * and providers by construction.
+ *
  * <p>Implements FR12b of split-into-modules; FR7, FR10, D6, D10 of add-agent-executor; D10 of
- * add-manual-run; FR7 of add-git-workflow; FR1, FR11 of add-claim-heartbeat.
+ * add-manual-run; FR7 of add-git-workflow; FR1, FR11 of add-claim-heartbeat; FR13 of
+ * add-base-ref-resolution.
  */
 public interface RunAssembly {
 
@@ -48,9 +58,14 @@ public interface RunAssembly {
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential env-var
      *     names (D17, NFR-S1 of add-tracker-port), combined with the operator's configured
      *     passthrough into the run's child-environment allowlist; empty for a plain {@code run}
-     * @param lawSourceRoot the root the pipeline law is frozen from at invocation start (D14, FR19
-     *     of add-sandbox-core), against which control-file and criteria references resolve — the
-     *     factory clone in git/take modes, so a running task cannot rewrite its own instructions
+     * @param lawBinding which tree the pipeline law is frozen from at invocation start (D14, FR19
+     *     of add-sandbox-core; D12 of add-base-ref-resolution) — the law commit wherever a ref was
+     *     resolved, the working tree in the in-place mode and a manual {@code run} without
+     *     {@code --base}; never the gnome's per-task worktree, so a running task cannot rewrite
+     *     its own instructions or acceptance criteria. The binding also names the repository the
+     *     external-check pin guard reads its repository-relative pin paths from: in the in-place
+     *     mode that root may not be a repository at all, in which case a check that declares pin
+     *     paths degrades fail-closed
      * @return the outcome loop and the ports it drives; never null
      */
     Run assemble(
@@ -60,7 +75,7 @@ public interface RunAssembly {
             RunArguments.InteractiveMode interactiveMode,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
-            Path lawSourceRoot);
+            LawBinding lawBinding);
 
     /**
      * Builds a standalone {@link DialogConsole} for a resume dialog that runs before any {@link
@@ -109,4 +124,30 @@ public interface RunAssembly {
      * @return a new assembly identical but for the decoration; never null
      */
     RunAssembly withHostGitPush(UnaryOperator<RoundEnvironmentSource> decoration);
+
+    /**
+     * Returns a copy of this assembly whose runs read their task tier through {@code
+     * pipelineSource} (FR13, design D14 of add-base-ref-resolution): {@code take} and {@code
+     * serve} attach the source their startup definition came from, once per invocation, exactly
+     * where they attach the heartbeat listener.
+     *
+     * @param pipelineSource where a task's law is read from by binding; never null
+     * @return a new assembly identical but for the attached source; never null
+     */
+    RunAssembly withPipelineSource(PipelineSource pipelineSource);
+
+    /**
+     * Reads the task tier of the law {@code binding} names — the definition that governs one task,
+     * or every located problem that keeps it from loading — through the attached {@link
+     * PipelineSource}. Only the task tier: the trusted tier was bound at startup and is never
+     * re-read on a claim (D15), which this method makes structural rather than promised.
+     *
+     * @param binding which repository and revision the task's law is read from; never null
+     * @return the task tier and its law commit; never null
+     * @throws IOException if the law cannot be read at all — an I/O fault, never a validation
+     *     problem
+     * @throws IllegalStateException if no source was attached — a wiring fault, never a per-task
+     *     condition
+     */
+    BoundTaskTier bindTaskTier(LawBinding binding) throws IOException;
 }

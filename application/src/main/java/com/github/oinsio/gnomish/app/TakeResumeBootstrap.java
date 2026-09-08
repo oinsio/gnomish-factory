@@ -15,6 +15,10 @@ import org.slf4j.MDC;
  * reimplemented. Extracted from {@link TakeResumeRunner} purely to keep both files within the
  * project's file-size guidance (`.claude/rules/process-invariants.md`).
  *
+ * <p>Kept in sync with {@link TakeContainerResumeBootstrap}: both must harden the clone,
+ * reconcile the remote on resume-start, and build the same resume bundle shape (context,
+ * outcome, last escalation, base commit/ref/rule) from the loaded task record.
+ *
  * <p>Implements FR9 of add-tracker-port; FR6 of harden-task-branch-contract.
  *
  * @param git the task-git capability set: clone hardening, branch lookup, worktree
@@ -75,6 +79,8 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
                 worktree,
                 branchName,
                 content.baseCommit(),
-                content.trackerWritePending());
+                content.trackerWritePending(),
+                content.baseRef(),
+                content.baseRule());
     }
 }

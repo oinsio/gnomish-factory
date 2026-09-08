@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -59,8 +60,8 @@ public final class PushBestEffortTaskRepository implements TaskRepository {
      * the best-effort discipline.
      */
     @Override
-    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
-        delegate.createTask(context, baseRef, initialState);
+    public void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState) {
+        delegate.createTask(context, baseRef, baseRule, initialState);
         firstPush.deliver(context.taskId(), cloneDir, TaskIdSanitizer.branchName(context.taskId()));
     }
 

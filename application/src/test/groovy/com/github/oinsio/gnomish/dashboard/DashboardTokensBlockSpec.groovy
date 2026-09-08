@@ -5,6 +5,7 @@ import static com.github.oinsio.gnomish.testsupport.DashboardHistoryFixtures.seg
 
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
+import java.time.Duration
 import java.time.LocalDate
 import spock.lang.Specification
 
@@ -36,7 +37,7 @@ class DashboardTokensBlockSpec extends Specification {
         given: 'input 3.7K, output 28.8K, cacheCreation 25.6K, cacheRead 4.7644M'
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO)
                 ],
                 [claude: new LedgerTokenUsage(3700, 28_800, 25_600, 4_764_400)])
 

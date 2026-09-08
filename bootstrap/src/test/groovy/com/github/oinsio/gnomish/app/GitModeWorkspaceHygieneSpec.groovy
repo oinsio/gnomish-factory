@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -40,13 +39,12 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
 
     Path cloneDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'hygiene-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'Do the thing.\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'Do the thing.\n')
+        commitAll(cloneDir, 'init')
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 
@@ -84,17 +82,17 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
                 RunArguments.InteractiveMode.NONE)
 
         then: 'the branch carries exactly one round commit on top of init'
-        def tipSha = gitRunner.run(cloneDir, 'rev-parse', 'gnomish/HYG-1').stdout().trim()
-        def tree = gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', tipSha).stdout()
+        def tipSha = gitOutput(cloneDir, 'rev-parse', 'gnomish/HYG-1')
+        def tree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', tipSha)
                 .readLines().findAll { !it.isBlank() }
 
-        and: 'the gnome change and instructions.md carried from init are present'
+        and: 'the gnome change and the .gnomish/ law carried from init are present'
         tree.contains('output.txt')
-        tree.contains('instructions.md')
+        tree.contains('.gnomish/instructions.md')
 
         and: 'every other path is a .gnomish-task/ structural artifact'
         tree.findAll {
-            !it.startsWith('.gnomish-task/') && it != 'output.txt' && it != 'instructions.md'
+            !it.startsWith('.gnomish-task/') && it != 'output.txt' && it != '.gnomish/instructions.md'
         }
         .isEmpty()
 

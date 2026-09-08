@@ -5,6 +5,7 @@ import static com.github.oinsio.gnomish.testsupport.DashboardHistoryFixtures.seg
 import static com.github.oinsio.gnomish.testsupport.DashboardPageMarkup.markup
 
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
+import java.time.Duration
 import java.time.LocalDate
 import spock.lang.Specification
 
@@ -23,8 +24,8 @@ class DashboardOutcomesBlockSpec extends Specification {
         given:
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 1, 0, 0)),
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(10, 10, 0, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 1, 0, 0), 0, Duration.ZERO),
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(10, 10, 0, 0), 0, Duration.ZERO)
                 ],
                 [:])
 
@@ -47,7 +48,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         given:
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(3, 0, 0, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(3, 0, 0, 0), 0, Duration.ZERO)
                 ], [:])
 
         when:
@@ -71,7 +72,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         given:
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(5, 3, 2, 10))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(5, 3, 2, 10), 0, Duration.ZERO)
                 ], [:])
 
         when:
@@ -96,7 +97,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         given: 'one aborted task among 300'
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(299, 0, 1, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(299, 0, 1, 0), 0, Duration.ZERO)
                 ], [:])
 
         when:
@@ -113,7 +114,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         given: 'three equal thirds, which no independent rounding can add back up to 100'
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 1, 1, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 1, 1, 0), 0, Duration.ZERO)
                 ], [:])
 
         when:
@@ -127,7 +128,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         given:
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO)
                 ], [:])
 
         when:
@@ -147,8 +148,8 @@ class DashboardOutcomesBlockSpec extends Specification {
         given:
         def history = new LedgerHistoryView(
                 [
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 0, 0, 0)),
-                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0))
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO),
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO)
                 ], [:])
 
         expect:
@@ -158,5 +159,38 @@ class DashboardOutcomesBlockSpec extends Specification {
         def empty = render(new LedgerHistoryView([], [:]))
         empty.contains('No finished tasks yet')
         empty.contains('<h2 class="card__title">Outcomes by day</h2></div>')
+    }
+
+    // NFR-O3 of add-base-ref-resolution: a compact line under the bar, not a bar of its own.
+    def "a day with a closed outage renders a compact line under its bar; a day with none renders nothing for it"() {
+        given:
+        def history = new LedgerHistoryView(
+                [
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO),
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 2, Duration.ofMinutes(210))
+                ], [:])
+
+        when:
+        def html = render(history)
+
+        then: 'exactly one outage line, for the day that had one'
+        html.count('bar-outage') == 1
+        html.contains('<div class="bar-outage">2 remote outages, 3h 30m total</div>')
+    }
+
+    // Pins the sub-hour duration format ("Nm", not "0h Nm") — the previous row only ever exercised
+    // the hours-and-minutes branch.
+    def "an outage under an hour formats as minutes only, with no hours part"() {
+        given:
+        def history = new LedgerHistoryView(
+                [
+                    new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 1, Duration.ofMinutes(12))
+                ], [:])
+
+        when:
+        def html = render(history)
+
+        then:
+        html.contains('<div class="bar-outage">1 remote outage, 12m total</div>')
     }
 }

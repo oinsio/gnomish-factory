@@ -11,12 +11,14 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshotAssembler;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
+import com.github.oinsio.gnomish.serveobservability.RemoteHealthAssembler;
 import com.github.oinsio.gnomish.serveobservability.SlotEntryAssembler;
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
@@ -26,6 +28,7 @@ import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter;
+import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
@@ -38,6 +41,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 
 /**
  * Builds the observability writer + appender + ledger writers {@link ServeCommand} starts beside
@@ -92,6 +96,8 @@ final class ObservabilityAssembly {
      * @param sweepTickLog the sandbox-lifecycle sweep's per-tick record feeding {@code
      *     vitals.sweep} (NFR-O1 of add-serve-sandbox-lifecycle); never null
      * @param clock the wall-clock time source for every write point; never null
+     * @param remoteOutageGate the shared remote outage gate feeding the snapshot's {@code remote}
+     *     section (NFR-O3, UX6 of add-base-ref-resolution); never null
      * @return the daemon-lifetime observability handle; never null
      */
     static ObservabilityWiring assemble(
@@ -109,7 +115,8 @@ final class ObservabilityAssembly {
             StandingReaper standingReaper,
             WorktreeJanitor worktreeJanitor,
             SweepTickLog sweepTickLog,
-            Clock clock) {
+            Clock clock,
+            RemoteOutageGate remoteOutageGate) {
         String instanceName = factoryProperties.instanceName();
         InstanceInfo instance = new InstanceInfo(instanceId.value(), resolveHost(), resolveFactoryVersion());
         Instant startedAt = clock.instant();
@@ -130,7 +137,8 @@ final class ObservabilityAssembly {
                         worktreeJanitor,
                         sweepTickLog,
                         serveProperties.sandboxSweepInterval(),
-                        startedAt),
+                        startedAt,
+                        remoteOutageGate),
                 new SnapshotJsonMapper(),
                 serveProperties.snapshotInterval(),
                 clock,
@@ -149,6 +157,8 @@ final class ObservabilityAssembly {
         // NFR-O2 of add-serve-sandbox-lifecycle: the sweep's own lines share this instance's
         // appender, so they rotate and are retained exactly like every other ledger line.
         SweepLedgerWriter sweepLedgerWriter = new SweepLedgerWriter(ledgerAppender, instance, clock);
+        // NFR-O1, NFR-O3 of add-base-ref-resolution: same appender, same rotation/retention.
+        RemoteOutageLedgerWriter remoteOutageLedgerWriter = new RemoteOutageLedgerWriter(ledgerAppender, instance);
 
         return new ObservabilityWiring(
                 lifecycleTracker,
@@ -156,6 +166,7 @@ final class ObservabilityAssembly {
                 lifecycleLedgerWriter,
                 taskOutcomeLedgerWriter,
                 sweepLedgerWriter,
+                remoteOutageLedgerWriter,
                 ledgerAppender,
                 instance,
                 clock);
@@ -174,7 +185,8 @@ final class ObservabilityAssembly {
             WorktreeJanitor worktreeJanitor,
             SweepTickLog sweepTickLog,
             Duration sweepInterval,
-            Instant startedAt) {
+            Instant startedAt,
+            RemoteOutageGate remoteOutageGate) {
         return new Snapshot(
                 1,
                 startedAt, // overwritten by SnapshotWriter#withSelfDescription on every actual write
@@ -185,7 +197,8 @@ final class ObservabilityAssembly {
                 new SlotsSnapshot(slotCapacity, SlotEntryAssembler.assemble(slotLedger, progress)),
                 VitalsSnapshotAssembler.assemble(
                         heartbeat, standingReaper, worktreeJanitor, sweepTickLog, sweepInterval),
-                TrackerHealthAssembler.assemble(trackerHealth));
+                TrackerHealthAssembler.assemble(trackerHealth),
+                RemoteHealthAssembler.assemble(List.of(remoteOutageGate)));
     }
 
     // task 6.3 documented exception: the try branch (returning the real hostname) is exercised

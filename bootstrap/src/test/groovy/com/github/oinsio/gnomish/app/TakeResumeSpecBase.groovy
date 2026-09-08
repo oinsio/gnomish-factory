@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.OpenTask
@@ -49,6 +50,11 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
     protected List<OpenTask> openFronts = []
 
     def setup() {
+        // FR5, FR13 of add-base-ref-resolution: a real take fresh-claim (bare-auto's own claim
+        // walk, TakeDisposition's Ready case) resolves and refreshes its base against a real
+        // 'origin' remote, never the clone's local HEAD — unlike GitResumeSpecBase's own specs,
+        // which build their own per-scenario origin and never share this one.
+        addOrigin(cloneDir, tempDir)
         tracker.fetchTask(_) >> {
             new TrackerTask(
             REF, new TaskSnapshot('PROJ-1', 'title', 'body'),
@@ -57,15 +63,29 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
         tracker.listOpen() >> { openFronts }
     }
 
+    /**
+     * The branch {@link #addOrigin} pushed to {@code origin} — the base value these specs pin a
+     * task to in place of the bare {@code 'HEAD'} literal (task 6.4, FR7 of add-base-ref-
+     * resolution): resume now prefers the recorded {@code baseRef} over {@code baseCommit}, so a
+     * task's pin must actually resolve through {@link
+     * com.github.oinsio.gnomish.app.port.git.BaseRefGit#resolveForResume} against the real {@code
+     * origin} this fixture wires up — a literal {@code 'HEAD'} does not, since {@code origin} holds
+     * no ref by that name.
+     */
+    protected String resumableBaseRef() {
+        gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD')
+    }
+
     protected TakeResumeRunner newTakeResumeRunner(
             InputStream input = new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')),
             FactoryProperties factoryProperties = testProperties(),
             List<String> credentialEnvVarsToScrub = [],
-            ClaimLossFlag claimLossFlag = new ClaimLossFlag()) {
+            ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
+            TaskGit git = TaskGitFixture.real()) {
         def assembly = newAssembly(input, System.out, factoryProperties)
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeResumeRunner(
-                assembly, TaskGitFixture.real(), worktreesRoot, 'taskId', abortHandler, ABORT_THRESHOLD, credentialEnvVarsToScrub, claimLossFlag)
+                assembly, git, worktreesRoot, 'taskId', abortHandler, ABORT_THRESHOLD, credentialEnvVarsToScrub, claimLossFlag)
     }
 
     /**

@@ -3,15 +3,9 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 
 /**
  * Shared project/pipeline fixture and {@link TakeCommand} factory for {@link
@@ -29,7 +23,7 @@ import java.time.ZoneOffset
  *
  * <p>Implements FR9, FR11, M3, NFR-R3 of add-tracker-port.
  */
-trait TwoInstanceTakeFixture implements BareGitRepoFixture, AppAssemblyFixture {
+trait TwoInstanceTakeFixture implements BareGitRepoFixture, TakeCommandFixture {
 
     abstract Path getTempDir()
 
@@ -42,13 +36,11 @@ trait TwoInstanceTakeFixture implements BareGitRepoFixture, AppAssemblyFixture {
     void writeTwoInstanceProjectFixture() {
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths: the pipeline loader resolves `instructions:` relative to the
-        // .gnomish/ root, while the runtime engine resolves the same string relative to the
-        // workspace root (the task worktree) — see TakeCommandCredentialScrubSpec's own note.
+        // One copy only, under the law root: since D12 of add-base-ref-resolution the runtime
+        // resolves `instructions:` against the same `.gnomish/` root the loader validates it
+        // against, so a project-root copy would be law in neither medium.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         // Attempt limit 1 + a files_exist check on a file the fake-agent scenario never creates:
         // the single attempt fails quality deterministically on BOTH instances' rounds, forcing an
         // AttemptsExhausted escalation on instance A's first round; instance B's retry only passes
@@ -89,6 +81,10 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim now resolves and
+        // refreshes its base against a real 'origin' remote (never the clone's local HEAD), so this
+        // shared project fixture needs one too.
+        addOrigin(projectDir, tempDir)
         // One shared worktrees root (matching the one machine-local ~/.gnomish/worktrees every
         // factory instance on a box shares, per the git-task-persistence spec) — git itself, not
         // this fixture, is what actually prevents a task branch from being checked out twice; NFR-R3
@@ -100,7 +96,7 @@ tracker:
      * Builds a brand-new {@link TakeCommand}, simulating a fresh factory instance: no field or
      * object here is ever shared with any other command built by this method (NFR-R3) — a fresh
      * {@link ManualRunAssembly}, a fresh {@link FactoryProperties} (own {@code instanceName}), and
-     * a fresh {@link Clock}; only {@link #worktreesRoot} and {@link #tracker}/{@link
+     * a fresh clock; only {@link #worktreesRoot} and {@link #tracker}/{@link
      * #trackerFactory} (which stand in for the one shared machine-local worktrees convention and
      * the external tracker service respectively) cross into it. {@code agentCliBinary} points at
      * the fake-agent {@code plain-round} scenario wrapper (task 6.1's own technique) so both
@@ -110,15 +106,6 @@ tracker:
     TakeCommand newCommand(String instanceName) {
         String fakeAgentBinary = FakeAgentSupport.propertiesFor('plain-round').agentCliBinary()
         def factoryProperties = testProperties(instanceName: instanceName, agentCliBinary: fakeAgentBinary)
-        TakeCommandFactory.of(
-                newAssembly(factoryProperties),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                'taskId',
-                factoryProperties,
-                Clock.fixed(Instant.parse('2026-01-01T00:00:00Z'), ZoneOffset.UTC),
-                [github: trackerFactory],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+        newTakeCommand(factoryProperties, worktreesRoot, [github: trackerFactory])
     }
 }

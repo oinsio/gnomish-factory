@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -32,15 +31,13 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
 
     Path cloneDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone-untouched-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'Do the thing.\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        commit(cloneDir, '.gnomish/instructions.md', 'Do the thing.\n')
         // Operator had a feature branch checked out, not main/master, before starting the task.
-        gitRunner.run(cloneDir, 'checkout', '-b', 'operator-feature-branch')
+        gitExitCode(cloneDir, 'checkout', '-b', 'operator-feature-branch')
         Files.writeString(cloneDir.resolve('operator-work.txt'), 'unrelated uncommitted change\n')
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
@@ -69,8 +66,8 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
      * or an index change with no working-tree diff would still be caught (porcelain alone
      * would miss both). */
     private String trackedContentFingerprint() {
-        gitRunner.run(cloneDir, 'ls-tree', '-r', 'HEAD').stdout() +
-                '|' + gitRunner.run(cloneDir, 'diff', '--cached').stdout()
+        gitOutput(cloneDir, 'ls-tree', '-r', 'HEAD') +
+                '|' + gitOutput(cloneDir, 'diff', '--cached')
     }
 
     /**
@@ -82,18 +79,18 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
      * the invariant precise instead of accidentally failing on the very ref FR7 says is fine.
      */
     private String operatorBranchRefs() {
-        gitRunner.run(cloneDir, 'for-each-ref', 'refs/heads/master', 'refs/heads/operator-feature-branch').stdout()
+        gitOutput(cloneDir, 'for-each-ref', 'refs/heads/master', 'refs/heads/operator-feature-branch')
     }
 
     private Map snapshot() {
         [
-            branch : gitRunner.run(cloneDir, 'symbolic-ref', '--short', 'HEAD').stdout().trim(),
-            head : gitRunner.run(cloneDir, 'rev-parse', 'HEAD').stdout().trim(),
-            porcelain : gitRunner.run(cloneDir, 'status', '--porcelain').stdout(),
+            branch : gitOutput(cloneDir, 'symbolic-ref', '--short', 'HEAD'),
+            head : gitOutput(cloneDir, 'rev-parse', 'HEAD'),
+            porcelain : gitOutput(cloneDir, 'status', '--porcelain'),
             content : trackedContentFingerprint(),
             operatorBranches: operatorBranchRefs(),
-            worktrees : gitRunner.run(cloneDir, 'worktree', 'list', '--porcelain').stdout(),
-            reflog : gitRunner.run(cloneDir, 'reflog', 'show', '--no-abbrev', 'HEAD').stdout(),
+            worktrees : gitOutput(cloneDir, 'worktree', 'list', '--porcelain'),
+            reflog : gitOutput(cloneDir, 'reflog', 'show', '--no-abbrev', 'HEAD'),
             uncommitted : Files.readString(cloneDir.resolve('operator-work.txt')),
         ]
     }
@@ -113,13 +110,14 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
                 RunArguments.InteractiveMode.ALL)
 
         then: 'the work actually landed: the task branch and its round commit exist'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/CLONE-1').exitCode() == 0
-        def taskTip = gitRunner.run(cloneDir, 'rev-parse', 'gnomish/CLONE-1').stdout().trim()
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/CLONE-1') == 0
+        def taskTip = gitOutput(cloneDir, 'rev-parse', 'gnomish/CLONE-1')
         taskTip != before.head
 
         and: 'the round content is in the worktree/branch tree, not the clone working copy'
-        def tree = gitRunner.run(cloneDir, 'ls-tree', '-r', '--name-only', taskTip).stdout()
-        tree.contains('.gnomish-task/task.json') || tree.contains('output.txt') || tree.contains('instructions.md')
+        def tree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', taskTip)
+        tree.contains('.gnomish-task/task.json') || tree.contains('output.txt')
+                || tree.contains('.gnomish/instructions.md')
 
         and: "the clone's own checked-out branch and HEAD never moved"
         def after = snapshot()
@@ -149,7 +147,7 @@ class GitModeRunCloneUntouchedSpec extends Specification implements BareGitRepoF
         def taskId = 'CLONE-2'
         def worktree = expectedWorktree(taskId)
         Files.createDirectories(worktree.getParent())
-        gitRunner.run(cloneDir, 'worktree', 'add', '-b', 'not-the-task-branch', worktree.toString())
+        addWorktree(cloneDir, worktree, 'not-the-task-branch')
         def before = snapshot()
         def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
 

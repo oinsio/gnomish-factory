@@ -30,6 +30,20 @@ and criteria (prompt builders, judge voter) takes frozen strings, never
 paths. `add-pipeline-routing` D3/D5 assume "same tree per task", which the
 allowed-bases list falsifies.
 
+Law-root facts (audit of 2026-09-07, `/architect`): the loader validates
+stage file references against `<project>/.gnomish/`
+(`GnomishDirPipelineSource` → `PipelineLoader` → `ReferencedFiles`), while
+every `assemble` call site freezes them against the clone root
+(`RunAssembler` wraps `lawSourceRoot` — the clone directory — directly), so
+a reference such as `stages/work/instructions.md` validates at load and
+freezes as unreadable at run. The defect dates from the module split (#27)
+and is masked by fixtures that write every law file twice (15 fixture
+sites) and by ~27 specs that build `StageDefinition` in code, bypassing the
+loader — including `GitModeLawBindingSpec`, which therefore pins the wrong
+root. Root cause: one `lawSourceRoot` parameter serves two roots — the law
+root (`.gnomish/`) and the repository root the external-check pin guard
+legitimately needs. D12 fixes the root rule; task 5.4 carries the code.
+
 ## Goals / Non-Goals
 
 **Goals:** implement FR1–FR10 with one resolution owner, no behavior change
@@ -304,11 +318,31 @@ a regular file, list a directory — all relative to a root) gets exactly two
 realizations: a working-tree source and a git-objects source bound to one
 commit, the **law commit**. `GnomishFiles`, `ReferencedFiles`, `PipelineLoader`
 and `PipelineLawReader` read through it; `GitObjects` gains tree listing
-(`ls-tree`); the git-objects source reports a symlink entry as unreadable
-(fail-closed — a git tree has no `realpath`, so the lexical half of
-`PathSafety` is the whole traversal guard there). The pin guard receives the
+(`ls-tree`). **Both realizations are rooted at the law root — the
+`.gnomish/` directory** — the same root the loader validates against, so a
+reference that validates at load reads at run in every medium; the
+assembly carries the law binding and the repository root as two typed
+values, never one `Path` doing both jobs (the repository root serves the
+external-check pin guard, whose pin paths are repository-relative by
+design). **Both realizations refuse a symlink entry under the law root**,
+never following it (revised 2026-09-07: the first draft kept the
+working-tree `realpath` guard, which accepted a symlink whose target stayed
+under the root — one commit would then be valid law in manual `run` and
+invalid in `take`; Kustomize `LoadRestrictionsRootOnly` and Argo CD's
+out-of-bounds symlink scan, adopted after three CVEs of one class, take the
+same fail-closed line). The lexical half of `PathSafety` is the whole
+traversal guard in git objects (a git tree has no `realpath`), and the
+working-tree realization keeps its `realpath` check on top for defense in
+depth; an absolute reference is refused in both. The pin guard receives the
 law commit instead of `"HEAD"`, so law and pin come from one SHA by
-construction. Selection is by *fact*, not by mode: any path that resolved a
+construction. A field is relative to exactly one root, recorded in
+`docs/adr/0007-pipeline-law-source.md`: `instructions` and `criteriaFile`
+to the law root; external-check pin paths and (per
+`enforce-artifact-contracts`) artifact output paths to the working copy
+root. Escaping the law root by an
+explicit repository-anchored prefix (Bazel `//`, Argo CD `/`) is a named
+non-goal with the syntax reserved, so a later change extends the grammar
+rather than loosening the guard. Selection is by *fact*, not by mode: any path that resolved a
 ref uses git objects (take, serve, manual `run` with `--base` — the latter
 resolving locally, offline, with no fetch); in-place mode and manual `run`
 without `--base` keep the working tree, which preserves the pipeline
@@ -325,6 +359,36 @@ deliberately neutralizes), the `task-branch.base` section must be read by ref an
 the `"HEAD"` pin stays wrong unless fixed separately. *Rejected outright:*
 checking the base out in the shared clone — mutates state that concurrent
 serve slots share and breaks the FR7 invariant D4 preserves.
+*Revised 2026-09-07 after the 5.4 review.* **The binding names a revision
+and knows its repository; the adapter peels once.** `LawBinding` in
+`:application` carries a repository root and a revision
+(`workingTree(repoRoot)`, `atRevision(repoRoot, rev)`,
+`atCheckout(repoRoot)`) — never a commit id, because peeling needs git and
+because resume (D13) has a ref *name* before its narrow fetch and a commit
+only after it. The adapter-side factory resolves the revision to a commit id
+exactly once and returns the law source and that id together, so law and pin
+cannot diverge (Argo CD #26530 and #16601 are the double-resolve incidents
+this rule prevents; JGit and libgit2 shape their APIs the same way: resolve,
+then object id only). **The pin is a typed peeled commit id, never a
+`String` the guard re-resolves** — the guard receives the id and compares; it
+does no `rev-parse` of its own. The binding owns the law-root rule and the
+"law belongs to this repository" invariant, which is what makes it a
+parameter object rather than a bag and returns `assemble` under the
+seven-parameter rule. **One segment walk owns the symlink verdict for both
+realizations**: each realization supplies tree entries (file / directory /
+symlink / absent); the walk, written once, refuses any symlink entry at
+*any* segment of the path regardless of its target (Kustomize's rule — a
+configuration tree has no legitimate link, so the target is never parsed), so
+a symlinked directory is *refused* in git objects as well, not *absent*
+(plain `ls-tree` cannot see through a `120000` entry and reports a missing
+tree, indistinguishable from a deleted directory — which is why the walk,
+not git, classifies). With every segment classified without following links,
+the working-tree `realpath` comparison named above can never disagree with
+the lexical guard, so it is dropped rather than kept as a line no spec could
+kill (task 5.8; the mutation gate, not the threat model, decides). The
+working-tree realization has a check-then-read window a replaced link could
+exploit; the git-objects realization has none, one more reason every
+resolved-ref path reads git objects.
 
 **D13 — Resume binds the task tier from the tip of the pinned ref name.**
 Security is identical either way (a base tip is human-merged content); the
@@ -513,7 +577,14 @@ extend `RestartBackoff`, do not fork it.
   documented fallback in D2: fold back into `:application`.
 - [Reading law by ref changes `PathSafety` semantics: no `realpath`, symlink
   entries refused] → specified in D12 and pinned by the law-source contract
-  spec; the working-tree realization keeps today's guard unchanged.
+  spec, which asserts the same verdict from both realizations over one
+  tree; the working-tree realization loses the "symlink inside the root is
+  ordinary law" arm — a pipeline author's local symlink to a law file stops
+  working in `run`, accepted for one rule across media.
+- [Moving the runtime law root to `.gnomish/` changes which file the
+  engine freezes] → it is the root the loader already validated against
+  and every shipped `stage.yaml` already assumes; the only readers of the
+  clone-root copy were the duplicated fixtures, which task 5.4 deletes.
 - [`GitObjects` grows a public tree-listing method] → one `ls-tree` call with
   its own spec; the module stays a thin `git` subprocess seam.
 - [Resume from the ref tip can bind a law that changed structurally] →
@@ -552,5 +623,5 @@ failure budget — outlives this change and lands as
 of D11 as `docs/adr/0006-base-refresh-fetch.md` — both written with this
 change's planning (task 8.5 keeps them in step with the implementation).
 The law-source principle of D12–D14 outlives this change and is recorded
-as `docs/adr/0007-pipeline-law-source.md` (task 8.2); D12 references it
-rather than restating it once it exists.
+as `docs/adr/0007-pipeline-law-source.md` (task 8.2, now written); D12
+references it rather than restating it.

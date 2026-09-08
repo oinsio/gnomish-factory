@@ -58,7 +58,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
      * Pinned at DEBUG: the per-tool-call line the round assertion below relies on lives there now
      * (FR12 of harden-logging-observability).
      */
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
+    private static List<ILoggingEvent> capture(Closure<?> emit) {
         def logs = LogCaptureSupport.attach(LoggingAgentProgressListener, Level.DEBUG)
         try {
             emit()
@@ -104,7 +104,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         when:
         def run = assembly.assemble(
-                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], workspaceDir)
+                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         then:
         run.ports().executor().class == expectedExecutor
@@ -124,7 +124,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
         when:
         def run = assembly.assemble(
-                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], workspaceDir)
+                definition(), context(), initialState(), interactiveMode, new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         then:
         run.ports().judgeVoter().class == expectedJudgeVoter
@@ -143,10 +143,11 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
     // binary's plain-round scenario.
     def "the wired CLI stage executor's round reaches the renderer and enriches the held activity"() {
         given:
-        Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
+        Files.createDirectories(workspaceDir.resolve('.gnomish'))
+        Files.writeString(workspaceDir.resolve('.gnomish/instructions.md'), 'Do the thing.')
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
         def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
-                new InMemoryAttemptPersistence(), [], workspaceDir)
+                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
 
         // Snapshot the held activity right after each of this test's own log lines lands, so
@@ -199,10 +200,11 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
     // and a judge round runs under Verifying in production, never Executing.
     def "the wired CLI judge voter's round reaches the renderer without touching the held activity"() {
         given:
-        Files.writeString(workspaceDir.resolve('criteria.md'), 'The output must be correct.')
+        Files.createDirectories(workspaceDir.resolve('.gnomish'))
+        Files.writeString(workspaceDir.resolve('.gnomish/criteria.md'), 'The output must be correct.')
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
         def run = assembly.assemble(definition(), context(), initialState(), RunArguments.InteractiveMode.NONE,
-                new InMemoryAttemptPersistence(), [], workspaceDir)
+                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
         run.holder().updateActivity(new Activity.Executing(Instant.now()))
         def before = run.holder().activity().activity() as Activity.Executing
 

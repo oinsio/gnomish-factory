@@ -44,7 +44,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
     }
 
     private Path setUpWorktree(String taskId) {
-        def result = branchCreator.createBranch(cloneDir, taskId, null)
+        def result = branchCreator.createBranch(cloneDir, taskId, 'HEAD')
         def branchName = (result as BranchCreationResult.Created).branchName()
         worktreeManager.ensureWorktree(cloneDir, taskId, branchName)
     }

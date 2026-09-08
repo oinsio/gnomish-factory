@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.baseref.BaseDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -69,6 +70,8 @@ public final class TakeBareAuto {
      *     claimable only while the open-front count stays below it
      * @param random the source of randomness for {@link FeedPolicy}'s head-zone pick (design D4);
      *     never null — a seeded instance makes the pick deterministic for tests
+     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
+     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
     TakeBareAuto(
             RunAssembly assembly,
@@ -86,7 +89,8 @@ public final class TakeBareAuto {
             int wipLimit,
             Random random,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase) {
         var claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -98,7 +102,8 @@ public final class TakeBareAuto {
                 heartbeat,
                 claimLossFlag,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
         this.walk = new BareTakeClaimWalk(claimAndWork, taskIdMdcKey, backoffBase, backoffCap, clock, wipLimit, random);
     }
 
@@ -136,7 +141,10 @@ public final class TakeBareAuto {
                 wipLimit,
                 random,
                 ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook());
+                new ClaimEpochBook(),
+                // A placeholder trusted tier: this construction serves specs that never reach a
+                // fresh claim's base resolution (see javadoc above).
+                new TrustedBaseContext(BaseDefinition.none(), "HEAD"));
     }
 
     /**

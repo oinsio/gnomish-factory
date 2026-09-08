@@ -27,18 +27,35 @@ import java.util.function.UnaryOperator;
  *     a git capability co-travelling with the other git capabilities, so no runner signature
  *     grows for it; identity by default, the real operator is built by the composition root
  *     beside the rest of this bundle; never null
+ * @param baseRefs the base-ref operations: default-branch discovery, the narrow base refresh, and
+ *     the resume-time rebind (FR5, FR6, FR12 of add-base-ref-resolution) — a git capability
+ *     co-travelling with the rest for the same reason as {@code midRoundPush}; {@link
+ *     BaseRefGit#UNWIRED} in the port-fake specs of the claim chain, which never reaches a remote
+ *     read — the resume chain always does (design D13), so its port-fake specs need a working
+ *     stub, never {@code UNWIRED}; the real one comes from the composition root; never null
  */
 public record TaskGit(
         TaskStoreGit store,
         TaskBranchGit branches,
         TaskWorktreeGit worktrees,
-        UnaryOperator<RoundEnvironmentSource> midRoundPush) {
+        UnaryOperator<RoundEnvironmentSource> midRoundPush,
+        BaseRefGit baseRefs) {
 
     /**
-     * The dominant construction: no mid-round push decoration (identity). Keeps every
-     * pre-existing construction site — and any spec that needs no push wiring — untouched.
+     * The dominant construction: no mid-round push decoration (identity) and no base-ref
+     * capability. Keeps every pre-existing construction site — and any spec that needs neither —
+     * untouched.
      */
     public TaskGit(TaskStoreGit store, TaskBranchGit branches, TaskWorktreeGit worktrees) {
         this(store, branches, worktrees, UnaryOperator.identity());
+    }
+
+    /** A push decoration without a base-ref capability: the specs of the mid-round push wiring. */
+    public TaskGit(
+            TaskStoreGit store,
+            TaskBranchGit branches,
+            TaskWorktreeGit worktrees,
+            UnaryOperator<RoundEnvironmentSource> midRoundPush) {
+        this(store, branches, worktrees, midRoundPush, BaseRefGit.UNWIRED);
     }
 }

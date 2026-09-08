@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.serveobservability.HeartbeatState
 import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
+import com.github.oinsio.gnomish.serveobservability.RemoteHealth
 import com.github.oinsio.gnomish.serveobservability.SlotEntry
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
 import com.github.oinsio.gnomish.serveobservability.Snapshot
@@ -42,14 +43,14 @@ class AlertSnapshotFixtures {
         def base = healthySnapshot()
         def feed = new FeedSnapshot(FeedPhase.IDLE_BLOCKED, NOW.minusSeconds(31 * 60), WRITTEN_AT, 0, 3)
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), feed, base.slots(), base.vitals(), base.tracker())
+                base.lifecycle(), feed, base.slots(), base.vitals(), base.tracker(), [:])
     }
 
     static Snapshot snapshotWithTrackerFailures() {
         def base = healthySnapshot()
         def tracker = new TrackerHealth(WRITTEN_AT, 3)
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), base.slots(), base.vitals(), tracker)
+                base.lifecycle(), base.feed(), base.slots(), base.vitals(), tracker, [:])
     }
 
     static Snapshot snapshotWithDegradedReaper() {
@@ -59,8 +60,17 @@ class AlertSnapshotFixtures {
         return withSlotsAndVitals(base, base.slots(), vitals)
     }
 
+    // NFR-O3, UX6 of add-base-ref-resolution.
+    static Snapshot snapshotWithRemoteGateOpen() {
+        def base = healthySnapshot()
+        def remote = [origin: new RemoteHealth(
+            'origin', true, NOW.minusSeconds(90), 'connection refused', NOW.plusSeconds(60), 2, null)]
+        return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
+                base.lifecycle(), base.feed(), base.slots(), base.vitals(), base.tracker(), remote)
+    }
+
     static Snapshot withSlotsAndVitals(Snapshot base, SlotsSnapshot slots, VitalsSnapshot vitals) {
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), slots, vitals, base.tracker())
+                base.lifecycle(), base.feed(), slots, vitals, base.tracker(), [:])
     }
 }

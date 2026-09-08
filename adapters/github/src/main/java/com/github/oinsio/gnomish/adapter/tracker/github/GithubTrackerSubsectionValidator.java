@@ -20,7 +20,9 @@ import java.util.Map;
  * credential-shaped key may appear at all (NFR-S1: the token comes only from
  * {@code GNOMISH_GITHUB_TOKEN} — or the variable {@code credential} names when
  * a connection profile renames it, FR16 of add-plugin-architecture — read at
- * adapter construction, never yaml).
+ * adapter construction, never yaml), and {@code designators} is the equally optional map of
+ * designator kind to label-matching rule graded by {@link GithubDesignatorsValidator} (FR3 of
+ * add-base-ref-resolution).
  *
  * <p>This class only checks subsection content; it does not read the
  * environment, build the API client, or apply label defaults — those are
@@ -41,6 +43,11 @@ public final class GithubTrackerSubsectionValidator implements TrackerSubsection
         Object labels = subsection.get("labels");
         if (labels != null) {
             errors.addAll(GithubLabelsValidator.validate(file, where + ".labels", labels));
+        }
+        Object designators = subsection.get(GithubDesignatorRules.KEY);
+        if (designators != null) {
+            errors.addAll(
+                    GithubDesignatorsValidator.validate(file, where + "." + GithubDesignatorRules.KEY, designators));
         }
         return List.copyOf(errors);
     }

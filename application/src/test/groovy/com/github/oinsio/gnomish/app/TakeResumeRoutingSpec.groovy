@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
@@ -29,6 +30,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -73,6 +75,9 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     TaskWorktreeGit worktrees = Stub(TaskWorktreeGit)
     TaskStoreGit store = Stub(TaskStoreGit)
 
+    /** Shared with the container twin's field of the same name; see {@link RunChainFakes#resumingBaseRefGit}. */
+    BaseRefGit baseRefGit = resumingBaseRefGit()
+
     def setup() {
         worktreesRoot = tempDir.resolve('worktrees')
         worktree = worktreesRoot.resolve('PROJ-1')
@@ -90,7 +95,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     private TaskGit git() {
-        new TaskGit(store, branches, worktrees)
+        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)
     }
 
     /** The real routing chain, over the ports above. */
@@ -325,10 +330,11 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         }
         store.readTaskRecord(_) >> recordWith(null, null, false)
         tracker.fetchTask(_) >> heldByUs()
+        def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit)
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
-        new TaskGit(store, branches, ownWorktrees), worktreesRoot, 'taskId',
+        ownGit, worktreesRoot, 'taskId',
         new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
-        def chain = chainOver(runner, new TaskGit(store, branches, ownWorktrees))
+        def chain = chainOver(runner, ownGit)
 
         when:
         resume(chain, discardWork)

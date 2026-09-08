@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.RecoveryCause;
+import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.time.Instant;
@@ -47,6 +48,7 @@ final class TrackedTask {
     private @Nullable String lastClaimHolder;
     private @Nullable ParkReason lastParkReason;
     private final List<CorrespondenceEntry> thread = new ArrayList<>();
+    private TaskDesignators designators = TaskDesignators.none();
 
     TrackedTask(TaskSnapshot snapshot, TrackerTaskState state) {
         this.snapshot = snapshot;
@@ -65,6 +67,21 @@ final class TrackedTask {
      */
     void snapshot(TaskSnapshot newSnapshot) {
         this.snapshot = newSnapshot;
+    }
+
+    /**
+     * The task's designator facts (FR3 of add-base-ref-resolution). A reference tracker has no
+     * native representation to derive candidates from — no labels, no fields — so the shapes are set
+     * directly by {@link InMemoryTrackerHarness#seedDesignators}, the adapter's test operation for
+     * them, and read back here unchanged.
+     */
+    TaskDesignators designators() {
+        return designators;
+    }
+
+    /** Sets what this task names per kind, as a human labelling an issue would (FR3). */
+    void designators(TaskDesignators newDesignators) {
+        this.designators = newDesignators;
     }
 
     TrackerTaskState state() {

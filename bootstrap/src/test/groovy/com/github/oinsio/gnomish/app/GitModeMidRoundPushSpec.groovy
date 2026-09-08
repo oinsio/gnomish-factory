@@ -44,15 +44,13 @@ class GitModeMidRoundPushSpec extends Specification implements BareGitRepoFixtur
     Path cloneDir
     Path bareRepo
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        commit(cloneDir, '.gnomish/instructions.md', 'build it\n')
         bareRepo = initBareRepo(tempDir, 'origin.git')
-        gitRunner.run(cloneDir, 'remote', 'add', 'origin', bareRepo.toString())
+        addRemote(cloneDir, 'origin', bareRepo.toString())
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 

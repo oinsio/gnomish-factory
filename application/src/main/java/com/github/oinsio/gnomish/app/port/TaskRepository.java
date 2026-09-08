@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port;
 
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -46,10 +47,13 @@ public interface TaskRepository {
      * @param context the new task's identity and description; never null
      * @param baseRef the reference this task started from — the current state of
      *     the caller's working copy unless explicitly overridden; never blank
+     * @param baseRule the tier that produced {@code baseRef} — pinned alongside it in the
+     *     task-creation commit so resume never re-resolves the base (FR7 of
+     *     add-base-ref-resolution); never null
      * @param initialState the task's starting state — positioned at the pipeline's
      *     first stage, no attempts burned, empty totals; never null
      */
-    void createTask(TaskContext context, String baseRef, TaskState initialState);
+    void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState);
 
     /**
      * Durably appends a {@link Decision} for the task identified by {@code taskId} —

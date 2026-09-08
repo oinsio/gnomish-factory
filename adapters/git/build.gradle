@@ -29,6 +29,10 @@ dependencies {
     // `TaskSalvage`, `AttemptDelivery`, the three `TaskGit` facades) and the
     // value model their signatures are drawn in.
     api project(':application')
+    // BaseRule (task.json's durable base pin, FR7 of add-base-ref-resolution) reaches this
+    // module's own public API: `TaskJsonMapper.toDto`/`BasePin` and `TaskRepository#createTask`
+    // both name it directly, so `:application`'s transitive edge is not enough on its own.
+    api project(':baseref')
     api project(':domain')
     // The published contract: `ClaimEpochSource` — the tenure record the branch writers ask before
     // stamping a commit with its claim epoch (FR13 of harden-task-branch-contract) — moved onto
@@ -121,6 +125,9 @@ layering {
     allowedProjects = [
         ':application',
         ':atomicfile',
+        // The base-resolution leaf (design D2 of add-base-ref-resolution): BasePin/BaseRule name
+        // it directly on this module's own public API (task 6.3 of add-base-ref-resolution).
+        ':baseref',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',

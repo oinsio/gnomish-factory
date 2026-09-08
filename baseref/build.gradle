@@ -1,0 +1,39 @@
+// Build script for the `:baseref` module (FR10, NFR-S3, design D2 of
+// add-base-ref-resolution): the pure base-resolution policy — the allowed-base
+// pattern grammar and its roles, the per-task designator's validation against it,
+// the fixed source-priority order, and the `(ref, rule, reason)` decision it hands
+// back. Values in, a decision out.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no
+// Jackson, no logging API. Unlike `:atomicfile`, whose emptiness exists to keep its
+// consumers free of transitive coupling, this leaf's emptiness is a *security*
+// property: an allowlist with nothing in it is what constructively guarantees the
+// policy can know nothing of subprocesses, git remotes, tracker labels or
+// configuration formats, so no repository-provided input can reach anything but
+// pattern matching over plain values (NFR-S3). There is no production-scope
+// declaration below because there is nothing to declare, and the layering gate
+// proves it stays that way.
+//
+// What stays outside: `ls-remote --symref` and the refresh fetch live in
+// `:adapters:git`, the `base:` DTO parsing lives in the pipeline loader, and the
+// orchestration and pinning live in `:application`. The tracker port's designator
+// shape is mapped onto this module's own input value by `:application`, because
+// this module may import nothing.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and
+// the PIT mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no
+    // internal project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Base-ref resolution policy: allowed-base patterns, designator validation, source priority.'
+
+// `:baseref` reaches no other project at all — the same gate `:domain`,
+// `:subprocess`, `:atomicfile` and `:logtext` carry, here for the reason stated
+// above: the empty allowlist is the constructive half of NFR-S3.
+layering {
+    allowedProjects = []
+}

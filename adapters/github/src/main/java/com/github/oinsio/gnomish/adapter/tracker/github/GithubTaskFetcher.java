@@ -62,7 +62,15 @@ import java.util.Optional;
  * ETag and the comment thread's ETag are tracked independently — the labels can
  * change (a human parks the task) while the comments do not, and vice versa.
  *
- * <p>Implements FR2, FR5, FR15, NFR-P1 of add-tracker-port.
+ * <p>The task's designators are derived from the same already-fetched labels the logical state
+ * comes from: each configured rule takes the capture group of every label it fully matches, and
+ * {@link GithubDesignatorRules} hands the candidates to the port's shared classification function.
+ * The adapter picks no winner and applies no default — the label vocabulary stops here, and what
+ * leaves is the port's own three-shape fact (FR3 of add-base-ref-resolution, design D5). A {@link
+ * TrackerTaskState.Gone} result carries no designators for the same reason it carries no abort
+ * facts: a closed or missing issue has no labels to read.
+ *
+ * <p>Implements FR2, FR5, FR15, NFR-P1 of add-tracker-port; FR3 of add-base-ref-resolution.
  *
  * @param cache the shared conditional-request cache; reused across polls so this fetcher's
  *     per-issue and per-comment-thread ETags survive between round-boundary checks (NFR-P1)
@@ -70,9 +78,16 @@ import java.util.Optional;
  * @param needsHumanLabel the configured needs-human-label name (e.g. {@code gnomish:needs-human})
  * @param deliveredLabel the configured delivered-label name (e.g. {@code gnomish:delivered}), mapped to
  *     {@link TrackerTaskState.Finished}
+ * @param designatorRules the compiled {@code tracker.github.designators} rules whose candidates this
+ *     fetcher derives from the issue's labels (FR3 of add-base-ref-resolution); {@link
+ *     GithubDesignatorRules#none()} when the subsection declares none
  */
 public record GithubTaskFetcher(
-        GithubConditionalRequestCache cache, String workingLabel, String needsHumanLabel, String deliveredLabel) {
+        GithubConditionalRequestCache cache,
+        String workingLabel,
+        String needsHumanLabel,
+        String deliveredLabel,
+        GithubDesignatorRules designatorRules) {
 
     /** Implements {@code Tracker.fetchTask} for GitHub (FR2, FR5). */
     public TrackerTask fetchTask(TaskRef ref) {
@@ -93,7 +108,8 @@ public record GithubTaskFetcher(
         AbortFacts abortFacts = GithubCommentBoundary.abortFactsSinceBoundary(markers);
         TrackerTaskState state = stateFrom(detail, markers);
         boolean finished = GithubHistoryFactReader.deriveFinished(markers);
-        return new TrackerTask(ref, snapshot, state, abortFacts, finished);
+        return new TrackerTask(
+                ref, snapshot, state, abortFacts, finished, designatorRules.extract(detail.labelNames()));
     }
 
     /** The instance of the last claim marker in the thread, or the placeholder when there is none. */

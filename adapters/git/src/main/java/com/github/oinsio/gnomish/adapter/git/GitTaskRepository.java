@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.adapter.git.state.BasePin;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
@@ -11,6 +12,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -78,7 +80,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     @Override
-    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
+    public void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState) {
         String taskId = context.taskId();
         BranchCreationResult result = branchCreator.createBranch(cloneDir, taskId, baseRef);
         String baseCommit =
@@ -99,7 +101,8 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                 };
 
         Path worktree = ensureWorktree(taskId);
-        TaskJsonDto dto = TaskJsonMapper.toDto(context, baseCommit, Instant.now(), null, null, false);
+        TaskJsonDto dto = TaskJsonMapper.toDto(
+                context, baseCommit, Instant.now(), null, null, false, new BasePin(baseRef, baseRule));
         StateFileWrite.write(worktree, taskId, initialState, TaskLifecycleEvent.STARTED);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.STARTED);
     }
@@ -124,7 +127,8 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                         current.createdAt(),
                         null,
                         current.lastEscalation(),
-                        false)
+                        false,
+                        new BasePin(current.baseRef(), current.baseRule()))
                 .withEgressCursor(currentDto.egressCursor());
         // One transition, one commit (FR4): the decision and the attempt-counter reset it implies
         // are staged together, so no tip ever shows one without the other.
@@ -149,7 +153,13 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         // write is best-effort and carries no marker.
         boolean pending = !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                        current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending)
+                        current.context(),
+                        current.baseCommit(),
+                        current.createdAt(),
+                        outcome,
+                        lastEscalation,
+                        pending,
+                        new BasePin(current.baseRef(), current.baseRule()))
                 .withEgressCursor(currentDto.egressCursor());
         writeAndCommit(taskId, worktree, dto, event);
     }

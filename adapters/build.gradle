@@ -53,6 +53,13 @@ dependencies {
     // dependency" task 5.2's residual-edge note anticipated.
     api project(':sandbox:docker')
 
+    // The pure base-resolution policy (design D2 of add-base-ref-resolution): the
+    // `task-branch.base` section of `config.yaml` is compiled into its value types at
+    // load, so the loader is where the allowed-base patterns stop being text. `api`, not
+    // `implementation`: the mapped `BaseDefinition` is on `ConfigurationLoad`'s
+    // public surface.
+    api project(':baseref')
+
     implementation libs.slf4j.api
     // The log-line sanitizer (design D5 of harden-logging-observability): the check runners
     // put a manifest command and a remote-chosen redirect target into log lines, and both
@@ -95,6 +102,9 @@ layering {
         // through the dependency-free atomic-write leaf (design D10 of
         // harden-task-branch-contract); no source in this module names it.
         ':atomicfile',
+        // The dependency-free base-resolution leaf (design D2 of add-base-ref-resolution):
+        // the `.gnomish/` loader compiles the `base:` section into its value types.
+        ':baseref',
         ':domain',
         ':gitobjects',
         ':gnomish-plugin-api',

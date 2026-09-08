@@ -20,6 +20,7 @@ package com.github.oinsio.gnomish.app.take;
  *   <tr><td>{@link TakeResult.Aborted}</td><td>12</td><td>infrastructure abort below the fuse</td></tr>
  *   <tr><td>{@link TakeResult.Revoked}</td><td>14</td><td>claim lost mid-run</td></tr>
  *   <tr><td>{@link TakeResult.Skipped}</td><td>15</td><td>refused or skipped</td></tr>
+ *   <tr><td>{@link TakeResult.InfrastructureUnavailable}</td><td>16</td><td>released, dependency unreachable</td></tr>
  * </table>
  *
  * <p>Exhaustive switch, no {@code default} arm: a new {@link TakeResult} variant must
@@ -51,6 +52,7 @@ public final class TakeExitCodeMapper {
             case TakeResult.Aborted ignored -> 12;
             case TakeResult.Revoked ignored -> 14;
             case TakeResult.Skipped ignored -> 15;
+            case TakeResult.InfrastructureUnavailable ignored -> 16;
         };
     }
 }

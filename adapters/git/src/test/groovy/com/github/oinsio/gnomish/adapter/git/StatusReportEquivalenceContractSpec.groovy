@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -72,7 +73,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
 
         and: 'the equivalent task.json + state.json content, committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), null, TaskState.atStageStart('build'))
+        taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
 
         and: 'the task escalated (recording lastEscalation durably, FR5) and was then resumed with the decision — outcome resets to null while lastEscalation is retained, exactly like the reference fixture (outcome: null, lastEscalation populated)'
@@ -120,7 +121,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
 
         and: 'the round committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        taskRepository.createTask(context, null, TaskState.atStageStart('build'))
+        taskRepository.createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
                 .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
@@ -154,7 +155,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
 
         and: 'the park committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        taskRepository.createTask(context, null, state)
+        taskRepository.createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, state)
         taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
 
         when: 'the branch is read back and both renderings go through the same mapper'

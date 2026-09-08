@@ -40,11 +40,17 @@ class RemotePrimitiveSingleSiteSpec extends Specification {
     // argv as one that reaches a remote, so the runner can bound it (FR1 of
     // bound-subprocess-commands). A classifier that lists every network subcommand is the opposite
     // of the regrowth this scan guards against — a second CALL SITE would still red it.
-    def "the remote-refs tip read is constructed in exactly one place"() {
+    //
+    // The primitive moved out of `RemoteBranchTip` and into `LsRemote` when add-base-ref-resolution
+    // gave the factory three more questions for the same command (the default branch, a base name's
+    // namespace, and bare reachability). Four responsibilities, still one argv — which is what this
+    // scan is about, since these are subprocess string arguments no bytecode analysis can see. The
+    // assertion is strictly stronger than before: the branch-tip reader no longer spells it either.
+    def "the remote-refs read is constructed in exactly one place"() {
         expect:
         filesContaining('"ls-remote"') == [
             'GitNetworkCommands.java',
-            'RemoteBranchTip.java'
+            'LsRemote.java'
         ]
     }
 

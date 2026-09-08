@@ -17,12 +17,15 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -47,12 +50,24 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
      */
     def claimEpochBook = new ClaimEpochBook()
 
+    /**
+     * FR13, D15 of add-base-ref-resolution: the trusted tier for this spec's real-git fixtures —
+     * {@link TakeResumeSpecBase#setup()} wires a real {@code origin} remote, so the default branch
+     * named here must be the clone's actual current branch, read lazily (not a static constant:
+     * {@code cloneDir} only exists once {@code setup()} has run).
+     */
+    private TrustedBaseContext trustedBase() {
+        new TrustedBaseContext(
+                BaseDefinition.none(),
+                gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD'))
+    }
+
     private TakeDisposition newDisposition() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeDisposition(newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler,
                 ABORT_THRESHOLD, 'taskId', [],
                 ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(), claimEpochBook)
+                ContainerTakeSupport.hostOnly(), claimEpochBook, trustedBase())
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
@@ -63,7 +78,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
                 newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler, ABORT_THRESHOLD,
                 'taskId', [],
                 ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(), claimEpochBook)
+                ContainerTakeSupport.hostOnly(), claimEpochBook, trustedBase())
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
@@ -177,17 +192,21 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         TakeExitCodeMapper.exitCodeFor(result) == 12
     }
 
-    // D16: codes shared with `run` keep their meaning — a UsageException (bad --base on a fresh
-    // claim, exit 2) is deliberate control flow, not an infrastructure crash, so it propagates
-    // unchanged and is never folded into the abort protocol.
+    // D16: codes shared with `run` keep their meaning — a UsageException (the task's branch already
+    // exists on a fresh claim, exit 2) is deliberate control flow, not an infrastructure crash, so
+    // it propagates unchanged and is never folded into the abort protocol. FR2, FR6 of
+    // add-base-ref-resolution route an unresolvable/unrefreshable --base to a park instead (a
+    // different, already-covered scenario), so the branch-already-exists refusal is what a fresh
+    // claim now throws deliberately.
     def "a UsageException during the claimed run propagates as exit 2, never converted to an abort"() {
-        given: 'a fresh Ready claim with an unresolvable --base'
+        given: 'a fresh Ready claim whose task branch already exists'
+        gitOutput(cloneDir, 'branch', 'gnomish/PROJ-1', 'HEAD')
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def disposition = newDisposition()
 
         when:
         disposition.dispose(
-                cloneDir, 'no-such-base-ref', pipeline(), RunArguments.InteractiveMode.ALL, false,
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
                 trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
 
         then:
@@ -198,26 +217,29 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
     // FR1 of add-claim-heartbeat: dispatchAfterClaim is the single claim-holding choke point, so
     // the beat lifecycle must bracket the claimed run — register the instant the claim is held,
-    // unregister in a finally even when the run exits via deliberate control flow (the bad --base
-    // UsageException path here, chosen as the cheapest post-claim exit: no engine round, no agent
-    // process). Two then-blocks enforce the order. Deliberately fast and interaction-based: the
-    // full lifecycle rehearsals (TakeHeartbeatLifecycleSpecBase and the death-and-recovery spec)
-    // also kill PIT's dropped-register/unregister mutants, but only after multi-second bounded
-    // waits that can outlive PIT's per-mutation budget under load (a flaky TIMED_OUT instead of a
-    // clean kill); this spec kills both mutants in milliseconds.
+    // unregister in a finally even when the run exits via deliberate control flow (the
+    // branch-already-exists UsageException path here, chosen as the cheapest post-claim exit: no
+    // engine round, no agent process — see the scenario above for why this replaces a bad --base as
+    // the trigger, FR2/FR6 of add-base-ref-resolution). Two then-blocks enforce the order.
+    // Deliberately fast and interaction-based: the full lifecycle rehearsals
+    // (TakeHeartbeatLifecycleSpecBase and the death-and-recovery spec) also kill PIT's
+    // dropped-register/unregister mutants, but only after multi-second bounded waits that can
+    // outlive PIT's per-mutation budget under load (a flaky TIMED_OUT instead of a clean kill);
+    // this spec kills both mutants in milliseconds.
     def "the beat lifecycle brackets a claimed run even when it exits via deliberate control flow"() {
-        given: 'a fresh Ready claim whose post-claim work exits via a deliberate UsageException'
+        given: 'a fresh Ready claim whose task branch already exists'
+        gitOutput(cloneDir, 'branch', 'gnomish/PROJ-1', 'HEAD')
         def beat = Mock(ClaimBeat)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         def disposition = new TakeDisposition(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
                 beat, false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC),
-                new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
+                new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook(), trustedBase())
 
         when:
         disposition.dispose(
-                cloneDir, 'no-such-base-ref', pipeline(), RunArguments.InteractiveMode.ALL, false,
+                cloneDir, null, pipeline(), RunArguments.InteractiveMode.ALL, false,
                 trackerTask(new TrackerTaskState.Ready()), tracker, INSTANCE)
 
         then: 'the claim is registered for beating the instant it is held'
@@ -234,7 +256,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "FR15: an unreadable state envelope parks the task once, burning no attempt"() {
         given: 'a claimed task whose branch carries an unreadable state.json'
         def taskId = 'PROJ-23'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('.gnomish-task/state.json'), 'not json at all')
         commitAll(worktree, 'corrupt state')
@@ -266,11 +288,11 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // and the run proceeds, so nothing is aborted and nothing is parked for a human.
     def "FR8: divergence during a resumed run resolves under the claim instead of stopping it"() {
         given: 'a task branch pushed to a real origin, then diverged from a peer push'
-        def bare = initBareRepo(tempDir, 'origin.git')
-        addRemote(cloneDir, 'origin', bare.toString())
-        gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        // setup() already wired a real 'origin' remote (FR5, FR13 of add-base-ref-resolution) with
+        // the default branch pushed; this scenario only needs its bare path back.
+        def bare = Path.of(gitOutput(cloneDir, 'remote', 'get-url', 'origin'))
         def taskId = 'PROJ-22'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-22')
         def worktree = expectedWorktree(taskId)
 
@@ -315,7 +337,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch resumes it instead of creating a new one"() {
         given:
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def disposition = newDisposition()
@@ -335,7 +357,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch and a DecisionNeeded outcome re-parks restating the question"() {
         given:
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -375,7 +397,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch recorded Completed reconciles the deferred finish, zero engine rounds"() {
         given: 'a delivered branch whose finish never reached the tracker'
         def taskId = 'PROJ-4'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(taskId, new TaskOutcome.Completed(state))
@@ -409,7 +431,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch recorded Aborted resumes it on the return alone"() {
         given:
         def taskId = 'PROJ-5'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(
@@ -545,7 +567,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working confirmed via TTY removes the stale claim, claims ordinarily, and resumes to Delivered"() {
         given: 'an existing branch for the held task, resumable from its last durable round'
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
@@ -576,7 +598,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working headless with --takeover proceeds as a confirmed takeover, bypassing the seam"() {
         given:
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
@@ -629,7 +651,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         openFronts = [
             new OpenTask(REF, new TrackerTaskState.Working('gnomish-dead-x1'), observed, 'fixture title')
         ]
-        tracker.removeStaleClaim(REF, observed) >> new RemoveStaleClaimResult.Mismatch(observed)
+        tracker.removeStaleClaim(REF, new ClaimFacts.Live('gnomish-dead-x1', observed)) >>
+                new RemoveStaleClaimResult.Mismatch(observed)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held('gnomish-live-x2')
         def confirmation = { r, h, a ->
             TakeoverConfirmation.Decision.CONFIRMED

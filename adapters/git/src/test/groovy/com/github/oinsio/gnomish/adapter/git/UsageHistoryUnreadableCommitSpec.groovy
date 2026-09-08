@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -35,7 +36,7 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
 
     def "FR16: an unreadable mid-history commit is skipped with a warning naming it, and the walk still renders"() {
         given: 'a first readable round'
-        taskRepository().createTask(new TaskContext('PROJ-20', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-20', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def first = round(0, AttemptRecord.Result.QUALITY_FAILURE, 500, 50)
         def afterFirst = TaskState.atStageStart('implement').recordQualityFailure(first)
         persistRound('PROJ-20', afterFirst, 'implement', 0)
@@ -71,7 +72,7 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
 
     def "FR16: an unsupported state.json version in history is skipped too, not a thrown refusal"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-21', 'T', 'B', []), null, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-21', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def first = round(0, AttemptRecord.Result.PASSED, 100, 10)
         persistRound('PROJ-21', TaskState.atStageStart('implement').recordUnburnedRound(first), 'implement', 0)
 

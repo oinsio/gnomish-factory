@@ -27,7 +27,7 @@ class SweepVitalReaderSpec extends Specification {
                 base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(), base.lifecycle(),
                 base.feed(), base.slots(),
                 new VitalsSnapshot(vitals.heartbeat(), vitals.reaper(), vitals.janitor(), SWEEP),
-                base.tracker())
+                base.tracker(), [:])
     }
 
     def "every snapshot-carrying view yields its sweep vital"() {

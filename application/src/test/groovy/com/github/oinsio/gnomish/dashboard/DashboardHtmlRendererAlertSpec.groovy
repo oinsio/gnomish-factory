@@ -6,6 +6,7 @@ import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.health
 import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithDegradedReaper
 import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithLongIdleBlocked
 import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithOccupiedSlotsDeadHeartbeat
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithRemoteGateOpen
 import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithTrackerFailures
 import static com.github.oinsio.gnomish.testsupport.DashboardPageMarkup.markup
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
@@ -55,13 +56,27 @@ class DashboardHtmlRendererAlertSpec extends Specification {
         'reaper degraded' | new DaemonSnapshotView.Fresh(snapshotWithDegradedReaper())
     }
 
+    // NFR-O3, UX6 of add-base-ref-resolution: dynamic content (target, timestamps), so asserted by
+    // substring rather than the fixed-label `where:` matrix above.
+    def "an open remote gate renders its own alarm line naming the target and last error"() {
+        when:
+        def html = renderer.render(
+                new DaemonSnapshotView.Fresh(snapshotWithRemoteGateOpen()), emptyHistory(), neverFetchedBoard(),
+                noSweepData(), NOW, null)
+
+        then:
+        html.contains('status__alert')
+        html.contains('origin')
+        html.contains('connection refused')
+    }
+
     def "two simultaneous alerts render as two lines, not just the first one shown"() {
         given: 'tracker failures and a degraded reaper both fire on the same snapshot'
         def base = snapshotWithTrackerFailures()
         def vitals = new VitalsSnapshot(
                 base.vitals().heartbeat(), new ReaperVital(WRITTEN_AT.minusSeconds(1000), 0, 300L), base.vitals().janitor())
         def snapshot = new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), base.slots(), vitals, base.tracker())
+                base.lifecycle(), base.feed(), base.slots(), vitals, base.tracker(), [:])
 
         when:
         def html = renderer.render(new DaemonSnapshotView.Fresh(snapshot), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)

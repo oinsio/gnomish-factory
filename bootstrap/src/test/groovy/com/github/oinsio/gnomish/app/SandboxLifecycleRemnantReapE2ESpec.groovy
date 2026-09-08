@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -76,7 +77,8 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
 
     private Path cloneWithOrigin(String name) {
         def dir = initWorkingRepo(tempDir, name)
-        Files.writeString(dir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(dir.resolve('.gnomish'))
+        Files.writeString(dir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(dir)
         addRemote(dir, 'origin', "https://example.invalid/org/${name}.git")
         dir
@@ -101,7 +103,7 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
         // has no origin at all and the remote is restored right after.
         def originUrl = gitOutput(project, 'remote', 'get-url', 'origin').trim()
         assert gitExitCode(project, 'remote', 'remove', 'origin') == 0
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
         addRemote(project, 'origin', originUrl)
         support.lease().environmentFor('work')
         assert ContainerE2eDocker.containerRunning("gnomish-box-${taskId}")

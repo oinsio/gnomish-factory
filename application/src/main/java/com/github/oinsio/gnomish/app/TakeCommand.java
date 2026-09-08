@@ -89,8 +89,10 @@ final class TakeCommand {
      * @param trackerAdapterRegistry known tracker adapter factories, keyed by {@code tracker.type}
      * @param secretsProvider the seam the resolved adapter reads its credentials through, handed to
      *     the factory per call rather than captured in it (FR2, design D2 of add-plugin-architecture)
-     * @param pipelineSource known adapter subsection validators, keyed by {@code
-     *     tracker.type}, so {@code take} rejects a malformed {@code tracker.<type>} at load time (FR17)
+     * @param pipelineSource where the definition is read from — at startup by binding from the
+     *     refreshed default branch, per claim by binding from the task's law commit (FR13 of
+     *     add-base-ref-resolution); its configured realization also rejects a malformed {@code
+     *     tracker.<type>} at load time (FR17)
      * @param heartbeatSleeper the beat-interval sleeper injected into the per-invocation heartbeat (FR1)
      * @param reaperSleeper the standing reaper's OWN interval sleeper, independent of {@code
      *     heartbeatSleeper} so a test can drive the two threads' ticks separately (fix-reaper-idle-
@@ -152,13 +154,23 @@ final class TakeCommand {
      * @throws UsageException if the flags are malformed, the project has no {@code tracker:} section
      *     (FR17), or {@code tracker.type} names no registered adapter
      * @throws PipelineLoadFailedException if {@code .gnomish/} fails to load
+     * @throws DefaultBranchUnboundException if origin's default branch cannot be established or
+     *     refreshed at startup — exit code 1, a failure outside a claimed run (FR5, FR13 of
+     *     add-base-ref-resolution)
      * @throws TakeExitCodeException always, on a completed run — carrying the computed exit code (D16)
      * @throws InterruptedException if a batch run is interrupted while waiting on its scheduler
      */
     void run(ApplicationArguments args) throws IOException, InterruptedException {
         try {
             TakeArguments takeArguments = argumentsParser.parse(args);
-            PipelineDefinition definition = TakeCommandSupport.loadPipeline(takeArguments.dir(), pipelineSource);
+            // FR13, D14/D15 of add-base-ref-resolution: the definition comes from the refreshed
+            // default branch of origin, read from git objects — never from the clone's checkout.
+            TrustedTierStartup.StartupLaw startupLaw = TrustedTierStartup.bind(
+                    takeArguments.dir(), git.baseRefs(), pipelineSource, trackerAdapterRegistry);
+            PipelineDefinition definition = startupLaw.definition();
+            // FR13, D15 of add-base-ref-resolution: bound once here, threaded to every fresh
+            // claim this invocation makes — never re-read per claim.
+            TrustedBaseContext trustedBase = new TrustedBaseContext(startupLaw.base(), startupLaw.defaultBranch());
             TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
             InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
             TrackerAdapterFactory factory = TakeCommandSupport.resolveFactory(trackerConfig, trackerAdapterRegistry);
@@ -187,7 +199,10 @@ final class TakeCommand {
                         takeArguments.dir(),
                         heartbeat.livenessOracle().evaluate(),
                         log);
-                RunAssembly takeAssembly = assembly.withExtraListener(heartbeat.progress());
+                // The source the startup definition came from is what every fresh claim reads its
+                // task tier through (FR13 of add-base-ref-resolution): one registry, two reads.
+                RunAssembly takeAssembly =
+                        assembly.withExtraListener(heartbeat.progress()).withPipelineSource(pipelineSource);
                 var dispatcher = new TakeDispatcher(
                         git,
                         worktreesRoot,
@@ -198,7 +213,8 @@ final class TakeCommand {
                         secretsProvider,
                         takeoverConfirmation,
                         containerTakeSupport,
-                        epochs);
+                        epochs,
+                        trustedBase);
                 TakeRefDispatch.run(
                         dispatcher,
                         takeArguments,

@@ -3,14 +3,15 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
 import java.nio.file.Path;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Creates the task branch as a plain ref — {@code git branch <name> <start-point>}, never {@code
  * checkout -b} — so the clone's own checked-out branch, HEAD, and working tree stay untouched
- * (FR7: "the clone itself is untouched"). The branch's starting point is the clone's current
- * {@code HEAD} by default; an explicit {@code baseRef} (branch, tag, or commit-ish) overrides it.
- * Neither path ever fetches or pulls — updating the clone is the human's job (design D7).
+ * (FR7: "the clone itself is untouched"). The branch's starting point is whatever {@code baseRef}
+ * the caller resolved (branch, tag, or commit-ish); this class no longer defaults it — the single
+ * policy component, {@code BaseRefResolver}, decides the ref one layer up, and by the time it
+ * reaches here it is always non-null (FR4, FR10, M2 of add-base-ref-resolution). Neither path ever
+ * fetches or pulls — updating the clone is the human's job (design D7).
  *
  * <p>The returned {@link BranchCreationResult} distinguishes the three possible outcomes rather
  * than throwing, matching {@link GitProcessRunner}'s "expected git-level outcomes are results,
@@ -34,16 +35,16 @@ public final class TaskBranchCreator {
      * @param cloneDir the working directory of an existing git clone (the {@code --dir} target)
      * @param taskId the tracker's original taskId; sanitized via {@link
      *     TaskIdSanitizer#branchName}
-     * @param baseRef when non-null, the ref (branch/tag/commit-ish) to branch from instead of the
-     *     clone's current {@code HEAD}; never fetched or pulled, must already resolve locally
+     * @param baseRef the ref (branch, tag, or commit-ish) to branch from, already resolved by the
+     *     caller; never fetched or pulled, must already resolve locally
      * @return the outcome: the created branch's base commit SHA, "already exists", or "base ref
      *     did not resolve"
      * @throws InvalidTaskIdException if {@code taskId} cannot be sanitized into a safe branch name
      */
-    public BranchCreationResult createBranch(Path cloneDir, String taskId, @Nullable String baseRef) {
+    public BranchCreationResult createBranch(Path cloneDir, String taskId, String baseRef) {
         String branchName = TaskIdSanitizer.branchName(taskId);
 
-        GitCommandResult resolve = runner.run(cloneDir, "rev-parse", "--verify", startPoint(baseRef));
+        GitCommandResult resolve = runner.run(cloneDir, "rev-parse", "--verify", baseRef);
         if (resolve.exitCode() != 0) {
             return new BranchCreationResult.BaseRefNotResolved(baseRef);
         }
@@ -55,9 +56,5 @@ public final class TaskBranchCreator {
         }
 
         return new BranchCreationResult.Created(branchName, baseCommit);
-    }
-
-    private static String startPoint(@Nullable String baseRef) {
-        return baseRef != null ? baseRef : "HEAD";
     }
 }

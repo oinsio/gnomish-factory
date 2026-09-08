@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.adapter.law
 
-import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
-import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
-import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import static com.github.oinsio.gnomish.adapter.law.PipelineDefinitionFixtures.pipeline
+import static com.github.oinsio.gnomish.adapter.law.PipelineDefinitionFixtures.stage
+
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.nio.file.Files
 import java.nio.file.Path
@@ -101,22 +99,5 @@ class PipelineLawReaderSpec extends Specification {
 
     private void write(String name, String content) {
         Files.writeString(lawRoot.resolve(name), content)
-    }
-
-    private static PipelineDefinition pipeline(StageDefinition stage) {
-        new PipelineDefinition('1', new AutonomyLimits(3), [stage])
-    }
-
-    private static StageDefinition stage(String instructionsRef, List<VerifyCheck> checks) {
-        new StageDefinition(
-                'implement',
-                'purpose',
-                [],
-                [],
-                new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-opus', [:]),
-                instructionsRef,
-                checks,
-                new AutonomyLimits(3),
-                AdvancementMode.AUTO)
     }
 }

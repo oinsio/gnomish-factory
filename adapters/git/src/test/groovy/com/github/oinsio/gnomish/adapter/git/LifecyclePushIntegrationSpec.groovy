@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -71,7 +72,7 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
         def repository = repositoryFor(mode, cloneDir)
 
         when: 'the whole lifecycle runs — creation, then the terminal outcome and its cleanup commit'
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def tipAfterStart = originTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup(TASK_ID)
@@ -99,7 +100,7 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
 
         when:
         List<ILoggingEvent> events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', TaskState.atStageStart('implement'))
+            repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
             repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
             repository.finishCleanup(TASK_ID)
         }

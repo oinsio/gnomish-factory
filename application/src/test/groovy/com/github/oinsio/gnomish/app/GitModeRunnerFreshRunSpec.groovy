@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -135,7 +136,9 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         1 * branches.harden(cloneDir)
 
         then:
-        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'HEAD', _)
+        1 * lifecycleStore.createTask({
+            it.taskId() == 'PROJ-1'
+        }, 'HEAD', BaseRule.LOCAL_HEAD, _)
         1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
         1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Completed)
 
@@ -150,7 +153,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         runCapturingStdout(base)
 
         then:
-        1 * lifecycleStore.createTask(_, expected, _)
+        1 * lifecycleStore.createTask(_, expected, _, _)
 
         where:
         base || expected

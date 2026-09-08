@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.adapter.git.state.BasePin;
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
@@ -10,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -108,7 +110,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     }
 
     @Override
-    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
+    public void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState) {
         String taskId = context.taskId();
         String ref = refFor(taskId);
         if (gitObjects.resolveRef(ref).isPresent()) {
@@ -125,7 +127,8 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
         Instant now = Instant.now(clock);
         var writer = new TaskLifecycleCommitWriter(gitObjects, identity, now, epochs);
-        TaskJsonDto dto = TaskJsonMapper.toDto(context, base.hex(), now, null, null, false);
+        TaskJsonDto dto =
+                TaskJsonMapper.toDto(context, base.hex(), now, null, null, false, new BasePin(baseRef, baseRule));
         writer.commit(
                 taskId,
                 ref,
@@ -158,7 +161,13 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         // denial read, so it has no position of its own to record and must not erase the one the
         // tip carries — that erasure is what sent every resumed run back to a full log re-read.
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                        updated, current.baseCommit(), current.createdAt(), null, current.lastEscalation(), false)
+                        updated,
+                        current.baseCommit(),
+                        current.createdAt(),
+                        null,
+                        current.lastEscalation(),
+                        false,
+                        new BasePin(current.baseRef(), current.baseRule()))
                 .withEgressCursor(currentDto.egressCursor());
         // One transition, one commit (FR4): the decision and its attempt-counter reset are two
         // tree edits of a single bare-object commit, never two tips.
@@ -188,7 +197,13 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         // tracker write follows. Aborted's tracker write is best-effort and carries no marker.
         boolean pending = !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                        current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending)
+                        current.context(),
+                        current.baseCommit(),
+                        current.createdAt(),
+                        outcome,
+                        lastEscalation,
+                        pending,
+                        new BasePin(current.baseRef(), current.baseRule()))
                 .withEgressCursor(cursorFor(lastEscalation, currentDto.egressCursor()));
         writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto), event);
     }

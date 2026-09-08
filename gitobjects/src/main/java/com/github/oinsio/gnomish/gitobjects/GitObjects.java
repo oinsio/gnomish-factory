@@ -17,6 +17,15 @@ import java.util.Optional;
  */
 public final class GitObjects {
 
+    /**
+     * The revision naming a repository's checked-out commit. Spelled once here, in the module that
+     * owns git's own vocabulary, so no law-source or pin wiring above has to write the literal
+     * (design D12 of add-base-ref-resolution): a caller that means "whatever this clone happens to
+     * be checked out at" says so by name, and a caller that means one particular commit passes that
+     * commit's id instead.
+     */
+    public static final String HEAD = "HEAD";
+
     private final GitExec exec;
     private final CommitBuilder commitBuilder;
 
@@ -75,6 +84,31 @@ public final class GitObjects {
     public boolean exists(ObjectId commit, String path) {
         TreePaths.validate(path);
         return exec.run(List.of("cat-file", "-e", commit.hex() + ":" + path)).exitCode() == 0;
+    }
+
+    /**
+     * Lists the entries of the tree at {@code path} in {@code commit} — the bare-objects answer to
+     * "what is in this directory", for a law reader that binds by ref and never checks anything out
+     * (design D12 of add-base-ref-resolution). Regular files, directories, and symlinks come back as
+     * distinct {@link TreeEntry.Kind}s, so a caller that must refuse a symlinked law file can.
+     *
+     * <p>Throws {@link MissingObjectException} when {@code path} is not a tree in that commit —
+     * absent, or a blob. An empty listing means an empty directory, never a wrong path.
+     *
+     * <p>Implements FR11 of add-base-ref-resolution.
+     *
+     * @param commit the commit whose tree is read
+     * @param path the repository-relative directory path; validated by {@link TreePaths}
+     * @return the directory's entries, in git's own order
+     */
+    public List<TreeEntry> listTree(ObjectId commit, String path) {
+        TreePaths.validate(path);
+        GitExec.Result result = exec.run(List.of("ls-tree", "-z", commit.hex() + ":" + path));
+        if (result.exitCode() != 0) {
+            throw new MissingObjectException("no tree at '" + path + "' in " + commit.hex() + ": "
+                    + result.stderr().strip());
+        }
+        return TreeListing.parse(result.stdoutText());
     }
 
     /**

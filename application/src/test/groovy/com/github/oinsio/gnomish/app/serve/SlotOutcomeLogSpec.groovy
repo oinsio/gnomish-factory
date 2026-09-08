@@ -80,6 +80,26 @@ class SlotOutcomeLogSpec extends Specification {
         capture.detach()
     }
 
+    // FR9 of add-base-ref-resolution: a released claim (a configured dependency never answered)
+    // keeps its own WARN and its own code, for the same reason Skipped does — no summary is written
+    // for it either.
+    def "a released-for-infrastructure task is the other detail line that stays at WARN"() {
+        given:
+        def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec)
+
+        when:
+        outcomeLog.detail(ref, new TakeResult.InfrastructureUnavailable('origin never answered'))
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].level == Level.WARN
+        capture.list[0].formattedMessage.startsWith(OperatorEvent.SLOT_BASE_INFRASTRUCTURE_UNAVAILABLE.head())
+        capture.list[0].formattedMessage.contains('origin never answered')
+
+        cleanup:
+        capture.detach()
+    }
+
     // FR3: the canonical summary is emitted for every outcome that ran, at the level the outcome
     // warrants — and for the two that never ran, not at all.
     def "summarize writes one summary line for an outcome that ran"() {
@@ -114,7 +134,8 @@ class SlotOutcomeLogSpec extends Specification {
         where:
         result << [
             new TakeResult.EmptyQueue(),
-            new TakeResult.Skipped('lost claim race')
+            new TakeResult.Skipped('lost claim race'),
+            new TakeResult.InfrastructureUnavailable('origin never answered')
         ]
     }
 

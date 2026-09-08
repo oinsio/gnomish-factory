@@ -56,7 +56,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def clone = initWorkingRepo(tempDir, 'clone-local')
         commit(clone, 'a.txt', 'first')
         def creator = new TaskBranchCreator(runner)
-        creator.createBranch(clone, 'PROJ-1', null)
+        creator.createBranch(clone, 'PROJ-1', 'HEAD')
         def emptyOrigin = initBareRepo(tempDir, 'empty-origin.git')
         runner.run(clone, 'remote', 'add', 'origin', emptyOrigin.toString())
 
@@ -170,7 +170,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         given:
         def clone = initWorkingRepo(tempDir, 'clone-sanitized')
         commit(clone, 'a.txt', 'first')
-        new TaskBranchCreator(runner).createBranch(clone, 'PROJ 7: fix/it', null)
+        new TaskBranchCreator(runner).createBranch(clone, 'PROJ 7: fix/it', 'HEAD')
 
         when:
         def location = locator.locate(clone, 'PROJ 7: fix/it')

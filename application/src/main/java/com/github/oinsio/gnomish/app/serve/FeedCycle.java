@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -36,17 +37,24 @@ import org.slf4j.LoggerFactory;
  * slot keeps running) is skipped with a WARN, never re-claimed by this instance (FR2 of
  * fix-reaper-idle-liveness, design D6).
  *
+ * <p>{@link #poll} also drives {@link RemoteOutageGate#probeIfDue} forward every cycle — whether or
+ * not the poll yields any claim candidates, so the gate's schedule advances during Idle cycles too
+ * — and {@link #claimOrAbandon} consults {@link RemoteOutageGate#isOpen} before it ever calls
+ * {@link FeedTracker#claim}: an open gate abandons the reserved permit with NO tracker claim call
+ * at all (FR14, NFR-R3 of add-base-ref-resolution), so a dead remote burns zero tracker traffic for
+ * the whole outage.
+ *
  * <p>Implements FR5, FR9, D1, D2, D5, NFR-R3 of add-factory-serve. Implements FR2 of
- * fix-reaper-idle-liveness (design D6).
+ * fix-reaper-idle-liveness (design D6). Implements FR14, NFR-R3 of add-base-ref-resolution.
  *
  * @param feed the tracker, with the instance identity every claim is made under
  * @param slotLedger the WIP permit ledger this cycle acquires, assigns and abandons against
  * @param slotRunner what a claimed task is handed to, on a virtual thread of its own
  * @param selection the constants a feed read is graded against, and the two gradings themselves
  * @param stateLogger the once-per-transition feed-state log plane (NFR-O1, UX2)
- * @param outageRetry the tracker-outage retry every tracker call in this cycle runs through
- * @param finishedDecline the terminal-status sweep applied to each feed read (design D4 of
- *     enforce-finish-terminality)
+ * @param resilience the cycle's outage-handling collaborators — tracker-outage retry, terminal-
+ *     status sweep, and the remote outage gate (FR14, NFR-R3 of add-base-ref-resolution) — grouped
+ *     so this record's own constructor stays under the parameter-count limit
  */
 record FeedCycle(
         FeedTracker feed,
@@ -54,8 +62,7 @@ record FeedCycle(
         SlotRunner slotRunner,
         FeedSelection selection,
         FeedStateLogger stateLogger,
-        FeedOutageRetry outageRetry,
-        FinishedDecline finishedDecline) {
+        FeedResilience resilience) {
 
     private static final Logger log = LoggerFactory.getLogger(FeedCycle.class);
 
@@ -76,12 +83,15 @@ record FeedCycle(
      *     shutdown stop signal, FR11) — see {@link FeedOutageRetry#run}
      */
     Poll poll(Instant now) throws InterruptedException {
-        return outageRetry.run("feed poll", () -> {
+        // FR14: advances the gate's own schedule every cycle, candidates or not — a tracker-free
+        // git probe, so it runs outside outageRetry (which only wraps tracker calls).
+        resilience.remoteOutageGate().probeIfDue();
+        return Objects.requireNonNull(resilience.outageRetry().run("feed poll", () -> {
             List<ReadyTask> readyTasks = feed.listReady();
-            finishedDecline.declineObserved(feed.tracker(), readyTasks);
+            resilience.finishedDecline().declineObserved(feed.tracker(), readyTasks);
             int openFrontCount = feed.openFrontCount();
             return new Poll(readyTasks, openFrontCount, now, selection.candidates(readyTasks, now, openFrontCount));
-        });
+        }));
     }
 
     /**
@@ -102,7 +112,15 @@ record FeedCycle(
      *     shutdown stop signal, FR11) — see {@link FeedOutageRetry#run}
      */
     void claimOrAbandon(List<ReadyTask> candidates) throws InterruptedException {
-        TaskRef claimed = outageRetry.run("feed claim", () -> attemptClaim(candidates));
+        // FR14, NFR-R3 of add-base-ref-resolution: an open gate abandons the reserved permit with
+        // NO call into attemptClaim at all — outageRetry.run is never entered, so feed.claim is
+        // never invoked while the remote is down.
+        if (resilience.remoteOutageGate().isOpen()) {
+            resilience.remoteOutageGate().claimReleasedWhileOpen();
+            slotLedger.abandon();
+            return;
+        }
+        TaskRef claimed = resilience.outageRetry().run("feed claim", () -> attemptClaim(candidates));
         if (claimed == null) {
             slotLedger.abandon();
         } else {
@@ -122,7 +140,7 @@ record FeedCycle(
             // `grep taskId=<id>` misses (UX2). The scope closes before the slot starts — the slot
             // thread sets the key itself, and a context left open across the launch would leak the
             // finished task's id into the feed thread's next cycle.
-            try (var taskScope = MdcAwareThread.taskScope(claimed.id())) {
+            try (var ignored = MdcAwareThread.taskScope(claimed.id())) {
                 AnchorLog.claimAcquired(claimed.id(), freeSlotsAfterClaim, slotLedger.totalSlots());
             }
             startSlot(claimed);

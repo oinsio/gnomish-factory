@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -15,9 +16,9 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -40,10 +41,6 @@ import spock.lang.Specification
  */
 class TakeContainerEngineExecutionSpec extends Specification implements RunChainFakes {
 
-    private static Workspace workspace() {
-        {} as Workspace
-    }
-
     private static ExecutionResult.DecisionNeeded decisionRound(String taskId = 'PROJ-1') {
         new ExecutionResult.DecisionNeeded(
                 'which way?', [], ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
@@ -61,7 +58,8 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     private static TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker) {
         new TakeContainerEngineExecution(
-                assembly, new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag(), CLONE_DIR)
+                assembly, new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3), [], new ClaimLossFlag(),
+                LawBinding.atCheckout(CLONE_DIR))
     }
 
     // FR18, D19: a fresh Completed outcome disposes the environment and finishes the tracker for
@@ -72,7 +70,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         tracker.fetchTask(_) >> heldByUs()
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
-            workspace() >> workspace()
+            workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
 
@@ -104,7 +102,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         tracker.fetchTask(_) >> heldByUs()
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
-            workspace() >> workspace()
+            workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
 
@@ -138,7 +136,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         tracker.fetchTask(_) >> heldByUs()
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
-            workspace() >> workspace()
+            workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
 
@@ -171,7 +169,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         tracker.fetchTask(_) >> heldByUs()
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence(failOnCall: 1)
-            workspace() >> workspace()
+            workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
 
@@ -201,7 +199,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         tracker.fetchTask(_) >> trackerTask(new TrackerTaskState.Gone())
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
-            workspace() >> workspace()
+            workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
 

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -21,7 +22,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
     // task.json is loaded back into the handoff bundle.
     def "bootstrap() finds a local branch, materializes the worktree, and loads task.json"() {
         given: 'a task started (but not completed) via the git task repository'
-        repository().createTask(context('PROJ-1'), null, TaskState.atStageStart('implement'))
+        repository().createTask(context('PROJ-1'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
 
         when:
         def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-1')
@@ -43,7 +44,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
     def "bootstrap() surfaces a recorded outcome and lastEscalation"() {
         given:
         def repo = repository()
-        repo.createTask(context('PROJ-2'), null, TaskState.atStageStart('implement'))
+        repo.createTask(context('PROJ-2'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
         repo.recordOutcome('PROJ-2', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
@@ -60,7 +61,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
     // fresh from the branch.
     def "bootstrap() materializes a fresh worktree when none exists locally yet"() {
         given:
-        repository().createTask(context('PROJ-3'), null, TaskState.atStageStart('implement'))
+        repository().createTask(context('PROJ-3'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def worktree = expectedWorktree('PROJ-3')
         gitOutput(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
         assert !Files.exists(worktree)
@@ -88,7 +89,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
     // stack trace surfaced past this bootstrap step.
     def "bootstrap() throws UnsupportedStateFileVersionException naming task.json and the found version"() {
         given:
-        repository().createTask(context('PROJ-4'), null, TaskState.atStageStart('implement'))
+        repository().createTask(context('PROJ-4'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         def taskJson = expectedWorktree('PROJ-4').resolve('.gnomish-task').resolve('task.json')
         def rewritten = Files.readString(taskJson).replaceFirst(/"version"\s*:\s*1/, '"version":2')
         gitOutput(expectedWorktree('PROJ-4'), 'worktree', 'remove', '--force', expectedWorktree('PROJ-4').toString())
@@ -117,7 +118,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         def bare = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', bare.toString())
         gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
-        repository().createTask(context('PROJ-20'), null, TaskState.atStageStart('implement'))
+        repository().createTask(context('PROJ-20'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-20')
         def worktree = expectedWorktree('PROJ-20')
 
@@ -150,7 +151,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         def bare = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', bare.toString())
         gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
-        repository().createTask(context('PROJ-21'), null, TaskState.atStageStart('implement'))
+        repository().createTask(context('PROJ-21'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-21')
         def worktree = expectedWorktree('PROJ-21')
         Files.writeString(worktree.resolve('unpushed.txt'), 'local only')
@@ -175,7 +176,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         def bare = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', bare.toString())
         gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
-        repository().createTask(context('PROJ-22'), null, TaskState.atStageStart('implement'))
+        repository().createTask(context('PROJ-22'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-22')
         def worktree = expectedWorktree('PROJ-22')
 
@@ -219,7 +220,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         def bare = initBareRepo(tempDir, 'origin.git')
         addRemote(cloneDir, 'origin', bare.toString())
         gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
-        repository().createTask(context('PROJ-23'), null, TaskState.atStageStart('implement'))
+        repository().createTask(context('PROJ-23'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
         gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-23')
         def worktree = expectedWorktree('PROJ-23')
 

@@ -30,6 +30,8 @@ public final class TakeClaimAndWorkFactory {
      *
      * @param epochs this instance's tenure record, so the routing point's repair line (NFR-O1) can
      *     name the claim epoch it runs under; an empty book where none is recorded
+     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
+     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
     public static TakeClaimAndWork forSlot(
             RunAssembly assembly,
@@ -42,7 +44,8 @@ public final class TakeClaimAndWorkFactory {
             ClaimBeat heartbeat,
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase) {
         var resumeRunner = new TakeResumeRunner(
                 assembly,
                 git,
@@ -73,6 +76,7 @@ public final class TakeClaimAndWorkFactory {
                 claimLossFlag,
                 containerTakeSupport,
                 containerResumeRunner,
-                epochs);
+                epochs,
+                trustedBase);
     }
 }
