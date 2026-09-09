@@ -219,14 +219,14 @@ public final class TakeSlotRunner implements SlotRunner {
 
     /**
      * Design D9, FR14 of add-base-ref-resolution (task 7.3): {@link
-     * TakeResult.InfrastructureUnavailable} is produced only by a fresh claim's base-refresh step
-     * (see its own javadoc), so it is exactly "this slot hit an infrastructure failure" — opens the
-     * gate. Every other terminal result implies the slot got past that step, i.e. {@code origin}
-     * answered at least once this run, so it is treated as the "successful base refresh" signal
-     * {@link RemoteOutageGate#onSuccessfulRefresh} needs; {@link TakeResult.EmptyQueue} and {@link
-     * TakeResult.Skipped} are the two exceptions — bare auto-mode/race-loss shapes this
-     * already-claimed slot never actually produces, kept out on purpose rather than asserted never
-     * to occur.
+     * TakeResult.InfrastructureUnavailable} is produced only by a claim's base-refresh step — a
+     * fresh claim's resolution or a resume's pinned-ref refresh (see its own javadoc) — so it is
+     * exactly "this slot hit an infrastructure failure" and opens the gate. Every other terminal
+     * result implies the slot got past that step, i.e. {@code origin} answered at least once this
+     * run, so it is treated as the "successful base refresh" signal {@link
+     * RemoteOutageGate#onSuccessfulRefresh} needs; {@link TakeResult.EmptyQueue} and {@link
+     * TakeResult.Skipped} are the two exceptions — bare auto-mode/race-loss shapes, kept out on
+     * purpose rather than asserted never to occur.
      */
     private void signalRemoteOutageGate(TakeResult result) {
         switch (result) {

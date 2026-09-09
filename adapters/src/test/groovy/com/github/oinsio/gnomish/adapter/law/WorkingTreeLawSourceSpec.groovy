@@ -1,13 +1,10 @@
 package com.github.oinsio.gnomish.adapter.law
 
-import java.net.StandardProtocolFamily
-import java.net.UnixDomainSocketAddress
 import java.nio.channels.ServerSocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
-
 /**
  * FR11, D12 of add-base-ref-resolution: the working-tree realization's own guard detail — which
  * segment of a reference the symlink refusal stops at, and what the refusal reads like. The
@@ -92,6 +89,9 @@ class WorkingTreeLawSourceSpec extends Specification {
         and: 'read by name it is refused as not a regular file — a different reason from an absent path'
         source.fileStatus('socket') == LawSource.FileStatus.ABSENT
         ((LawSource.Unreadable) source.read('socket')).reason().contains('not a regular file')
+
+        and: 'listing it is empty — an entry that is not a directory holds no law beneath it'
+        source.list('socket') == []
 
         cleanup:
         channel.close()

@@ -9,9 +9,12 @@ import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
+import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -98,6 +101,36 @@ trait KillPointWorlds implements BareGitRepoFixture {
                         runner,
                         recovering),
                 taskId: TASK_ID)
+    }
+
+    /**
+     * The claim transition's world: an empty {@code origin}, the claimant's clone of it, and a
+     * Ready task on an in-memory tracker. No task is claimed and no branch is cut here — claiming
+     * IS the transition, and the branch that never follows is what the window is about.
+     */
+    ClaimWorld claimWorld(Path root) {
+        Path origin = initBareRepo(root, 'origin.git')
+        Path work = initWorkingRepo(root, 'claimant-clone')
+        Files.createDirectories(work.resolve('.gnomish'))
+        Files.writeString(work.resolve('.gnomish/instructions.md'), 'build it\n')
+        commitAll(work, 'init')
+        addRemote(work, 'origin', origin.toString())
+        gitOutput(work, 'push', 'origin', 'HEAD:refs/heads/base')
+
+        def tracker = new InMemoryTracker()
+        def ref = new TaskRef(TASK_ID)
+        new InMemoryTrackerHarness(tracker).seed(
+                ref, new TaskSnapshot(TASK_ID, 'title', 'body'), new TrackerTaskState.Ready(), AbortFacts.none())
+
+        def world = new ClaimWorld(
+                origin: origin,
+                claimantClone: work,
+                taskId: TASK_ID,
+                ref: ref,
+                instanceId: new InstanceId('gnomish-factory', 'kp0002'),
+                tracker: tracker)
+        world.armReaper()
+        world
     }
 
     private KillPointWorld seed(Path repoDir, TaskLifecycleStore store, String baseRef) {

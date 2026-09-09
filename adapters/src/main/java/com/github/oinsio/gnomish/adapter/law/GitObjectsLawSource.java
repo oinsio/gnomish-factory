@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.law;
 
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.GitObjectsException;
+import com.github.oinsio.gnomish.gitobjects.MissingObjectException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.gitobjects.TreeEntry;
 import java.nio.charset.StandardCharsets;
@@ -9,6 +10,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.StringJoiner;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link LawSource} realization that reads law out of bare git objects at one commit — the
@@ -27,6 +30,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR11 of add-base-ref-resolution.
  */
 public final class GitObjectsLawSource implements LawSource {
+
+    private static final Logger log = LoggerFactory.getLogger(GitObjectsLawSource.class);
 
     /** The per-file read cap: law files are hand-written text, and a truncated one is never law. */
     public static final long DEFAULT_READ_CAP_BYTES = 1L << 20;
@@ -138,13 +143,25 @@ public final class GitObjectsLawSource implements LawSource {
 
     /**
      * The entries of the tree at the repository-relative {@code path}, or an empty listing when the
-     * law commit has no tree there — absent, a blob, or a path git will not look up at all (one
-     * touching {@code .git}). "Not a tree" and "an empty tree" hold the same law: none.
+     * law commit has no tree there — absent, or a blob. "Not a tree" and "an empty tree" hold the
+     * same law: none, and {@link MissingObjectException} is git's own name for exactly that
+     * classification, so it is the only failure swallowed here.
+     *
+     * <p>Every other {@link GitObjectsException} is a fault, not a verdict — git could not be
+     * launched, the wait was interrupted, an object is corrupt, {@code ls-tree} printed something
+     * unparsable — and it propagates. Reading a fault as "the law commit carries no such tree"
+     * would be the one fail-open in a fail-closed traversal: an absent listing is law the reader
+     * acts on, and an unreachable one is not. The caller above already handles an unchecked
+     * {@link GitObjectsException} from this repository, which is what {@code LawSources.open}
+     * raises for the same faults while peeling the law commit.
      */
     private List<TreeEntry> listTree(String path) {
         try {
             return gitObjects.listTree(lawCommit, path);
-        } catch (GitObjectsException e) {
+        } catch (MissingObjectException e) {
+            // throwable-not-subject: "no tree at this path in the law commit" is the outcome being
+            //     classified, not a failure; the verdict it produces is reported at its point of use.
+            log.debug("no tree at '{}' in {}: the law commit carries nothing there", path, lawCommit.hex());
             return List.of();
         }
     }

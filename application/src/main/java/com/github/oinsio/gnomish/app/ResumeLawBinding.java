@@ -66,7 +66,10 @@ final class ResumeLawBinding {
     record Parked(TakeResult result) implements Outcome {}
 
     /**
-     * A configured remote never answered and the claim was released.
+     * A configured remote never answered and the claim was released. The result is {@link
+     * TakeResult.InfrastructureUnavailable} — the outage is the daemon's condition, never the
+     * task's (FR9, design D9/D13 of add-base-ref-resolution), so a serve slot ending here opens
+     * the remote outage gate exactly as a fresh claim's does.
      *
      * @param result the terminal result the run ends with
      */
@@ -172,8 +175,8 @@ final class ResumeLawBinding {
                 pinnedRef,
                 LogText.forLog(reason));
         releaseBestEffort(tracker, ref);
-        return new TakeResult.Skipped("Task " + ref.id() + " was returned to Ready: origin did not answer the"
-                + " resume refresh of its pinned base ref '" + pinnedRef + "': " + reason);
+        return new TakeResult.InfrastructureUnavailable("Task " + ref.id() + " was returned to Ready: origin did"
+                + " not answer the resume refresh of its pinned base ref '" + pinnedRef + "': " + reason);
     }
 
     private static void releaseBestEffort(Tracker tracker, TaskRef ref) {

@@ -118,9 +118,11 @@ class ResumeLawBindingSpec extends Specification {
         logs.detach()
     }
 
-    // D9, D13: a configured origin that never answered the resume refresh is the daemon's
-    // infrastructure condition, not the task's — the claim is released, plain, no attempt burned.
-    def "releases the claim and returns Skipped when a configured origin never answers"() {
+    // FR9, D9, D13: a configured origin that never answered the resume refresh is the daemon's
+    // infrastructure condition, not the task's — the claim is released, plain, no attempt burned,
+    // and the result is the typed InfrastructureUnavailable a serve slot opens the outage gate on,
+    // never Skipped ("the take result is a typed variant with its own exit code, never Skipped").
+    def "releases the claim and returns InfrastructureUnavailable when a configured origin never answers"() {
         given:
         def logs = LogCaptureSupport.attach(ResumeLawBinding)
 
@@ -138,9 +140,9 @@ class ResumeLawBindingSpec extends Specification {
         and:
         outcome instanceof ResumeLawBinding.Released
         def result = (outcome as ResumeLawBinding.Released).result()
-        result instanceof TakeResult.Skipped
-        (result as TakeResult.Skipped).reason().contains('PROJ-1')
-        (result as TakeResult.Skipped).reason().contains('connection timed out')
+        result instanceof TakeResult.InfrastructureUnavailable
+        (result as TakeResult.InfrastructureUnavailable).reason().contains('PROJ-1')
+        (result as TakeResult.InfrastructureUnavailable).reason().contains('connection timed out')
 
         and:
         def event = logs.list.find {
@@ -154,8 +156,9 @@ class ResumeLawBindingSpec extends Specification {
     }
 
     // NFR-R2: a tracker whose release itself fails must not escape either — logged as its own
-    // coded ERROR, the Skipped result still returned so the caller reports and exits normally.
-    def "a release failure is swallowed and logs GF138, still returns Skipped"() {
+    // coded ERROR, the InfrastructureUnavailable result still returned so the caller reports and
+    // exits normally.
+    def "a release failure is swallowed and logs GF138, still returns InfrastructureUnavailable"() {
         given:
         baseRefGit.resolveForResume(ROOT, 'release/1.18') >> new ResumeBaseOutcome.Unavailable('no answer')
         tracker.release(_) >> {
@@ -169,7 +172,7 @@ class ResumeLawBindingSpec extends Specification {
         then:
         noExceptionThrown()
         outcome instanceof ResumeLawBinding.Released
-        (outcome as ResumeLawBinding.Released).result() instanceof TakeResult.Skipped
+        (outcome as ResumeLawBinding.Released).result() instanceof TakeResult.InfrastructureUnavailable
 
         and:
         def event = logs.list.find {

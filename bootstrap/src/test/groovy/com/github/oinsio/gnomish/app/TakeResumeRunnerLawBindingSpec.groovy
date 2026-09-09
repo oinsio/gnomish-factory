@@ -69,8 +69,9 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
         1 * tracker.park(REF, ParkReason.INFRA, _)
     }
 
-    // D9, D13: a configured origin that never answers releases the claim rather than parking —
-    // the daemon's infrastructure condition, never the task's.
+    // FR9, D9, D13: a configured origin that never answers releases the claim rather than parking —
+    // the daemon's infrastructure condition, never the task's — and the typed
+    // InfrastructureUnavailable result is what a serve slot opens its remote outage gate on.
     def "resumeWithoutDecision releases the claim when a configured origin never answers"() {
         given:
         def taskId = 'PROJ-3'
@@ -87,7 +88,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
                 cloneDir, bootstrap, pipeline(), state, RunArguments.InteractiveMode.ALL, false, tracker, REF, INSTANCE)
 
         then:
-        result instanceof TakeResult.Skipped
+        result instanceof TakeResult.InfrastructureUnavailable
         1 * tracker.release(REF)
     }
 }

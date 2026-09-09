@@ -19,6 +19,10 @@ import spock.lang.Specification
  * git repositories and the real lifecycle writers of both media, so the host/container pair
  * (`.claude/rules/manual-sync-pairs.md`) is checked rather than assumed.
  *
+ * <p>The claim row is the one that crosses media ({@link ClaimKillPoints}): its window sits between
+ * a tracker write and the first branch write, so neither medium alone can name it. It classifies in
+ * both and converges through the tracker's recovery owner, the reaper.
+ *
  * <p>Deliberately NOT covered here: the tracker's own kill windows. The in-memory reference adapter
  * is atomic, so a frozen half-written tracker sequence cannot exist against it; those windows are
  * covered by fault injection in the GitHub adapter's own suite (FR19, task 9.1b).
@@ -77,6 +81,11 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds {
             CreationKillPoints.transition('shared', {
                 creationWorld(nextRoot())
             }),
+            // The row before creation's: the tracker claim, and the stretch of pure reads — base
+            // discovery, refresh fetch, resolution — that runs before anything durable is cut from
+            // it (design D8 of add-base-ref-resolution). Medium-crossing, so it classifies in both:
+            // the tracker's own shape and the branch medium's emptiness.
+            ClaimKillPoints.transition({ claimWorld(nextRoot()) }),
         ]
     }
 }

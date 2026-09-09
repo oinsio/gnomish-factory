@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.law
 
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.gitobjects.GitObjectsException
 import com.github.oinsio.gnomish.gitobjects.GitObjectsFixture
+import com.github.oinsio.gnomish.gitobjects.ObjectId
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -77,6 +79,7 @@ class GitObjectsLawSourceSpec extends Specification implements GitObjectsFixture
         expect:
         source.fileStatus('vendor') == LawSource.FileStatus.ABSENT
         ((LawSource.Unreadable) source.read('vendor')).reason().contains('not a regular file')
+        source.list('vendor') == []
     }
 
     def "FR11: a law file larger than the read cap is unreadable, never silently truncated"() {
@@ -100,6 +103,30 @@ class GitObjectsLawSourceSpec extends Specification implements GitObjectsFixture
         source.read('.git/config') instanceof LawSource.Unreadable
         source.fileStatus('.git/config') == LawSource.FileStatus.ABSENT
         source.list('.git') == []
+    }
+
+    def "FR11: a git fault while listing the law tree is raised, not read as an empty law"() {
+        given: 'a reader whose git binary does not exist, so every listing fails to launch'
+        def git = GitObjects.open(seedLawTree(), tempDir, tempDir.resolve('no-such-git').toString())
+        def source = new GitObjectsLawSource(git, new ObjectId('0' * 40), '.gnomish')
+
+        when: 'the law root is listed'
+        source.list('')
+
+        then: 'the fault is not classified as "the law commit carries no such tree"'
+        thrown(GitObjectsException)
+    }
+
+    def "FR11: a git fault while classifying a reference is raised, not reported as absent"() {
+        given:
+        def git = GitObjects.open(seedLawTree(), tempDir, tempDir.resolve('no-such-git').toString())
+        def source = new GitObjectsLawSource(git, new ObjectId('0' * 40), '.gnomish')
+
+        when:
+        source.fileStatus('config.yaml')
+
+        then:
+        thrown(GitObjectsException)
     }
 
     def "FR11: the law binds to one commit, never to the ref's later tip"() {

@@ -15,9 +15,9 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
  * run happened for any other reason, e.g. every eligible candidate lost its claim
  * race (later tasks); {@link InfrastructureUnavailable} — a configured dependency the claim needs
  * before any engine run could start never answered, so the claim was released plain with no
- * penalty (FR9 of add-base-ref-resolution; today produced only by the fresh-claim base-refresh
- * step, and the type task 7.3's remote outage gate will consult to learn a slot hit an
- * infrastructure failure).
+ * penalty (FR9 of add-base-ref-resolution; produced by the claim's base-refresh step in both its
+ * shapes — a fresh claim's resolution and a resume's pinned-ref refresh — and the type task 7.3's
+ * remote outage gate consults to learn a slot hit an infrastructure failure).
  *
  * <p>This is deliberately a runner-level type, not a {@code TaskOutcome} variant
  * (design D2): the engine knows nothing about trackers, claims, or revocation: those
@@ -165,8 +165,9 @@ public sealed interface TakeResult
      * covers a genuine refusal of the task itself (design D9, FR9 of add-base-ref-resolution).
      * Carries no {@link TaskState}: no engine run happened, the same boundary {@link Skipped} draws.
      *
-     * <p>Named for task 7.3's remote outage gate to consult later: a slot ending here is exactly
-     * "this slot's infrastructure failure" the gate opens on.
+     * <p>Named for task 7.3's remote outage gate to consult: a slot ending here is exactly "this
+     * slot's infrastructure failure" the gate opens on — whether the unreachable refresh was a
+     * fresh claim's base resolution or a resume's pinned-ref refresh (design D13).
      *
      * @param reason free-text description of what did not answer; never blank
      */
