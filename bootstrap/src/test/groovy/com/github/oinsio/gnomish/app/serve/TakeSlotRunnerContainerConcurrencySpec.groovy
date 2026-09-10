@@ -136,6 +136,9 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
                 ABORT_THRESHOLD, MDC_KEY, [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE,
                 containerTakeSupport, new ClaimEpochBook(),
                 new TrustedBaseContext(BaseDefinition.none(), 'HEAD'),
+                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                //     stamp a transition this spec never drives.
                 RemoteOutageGate.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
     }
 

@@ -80,20 +80,20 @@ class SlotOutcomeLogSpec extends Specification {
         capture.detach()
     }
 
-    // FR9 of add-base-ref-resolution: a released claim (a configured dependency never answered)
-    // keeps its own WARN and its own code, for the same reason Skipped does — no summary is written
-    // for it either.
-    def "a released-for-infrastructure task is the other detail line that stays at WARN"() {
+    // "One failure, one log" (.claude/rules/logging.md): a released claim is already stated at WARN
+    // by the layer that decided to release it (FreshClaimBaseBinding / ResumeLawBinding) and by the
+    // remote outage gate's own transition line, so the slot's detail line is DEBUG and carries no
+    // code — GF144 is retired. Skipped, which no other layer announces, keeps its WARN.
+    def "a released-for-infrastructure task is DEBUG detail, not a second WARN for the same fault"() {
         given:
-        def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec)
+        def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec, Level.DEBUG)
 
         when:
         outcomeLog.detail(ref, new TakeResult.InfrastructureUnavailable('origin never answered'))
 
         then:
         capture.list.size() == 1
-        capture.list[0].level == Level.WARN
-        capture.list[0].formattedMessage.startsWith(OperatorEvent.SLOT_BASE_INFRASTRUCTURE_UNAVAILABLE.head())
+        capture.list[0].level == Level.DEBUG
         capture.list[0].formattedMessage.contains('origin never answered')
 
         cleanup:

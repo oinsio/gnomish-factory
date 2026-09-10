@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskRecord
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -37,6 +38,15 @@ trait TaskRecordFakes {
             new Decision(body, 'build', 'tracker', NOW)
         ]),
         'base-sha', NOW, null, null, false, null, null)
+    }
+
+    /**
+     * The {@code task.json} of a branch carrying a durable base pin — the shape every task created
+     * after add-base-ref-resolution has, and the one a resume rebinds its law from (FR7, FR12).
+     */
+    TaskRecord recordPinnedTo(String baseRef, String baseCommit = 'base-sha', String taskId = 'PROJ-1') {
+        new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+                baseCommit, NOW, null, null, false, baseRef, BaseRule.CONFIGURED_DEFAULT)
     }
 
     /**

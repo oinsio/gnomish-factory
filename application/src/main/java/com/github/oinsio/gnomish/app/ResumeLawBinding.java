@@ -31,7 +31,9 @@ import org.slf4j.LoggerFactory;
  * daemon for on a fresh claim's base-refresh outage.
  *
  * <p>The one place both {@link TakeResumeRunner} and {@link TakeContainerResumeRunner} bind their
- * resumed law from — see the {@code Kept in sync with} markers on each.
+ * resumed law from — see the {@code Kept in sync with} markers on each. The manual {@code run
+ * --resume} paths, which hold no claim and so have no tracker to park or release a task with, bind
+ * the same pinned ref offline through {@link ManualResumeLawBinding}.
  *
  * <p><b>Pinned ref source (task 6.4, FR7).</b> Both callers pass {@link #pinnedRef} the bundle's
  * {@code baseRef} — the durable pin's ref name, e.g. {@code release/1.18} — falling back to {@code

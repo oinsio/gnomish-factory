@@ -215,9 +215,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * paths that drive the loop rather than the engine directly (the git-mode resume chain), and
      * whose dialogs therefore have to answer. {@code io} feeds those prompts in order, and a caller
      * that wants to assert what the dialog PRINTED passes its own and reads {@code io.printed}.
+     * {@code lawBindings} collects every {@link LawBinding} the chain assembles with, for the
+     * specs that assert WHICH tree a resumed run binds its law from.
      */
     RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(['']),
-            Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = []) {
+            Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = [], List lawBindings = []) {
         def clock = new VirtualClock()
         def console = new DialogConsole(io, { json ->
             'unused'
@@ -225,6 +227,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         def self = null
         self = [
             assemble: { definition, context, state, interactiveMode, AttemptPersistence persistence, credentials, lawBinding ->
+                lawBindings << lawBinding
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),

@@ -139,6 +139,9 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 newWorktreeJanitor(engineClock),
                 new SweepTickLog(Duration.ofDays(7), clock, 20),
                 clock,
+                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                //     stamp a transition this spec never drives.
                 RemoteOutageGate.system(
                         BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
 
@@ -212,6 +215,9 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 newWorktreeJanitor(engineClock),
                 new SweepTickLog(Duration.ofDays(7), clock, 20),
                 clock,
+                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                //     stamp a transition this spec never drives.
                 RemoteOutageGate.system(
                         BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())

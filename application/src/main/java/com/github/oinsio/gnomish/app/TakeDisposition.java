@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.DeclineFinishedMessage;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.baseref.BaseDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -109,41 +108,6 @@ final class TakeDisposition {
                 epochs,
                 trustedBase);
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
-    }
-
-    /**
-     * The heartbeat- and takeover-free construction used where neither a beat nor an explicit
-     * takeover runs (the {@code Ready}/{@code AwaitingHuman}/{@code Finished}/{@code Gone}
-     * disposition unit specs): delegates with {@link ClaimBeat#NONE}, no {@code --takeover}, the
-     * {@link TakeoverConfirmation#UNAVAILABLE} headless default on a system clock, and a fresh empty
-     * {@link ClaimLossFlag} that never trips, so those call sites are unaffected by the added seams.
-     */
-    TakeDisposition(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            String taskIdMdcKey,
-            List<String> credentialEnvVarsToScrub) {
-        this(
-                assembly,
-                git,
-                worktreesRoot,
-                abortHandler,
-                abortThreshold,
-                taskIdMdcKey,
-                credentialEnvVarsToScrub,
-                ClaimBeat.NONE,
-                false,
-                TakeoverConfirmation.UNAVAILABLE,
-                Clock.systemUTC(),
-                new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook(),
-                // A placeholder trusted tier: this construction serves specs that never reach a
-                // fresh claim's base resolution (see javadoc above).
-                new TrustedBaseContext(BaseDefinition.none(), "HEAD"));
     }
 
     /**

@@ -33,6 +33,18 @@ import org.slf4j.MDC;
  * resume decision is committed factory-side before any environment
  * materializes, so the in-box clone contains it from the start (FR25, D19).
  *
+ * <p>Kept in sync with {@link GitResumeRunner}: both bootstrap a resumed task through the same
+ * claimless reconciliation — {@code run --resume} holds no claim, so a truly diverged
+ * local/origin pair fails closed with {@link
+ * com.github.oinsio.gnomish.app.port.git.DivergedBranchException} rather than discarding the
+ * local line — and both then dispatch on the branch's recorded {@code task.json} outcome over
+ * one closed set, with the same meaning per arm: {@code null} salvages the interrupted round and
+ * continues from the recorded position (honouring {@code --discard-work}), {@code escalated}
+ * runs the same {@link EscalationResumeDialog}, {@code paused} the same checkpoint confirmation,
+ * {@code completed} reports without another engine run, and {@code aborted} refuses with a usage
+ * error naming the kept working copy. Adding or re-meaning an arm on one side alone is the
+ * divergence this pair guards against (UX2).
+ *
  * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core.
  */
 final class ContainerResumeRunner {

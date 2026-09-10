@@ -198,10 +198,11 @@ public enum OperatorEvent {
     FRESH_CLAIM_BASE_PARK_FAILED("GF141"),
     FRESH_CLAIM_BASE_REFRESH_UNAVAILABLE("GF142"),
     FRESH_CLAIM_BASE_RELEASE_FAILED("GF143"),
-    // slot outcome log (add-base-ref-resolution, task 7.2): a slot's own claim was released because
-    // a configured dependency never answered — degraded but not a fault of the slot's, WARN like
-    // Skipped since no taskOutcome summary is written for it either
-    SLOT_BASE_INFRASTRUCTURE_UNAVAILABLE("GF144"),
+    // GF144 is retired: the slot's own "released for infrastructure" line duplicated the
+    // FRESH_CLAIM_BASE_REFRESH_UNAVAILABLE / RESUME_BASE_REFRESH_UNAVAILABLE WARN the deciding
+    // layer already wrote for the same fault ("One failure, one log", .claude/rules/logging.md),
+    // and is now DEBUG detail in SlotOutcomeLog. A retired code stays retired — the gap is not
+    // filled.
     // remote outage gate observability (add-base-ref-resolution, task 7.4): the gate's own two
     // state-transition-shaped events — opening once per outage, and a one-shot escalation for an
     // outage that outlives the configured sustained-open duration. Every failed probe in between

@@ -91,8 +91,9 @@ on real I/O instead of failing fast" mode recorded above. Because there is nothi
 notice, review is the wrong instrument for it.
 
 So `check` asks instead: **`checkTestTimeInjection`** (registered by `test-conventions` in every
-module, and by `:test-fixtures` over its own `src/main`) fails on a `SomeType.system()` call in a
-test source. Satisfy it by building the component with virtual time — which keeps the production
+module, and by `:test-fixtures` over its own `src/main`) fails on a `SomeType.system(...)` call in a
+test source — with or without arguments, since a factory that takes collaborators and bounds
+(`RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)`) wires the real clock just the same. Satisfy it by building the component with virtual time — which keeps the production
 bound and elapses it instantly — or, where the call really is right (a spec asserting the
 production defaults themselves, a factory with no time in it), justify it in place:
 

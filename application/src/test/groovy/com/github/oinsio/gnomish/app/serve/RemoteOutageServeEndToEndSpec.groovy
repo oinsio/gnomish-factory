@@ -39,6 +39,13 @@ import spock.util.concurrent.PollingConditions
  * outage-shaped outcome opens the gate and releases the claim back to {@code Ready}; a
  * post-recovery outcome confirms the refresh instead.
  *
+ * <p><b>Scope of its "one WARN" assertions.</b> The capture below is attached to {@link
+ * RemoteOutageGate}'s own logger, so it proves the gate transitions exactly once per outage — NOT
+ * that the console as a whole sees one WARN, since the slot double here stands in for the real
+ * emitters around it. {@code OutageWarnFanOutSpec} owns that second invariant: it walks one
+ * released task through {@code FreshClaimBaseBinding} and {@link SlotOutcomeLog} for real and
+ * counts every WARN a console would show.
+ *
  * <p>G5 ("a dead remote costs the tracker nothing beyond the claims already in flight when it
  * died") and M4 ("at most one claim per slot for the whole outage ... claimable again after the
  * first successful probe") are both read directly off {@link FeedCycle#claimOrAbandon}: once

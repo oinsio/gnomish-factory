@@ -61,7 +61,7 @@ final class ContainerResumeOutcomes {
                 taskJson.context(),
                 state,
                 interactiveMode,
-                LawBinding.atCheckout(cloneDir),
+                ManualResumeLawBinding.of(cloneDir, taskJson.baseRef(), taskJson.baseCommit()),
                 pending);
     }
 
@@ -103,7 +103,7 @@ final class ContainerResumeOutcomes {
                 resumption.context(),
                 resumption.state(),
                 interactiveMode,
-                LawBinding.atCheckout(cloneDir),
+                ManualResumeLawBinding.of(cloneDir, taskJson.baseRef(), taskJson.baseCommit()),
                 null);
     }
 
@@ -131,7 +131,7 @@ final class ContainerResumeOutcomes {
                 taskJson.context(),
                 state,
                 interactiveMode,
-                LawBinding.atCheckout(cloneDir),
+                ManualResumeLawBinding.of(cloneDir, taskJson.baseRef(), taskJson.baseCommit()),
                 null);
     }
 

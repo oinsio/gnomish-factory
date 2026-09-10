@@ -46,6 +46,8 @@ class RemoteOutageGateSpec extends Specification {
     //     wires a real, usable, closed gate under the target DEFAULT_TARGET names.
     def "the composition-root system() factory builds a real, closed gate"() {
         given:
+        // real-time-wiring: the composition-root factory IS the subject of this feature — the gate is
+        //     built and read, never opened or probed, so no clock-driven decision runs.
         def g = RemoteOutageGate.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30),
                 Duration.ofMinutes(10), Duration.ofHours(1), {}, { ignored -> })
 

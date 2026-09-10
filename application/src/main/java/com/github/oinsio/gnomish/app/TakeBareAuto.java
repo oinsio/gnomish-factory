@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.take.AbortHandler;
 import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.TakeResult;
-import com.github.oinsio.gnomish.baseref.BaseDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -105,46 +104,6 @@ public final class TakeBareAuto {
                 epochs,
                 trustedBase);
         this.walk = new BareTakeClaimWalk(claimAndWork, taskIdMdcKey, backoffBase, backoffCap, clock, wipLimit, random);
-    }
-
-    /**
-     * The heartbeat-free construction used where no beat runs (the bare-auto unit spec): delegates
-     * with {@link ClaimBeat#NONE} and a fresh empty {@link ClaimLossFlag} that never trips, so call
-     * sites unconcerned with task 6.1's and 6.3's added seams don't need to supply them.
-     */
-    TakeBareAuto(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            String taskIdMdcKey,
-            Duration backoffBase,
-            Duration backoffCap,
-            Clock clock,
-            List<String> credentialEnvVarsToScrub,
-            int wipLimit,
-            Random random) {
-        this(
-                assembly,
-                git,
-                worktreesRoot,
-                abortHandler,
-                abortThreshold,
-                taskIdMdcKey,
-                backoffBase,
-                backoffCap,
-                clock,
-                credentialEnvVarsToScrub,
-                ClaimBeat.NONE,
-                new ClaimLossFlag(),
-                wipLimit,
-                random,
-                ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook(),
-                // A placeholder trusted tier: this construction serves specs that never reach a
-                // fresh claim's base resolution (see javadoc above).
-                new TrustedBaseContext(BaseDefinition.none(), "HEAD"));
     }
 
     /**

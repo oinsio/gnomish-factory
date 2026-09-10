@@ -168,7 +168,7 @@ final class GitResumeContinuation {
                                 interactiveMode,
                                 persistence,
                                 List.of(),
-                                LawBinding.atCheckout(cloneDir));
+                                ManualResumeLawBinding.of(cloneDir, bootstrap.baseRef(), bootstrap.baseCommit()));
 
         try {
             assembled.loop().run(definition, context, state, workspace, assembled.ports());

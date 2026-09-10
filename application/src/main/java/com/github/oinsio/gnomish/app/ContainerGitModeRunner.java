@@ -24,6 +24,14 @@ import org.jspecify.annotations.Nullable;
  * commits; every non-completed exit keeps the environment stopped with volume
  * and network retained.
  *
+ * <p>Kept in sync with {@link GitModeRunner}: both run the SAME manual fresh-run recipe — harden
+ * the clone's branches, print the banner naming where the work lives (UX1), resolve the {@code
+ * --base} override through {@code GitFreshTaskSupport#resolveManualBase} and create the task
+ * through {@code GitFreshTaskSupport#createTask}, then drive the engine under {@code
+ * ManualRunLawBinding#of(cloneDir, base)} — and both observe only the {@code Completed} and
+ * {@code Aborted} terminals, recording each through the mode's own outcome/cleanup ordering. The
+ * media differ (host worktree there, task environment here); the recipe and its order must not.
+ *
  * <p>Implements FR3, FR12, FR21, FR25, D19 of add-sandbox-core.
  */
 record ContainerGitModeRunner(

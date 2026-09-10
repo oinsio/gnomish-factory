@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -57,8 +58,12 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         support.pendingVerification() >> { pending }
     }
 
+    /** Every law binding the resumed chain assembled with, in order (FR12 of add-base-ref-resolution). */
+    List lawBindings = []
+
     private String resume(boolean discardWork = false) {
-        def runner = new ContainerResumeRunner(assemblyRunningLoop(executor, console),
+        def runner = new ContainerResumeRunner(
+                assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new FactoryProperties(null, null, null, null, null), 'taskId', { _c, _t, _s, _sp, _fp, _def, _cred ->
@@ -104,6 +109,24 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
 
         then:
         1 * branches.reconcileRemote(CLONE_DIR, 'PROJ-1', 'resume-start')
+    }
+
+    // FR7, FR12, D13 of add-base-ref-resolution: the container resume binds its law exactly as the
+    // host one does — from the LOCAL tip of the branch's pinned ref, never the clone's checkout.
+    def "binds the resumed law from the task's pinned base ref, not from the clone's checkout"() {
+        given:
+        record = recordPinnedTo('release/1.18')
+
+        when:
+        resume()
+
+        then:
+        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> true
+
+        and:
+        lawBindings == [
+            new LawBinding.AtRevision(CLONE_DIR, 'release/1.18')
+        ]
     }
 
     // FR8, FR21: the ordinary interrupted visit. The environment is reattached for the recorded
