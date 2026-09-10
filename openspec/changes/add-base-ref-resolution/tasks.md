@@ -333,3 +333,76 @@
 - [x] 9.3 `./gradlew :baseref:check :adapters:check :application:check`
       green with 100% mutation score after the rename, and every checked
       item of sections 1–3 still holds under the new names
+
+## 10. Branch start point from the peeled law commit (D12 revision 2026-09-10, D7 kind)
+
+> Sequenced before `add-pipeline-entry-precondition` 4.1 and before
+> `add-pipeline-routing` resumes: both build on the `createTask` signature
+> revised here. Context: the post-implementation review reproduced a task
+> branch created from a stale local `main`, a failed `createTask` for an
+> origin-only branch, and a planted local tag winning the start point — all
+> after a successful refresh (FR15, NFR-S1).
+
+- [ ] 10.1 TDD `LawBinding.atCommit(ObjectId)`: a binding that already holds
+      the peeled commit; `LawSources.open` returns it as the law commit with
+      no `rev-parse`, and the git-objects realization is rooted at it exactly
+      as for `atRevision`; `LawBindingSpec` covers the new variant and the
+      law-source contract test asserts no resolution call for it (D12)
+- [ ] 10.2 `TaskTierLaw.Bound` carries the typed `ObjectId lawCommit` next to
+      the definition and exposes `LawBinding.atCommit(lawCommit)` as the
+      binding to assemble under — the hex downgrade is deleted;
+      `TaskTierLawSpec` asserts the commit in `Bound` is the one
+      `LawSources.open` peeled (D12)
+- [ ] 10.3 Revise the port: `TaskRepository.createTask(context, lawCommit,
+      pin, initialState)` — the start point is a typed commit, the pin
+      `(ref, kind, rule)` is metadata; `TaskBranchCreator.createBranch` and
+      `GitObjectsTaskRepository.createTask` take the commit, run no
+      `rev-parse` of a base name, verify the object exists as a commit
+      (`cat-file -e <sha>^{commit}` / `resolveRef(<sha>)`), and record the
+      same commit as `baseCommit`; `BranchCreationResult.BaseRefNotResolved`
+      becomes "base commit missing"; both ends of the
+      `GitTaskRepository` / `GitObjectsTaskRepository` pair change in this
+      step and their `Kept in sync with` invariant line names the commit
+      input; the two push-best-effort decorators pass it through
+      (FR15, sync surface)
+- [ ] 10.4 Wire the fresh-claim pair: `TakeFreshClaim` and
+      `TakeContainerFreshClaim` pass `bound.lawCommit()` into
+      `GitFreshTaskSupport.createTask`; `FreshClaimBaseBinding.Bound` keeps
+      the `BaseRefKind` from `Refreshed` for the pin instead of discarding
+      it; `Kept in sync with` markers updated at both ends; mirrored specs
+      assert the branch's first parent equals `Refreshed.commit` on both
+      media (FR15, D6)
+- [ ] 10.5 Manual `run` (`GitModeRunner`, `ContainerGitModeRunner`): bind the
+      law through `ManualRunLawBinding` first, then create the branch from
+      the bound law commit; a working-tree binding that yields no checkout
+      commit fails with a `UsageException` naming the missing repository,
+      never with a fallback to a name; the offline no-`--base` scenario still
+      makes zero remote calls (FR8, FR15, UX3)
+- [ ] 10.6 TDD the pin's kind: `BasePin` gains `BaseRefKind`; `TaskJsonMapper`
+      writes and reads `baseKind` behind the wire version gate; a pin without
+      it reads with kind absent; data-driven round-trip spec iterates every
+      `BaseRefKind` constant plus the unknown-token arm (FR7)
+- [ ] 10.7 Resume by pinned kind: `BaseRefGit.resolveForResume` takes the
+      optional pinned kind; `BaseRefresh` skips the `ls-remote`
+      classification and fetches that namespace only when a kind is given,
+      classifies as before when it is absent; `ResumeLawBinding` and
+      `ManualResumeLawBinding` pass the pin's kind; spec: a tag pushed under a
+      pinned branch's name does not park the resume (FR7, D7, D11a)
+- [ ] 10.8 Regression spec on a bare origin (`adapters/git`, real git): a clone
+      whose local `main` is behind origin, a branch existing only on origin,
+      and a planted local tag carrying the base name; for each, the task
+      branch's first parent, the law commit, and `task.json`'s `baseCommit`
+      equal `Refreshed.commit`, and the clone's `refs/heads/*`, tags, and
+      HEAD are unchanged; run twice to assert idempotent recovery is
+      untouched (FR15, NFR-S1, git-task-persistence scenarios)
+- [ ] 10.9 Grep gate in the style of 6.1: no `rev-parse` of a base *name*
+      remains in `adapters/git` outside `BaseRefresh`, `RefreshedTip`,
+      `TagBaseFetch`, `CommitBaseFetch`, and `ResumeBaseResolution.localTip`;
+      amend `docs/adr/0006-base-refresh-fetch.md` with the durable rule "the
+      commit read from the destination is the only start point; a ref name
+      crosses a port only as pin metadata or inside a `LawBinding`"; rewrite
+      the `TaskBranchCreator` javadoc, which still states the pre-refresh
+      contract; glossary entry *base pin* names the kind (D12, no-jargon rule)
+- [ ] 10.10 `./gradlew :adapters:check :adapters:git:check :application:check
+      :bootstrap:check` green with 100% mutation score; the kill-point matrix
+      of 8.4 passes unchanged, confirming no durable step was added (NFR-R1)

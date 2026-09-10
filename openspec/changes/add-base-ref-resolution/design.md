@@ -174,6 +174,19 @@ The pin exists so a resume can also *see* that the rule would resolve
 differently today — a report line, never a re-resolution. *Alternative
 rejected:* a separate pin file — splits mutually-implied facts across
 writes, violating the one-commit rule.
+*Revised 2026-09-10 after the post-implementation review.* **The pin also
+carries the kind** — branch, tag, or commit — that origin stated when the
+refresh classified the ref (D11a). This is not the rejected "kind on the
+allowed-base entry": that would be configuration guessing at a remote fact,
+while the pinned kind *is* the remote fact, recorded at the moment it was
+established. Resume hands the pinned kind to the refresh, which then fetches
+that namespace only; a tag pushed later under a pinned branch's name (or the
+reverse) neither redirects nor parks the task, which D11a's collision arm
+would otherwise do to every resume of a task whose base name was reused.
+GitLab's `ref_type` fix for its ambiguous-ref API (gitlab#591446) is the
+same shape: a name is only addressable together with its type. A legacy pin
+without a kind resumes exactly as before this revision — classified by
+`ls-remote` at resume time.
 
 **D8 — Crash consistency of claim → refresh → resolve → create.** Durable
 steps in order: tracker claim; (no durable step: discovery, base fetch,
@@ -389,6 +402,46 @@ kill (task 5.8; the mutation gate, not the threat model, decides). The
 working-tree realization has a check-then-read window a replaced link could
 exploit; the git-objects realization has none, one more reason every
 resolved-ref path reads git objects.
+*Revised 2026-09-10 after the post-implementation review.* **The peeled law
+commit is also the branch's start point; a base name never reaches the
+repository port.** The 2026-09-07 rule ("the adapter peels once, then object
+id only") was applied to the law and not to branch creation: `createTask`
+kept its pre-refresh `String baseRef` contract from `add-git-workflow`'s D7
+era ("must already resolve locally"), so both lifecycle adapters re-resolved
+the bare name with `rev-parse`. Git resolves a bare name in a fixed order —
+`$GIT_DIR/<n>`, `refs/<n>`, `refs/tags/<n>`, `refs/heads/<n>`,
+`refs/remotes/<n>`, `refs/remotes/<n>/HEAD` (gitrevisions) — and the refresh
+of D11 lands a branch in `refs/remotes/origin/<n>`, which no bare name
+reaches. Reproduced on a bare origin: a stale local `main` started the branch
+from the stale commit while the law was read from origin's tip; a
+`release/1.18` existing only on origin failed `createTask` after a successful
+fetch; a planted local tag `main` won over both. Law and pin named one SHA,
+the branch another — the exact divergence the 2026-09-07 rule exists to
+prevent, and an NFR-S1 lever in host mode. The fix is one owner, not a
+second peel: `LawSources.open` already peels the binding exactly once and
+returns the `ObjectId` with the source; `TaskTierLaw.Bound` carries that
+`lawCommit` instead of downgrading it to a hex string, `createTask` takes it
+as a typed commit, and `TaskBranchCreator` / `GitObjectsTaskRepository` do
+no name resolution at all. `LawBinding` gains `atCommit(ObjectId)` so that
+after the first peel no string revision exists to be re-resolved (the
+`assemble` re-open of the law becomes a no-peel lookup). Manual `run` binds
+its law first and creates the branch from the same `lawCommit`, so the
+manual tier obeys the rule without a fetch; a working-tree binding outside a
+repository refuses rather than falls back to a name. The type is the gate: a
+future caller cannot hand the port a name without going through the one
+peel. *Alternative steelmanned and rejected — pass the fully qualified name
+(`refs/remotes/origin/<n>`, `refs/tags/<n>`) and keep the `String` port:*
+smallest diff, and exactly what `actions/checkout` does; but the clone is
+shared with a human whose own `git fetch` may move `refs/remotes/origin/<n>`
+between the law read and the branch read, so law and branch could still
+diverge (Argo CD #26530 again), the double resolution stays, and creating
+from a remote-tracking ref implies upstream tracking the SHA form never sets.
+*Rejected outright — a private `refs/gnomish/*` namespace (Zuul, Gerrit):*
+immune to human fetches, but contradicts ADR 0006's "each kind lands where
+git would put it", needs its own cleanup, and is unnecessary once the SHA is
+held. No durable step is added or reordered on the autonomous paths —
+`createTask` stays the single durable write, only its input changes — so
+D8's kill-window list is unchanged; the manual path's law bind is a read.
 
 **D13 — Resume binds the task tier from the tip of the pinned ref name.**
 Security is identical either way (a base tip is human-merged content); the
@@ -487,7 +540,7 @@ flowchart LR
     Fetch -->|infra failure| Release["release claim,<br/>open remote gate<br/>(task back to Ready)"]
     Fetch --> Law["load task tier<br/>from base SHA (law commit)"]
     Law -->|load error| Park
-    Law --> Create["createTask:<br/>branch + pin (ref, sha, rule)"]
+    Law -->|"lawCommit (typed)"| Create["createTask from lawCommit:<br/>branch + pin (ref, kind, sha, rule)"]
     Create --> Push["load-bearing first push"]
 ```
 
@@ -517,13 +570,18 @@ their registry rows are removed.
 
 The pin also touches both ends of the declared pair
 `GitTaskRepository` / `GitObjectsTaskRepository` (task lifecycle write
-protocol): `createTask` starts carrying the pin `(ref, sha, rule)` into the
-task-creation commit on both media. The mirrored change is deliberately
+protocol): `createTask` starts carrying the pin `(ref, kind, sha, rule)` into
+the task-creation commit on both media. The mirrored change is deliberately
 narrow — the pin's serialization is single-point in the shared
 `TaskJsonMapper`, so each end only passes the pin through its own
 `createTask` path identically; no other step of the lifecycle write
 protocol changes. Deleting `TaskBranchCreator.startPoint()`'s default removes
-an undeclared duplication (the double default) rather than adding one.
+an undeclared duplication (the double default) rather than adding one. The
+D12 revision of 2026-09-10 changes the port signature itself — `createTask`
+takes the typed law commit as the start point — so both ends lose their
+name resolution in the same step, and the fresh-claim pair
+`TakeFreshClaim` / `TakeContainerFreshClaim` passes `lawCommit` from
+`TaskTierLaw.Bound` on both media.
 
 **Overlapping deltas.** The `module-layering` delta MODIFIES the same two
 requirements (module tree, dependency direction) as the active
@@ -536,7 +594,10 @@ requirement (the OpenSpec MODIFIED merge is replace-only).
 `add-pipeline-entry-precondition` is sequenced after this change (D6):
 the fresh-claim recipe invariant becomes "harden → fetch+resolve →
 synthesize → createTask → entry precondition → run", and its pin reader
-follows D7.
+follows D7. Its task 4.1 reads a "baseline SHA" after `createTask`, and
+`add-pipeline-routing` cites the recipe around `createTask`; both build on
+the revised `createTask(lawCommit, pin)` signature of section 10, so
+section 10 lands before either resumes.
 
 The remote outage gate (D9) is one owner class; the feed consults it and
 the slot opens it, neither holds a second copy of its state or policy. It
@@ -624,4 +685,10 @@ of D11 as `docs/adr/0006-base-refresh-fetch.md` — both written with this
 change's planning (task 8.5 keeps them in step with the implementation).
 The law-source principle of D12–D14 outlives this change and is recorded
 as `docs/adr/0007-pipeline-law-source.md` (task 8.2, now written); D12
-references it rather than restating it.
+references it rather than restating it. The 2026-09-10 revision of D12
+adds one durable rule to `docs/adr/0006-base-refresh-fetch.md` (task 10.9):
+the commit read from the fetch destination is the only start point of the
+task branch, and a ref name crosses a port boundary only as pin metadata or
+inside a `LawBinding`. The pin's new `kind` field ships behind the existing
+wire version gate; a pin written without it reads as kind-less and resumes
+with `ls-remote` classification, exactly as before.

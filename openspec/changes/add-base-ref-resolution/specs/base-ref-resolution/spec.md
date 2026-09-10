@@ -141,8 +141,10 @@ tier of the law binds from the chosen base's law commit (see pipeline-config,
   on the claim path, and the next start of `serve` accepts the entry
 
 ### Requirement: The base decision is pinned at claim and never re-resolved
-The resolved base — ref, commit SHA, and source rule — SHALL be pinned into
-the task's durable state in the task-creation commit, before any agent runs.
+The resolved base — ref, kind, commit SHA, and source rule — SHALL be pinned
+into the task's durable state in the task-creation commit, before any agent
+runs. The pinned SHA SHALL be the very object the branch was created from and
+the law was bound from — one value, not three resolutions of one name.
 Every resume, on any instance and in any execution mode, SHALL read the pin
 and SHALL NOT re-resolve the base from tracker metadata or configuration; a
 designator or allowed-bases change after the pin affects only tasks not yet pinned.
@@ -151,8 +153,12 @@ crash window, and a later resolution answering differently is legal — nothing
 durable references the earlier answer.
 The pinned SHA is the law commit of the fresh start; on resume the law commit
 is the current tip of the pinned ref name (pipeline-config owns that rule),
-which is a law-freshness matter, not a re-resolution of the base.
-<!-- implements FR7, NFR-R2, NFR-S2 of add-base-ref-resolution -->
+which is a law-freshness matter, not a re-resolution of the base. That
+re-fetch SHALL address the pinned ref by its pinned kind — the branch or tag
+namespace the pin names — so a same-named ref appearing later in the other
+namespace neither redirects nor parks the task; a legacy pin without a kind
+is classified against origin as before.
+<!-- implements FR7, FR15, NFR-R2, NFR-S2 of add-base-ref-resolution -->
 
 #### Scenario: Retargeting a pinned task has no effect
 - **WHEN** a human changes the task's base label after the task branch exists
@@ -165,6 +171,13 @@ which is a law-freshness matter, not a re-resolution of the base.
 - **THEN** the guard compares the attempt's law files against the pinned
   base SHA — the same commit the law was frozen from — never against the
   clone's `HEAD`
+
+#### Scenario: A tag reusing a pinned branch's name does not park the resume
+- **WHEN** a task was pinned to branch `release/1.18` and origin later gains
+  a tag `release/1.18`, and the task is resumed autonomously
+- **THEN** the resume fetches `refs/heads/release/1.18` only, binds the law
+  from its tip, and no collision report is produced
+<!-- implements FR7 of add-base-ref-resolution -->
 
 #### Scenario: A crash before the pin re-resolves cleanly
 - **WHEN** an instance dies after refreshing the base but before the

@@ -287,10 +287,15 @@ and the rest from the ref being built. This change adopts that mechanism.
   (deadline, stall detection, credential scrubbing) and MUST NOT touch the
   working tree, index, HEAD, `refs/heads/*`, or any pre-existing
   `refs/tags/*` entry of the operator clone.
-- FR7: the task-creation commit SHALL pin `(resolved ref, SHA, source rule)`
-  in `task.json` behind the wire version gate; legacy files carrying only
-  `baseCommit` stay readable. Resume — any instance, any mode — SHALL read
-  the pin and never re-resolve the base from tracker data or configuration.
+- FR7: the task-creation commit SHALL pin `(resolved ref, kind, SHA, source
+  rule)` in `task.json` behind the wire version gate — the kind (branch, tag,
+  or commit) being the fact origin stated when the refresh classified the
+  ref, never a configured value; legacy files carrying only `baseCommit`
+  stay readable. Resume — any instance, any mode — SHALL read the pin and
+  never re-resolve the base from tracker data or configuration; the
+  re-fetch of the pinned ref name on resume SHALL use the pinned kind, so a
+  same-named ref appearing later in the other namespace cannot redirect or
+  park the task.
 - FR8: manual `gnomish run` behavior is preserved: without `--base` it
   branches from the local HEAD with no fetch and no remote query, and its
   law source stays the working tree, so uncommitted `.gnomish/` edits apply;
@@ -370,6 +375,17 @@ and the rest from the ref being built. This change adopts that mechanism.
   keep working under an open gate; single-shot `take` has no gate and ends
   per FR9. The gate is process-local: a restart forgets it and re-learns on
   the next failure.
+- FR15: on every path that creates a task branch, the branch SHALL start
+  from the same peeled commit the task's law was bound from, handed to the
+  repository port as a typed object id — never as a ref name the adapter
+  resolves again. No adapter SHALL run a name-to-commit resolution of the
+  base: the one resolution happens where the law is bound, and the pin's
+  `SHA`, the law commit, and the branch's first parent are one value by
+  construction. This closes git's own refname disambiguation (a bare name
+  prefers a local tag, then a local branch, over `refs/remotes/origin/`),
+  which otherwise lets a stale local branch, a planted local tag, or an
+  origin-only branch that no local ref names redirect or fail the start
+  point after a successful refresh.
 
 ### Non-Functional — Reliability
 
@@ -416,6 +432,10 @@ and the rest from the ref being built. This change adopts that mechanism.
   copies are project content, never law. Reading law by ref also closes the
   serve drift where a `git pull` in the clone silently changed the law between
   tasks.
+  A local branch or tag in the shared clone that carries a base's name
+  SHALL NOT redirect any task's start point: the branch is created from the
+  refreshed commit itself (FR15), so a gnome sharing the clone's refs in
+  host mode gains no lever over a future task's base.
 - NFR-S2: the base choice is pinned at claim, before any agent runs; resume
   reads the pin and never re-resolves from data a gnome can write.
 - NFR-S3: no repository-provided code executes to choose a base — selection

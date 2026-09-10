@@ -3,9 +3,9 @@
 ## MODIFIED Requirements
 
 ### Requirement: Task branch naming and base
-The task branch SHALL be named `gnomish/` + the sanitized taskId: every character outside `[A-Za-z0-9._-]` replaced by `-`, consecutive `-` collapsed, leading/trailing `.`/`-` stripped; an empty result or `.lock` suffix rejects the taskId. The authoritative taskId lives inside `task.json` — never parsed back from the ref name. The branch SHALL be created from the base ref the resolution decision names (see base-ref-resolution): in autonomous paths that ref is refreshed by the base fetch below before the branch is created; in manual `run` without `--base` the decision is the clone's local HEAD and no fetch or remote query runs, preserving the offline behavior exactly. `--base <ref>` overrides on the paths that accept it today. Exactly one code path SHALL turn the resolution decision into a start point — no adapter keeps a private HEAD fallback. The runner SHALL NOT pull on any path.
+The task branch SHALL be named `gnomish/` + the sanitized taskId: every character outside `[A-Za-z0-9._-]` replaced by `-`, consecutive `-` collapsed, leading/trailing `.`/`-` stripped; an empty result or `.lock` suffix rejects the taskId. The authoritative taskId lives inside `task.json` — never parsed back from the ref name. The branch SHALL be created from the base ref the resolution decision names (see base-ref-resolution): in autonomous paths that ref is refreshed by the base fetch below before the branch is created; in manual `run` without `--base` the decision is the clone's local HEAD and no fetch or remote query runs, preserving the offline behavior exactly. `--base <ref>` overrides on the paths that accept it today. Exactly one code path SHALL turn the resolution decision into a start point — no adapter keeps a private HEAD fallback. The start point handed to the repository port SHALL be the peeled law commit as a typed object id — the same commit the task's law was bound from — never a ref name: the adapters SHALL run no name-to-commit resolution of the base, so a local branch, a local tag, or the absence of a local ref under the base's name cannot change or fail the start point once the refresh has delivered the commit. The runner SHALL NOT pull on any path.
 <!-- implements FR2, FR7 of add-git-workflow -->
-<!-- implements FR4, FR6, FR8, FR10 of add-base-ref-resolution -->
+<!-- implements FR4, FR6, FR8, FR10, FR15 of add-base-ref-resolution -->
 
 #### Scenario: Unsafe characters sanitized deterministically
 - **WHEN** the taskId is `PROJ 42: fix/it`
@@ -23,6 +23,29 @@ The task branch SHALL be named `gnomish/` + the sanitized taskId: every characte
   creates a task branch
 - **THEN** the start point comes from the shared resolution decision, and no
   path-local default substitutes for it
+
+#### Scenario: A stale local branch does not redirect the base
+- **WHEN** the clone's local `main` is behind origin's `main` and a task
+  resolving to `main` is claimed
+- **THEN** the task branch's first parent, the law commit, and the pinned
+  SHA are all origin's refreshed `main` tip, and the local `main` is neither
+  read nor moved
+<!-- implements FR15 of add-base-ref-resolution -->
+
+#### Scenario: An origin-only branch starts the task
+- **WHEN** the resolved base is a branch that exists on origin and under no
+  local ref of the clone
+- **THEN** the refresh delivers it and the task branch is created from the
+  delivered commit — no "base ref did not resolve" failure follows a
+  successful fetch
+<!-- implements FR15 of add-base-ref-resolution -->
+
+#### Scenario: A planted local tag does not redirect the base
+- **WHEN** the clone holds a local tag carrying the base branch's name and
+  pointing elsewhere, and a task resolving to that branch is claimed
+- **THEN** the task branch starts from origin's refreshed branch tip, not
+  from the tag's commit
+<!-- implements FR15, NFR-S1 of add-base-ref-resolution -->
 
 ### Requirement: Resume from the recorded branch
 `--resume <task>` SHALL locate the branch: local → remote-tracking → narrow fetch of exactly `gnomish/<task>` — that locate step fetches nothing else, then continue by `task.json` outcome: escalated → decision dialog; paused → confirmation; null → continue from the recorded position; completed → report "task done" and exit. When the task working copy does not exist locally (another machine, or removed), resume SHALL materialize it through the bound task environment from the branch state alone.
@@ -113,13 +136,16 @@ task-level park. Pull remains forbidden on every path.
   failure is reported as infrastructure, not as a gnome or quality failure
 
 ### Requirement: Base pin in task.json
-`task.json` SHALL carry the base pin — the resolved ref, the commit SHA the
+`task.json` SHALL carry the base pin — the resolved ref, its kind (branch,
+tag, or commit, as origin classified it at refresh), the commit SHA the
 branch was created from, and the source rule that produced the decision —
 written in the task-creation commit. The pin extends the existing
 `baseCommit` slot behind the wire version gate: legacy files carrying only
-`baseCommit` SHALL stay readable, reporting an absent ref and rule. The rule
-vocabulary is a wire vocabulary: writer and reader SHALL round-trip every
-constant, with the documented forward-compatible unknown-token behavior.
+`baseCommit` SHALL stay readable, reporting an absent ref, kind, and rule; a
+pin written before the kind existed SHALL read with the kind absent. The rule
+and kind vocabularies are wire vocabularies: writer and reader SHALL
+round-trip every constant of each, with the documented forward-compatible
+unknown-token behavior.
 Resume SHALL read the pin and never re-resolve (see base-ref-resolution).
 The pinned SHA is the fresh start's law commit: the law and the external-check
 pin guard bind from it, never from the clone's `HEAD`.
@@ -128,8 +154,8 @@ pin guard bind from it, never from the clone's `HEAD`.
 
 #### Scenario: Creation commit carries the pin
 - **WHEN** the task-creation commit on a fresh branch is inspected
-- **THEN** its `task.json` already names the resolved ref, the SHA, and the
-  source rule
+- **THEN** its `task.json` already names the resolved ref, its kind, the SHA,
+  and the source rule, and the SHA equals the commit's own first parent
 
 #### Scenario: Legacy task file reads as unpinned
 - **WHEN** a pre-pin `task.json` carrying only `baseCommit` is read
@@ -138,5 +164,6 @@ pin guard bind from it, never from the clone's `HEAD`.
 
 #### Scenario: Pin round-trips the wire
 - **WHEN** a pinned task file is written and read back
-- **THEN** ref, SHA, and rule survive unchanged, covered by a data-driven
-  round-trip spec over every rule constant
+- **THEN** ref, kind, SHA, and rule survive unchanged, covered by a
+  data-driven round-trip spec over every rule constant and every kind
+  constant
