@@ -47,6 +47,7 @@ Active changes: `openspec/changes/`. Archived: `openspec/changes/archive/` (immu
 | `logging.md`            | `**/*.java`                   | Level policy, throwable form, untrusted text, MDC, suppression |
 | `crash-consistency.md`  | multi-step transitions        | Kill windows, shapes, recovery owners, ordering checklist  |
 | `manual-sync-pairs.md`  | hand-synced implementations   | Declared pairs, sync markers, rule-of-three extraction     |
+| `implementation.md`     | global                        | Single-owner mechanisms: consumer list, old-way sweep, DoD |
 | `stage-description.md`  | stage docs                    | IDEF0/ICOM + Quality Control format for pipeline stages    |
 | `proposal-format.md`    | `openspec/**/proposal.md`     | Required sections and format for PRD                       |
 | `delta-specs.md`        | `openspec/**/specs/**`        | Delta spec format with ADDED/MODIFIED/REMOVED              |

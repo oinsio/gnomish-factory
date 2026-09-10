@@ -406,3 +406,11 @@
 - [ ] 10.10 `./gradlew :adapters:check :adapters:git:check :application:check
       :bootstrap:check` green with 100% mutation score; the kill-point matrix
       of 8.4 passes unchanged, confirming no durable step was added (NFR-R1)
+- [ ] 10.11 Make the shared clone fixture adversarial by default
+      (`testing.md`, "Git fixtures are adversarial by default"): the clone
+      `BareGitRepoFixture` hands out carries a local branch under the base
+      name one commit behind origin and a local tag under the same name
+      pointing elsewhere; specs needing the converged posture opt in
+      explicitly; the whole `adapters/git`, `application`, and `bootstrap`
+      suites stay green on the new default — any spec that goes red is a
+      bare-name resolution to fix, not a fixture to relax (FR15, NFR-S1)

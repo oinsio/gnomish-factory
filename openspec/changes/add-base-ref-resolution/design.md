@@ -443,6 +443,13 @@ held. No durable step is added or reordered on the autonomous paths —
 `createTask` stays the single durable write, only its input changes — so
 D8's kill-window list is unchanged; the manual path's law bind is a read.
 
+Single-owner mechanisms (per `design-decisions.md`):
+
+| Owner | Value (type) | Consumers | Old way removed | Enforced by |
+|-------|--------------|-----------|-----------------|-------------|
+| `LawSources.open` — the one peel of a `LawBinding` revision | `ObjectId lawCommit` in `BoundLaw`, carried by `TaskTierLaw.Bound` | `TakeFreshClaim`, `TakeContainerFreshClaim` (via `GitFreshTaskSupport.createTask`), `GitModeRunner`, `ContainerGitModeRunner`, `TaskRepository.createTask` → `TaskBranchCreator`, `GitObjectsTaskRepository`, the two push-best-effort decorators; the external-check pin guard (already typed) | `rev-parse` / `resolveRef` of a base *name* in `TaskBranchCreator.createBranch` and `GitObjectsTaskRepository.createTask`; the `String baseRef` parameter of `createTask`; the hex downgrade in `TaskTierLaw.bind`. Exemptions: `ResumeBaseResolution.localTip` (no-origin resume, offline by spec), `BaseRefresh` / `RefreshedTip` / `TagBaseFetch` / `CommitBaseFetch` (they *are* the fetch-side read of the destination ref) | the `ObjectId` parameter type of `createTask`; grep gate of task 10.9; identity spec of task 10.8 (branch first parent = law commit = pinned SHA) |
+| `BaseRefresh` — the one classification and fetch of a base name | `BaseRefreshOutcome.Refreshed(name, commit, kind)` | `FreshClaimBaseBinding`, `ResumeBaseResolution`, `TrustedTierStartup` | none newly; `FreshClaimBaseBinding` stops discarding `kind` | the sealed outcome type; `BaseRefreshSpec` |
+
 **D13 — Resume binds the task tier from the tip of the pinned ref name.**
 Security is identical either way (a base tip is human-merged content); the
 choice is freshness versus determinism. Industry pins configuration for
