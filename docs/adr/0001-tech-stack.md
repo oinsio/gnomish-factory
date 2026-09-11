@@ -49,7 +49,13 @@ Negative:
 
 **No framework (manual DI)** and **Dagger 2**: viable for three port families, but rejected in favor of a minimal Spring container to avoid hand-rolled wiring and config binding.
 
-**JGit**: full git implementation in-process, but shelling out to `git` is simpler, matches how agent CLIs operate on the working copy, and avoids a heavy dependency.
+**JGit**: full git implementation in-process, but shelling out to `git` is simpler, matches how agent CLIs operate on the working copy, and avoids a heavy dependency. Re-examined on 2026-09-11 against the built git adapter; three facts keep the decision in place:
+
+- **Git runs inside the sandbox too.** The container medium commits, pushes, and resets through `git` invoked inside the task environment, where the sandbox image contract puts the binary on `PATH`. No in-process library reaches that side, so a second (CLI) implementation would exist regardless.
+- **Linked worktrees.** The factory manages task working copies with `git worktree add/remove/prune` and keys its clone-mutation lock on `rev-parse --git-common-dir`. JGit 7.0 added read-only worktree awareness; creating and managing worktrees remains unsupported.
+- **Operator authentication.** The factory inherits the operator's `GIT_SSH_COMMAND`, credential helpers, ssh-agent, and `.ssh/config` without writing any secret itself. JGit supports neither `GIT_SSH_COMMAND` nor credential helpers; its SSH goes through a separate Apache MINA module with its own agent limitations.
+
+The one thing a library would add — a typed authentication-failure signal — is covered by the probe described in ADR 0005.
 
 **OWASP Dependency-Check, SpotBugs + FindSecBugs, SonarCloud (instead of the CodeQL / OSV-Scanner / Gitleaks trio)**: Dependency-Check does OSV-Scanner's job but slowly and behind an NVD API key; SpotBugs+FindSecBugs overlaps Error Prone and CodeQL as a third bytecode analyzer; SonarCloud duplicates gates the build already enforces more strictly (PIT vs coverage smells). ArchUnit is deferred, not rejected — architecture-boundary tests arrive with the first ports/adapters change.
 

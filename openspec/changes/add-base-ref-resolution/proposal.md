@@ -307,9 +307,10 @@ and the rest from the ref being built. This change adopts that mechanism.
 - FR9: a failure to discover, fetch, or resolve the base in take/serve SHALL
   classify as an infrastructure failure, distinguished **by cause, never by
   the step that observed it**, from task-level failures (a ref that does not
-  exist, an authentication refusal, a diverging local tag, a remote that
-  refuses fetch-by-SHA, and an underdetermined designator are NOT this
-  class). The same classification SHALL apply to every claim-time fetch of
+  exist, a per-ref refusal by a remote that still answers, a diverging local
+  tag, a remote that refuses fetch-by-SHA, and an underdetermined designator
+  are NOT this class; a credential the remote refuses before any ref is
+  confirmed IS this class, per `docs/adr/0005-dependency-outage-accounting.md`). The same classification SHALL apply to every claim-time fetch of
   any ref, so a later change fetching another branch at claim (for example
   an epic branch for inherited context) inherits this rule rather than
   choosing its own: bounded retries via

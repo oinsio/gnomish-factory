@@ -193,9 +193,16 @@ trusted/task tier split, and the law-root rule.
   own representation (a GitHub label rule, a future Jira native field).
   `base` is the first kind; `type` (task routing) is the next, added by a
   later change on the same mechanism.
-- **Base pin** — the `(resolved ref, SHA, source rule)` triple written into
-  `task.json` at task creation. Resume reads the pin and never re-resolves
-  the base from tracker data or configuration.
+- **Base pin** — the `(resolved ref, ref kind, SHA, source rule)` record
+  written into `task.json` at task creation. The **ref kind** is the
+  namespace origin held the name in — branch, tag, or commit — as the refresh
+  established it; a pin written by the manual tier, which classifies nothing,
+  carries no kind. Resume reads the pin and never re-resolves the base from
+  tracker data or configuration: it refreshes the pinned name in the pinned
+  kind's namespace only, so a name later reused in the other namespace
+  neither redirects nor parks the task. The SHA is not a second way of
+  finding the base — it *is* the commit the task branch was created from,
+  read once from the refresh's destination ref (`docs/adr/0006`).
 - **Law commit** — the commit a task's pipeline law (`.gnomish/` stage
   manifests, stage instructions, judge criteria) is read from once a ref has
   been resolved for it: the pinned SHA on a fresh start, the current tip of

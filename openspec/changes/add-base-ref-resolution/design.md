@@ -661,9 +661,14 @@ extend `RestartBackoff`, do not fork it.
 - [Recovery herd: every slot and instance resumes claiming the moment the
   remote returns] → probes are jittered, the WIP limit throttles fresh
   starts, and a probe is one cheap `ls-remote`, not a claim.
-- [A single bad ref or a revoked credential opens the gate for every task]
-  → classification by cause (FR9): only reachability failures open it; the
-  rest park the one task they belong to.
+- [A single bad ref opens the gate for every task] → classification by
+  cause (FR9): a refusal by a remote that still answers parks the one task
+  it belongs to, and only reachability failures open the gate.
+- [A revoked credential opens the gate for every task] → it does, and that
+  is the decision, not the leak: the condition is the daemon's credential,
+  so parking the backlog task by task would be the worse ending. ADR 0005's
+  credential-failure section records the split and the two limitations it
+  accepts; `RemoteAuthRefusalSpec` pins it.
 - [A change to the allowed bases on the default branch is invisible to a
   running serve until restart] → accepted (D15): the trusted tier is
   startup-scoped like `tracker:`; the operator guide names the restart, and

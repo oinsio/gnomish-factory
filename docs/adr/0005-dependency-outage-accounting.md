@@ -1,7 +1,8 @@
 # ADR 0005: Dependency Outage Accounting
 
 Status: accepted-and-implemented (2026-09-06, introduced by
-`add-base-ref-resolution`; implemented 2026-09-08)
+`add-base-ref-resolution`; implemented 2026-09-08; amended 2026-09-11 — the
+credential-failure split below)
 
 ## Context
 
@@ -50,11 +51,13 @@ backoff, or fuse accounting moves.
 ### Classification is by cause, never by step
 
 The class of a failure is decided by what was observed, not by which step
-observed it. Only reachability (connect, DNS, timeout, bounded retries
-exhausted) is the daemon's class. A ref that does not exist on the remote,
-an authentication refusal, a diverging local tag, a remote refusing a
-fetch-by-SHA, a malformed configuration on the base, an underdetermined
-selection — these are the task's, and they park the task with a report.
+observed it. Only reachability is the daemon's class: connect, DNS, timeout,
+bounded retries exhausted, and a credential the remote refuses before any ref
+is confirmed (the next section draws that line). A ref that does not exist on
+the remote, a per-ref refusal by a remote that still answers, a diverging
+local tag, a remote refusing a fetch-by-SHA, a malformed configuration on the
+base, an underdetermined selection — these are the task's, and they park the
+task with a report.
 
 The rule binds **every** claim-time fetch of **any** ref. A change that adds
 another fetch before the first round (the epic branch for inherited context,
@@ -62,6 +65,73 @@ a baseline probe, a sibling branch) inherits this classification and may not
 choose its own. The classifier already exists: the branch locate step's
 three-way answer — origin answered and holds no such ref / origin holds it /
 origin never answered — is the one to reuse.
+
+### A credential failure is the daemon's; a per-ref refusal is the task's
+
+*Amendment of 2026-09-11, from a `/check-issue` verification of the refs read.
+The original wording put every "authentication refusal" in the task's class,
+which the code never implemented and should not.*
+
+Two situations wear that one name, and the factory already tells them apart
+by behavior rather than by wording:
+
+- **Origin answered the read and refused one ref.** The ref exists, origin
+  serves other reads, and only this fetch was declined — most often a
+  protected ref or a token scoped away from it. This is the **task's**:
+  `OriginProbe` confirms origin still answers, and the task parks with a
+  report naming the ref (`docs/adr/0006-base-refresh-fetch.md`).
+- **Origin refused the read itself.** A revoked, expired or mis-scoped daemon
+  credential fails `ls-remote` before any ref is confirmed, so the base refs
+  read, the default-branch discovery and the gate's own probe all fail
+  together. This is the **daemon's**: the condition belongs to the factory's
+  credential, not to any task. Parking task after task for it would park the
+  whole backlog one report at a time — the exact ending the principle above
+  exists to prevent — so it opens the gate, and the gate stays open, because
+  no probe can pass until a human replaces the credential.
+
+The split is drawn by **what the remote did**, never by reading git's words.
+The git CLI exits 128 for a refused credential, a refused repository and an
+unreachable host alike; `RemoteBaseRef` and `RemoteDefaultBranch` classify on
+that exit alone and parse no stderr. The probe is the whole mechanism: a
+remote that still answers `ls-remote origin HEAD` may put a task-level
+refusal on the record, one that does not may not.
+
+A survey of orchestrators (2026-09-11) finds the same split drawn the same
+way, and the same dependence on the client:
+
+- **Renovate** drives the git CLI and therefore parses stderr;
+  `checkForPlatformFailure` maps `remote: Invalid username or password` and
+  `The requested URL returned error: 403` to `ExternalHostError` — the same
+  class as `Could not resolve host` and `Failed to connect to`. A credential
+  failure is a host condition there too.
+- **Flux `source-controller`** keeps a distinct `AuthenticationFailed` reason
+  for the operator, but retries it on the same exponential backoff as a
+  network failure; only a *configuration* error stalls reconciliation.
+- **Argo CD** retries `ls-remote` on timeouts, 5xx, 429 and connection resets
+  only, returning every other failure immediately — no budget spent on a
+  refusal.
+- Library-based clients get the distinction typed and free: go-git maps HTTP
+  401 to `ErrAuthenticationRequired` and 403 to `ErrAuthorizationFailed`,
+  libgit2 raises `GIT_EAUTH`. A CLI wrapper has no such signal, which is why
+  the probe stands in for it here.
+
+Two limitations are accepted rather than fixed, and are recorded so a later
+change inherits the decision instead of rediscovering it:
+
+- **The bounded retry is spent first.** A refused read is unsettled in the
+  retry's sense, so three `ls-remote` attempts go to it before the gate
+  opens; Argo CD would spend none. Accepted: three cheap reads per slot that
+  reaches the failure, after which the gate stops further claims, so the cost
+  does not scale with the backlog.
+- **The operator-facing wording is reachability-shaped.** The `GF145` WARN
+  and the snapshot's `lastError` carry git's own scrubbed detail, so
+  `Authentication failed for ...` is legible in them, but the surrounding
+  text says origin did not answer. A distinct credential-failure operator
+  event would be the improvement; it needs stderr patterns under the already
+  pinned `LC_ALL=C`, and that is a separate decision from this one.
+
+`RemoteAuthRefusalSpec` (`:adapters:git`) pins all of the above against a
+real HTTP origin that answers 401.
 
 ### The remote outage gate
 
@@ -157,6 +227,13 @@ survey names.
 - **Reset the probe interval on the closing probe** — turns a flapping
   remote into a claim-and-release cycle; rejected in favour of resetting on
   the first successful refresh.
+- **Park the task on a credential failure, by matching git's stderr** — the
+  only way a CLI wrapper could draw the line without the probe, and the one
+  surveyed system that does parse those patterns reaches the opposite
+  conclusion with them: Renovate calls a refused credential a host
+  condition. Parking would turn one revoked token into a backlog parked task
+  by task, for a condition no task caused and no task can fix. Rejected on
+  the principle, not on the parsing.
 
 ## Consequences
 
@@ -172,6 +249,9 @@ survey names.
   collapsed.
 - An operator reading `serve` during an outage gets one answer from one
   place: blocked on which remote, since when, next probe when.
+- A revoked daemon credential stops intake instead of parking the backlog.
+  It is the one outage class that cannot recover on its own, so the
+  sustained-open ERROR (`GF146`) is what carries it to a human.
 
 ## See also
 

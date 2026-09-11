@@ -52,6 +52,28 @@ After a successful fetch the factory reads `refs/remotes/origin/<n>`,
 `refs/tags/<n>`, or verifies the object itself. `FETCH_HEAD` is never read
 anywhere in the factory.
 
+### The commit read from the destination is the only start point
+
+Once the refresh has read a commit back from its destination ref, **that
+commit is what everything downstream uses**: the law is read at it, the task
+branch is created from it, and it is recorded as `baseCommit`. A ref *name*
+crosses a port only as pin metadata or inside a `LawBinding` — never as a
+value a component below is expected to resolve.
+
+The rule exists because git's bare-name lookup order (gitrevisions:
+`$GIT_DIR/<n>`, `refs/<n>`, `refs/tags/<n>`, `refs/heads/<n>`,
+`refs/remotes/<n>`, `refs/remotes/<n>/HEAD`) does not reach
+`refs/remotes/origin/<n>`, which is where the branch refresh above lands. A
+component re-resolving the base name after a successful refresh therefore
+answers with a *stale local branch*, a *planted local tag*, or nothing at all
+— reproduced on a bare origin on 2026-09-10, once for each of the three.
+Passing the fully qualified name instead would still leave two resolutions,
+and a human's own `git fetch` can move `refs/remotes/origin/<n>` between them.
+
+Enforcement is the type: `TaskRepository.createTask` takes an `ObjectId`, and
+the two lifecycle adapters only verify the object is a commit this repository
+holds. Provenance: `add-base-ref-resolution`, section 10.
+
 ### Serialization is the clone lock, not git's ref lock
 
 All mutating git calls against one clone already serialize on the
@@ -112,7 +134,10 @@ itself.
 ### Failure classes
 
 A remote that never answers a fetch or a probe is a reachability failure,
-charged to the daemon per ADR 0005. A diverging local tag, a remote that
+charged to the daemon per ADR 0005. So is a remote that refuses the refs
+read itself — a revoked or mis-scoped daemon credential, which no ref and no
+task can be blamed for; ADR 0005 draws that line and this change's
+`RemoteAuthRefusalSpec` pins it. A diverging local tag, a remote that
 refuses fetch-by-SHA (the report names the `uploadpack.allow*SHA1InWant`
 option), a remote that answers but refuses a branch or tag fetch after
 confirming the ref exists, and a ref origin reports absent are the task's,
@@ -151,6 +176,11 @@ and park it with a report.
   silent choice, at the cost of a rare human intervention.
 - The SHA path is the only one that can succeed with zero network, which
   is exactly the manual `--base <sha>` case D7 protected.
+- Because the start point is a commit rather than a name, a clone whose local
+  refs disagree with origin — the normal state of a clone a human also uses —
+  can no longer redirect a task branch. The cost is that every caller must
+  hold the peel, which is why the manual `run` tier binds its law before it
+  creates its branch.
 
 ## See also
 

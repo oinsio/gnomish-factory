@@ -343,17 +343,17 @@
 > origin-only branch, and a planted local tag winning the start point — all
 > after a successful refresh (FR15, NFR-S1).
 
-- [ ] 10.1 TDD `LawBinding.atCommit(ObjectId)`: a binding that already holds
+- [x] 10.1 TDD `LawBinding.atCommit(ObjectId)`: a binding that already holds
       the peeled commit; `LawSources.open` returns it as the law commit with
       no `rev-parse`, and the git-objects realization is rooted at it exactly
       as for `atRevision`; `LawBindingSpec` covers the new variant and the
       law-source contract test asserts no resolution call for it (D12)
-- [ ] 10.2 `TaskTierLaw.Bound` carries the typed `ObjectId lawCommit` next to
+- [x] 10.2 `TaskTierLaw.Bound` carries the typed `ObjectId lawCommit` next to
       the definition and exposes `LawBinding.atCommit(lawCommit)` as the
       binding to assemble under — the hex downgrade is deleted;
       `TaskTierLawSpec` asserts the commit in `Bound` is the one
       `LawSources.open` peeled (D12)
-- [ ] 10.3 Revise the port: `TaskRepository.createTask(context, lawCommit,
+- [x] 10.3 Revise the port: `TaskRepository.createTask(context, lawCommit,
       pin, initialState)` — the start point is a typed commit, the pin
       `(ref, kind, rule)` is metadata; `TaskBranchCreator.createBranch` and
       `GitObjectsTaskRepository.createTask` take the commit, run no
@@ -365,37 +365,37 @@
       step and their `Kept in sync with` invariant line names the commit
       input; the two push-best-effort decorators pass it through
       (FR15, sync surface)
-- [ ] 10.4 Wire the fresh-claim pair: `TakeFreshClaim` and
+- [x] 10.4 Wire the fresh-claim pair: `TakeFreshClaim` and
       `TakeContainerFreshClaim` pass `bound.lawCommit()` into
       `GitFreshTaskSupport.createTask`; `FreshClaimBaseBinding.Bound` keeps
       the `BaseRefKind` from `Refreshed` for the pin instead of discarding
       it; `Kept in sync with` markers updated at both ends; mirrored specs
       assert the branch's first parent equals `Refreshed.commit` on both
       media (FR15, D6)
-- [ ] 10.5 Manual `run` (`GitModeRunner`, `ContainerGitModeRunner`): bind the
+- [x] 10.5 Manual `run` (`GitModeRunner`, `ContainerGitModeRunner`): bind the
       law through `ManualRunLawBinding` first, then create the branch from
       the bound law commit; a working-tree binding that yields no checkout
       commit fails with a `UsageException` naming the missing repository,
       never with a fallback to a name; the offline no-`--base` scenario still
       makes zero remote calls (FR8, FR15, UX3)
-- [ ] 10.6 TDD the pin's kind: `BasePin` gains `BaseRefKind`; `TaskJsonMapper`
+- [x] 10.6 TDD the pin's kind: `BasePin` gains `BaseRefKind`; `TaskJsonMapper`
       writes and reads `baseKind` behind the wire version gate; a pin without
       it reads with kind absent; data-driven round-trip spec iterates every
       `BaseRefKind` constant plus the unknown-token arm (FR7)
-- [ ] 10.7 Resume by pinned kind: `BaseRefGit.resolveForResume` takes the
+- [x] 10.7 Resume by pinned kind: `BaseRefGit.resolveForResume` takes the
       optional pinned kind; `BaseRefresh` skips the `ls-remote`
       classification and fetches that namespace only when a kind is given,
       classifies as before when it is absent; `ResumeLawBinding` and
       `ManualResumeLawBinding` pass the pin's kind; spec: a tag pushed under a
       pinned branch's name does not park the resume (FR7, D7, D11a)
-- [ ] 10.8 Regression spec on a bare origin (`adapters/git`, real git): a clone
+- [x] 10.8 Regression spec on a bare origin (`adapters/git`, real git): a clone
       whose local `main` is behind origin, a branch existing only on origin,
       and a planted local tag carrying the base name; for each, the task
       branch's first parent, the law commit, and `task.json`'s `baseCommit`
       equal `Refreshed.commit`, and the clone's `refs/heads/*`, tags, and
       HEAD are unchanged; run twice to assert idempotent recovery is
       untouched (FR15, NFR-S1, git-task-persistence scenarios)
-- [ ] 10.9 Grep gate in the style of 6.1: no `rev-parse` of a base *name*
+- [x] 10.9 Grep gate in the style of 6.1: no `rev-parse` of a base *name*
       remains in `adapters/git` outside `BaseRefresh`, `RefreshedTip`,
       `TagBaseFetch`, `CommitBaseFetch`, and `ResumeBaseResolution.localTip`;
       amend `docs/adr/0006-base-refresh-fetch.md` with the durable rule "the
@@ -403,10 +403,10 @@
       crosses a port only as pin metadata or inside a `LawBinding`"; rewrite
       the `TaskBranchCreator` javadoc, which still states the pre-refresh
       contract; glossary entry *base pin* names the kind (D12, no-jargon rule)
-- [ ] 10.10 `./gradlew :adapters:check :adapters:git:check :application:check
+- [x] 10.10 `./gradlew :adapters:check :adapters:git:check :application:check
       :bootstrap:check` green with 100% mutation score; the kill-point matrix
       of 8.4 passes unchanged, confirming no durable step was added (NFR-R1)
-- [ ] 10.11 Make the shared clone fixture adversarial by default
+- [x] 10.11 Make the shared clone fixture adversarial by default
       (`testing.md`, "Git fixtures are adversarial by default"): the clone
       `BareGitRepoFixture` hands out carries a local branch under the base
       name one commit behind origin and a local tag under the same name
@@ -414,3 +414,64 @@
       explicitly; the whole `adapters/git`, `application`, and `bootstrap`
       suites stay green on the new default — any spec that goes red is a
       bare-name resolution to fix, not a fixture to relax (FR15, NFR-S1)
+
+## 11. Credential-refusal classification, recorded (check-issue 2026-09-11)
+
+> No code change: the `/check-issue` verification of the refs read found the
+> behavior right and the written rule wrong. FR9 listed every "authentication
+> refusal" as task-level, while a credential the remote refuses before any ref
+> is confirmed is — and should be — the daemon's. The record is what moves.
+
+- [x] 11.1 Amend `docs/adr/0005-dependency-outage-accounting.md` with the
+      credential-failure split: origin refused the read (daemon, opens the
+      gate, no probe can close it) versus origin answered and refused one ref
+      (task, parks with a report through `OriginProbe`); the 2026-09-11
+      survey (Renovate, Flux, Argo CD, go-git/libgit2) that finds the same
+      split; the two accepted limitations — the bounded retry is spent first,
+      and the operator wording is reachability-shaped; the rejected
+      alternative of parking the task by matching git's stderr (FR9, FR14)
+- [x] 11.2 Bring the artifacts that state the old rule into line: FR9 in
+      `proposal.md`, the risk line in `design.md` that claimed a revoked
+      credential parks only its own task, and the failure-classes paragraph
+      of `docs/adr/0006-base-refresh-fetch.md`
+- [x] 11.3 TDD `RemoteAuthRefusalSpec` against a real HTTP origin answering
+      401 — a rejected token and no credentials at all both classify as the
+      daemon's for the base refresh and the default-branch discovery, the
+      gate's probe cannot pass, and the bounded retry is spent first; the
+      served-request count is the evidence that origin answered and refused,
+      which no exit-code fake could establish (FR5, FR9, FR14)
+
+## 12. Untrusted-text findings of the 2026-09-11 review (check-issue report 4)
+
+> The review's report 4 named raw git stderr in `TakeResult.reason()`; the
+> stderr half was refuted (`GitCommandResult.failureDetail` already sanitizes),
+> the real vector was tracker/`task.json`/manifest text folded raw into the
+> three base reports and the two bindings. The per-field `LogText.forLog`
+> patch is in the tree (`BaseReportSanitizingSpec`, `ResumeLawBindingSpec`).
+> The systemic follow-ups are `harden-untrusted-text-sinks`,
+> `split-logtext-leaves`, `type-untrusted-text`; the three items below are
+> this change's own code and stay here.
+
+- [x] 12.1 Per-field sanitizing in `FreshClaimBaseReport`, `ResumeBaseReport`,
+      `BaseLawReport`, and the bare `resolvedRef`/`pinnedRef` log arguments and
+      `InfrastructureUnavailable` text in `FreshClaimBaseBinding` /
+      `ResumeLawBinding` (FR2, FR6, FR9, FR12, FR13; FR6 of
+      harden-logging-observability). Verify: `BaseReportSanitizingSpec` (five
+      features, red before the fix) and the `ResumeLawBindingSpec` release-reason
+      feature green; `:application:check` and `:bootstrap:check` green
+- [ ] 12.2 TDD (red first): `RefNameSyntax` at the three ref entries the review
+      found unvalidated — the pin read at `TaskJsonMapper:125` (a malformed
+      `baseRef` in `task.json` parks with a report naming the document, never
+      reaches a fetch), `task-branch.base.default` when `allowed` is empty
+      (`BaseConfigMapper.checkDefault` — a located `ConfigError`), and the branch
+      name parsed by `RemoteDefaultBranch.symrefBranch` (a name with a control
+      character is `Undetermined`, not `Discovered`) (FR1, FR4, NFR-S3; refuse,
+      not escape — the git `check-ref-format` posture). Verify: three red specs,
+      then green; existing `BaseConfigMapperSpec` / `RemoteDefaultBranchSpec` /
+      `TaskJsonMapperBasePinSpec` green
+- [ ] 12.3 `GitCommandResult.cannotVerifyDetail` applies `CredentialScrub` like
+      `failureDetail` does, and its javadoc names the invariant it rests on
+      (`GitProcessRunner:230` scrubs at capture) instead of leaving it implicit
+      (NFR-S2 of fix-lifecycle-push). Verify: a `GitCommandResultSpec` feature with
+      a `https://token@host` URL in stderr shows `***` in both details
+
