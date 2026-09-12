@@ -129,8 +129,12 @@ binding — the same bounded, fail-closed fetch as the base refresh (ADR
 0006), with the same per-kind destinations. A SHA base needs no fetch at
 all, since the object is already in the task branch's history; an
 unreachable remote is an infrastructure failure that releases the claim.
-Manual resume in a clone without a reachable remote binds from the local ref
-tip. A pinned ref that no longer resolves anywhere (a series branch deleted
+Manual `run --resume` never fetches at all: it holds no claim and has no
+tracker to park or release a task with, so it binds from the pinned ref's
+LOCAL tip in the operator's clone (`ManualResumeLawBinding`), reachable
+remote or not — the offline manual contract. The local-tip fallback inside
+the autonomous path is a different case: a clone with no `origin` configured
+at all. A pinned ref that no longer resolves anywhere (a series branch deleted
 after release) parks the task with a report — the task is probably obsolete,
 and silently falling back to the pinned SHA would hide that.
 

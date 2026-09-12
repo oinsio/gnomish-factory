@@ -36,7 +36,7 @@ protocol v0 without those options refuses it.
 |-----------|---------|-----|
 | branch | `+refs/heads/<n>:refs/remotes/origin/<n>` | the remote-tracking ref is the clone's cache of origin; updating it is what fetch is for, it is what the resume locate step already does, and `git log origin/<n>` stays truthful for the operator |
 | tag | `refs/tags/<n>:refs/tags/<n>`, without force | tags have no remote-tracking namespace and an ordinary fetch auto-follows them into `refs/tags/` anyway; no force keeps git's own semantics — create if absent, refuse to move an existing tag. A refusal means the operator clone's tag diverges from origin's: a task-level park with a report naming both commits, never a silent pick |
-| SHA | `<sha>`, no destination | a commit has no tip to refresh; the only question is "do I hold it". Check `cat-file -e <sha>^{commit}` first (zero network when present, the usual manual `--base` case), fetch by SHA only when absent, check again. No ref is needed: the task-creation commit references the object seconds later, far inside git's prune grace |
+| SHA | `<sha>`, no destination | a commit has no tip to refresh; the only question is "do I hold it". Check `rev-parse --verify --quiet <sha>^{commit}` first (zero network when present, the usual manual `--base` case), fetch by SHA only when absent, check again. No ref is needed: the task-creation commit references the object seconds later, far inside git's prune grace. An abbreviation a *ref* of this clone answers to is refused rather than resolved (`rev-parse --symbolic-full-name`): git's lookup order would otherwise let a local branch or tag named in hex stand in for the object of the same prefix. A full 40/64-character name needs no such guard — git ignores any ref whose name is a whole object name |
 
 ### Flags on every refresh
 
@@ -45,6 +45,11 @@ protocol v0 without those options refuses it.
 non-standard `remote.origin.fetch` cannot make the fetch move refs the
 factory did not name). Full depth, never shallow: resume must resolve
 history.
+
+`NarrowFetch` is the one construction site of that argv, and it serves every
+factory fetch rather than the base refresh alone: the resume/inspection task-branch
+locate (`TaskBranchLocator`) is built there too, so no caller can quietly acquire a
+different flag set.
 
 ### The SHA is read from the destination, never from `FETCH_HEAD`
 
@@ -91,31 +96,37 @@ other `refs/remotes/origin/*`. Pull remains forbidden on every path.
 
 ### Resume
 
-Resume never re-resolves the base; it re-fetches the *pinned ref name* to
-bind the law from its current tip, with the same destinations and flags. A
-SHA base needs no fetch at all: the object is already in the task branch's
-history.
+Autonomous resume never re-resolves the base; it re-fetches the *pinned ref
+name* to bind the law from its current tip, with the same destinations and
+flags. A SHA base needs no fetch at all: the object is already in the task
+branch's history. Manual `run --resume` fetches nothing at all — see ADR 0007.
 
 ### Auth refusal vs. genuine outage: the origin probe
 
 *Landed wider than this ADR originally scoped it.* At planning time (design
 D11) the probe-based disambiguation was sketched only for the SHA path,
 where a fetch is asked for blind with no prior refs read to lean on. Task
-7.1 generalized it: a fetch that exits zero but leaves no object at the
-named destination is ambiguous on **every** kind, not only SHA — a remote
-that answered a `refs/heads/<n>`/`refs/tags/<n>` read a moment earlier can
+7.1 generalized it: a fetch that **failed** and left no object at the named
+destination is ambiguous on **every** kind, not only SHA — a remote that
+answered a `refs/heads/<n>`/`refs/tags/<n>` read a moment earlier can
 still refuse the fetch itself (most often an authentication or permission
 problem scoped to that ref), and git's own exit detail cannot tell that
 apart from the remote going dark in between. `OriginProbe` (one bounded
 `git ls-remote origin HEAD`, no object transfer, no ref written) answers
 that second, simpler question directly instead of parsing git's localized
-wording. It is now the single mechanism behind all three undelivered-fetch
+wording. It is the single mechanism behind all three undelivered-fetch
 paths:
 
 - **Branch and tag** — `RefreshedTip.of`, shared by `BaseRefresh.fetchBranch`
-  and `TagBaseFetch.fetch`, probes on an undelivered fetch and returns a
+  and `TagBaseFetch.fetch`, probes a fetch that did not exit zero and returns a
   task-level `Refused` (probe answers) or an `Unavailable` (probe fails or
-  the invocation itself did not exit).
+  the invocation itself did not exit). A fetch that exits **zero** and still
+  leaves no ref is not put to the probe: git reported success, so nothing
+  points at a per-ref refusal, and the honest class is `Unavailable` — the
+  clone could not establish freshness, and the daemon is charged for it
+  (`BaseRefreshSpec`, "a fetch that exits zero without delivering the ref").
+  The SHA path differs deliberately: it has no prior refs read, so it probes
+  on any non-delivery, exit code included.
 - **Commit SHA** — `CommitBaseFetch`'s own `OriginProbe` instance, same
   classification, since a SHA fetch has no prior refs read to lean on at
   all.

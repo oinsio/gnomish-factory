@@ -75,7 +75,7 @@
       `+refs/heads/<n>:refs/remotes/origin/<n>`; tag →
       `refs/tags/<n>:refs/tags/<n>` without force, a diverging local tag
       yielding the task-level refusal with both commits; SHA →
-      `cat-file -e <sha>^{commit}` first, fetch by SHA only when absent,
+      `rev-parse --verify --quiet <sha>^{commit}` first, fetch by SHA only when absent,
       verify again, no ref written; every call with `--no-tags`,
       `--no-write-fetch-head`, empty `--refmap=`, full depth; the SHA read
       back from the destination ref or object, never `FETCH_HEAD`; assert
