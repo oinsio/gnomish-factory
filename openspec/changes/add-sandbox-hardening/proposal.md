@@ -231,6 +231,9 @@ snapshot provisioning surface. Threat-registry items closed: #11, #15
   built with the factory CA in `ca/` need no rebuild to enable
   interception, while images built with the (previously valid) empty
   `ca/` need one rebuild with the CA present — docs cover both paths.
+- UX5: a setup.sh that leaves content under a path the base image
+  declares as a volume gets a provisioning error naming that path and the
+  fix — never a snapshot that silently lacks part of its toolchain.
 - UX4: docs instruct repo maintainers to pin versions in setup.sh
   (lockfile discipline), making the snapshot TTL a safety net rather than
   the working mechanism.
@@ -280,5 +283,8 @@ snapshot provisioning surface. Threat-registry items closed: #11, #15
   rules, snapshot TTL.
 - Depends on change A (CA import seam in the reference image, mitmdump
   guard, env-allowlist seam, SecretsProvider port), on
-  `fix-denial-attribution-durability` and `add-serve-sandbox-lifecycle`
-  landing first; `docs/glossary.md` gains entries for the new terms.
+  `fix-denial-attribution-durability`, `add-serve-sandbox-lifecycle` and
+  `fix-image-declared-volumes` (declared-volume override: the guard's
+  confdir is ephemeral, the provisioning container takes the override,
+  snapshots inherit their base image's declarations) landing first;
+  `docs/glossary.md` gains entries for the new terms.

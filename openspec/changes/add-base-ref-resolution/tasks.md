@@ -487,3 +487,25 @@
       (NFR-S2 of fix-lifecycle-push). Verify: a `GitCommandResultSpec` feature with
       a `https://token@host` URL in stderr shows `***` in both details
 
+- [x] 12.4 The repository default branch is a type, not a string (check-issue
+      2026-09-12, follow-up to 12.x). `DefaultBranch` in `:baseref` — validated
+      short branch name, `HEAD` refused as git's own `strbuf_check_branch_ref`
+      refuses it — replaces the `String` in `DefaultBranchDiscovery.Discovered`,
+      `TrustedTierStartup.StartupLaw`, `TrustedBaseContext` and
+      `BaseRefRequest.defaultBranch`, and is built in exactly one place
+      (`RemoteDefaultBranch.discovered`, which is where the ref-name check
+      already lived) (FR4, FR5, FR10, M2, NFR-S3). Why: the default-branch tier
+      reports "the repository default branch reported by the remote", and while
+      the value travelled as a string any caller on the startup path could stand
+      in `"HEAD"` — an autonomous claim branching from the shared clone's
+      checkout under a sentence saying origin chose it. The only thing standing
+      in the way was `BaseHeadDefaultBoundarySpec`'s hand-maintained file list,
+      which had already fallen behind (its three producers were unlisted), so the
+      gate's trusted-tier half moves onto the type and the list keeps only the
+      half no type covers. Verify: `DefaultBranchSpec` (seven features); a
+      `RemoteDefaultBranchSpec` feature proving the path reachable on real git —
+      `update-ref refs/heads/HEAD` then `symbolic-ref HEAD refs/heads/HEAD` makes
+      `ls-remote --symref` really answer `ref: refs/heads/HEAD`, now
+      `Undetermined` rather than `Discovered`; a `BaseRefResolverSpec` feature
+      that the tier cannot be handed the local HEAD at all; `:baseref`,
+      `:adapters:git`, `:application`, `:bootstrap` `check` green

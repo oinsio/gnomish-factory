@@ -4,9 +4,11 @@ Order follows the migration plan (design): gateway first (no TLS
 complexity), provisioning second (independent), interception third, E2E
 and docs last. Every layer lands behind its own default-off switch.
 Requires change A (`add-sandbox-core`) implemented. Coordination:
-`fix-denial-attribution-durability` and `add-serve-sandbox-lifecycle`
-land first; the findings slot already exists (task 2.7) and container
-labels follow the `sandbox-lifecycle` scheme (task 4.4/4.5).
+`fix-denial-attribution-durability`, `add-serve-sandbox-lifecycle` and
+`fix-image-declared-volumes` land first; the findings slot already
+exists (task 2.7), container labels follow the `sandbox-lifecycle`
+scheme (task 4.4/4.5), and every `docker run` this change adds takes
+`DeclaredVolumeOverrides` from its owner (tasks 4.2, 5.1).
 
 ## 1. Spikes and tool re-verification
 
@@ -37,15 +39,15 @@ labels follow the `sandbox-lifecycle` scheme (task 4.4/4.5).
 ## 4. Provisioning and snapshot cache
 
 - [ ] 4.1 Recognize `.gnomish/setup.sh` as law surface: read from the factory law clone, loading executes nothing (FR12)
-- [ ] 4.2 Provisioning flow: one-shot container from the base image with working copy materialized from the law clone, egress through the guard, gnome never enters (FR12, D6)
-- [ ] 4.3 Snapshot commit: fingerprint naming (`sha256(setup.sh)+base digest`), working copy and secret material removed before commit (FR13, FR16, D7)
+- [ ] 4.2 Provisioning flow: one-shot container from the base image with working copy materialized from the law clone, egress through the guard, gnome never enters; its `docker run` takes `DeclaredVolumeOverrides` from the owner (explicit destination: the working copy), so no anonymous volume is created — spec asserts the override fragments in the argv (FR12, D6)
+- [ ] 4.3 Snapshot commit: fingerprint naming (`sha256(setup.sh)+base digest`), working copy and secret material removed before commit; before committing, every base-image declared volume path is checked and a non-empty one fails provisioning as an infrastructure failure naming the path and the fix (`docker commit` captures no mount content) — Docker-gated spec with a base image declaring a `VOLUME` and a setup.sh writing under it (FR13, FR16, UX5, D7)
 - [ ] 4.4 Image resolution in the container adapter: valid snapshot first (name + TTL `factory.sandbox.snapshot-max-age`), else operator image; rebuild triggers (fingerprint, TTL, `gnomish env rebuild` / `--rebuild-env`); provisioning failure = infrastructure failure (FR13, NFR-P1, D8)
 - [ ] 4.5 Snapshot lifecycle: provisioning-scoped factory labels (project identity; snapshot images are outside the task-keyed `sandbox-lifecycle` scheme per its non-goal — this change owns their cleanup), superseded-image cleanup after successful build, label-based reclaim of orphaned provisioning containers/partial images, per-fingerprint provisioning lock (FR15, NFR-R2)
 - [ ] 4.6 Specs (Docker-gated): snapshot reuse, rebuild-exactly-once on content change, crash-safe cleanup, setup-secret hygiene incl. image history (M3, M6)
 
 ## 5. Interception, credential policy, L7
 
-- [ ] 5.1 Guard interception mode switch on the image CA seam (a factory CA must be generated and present in the image's `ca/`; images built with an empty `ca/` need one rebuild); per-host passthrough exceptions; unbuffered streaming settings (FR8, NFR-P1)
+- [ ] 5.1 Guard interception mode switch on the image CA seam (a factory CA must be generated and present in the image's `ca/`; images built with an empty `ca/` need one rebuild); the CA and key reach mitmdump through the read-only config mount (`--certs`-class option) — the confdir is an ephemeral declared volume and is neither read nor written for key material (D4); per-host passthrough exceptions; unbuffered streaming settings (FR8, NFR-P1)
 - [ ] 5.2 Credential policy at the guard: strip non-factory auth headers on policy hosts, optional injection with in-box sentinel; stripped headers → findings; credentials never logged (FR9, NFR-S2)
 - [ ] 5.3 Per-host L7 rules (paths, methods) from operator config; violations recorded like denials (FR10)
 - [ ] 5.4 Extended self-check probes per enabled layer: gateway/key valid, interception active, foreign header does not survive, disallowed tool stripped; failure = infrastructure failure (FR11, D5)
