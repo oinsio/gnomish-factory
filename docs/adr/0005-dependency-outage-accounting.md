@@ -136,7 +136,9 @@ real HTTP origin that answers 401.
 ### The remote outage gate
 
 `serve` keeps one gate per remote target. A slot's reachability failure
-opens it; the feed consults it *before* every claim and claims nothing while
+opens it — reported at the base read itself, by the decoration every slot's
+`BaseRefGit` carries, never inferred from the slot's terminal result, which
+would carry a refresh hours old; the feed consults it *before* every claim and claims nothing while
 it is open, so an open gate costs the tracker nothing. While open, the daemon
 probes the remote with a tracker-free reachability check (`ls-remote`) on a
 jittered interval that grows from the idle interval to a configured cap; the

@@ -205,8 +205,11 @@ first push. Kill windows and shapes:
    re-resolution is legal by construction. The claim release of an
    infrastructure failure (D9) is a tracker write that follows the failed
    fetch; a kill between the two freezes the same `Claimed` shape with the
-   same reaper owner (NFR-R3); a kill after the release is `Ready`, not a
-   window. The gate D9 opens is process memory, not a durable step.
+   same reaper owner (NFR-R3); a kill after the release freezes
+   `ClaimAbandoned` — a release drops the claim footprint and leaves the
+   working label (FR15, D2 of add-tracker-port) — whose recovery owner is
+   that same reaper, by grace then stale-claim removal, so the window adds
+   no owner either. The gate D9 opens is process memory, not a durable step.
 2. *After the creation commit, before the first push* — the existing
    `task-branch-contract` shape (local branch unseen by origin); unchanged
    recovery (load-bearing first push / re-create on another instance).
@@ -217,21 +220,38 @@ the kill-point matrix of their owning capabilities; the new fetch only
 lengthens window 1. Because it does, this change adds the window's own
 kill-point spec (tasks 6.4, 8.4): kill after the claim and before
 `createTask`, drive the reaper on virtual time to `Ready`, assert the branch
-ref is absent, and assert a second reaper pass changes nothing. *Alternative rejected:* pinning in the tracker at claim
+ref is absent, and assert a second reaper pass changes nothing. The D9 route
+into the same window is a second row of the same table — claim, a real
+refresh against an unreachable `origin`, release — so the failed fetch's
+"nothing durable landed" is asserted rather than argued. *Alternative rejected:* pinning in the tracker at claim
 time — splits the pin from the branch it describes across two media.
 
 **D9 — A dead remote is the daemon's condition, not the task's: release
 the claim, gate the feed.** A base-refresh reachability failure is caught
 at the fresh-claim step, classified by cause (never by step), and answered
-with a plain `release`: no abort marker, no comment, no attempt burned, the
-task back in Ready (FR9). The take result is a typed `TakeResult` variant
+with a plain `release`: no abort marker, no comment, no attempt burned (FR9).
+The release moves no label — it drops the claim and leaves the logical
+state, per FR15/D2 of add-tracker-port, and the GitHub adapter's `release`
+is a documented no-op — so the task is back in Ready only once the reaper
+finds the claim stale, one claim TTL later. The kill-point row that covers
+the release (D8, NFR-R3) and `TrackerReleaseContract` pin exactly that for
+both adapters; the fenced immediate return the operator guides had implied
+is a separate port verb, `add-claim-return`, never a meaning `release`
+quietly grows. The revocation path keeps plain `release`: there a human may
+already have moved the label, which is the case the no-op was designed for. The take result is a typed `TakeResult` variant
 with its own exit code, never `Skipped` with free text. In serve the same
 failure opens the **remote outage gate** — one owner class per remote
 target, consulted by the feed before every claim, probing with a
 tracker-free `ls-remote` on a jittered, growing, capped interval
 (`RestartBackoff`'s policy), closed by the first successful probe, its
 interval reset only by the first successful base refresh after the close
-(FR14). Transitions are the log and snapshot signal (NFR-O1, NFR-O3, M4).
+(FR14). Both slot-side signals are emitted at the base read itself — a
+decoration of the slot's `BaseRefGit` reports each `refresh`/`resolveForResume`
+outcome to the gate as it returns — never derived from the slot's terminal
+result, which arrives hours after the refresh it implies and would reset
+the interval on a refresh that predates the outage (revised 2026-09-11; the
+original task 7.3 mapping of `TakeResult` variants to signals is withdrawn).
+Transitions are the log and snapshot signal (NFR-O1, NFR-O3, M4).
 The principle, the survey of orchestrators behind it, the recorded
 deviation from CI practice, the separate bound, and the rejected
 alternatives are `docs/adr/0005-dependency-outage-accounting.md`; the rule
@@ -544,7 +564,7 @@ flowchart LR
     Claim["claim + harden"] --> Resolve["resolve:<br/>--base > designator > default > repo default"]
     Resolve -->|underdetermined| Park["park with report<br/>(no attempt burned)"]
     Resolve --> Fetch["narrow fetch of the base"]
-    Fetch -->|infra failure| Release["release claim,<br/>open remote gate<br/>(task back to Ready)"]
+    Fetch -->|infra failure| Release["release claim,<br/>open remote gate<br/>(reaper restores Ready after TTL)"]
     Fetch --> Law["load task tier<br/>from base SHA (law commit)"]
     Law -->|load error| Park
     Law -->|"lawCommit (typed)"| Create["createTask from lawCommit:<br/>branch + pin (ref, kind, sha, rule)"]

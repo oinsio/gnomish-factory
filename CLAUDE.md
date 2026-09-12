@@ -46,6 +46,7 @@ Active changes: `openspec/changes/`. Archived: `openspec/changes/archive/` (immu
 | `diagrams.md`           | global                        | Mermaid diagram conventions                                |
 | `logging.md`            | `**/*.java`                   | Level policy, throwable form, untrusted text, MDC, suppression |
 | `crash-consistency.md`  | multi-step transitions        | Kill windows, shapes, recovery owners, ordering checklist  |
+| `lock-scope.md`         | every monitor / lock          | No blocking call under a state lock; three-phase shape, exceptions |
 | `manual-sync-pairs.md`  | hand-synced implementations   | Declared pairs, sync markers, rule-of-three extraction     |
 | `implementation.md`     | global                        | Single-owner mechanisms: consumer list, old-way sweep, DoD |
 | `stage-description.md`  | stage docs                    | IDEF0/ICOM + Quality Control format for pipeline stages    |

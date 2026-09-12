@@ -65,8 +65,12 @@ Give each subagent the project context (orchestrator, ports & adapters, module l
 - **concurrency** — enumerate objects reachable from concurrent paths (serve slots, reapers,
   tickers); for each mutable field: who writes, who reads, on which thread, what
   happens-before edge. Interrupt protocol: every blocking wait answers interruption, flag
-  restored. Virtual-thread pinning: `synchronized` around subprocess/blocking I/O.
-  Attach/set-after-construction across threads is a finding even without a proven race.
+  restored. Lock scope: every `synchronized`/`lock()` region against `lock-scope.md` — a
+  subprocess, network call, file I/O, sleep or caller-supplied callback inside one is a
+  finding unless the class's javadoc claims the resource-serializing exception and answers
+  its three bar items (the harm is waiter starvation, not carrier pinning, which JEP 491
+  removed). Attach/set-after-construction across threads is a finding even without a proven
+  race.
 - **crash-consistency** — take every multi-step durable transition (commit+push,
   push+tracker write, effect+receipt, create+delete) in `adapters/git` and the take/serve
   paths; check it against the `crash-consistency.md` checklist: kill windows named, each

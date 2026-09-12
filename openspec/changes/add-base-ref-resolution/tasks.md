@@ -217,7 +217,8 @@
       protocol's uncaught-exception arm is asserted unreached with a
       throwing-tracker fake (FR9)
 - [x] 7.2 TDD claim release on base infrastructure failure in take: plain
-      `release`, task back to Ready, no abort marker, no comment, abort
+      `release` (label untouched; the reaper returns the task to Ready
+      after the claim TTL), no abort marker, no comment, abort
       facts and backoff unchanged (seed a task with two aborts and assert
       still two); new `TakeResult` variant with exit code 16 in the exit
       mapper and a typed outcome-log line in serve (no `taskOutcome`
@@ -255,6 +256,14 @@
       the gate opened, one WARN and one recovery line, the first successful
       probe precedes the first post-outage claim, every task claimable
       again with zero abort facts (M4, G5)
+- [x] 7.7 Move the slot's gate signals to the base read itself (revision of
+      2026-09-11): a `BaseRefGit` decoration on the slot's `TaskGit` reports
+      `refresh`/`resolveForResume` outcomes to the gate as they return;
+      the terminal-result mapping in the slot runner is removed, and the
+      gate ignores a successful-refresh signal while open. Specs: the
+      decoration's three arms on a real gate, the slot's real refresh
+      observed on the gate's health, and the gate's own stale-signal
+      regressions (FR14, D9)
 - [x] 7.6 Integration spec against a local bare remote: zero-config serve
       claim branches from the remote default-branch tip observed at claim
       (M1); label-selected release base is fetched, validated, and pinned
@@ -459,7 +468,7 @@
       harden-logging-observability). Verify: `BaseReportSanitizingSpec` (five
       features, red before the fix) and the `ResumeLawBindingSpec` release-reason
       feature green; `:application:check` and `:bootstrap:check` green
-- [ ] 12.2 TDD (red first): `RefNameSyntax` at the three ref entries the review
+- [x] 12.2 TDD (red first): `RefNameSyntax` at the three ref entries the review
       found unvalidated — the pin read at `TaskJsonMapper:125` (a malformed
       `baseRef` in `task.json` parks with a report naming the document, never
       reaches a fetch), `task-branch.base.default` when `allowed` is empty
@@ -468,8 +477,11 @@
       character is `Undetermined`, not `Discovered`) (FR1, FR4, NFR-S3; refuse,
       not escape — the git `check-ref-format` posture). Verify: three red specs,
       then green; existing `BaseConfigMapperSpec` / `RemoteDefaultBranchSpec` /
-      `TaskJsonMapperBasePinSpec` green
-- [ ] 12.3 `GitCommandResult.cannotVerifyDetail` applies `CredentialScrub` like
+      `TaskJsonMapperBasePinSpec` green. Done 2026-09-11; the sweep found a
+      fourth entry, the operator's `--base` argument (bounded by no pattern), and
+      `BaseRefResolver` now refuses it under
+      `UnderdeterminedCause.EXPLICIT_BASE_MALFORMED` in the same task
+- [x] 12.3 `GitCommandResult.cannotVerifyDetail` applies `CredentialScrub` like
       `failureDetail` does, and its javadoc names the invariant it rests on
       (`GitProcessRunner:230` scrubs at capture) instead of leaving it implicit
       (NFR-S2 of fix-lifecycle-push). Verify: a `GitCommandResultSpec` feature with

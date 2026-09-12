@@ -58,7 +58,9 @@ terms) live in `.claude/rules/process-invariants.md`.
   terminal boundary. Deliberately not a timer or a daemon — the next instance
   to touch the task is the delivery vehicle for a push an earlier one lost.
 - **Park** — set the task to a waiting tracker status (escalation or a manual
-  checkpoint); **release** — give the claim up so any instance may take over.
+  checkpoint); **release** — give the claim up without moving the task's status; the reaper
+  returns it to Ready once the claim is stale, and only then may any instance take
+  over.
 - **Escalation** — handing a task to a human via tracker status, with the
   findings history attached.
 - **Abort fuse** — the bound on infrastructure aborts a task may accumulate
