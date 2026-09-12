@@ -224,6 +224,13 @@ as a bug (kubernetes#119905), not a documentation fix.
 
 ## Impact
 
+- **Sequencing (noted 2026-09-13)**: the parameter-limit family
+  (`introduce-take-order`, then `introduce-slot-wiring`) rewrites the take-chain
+  signatures this change edits — `TakeClaimAndWork`, `FreshClaimBaseBinding`'s
+  callers, the fresh-claim and resume pairs. This change is rebased onto the new
+  signatures after `introduce-take-order` lands (its task 6.2), which is a
+  rename of call sites, not a change of this proposal's scope: the release-call
+  boundary spec and the `ClaimIdentity` port type are untouched by the refactor.
 - `gnomish-plugin-api`: `Tracker` gains one method and one result type; the
   `TrackerHealthTracker` decorator and the plugin `SampleTracker` implement
   it; the adapter author guide's port table gains a row.

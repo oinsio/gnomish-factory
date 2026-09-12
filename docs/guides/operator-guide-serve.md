@@ -104,7 +104,7 @@ sequenceDiagram
     D->>D: stop claiming immediately (feed thread interrupted)
     D->>S: flag claims lost (round-boundary stop signal)
     S->>S: finish current round, if within grace window
-    S->>Gh: release claim -> Ready (instant, no TTL wait)
+    S->>Gh: release claim (label stays; reaper restores Ready after the claim TTL)
     D->>D: wait up to sigterm-grace for all slots to release
     D->>D: kill process tree (no gnome subprocess survives)
     D->>D: close the application context
@@ -115,8 +115,11 @@ sequenceDiagram
 On SIGTERM the daemon stops claiming immediately, lets every in-flight slot
 stop at its next round boundary — the only point where state is durably
 committed — within the configured grace window, and explicitly releases the
-claims of whichever slots make it: those tasks return to `Ready` instantly,
-with no TTL wait. A round that outlives the grace window is deliberately left
+claims of whichever slots make it. A release drops the claim and stops the
+heartbeat; it does not move the label — the task returns to `Ready` when the
+reaper of any running instance finds the claim stale, one claim TTL later
+(`add-claim-return` adds the fenced immediate return). A round that outlives
+the grace window is deliberately left
 alone: the process still exits (killing its whole process tree, so no gnome
 subprocess outlives the daemon), and that task's claim is recovered later by
 the ordinary lease path (TTL, reaper, resume from the branch) — no new

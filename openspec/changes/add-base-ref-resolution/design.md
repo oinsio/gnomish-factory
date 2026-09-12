@@ -406,8 +406,12 @@ then object id only). **The pin is a typed peeled commit id, never a
 `String` the guard re-resolves** — the guard receives the id and compares; it
 does no `rev-parse` of its own. The binding owns the law-root rule and the
 "law belongs to this repository" invariant, which is what makes it a
-parameter object rather than a bag and returns `assemble` under the
-seven-parameter rule. **One segment walk owns the symlink verdict for both
+parameter object rather than a bag. It collapses the law parameters into
+one and brings `RunAssembler.assemble` to eight parameters — one over the
+`process-invariants.md` limit, not under it, as an earlier revision of this
+paragraph claimed. The eighth is removed by `introduce-take-order`, whose
+`RunOrder` absorbs `definition` and `interactiveMode`; that change lists
+`RunAssembler.assemble` among its consumers. **One segment walk owns the symlink verdict for both
 realizations**: each realization supplies tree entries (file / directory /
 symlink / absent); the walk, written once, refuses any symlink entry at
 *any* segment of the path regardless of its target (Kustomize's rule — a

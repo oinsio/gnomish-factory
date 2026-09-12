@@ -179,6 +179,15 @@ ever stamped and no live epoch ever exists.
 
 ## Impact
 
+- **Sequencing (decided 2026-09-13)**: this change lands **before** the
+  parameter-limit family — `introduce-take-order`, `introduce-slot-wiring`,
+  `collapse-composition-roots`, `add-parameter-count-gate`. Two reasons, both
+  from this change's own single-owner table: it makes `TaskGit.epochs()` the
+  sole source of the tenure book, which `introduce-slot-wiring` would otherwise
+  duplicate inside `SlotWiring`; and it deletes
+  `TakeDispositionResume.afterReconciliation`, a consumer
+  `introduce-take-order` would otherwise edit first and lose second. No change
+  to this proposal's own scope follows — only its position in the queue.
 - `:domain` — `BranchShape` (shape removed), `BranchShapeClassifier` (fence rule removed),
   `BranchTipFacts` (live-epoch field removed), `ClaimEpoch` (`isStaleAgainst` removed; `Comparable`
   stays only if a consumer remains).

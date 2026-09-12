@@ -68,7 +68,8 @@ and the rest from the ref being built. This change adopts that mechanism.
 - ADDED: **fail-closed refresh fetch** of the resolved base (branch, tag, or
   SHA) between claim hardening and task creation in the autonomous paths; an
   unreachable remote is an infrastructure failure — bounded retries, no stage
-  attempt burned, the claim is released and the task returns to Ready, and
+  attempt burned, the claim is released (the reaper returns the task to Ready
+  once the claim is stale), and
   the outage is never charged to the task's abort accounting. (FR6, FR9)
 - ADDED: **remote outage gate** in `serve`: one daemon-level state per remote
   target, opened by a slot's base-refresh infrastructure failure and consulted
@@ -142,6 +143,10 @@ and the rest from the ref being built. This change adopts that mechanism.
   tier; fetch/resolution failure releases the claim as an infrastructure
   failure with a typed take result and its own exit code, outside the abort
   accounting.
+  The release requirement this adds ("Base infrastructure failure releases
+  the claim outside the abort accounting") is MODIFIED again by the later
+  `add-claim-return`, which is sequenced after this change and layers its
+  text on this delta's.
 - `factory-serve`: a base-resolution infrastructure failure in a slot releases
   the claim and opens the remote outage gate — neither an abort nor an
   escalation; the gate holds the feed off the tracker until a probe succeeds;
@@ -315,8 +320,10 @@ and the rest from the ref being built. This change adopts that mechanism.
   an epic branch for inherited context) inherits this rule rather than
   choosing its own: bounded retries via
   the existing git retry policy, no stage attempt burned, the claim released
-  through the plain claim-release path so the task returns to Ready for any
-  instance. The release SHALL write no abort marker and no comment: the
+  through the plain claim-release path; the reaper of the `claim-heartbeat`
+  capability returns the task to Ready for any instance once the claim is
+  stale (the release itself moves no label — a deliberate, fenced immediate
+  return is `add-claim-return`'s verb). The release SHALL write no abort marker and no comment: the
   outage is charged to the daemon, never to the task's abort accounting, so
   neither the task's backoff nor the K fuse moves. The failure is caught and
   classified at the fresh-claim step and never reaches the abort protocol as
