@@ -354,8 +354,40 @@ Pin paths are repo-relative data, not file references: the loader SHALL NOT read
 - **THEN** validation reports a located `ConfigError` identifying the check
 
 ### Requirement: Pipeline law binds per invocation
-Pipeline law — `.gnomish/` stage manifests, stage instructions, and judge acceptance criteria — SHALL be bound at invocation start and frozen for the invocation's lifetime, including the in-process outcome loop. The law source SHALL be the factory-owned clone of the base branch in tracker-driven and git modes, and the workspace snapshot at startup in the git-less in-place mode. Control files and judge acceptance criteria SHALL be read from the law source, never from the gnome-writable working copy at use time. Copies of law files in the gnome's working copy are project content: editable, but never law for the current task. A contract test SHALL enforce the source in git modes.
+Pipeline law — `.gnomish/` stage manifests, stage instructions, and judge
+acceptance criteria — SHALL be bound at invocation start and frozen for the
+invocation's lifetime, including the in-process outcome loop. The law source
+SHALL be read through one law-source abstraction with exactly two
+realizations: **git objects at one commit — the law commit —** in every path
+that resolved a ref (tracker-driven modes, manual `run` with `--base`), and
+the **working tree** in the git-less in-place mode and in manual `run`
+without `--base`. Where a ref was resolved, the factory clone's working tree,
+index, and `HEAD` SHALL play no part in the law. Configuration has two tiers:
+the trusted tier (`tracker:`, `task-branch:`, and future selector sections) binds
+once at startup from the refreshed repository default branch and is never
+re-read per task; the task tier (stages,
+instructions, criteria, the remainder of `config.yaml`) binds from the base's
+law commit — the pinned SHA on a fresh start, the current tip of the pinned
+ref name on resume (a tag or SHA base makes these equal). The external-check
+pin guard SHALL compare against the law commit as a commit id peeled once at
+binding; the guard SHALL NOT resolve a ref name itself. Both realizations SHALL be
+rooted at the **law root** — the `.gnomish/` directory of the law commit or
+of the working tree, the same root the loader validates file references
+against — so a stage file reference that validates at load reads at run in
+every medium; the repository root reaches the pin guard as a separate value
+and is never the law root. A symlink entry at any segment of a reference's
+path under the law root SHALL be refused as an unreadable law file by both
+realizations, never followed and regardless of its target; the verdict SHALL
+come from one shared walk, so both realizations report the same category
+for one tree; an absolute reference SHALL be refused by both. Control files and judge
+acceptance criteria SHALL be read from the law source, never from the
+gnome-writable working copy at use time. Copies of law files in the gnome's
+working copy are project content: editable, but never law for the current
+task. A contract test SHALL enforce the source in git modes — including a
+base that differs from the clone's checked-out ref and the default-branch
+source of the trusted tier.
 <!-- implements FR19, NFR-S2 of add-sandbox-core -->
+<!-- implements FR2, FR11, FR12, NFR-S1, M5 of add-base-ref-resolution -->
 
 #### Scenario: Gnome edits to the law have no effect
 - **WHEN** the gnome branch modifies `.gnomish/` manifests, stage instructions, or judge acceptance criteria
@@ -367,4 +399,148 @@ Pipeline law — `.gnomish/` stage manifests, stage instructions, and judge acce
 
 #### Scenario: Resume picks up human-fixed criteria
 - **WHEN** a human fixes acceptance criteria on the base branch and returns an escalated task to work
-- **THEN** the resuming invocation binds the corrected law from the base branch, and the gnome branch content plays no part in it
+- **THEN** the resuming invocation binds the corrected law from the tip of the pinned ref name, and the gnome branch content plays no part in it
+
+#### Scenario: A reference that validates at load reads at run
+- **WHEN** a stage manifest under `.gnomish/stages/work/` declares
+  `instructions: stages/work/instructions.md` and the loader accepted it
+- **THEN** the frozen law carries that file's content from the law root of
+  the same commit or working tree, in the working-tree and the git-objects
+  realization alike, and no copy at the repository root is consulted
+
+#### Scenario: Symlinked law file is refused in every medium
+- **WHEN** a law file under `.gnomish/` is a symlink entry, or an
+  intermediate directory on a law file's path is a symlink entry, in a
+  working tree or in a git tree
+- **THEN** both realizations report it unreadable without following it,
+  and the contract spec asserts the same verdict from both over one tree
+
+#### Scenario: Pin guard never re-resolves
+- **WHEN** the factory clone's `HEAD` moves after the law was bound in a
+  manual `run` without `--base`
+- **THEN** the external-check pin guard still compares against the commit
+  id peeled at binding, not against the moved `HEAD`
+
+#### Scenario: Base differs from the clone's checked-out ref
+- **WHEN** the factory clone has `main` checked out and a task resolves to
+  `release/1.18`, whose stage instructions differ from `main`'s
+- **THEN** the frozen law and the pin guard use `release/1.18`'s content at
+  the pinned SHA, and nothing from the checked-out `main` tree reaches the
+  task
+
+#### Scenario: Uncommitted clone edits are not law in autonomous modes
+- **WHEN** an operator edits a stage instruction in the factory clone's
+  working tree without committing and serve claims a task
+- **THEN** the task binds the committed instruction at its law commit, and
+  the uncommitted edit plays no part
+
+#### Scenario: Manual run without a base keeps working-tree law
+- **WHEN** `gnomish run` starts without `--base` in a clone with uncommitted
+  `.gnomish/` edits
+- **THEN** the edited files are the law, exactly as before this change
+
+#### Scenario: Manual run with a base reads that ref's law offline
+- **WHEN** `gnomish run --base v1.2.3` starts in a clone with no reachable
+  remote and uncommitted `.gnomish/` edits
+- **THEN** no fetch runs, the law is read from git objects at `v1.2.3`, and
+  the uncommitted edits play no part
+
+#### Scenario: Resume after the pinned ref disappeared
+- **WHEN** a task pinned to `release/1.18` is resumed after that branch was
+  deleted from the remote
+- **THEN** the task parks with a report naming the pinned ref and SHA, and
+  no law is bound from the pinned SHA silently
+
+#### Scenario: The chosen base's own `task-branch.base` section plays no part in choosing it
+- **WHEN** a task resolves to base `release/1.18`, whose `.gnomish/config.yaml`
+  carries a `task-branch.base` section differing from the default branch's
+- **THEN** resolution used the default-branch `task-branch.base` section, and the rest of
+  the law — including the remainder of `release/1.18`'s `config.yaml` —
+  binds from `release/1.18`'s law commit
+
+### Requirement: Optional task-branch base section with allowed patterns
+`.gnomish/config.yaml` SHALL support an optional `task-branch:` section — the
+root key is the glossary term for the branch it configures — holding a `base`
+subsection: `type` (a discriminator; `patterns` is the only supported value in
+this version, and it is the default when absent), `default` (optional ref
+name), and `allowed` (a list of entries, each `pattern` plus optional `role`
+of `development` | `release`, defaulting to `development`). Patterns SHALL
+compile at load. Located `ConfigError`s under the existing aggregation
+contract SHALL cover: an unknown `type` value, an unknown key anywhere in the
+section — a root-level `base:` and a `menu` key included, since the earlier
+draft shape has no alias — an invalid pattern, an unknown `role`, and a
+`default` that matches no allowed pattern when any is declared. The
+subsection holds no tracker-specific selection rule: how a task names its
+base is the tracker adapter's own configuration (`tracker.<type>.designators`,
+owned and validated by the adapter per tracker-port). An absent section SHALL
+be valid: no allowed bases, no configured default, and all previously
+specified loading behavior unchanged. The loader parses and validates only —
+resolution semantics belong to base-ref-resolution. The `task-branch:`
+section is reserved for settings of the task branch itself; a name-prefix
+override is a named candidate for a later change, not part of this one.
+<!-- implements FR1 of add-base-ref-resolution -->
+<!-- implements UX1 of add-base-ref-resolution -->
+
+#### Scenario: Settled shape loads
+- **WHEN** `task-branch.base` declares `type: patterns`, `default: main`, and
+  `allowed` entries `main` and `release/*` (role `release`)
+- **THEN** loading succeeds and the typed definition exposes the compiled
+  allowed bases, the default, and the roles
+
+#### Scenario: No task-branch section
+- **WHEN** a `.gnomish/` without a `task-branch:` section is loaded
+- **THEN** loading succeeds exactly as before and the definition reports no
+  allowed bases and no default
+
+#### Scenario: Selection rule without allowed bases is a load error
+- **WHEN** the tracker adapter reports that it extracts designator kind
+  `base` (for GitHub, a `tracker.github.designators.base` rule) and the
+  `task-branch.base` section is absent or declares no `allowed` entry
+- **THEN** loading fails with a located error naming the rule's location and
+  `task-branch.base.allowed`, stating that the rule can only ever reject a
+  selection — allow a base or remove the rule
+
+#### Scenario: Default outside the allowed bases is a load error
+- **WHEN** the section declares `default: develop` and `allowed` containing
+  only `release/*`
+- **THEN** loading fails with a located error naming
+  `task-branch.base.default` and the allowed patterns it failed to match
+
+#### Scenario: Unknown discriminator is a load error
+- **WHEN** the section declares `type: script`
+- **THEN** loading fails with a located error naming the unknown type — the
+  discriminator exists so future selection mechanisms arrive as new values,
+  not as schema breaks
+
+#### Scenario: Unknown keys are not ignored
+- **WHEN** the section contains a misspelled key such as `defualt:`
+- **THEN** loading fails with a located error naming the unknown key
+
+#### Scenario: The earlier draft shape is not an alias
+- **WHEN** `config.yaml` carries a root-level `base:` key, or
+  `task-branch.base` carries a `menu` key
+- **THEN** loading fails with a located error naming the unknown key, and
+  nothing is silently read from it
+
+### Requirement: Definition validated at startup, bound per task from the base
+`serve` and `take` SHALL load and validate the full definition from the
+refreshed repository default branch at startup — fail-fast for the common
+base, the source of the trusted tier, and the definition `board` and
+`dashboard` display. That load SHALL NOT be authoritative for a task: after
+base resolution the task tier SHALL be loaded from the task's law commit and
+frozen from it, per task. A definition that fails to load from a base SHALL
+park the task with a configuration report naming the base ref, the law
+commit, and the located errors — no stage attempt burned, no claim released
+for retry, because the failure is deterministic.
+<!-- implements FR13, UX5 of add-base-ref-resolution -->
+
+#### Scenario: Startup still fails fast on the default branch
+- **WHEN** the default branch's `.gnomish/` carries a malformed stage manifest
+- **THEN** `serve` exits at startup with the located errors, before any claim
+
+#### Scenario: A broken base parks only its task
+- **WHEN** the default branch loads cleanly and a task resolves to
+  `release/1.18`, whose `.gnomish/` fails validation
+- **THEN** that task parks with the located errors and the base ref in its
+  report, the claim is not released into a retry loop, and other slots keep
+  working
