@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -54,7 +55,7 @@ class ResumeLawBindingSpec extends Specification {
         def outcome = ResumeLawBinding.bind(baseRefGit, ROOT, PINNED, STATE, REF, tracker)
 
         then:
-        1 * baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >> new ResumeBaseOutcome.Bound('release/1.18', 'c0ffee')
+        1 * baseRefGit.resolveForResume(ROOT, 'release/1.18', BaseRefKind.BRANCH) >> new ResumeBaseOutcome.Bound('release/1.18', 'c0ffee', OriginContact.CONTACTED)
 
         and:
         outcome instanceof ResumeLawBinding.Bound
@@ -240,7 +241,7 @@ class ResumeLawBindingSpec extends Specification {
 
                     @Override
                     ResumeBaseOutcome resolveForResume(Path cloneDir, String ref, BaseRefKind kind) {
-                        new ResumeBaseOutcome.Bound(ref, 'c0ffee')
+                        new ResumeBaseOutcome.Bound(ref, 'c0ffee', OriginContact.CONTACTED)
                     }
 
                     @Override

@@ -142,7 +142,12 @@ would carry a refresh hours old; the feed consults it *before* every claim and c
 it is open, so an open gate costs the tracker nothing. While open, the daemon
 probes the remote with a tracker-free reachability check (`ls-remote`) on a
 jittered interval that grows from the idle interval to a configured cap; the
-first successful probe closes the gate. Recovery is confirmed by a probe,
+first successful probe closes the gate. Only a base read that contacted
+origin counts as the successful refresh that resets the probe interval and
+advances the remote's last successful contact time: a base pinned to a commit
+the clone already holds, and a resume bound from the local tip in a clone with
+no `origin` remote, are served without a network round trip and say nothing
+about whether origin answered. Recovery is confirmed by a probe,
 never by claiming a task — a claim is a tracker write, and using it as the
 probe is exactly the amplification the gate exists to remove. Slots already
 working continue under an open gate. The gate is process memory: a restart
@@ -163,7 +168,7 @@ stateDiagram-v2
 
 ### The separate bound
 
-An uncharged failure needs its own bound or it stalls silently. Two rules
+An uncharged failure needs its own bound, or it stalls silently. Two rules
 supply it, both landed exactly as designed. The probe interval — jittered,
 doubling off `RestartBackoff`, capped at `factory.serve.remote-probe-interval-cap`
 (default 10 minutes) — resets to the idle value only on the first

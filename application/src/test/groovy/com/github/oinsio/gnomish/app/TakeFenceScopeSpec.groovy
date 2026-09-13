@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -74,7 +75,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
     private BaseRefGit resolvingBaseRefGit() {
         Stub(BaseRefGit) {
             resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
-                new ResumeBaseOutcome.Bound(ref, ref)
+                new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
             }
         }
     }

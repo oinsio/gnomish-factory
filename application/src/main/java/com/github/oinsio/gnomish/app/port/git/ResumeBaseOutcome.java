@@ -24,8 +24,11 @@ public sealed interface ResumeBaseOutcome {
      *
      * @param ref the pinned ref name as the task recorded it
      * @param commit the commit it resolves to
+     * @param contact whether this resolution reached origin or was served by the clone alone — a
+     *     remote-backed resume carries the value of the refresh it delegated to, a local-tip bind
+     *     is never a contact (FR1 of signal-outage-gate-on-origin-contact)
      */
-    record Bound(String ref, String commit) implements ResumeBaseOutcome {}
+    record Bound(String ref, String commit, OriginContact contact) implements ResumeBaseOutcome {}
 
     /**
      * A deterministic refusal: the pinned ref resolves nowhere the resolution looked — neither on a

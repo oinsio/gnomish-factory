@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.Designator
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -65,7 +66,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         def outcome = FreshClaimBaseBinding.bind(baseRefGit, ROOT, request, STATE, tracker)
 
         then:
-        1 * baseRefGit.refresh(ROOT, 'release/1.2') >> new BaseRefreshOutcome.Refreshed('release/1.2', 'c0ffee', BaseRefKind.BRANCH)
+        1 * baseRefGit.refresh(ROOT, 'release/1.2') >> new BaseRefreshOutcome.Refreshed('release/1.2', 'c0ffee', BaseRefKind.BRANCH, OriginContact.CONTACTED)
 
         and:
         outcome instanceof FreshClaimBaseBinding.Bound
@@ -91,7 +92,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         def outcome = FreshClaimBaseBinding.bind(baseRefGit, ROOT, request, STATE, tracker)
 
         then:
-        1 * baseRefGit.refresh(ROOT, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', 'd0d0', BaseRefKind.BRANCH)
+        1 * baseRefGit.refresh(ROOT, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', 'd0d0', BaseRefKind.BRANCH, OriginContact.CONTACTED)
 
         and:
         outcome instanceof FreshClaimBaseBinding.Bound
@@ -316,7 +317,7 @@ class FreshClaimBaseBindingSpec extends Specification {
     def "resolve hands the bound law to the continuation, and short-circuits on park or release"() {
         given:
         def request = new FreshClaimBaseBinding.Request('release/1.2', taskWithNoDesignator(), NO_ALLOWED_BASES)
-        baseRefGit.refresh(ROOT, 'release/1.2') >> new BaseRefreshOutcome.Refreshed('release/1.2', 'c0ffee', BaseRefKind.BRANCH)
+        baseRefGit.refresh(ROOT, 'release/1.2') >> new BaseRefreshOutcome.Refreshed('release/1.2', 'c0ffee', BaseRefKind.BRANCH, OriginContact.CONTACTED)
         def continuationCalled = false
 
         when:

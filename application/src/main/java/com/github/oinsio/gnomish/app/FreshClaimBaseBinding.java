@@ -159,7 +159,7 @@ final class FreshClaimBaseBinding {
             TaskRef ref,
             Tracker tracker) {
         return switch (baseRefGit.refresh(cloneDir, decision.ref())) {
-            case BaseRefreshOutcome.Refreshed(var ignoredRef, String commit, var kind) ->
+            case BaseRefreshOutcome.Refreshed(var ignoredRef, String commit, var kind, var _) ->
                 new Bound(LawBinding.atRevision(cloneDir, commit), new BasePin(decision.ref(), kind, decision.rule()));
             case BaseRefreshOutcome.Refused(String report) ->
                 new Parked(parkRefused(finalState, ref, tracker, decision.ref(), report));

@@ -62,7 +62,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
      */
     BaseRefGit baseRefGit = Stub(BaseRefGit) {
         resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
-            new ResumeBaseOutcome.Bound(ref, ref)
+            new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
         }
     }
 

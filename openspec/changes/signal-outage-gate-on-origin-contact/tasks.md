@@ -8,7 +8,7 @@ commit.
 
 ## 1. The fact on the port
 
-- [ ] 1.1 Add `OriginContact { CONTACTED, CLONE_ONLY }` to `app.port.git` with
+- [x] 1.1 Add `OriginContact { CONTACTED, CLONE_ONLY }` to `app.port.git` with
       a javadoc stating the rule of design D2 (a label on the path taken, never
       derived from git output) and append it as the last component of
       `BaseRefreshOutcome.Refreshed` and `ResumeBaseOutcome.Bound`; no
@@ -19,7 +19,7 @@ commit.
       :application:compileJava` fails only at the production consumers named
       in 1.2, and `./gradlew :adapters:git:compileJava` only at the five
       adapter sites of 2.1/2.2 — the compilers' lists are the consumer list.
-- [ ] 1.2 Update the four production pattern-match consumers to destructure the
+- [x] 1.2 Update the four production pattern-match consumers to destructure the
       new component as `var _` and change nothing else: `FreshClaimBaseBinding`
       (`refresh` switch), `ResumeLawBinding` (`bind` switch),
       `TrustedTierStartup` (default-branch refresh switch),
@@ -31,7 +31,7 @@ commit.
 
 ## 2. The adapter sets it
 
-- [ ] 2.1 TDD (red first) in `BaseRefreshSpec`, on the existing recording-git
+- [x] 2.1 TDD (red first) in `BaseRefreshSpec`, on the existing recording-git
       fixture (`recordedSubcommands`): the present-commit feature ("costs no
       network at all") asserts `CLONE_ONLY` alongside its no-`fetch`
       assertion; the fetched-commit, branch, and tag features assert
@@ -40,7 +40,7 @@ commit.
       `RefreshedTip` ×1) per design D2. Traceability comments on each site.
       Verify: the four features red before, green after; the abbreviated-SHA
       offline feature also reads `CLONE_ONLY` (FR1, NFR-R1, M2).
-- [ ] 2.2 TDD (red first) in `ResumeBaseResolutionSpec`: the no-origin
+- [x] 2.2 TDD (red first) in `ResumeBaseResolutionSpec`: the no-origin
       local-tip feature asserts `CLONE_ONLY`; the configured-origin fetch
       feature asserts `CONTACTED`; the present-commit resume feature asserts
       `CLONE_ONLY` (pass-through of the refresh's value). Then set the value at
@@ -49,7 +49,7 @@ commit.
 
 ## 3. The decoration reads it
 
-- [ ] 3.1 Update every remaining construction site of the two records in test
+- [x] 3.1 Update every remaining construction site of the two records in test
       code, choosing `CONTACTED` where the stub stands in for a remote answer
       and `CLONE_ONLY` where it stands in for a local hit, with no assertion
       changed (M3): `application` — `RunChainFakes`, `FreshClaimBaseBindingSpec`,
@@ -62,7 +62,7 @@ commit.
       `TakeResumeRunnerLawBindingSpec`. Verify: `./gradlew compileTestGroovy`
       across the three modules green; `git diff` on these files touches only
       constructor argument lists.
-- [ ] 3.2 TDD (red first) in `RemoteOutageSignalingBaseRefGitSpec`: make the two
+- [x] 3.2 TDD (red first) in `RemoteOutageSignalingBaseRefGitSpec`: make the two
       success features data-driven over `OriginContact`, asserting for both
       `refresh` and `resolveForResume` that `CONTACTED` sets the gate's
       `lastSuccessAt` and `CLONE_ONLY` leaves it null; add a feature on a real
@@ -76,7 +76,7 @@ commit.
       with PIT 100%. The scenario feature is the operator-facing promise of
       UX1: the pause is as long as FR14 said, and the last-contact time names
       a moment origin answered (FR2, FR3, NFR-O1, UX1, M1).
-- [ ] 3.3 Run the `:bootstrap` slot specs that drive the real decoration
+- [x] 3.3 Run the `:bootstrap` slot specs that drive the real decoration
       (`TakeSlotRunnerSpec`, `TakeSlotRunnerContainerConcurrencySpec`,
       `ServeShutdownWiringSpec`) and `:bootstrap:spotlessCheck`. Verify: green;
       the flow feature "a slot's real base refresh is reported to the remote
@@ -85,19 +85,19 @@ commit.
 
 ## 4. Documents
 
-- [ ] 4.1 Glossary: extend the "Remote outage gate" entry with the contact
+- [x] 4.1 Glossary: extend the "Remote outage gate" entry with the contact
       rule (a refresh served from the clone alone is not a successful refresh
       for the gate) and add an entry for the origin-contact fact under the
       base-ref context, naming its two values in plain words (process-invariants:
       a change that introduces a term adds its entry). Verify: both entries
       present; no banned synonym introduced.
-- [ ] 4.2 `docs/adr/0005-dependency-outage-accounting.md`, gate section: one
+- [x] 4.2 `docs/adr/0005-dependency-outage-accounting.md`, gate section: one
       sentence after "reported at the base read itself" stating that only a
       read that contacted origin counts, with the clone-served cases named.
       Verify: the ADR's state diagram needs no change (the transition label
       "first base refresh succeeds" is unchanged; the qualification lives in
       prose).
-- [ ] 4.3 Single-owner sweep per `implementation.md`: grep for every
+- [x] 4.3 Single-owner sweep per `implementation.md`: grep for every
       construction of `BaseRefreshOutcome.Refreshed(` and
       `ResumeBaseOutcome.Bound(` in `src/main` (qualified, since a bare
       `Bound(` also matches the unrelated `Bound` records of

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -83,7 +84,7 @@ class HexNamedRefBaseRefreshSpec extends Specification implements BareGitRepoFix
         def outcome = refresh().refresh(clone, abbreviation)
 
         then:
-        outcome == new BaseRefreshOutcome.Refreshed(abbreviation, held, BaseRefKind.COMMIT)
+        outcome == new BaseRefreshOutcome.Refreshed(abbreviation, held, BaseRefKind.COMMIT, OriginContact.CLONE_ONLY)
     }
 
     def "FR6: a full object name resolves to the object even when a ref of that name exists"() {
@@ -94,6 +95,6 @@ class HexNamedRefBaseRefreshSpec extends Specification implements BareGitRepoFix
         def outcome = refresh().refresh(clone, held)
 
         then:
-        outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT)
+        outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT, OriginContact.CLONE_ONLY)
     }
 }

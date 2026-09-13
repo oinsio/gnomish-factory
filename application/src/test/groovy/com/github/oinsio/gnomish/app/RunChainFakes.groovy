@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
@@ -113,7 +114,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
     BaseRefGit refreshingBaseRefGit() {
         [
             refresh: { Path cloneDir, String ref ->
-                new BaseRefreshOutcome.Refreshed(ref, ref, BaseRefKind.BRANCH)
+                new BaseRefreshOutcome.Refreshed(ref, ref, BaseRefKind.BRANCH, OriginContact.CONTACTED)
             },
             discoverDefaultBranch: { Path cloneDir ->
                 throw new UnsupportedOperationException('never called on the claim path (FR13)')
@@ -142,7 +143,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 throw new UnsupportedOperationException('not exercised by a resume scenario')
             },
             resolveForResume: { Path cloneDir, String ref, BaseRefKind kind ->
-                new ResumeBaseOutcome.Bound(ref, ref)
+                new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
             },
         ] as BaseRefGit
     }
@@ -306,7 +307,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             },
             resolveForResume: { Path cloneDir, String ref, BaseRefKind kind ->
                 resolved << ref
-                new ResumeBaseOutcome.Bound(ref, ref)
+                new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
             },
         ] as BaseRefGit
     }

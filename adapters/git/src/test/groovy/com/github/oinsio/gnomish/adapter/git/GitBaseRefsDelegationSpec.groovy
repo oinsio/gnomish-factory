@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import java.nio.file.Path
 import spock.lang.Specification
@@ -50,6 +51,6 @@ class GitBaseRefsDelegationSpec extends Specification implements BareGitRepoFixt
         def localTip = gitOutput(clone, 'rev-parse', 'HEAD')
 
         expect:
-        newGitBaseRefs().resolveForResume(clone, 'HEAD', null) == new ResumeBaseOutcome.Bound('HEAD', localTip)
+        newGitBaseRefs().resolveForResume(clone, 'HEAD', null) == new ResumeBaseOutcome.Bound('HEAD', localTip, OriginContact.CLONE_ONLY)
     }
 }

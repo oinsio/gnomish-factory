@@ -23,8 +23,12 @@ public sealed interface BaseRefreshOutcome {
      * @param commit the commit it resolves to, read back from the destination ref or the object
      *     itself — never from {@code FETCH_HEAD}
      * @param kind the namespace origin holds it in
+     * @param contact whether this refresh reached origin or was served by the clone alone — the
+     *     fact the remote outage gate reads, set by the adapter at the path it took (FR1 of
+     *     signal-outage-gate-on-origin-contact)
      */
-    record Refreshed(String ref, String commit, BaseRefKind kind) implements BaseRefreshOutcome {}
+    record Refreshed(String ref, String commit, BaseRefKind kind, OriginContact contact)
+            implements BaseRefreshOutcome {}
 
     /**
      * A deterministic refusal: the task parks with this report, no stage attempt burned, and no

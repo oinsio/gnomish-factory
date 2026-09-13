@@ -108,7 +108,7 @@ final class ResumeLawBinding {
             Tracker tracker) {
         String name = pinnedRef.ref();
         return switch (baseRefGit.resolveForResume(cloneDir, name, pinnedRef.kind())) {
-            case ResumeBaseOutcome.Bound(var ignoredRef, String commit) ->
+            case ResumeBaseOutcome.Bound(var ignoredRef, String commit, var _) ->
                 new Bound(LawBinding.atRevision(cloneDir, commit));
             case ResumeBaseOutcome.Refused(String report) -> new Parked(park(finalState, ref, tracker, name, report));
             case ResumeBaseOutcome.Unavailable(String reason) -> new Released(release(ref, tracker, name, reason));

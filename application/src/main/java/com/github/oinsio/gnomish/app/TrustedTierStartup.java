@@ -104,7 +104,7 @@ final class TrustedTierStartup {
 
     private static String refresh(Path dir, BaseRefGit baseRefs, DefaultBranch branch) {
         return switch (baseRefs.refresh(dir, branch.name())) {
-            case BaseRefreshOutcome.Refreshed(var ignored, String commit, var _) -> commit;
+            case BaseRefreshOutcome.Refreshed(var ignored, String commit, var _, var _) -> commit;
             case BaseRefreshOutcome.Refused(String report) -> throw unbound(dir, report);
             case BaseRefreshOutcome.Unavailable(String reason) ->
                 throw unbound(

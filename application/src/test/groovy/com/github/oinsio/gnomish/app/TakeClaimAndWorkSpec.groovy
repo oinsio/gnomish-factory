@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -455,7 +456,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def recoveringBaseRefGit = Stub(BaseRefGit) {
             refresh(_, _) >>> [
                 new BaseRefreshOutcome.Unavailable('connection timed out'),
-                new BaseRefreshOutcome.Refreshed('main', 'c0ffee', BaseRefKind.BRANCH),
+                new BaseRefreshOutcome.Refreshed('main', 'c0ffee', BaseRefKind.BRANCH, OriginContact.CONTACTED),
             ]
         }
         def git = new TaskGit(store, branches, Stub(TaskWorktreeGit),
@@ -612,7 +613,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         // this port-fake chain needs a working BaseRefGit rather than BaseRefGit.UNWIRED.
         def baseRefGit = Stub(BaseRefGit) {
             resolveForResume(_, _, _) >> { Path cloneDir, String ref, BaseRefKind kind ->
-                new ResumeBaseOutcome.Bound(ref, ref)
+                new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
             }
         }
         def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
+import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -67,15 +68,21 @@ final class CommitBaseFetch {
     Optional<BaseRefreshOutcome> fetch(Path cloneDir, String sha) {
         Optional<String> present = commit(cloneDir, sha);
         if (present.isPresent()) {
-            return Optional.of(new BaseRefreshOutcome.Refreshed(sha, present.get(), BaseRefKind.COMMIT));
+            // The object was already here, so nothing was asked of origin — design D2 of
+            // signal-outage-gate-on-origin-contact labels the path, it does not read git's output.
+            // Implements FR1 of signal-outage-gate-on-origin-contact.
+            return Optional.of(
+                    new BaseRefreshOutcome.Refreshed(sha, present.get(), BaseRefKind.COMMIT, OriginContact.CLONE_ONLY));
         }
         if (sha.length() != SHA1_LENGTH && sha.length() != SHA256_LENGTH) {
             return Optional.empty();
         }
         GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, sha);
+        // Past the fetch, so this return is reached only by way of a round trip (design D2).
+        // Implements FR1 of signal-outage-gate-on-origin-contact.
         return Optional.of(commit(cloneDir, sha)
-                .<BaseRefreshOutcome>map(
-                        resolved -> new BaseRefreshOutcome.Refreshed(sha, resolved, BaseRefKind.COMMIT))
+                .<BaseRefreshOutcome>map(resolved ->
+                        new BaseRefreshOutcome.Refreshed(sha, resolved, BaseRefKind.COMMIT, OriginContact.CONTACTED))
                 .orElseGet(() -> unresolved(cloneDir, sha, fetch)));
     }
 
