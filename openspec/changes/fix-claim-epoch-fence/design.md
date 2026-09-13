@@ -20,11 +20,13 @@ See proposal.md — Why. What shapes the approach:
 - The tenure record is filled by `EpochRecordingTracker`, applied by `EpochRecordingTrackerFactory`
   over every discovered provider in the Spring bean
   `TrackerAdapterConfiguration.trackerAdapterRegistry`. `ManualRunConfiguration.taskGit` builds the
-  git writers over the same `ClaimEpochBook` bean. The two are joined only by Spring: any assembly
-  that bypasses the beans — every end-to-end fixture does — gets a git layer over
-  `ClaimEpochSource.NONE` and a tracker that records into a fresh, unread book
-  (`TakeCommandSeams.DEFAULTS`). `TakeCommandSeams.withEpochs` exists to close that gap and has
-  no caller.
+  git writers over the same `ClaimEpochBook` bean, and `SubcommandDispatchFactory` hands that bean
+  a third time to `TakeCommand` (through `TakeCommandSeams.withEpochs`, read back by
+  `TakeCommandFactory`) and to `ServeCommand`'s constructor, for the repair log line. The three
+  hand-offs are joined only by Spring: any assembly that bypasses the beans — every end-to-end
+  fixture does — gets a git layer over `ClaimEpochSource.NONE` (`TaskGitFixture.real()`), an
+  unwrapped tracker registry, and a fresh, unread book from `TakeCommandSeams.DEFAULTS`, so no
+  commit is stamped and no epoch is recorded.
 - Precedents this design reuses: `BaseHeadDefaultBoundarySpec` (an allowlisted whole-tree scan in
   `:bootstrap`), `TakeLifecycleEscalateResumeSpecBase` over `TwoInstanceTakeFixture` (two
   instances, one origin, one tracker), and the kill-point matrix (`TransitionKillPointSpec` over
@@ -44,8 +46,9 @@ Design-level boundaries beyond the proposal's:
 ## Decisions
 
 **D1 — Remove the read-side fence rather than invert or narrow it** (FR1, FR2).
-`BranchShape.StaleEpoch` leaves the sealed set; `BranchTipFacts` loses `liveEpoch` (and
-`tipEpoch`, unless a status or inspect renderer is found to consume it — the task checks by grep);
+`BranchShape.StaleEpoch` leaves the sealed set; `BranchTipFacts` loses `liveEpoch` and `tipEpoch`
+(the classifier and `BranchTipFactsReader` are their only consumers, verified by grep on
+2026-09-13, so `BranchTipSource.tipEpoch` and `ClaimEpochTrailer.parse` go with them);
 `BranchShapeClassifier` applies delivery, envelope, progression in that order; `ClaimEpoch
 .isStaleAgainst` is deleted and `Comparable` kept only if a consumer remains; `TakeDispositionResume
 .afterReconciliation` and the `StaleEpoch` arms of every exhaustive switch go. The recovery table
@@ -61,14 +64,22 @@ reconciler re-stamp the tip:* a commit written only to satisfy a classifier is a
 tenure boundaries with no consumer, and it hides rather than removes the wrong comparison.
 
 **D2 — The `TaskGit` bundle owns the tenure record; the claiming commands wrap their tracker from
-it** (FR4). `TaskGit` gains a `ClaimEpochBook epochs` component beside its five capabilities.
-`TakeCommandSupport.resolveTracker` (the one funnel both `TakeCommand` and
-`ServeCommand.provisionTracker` resolve through) calls the four-argument
-`TrackerAdapterFactory.create(secrets, config, instanceId, book)` and wraps the result in
-`EpochRecordingTracker(tracker, book)`, with `book = git.epochs()`. `TrackerAdapterConfiguration
-.trackerAdapterRegistry` stops wrapping; `EpochRecordingTrackerFactory` and its spec are deleted;
-`TakeCommandSeams.epochs` and `withEpochs` are deleted; `TakeCommand` and `TakeWorkRouter` read the
-book from the bundle. *Rationale:* the stamping half and the recording half must be one object, and
+it** (FR4). `TaskGit` gains a `ClaimEpochBook epochs` component beside its five capabilities, and
+every one of its constructors takes it — the three- and four-argument convenience constructors
+gain the parameter rather than defaulting it, and `withBaseRefs` carries it — so a bundle without
+a book cannot be built anywhere, hand-built port-fake specs included (they pass a fresh book).
+`TakeCommandSupport.resolveTracker` becomes the one funnel both `TakeCommand` and
+`ServeCommand.provisionTracker` resolve through (today `provisionTracker` calls `factory.create`
+directly); it calls the four-argument `TrackerAdapterFactory.create(secrets, config, instanceId,
+book)` and wraps the result in `EpochRecordingTracker(tracker, book)`, with `book = git.epochs()`.
+`TrackerAdapterConfiguration.trackerAdapterRegistry` stops wrapping; `EpochRecordingTrackerFactory`
+and its spec are deleted; `TakeCommandSeams.epochs` and `withEpochs` are deleted; the separate
+`ClaimEpochBook` parameter of `TakeCommandFactory.of`, `SubcommandDispatchFactory.of`, the
+`ServeCommand` constructor, and the `TakeClaimAndWork` constructor is deleted, and `TakeCommand`,
+`TakeWorkRouter`, and `TakeClaimAndWork` read the book from the bundle. The one-argument
+`GitTaskBranches(GitProcessRunner)` constructor, which defaults to `ClaimEpochSource.NONE` and has
+no production caller, is deleted too: a claimless branch reader is built with `NONE` spelled out.
+*Rationale:* the stamping half and the recording half must be one object, and
 the only value both halves already receive is `TaskGit`; carrying the book inside it makes a
 mismatched assembly unconstructible (the "escape hatch is gone" item of
 `.claude/rules/implementation.md`) instead of merely unusual. *Alternative rejected — keep the
@@ -82,8 +93,15 @@ purpose of keeping such collaborators together.
 (FR5, FR6). `TaskGitFixture.real()` builds a fresh `ClaimEpochBook` by default; the claimless
 variant is renamed to say so (`realClaimless()`) and used only by `StatusCommand`, `UsageCommand`,
 and board fixtures. `TakeCommandFixture`, `TwoInstanceTakeFixture`, `AppAssemblyFixture`,
-`ServeObservabilityFixture`, `ContainerSupportFixture`, `ResumeSpecFixtureBase`, and
-`KillPointWorlds` take their book from the bundle they build. Two regression specs extend the
+`ServeObservabilityFixture`, `ContainerSupportFixture`, and `ResumeSpecFixtureBase` take their book
+from the bundle they build; `KillPointWorlds`, which builds `GitTaskRepository` and
+`GitObjectsTaskRepository` directly rather than a bundle, builds one book per world and passes it
+to both. Beyond those seven, the grep of 2026-09-13 found `ClaimEpochSource.NONE` in twenty more
+files of `bootstrap/src/test` and `application/src/test`, listed in task 6.1; each is dispositioned
+by one rule — *a spec that claims (drives `take`, `serve`, or a tracker-backed resume) moves onto a
+book; a spec that never claims (plain `run`, `status`, `usage`, `board`, or a unit spec of one git
+or lease component) is allowlisted with that reason* — and the report records the disposition per
+file. Two regression specs extend the
 two-instance base: the existing escalate-resume base gains the assertions of the spec scenario
 "Escalated, returned, reclaimed" (tip epoch before reclaim, new epoch after), and a new
 crash-reap-reclaim base realizes "Crashed, reaped, reclaimed" over a salvaged tip. Both are
@@ -94,15 +112,27 @@ production". *Alternative rejected — a unit spec of `TakeDispositionResume` wi
 author chose) and is exactly the component-spec-green, flow-red shape this defect had.
 
 **D4 — Enforcement and durable record** (FR5, FR7). A `:bootstrap` architecture spec,
-`ClaimlessGitBoundarySpec`, scans `application/src`, `bootstrap/src`, and `test-fixtures/src` for
-`ClaimEpochSource.NONE` and `new ClaimEpochBook()` and fails on any file outside an allowlist:
-the claimless commands' wiring, `TaskGitFixture`, the bean that creates the book, and the unit
-specs of the book and the decorator themselves. The ADR 0003 disposition table drops its
-`StaleEpoch` row and its "Block-allocated sequence counters" paragraph gains the sentence that
+`ClaimlessGitBoundarySpec`, applies two rules over `RepoSourceTree` and asserts the scan reached
+every allowlisted file. *Rule 1, production and fixture sources* (`application/src/main`,
+`bootstrap/src/main`, `test-fixtures/src/main`): `ClaimEpochSource.NONE` may appear only in
+`ContainerRunSupportFactory` and `ManualRunRunner` (the plain-`run` path) and in
+`TaskGitFixture.realClaimless()`; `new ClaimEpochBook()` only in
+`ManualRunConfiguration.claimEpochBook` and `TaskGitFixture.real()`. *Rule 2, test sources*
+(`application/src/test`, `bootstrap/src/test`): `ClaimEpochSource.NONE` may appear only in the
+files task 6.1 allowlists as claimless, and no file may hold both a bundle construction
+(`TaskGitFixture.real(` or `new TaskGit(`) and a `new ClaimEpochBook()` — the two-book assembly
+`AppAssemblyFixture` and `ServeObservabilityFixture` have today. Unit specs of the book and the
+decorator (`ClaimEpochBookSpec`, `EpochRecordingTrackerSpec`) construct a book without a bundle
+and pass rule 2 unlisted; `adapters/git/src/test` is outside both rules, since its specs exercise
+single git components and never claim. The ADR 0003 disposition table drops its
+`StaleEpoch` row, its "Block-allocated sequence counters" paragraph gains the sentence that
 states the principle: *an epoch comparison belongs to the medium at write time, against the
 highest epoch it has accepted; a reader that compares history against its own claim has no
-fence, only false positives*. The glossary's *Fence* entry names the two real fences and *Claim
-epoch* says provenance and tracker identity. `testing.md` gains a short section, "Fixtures
+fence, only false positives*, and the same paragraph's "detectable and classifiable" clause is
+rewritten to say what the stamp is for. The glossary's *Fence* entry names the two real fences
+and *Claim epoch* says provenance and tracker identity; the `tracker-port` and `claim-heartbeat`
+capabilities lose their one sentence each about readers classifying older-epoch artifacts as
+stale (their deltas restate the requirements verbatim otherwise). `testing.md` gains a short section, "Fixtures
 assemble through production owners": a decorator or wiring applied only at the composition root
 is not covered by end-to-end specs that assemble by hand; the owner must be a value the command
 receives, and an architecture spec must pin the fixture path. *Rationale:* the principle outlives
@@ -121,7 +151,7 @@ them aligned as before; that is a documented realization, not a hand-synced impl
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `TaskGit.epochs()` — the process's tenure record, built once in `ManualRunConfiguration.taskGit` (production) and `TaskGitFixture.real()` (specs) | `ClaimEpochBook` | `TakeCommandSupport.resolveTracker` (wraps the tracker for `TakeCommand.run` and `ServeCommand.provisionTracker`); `TakeCommand` → `TakeWorkRouter` (repair log epoch); `TakeClaimAndWork.dispatchAfterClaim` (`epochs.ended`); `GitTaskStore`, `GitTaskBranches`, `GitTaskWorktrees` (constructed from the same book inside the bean); `ContainerRunSupportFactory`/`ContainerRunSupport` (container writers; take the book from the bundle instead of a separate parameter); `ManualRunRunner` (passes the bundle, no longer a separate book) | `TrackerAdapterConfiguration.trackerAdapterRegistry` wrapping and `EpochRecordingTrackerFactory` (deleted); `TakeCommandSeams.epochs`/`withEpochs` (deleted); `ClaimEpochSource.NONE` in every claiming assembly and fixture (replaced by the bundle's book). Exemptions: `status`, `usage`, `board`, plain `run` wiring and their fixtures — claimless by design | the `TaskGit` record component (a claiming command cannot be handed a bundle without a book); `ClaimlessGitBoundarySpec` allowlist scan; the two FR6 flow specs asserting stamped epochs on the real medium |
+| `TaskGit.epochs()` — the process's tenure record, built once in `ManualRunConfiguration.taskGit` (production) and `TaskGitFixture.real()` (specs) | `ClaimEpochBook` | `TakeCommandSupport.resolveTracker` (wraps the tracker for `TakeCommand.run` and `ServeCommand.provisionTracker`); `TakeCommand` → `TakeWorkRouter` (repair log epoch; the book reaches `TakeCommand` from `TaskGit`, no longer from `TakeCommandFactory.of`/`SubcommandDispatchFactory.of`); `ServeCommand` (from `TaskGit`, no longer a constructor parameter); `TakeClaimAndWork.dispatchAfterClaim` (`epochs.ended`; from `TaskGit`, no longer a constructor parameter); `GitTaskStore`, `GitTaskBranches`, `GitTaskWorktrees` (constructed from the same book inside the bean); `ContainerRunSupportFactory`/`ContainerRunSupport` (container writers; take the book from the bundle instead of a separate parameter); `ManualRunRunner` (passes the bundle, no longer a separate book) | `TrackerAdapterConfiguration.trackerAdapterRegistry` wrapping and `EpochRecordingTrackerFactory` (deleted); `TakeCommandSeams.epochs`/`withEpochs` (deleted); the separate `ClaimEpochBook` parameter of `TakeCommandFactory.of`, `SubcommandDispatchFactory.of`, `ServeCommand`, `TakeClaimAndWork` (deleted); the `GitTaskBranches(GitProcessRunner)` constructor defaulting to `NONE` (deleted); `TaskGit` constructors without a book (none remain); `ClaimEpochSource.NONE` in every claiming assembly and fixture (replaced by the bundle's book). Exemptions: plain `run` wiring (`ContainerRunSupportFactory`, `ManualRunRunner`), `TaskGitFixture.realClaimless()`, and the claimless specs task 6.1 allowlists by name — claimless by design | the `TaskGit` record component (a claiming command cannot be handed a bundle without a book); `ClaimlessGitBoundarySpec` allowlist scan; the two FR6 flow specs asserting stamped epochs on the real medium |
 
 Identity claimed: "the epoch the tracker recorded for a claim and the epoch stamped on every
 commit of that tenure are one value". Identity spec: the escalate-return-reclaim flow spec (D3)
@@ -142,9 +172,10 @@ pickup and that a second pickup is a no-op (`crash-consistency.md` item 10).
   today: the reclaimer's push is refused as non-fast-forward, the reconciler discards its local
   round under the lease, and the run continues from origin. One round of churn, logged. Q1 in the
   proposal tracks whether a tenure-boundary commit should close it.
-- [`TaskGit` grows a sixth component; some port-fake specs construct it by hand] → they pass a
-  fresh `ClaimEpochBook`, which the boundary spec allowlists for unit specs of the bundle itself;
-  count and list them in the task report.
+- [`TaskGit` grows a sixth component; 28 test files construct it by hand (grep of 2026-09-13)] →
+  every constructor takes the book, so each site passes a fresh `ClaimEpochBook`; D4 rule 2 allows
+  that as long as the file builds no second book beside a bundle. Task 5.1 counts and lists them
+  in the report.
 - [Deleting `RecoveryDisposition.DISCARD` if `StaleEpoch` was its only user removes a documented
   disposition kind] → the ADR's "roll forward / discard" vocabulary keeps *discard* for the
   reconciler's diverged-local rule, which is not a shape disposition; the enum reflects shapes only.

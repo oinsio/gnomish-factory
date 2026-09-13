@@ -50,7 +50,7 @@ The claim epoch stamped on the tip commit SHALL NOT be a classification input: a
 
 #### Scenario: Unsupported envelope version is its own shape, not a parse failure
 - **WHEN** a state file at the tip declares an envelope version the factory does not support
-- **THEN** the shape is `UnsupportedVersion` carrying the file name, the observed version, and the supported version, and the diagnosis names the version rather than a parse failure
+- **THEN** the tip classifies as `UnsupportedVersion` with a diagnosis naming the file, the observed version, and the supported range — on every reading path including take and serve — and never as `Corrupt` or `Unknown`
 
 #### Scenario: A tip stamped by an earlier tenure classifies by its content
 - **WHEN** a task is reclaimed and its tip commit carries a claim epoch older than the new claim's
@@ -69,12 +69,8 @@ Each (re)claim SHALL be issued a monotonically increasing epoch, recorded with t
 - **THEN** the commit message carries that claim's epoch trailer, and a reclaiming tenure's commits carry the new epoch
 
 #### Scenario: Stale-epoch artifact is its own shape
-- **WHEN** a reader encounters a commit or tracker write stamped with an epoch older than the live claim
-- **THEN** no distinct shape is produced for it: the artifact is history of an earlier tenure, and the tip classifies to the shape its content describes (this scenario is kept under its historical name so the archive records the reversal of the former rule; the former rule fired on every legitimate reclaim)
-
-#### Scenario: Older-epoch history is resumed, not rejected
 - **WHEN** a reclaiming instance reads a tip whose epoch is older than its own claim's
-- **THEN** it resumes from that tip by content shape, writes nothing to repair it, and no quarantine or discard is raised on account of the epoch
+- **THEN** no distinct shape is produced for it: the tip classifies to the shape its content describes, the instance resumes from it, writes nothing to repair it, and no quarantine or discard is raised on account of the epoch (the scenario keeps its historical name because the OpenSpec archive refuses a MODIFIED block that drops a scenario; its body records the reversal of the former rule, which fired on every legitimate reclaim)
 
 #### Scenario: A superseded tenure's late push is rejected by the remote
 - **WHEN** a holder whose lease lapsed pushes after a newer tenure has pushed
