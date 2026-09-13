@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.baseref.AllowedBases;
 import com.github.oinsio.gnomish.baseref.BaseDefinition;
 import com.github.oinsio.gnomish.baseref.BasePattern;
 import com.github.oinsio.gnomish.baseref.BranchRole;
+import com.github.oinsio.gnomish.baseref.RefNameSyntax;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -73,7 +74,8 @@ final class BaseConfigMapper {
     }
 
     /** Compiles each declared entry, reporting a missing pattern, a bad pattern and an unknown role. */
-    private static List<AllowedBase> entries(@Nullable List<AllowedBaseDto> allowed, List<ConfigError> errors) {
+    private static List<AllowedBase> entries(
+            @Nullable List<@Nullable AllowedBaseDto> allowed, List<ConfigError> errors) {
         if (allowed == null) {
             return List.of();
         }
@@ -142,12 +144,26 @@ final class BaseConfigMapper {
     }
 
     /**
-     * Holds a declared default against the declared allowed bases. A project that allows none accepts
-     * no per-task selection at all, so its default is the only base there is and nothing bounds it.
+     * Holds a declared default first to the ref-name grammar, then against the declared allowed
+     * bases. A project that allows none accepts no per-task selection at all, so its default is the
+     * only base there is and no pattern bounds it — which is exactly why the grammar check cannot
+     * be left to the pattern match there: with nothing allowed, the default goes straight to the
+     * refresh fetch of every task, so a malformed one must be a located load error (NFR-S3, task
+     * 12.2). With allowed bases declared, a malformed default fails the match as well, but the
+     * grammar error is the one an author can act on.
      */
     private static void checkDefault(
             @Nullable String declared, AllowedBases allowedBases, boolean allowedBasesClean, List<ConfigError> errors) {
-        if (declared == null || allowedBases.isEmpty() || !allowedBasesClean) {
+        if (declared == null) {
+            return;
+        }
+        String violation = RefNameSyntax.refNameViolation(declared).orElse(null);
+        if (violation != null) {
+            errors.add(new ConfigError(
+                    FILE, "task-branch.base.default", "invalid default '%s': %s".formatted(declared, violation)));
+            return;
+        }
+        if (allowedBases.isEmpty() || !allowedBasesClean) {
             return;
         }
         if (allowedBases.match(declared).isEmpty()) {

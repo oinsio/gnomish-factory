@@ -100,7 +100,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
 
         when:
         def events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('work'))
+            repository.createTask(new TaskContext(TASK_ID, 'title', 'body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))
         }
 
         then:

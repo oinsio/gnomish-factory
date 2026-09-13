@@ -611,7 +611,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         // FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so
         // this port-fake chain needs a working BaseRefGit rather than BaseRefGit.UNWIRED.
         def baseRefGit = Stub(BaseRefGit) {
-            resolveForResume(_, _) >> { Path cloneDir, String ref ->
+            resolveForResume(_, _, _) >> { Path cloneDir, String ref, BaseRefKind kind ->
                 new ResumeBaseOutcome.Bound(ref, ref)
             }
         }

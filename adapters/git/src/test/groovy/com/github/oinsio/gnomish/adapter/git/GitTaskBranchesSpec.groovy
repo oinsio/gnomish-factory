@@ -52,7 +52,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture {
     }
 
     private void seedTask(String taskId) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])

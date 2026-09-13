@@ -47,7 +47,6 @@ final class GithubTrackerAdapterFactorySupport {
         return s;
     }
 
-    @SuppressWarnings("unchecked")
     static GithubLabelDef resolveLabel(Map<String, Object> subsection, String key, GithubLabelDef fallback) {
         Object labels = subsection.get("labels");
         if (!(labels instanceof Map<?, ?> labelsMap)) {
@@ -57,7 +56,7 @@ final class GithubTrackerAdapterFactorySupport {
         if (!(entry instanceof Map<?, ?> raw)) {
             return fallback;
         }
-        Map<String, Object> entryMap = (Map<String, Object>) raw;
+        Map<String, Object> entryMap = GithubConfigMaps.stringKeyed(raw);
         String name = (String) entryMap.getOrDefault("name", fallback.name());
         String color = (String) entryMap.getOrDefault("color", fallback.color());
         return new GithubLabelDef(name, color, fallback.description());

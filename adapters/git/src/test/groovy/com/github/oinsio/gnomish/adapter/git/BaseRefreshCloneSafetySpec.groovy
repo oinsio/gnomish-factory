@@ -29,16 +29,7 @@ class BaseRefreshCloneSafetySpec extends Specification implements BareGitRepoFix
     private Path clone
 
     def setup() {
-        work = initWorkingRepo(tempDir, 'work')
-        gitOutput(work, 'checkout', '-b', 'main')
-        commit(work, 'a.txt', 'one')
-        gitOutput(work, 'checkout', '-b', 'develop')
-        commit(work, 'b.txt', 'two')
-        origin = initBareRepo(tempDir, 'origin.git')
-        addRemote(work, 'origin', origin.toString())
-        assert gitExitCode(work, 'push', 'origin', 'main', 'develop') == 0
-        assert gitExitCode(tempDir, 'clone', origin.toString(), 'clone') == 0
-        clone = tempDir.resolve('clone')
+        (work, origin, clone) = initBaseRefTopology(tempDir)
 
         // The operator's own state: a local branch, a local tag, a dirty tree and a staged index.
         assert gitExitCode(clone, 'checkout', '-b', 'my-work') == 0

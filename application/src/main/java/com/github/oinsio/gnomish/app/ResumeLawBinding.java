@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
@@ -36,10 +38,17 @@ import org.slf4j.LoggerFactory;
  * the same pinned ref offline through {@link ManualResumeLawBinding}.
  *
  * <p><b>Pinned ref source (task 6.4, FR7).</b> Both callers pass {@link #pinnedRef} the bundle's
- * {@code baseRef} — the durable pin's ref name, e.g. {@code release/1.18} — falling back to {@code
- * baseCommit} (a bare SHA, itself a valid {@link BaseRefGit#resolveForResume} input) only for a
- * legacy branch created before the structured pin existed, whose {@code task.json} carries no
- * {@code baseRef} at all.
+ * pin — the durable pin's ref name, e.g. {@code release/1.18}, together with the namespace origin
+ * held it in — falling back to {@code baseCommit} as a bare SHA (itself a valid {@link
+ * BaseRefGit#resolveForResume} input, and a {@link BaseRefKind#COMMIT} by construction) only for a
+ * legacy branch created before the structured pin existed, whose {@code task.json} carries no ref
+ * at all.
+ *
+ * <p><b>The pinned kind is the namespace the resume fetches</b> (D7, revised 2026-09-10). Handing
+ * it to {@link BaseRefGit#resolveForResume} is what keeps a tag pushed later under a pinned
+ * branch's name from parking the task under the refresh's collision arm — the kind was origin's own
+ * answer when the base was first resolved, so re-asking the question every resume could only
+ * un-answer it. A pin written without a kind classifies at resume time exactly as before.
  *
  * <p>Implements FR7, FR12, D13 of add-base-ref-resolution.
  */
@@ -82,7 +91,7 @@ final class ResumeLawBinding {
      *
      * @param baseRefGit the base-ref capability the resolution reads through; never null
      * @param cloneDir the factory clone the resolution runs against; never null
-     * @param pinnedRef the task's pinned base ref — see {@link #pinnedRef(String, String)} for how
+     * @param pinnedRef the task's pinned base — see {@link #pinnedRef(BasePin, String)} for how
      *     callers derive it; never null
      * @param finalState the state the resume was about to run from — reported unchanged on a park,
      *     since neither outcome makes engine progress; never null
@@ -93,18 +102,27 @@ final class ResumeLawBinding {
     static Outcome bind(
             BaseRefGit baseRefGit,
             Path cloneDir,
-            String pinnedRef,
+            PinnedBase pinnedRef,
             TaskState finalState,
             TaskRef ref,
             Tracker tracker) {
-        return switch (baseRefGit.resolveForResume(cloneDir, pinnedRef)) {
+        String name = pinnedRef.ref();
+        return switch (baseRefGit.resolveForResume(cloneDir, name, pinnedRef.kind())) {
             case ResumeBaseOutcome.Bound(var ignoredRef, String commit) ->
                 new Bound(LawBinding.atRevision(cloneDir, commit));
-            case ResumeBaseOutcome.Refused(String report) ->
-                new Parked(park(finalState, ref, tracker, pinnedRef, report));
-            case ResumeBaseOutcome.Unavailable(String reason) -> new Released(release(ref, tracker, pinnedRef, reason));
+            case ResumeBaseOutcome.Refused(String report) -> new Parked(park(finalState, ref, tracker, name, report));
+            case ResumeBaseOutcome.Unavailable(String reason) -> new Released(release(ref, tracker, name, reason));
         };
     }
+
+    /**
+     * The base one resume rebinds from: a ref name and, where the pin recorded it, the namespace
+     * origin held that name in.
+     *
+     * @param ref the ref name to resolve; never null
+     * @param kind the namespace to read, or {@code null} to classify {@code ref} at resume time
+     */
+    record PinnedBase(String ref, @Nullable BaseRefKind kind) {}
 
     /**
      * The ref both {@link #bind} callers resolve from: the durable pin's ref name when the branch
@@ -113,12 +131,15 @@ final class ResumeLawBinding {
      * add-base-ref-resolution). A pinned task never re-resolves either way — this only selects
      * which already-recorded value names the tip to refresh.
      *
-     * @param baseRef the branch's durable pin, or {@code null} for a legacy branch
+     * @param pin the branch's durable pin, {@link BasePin#UNPINNED} for a legacy branch
      * @param baseCommit the branch's recorded base commit; never null
-     * @return {@code baseRef} if present, else {@code baseCommit}; never null
+     * @return the pin's ref and kind if it carries one, else the base commit as a {@link
+     *     BaseRefKind#COMMIT}; never null
      */
-    static String pinnedRef(@Nullable String baseRef, String baseCommit) {
-        return baseRef != null ? baseRef : baseCommit;
+    static PinnedBase pinnedRef(BasePin pin, String baseCommit) {
+        return pin.ref() != null
+                ? new PinnedBase(pin.ref(), pin.kind())
+                : new PinnedBase(baseCommit, BaseRefKind.COMMIT);
     }
 
     /**
@@ -130,7 +151,7 @@ final class ResumeLawBinding {
     static TakeResult resolve(
             BaseRefGit baseRefGit,
             Path cloneDir,
-            String pinnedRef,
+            PinnedBase pinnedRef,
             TaskState finalState,
             TaskRef ref,
             Tracker tracker,
@@ -149,7 +170,7 @@ final class ResumeLawBinding {
                 OperatorEvent.RESUME_PINNED_REF_UNRESOLVED.head()
                         + "parking task {}: its pinned base ref '{}' no longer resolves: {}",
                 ref.id(),
-                pinnedRef,
+                LogText.forLog(pinnedRef),
                 LogText.forLog(report));
         parkBestEffort(tracker, ref, fullReport);
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, fullReport);
@@ -174,11 +195,17 @@ final class ResumeLawBinding {
                         + "releasing claim on task {}: origin never answered the resume refresh of its pinned"
                         + " base ref '{}': {}",
                 ref.id(),
-                pinnedRef,
+                LogText.forLog(pinnedRef),
                 LogText.forLog(reason));
         releaseBestEffort(tracker, ref);
-        return new TakeResult.InfrastructureUnavailable("Task " + ref.id() + " was returned to Ready: origin did"
-                + " not answer the resume refresh of its pinned base ref '" + pinnedRef + "': " + reason);
+        // Sanitized here, not at the sinks: this text becomes TakeResult.InfrastructureUnavailable's
+        // reason, which SlotOutcomeLog and the drain/batch summaries log whole. The pinned ref is
+        // read back from the task branch's task.json and never passed a ref-syntax check, so it is
+        // untrusted in its own right (FR6 of harden-logging-observability).
+        return new TakeResult.InfrastructureUnavailable("Task " + ref.id() + " claim released (the reaper returns"
+                + " it to Ready after the claim TTL): origin did not answer the resume refresh of its pinned base ref '"
+                + LogText.forLog(pinnedRef) + "': "
+                + LogText.forLog(reason));
     }
 
     private static void releaseBestEffort(Tracker tracker, TaskRef ref) {

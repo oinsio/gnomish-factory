@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -89,7 +90,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
         then:
         1 * taskRepository.createTask({
             it.taskId() == 'PROJ-1'
-        }, 'HEAD', BaseRule.LOCAL_HEAD, _)
+        }, LAW_COMMIT, new BasePin('HEAD', null, BaseRule.LOCAL_HEAD), _)
 
         and:
         1 * support.sweepOrphans()
@@ -97,18 +98,19 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
         executor.requests.size() == 1
     }
 
-    // FR6, design D7: --base is passed through; absent, the branch starts at the clone's HEAD.
-    def "passes the base ref through, defaulting an absent one to HEAD"() {
+    // FR6, FR15, design D7: the branch always starts at the peeled law commit, and the resolved ref
+    // — the raw --base, or the clone's HEAD when there is none — travels beside it as the pin.
+    def "starts the branch at the law commit and pins the resolved ref (#base)"() {
         when:
         run(base)
 
         then:
-        1 * taskRepository.createTask(_, expected, _, _)
+        1 * taskRepository.createTask(_, LAW_COMMIT, new BasePin(expected, null, expectedRule), _)
 
         where:
-        base || expected
-        null || 'HEAD'
-        'release/1.2' || 'release/1.2'
+        base || expected | expectedRule
+        null || 'HEAD' | BaseRule.LOCAL_HEAD
+        'release/1.2' || 'release/1.2' | BaseRule.EXPLICIT_ARGUMENT
     }
 
     // FR7: on a FRESH run, a creation failure names an operator mistake — the same remap as the host

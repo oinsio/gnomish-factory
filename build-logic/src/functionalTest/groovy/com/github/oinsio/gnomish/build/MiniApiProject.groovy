@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.build
 
 import org.gradle.testkit.runner.BuildResult
-import org.gradle.testkit.runner.GradleRunner
 
 import java.nio.file.Files
 import java.nio.file.Path
@@ -77,8 +76,8 @@ public class MiniApi {
 
     /** Writes settings, build script and the initial api source. */
     void write() {
-        writeFile('settings.gradle', "rootProject.name = 'mini-api'\n")
-        writeFile('build.gradle', '''\
+        GradleRunnerSupport.writeFile(projectDir, 'settings.gradle', "rootProject.name = 'mini-api'\n")
+        GradleRunnerSupport.writeFile(projectDir, 'build.gradle', '''\
 plugins {
     id 'api-compatibility-gate-conventions'
 }
@@ -99,7 +98,7 @@ version = '1.0.0'
 
     /** Replaces the single public api source file. */
     void writeApi(String source) {
-        writeFile('src/main/java/com/example/mini/MiniApi.java', source)
+        GradleRunnerSupport.writeFile(projectDir, 'src/main/java/com/example/mini/MiniApi.java', source)
     }
 
     /** Empties the generated baseline directory without removing it (FR4). */
@@ -129,31 +128,10 @@ version = '1.0.0'
     }
 
     BuildResult build(String... tasks) {
-        runner(tasks).build()
+        GradleRunnerSupport.runner(projectDir, tasks).build()
     }
 
     BuildResult buildAndFail(String... tasks) {
-        runner(tasks).buildAndFail()
-    }
-
-    private GradleRunner runner(String... tasks) {
-        GradleRunner.create()
-                .withProjectDir(projectDir.toFile())
-                .withPluginClasspath()
-                .withArguments([*tasks, '--offline', '--stacktrace', '-g', gradleUserHome()])
-                .forwardOutput()
-    }
-
-    /** The outer build's Gradle user home — shared so `--offline` resolves from a warm cache (NFR-R1). */
-    private static String gradleUserHome() {
-        String home = System.getProperty('gnomish.gradleUserHome')
-        assert home != null: 'functionalTest must pass -Dgnomish.gradleUserHome (see build-logic/build.gradle)'
-        home
-    }
-
-    private void writeFile(String relativePath, String content) {
-        Path target = projectDir.resolve(relativePath)
-        Files.createDirectories(target.parent)
-        target.text = content
+        GradleRunnerSupport.runner(projectDir, tasks).buildAndFail()
     }
 }

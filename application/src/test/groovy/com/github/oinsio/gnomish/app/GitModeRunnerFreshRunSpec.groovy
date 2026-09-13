@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -138,7 +139,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         then:
         1 * lifecycleStore.createTask({
             it.taskId() == 'PROJ-1'
-        }, 'HEAD', BaseRule.LOCAL_HEAD, _)
+        }, LAW_COMMIT, new BasePin('HEAD', null, BaseRule.LOCAL_HEAD), _)
         1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
         1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Completed)
 
@@ -146,19 +147,19 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         executor.requests.size() == 1
     }
 
-    // FR6, design D7: --base chooses where the task branch starts; absent, it is the clone's current
-    // HEAD, passed through literally because the port requires a non-blank baseRef.
-    def "passes the base ref through, defaulting an absent one to HEAD"() {
+    // FR6, FR15, design D7: the branch always starts at the peeled law commit, and the resolved ref
+    // — the raw --base, or the clone's HEAD when there is none — travels beside it as the pin.
+    def "starts the branch at the law commit and pins the resolved ref (#base)"() {
         when:
         runCapturingStdout(base)
 
         then:
-        1 * lifecycleStore.createTask(_, expected, _, _)
+        1 * lifecycleStore.createTask(_, LAW_COMMIT, new BasePin(expected, null, expectedRule), _)
 
         where:
-        base || expected
-        null || 'HEAD'
-        'release/1.2' || 'release/1.2'
+        base || expected | expectedRule
+        null || 'HEAD' | BaseRule.LOCAL_HEAD
+        'release/1.2' || 'release/1.2' | BaseRule.EXPLICIT_ARGUMENT
     }
 
     // FR6, FR8: an ABORTED run is still a terminal boundary — the outcome is recorded and the

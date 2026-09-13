@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
@@ -177,7 +178,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             ensureLocalTaskBranch(_, _) >> true
         }
         builtSupport = Mock(SandboxRunSupport) {
-            readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false, null, null)
+            readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
@@ -205,7 +206,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
             ensureLocalTaskBranch(_, _) >> true
         }
         builtSupport = Mock(SandboxRunSupport) {
-            readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false, null, null)
+            readTaskJson() >> new TaskRecord(taskContext(), 'base', Instant.EPOCH, null, null, false, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
@@ -237,7 +238,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def report = new EscalationReport.AttemptsExhausted(3)
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, true, null, null)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, true, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
         }
         tracker.fetchTask(_) >> heldByUs()
@@ -271,7 +272,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         }
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Completed(), null, false, null, null)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Completed(), null, false, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
         }
         tracker.fetchTask(_) >> heldByUs()
@@ -305,7 +306,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         }
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Paused('build'), null, true, null, null)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Paused('build'), null, true, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
         }
         tracker.fetchTask(_) >> heldByUs()
@@ -331,7 +332,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def report = new EscalationReport.AttemptsExhausted(3)
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, null, null)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
@@ -362,7 +363,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def repository = Mock(TaskRepository)
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, null, null)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
@@ -402,7 +403,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         def report = new EscalationReport.DecisionNeeded('which way?', [])
         builtSupport = Mock(SandboxRunSupport) {
             readTaskJson() >> new TaskRecord(
-            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, null, null)
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false, BasePin.UNPINNED)
             readFinalState() >> TaskState.atStageStart('build')
         }
         tracker.collectDecisions(REF) >> []

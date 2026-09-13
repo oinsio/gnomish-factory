@@ -14,6 +14,14 @@ import java.util.function.Supplier;
  * each other is cheap against an hour-long round; a nondeterministic git-level failure and a retry
  * loop around it would not be.
  *
+ * <p><b>Lock scope</b> (`lock-scope.md`, the resource-serializing exception): the subprocess runs
+ * with the lock held on purpose — the clone's shared {@code .git} is the guarded resource, not any
+ * field of this class, and every waiter is another mutating command that must not run concurrently
+ * anyway. The hold is bounded by {@link GitProcessRunner}'s own deadline: a network command
+ * ({@code fetch}, {@code push}) by {@code factory.git-network-timeout}, a local one ({@code
+ * worktree}) by the time git takes to write. Worst case is therefore one network timeout, which a
+ * slot of the same clone would have spent waiting on the same dead remote regardless.
+ *
  * <p>Different clones never block each other: each gets its own lock, keyed by the caller-supplied
  * key (in practice the clone's canonical git-common-dir, resolved by {@link GitProcessRunner} —
  * see there for how a worktree's mutating call is mapped back to the clone it shares a {@code .git}

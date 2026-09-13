@@ -17,13 +17,20 @@ import java.nio.file.Path;
  * (FR6, M1). And a fetch that exits zero without leaving the destination behind delivered nothing,
  * so the ref must be read back too rather than trusting the status.
  *
- * <p>A fetch that exits and delivers nothing is put to the same probe {@link CommitBaseFetch} uses:
- * by the time this method runs, an earlier refs read already told the caller origin holds the ref,
- * so a non-delivering fetch means either origin stopped answering in between, or it answered the
- * fetch itself but declined — most often a mid-fetch authentication or permission refusal. Git's own
- * words are the wrong evidence to tell those apart (localized, reworded between releases), so
- * {@link OriginProbe} asks a second, simpler question instead: a remote that still answers may put a
- * task-level refusal on the record, one that does not may not.
+ * <p>A fetch that <em>failed</em> is put to the same probe {@link CommitBaseFetch} uses: by the time
+ * this method runs, an earlier refs read already told the caller origin holds the ref, so a failed
+ * fetch means either origin stopped answering in between, or it answered the fetch itself but
+ * declined — most often a mid-fetch authentication or permission refusal. Git's own words are the
+ * wrong evidence to tell those apart (localized, reworded between releases), so {@link OriginProbe}
+ * asks a second, simpler question instead: a remote that still answers may put a task-level refusal
+ * on the record, one that does not may not.
+ *
+ * <p>A fetch that exits <em>zero</em> and still leaves no ref takes the other road — {@code
+ * Unavailable}, with no probe. Git reported success, so nothing here points at a refusal of this
+ * ref, and the only honest statement is that freshness could not be established; the daemon is
+ * charged for it and the task keeps its claim. The deliberate asymmetry with {@link CommitBaseFetch},
+ * which probes on any non-delivery, is that a SHA fetch has no prior refs read to lean on at all
+ * ({@code docs/adr/0006-base-refresh-fetch.md}, "Auth refusal vs. genuine outage").
  *
  * <p>Implements FR6, FR9 of add-base-ref-resolution.
  */

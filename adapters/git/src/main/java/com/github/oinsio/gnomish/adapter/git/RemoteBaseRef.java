@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Asks {@code origin}, in one refs read, which namespace it holds a base name in — {@code git
@@ -63,14 +64,24 @@ final class RemoteBaseRef {
     }
 
     /**
-     * Reads which namespaces {@code origin} holds {@code name} in.
+     * Reads which of the asked-for namespaces {@code origin} holds {@code name} in.
+     *
+     * <p>Asking for one namespace only is the shape a resume takes when the task's pin already
+     * records which namespace origin held the name in (D7 of add-base-ref-resolution, revised
+     * 2026-09-10). The collision arm is then structurally unreachable, which is the point: the
+     * pinned kind IS the remote fact, established when the base was first resolved, so a name later
+     * reused in the other namespace can neither redirect the task nor park it.
      *
      * @param cloneDir the factory clone the read runs from; never null
      * @param name a base ref name, neither {@code refs/}-qualified nor a pattern
+     * @param branches true to look in {@code refs/heads/}
+     * @param tags true to look in {@code refs/tags/}
      * @return the namespace answer, or why none could be established
      */
-    Held read(Path cloneDir, String name) {
-        GitCommandResult refs = LsRemote.refs(runner, cloneDir, HEADS + name, TAGS + name);
+    Held read(Path cloneDir, String name, boolean branches, boolean tags) {
+        GitCommandResult refs = branches && tags
+                ? LsRemote.refs(runner, cloneDir, HEADS + name, TAGS + name)
+                : LsRemote.refs(runner, cloneDir, (branches ? HEADS : TAGS) + name);
         if (refs.termination() != Termination.EXITED || refs.exitCode() != 0) {
             // A clone with no origin was never going to answer, and re-asking it spends an
             // infrastructure budget on a settled fact — the same split the default-branch read makes.
@@ -79,17 +90,19 @@ final class RemoteBaseRef {
             }
             return new Held.Unanswered(refs.failureDetail("base refs read"));
         }
-        return classify(commitAt(refs.stdout(), HEADS + name), commitAt(refs.stdout(), TAGS + name));
+        return classify(
+                branches ? commitAt(refs.stdout(), HEADS + name).orElse(null) : null,
+                tags ? commitAt(refs.stdout(), TAGS + name).orElse(null) : null);
     }
 
-    private static Held classify(Optional<String> branch, Optional<String> tag) {
-        if (branch.isPresent() && tag.isPresent()) {
-            return new Held.Both(branch.get(), tag.get());
+    private static Held classify(@Nullable String branch, @Nullable String tag) {
+        if (branch != null && tag != null) {
+            return new Held.Both(branch, tag);
         }
-        if (branch.isPresent()) {
-            return new Held.Branch(branch.get());
+        if (branch != null) {
+            return new Held.Branch(branch);
         }
-        return tag.<Held>map(Held.Tag::new).orElseGet(Held.Absent::new);
+        return tag != null ? new Held.Tag(tag) : new Held.Absent();
     }
 
     /**

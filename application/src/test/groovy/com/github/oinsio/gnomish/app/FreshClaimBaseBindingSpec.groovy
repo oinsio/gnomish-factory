@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
@@ -18,6 +19,8 @@ import com.github.oinsio.gnomish.baseref.AllowedBase
 import com.github.oinsio.gnomish.baseref.AllowedBases
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.BasePattern
+import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -38,7 +41,7 @@ class FreshClaimBaseBindingSpec extends Specification {
     private static final TaskRef REF = new TaskRef('PROJ-1')
     private static final Path ROOT = Paths.get('/repo')
     private static final TaskState STATE = TaskState.atStageStart('build')
-    private static final TrustedBaseContext NO_ALLOWED_BASES = new TrustedBaseContext(BaseDefinition.none(), 'main')
+    private static final TrustedBaseContext NO_ALLOWED_BASES = new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main'))
 
     private BaseRefGit baseRefGit = Mock()
     private Tracker tracker = Mock()
@@ -68,7 +71,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         outcome instanceof FreshClaimBaseBinding.Bound
         def bound = outcome as FreshClaimBaseBinding.Bound
         bound.lawBinding() == LawBinding.atRevision(ROOT, 'c0ffee')
-        bound.decision().ref() == 'release/1.2'
+        bound.pin() == new BasePin('release/1.2', BaseRefKind.BRANCH, BaseRule.EXPLICIT_ARGUMENT)
 
         and:
         0 * tracker.park(*_)
@@ -81,7 +84,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         def base = new BaseDefinition(AllowedBases.of([
             AllowedBase.of(BasePattern.compile('develop'))
         ]), null)
-        def trustedBase = new TrustedBaseContext(base, 'main')
+        def trustedBase = new TrustedBaseContext(base, new DefaultBranch('main'))
         def request = new FreshClaimBaseBinding.Request(null, taskNaming(Designator.single('develop')), trustedBase)
 
         when:
@@ -92,7 +95,8 @@ class FreshClaimBaseBindingSpec extends Specification {
 
         and:
         outcome instanceof FreshClaimBaseBinding.Bound
-        (outcome as FreshClaimBaseBinding.Bound).decision().ref() == 'develop'
+        (outcome as FreshClaimBaseBinding.Bound).pin()
+                == new BasePin('develop', BaseRefKind.BRANCH, BaseRule.DESIGNATOR)
     }
 
     // FR9, UX2: a designator the allowed bases reject is also a deterministic refusal — parked, no
@@ -105,7 +109,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         def base = new BaseDefinition(AllowedBases.of([
             AllowedBase.of(BasePattern.compile('develop'))
         ]), null)
-        def trustedBase = new TrustedBaseContext(base, 'main')
+        def trustedBase = new TrustedBaseContext(base, new DefaultBranch('main'))
         def request = new FreshClaimBaseBinding.Request(null, taskNaming(Designator.single('nope')), trustedBase)
 
         when:

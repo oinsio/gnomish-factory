@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
@@ -29,12 +30,12 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision binds the resolved tip and runs the engine"() {
         given:
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def resolved = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
         def baseRefGit = Stub(BaseRefGit)
-        baseRefGit.resolveForResume(cloneDir, _ as String) >> new ResumeBaseOutcome.Bound('irrelevant', resolved)
+        baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Bound('irrelevant', resolved)
         def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
@@ -51,11 +52,11 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision parks INFRA and never runs the engine when the ref resolves nowhere"() {
         given:
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def baseRefGit = Stub(BaseRefGit)
-        baseRefGit.resolveForResume(cloneDir, _ as String) >> new ResumeBaseOutcome.Refused('gone')
+        baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Refused('gone')
         def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 
@@ -75,11 +76,11 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
     def "resumeWithoutDecision releases the claim when a configured origin never answers"() {
         given:
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def baseRefGit = Stub(BaseRefGit)
-        baseRefGit.resolveForResume(cloneDir, _ as String) >> new ResumeBaseOutcome.Unavailable('no answer')
+        baseRefGit.resolveForResume(cloneDir, _ as String, _) >> new ResumeBaseOutcome.Unavailable('no answer')
         def runner = newTakeResumeRunner(new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), testProperties(), [], new ClaimLossFlag(), gitWith(baseRefGit))
         def bootstrap = runner.bootstrap(cloneDir, taskId)
 

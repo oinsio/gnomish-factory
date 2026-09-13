@@ -1,22 +1,22 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.adapter.git.state.BasePin;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
-import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,6 +51,13 @@ import org.slf4j.LoggerFactory;
  * still leaves a readable branch — this class writes that one file and {@link
  * GitAttemptPersistence} owns every later write of it.
  *
+ * <p>Kept in sync with {@link GitObjectsTaskRepository}: both media run the same task-lifecycle
+ * write protocol, and in particular both take the task's start point as an already-peeled {@code
+ * ObjectId} — the caller's single peel of its law binding — resolve no base <em>name</em> of their
+ * own, verify the object is a commit this repository holds, and record that same commit as {@code
+ * baseCommit} beside the {@code (ref, kind, rule)} pin (FR15, D12 of add-base-ref-resolution,
+ * revised 2026-09-10).
+ *
  * <p>Implements FR1, FR2, FR3, FR5, FR15 of add-git-workflow; FR3, FR5, FR10 of
  * harden-task-branch-contract.
  */
@@ -80,9 +87,9 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     @Override
-    public void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState) {
+    public void createTask(TaskContext context, ObjectId lawCommit, BasePin pin, TaskState initialState) {
         String taskId = context.taskId();
-        BranchCreationResult result = branchCreator.createBranch(cloneDir, taskId, baseRef);
+        BranchCreationResult result = branchCreator.createBranch(cloneDir, taskId, lawCommit);
         String baseCommit =
                 switch (result) {
                     case BranchCreationResult.Created created -> created.baseCommit();
@@ -92,17 +99,16 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                                 TaskLifecycleEvent.STARTED,
                                 "creating branch",
                                 "branch \"" + already.branchName() + "\" already exists");
-                    case BranchCreationResult.BaseRefNotResolved notResolved ->
+                    case BranchCreationResult.BaseCommitMissing missing ->
                         throw new GitTaskRepositoryException(
                                 taskId,
                                 TaskLifecycleEvent.STARTED,
                                 "creating branch",
-                                "base ref \"" + notResolved.baseRef() + "\" did not resolve");
+                                "base commit \"" + missing.baseCommit() + "\" is not in this clone");
                 };
 
         Path worktree = ensureWorktree(taskId);
-        TaskJsonDto dto = TaskJsonMapper.toDto(
-                context, baseCommit, Instant.now(), null, null, false, new BasePin(baseRef, baseRule));
+        TaskJsonDto dto = TaskJsonMapper.toDto(context, baseCommit, Instant.now(), null, null, false, pin);
         StateFileWrite.write(worktree, taskId, initialState, TaskLifecycleEvent.STARTED);
         writeAndCommit(taskId, worktree, dto, TaskLifecycleEvent.STARTED);
     }
@@ -128,7 +134,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                         null,
                         current.lastEscalation(),
                         false,
-                        new BasePin(current.baseRef(), current.baseRule()))
+                        current.pin())
                 .withEgressCursor(currentDto.egressCursor());
         // One transition, one commit (FR4): the decision and the attempt-counter reset it implies
         // are staged together, so no tip ever shows one without the other.
@@ -159,7 +165,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
                         outcome,
                         lastEscalation,
                         pending,
-                        new BasePin(current.baseRef(), current.baseRule()))
+                        current.pin())
                 .withEgressCursor(currentDto.egressCursor());
         writeAndCommit(taskId, worktree, dto, event);
     }

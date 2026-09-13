@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.baseref.BaseDefinition;
+import com.github.oinsio.gnomish.baseref.DefaultBranch;
 import java.util.Objects;
 
 /**
@@ -26,9 +27,12 @@ import java.util.Objects;
  * @param base the project's allowed bases and configured default, as {@link
  *     TrustedTierStartup.StartupLaw#base()} bound it
  * @param defaultBranch the repository default branch origin named at startup, as {@link
- *     TrustedTierStartup.StartupLaw#defaultBranch()} bound it
+ *     TrustedTierStartup.StartupLaw#defaultBranch()} bound it. A {@link DefaultBranch} rather than
+ *     a name: this record is the last hop before {@code BaseRefResolver}'s default-branch tier, so
+ *     a bare string here is exactly where a stand-in {@code HEAD} would enter and be reported as
+ *     the remote's own choice (FR4, FR10, M2)
  */
-public record TrustedBaseContext(BaseDefinition base, String defaultBranch) {
+public record TrustedBaseContext(BaseDefinition base, DefaultBranch defaultBranch) {
 
     /** Both halves of the trusted tier travel together; neither may be missing. */
     public TrustedBaseContext {

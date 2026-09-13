@@ -31,12 +31,12 @@ record RemoteOutageWiring(
         Runnable onTransition,
         Consumer<RemoteOutageClosedOutage> onClosedOutage) {
 
-    /** The production defaults: {@link RemoteOutageGate#DEFAULT_TARGET}, no-op callbacks. */
+    /** The production defaults: {@link RemoteOutageReporter#DEFAULT_TARGET}, no-op callbacks. */
     static RemoteOutageWiring defaults() {
         return new RemoteOutageWiring(
-                RemoteOutageGate.DEFAULT_TARGET,
+                RemoteOutageReporter.DEFAULT_TARGET,
                 RepeatSuppressor.system(),
-                RemoteOutageGate.DEFAULT_SUSTAINED_OPEN_THRESHOLD,
+                RemoteOutageReporter.DEFAULT_SUSTAINED_OPEN_THRESHOLD,
                 () -> {},
                 ignored -> {});
     }

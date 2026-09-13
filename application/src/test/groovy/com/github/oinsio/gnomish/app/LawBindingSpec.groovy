@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.gitobjects.ObjectId
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -34,6 +35,16 @@ class LawBindingSpec extends Specification {
         binding == new LawBinding.AtRevision(REPO, 'release/1.18')
     }
 
+    // FR15, D12 (revised 2026-09-10): after the one peel a binding holds the commit itself, so
+    //     re-opening the law resolves nothing and no name survives for a second lookup.
+    def "FR15: a commit binding carries the peeled commit verbatim"() {
+        given:
+        def commit = ObjectId.of('0123456789abcdef0123456789abcdef01234567')
+
+        expect:
+        LawBinding.atCommit(REPO, commit) == new LawBinding.AtCommit(REPO, commit)
+    }
+
     // FR11: "this path resolved no base of its own yet" is spelled once, here, rather than as a
     //     "HEAD" literal repeated across the take, serve, container and resume paths.
     def "FR11: the checkout binding is the clone's HEAD, named rather than spelled"() {
@@ -53,6 +64,7 @@ class LawBindingSpec extends Specification {
         'working tree' | LawBinding.workingTree(REPO)
         'revision' | LawBinding.atRevision(REPO, 'v1.2.3')
         'checkout' | LawBinding.atCheckout(REPO)
+        'commit' | LawBinding.atCommit(REPO, ObjectId.of('0123456789abcdef0123456789abcdef01234567'))
     }
 
     // D12: the law root is the same directory name in both media.

@@ -24,6 +24,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -79,6 +80,10 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     Path worktreesRoot
     def gitRunner = new GitProcessRunner()
     Tracker tracker = Mock()
+    // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and over
+    //     BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to stamp the
+    //     slot's own refresh, which this spec reads back but never paces.
+    RemoteOutageGate remoteOutageGate = RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30))
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
@@ -148,8 +153,8 @@ tracker:
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, ABORT_THRESHOLD, MDC_KEY,
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
                 new ClaimEpochBook(), new TrustedBaseContext(BaseDefinition.none(),
-                gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD')),
-                RemoteOutageGate.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
+                new DefaultBranch(currentBranch(cloneDir))),
+                remoteOutageGate)
     }
 
     // Scenario: slot body unchanged — a pre-claimed fresh task dispatches through
@@ -166,6 +171,24 @@ tracker:
         then:
         gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1').exitCode() == 0
         0 * tracker.claim(*_)
+    }
+
+    // FR14, D9 of add-base-ref-resolution: the slot's REAL base refresh — the narrow fetch against
+    //     the spec's own origin — reaches the remote outage gate through the slot's own TaskGit,
+    //     proven on the gate's observable state: it records the refresh as the remote's last
+    //     successful contact. The slot's terminal result plays no part in it.
+    def "a slot's real base refresh is reported to the remote outage gate"() {
+        given:
+        tracker.fetchTask(new TaskRef('PROJ-1')) >> workingTask('PROJ-1')
+        def slotRunner = newSlotRunner()
+        remoteOutageGate.health().lastSuccessAt() == null
+
+        when:
+        slotRunner.run(new TaskRef('PROJ-1'))
+
+        then:
+        remoteOutageGate.health().lastSuccessAt() != null
+        !remoteOutageGate.isOpen()
     }
 
     // Scenario: MDC is set to the claimed ref's id for the duration of the run and cleared once it

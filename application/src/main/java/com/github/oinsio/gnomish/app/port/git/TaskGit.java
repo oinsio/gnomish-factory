@@ -58,4 +58,16 @@ public record TaskGit(
             UnaryOperator<RoundEnvironmentSource> midRoundPush) {
         this(store, branches, worktrees, midRoundPush, BaseRefGit.UNWIRED);
     }
+
+    /**
+     * The same bundle with its base-ref capability replaced — the seam a decoration of the base
+     * reads is attached at (the serve slot's outage-signaling one, FR14 of add-base-ref-resolution)
+     * without the other three capabilities leaving the backend they came from.
+     *
+     * @param baseRefs the base-ref capability the copy carries; never null
+     * @return a copy differing only in {@code baseRefs}; never null
+     */
+    public TaskGit withBaseRefs(BaseRefGit baseRefs) {
+        return new TaskGit(store, branches, worktrees, midRoundPush, baseRefs);
+    }
 }

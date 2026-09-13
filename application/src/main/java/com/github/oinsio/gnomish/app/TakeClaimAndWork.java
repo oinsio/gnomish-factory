@@ -215,8 +215,11 @@ public final class TakeClaimAndWork {
      * sits {@code Working} behind a runner that is already gone until its lease expires, exactly
      * the hanging claim the crash arm ({@link TakeCrashAbort}) exists to prevent. {@link
      * Tracker#release} is the right verb rather than {@code recordAbort} or {@code park}: nothing
-     * infrastructural failed, so the task's logical state is left untouched and it returns to
-     * circulation immediately.
+     * infrastructural failed, so the task's logical state is left untouched. The release does not
+     * return the task to {@code Ready} by itself — the working label stays and the reaper of the
+     * {@code claim-heartbeat} capability restores the queue once the claim is stale; what the
+     * release buys is the heartbeat stopping cleanly so that staleness is reached, not a shorter
+     * wait. The fenced immediate return is {@code add-claim-return}'s verb.
      *
      * <p>Best-effort, in the same shape as {@link com.github.oinsio.gnomish.app.take.AbortHandler}'s
      * tracker writes (NFR-R2): an unreachable tracker is itself a plausible reason a run is bailing

@@ -64,7 +64,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     def worktreeManager = new TaskWorktreeManager(runner, worktreesRoot)
                     def push = new BranchPush(runner)
 
-                    def branchName = (branchCreator.createBranch(cloneDir, taskId, 'HEAD')
+                    def branchName = (branchCreator.createBranch(cloneDir, taskId, TaskStart.commit(cloneDir, 'HEAD'))
                             as BranchCreationResult.Created).branchName()
                     def worktree = worktreeManager.ensureWorktree(cloneDir, taskId, branchName)
 

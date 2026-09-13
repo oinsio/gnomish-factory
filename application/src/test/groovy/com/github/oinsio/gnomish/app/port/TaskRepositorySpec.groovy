@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.port
 
+import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -9,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.gitobjects.ObjectId
 import java.time.Instant
 import spock.lang.Specification
 
@@ -24,17 +27,25 @@ import spock.lang.Specification
  */
 class TaskRepositorySpec extends Specification {
 
+    /** The caller's single peel — the port takes a commit, never a name (FR15). */
+    private static final ObjectId START_POINT = ObjectId.of('0123456789abcdef0123456789abcdef01234567')
+
+    /** The metadata that travels beside it. */
+    private static final BasePin PIN = new BasePin('release/1.18', BaseRefKind.BRANCH, BaseRule.EXPLICIT_ARGUMENT)
+
     /** A minimal in-memory {@link TaskRepository}, honoring the D9/FR5 reset contract. */
     static class FakeTaskRepository implements TaskRepository {
-        final Map<String, String> baseRefs = [:]
+        final Map<String, ObjectId> startPoints = [:]
+        final Map<String, BasePin> pins = [:]
         final Map<String, List<Decision>> decisions = [:].withDefault { [] }
         final Map<String, TaskOutcome> outcomes = [:]
         final Map<String, TaskState> initialStates = [:]
         final Map<String, TaskState> resetStates = [:]
 
         @Override
-        void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState) {
-            baseRefs[context.taskId()] = baseRef
+        void createTask(TaskContext context, ObjectId lawCommit, BasePin pin, TaskState initialState) {
+            startPoints[context.taskId()] = lawCommit
+            pins[context.taskId()] = pin
             decisions[context.taskId()] = new ArrayList<>(context.decisions())
             initialStates[context.taskId()] = initialState
             outcomes.remove(context.taskId())
@@ -61,10 +72,11 @@ class TaskRepositorySpec extends Specification {
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
 
         when: 'the task is created from a base ref'
-        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
+        repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
 
         then: 'the base ref is durably associated with the task'
-        repository.baseRefs['TASK-1'] == 'abc123'
+        repository.startPoints['TASK-1'] == START_POINT
+        repository.pins['TASK-1'] == PIN
     }
 
     // FR3 of harden-task-branch-contract: the initial state is part of the SAME durable write as
@@ -77,7 +89,7 @@ class TaskRepositorySpec extends Specification {
         def initialState = TaskState.atStageStart('build')
 
         when: 'the task is created'
-        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, initialState)
+        repository.createTask(context, START_POINT, PIN, initialState)
 
         then: 'the starting position is recorded with it'
         repository.initialStates['TASK-1'] == initialState
@@ -87,7 +99,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a repository with an existing task'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
+        repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
 
         when: 'a resume decision is appended'
         def decision = new Decision('proceed with plan B', 'build', 'operator', null)
@@ -101,7 +113,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a task escalated in a prior visit'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
+        repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         def escalation = new EscalationReport.DecisionNeeded('needs input', [])
         repository.recordOutcome('TASK-1', new TaskOutcome.Escalated(state, escalation))
@@ -123,7 +135,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a task whose stage burned its attempts before parking'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
+        repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def exhausted = TaskState.atStageStart('build').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
                         ExecutorUsage.none(), JudgeUsage.none(), []))
@@ -141,7 +153,7 @@ class TaskRepositorySpec extends Specification {
         given: 'a repository with an existing task'
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', 'Fix the widget', 'Body text', [])
-        repository.createTask(context, 'abc123', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
+        repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
 
         when: 'the task completes'

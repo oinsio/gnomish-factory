@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery;
+import com.github.oinsio.gnomish.baseref.DefaultBranch;
+import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -68,9 +70,29 @@ public final class RemoteDefaultBranch {
             return new DefaultBranchDiscovery.Unavailable(read.failureDetail("default-branch read"));
         }
         return symrefBranch(read.stdout())
-                .<DefaultBranchDiscovery>map(DefaultBranchDiscovery.Discovered::new)
+                .map(RemoteDefaultBranch::discovered)
                 .orElseGet(() -> new DefaultBranchDiscovery.Undetermined(
                         "origin answered but named no default branch: its HEAD points at no ref"));
+    }
+
+    /**
+     * Holds the name origin reported to {@link DefaultBranch}'s own rules before it is discovered:
+     * the name goes on to the refresh fetch as a refspec, and it is subprocess output from a remote
+     * a human administers, so a name those rules refuse is a fact about the repository — {@link
+     * DefaultBranchDiscovery.Undetermined}, no budget spent — never a {@link
+     * DefaultBranchDiscovery.Discovered} carrying it onward (NFR-S3, task 12.2).
+     *
+     * <p>This is the one place a {@link DefaultBranch} is built, which is what makes the type an
+     * enforcement rather than a label: every later holder of the value received it from here
+     * (FR4, FR10, M2, task 12.4). The rules are the ref-name grammar plus the refusal of {@code
+     * HEAD} — a name git itself will not let a remote carry on a branch.
+     */
+    private static DefaultBranchDiscovery discovered(String branch) {
+        return DefaultBranch.violation(branch)
+                .<DefaultBranchDiscovery>map(
+                        violation -> new DefaultBranchDiscovery.Undetermined("origin named a default branch '"
+                                + LogText.forLog(branch) + "' that is not a usable branch name: " + violation))
+                .orElseGet(() -> new DefaultBranchDiscovery.Discovered(new DefaultBranch(branch)));
     }
 
     /**

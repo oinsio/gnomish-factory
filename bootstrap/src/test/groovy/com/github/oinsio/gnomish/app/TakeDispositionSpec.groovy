@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
@@ -19,6 +20,7 @@ import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -59,7 +61,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     private TrustedBaseContext trustedBase() {
         new TrustedBaseContext(
                 BaseDefinition.none(),
-                gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD'))
+                new DefaultBranch(currentBranch(cloneDir)))
     }
 
     private TakeDisposition newDisposition() {
@@ -256,7 +258,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "FR15: an unreadable state envelope parks the task once, burning no attempt"() {
         given: 'a claimed task whose branch carries an unreadable state.json'
         def taskId = 'PROJ-23'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('.gnomish-task/state.json'), 'not json at all')
         commitAll(worktree, 'corrupt state')
@@ -292,7 +294,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         // the default branch pushed; this scenario only needs its bare path back.
         def bare = Path.of(gitOutput(cloneDir, 'remote', 'get-url', 'origin'))
         def taskId = 'PROJ-22'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         gitOutput(cloneDir, 'push', 'origin', 'gnomish/PROJ-22')
         def worktree = expectedWorktree(taskId)
 
@@ -337,7 +339,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch resumes it instead of creating a new one"() {
         given:
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         def disposition = newDisposition()
@@ -357,7 +359,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch and a DecisionNeeded outcome re-parks restating the question"() {
         given:
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -397,7 +399,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch recorded Completed reconciles the deferred finish, zero engine rounds"() {
         given: 'a delivered branch whose finish never reached the tracker'
         def taskId = 'PROJ-4'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(taskId, new TaskOutcome.Completed(state))
@@ -431,7 +433,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Ready with an existing branch recorded Aborted resumes it on the return alone"() {
         given:
         def taskId = 'PROJ-5'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def state = TaskState.atStageStart('build')
         persistOneRound(taskId, state)
         repository().recordOutcome(
@@ -567,7 +569,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working confirmed via TTY removes the stale claim, claims ordinarily, and resumes to Delivered"() {
         given: 'an existing branch for the held task, resumable from its last durable round'
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [
@@ -598,7 +600,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     def "Working headless with --takeover proceeds as a confirmed takeover, bypassing the seam"() {
         given:
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def observed = new ClaimVersion('claim-comment-1', NOW.minusSeconds(47 * 60), new ClaimEpoch(1))
         openFronts = [

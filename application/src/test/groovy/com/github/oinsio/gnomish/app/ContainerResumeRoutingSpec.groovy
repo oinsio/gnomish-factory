@@ -125,7 +125,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
 
         and:
         lawBindings == [
-            new LawBinding.AtRevision(CLONE_DIR, 'release/1.18')
+            new LawBinding.AtRevision(CLONE_DIR, 'refs/heads/release/1.18')
         ]
     }
 

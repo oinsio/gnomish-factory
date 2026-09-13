@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
@@ -114,20 +115,10 @@ tracker:
         return captured.toString('UTF-8')
     }
 
+    // Kept in sync with com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory:
+    // this is the same "fixed tracker, expandRef unsupported" fixture other specs use directly.
     private static TrackerAdapterFactory factoryReturning(Tracker t) {
-        new TrackerAdapterFactory() {
-                    String type() {
-                        'github'
-                    }
-
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
+        new FixedTrackerAdapterFactory({ t })
     }
 
     private static TrackerAdapterFactory factoryThrowingOnCreate(RuntimeException failure) {

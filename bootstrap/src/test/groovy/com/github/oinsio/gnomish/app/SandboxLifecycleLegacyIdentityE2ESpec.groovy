@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.git.ProjectIdentity
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
@@ -107,7 +108,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
         // has no origin at all and the remote is restored right after.
         def originUrl = gitOutput(cloneDir, 'remote', 'get-url', 'origin').trim()
         assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         addRemote(cloneDir, 'origin', originUrl)
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"

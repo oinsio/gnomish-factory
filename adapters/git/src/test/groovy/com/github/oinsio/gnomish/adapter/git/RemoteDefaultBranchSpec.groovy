@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import java.nio.file.Files
@@ -48,7 +49,7 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
         def clone = cloneOfRemoteDefaulting('plain', 'main')
 
         expect:
-        discovery().discover(clone) == new DefaultBranchDiscovery.Discovered('main')
+        discovery().discover(clone) == new DefaultBranchDiscovery.Discovered(new DefaultBranch('main'))
     }
 
     def "FR5: a renamed default branch is followed with no configuration change"() {
@@ -59,7 +60,7 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
         def discovered = discovery().discover(clone)
 
         then: 'it names what origin holds now, never a hardcoded main'
-        discovered == new DefaultBranchDiscovery.Discovered('develop')
+        discovered == new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
     }
 
     def "FR5: the read goes to the remote, not to the clone's stale origin/HEAD symref"() {
@@ -68,7 +69,7 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
         assert gitExitCode(clone, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/obsolete') == 0
 
         expect: 'the remote is the authority'
-        discovery().discover(clone) == new DefaultBranchDiscovery.Discovered('develop')
+        discovery().discover(clone) == new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
     }
 
     def "FR5: a clone with no origin refuses instead of guessing a name"() {
@@ -81,6 +82,30 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
 
         then: 'a settled fact, so the infrastructure budget is not spent on it'
         discovered == new DefaultBranchDiscovery.NoRemote()
+        sleeper.slept.isEmpty()
+    }
+
+    // FR4, FR10, M2: the one well-formed ref name that would change the tier's meaning, proved
+    //     reachable rather than assumed away. `git branch HEAD` is refused by git's own
+    //     strbuf_check_branch_ref, but `update-ref` writes refs/heads/HEAD directly, and
+    //     `ls-remote --symref` then really does answer "ref: refs/heads/HEAD\tHEAD" — so a hostile
+    //     or mis-administered remote can name it, and before the typed value it flowed on as the
+    //     repository default branch nobody chose.
+    def "FR4, FR10, M2: a remote naming HEAD as its default branch is undetermined, never discovered"() {
+        given: "an origin carrying a branch literally named HEAD, with its own HEAD pointed at it"
+        def clone = cloneOfRemoteDefaulting('head-named', 'main')
+        Path origin = tempDir.resolve('head-named-origin.git')
+        assert gitExitCode(origin, 'update-ref', 'refs/heads/HEAD', gitOutput(origin, 'rev-parse', 'main').trim()) == 0
+        assert gitExitCode(origin, 'symbolic-ref', 'HEAD', 'refs/heads/HEAD') == 0
+
+        when:
+        def discovered = discovery().discover(clone)
+
+        then: 'the stand-in never becomes a branch the autonomous tier would speak for'
+        discovered instanceof DefaultBranchDiscovery.Undetermined
+        (discovered as DefaultBranchDiscovery.Undetermined).reason().contains("must not be 'HEAD'")
+
+        and: 'a fact about the repository, so the infrastructure budget is not spent on it'
         sleeper.slept.isEmpty()
     }
 
@@ -151,7 +176,7 @@ exec git "$@"
         def discovered = discovery(new GitProcessRunner(recordingGit(log).toString())).discover(clone)
 
         then:
-        discovered == new DefaultBranchDiscovery.Discovered('main')
+        discovered == new DefaultBranchDiscovery.Discovered(new DefaultBranch('main'))
         recordedSubcommands(log).count('ls-remote') == 1
     }
 
@@ -167,6 +192,32 @@ exec git "$@"
         then:
         discovered instanceof DefaultBranchDiscovery.Unavailable
         !(discovered as DefaultBranchDiscovery.Unavailable).reason().contains('ghp_SECRETTOKEN')
+    }
+
+    def "NFR-S3: a default-branch name origin reports with a control character is undetermined, never discovered"() {
+        given: 'a git whose ls-remote answers with a symref line carrying an escape sequence'
+        Path gitBinary = tempDir.resolve('hostile-git.sh')
+        gitBinary.toFile().text = '''#!/bin/sh
+for a in "$@"; do
+  if [ "$a" = "ls-remote" ]; then printf 'ref: refs/heads/main\\033[31m\\tHEAD\\nabc123\\tHEAD\\n'; exit 0; fi
+done
+exec git "$@"
+'''
+        gitBinary.toFile().executable = true
+        def clone = initWorkingRepo(tempDir, 'hostile-origin')
+        commit(clone, 'a.txt', 'seed')
+        addRemote(clone, 'origin', tempDir.resolve('anywhere.git').toString())
+
+        when:
+        def discovered = discovery(new GitProcessRunner(gitBinary.toString())).discover(clone)
+
+        then: 'the name is refused, not escaped, and never becomes a refspec'
+        discovered instanceof DefaultBranchDiscovery.Undetermined
+        (discovered as DefaultBranchDiscovery.Undetermined).reason().contains('not a usable branch name')
+        !(discovered as DefaultBranchDiscovery.Undetermined).reason().contains(Character.toString(27 as char))
+
+        and: 'a fact about the repository, so the infrastructure budget is not spent on it'
+        sleeper.slept.isEmpty()
     }
 
     def "the symref line is parsed, and output naming no head ref yields no name"() {

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
@@ -20,6 +21,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
@@ -72,7 +75,15 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * about base policy specifics: no allowed bases, no configured default, and a default branch
      * name any {@link BaseRefGit} stub's {@code refresh} may accept unconditionally.
      */
-    static final TrustedBaseContext DEFAULT_TRUSTED_BASE = new TrustedBaseContext(BaseDefinition.none(), 'main')
+    static final TrustedBaseContext DEFAULT_TRUSTED_BASE = new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main'))
+
+    /**
+     * The pin a claim under {@link #DEFAULT_TRUSTED_BASE} records (FR7, FR15): the default branch
+     * the trusted tier named, the namespace {@link #refreshingBaseRefGit} reports for it, and the
+     * tier that produced the name.
+     */
+    static final BasePin DEFAULT_BRANCH_PIN =
+    new BasePin('main', BaseRefKind.BRANCH, BaseRule.REPOSITORY_DEFAULT_BRANCH)
 
     /**
      * FR13 of add-base-ref-resolution: {@link TaskTierLaw#bind} reads the task tier through {@link
@@ -105,7 +116,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             discoverDefaultBranch: { Path cloneDir ->
                 throw new UnsupportedOperationException('never called on the claim path (FR13)')
             },
-            resolveForResume: { Path cloneDir, String ref ->
+            resolveForResume: { Path cloneDir, String ref, BaseRefKind kind ->
                 throw new UnsupportedOperationException('not exercised by a fresh-claim scenario')
             },
         ] as BaseRefGit
@@ -128,7 +139,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             discoverDefaultBranch: { Path cloneDir ->
                 throw new UnsupportedOperationException('not exercised by a resume scenario')
             },
-            resolveForResume: { Path cloneDir, String ref ->
+            resolveForResume: { Path cloneDir, String ref, BaseRefKind kind ->
                 new ResumeBaseOutcome.Bound(ref, ref)
             },
         ] as BaseRefGit
@@ -207,6 +218,10 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             bindTaskTier: { binding ->
                 new BoundTaskTier(new LoadOutcome.Loaded(completingPipeline()), LAW_COMMIT)
             },
+            // FR15 of add-base-ref-resolution: the manual tier peels its binding through the
+            // assembly before creating a branch, so a chain that reaches a manual fresh run needs
+            // this answered with the same fixed commit its law reads report.
+            lawCommitOf: { binding -> LAW_COMMIT },
         ] as RunAssembly
     }
 
@@ -246,6 +261,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             bindTaskTier: { binding ->
                 new BoundTaskTier(new LoadOutcome.Loaded(completingPipeline()), LAW_COMMIT)
             },
+            lawCommitOf: { binding -> LAW_COMMIT },
         ] as RunAssembly
         return self
     }

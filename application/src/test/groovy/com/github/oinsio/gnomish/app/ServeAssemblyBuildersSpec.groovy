@@ -16,7 +16,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGate
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
@@ -57,7 +57,10 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                 new TrackerConfig('github', 3), Stub(TrackerAdapterFactory), tracker, INSTANCE,
                 assemblyRunning(null), git, heartbeat, FIXED_CLOCK, ContainerTakeSupport.hostOnly(),
                 new ClaimEpochBook(), DEFAULT_TRUSTED_BASE,
-                RemoteOutageGate.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
+                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                //     stamp a transition this spec never drives.
+                RemoteOutageGates.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
 
         then:
         slotRunner != null
@@ -84,7 +87,10 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         when:
         def automaton = ServeAssembly.feedAutomaton(testProperties(), SERVE_PROPERTIES, clock, trackerConfig,
                 Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier,
-                RemoteOutageGate.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
+                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                //     stamp a transition this spec never drives.
+                RemoteOutageGates.system(BaseRefGit.UNWIRED, CLONE_DIR, Duration.ofSeconds(30)))
 
         then:
         automaton.view().wipLimit() == 7

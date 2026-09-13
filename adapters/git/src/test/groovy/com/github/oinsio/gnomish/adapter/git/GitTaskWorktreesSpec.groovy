@@ -38,14 +38,9 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
-    private String createTaskBranch(String taskId) {
-        def result = new TaskBranchCreator(runner).createBranch(cloneDir, taskId, 'HEAD')
-        (result as BranchCreationResult.Created).branchName()
-    }
-
     def "ensureWorktree delegates to TaskWorktreeManager and returns the materialized path"() {
         given:
-        def branch = createTaskBranch('PROJ-1')
+        def branch = createTaskBranch(cloneDir, 'PROJ-1')
 
         when:
         def path = worktrees.ensureWorktree(cloneDir, worktreesRoot, 'PROJ-1', branch)
@@ -57,7 +52,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
 
     def "reconcile delegates to the replica-pair reconciler and returns its verdict"() {
         given:
-        def branch = createTaskBranch('PROJ-2')
+        def branch = createTaskBranch(cloneDir, 'PROJ-2')
         def worktree = worktrees.ensureWorktree(cloneDir, worktreesRoot, 'PROJ-2', branch)
 
         expect: 'no remote-tracking ref to diverge from — the check reports the local tip stands'
@@ -66,7 +61,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
 
     def "salvage delegates to WorktreeSalvage and returns a salvager bound to the worktree"() {
         given:
-        def branch = createTaskBranch('PROJ-3')
+        def branch = createTaskBranch(cloneDir, 'PROJ-3')
         def worktree = worktrees.ensureWorktree(cloneDir, worktreesRoot, 'PROJ-3', branch)
         Files.writeString(worktree.resolve('leftover.txt'), 'uncommitted')
 
@@ -79,7 +74,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
 
     def "cleanUp delegates to TaskWorktreeCleanup — a completed task's worktree is removed"() {
         given:
-        def branch = createTaskBranch('PROJ-4')
+        def branch = createTaskBranch(cloneDir, 'PROJ-4')
         def worktree = worktrees.ensureWorktree(cloneDir, worktreesRoot, 'PROJ-4', branch)
         assert Files.isDirectory(worktree)
 
@@ -92,7 +87,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
 
     def "pruneWorktrees delegates to TaskWorktreeCleanup — a stale administrative entry is dropped"() {
         given: 'a worktree whose directory was removed behind git\'s back'
-        def branch = createTaskBranch('PROJ-5')
+        def branch = createTaskBranch(cloneDir, 'PROJ-5')
         def worktree = worktrees.ensureWorktree(cloneDir, worktreesRoot, 'PROJ-5', branch)
         worktree.toFile().deleteDir()
         assert runner.run(cloneDir, 'worktree', 'list').stdout().contains('PROJ-5')

@@ -48,7 +48,7 @@ class RemoteOutageGateSpec extends Specification {
         given:
         // real-time-wiring: the composition-root factory IS the subject of this feature — the gate is
         //     built and read, never opened or probed, so no clock-driven decision runs.
-        def g = RemoteOutageGate.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30),
+        def g = RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30),
                 Duration.ofMinutes(10), Duration.ofHours(1), {}, { ignored -> })
 
         expect:
@@ -355,5 +355,81 @@ class RemoteOutageGateSpec extends Specification {
 
         then: 'the reset took effect: a probe fires again at the plain idle interval'
         probes.get() == 3
+    }
+
+    // FR14: the interval resets "only after the first successful base refresh that FOLLOWS the
+    //     close". A slot that started before the outage and finishes while the gate is still open
+    //     reports a refresh that predates the open — it must not shrink the growing probe schedule
+    //     mid-outage: the next probe after a second failure still waits the quadrupled interval.
+    def "a successful refresh reported while the gate is open does not reset the probe interval"() {
+        given:
+        def probes = new AtomicInteger()
+        def baseRefGit = [probe: { Path p ->
+                probes.incrementAndGet(); false
+            }] as BaseRefGit
+        def g = gate(baseRefGit)
+        g.openOnFailure("boom")
+
+        when: 'the first probe fails, growing the interval to 2x idle'
+        clock.advance(IDLE)
+        g.probeIfDue()
+
+        and: 'an in-flight slot that fetched its base BEFORE the outage finishes now'
+        g.onSuccessfulRefresh()
+
+        and: 'the second probe fails at the doubled interval, growing it to 4x idle'
+        clock.advance(IDLE.multipliedBy(2))
+        g.probeIfDue()
+
+        then:
+        g.isOpen()
+        probes.get() == 2
+
+        when: 'only the doubled interval elapses — not yet the quadrupled one'
+        clock.advance(IDLE.multipliedBy(2))
+        g.probeIfDue()
+
+        then: 'no third probe yet: the stale refresh signal did not shrink the schedule'
+        probes.get() == 2
+    }
+
+    // FR14: the pending reset is consumed only by a refresh after the close — a stale refresh
+    //     signal during the outage must not spend it, so the genuine post-close refresh still
+    //     resets the interval to idle for the next outage.
+    def "a refresh reported while open does not consume the post-close reset"() {
+        given:
+        def probes = new AtomicInteger()
+        def answer = false
+        def baseRefGit = [probe: { Path p ->
+                probes.incrementAndGet(); answer
+            }] as BaseRefGit
+        def g = gate(baseRefGit)
+        g.openOnFailure("boom")
+
+        when: 'the first probe fails, then an in-flight slot reports a (pre-outage) refresh'
+        clock.advance(IDLE)
+        g.probeIfDue()
+        g.onSuccessfulRefresh()
+
+        and: 'the second probe fails too, then the third succeeds and closes the gate'
+        clock.advance(IDLE.multipliedBy(2))
+        g.probeIfDue()
+        clock.advance(IDLE.multipliedBy(4))
+        answer = true
+        g.probeIfDue()
+
+        then:
+        !g.isOpen()
+        probes.get() == 3
+
+        when: 'the base refresh that follows the close succeeds, then a new failure reopens the gate'
+        g.onSuccessfulRefresh()
+        g.openOnFailure("boom")
+        answer = false
+        clock.advance(IDLE)
+        g.probeIfDue()
+
+        then: 'the reset took effect: the probe fires at the plain idle interval'
+        probes.get() == 4
     }
 }

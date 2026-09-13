@@ -21,12 +21,13 @@ import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker
 import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller
 import com.github.oinsio.gnomish.app.serve.RecordingKiller
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGate
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.ServeShutdown
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
@@ -136,8 +137,11 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         new TakeSlotRunner(
                 newAssembly(), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, 3, 'taskId',
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook(), new TrustedBaseContext(BaseDefinition.none(), 'HEAD'),
-                RemoteOutageGate.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
+                new ClaimEpochBook(), new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')),
+                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                //     stamp a transition this spec never drives.
+                RemoteOutageGates.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
     }
 
     /** A real, quick-to-drain automaton: the mocked tracker reports nothing eligible. */
@@ -714,7 +718,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
                 ['model-x': new TokenUsage(120, 45, 10, 5)])
         def shutdown = newShutdown({
             ->
-            try (var taskScope = MdcAwareThread.taskScope(IN_FLIGHT_TASK)) {
+            try (var ignored = MdcAwareThread.taskScope(IN_FLIGHT_TASK)) {
                 AnchorLog.taskSummary(summary)
             }
         })

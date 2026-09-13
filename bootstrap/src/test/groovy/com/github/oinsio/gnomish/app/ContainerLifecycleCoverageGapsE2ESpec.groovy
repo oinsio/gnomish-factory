@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -155,7 +156,7 @@ advancement: auto
                 AdvancementMode.AUTO)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(stage), sandboxProps,
                 new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def environment = support.lease().environmentFor('work')
         def handle = environment.exec(new ExecCommand(
                         [

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.baseref.DefaultBranch;
+
 /**
  * What one bounded remote read established about the repository's default branch — the
  * zero-configuration tier of base resolution (FR5).
@@ -17,9 +19,11 @@ public sealed interface DefaultBranchDiscovery {
     /**
      * Origin answered and named its default branch.
      *
-     * @param branch the short branch name, {@code refs/heads/} stripped
+     * @param branch the validated branch name, {@code refs/heads/} stripped. Typed rather than a
+     *     bare string so the one value that speaks for the remote cannot be stood in for further
+     *     down the startup path (FR4, FR10, M2)
      */
-    record Discovered(String branch) implements DefaultBranchDiscovery {}
+    record Discovered(DefaultBranch branch) implements DefaultBranchDiscovery {}
 
     /**
      * The clone has no {@code origin} remote, so there is no one to ask. A refusal, never a

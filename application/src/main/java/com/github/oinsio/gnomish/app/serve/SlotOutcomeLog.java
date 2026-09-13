@@ -46,9 +46,17 @@ final class SlotOutcomeLog {
      * with the summary now stating it at the level the outcome warrants would be two lines saying
      * the same thing about one task — and for an infrastructure abort, a third one under
      * {@code AbortHandler}'s own WARN/ERROR naming the cause. One outcome, one level-bearing line:
-     * the summary. {@code Skipped} and {@code InfrastructureUnavailable} keep their WARN because no
-     * summary is written for either — nothing ran, yet an operator still wants to know the slot
-     * declined the task (FR9 of add-base-ref-resolution for the latter).
+     * the summary. {@code Skipped} keeps its WARN because no summary is written for it — nothing
+     * ran, yet an operator still wants to know the slot declined the task.
+     *
+     * <p>{@code InfrastructureUnavailable} writes no summary either, but it does NOT keep a WARN:
+     * the layer that decided to release the claim ({@code FreshClaimBaseBinding} for a fresh claim,
+     * {@code ResumeLawBinding} for a resume) already wrote one naming the base ref and the cause,
+     * and the remote outage gate writes its own for the daemon-level transition. A second WARN here
+     * restated the first one's own text for the same fault — "One failure, one log"
+     * (.claude/rules/logging.md); its retired code was {@code GF144}. FR9's operator signal for a
+     * single-shot {@code take} is the deciding layer's WARN plus the typed result and exit code 16,
+     * not this line.
      *
      * @param claimed the task the slot ran; never null
      * @param result the terminal result of that run; never null
@@ -71,10 +79,7 @@ final class SlotOutcomeLog {
                         claimed.id(),
                         skipped.reason());
             case TakeResult.InfrastructureUnavailable infrastructureUnavailable ->
-                log.warn(
-                        OperatorEvent.SLOT_BASE_INFRASTRUCTURE_UNAVAILABLE.head() + "slot for task {} released: {}",
-                        claimed.id(),
-                        infrastructureUnavailable.reason());
+                log.debug("slot for task {} released: {}", claimed.id(), infrastructureUnavailable.reason());
             case TakeResult.EmptyQueue _ ->
                 log.debug("slot for task {} reported an unexpected empty-queue result", claimed.id());
         }

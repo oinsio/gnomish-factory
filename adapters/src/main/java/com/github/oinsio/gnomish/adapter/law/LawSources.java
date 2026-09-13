@@ -60,7 +60,8 @@ public final class LawSources {
         return switch (binding) {
             case LawBinding.WorkingTree workingTree ->
                 new BoundLaw(new WorkingTreeLawSource(workingTree.lawRoot()), checkoutOf(gitObjects));
-            case LawBinding.AtRevision atRevision -> atCommit(atRevision.revision(), gitObjects);
+            case LawBinding.AtRevision atRevision -> peel(atRevision.revision(), gitObjects);
+            case LawBinding.AtCommit atCommit -> boundAt(atCommit.commit(), gitObjects);
         };
     }
 
@@ -78,12 +79,22 @@ public final class LawSources {
     }
 
     /** The git-objects realization at the commit {@code revision} peels to, with that commit as the pin. */
-    private static BoundLaw atCommit(String revision, GitObjects gitObjects) {
+    private static BoundLaw peel(String revision, GitObjects gitObjects) {
         ObjectId lawCommit = gitObjects
                 .resolveRef(revision)
                 .orElseThrow(() -> new UsageException("cannot bind the pipeline law: '" + revision
                         + "' resolves to no commit in the factory clone — the law of a task is read from its"
                         + " base's own commit, never from the clone's working tree"));
+        return boundAt(lawCommit, gitObjects);
+    }
+
+    /**
+     * The git-objects realization at an already-peeled commit: no {@code rev-parse} runs, because
+     * the one peel that established this commit has already happened (design D12, revised
+     * 2026-09-10). This is what keeps re-opening the law of a bound task a lookup rather than a
+     * second resolution that a moved ref could answer differently.
+     */
+    private static BoundLaw boundAt(ObjectId lawCommit, GitObjects gitObjects) {
         return new BoundLaw(new GitObjectsLawSource(gitObjects, lawCommit, LawBinding.LAW_ROOT), lawCommit);
     }
 

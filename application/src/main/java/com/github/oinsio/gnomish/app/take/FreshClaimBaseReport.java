@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.baseref.UnderdeterminedCause;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * The report a fresh claim parks with when its base could not be determined or refreshed (FR2,
@@ -10,6 +12,15 @@ import java.util.List;
  * reads one report format wherever a base decision is refused.
  *
  * <p>Pure text assembly, no I/O: the tracker write and the log line are the caller's.
+ *
+ * <p>Every field this report carries from outside the factory — the designator values a tracker
+ * held, the resolver's reason built around them, the resolved ref name — is passed through {@link
+ * LogText} here, where it enters the factory's own text. It has to happen here rather than at the
+ * sinks: the assembled report is logged whole by {@code SlotOutcomeLog} and posted as a tracker
+ * comment, and by then no untrusted accessor is left at the call site for
+ * {@code UntrustedLogTextGateSpec} to see. Same reasoning, same remedy as {@code
+ * GitCommandResult.failureDetail} (FR6 of harden-logging-observability;
+ * {@code .claude/rules/logging.md}).
  *
  * <p>Implements FR2, FR6, FR9 of add-base-ref-resolution.
  */
@@ -29,11 +40,13 @@ public final class FreshClaimBaseReport {
      */
     public static String underdetermined(
             String taskId, UnderdeterminedCause cause, List<String> values, String reason) {
-        String named = values.isEmpty() ? "" : "Values named: " + String.join(", ", values) + "\n";
+        String named = values.isEmpty()
+                ? ""
+                : "Values named: " + values.stream().map(LogText::forLog).collect(Collectors.joining(", ")) + "\n";
         return "Task " + taskId + " is parked: its base could not be determined.\n"
                 + "Cause: " + cause + "\n"
                 + named
-                + "Detail: " + reason + "\n"
+                + "Detail: " + LogText.forLog(reason) + "\n"
                 + "No stage attempt was spent and the claim was not released: the failure is deterministic,"
                 + " so re-claiming would only repeat it. Fix the task's base designator or the project's"
                 + " allowed bases, then return the task to work.";
@@ -50,8 +63,8 @@ public final class FreshClaimBaseReport {
      */
     public static String refused(String taskId, String ref, String detail) {
         return "Task " + taskId + " is parked: its resolved base ref could not be refreshed.\n"
-                + "Resolved ref: " + ref + "\n"
-                + "Detail: " + detail + "\n"
+                + "Resolved ref: " + LogText.forLog(ref) + "\n"
+                + "Detail: " + LogText.forLog(detail) + "\n"
                 + "No stage attempt was spent and the claim was not released: the failure is deterministic,"
                 + " so re-claiming would only repeat it. Fix or re-point the base and return the task to"
                 + " work.";

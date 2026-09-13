@@ -39,6 +39,9 @@ class CreationWorld implements BareGitRepoFixture {
      */
     TaskRepository recovering
 
+    /** The second instance's own clone — where its {@code createTask} peels the base it starts from. */
+    Path recoveringClone
+
     String taskId
 
     /** The task branch's name on any of the three repositories. */

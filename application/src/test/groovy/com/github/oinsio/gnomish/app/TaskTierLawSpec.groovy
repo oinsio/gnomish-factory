@@ -54,8 +54,9 @@ class TaskTierLawSpec extends Specification {
         TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
     }
 
-    // FR13, D14: a task tier that loads cleanly binds the task to the peeled law commit, never to
-    // the requested revision — so law and pin name one SHA by construction — and never parks.
+    // FR13, D14, FR15: a task tier that loads cleanly binds the task to the peeled law commit
+    // itself — kept typed, so the branch's start point, the frozen law and the pin are one SHA by
+    // construction and no string revision survives to be resolved a second time — and never parks.
     def "binds to the peeled law commit when the task tier loads cleanly"() {
         given:
         def binding = LawBinding.atRevision(ROOT, 'release/1.18')
@@ -71,7 +72,8 @@ class TaskTierLawSpec extends Specification {
         outcome instanceof TaskTierLaw.Bound
         def bound = outcome as TaskTierLaw.Bound
         bound.definition() == definition
-        bound.lawBinding() == LawBinding.atRevision(ROOT, LAW_COMMIT.hex())
+        bound.lawCommit() == LAW_COMMIT
+        bound.lawBinding() == LawBinding.atCommit(ROOT, LAW_COMMIT)
 
         and: 'a clean load never touches the tracker'
         0 * tracker.park(*_)

@@ -96,8 +96,51 @@ final class CommitBaseFetch {
                 + "branch or a tag instead, or enable it on the server.");
     }
 
-    /** The full commit name {@code revision} resolves to in this clone, or empty when it holds none. */
+    /**
+     * The full commit name {@code revision} resolves to in this clone, or empty when it holds none.
+     * A pinned {@code COMMIT} kind reaches here without passing {@link #looksLikeCommit}, so
+     * {@code --end-of-options} guards the one arm where {@code revision} is not known to be hex.
+     *
+     * <p>A name a ref answers to is refused rather than resolved. {@code rev-parse} applies the
+     * whole gitrevisions lookup order, so a local branch or tag that happens to be named in hex
+     * ({@code refs/heads/fcd49bc0ae}) wins over the object of the same abbreviation — and the
+     * refresh would then report the operator's own stale ref as this claim's base commit, with no
+     * fetch and no refusal: precisely the redirection ADR 0006 exists to close. Refusing hands an
+     * unpinned name on to the ref namespaces, where origin decides it, and turns a pinned
+     * {@code COMMIT} into a report instead of a wrong base.
+     */
     private Optional<String> commit(Path cloneDir, String revision) {
-        return VerifiedTip.read(runner.run(cloneDir, "rev-parse", "--verify", "--quiet", revision + "^{commit}"));
+        if (!isFullObjectName(revision) && namesRef(cloneDir, revision)) {
+            return Optional.empty();
+        }
+        return VerifiedTip.read(
+                runner.run(cloneDir, "rev-parse", "--verify", "--quiet", "--end-of-options", revision + "^{commit}"));
+    }
+
+    /**
+     * Whether {@code revision} is a whole object name. Git ignores any ref whose name is one, so
+     * these resolve to the object no matter what the clone holds under that name — which is why the
+     * guard above is the abbreviation arm's alone, and why a full name is also the only one this
+     * class will fetch by.
+     */
+    private static boolean isFullObjectName(String revision) {
+        return revision.length() == SHA1_LENGTH || revision.length() == SHA256_LENGTH;
+    }
+
+    /**
+     * Whether this clone answers {@code revision} out of a ref namespace. {@code
+     * --symbolic-full-name} prints the ref a name resolves to and nothing at all for an object, so
+     * the question is asked of git's own lookup order rather than of a list of namespaces kept here.
+     */
+    private boolean namesRef(Path cloneDir, String revision) {
+        return VerifiedTip.read(runner.run(
+                        cloneDir,
+                        "rev-parse",
+                        "--verify",
+                        "--quiet",
+                        "--symbolic-full-name",
+                        "--end-of-options",
+                        revision))
+                .isPresent();
     }
 }

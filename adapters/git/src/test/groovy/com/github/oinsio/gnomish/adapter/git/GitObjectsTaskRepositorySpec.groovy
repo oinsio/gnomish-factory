@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
+import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
@@ -25,6 +27,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
+import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -47,6 +50,11 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     @TempDir
     Path tempDir
 
+    /** The pin travelling beside the start commit — metadata only (FR7, FR15). */
+    private static final BasePin PIN = new BasePin('base', BaseRefKind.BRANCH, BaseRule.EXPLICIT_ARGUMENT)
+
+    private static final BasePin CONFIGURED_PIN = new BasePin('base', BaseRefKind.BRANCH, BaseRule.CONFIGURED_DEFAULT)
+
     def runner = new GitProcessRunner()
     Path bareDir
     GitObjectsTaskRepository repository
@@ -68,6 +76,11 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         repository = new GitObjectsTaskRepository(gitObjects, identity, clock, ClaimEpochSource.NONE, DenialCursorSource.NONE)
     }
 
+    /** The base's own commit — the caller's single peel, which the port now takes in place of a name. */
+    private ObjectId baseCommit() {
+        TaskStart.commit(bareDir, 'refs/heads/base')
+    }
+
     private static TaskContext sampleContext(String taskId = 'PROJ-1', List<Decision> decisions = []) {
         new TaskContext(taskId, 'Fix the thing', 'Body text', decisions)
     }
@@ -82,7 +95,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25: createTask creates the branch ref and commits task.json over bare objects, no checkout"() {
         when:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         then: 'the branch ref exists in the bare clone'
         runner.run(bareDir, 'rev-parse', '--verify', refFor('PROJ-1')).exitCode() == 0
@@ -114,19 +127,19 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // stand-in — the ref and the rule land in the STARTED commit's task.json over bare objects too.
     def "FR7: createTask pins the resolved ref and its rule in the bare-object STARTED commit"() {
         when:
-        repository.createTask(sampleContext(), 'base', BaseRule.CONFIGURED_DEFAULT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), CONFIGURED_PIN, TaskState.atStageStart('implement'))
 
         then:
         def content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
-        content.baseRef() == 'base'
-        content.baseRule() == BaseRule.CONFIGURED_DEFAULT
+        content.pin().ref() == 'base'
+        content.pin().rule() == BaseRule.CONFIGURED_DEFAULT
     }
 
     // FR7: the pin is not re-derived on later lifecycle commits — appendDecision and recordOutcome
     // carry the SAME (ref, rule) forward unchanged over bare objects, exactly like the host medium.
     def "FR7: the pin survives appendDecision and recordOutcome unchanged over bare objects"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.CONFIGURED_DEFAULT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), CONFIGURED_PIN, TaskState.atStageStart('implement'))
 
         when:
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
@@ -134,16 +147,16 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
         then:
         def afterDecision = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
-        afterDecision.baseRef() == 'base'
-        afterDecision.baseRule() == BaseRule.CONFIGURED_DEFAULT
+        afterDecision.pin().ref() == 'base'
+        afterDecision.pin().rule() == BaseRule.CONFIGURED_DEFAULT
 
         when:
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
 
         then:
         def afterOutcome = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(readTaskJson('PROJ-1')))
-        afterOutcome.baseRef() == 'base'
-        afterOutcome.baseRule() == BaseRule.CONFIGURED_DEFAULT
+        afterOutcome.pin().ref() == 'base'
+        afterOutcome.pin().rule() == BaseRule.CONFIGURED_DEFAULT
     }
 
     // FR3 of harden-task-branch-contract: the container-side STARTED commit carries both files
@@ -157,7 +170,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         def capture = LogCaptureSupport.attach(TaskLifecycleCommitWriter)
 
         when:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
 
         then:
@@ -177,7 +190,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR3: the bare-object STARTED commit carries the initial state.json beside task.json"() {
         when:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         then: 'one commit carries both files'
         def files = gitOutput(bareDir, 'show', '--name-only', '--format=', refFor('PROJ-1'))
@@ -196,7 +209,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // carrying both envelopes — the answer and the attempt-counter reset it implies.
     def "FR4: the bare-object decision commit carries the attempt-counter reset"() {
         given: 'a task branch and the state a park recorded, with an attempt burned'
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def before = gitOutput(bareDir, 'rev-list', '--count', refFor('PROJ-1')) as Integer
         def burned = TaskState.atStageStart('implement').recordQualityFailure(new AttemptRecord(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
@@ -222,7 +235,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     //     drain left behind rides the very same lifecycle commit
     def "FR3: a cannotExecute park commits the drained position beside the escalation it delimits"() {
         given: 'a task branch and an environment that read its denial source up to a known position'
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def parking = parkingRepository({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:00:00.000000001Z'))
         })
@@ -246,7 +259,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // NFR-R1: denial bookkeeping never takes a park down — losing the position costs a re-read
     def "NFR-R1: an unanswerable position leaves the escalation cursorless and the park succeeds"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def parking = parkingRepository({
             throw new IllegalStateException('no environment leased yet')
         })
@@ -279,7 +292,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     //     denials of its own records no position, whatever the environment would answer
     def "FR3: a park that carries no drained denials records no position of its own"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def parking = parkingRepository({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:00:00.000000001Z'))
         })
@@ -301,7 +314,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     //     it has no position of its own — and must not erase the one the tip carries
     def "FR5: a RESUMED commit carries both envelopes' committed cursors forward"() {
         given: 'a tip whose task.json carries an escalation cursor and whose state.json carries an attempt cursor'
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def parking = parkingRepository({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
         })
@@ -327,7 +340,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // FR10 of add-claim-heartbeat + FR5: clearing the pending marker is a rewrite like any other
     def "FR5: confirmTerminalWrite keeps the escalation cursor it finds at the tip"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def parking = parkingRepository({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
         })
@@ -351,7 +364,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     //     than blank it, or the resume re-reads denials the branch already records
     def "FR5: a park with nothing to record keeps the escalation cursor already at the tip"() {
         given: 'a tip whose task.json carries a committed escalation cursor'
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         parkingRepository({
             Optional.of(new DenialCursor('sha256:guard', '2026-09-05T10:05:00Z'))
         }).recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'),
@@ -432,8 +445,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 DenialCursorSource.NONE)
 
         when:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
-        repo2.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
+        repo2.createTask(sampleContext(), TaskStart.commit(bare2, 'refs/heads/base'), PIN,
+                TaskState.atStageStart('implement'))
 
         then: 'both branch tips are byte-identical commit objects'
         gitOutput(bareDir, 'rev-parse', refFor('PROJ-1')) == gitOutput(bare2, 'rev-parse', refFor('PROJ-1'))
@@ -446,7 +460,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         hook.toFile().setExecutable(true)
 
         when:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         then: 'the commit lands anyway — commit-tree/update-ref run no hooks'
         runner.run(bareDir, 'rev-parse', '--verify', refFor('PROJ-1')).exitCode() == 0
@@ -454,18 +468,20 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25: createTask throws when the branch already exists for the taskId"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         then:
         thrown(GitTaskRepositoryException)
     }
 
-    def "FR25: createTask throws when the base ref does not resolve"() {
+    // FR15: the start point is a commit the caller already peeled, so the only failure left here is
+    // "this clone does not hold that object" — never "that name did not resolve".
+    def "FR15: createTask throws when the start-point commit is not in this clone"() {
         when:
-        repository.createTask(sampleContext(), 'no-such-ref', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), TaskStart.ANY, PIN, TaskState.atStageStart('implement'))
 
         then:
         thrown(GitTaskRepositoryException)
@@ -473,7 +489,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25/D9: appendDecision appends to decisions[], resets outcome to null, commits RESUMED"() {
         given: 'a task parked with a non-null outcome'
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
         def decision = new Decision('proceed to verify', 'implement', 'operator', null)
 
@@ -500,7 +516,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25: recordOutcome commits the matching message and content for each outcome variant"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when:
         repository.recordOutcome('PROJ-1', outcome)
@@ -525,7 +541,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25: recordOutcome for Escalated populates lastEscalation and the tracker-write pending marker"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
 
         when:
@@ -539,7 +555,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25: recordOutcome for Aborted leaves the tracker-write pending marker unset, needs no environment"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when: 'aborting records on the last harvested tip, factory-side, with no environment'
         repository.recordOutcome(
@@ -558,7 +574,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // follow — the container twin of the host repository's ordering.
     def "FR10: recordOutcome(Completed) leaves the envelope at the tip for finishCleanup to remove"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when:
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
@@ -572,7 +588,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // FR10 of harden-task-branch-contract: the park's receipt, container-side.
     def "FR10: confirmTerminalWrite clears the pending marker a park recorded"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
         repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report))
 
@@ -591,7 +607,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // tells a reader the recovery ran and found the work already done rather than skipping it.
     def "FR10: finishCleanup on an already-cleaned tip changes nothing"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('PROJ-1')
         def tip = gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
@@ -615,7 +631,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // envelope is already gone.
     def "FR5: confirmTerminalWrite on a cleaned tip is a no-op that says so"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup('PROJ-1')
         def tip = gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
@@ -636,7 +652,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, history preserved"() {
         given: 'a task with an extra lifecycle commit before completion, to prove earlier history stays reachable'
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null), TaskState.atStageStart('implement'))
         def commitsBefore = commitCount()
 
@@ -662,7 +678,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     def "FR25/M4: non-Completed outcomes never add a cleanup commit, .gnomish-task/ stays at the tip"() {
         given:
-        repository.createTask(sampleContext(), 'base', BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('implement'))
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
 
         when:
         repository.recordOutcome('PROJ-1', outcome)

@@ -34,4 +34,22 @@ class GitCommandResultDetailSpec extends Specification {
                 .cannotVerifyDetail()
                 .contains(Termination.TIMED_OUT.toString())
     }
+
+    // NFR-S2 of fix-lifecycle-push (task 12.3 of add-base-ref-resolution): both details rest on
+    // GitProcessRunner scrubbing stderr at capture, and both scrub again where the text enters a
+    // message — a result built anywhere else (a spec, a future runner) cannot leak a token
+    // through one detail and not the other.
+    def "NFR-S2: a credential-bearing URL in stderr is masked in both details"() {
+        given:
+        def result = new GitCommandResult(128, '',
+                'fatal: unable to access https://ghp_SECRETTOKEN@github.com/owner/repo.git/: timed out')
+
+        expect:
+        [
+            result.cannotVerifyDetail(),
+            result.failureDetail('fetch')
+        ].every {
+            !it.contains('ghp_SECRETTOKEN') && it.contains('https://***@github.com/owner/repo.git')
+        }
+    }
 }

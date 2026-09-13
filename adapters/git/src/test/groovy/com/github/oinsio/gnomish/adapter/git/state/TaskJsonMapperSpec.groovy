@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git.state
 
+import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -172,7 +173,7 @@ class TaskJsonMapperSpec extends Specification {
                         new EscalationReportDto.CannotVerify("cannotVerify", "external:ci", "timeout", "poll exceeded")),
                 new EscalationReportDto.DecisionNeeded("decisionNeeded", "Refactor or patch?", ["refactor", "patch"]),
                 null,
-                new EgressCursorDto("sha256:guard-container", "2026-07-18T09:00:00.000000001Z"), null, null)
+                new EgressCursorDto("sha256:guard-container", "2026-07-18T09:00:00.000000001Z"), null, null, null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -185,7 +186,7 @@ class TaskJsonMapperSpec extends Specification {
     def "round-trip: null outcome and null lastEscalation survive serialize/deserialize"() {
         given:
         def mapper = TaskStateJson.mapper()
-        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, null, null, null, null, null)
+        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, null, null, null, null, null, null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -200,7 +201,7 @@ class TaskJsonMapperSpec extends Specification {
     def "round-trip: every TaskOutcomeDto kind survives serialize/deserialize"() {
         given:
         def mapper = TaskStateJson.mapper()
-        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], outcome, null, null, null, null, null)
+        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], outcome, null, null, null, null, null, null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -221,7 +222,7 @@ class TaskJsonMapperSpec extends Specification {
     def "round-trip: every EscalationReportDto kind survives serialize/deserialize as lastEscalation"() {
         given:
         def mapper = TaskStateJson.mapper()
-        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, escalation, null, null, null, null)
+        def dto = new TaskJsonDto(1, "task-1", "Title", "Body", "2026-07-18T09:00:00Z", "abc123", [], null, escalation, null, null, null, null, null)
 
         when:
         def json = mapper.writeValueAsString(dto)
@@ -482,7 +483,7 @@ class TaskJsonMapperSpec extends Specification {
                 dto.outcome(),
                 dto.lastEscalation(),
                 dto.trackerWritePending(),
-                new EgressCursorDto("sha256:guard", "2026-07-18T09:00:00.000000001Z"), null, null)
+                new EgressCursorDto("sha256:guard", "2026-07-18T09:00:00.000000001Z"), null, null, null)
 
         and: 'and the mapper itself never invents one'
         dto.egressCursor() == null

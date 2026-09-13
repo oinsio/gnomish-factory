@@ -127,7 +127,7 @@ public final class FeedAutomaton {
                 wipLimit,
                 random,
                 dirtyNotifier,
-                RemoteOutageGate.system(BaseRefGit.UNWIRED, Path.of("."), idlePollInterval));
+                RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of("."), idlePollInterval));
     }
 
     /**

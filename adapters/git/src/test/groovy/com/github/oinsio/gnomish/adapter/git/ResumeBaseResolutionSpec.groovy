@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -58,16 +59,33 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         def advanced = advance('develop', 'c.txt')
 
         when:
-        def outcome = resolution().resolve(clone, 'develop')
+        def outcome = resolution().resolve(clone, 'develop', null)
 
         then:
         outcome == new ResumeBaseOutcome.Bound('develop', advanced)
     }
 
+    // FR7, D7 (revised 2026-09-10): a pinned kind names the namespace to fetch, so a tag pushed
+    // later under the pinned branch's name is not even looked at — no collision, no park, and the
+    // law still binds to the branch's tip. Classifying afresh at every resume would instead park
+    // every resume of a task whose base name was reused.
+    def "FR7: a tag reusing a pinned branch's name does not park the resume"() {
+        given: 'origin gains a tag carrying the pinned branch name, pointing elsewhere'
+        def advanced = advance('develop', 'c.txt')
+        gitOutput(work, 'tag', 'develop', 'refs/heads/main')
+        assert gitExitCode(work, 'push', 'origin', 'refs/tags/develop') == 0
+
+        expect: 'classifying afresh would see the collision and refuse'
+        resolution().resolve(clone, 'develop', null) instanceof ResumeBaseOutcome.Refused
+
+        and: 'the pinned kind fetches the branch namespace only'
+        resolution().resolve(clone, 'develop', BaseRefKind.BRANCH) == new ResumeBaseOutcome.Bound('develop', advanced)
+    }
+
     // D13: a pinned ref that resolves nowhere on a configured origin parks the task.
     def "a configured origin refuses a pinned ref it holds in neither namespace"() {
         when:
-        def outcome = resolution().resolve(clone, 'no-such-base')
+        def outcome = resolution().resolve(clone, 'no-such-base', null)
 
         then:
         outcome instanceof ResumeBaseOutcome.Refused
@@ -80,7 +98,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         assert gitExitCode(clone, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString()) == 0
 
         when:
-        def outcome = resolution().resolve(clone, 'develop')
+        def outcome = resolution().resolve(clone, 'develop', null)
 
         then:
         outcome instanceof ResumeBaseOutcome.Unavailable
@@ -95,7 +113,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         assert gitExitCode(clone, 'remote', 'remove', 'origin') == 0
 
         when:
-        def outcome = resolution().resolve(clone, 'release/1.18')
+        def outcome = resolution().resolve(clone, 'release/1.18', null)
 
         then:
         outcome == new ResumeBaseOutcome.Bound('release/1.18', localTip)
@@ -108,7 +126,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         assert gitExitCode(clone, 'remote', 'remove', 'origin') == 0
 
         when:
-        def outcome = resolution().resolve(clone, 'release/does-not-exist')
+        def outcome = resolution().resolve(clone, 'release/does-not-exist', null)
 
         then:
         outcome instanceof ResumeBaseOutcome.Refused
@@ -126,7 +144,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         Path log = tempDir.resolve('sha-present.log')
 
         when:
-        def outcome = resolution(new GitProcessRunner(recordingGit(log).toString())).resolve(clone, held)
+        def outcome = resolution(new GitProcessRunner(recordingGit(log).toString())).resolve(clone, held, null)
 
         then:
         outcome == new ResumeBaseOutcome.Bound(held, held)

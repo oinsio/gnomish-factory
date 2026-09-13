@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -26,7 +27,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
     def "an ESCALATION resume appends the decision text durably via GitTaskRepository"() {
         given: 'a task escalated after one persisted round, needing a human decision'
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -68,7 +69,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
     def "an ESCALATION resume resets the attempt counter so a previously-exhausted stage can run again"() {
         given: 'a stage with attempt limit 1, already exhausted (attemptsUsed == 1) before resume'
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
@@ -94,7 +95,7 @@ class TakeResumeRunnerWithDecisionSpec extends TakeResumeSpecBase {
     def "an ESCALATION resume runs the engine once and maps a Completed outcome to Delivered"() {
         given:
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), resumableBaseRef(), BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())

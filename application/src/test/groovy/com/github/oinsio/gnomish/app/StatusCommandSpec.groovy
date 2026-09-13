@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -41,7 +42,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     }
 
     private void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
         def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [

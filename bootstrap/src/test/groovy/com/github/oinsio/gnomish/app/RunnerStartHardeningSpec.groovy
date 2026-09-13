@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -184,7 +185,7 @@ tracker:
         // FR2, FR13 of add-base-ref-resolution: a fresh claim resolves and refreshes its base
         // against a real 'origin' remote before it ever reaches branch creation.
         addOrigin(clone, tempDir)
-        String defaultBranch = gitOutput(clone, 'rev-parse', '--abbrev-ref', 'HEAD')
+        String defaultBranch = currentBranch(clone)
         def tracker = Mock(Tracker)
         def trackerTask = new TrackerTask(
                 new TaskRef('T-1'), new TaskSnapshot('T-1', 'title', 'body'),
@@ -195,7 +196,7 @@ tracker:
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, new AbortHandler(tracker, Clock.systemUTC()), 3, [],
                 clone, null, pipeline(), RunArguments.InteractiveMode.ALL,
                 trackerTask, tracker, InstanceId.generate('test-instance'), new ClaimLossFlag(),
-                new TrustedBaseContext(BaseDefinition.none(), defaultBranch))
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(defaultBranch)))
 
         then:
         thrown(UsageException)

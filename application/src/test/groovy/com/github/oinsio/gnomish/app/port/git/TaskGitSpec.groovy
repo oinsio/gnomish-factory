@@ -37,4 +37,26 @@ class TaskGitSpec extends Specification {
         expect:
         new TaskGit(store, branches, worktrees, marker).midRoundPush().is(marker)
     }
+
+    // FR14 of add-base-ref-resolution: withBaseRefs swaps only the base-ref capability, so a
+    // decoration of the base reads never detaches the other capabilities from their backend.
+    def "withBaseRefs replaces only the base-ref capability"() {
+        given:
+        def marker = { rounds ->
+            rounds
+        } as UnaryOperator<RoundEnvironmentSource>
+        def original = new TaskGit(store, branches, worktrees, marker)
+        def replacement = Stub(BaseRefGit)
+
+        when:
+        def copy = original.withBaseRefs(replacement)
+
+        then:
+        copy.baseRefs().is(replacement)
+        copy.store().is(store)
+        copy.branches().is(branches)
+        copy.worktrees().is(worktrees)
+        copy.midRoundPush().is(marker)
+        original.baseRefs().is(BaseRefGit.UNWIRED)
+    }
 }

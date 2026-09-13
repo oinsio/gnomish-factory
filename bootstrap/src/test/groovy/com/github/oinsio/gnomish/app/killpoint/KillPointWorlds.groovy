@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -100,6 +101,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
                                 runner, recovering, root.resolve('recovering-worktrees'), ClaimEpochSource.NONE),
                         runner,
                         recovering),
+                recoveringClone: recovering,
                 taskId: TASK_ID)
     }
 
@@ -133,13 +135,26 @@ trait KillPointWorlds implements BareGitRepoFixture {
         world
     }
 
+    /**
+     * The outage row's world: the same claim world, with the claimant's {@code origin} URL pointed
+     * at a path no repository sits at — a remote that cannot answer, which is the condition NFR-R3
+     * is about. The bare {@code origin} itself stays on disk, because the branch medium's emptiness
+     * is still what the row asserts, and a deleted repository would make that assertion vacuous.
+     */
+    ClaimWorld claimOutageWorld(Path root) {
+        def world = claimWorld(root)
+        gitOutput(world.claimantClone, 'remote', 'set-url', 'origin', root.resolve('no-such-origin.git').toString())
+        world.baseRefGit = newGitBaseRefs()
+        world
+    }
+
     private KillPointWorld seed(Path repoDir, TaskLifecycleStore store, String baseRef) {
         def tracker = new InMemoryTracker()
         def trackerHarness = new InMemoryTrackerHarness(tracker)
         def instanceId = new InstanceId('gnomish-factory', 'kp0001')
         def ref = new TaskRef(TASK_ID)
         trackerHarness.seedWorkingWithClaim(tracker, ref, instanceId.value())
-        store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), baseRef, BaseRule.EXPLICIT_ARGUMENT, TaskState.atStageStart('build'))
+        store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), TaskStart.commit(repoDir, baseRef), TaskStart.pin(baseRef, BaseRule.EXPLICIT_ARGUMENT), TaskState.atStageStart('build'))
         new KillPointWorld(
                 repoDir: repoDir,
                 store: store,

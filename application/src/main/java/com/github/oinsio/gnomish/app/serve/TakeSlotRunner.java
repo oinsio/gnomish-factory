@@ -51,11 +51,14 @@ import org.slf4j.MDC;
  * thread. This class catches every {@link Throwable} here, hands it to {@link SlotOutcomeLog} and
  * swallows it — a failed slot must not take down the daemon. Implements FR1, M2 of add-factory-serve.
  *
- * <p><b>Remote outage gate (task 7.3 of add-base-ref-resolution, FR14).</b> Every {@link
- * #run(TaskRef)} call signals the shared {@link RemoteOutageGate} from its terminal {@link
- * TakeResult} — see {@link #signalRemoteOutageGate} for exactly which results open it and which
- * confirm a successful base refresh. Opening the gate never touches an in-flight slot: it only
- * changes what the NEXT feed cycle's {@link FeedCycle#claimOrAbandon} does.
+ * <p><b>Remote outage gate (task 7.3 of add-base-ref-resolution, FR14).</b> The slot signals the
+ * shared {@link RemoteOutageGate} from its base reads themselves, not from its terminal {@link
+ * TakeResult}: the {@link com.github.oinsio.gnomish.app.port.git.BaseRefGit} inside the {@link
+ * TaskGit} handed to {@link TakeClaimAndWorkFactory#forSlot} is wrapped in {@link
+ * RemoteOutageSignalingBaseRefGit}, so an outage opens the gate and a refresh confirms recovery at
+ * the instant either happens — a terminal result arrives hours after the refresh it implies (see
+ * that class for the stale-signal defect this closes). Opening the gate never touches an in-flight
+ * slot: it only changes what the NEXT feed cycle's {@link FeedCycle#claimOrAbandon} does.
  */
 public final class TakeSlotRunner implements SlotRunner {
 
@@ -67,7 +70,6 @@ public final class TakeSlotRunner implements SlotRunner {
     private final Tracker tracker;
     private final InstanceId instanceId;
     private final String taskIdMdcKey;
-    private final RemoteOutageGate remoteOutageGate;
     private final SlotOutcomeLog outcomeLog = new SlotOutcomeLog(log);
     private @Nullable DrainReport drainReport;
     private @Nullable TaskOutcomeLedgerWriter ledgerWriter;
@@ -92,10 +94,10 @@ public final class TakeSlotRunner implements SlotRunner {
      *     leaves on a non-clean pickup (NFR-O1 of harden-task-branch-contract); never null
      * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
      *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
-     * @param remoteOutageGate the remote outage gate this slot opens on an {@code
-     *     InfrastructureUnavailable} result and signals on every other terminal result that
-     *     implies the base was reached (FR14, task 7.3 of add-base-ref-resolution) — the SAME
-     *     instance the daemon's {@link FeedAutomaton} consults; never null
+     * @param remoteOutageGate the remote outage gate every base read of this slot reports to
+     *     through {@link RemoteOutageSignalingBaseRefGit} (FR14, task 7.3 of
+     *     add-base-ref-resolution) — the SAME instance the daemon's {@link FeedAutomaton}
+     *     consults; never null
      */
     public TakeSlotRunner(
             RunAssembly assembly,
@@ -117,7 +119,7 @@ public final class TakeSlotRunner implements SlotRunner {
             RemoteOutageGate remoteOutageGate) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
-                git,
+                git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), remoteOutageGate)),
                 worktreesRoot,
                 taskIdMdcKey,
                 abortHandler,
@@ -133,7 +135,6 @@ public final class TakeSlotRunner implements SlotRunner {
         this.tracker = tracker;
         this.instanceId = instanceId;
         this.taskIdMdcKey = taskIdMdcKey;
-        this.remoteOutageGate = remoteOutageGate;
     }
 
     /**
@@ -194,7 +195,6 @@ public final class TakeSlotRunner implements SlotRunner {
                     trackerTask,
                     tracker,
                     instanceId);
-            signalRemoteOutageGate(result);
             outcomeLog.detail(claimed, result);
             if (drainReport != null) {
                 drainReport.record(claimed, result);
@@ -214,29 +214,6 @@ public final class TakeSlotRunner implements SlotRunner {
             // FR8: backstop for a slot that ended without TaskFinished — a crash caught at the
             // boundary above leaves the engine's stage/attempt keys on this carrier thread.
             MdcEventListener.clearAttemptScope();
-        }
-    }
-
-    /**
-     * Design D9, FR14 of add-base-ref-resolution (task 7.3): {@link
-     * TakeResult.InfrastructureUnavailable} is produced only by a claim's base-refresh step — a
-     * fresh claim's resolution or a resume's pinned-ref refresh (see its own javadoc) — so it is
-     * exactly "this slot hit an infrastructure failure" and opens the gate. Every other terminal
-     * result implies the slot got past that step, i.e. {@code origin} answered at least once this
-     * run, so it is treated as the "successful base refresh" signal {@link
-     * RemoteOutageGate#onSuccessfulRefresh} needs; {@link TakeResult.EmptyQueue} and {@link
-     * TakeResult.Skipped} are the two exceptions — bare auto-mode/race-loss shapes, kept out on
-     * purpose rather than asserted never to occur.
-     */
-    private void signalRemoteOutageGate(TakeResult result) {
-        switch (result) {
-            case TakeResult.InfrastructureUnavailable unavailable ->
-                remoteOutageGate.openOnFailure(unavailable.reason());
-            case TakeResult.Delivered _, TakeResult.AwaitingHuman _, TakeResult.Aborted _, TakeResult.Revoked _ ->
-                remoteOutageGate.onSuccessfulRefresh();
-            case TakeResult.EmptyQueue _, TakeResult.Skipped _ -> {
-                // No engine run at all; no base was touched either way.
-            }
         }
     }
 }

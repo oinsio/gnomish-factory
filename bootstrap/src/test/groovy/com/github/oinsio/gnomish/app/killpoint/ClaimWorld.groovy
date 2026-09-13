@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.GitBaseRefs
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
+import com.github.oinsio.gnomish.app.FailedBaseRefreshRelease
 import com.github.oinsio.gnomish.app.lease.Reaper
 import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.TrackerShapeClassifier
@@ -37,6 +39,9 @@ import java.time.Duration
  */
 class ClaimWorld implements BareGitRepoFixture {
 
+    /** The branch {@code origin} is seeded with, and the base every fresh claim here resolves to. */
+    static final String BASE = 'base'
+
     /** How long a claim may stand unchanged before the reaper judges it stale. */
     private static final Duration TTL = Duration.ofMinutes(15)
 
@@ -65,6 +70,12 @@ class ClaimWorld implements BareGitRepoFixture {
 
     VirtualMonotonicTime time
 
+    /**
+     * The real base-ref capability the outage row reads through — a live {@link GitBaseRefs} over
+     * the claimant's clone, whose {@code origin} URL that row points at nothing.
+     */
+    GitBaseRefs baseRefGit
+
     /** Wires the reaper this world's pickup runs; called once the tracker is in place. */
     void armReaper() {
         time = new VirtualMonotonicTime()
@@ -88,6 +99,25 @@ class ClaimWorld implements BareGitRepoFixture {
     boolean anyBranch() {
         gitExitCode(origin, 'rev-parse', '--verify', '--quiet', "refs/heads/${branch()}") == 0 ||
                 gitExitCode(claimantClone, 'rev-parse', '--verify', '--quiet', "refs/heads/${branch()}") == 0
+    }
+
+    /**
+     * The base refresh of a fresh claim meeting an unreachable {@code origin}: the read the window
+     * NFR-R3 names is the gap after. It lands nothing durable in either medium, which is what the
+     * kill point taken straight after it asserts.
+     */
+    void failRefresh() {
+        assert FailedBaseRefreshRelease.refreshIsUnavailable(baseRefGit, claimantClone, BASE):
+        'an unreachable origin was not classified as an infrastructure condition'
+    }
+
+    /**
+     * The production answer to that failure (D9): the resolve-then-refresh step re-meets the same
+     * unreachable origin and releases the claim, plain — no abort marker, no park, no attempt.
+     */
+    void releaseClaim() {
+        assert FailedBaseRefreshRelease.releasesClaim(baseRefGit, claimantClone, tracker.fetchTask(ref), tracker):
+        'the fresh-claim base binding did not release the claim on an unanswered origin'
     }
 
     /**

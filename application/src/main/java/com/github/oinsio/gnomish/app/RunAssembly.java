@@ -11,9 +11,11 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
 import java.util.List;
 import java.util.function.UnaryOperator;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Builds one run's collaborators once its {@link TaskContext} and initial {@link TaskState} are
@@ -150,4 +152,24 @@ public interface RunAssembly {
      *     condition
      */
     BoundTaskTier bindTaskTier(LawBinding binding) throws IOException;
+
+    /**
+     * Peels {@code binding} to the commit its law is read from — the one peel of design D12,
+     * exposed for the paths that need the commit before a run is assembled. The manual {@code run}
+     * tier is the only such caller today: it must create the task branch from the same commit its
+     * law comes from (FR15, D12 revised 2026-09-10), and it has no tracker-driven refresh to hand
+     * it one.
+     *
+     * <p>Reading the law tier is deliberately not required for this: a manual run has already
+     * loaded its definition, and {@link #bindTaskTier} would demand a pipeline source only {@code
+     * take} and {@code serve} attach.
+     *
+     * @param binding which repository and tree the law is bound to; never null
+     * @return the peeled law commit, or {@code null} when a working-tree binding's root resolves no
+     *     checkout at all — an in-place workspace that is no repository, which the caller refuses
+     *     rather than falls back from
+     * @throws UsageException when the binding names a revision the repository resolves to no commit
+     */
+    @Nullable
+    ObjectId lawCommitOf(LawBinding binding);
 }

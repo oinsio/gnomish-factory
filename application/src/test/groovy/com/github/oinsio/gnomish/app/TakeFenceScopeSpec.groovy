@@ -73,7 +73,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
      */
     private BaseRefGit resolvingBaseRefGit() {
         Stub(BaseRefGit) {
-            resolveForResume(_, _) >> { cloneDir, ref ->
+            resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
                 new ResumeBaseOutcome.Bound(ref, ref)
             }
         }

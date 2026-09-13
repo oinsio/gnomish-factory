@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.nio.file.Path;
 
 /**
@@ -73,6 +74,18 @@ public sealed interface LawBinding {
     }
 
     /**
+     * Binds law to {@code commit} itself — the shape a binding takes once its revision has been
+     * peeled, so opening the law again is a lookup and never a second resolution.
+     *
+     * @param repositoryRoot the repository whose objects hold {@code commit}
+     * @param commit the already-peeled law commit
+     * @return the git-objects binding at that commit; never null
+     */
+    static LawBinding atCommit(Path repositoryRoot, ObjectId commit) {
+        return new AtCommit(repositoryRoot, commit);
+    }
+
+    /**
      * Binds law to the commit the factory clone at {@code repositoryRoot} is checked out at — the
      * commit its task branches are cut from until base resolution (FR4) supplies each task its
      * own. This is where "this path resolved no base of its own yet" is spelled, once, instead of
@@ -110,4 +123,12 @@ public sealed interface LawBinding {
      * @param revision the revision the law commit is read from
      */
     record AtRevision(Path repositoryRoot, String revision) implements LawBinding {}
+
+    /**
+     * Law from git objects at an already-peeled commit.
+     *
+     * @param repositoryRoot the repository the commit's objects live in
+     * @param commit the law commit
+     */
+    record AtCommit(Path repositoryRoot, ObjectId commit) implements LawBinding {}
 }

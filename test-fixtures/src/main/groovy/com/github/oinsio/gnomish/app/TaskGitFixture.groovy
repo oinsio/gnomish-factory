@@ -5,10 +5,10 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore
 import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import java.util.function.UnaryOperator
 
 /**
@@ -41,6 +41,6 @@ final class TaskGitFixture {
         // dead origin in a spec exhausts the production bound instantly instead of sleeping.
         new TaskGit(new GitTaskStore(runner, epochs), new GitTaskBranches(runner, epochs),
                 new GitTaskWorktrees(runner, epochs), UnaryOperator.identity(),
-                new GitBaseRefs(runner, VirtualTimeRetries.gitInfrastructure()))
+                new GitBaseRefs(runner, VirtualTimeGitRetries.gitInfrastructure()))
     }
 }

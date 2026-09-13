@@ -251,4 +251,22 @@ class BranchTipFactsReaderSpec extends Specification {
 
     /** A token no diagnosis may echo: recognizable, and shaped like the credentials a tip could hold. */
     private static final String SECRET = 'ghp-must-never-reach-the-tracker'
+
+    // NFR-S3 of add-base-ref-resolution (task 12.2): a pinned base ref that is not a well-formed
+    // ref name is a content fault of task.json — the shape names the document and the rule, and
+    // the resume that would have fetched the name is never reached.
+    def "a task.json whose pinned baseRef is malformed reads as an unreadable envelope naming the document"() {
+        when:
+        def facts = reader.read(tip([('task.json'): taskJson(baseRef: 'release/../../x', baseRule: 'designator'),
+            ('state.json'): stateJson()]), null)
+
+        then:
+        facts.taskEnvelope() instanceof EnvelopeStatus.Unreadable
+        (facts.taskEnvelope() as EnvelopeStatus.Unreadable).reason().contains("baseRef 'release/../../x'")
+
+        and: 'the classifier makes it the corrupt shape every reader refuses on'
+        def shape = classifier.classify(facts)
+        shape instanceof BranchShape.Corrupt
+        (shape as BranchShape.Corrupt).reason().contains('task.json')
+    }
 }

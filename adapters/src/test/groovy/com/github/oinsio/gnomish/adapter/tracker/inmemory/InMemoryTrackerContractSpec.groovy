@@ -8,13 +8,13 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerDesignatorContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReleaseContract
 
 /**
  * Wires the production {@link InMemoryTracker} (via {@link
  * InMemoryTrackerHarness}) into the full port contract suite (task 2.4/2.7,
  * 1.2 of add-factory-serve; FR3, FR4, FR5, M1, M2): {@link
- * TrackerEpochContract} — the most-derived link in the chain —
+ * TrackerReleaseContract} — the most-derived link in the chain —
  * transitively runs every property from {@code TrackerContract}, {@code
  * TrackerMarkerContract}, {@code TrackerFetchContract}, {@code
  * TrackerLeaseContract}, {@code TrackerHeartbeatContract}, {@code
@@ -31,7 +31,7 @@ import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerDesignatorCont
  * <p>Implements FR3, FR4, FR5 of add-tracker-port and add-claim-heartbeat;
  * M1 of add-claim-heartbeat (the extended contract passes on this adapter).
  */
-class InMemoryTrackerContractSpec extends TrackerDesignatorContract {
+class InMemoryTrackerContractSpec extends TrackerReleaseContract {
 
     private InMemoryTrackerHarness harness
 

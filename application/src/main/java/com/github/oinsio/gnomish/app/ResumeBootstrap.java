@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
-import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import java.nio.file.Path;
@@ -21,6 +21,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR8 of add-git-workflow.
  *
+ * <p>Kept in sync with {@link ContainerResumeBootstrap}: both carry {@code baseCommit} and {@code
+ * pin} with identical semantics for the resume law rebind, since neither field is part of the
+ * shared {@link ResumedBranch} contract.
+ *
  * @param taskId the tracker's original (un-sanitized) taskId, as supplied to {@code --resume}
  * @param context the resumed task's identity, description and decisions, read from {@code
  *     task.json}
@@ -37,12 +41,10 @@ import org.jspecify.annotations.Nullable;
  *     unconfirmed tracker write — the durable "tracker-write pending" marker reconcile-on-resume
  *     reads to distinguish an orphaned park (deferred park, zero engine rounds) from a settled one
  *     (normal resume); FR10, D10 of add-claim-heartbeat
- * @param baseRef the resolved ref {@code baseCommit} was resolved from, or {@code null} when the
- *     branch carries no durable pin (a legacy {@code baseCommit}-only document, FR7 of
- *     add-base-ref-resolution) — the resume law rebind's preferred pinned-ref-name input (task 6.4)
- * @param baseRule the tier that produced {@code baseRef}, or {@code null} together with it when
- *     unpinned (FR7 of add-base-ref-resolution); not consumed by resume law rebinding — resume only
- *     re-resolves a ref, it does not re-derive the audit-trail rule (task 6.4)
+ * @param pin the branch's durable base pin, or {@link BasePin#UNPINNED} for a legacy {@code
+ *     baseCommit}-only document (FR7 of add-base-ref-resolution). The resume law rebind reads its
+ *     ref name and its kind — the namespace to fetch (D7, revised 2026-09-10) — and never its rule:
+ *     resume re-resolves a ref, it does not re-derive the audit-trail rule
  */
 public record ResumeBootstrap(
         String taskId,
@@ -53,6 +55,5 @@ public record ResumeBootstrap(
         String branchName,
         String baseCommit,
         boolean trackerWritePending,
-        @Nullable String baseRef,
-        @Nullable BaseRule baseRule)
+        BasePin pin)
         implements ResumedBranch {}

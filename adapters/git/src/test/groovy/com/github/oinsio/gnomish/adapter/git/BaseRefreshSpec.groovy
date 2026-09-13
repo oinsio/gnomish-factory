@@ -27,17 +27,9 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
     private Path clone
 
     def setup() {
-        work = initWorkingRepo(tempDir, 'work')
-        gitOutput(work, 'checkout', '-b', 'main')
-        commit(work, 'a.txt', 'one')
-        gitOutput(work, 'checkout', '-b', 'develop')
-        commit(work, 'b.txt', 'two')
-        gitOutput(work, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'tag', '-a', 'v1.0', '-m', 'release')
-        origin = initBareRepo(tempDir, 'origin.git')
-        addRemote(work, 'origin', origin.toString())
-        assert gitExitCode(work, 'push', 'origin', 'main', 'develop', 'v1.0') == 0
-        assert gitExitCode(tempDir, 'clone', origin.toString(), 'clone') == 0
-        clone = tempDir.resolve('clone')
+        (work, origin, clone) = initBaseRefTopology(tempDir, ['v1.0']) { Path w ->
+            gitOutput(w, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'tag', '-a', 'v1.0', '-m', 'release')
+        }
     }
 
     /** Every wait the refresh spent, in order — the budget as elapsed virtual time. */
@@ -122,6 +114,41 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         and: 'neither the refs read nor the fetch was needed — this is the offline --base case'
         !recordedSubcommands(log).contains('fetch')
         !recordedSubcommands(log).contains('ls-remote')
+    }
+
+    // FR7, D7 (revised 2026-09-10): a pin recording COMMIT names an object, not a ref. The refresh
+    //     goes straight to the object store and never asks origin about the ref namespaces — which
+    //     is what keeps a branch or tag later created under that hex-looking name out of the answer.
+    def "FR7: a pinned COMMIT base is resolved as an object, never as a ref name"() {
+        given:
+        Path log = tempDir.resolve('pinned-sha.log')
+        def held = gitOutput(clone, 'rev-parse', 'refs/remotes/origin/develop')
+
+        when:
+        def outcome = refresh(new GitProcessRunner(recordingGit(log).toString()))
+                .refresh(clone, held, BaseRefKind.COMMIT)
+
+        then:
+        outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT)
+
+        and: 'no refs read ran at all — the pin already said which namespace this is'
+        !recordedSubcommands(log).contains('ls-remote')
+    }
+
+    // FR7, D7: a pinned COMMIT the clone does not hold and that is too short to fetch by is a
+    //     deterministic refusal naming the pin — never a fall-through to the ref namespaces, which
+    //     would re-open the ambiguity the pin closed.
+    def "FR7: a pinned COMMIT the clone lacks and cannot fetch by name refuses, naming the pin"() {
+        given: 'an abbreviation no object in this clone matches'
+        def absent = 'abcdef1'
+
+        when:
+        def outcome = refresh().refresh(clone, absent, BaseRefKind.COMMIT)
+
+        then:
+        outcome instanceof BaseRefreshOutcome.Refused
+        (outcome as BaseRefreshOutcome.Refused).report().contains(absent)
+        (outcome as BaseRefreshOutcome.Refused).report().contains('not a commit this clone holds')
     }
 
     def "FR8: an abbreviated commit the clone holds resolves to its full name offline"() {

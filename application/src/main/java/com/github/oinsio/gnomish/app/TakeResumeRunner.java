@@ -135,7 +135,7 @@ final class TakeResumeRunner {
 
         return execution.run(
                 cloneDir,
-                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 finalState,
                 ref,
                 tracker,
@@ -178,7 +178,7 @@ final class TakeResumeRunner {
             InstanceId instanceId) {
         return execution.run(
                 cloneDir,
-                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 resetState,
                 ref,
                 tracker,

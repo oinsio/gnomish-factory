@@ -155,6 +155,45 @@ task-branch:
         load.base().allowedBases().isEmpty()
     }
 
+    // FR1, NFR-S3 (task 12.2): with nothing allowed, no pattern match grades the default — so the
+    // ref-name check runs on it directly, and a malformed default is a located load error rather
+    // than the name of the refresh fetch on every task.
+    def "a default that is not a well-formed ref name is a located error even with nothing allowed"() {
+        given:
+        writePlanOnlyTree(tree('task-branch:\n  base:\n    default: release/../../secrets\n'))
+
+        when:
+        def outcome = loadConfigurationTree().outcome()
+
+        then:
+        renderedErrors(outcome) == [
+            'config.yaml: task-branch.base.default: ' +
+            "invalid default 'release/../../secrets': must not contain '..' or '@{'"
+        ]
+    }
+
+    // FR1, NFR-S3 (task 12.2): the grammar is held first, so a malformed default reports the rule it
+    // broke — the one an author can act on — instead of the pattern match it was always going to fail.
+    def "a malformed default with allowed bases declared reports the grammar violation, not the failed match"() {
+        given:
+        writePlanOnlyTree(tree('''\
+task-branch:
+  base:
+    default: release/../../secrets
+    allowed:
+      - pattern: release/*
+'''))
+
+        when:
+        def outcome = loadConfigurationTree().outcome()
+
+        then:
+        renderedErrors(outcome) == [
+            'config.yaml: task-branch.base.default: ' +
+            "invalid default 'release/../../secrets': must not contain '..' or '@{'"
+        ]
+    }
+
     // FR1: patterns compile at load, so a malformed one is a located error, not a claim-time surprise
     def "an invalid allowed pattern is a located error naming the violated rule"() {
         given:

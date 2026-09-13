@@ -86,6 +86,11 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds {
             // it (design D8 of add-base-ref-resolution). Medium-crossing, so it classifies in both:
             // the tracker's own shape and the branch medium's emptiness.
             ClaimKillPoints.transition({ claimWorld(nextRoot()) }),
+            // The same window entered through its other route (NFR-R3): the base refresh meets an
+            // unreachable origin, and the release that answers it is the next durable write. The
+            // middle kill point is the requirement itself — a failed fetch is a read, so it freezes
+            // no new shape and needs no new recovery owner.
+            ClaimKillPoints.outageTransition({ claimOutageWorld(nextRoot()) }),
         ]
     }
 }

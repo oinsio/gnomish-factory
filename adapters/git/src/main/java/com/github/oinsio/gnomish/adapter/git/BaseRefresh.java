@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import java.nio.file.Path;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Refreshes the resolved base ref from {@code origin} before a task branch is created, fail-closed:
@@ -55,12 +56,38 @@ public final class BaseRefresh {
      * @return the commit the task branch may start from, or which failure class stopped it
      */
     public BaseRefreshOutcome refresh(Path cloneDir, String ref) {
-        return retry.until(
-                () -> attempt(cloneDir, ref), outcome -> !(outcome instanceof BaseRefreshOutcome.Unavailable));
+        return refresh(cloneDir, ref, null);
     }
 
-    private BaseRefreshOutcome attempt(Path cloneDir, String ref) {
-        if (CommitBaseFetch.looksLikeCommit(ref)) {
+    /**
+     * Refreshes {@code ref}, reading only the namespace {@code pinnedKind} names when one is given.
+     *
+     * <p>A pinned kind is the remote's own answer from the moment the base was first resolved (D7
+     * of add-base-ref-resolution, revised 2026-09-10), so a resume trusts it instead of asking
+     * again: without it, a tag pushed later under a pinned branch's name would park every resume of
+     * that task under the collision arm below. With no kind — a manual pin, or one written before
+     * the kind existed — the name is classified exactly as a fresh claim classifies it.
+     *
+     * @param cloneDir the factory clone, already hardened; never null
+     * @param ref the base ref — a branch name, a tag name, or a commit SHA
+     * @param pinnedKind the namespace to read, or {@code null} to classify {@code ref}
+     * @return the commit the task branch may start from, or which failure class stopped it
+     */
+    public BaseRefreshOutcome refresh(Path cloneDir, String ref, @Nullable BaseRefKind pinnedKind) {
+        return retry.until(
+                () -> attempt(cloneDir, ref, pinnedKind),
+                outcome -> !(outcome instanceof BaseRefreshOutcome.Unavailable));
+    }
+
+    private BaseRefreshOutcome attempt(Path cloneDir, String ref, @Nullable BaseRefKind pinnedKind) {
+        if (pinnedKind == BaseRefKind.COMMIT) {
+            // A pinned commit is an object name, not a ref: it either is in the clone or is fetched
+            // by SHA. Falling through to the ref namespaces would re-open the very ambiguity the
+            // pin closed.
+            return commits.fetch(cloneDir, ref)
+                    .orElseGet(() -> new BaseRefreshOutcome.Refused(unheldCommitReport(ref)));
+        }
+        if (pinnedKind == null && CommitBaseFetch.looksLikeCommit(ref)) {
             Optional<BaseRefreshOutcome> asCommit = commits.fetch(cloneDir, ref);
             if (asCommit.isPresent()) {
                 return asCommit.get();
@@ -68,7 +95,9 @@ public final class BaseRefresh {
             // A hex-looking name the clone holds no object for and that is too short to fetch by:
             // it may still be an oddly named branch or tag, so it goes to origin like any other.
         }
-        return switch (remoteRef.read(cloneDir, ref)) {
+        boolean readBranches = pinnedKind != BaseRefKind.TAG;
+        boolean readTags = pinnedKind != BaseRefKind.BRANCH;
+        return switch (remoteRef.read(cloneDir, ref, readBranches, readTags)) {
             case RemoteBaseRef.Held.Branch _ -> fetchBranch(cloneDir, ref);
             case RemoteBaseRef.Held.Tag(String commit) -> tags.fetch(cloneDir, ref, commit);
             case RemoteBaseRef.Held.Both(String branchCommit, String tagCommit) ->
@@ -91,6 +120,11 @@ public final class BaseRefresh {
                 + ". Git would silently prefer the tag; the factory refuses instead, because a tag pushed over "
                 + "a branch name would otherwise redirect this task's base. Rename one of them, or name a base "
                 + "that exists in one namespace only.";
+    }
+
+    private static String unheldCommitReport(String ref) {
+        return "The base commit " + ref + " this task is pinned to is not a commit this clone holds, and it is "
+                + "too short a name to fetch by. Correct the base this task's pin names.";
     }
 
     private static String absentReport(String ref) {

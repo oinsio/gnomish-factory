@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.baseref.AllowedBases;
 import com.github.oinsio.gnomish.baseref.BaseDecision;
@@ -11,6 +12,7 @@ import com.github.oinsio.gnomish.baseref.BaseResolution;
 import com.github.oinsio.gnomish.baseref.ResolutionMode;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
@@ -33,20 +35,21 @@ final class GitFreshTaskSupport {
      * Delegates to {@link TaskRepository#createTask} — the sole branch/worktree creator on the
      * fresh-run path — remapping its {@link GitTaskRepositoryException} to a {@link
      * UsageException} (exit code 2): on a fresh run, both causes {@code createTask} can throw (an
-     * already-existing branch for this taskId, or an unresolved {@code --base}) name an operator
-     * mistake, not a resumable condition.
+     * already-existing branch for this taskId, or a start commit this clone does not hold) name an
+     * operator mistake, not a resumable condition.
      *
-     * <p>{@code decision} is resolved by the caller: a manual-run caller with only a raw {@code
-     * --base} string in hand resolves one first through {@link #resolveManualBase}, while a
-     * take/serve caller that already ran {@code FreshClaimBaseBinding} passes its own {@link
-     * BaseDecision} straight through — this method never re-resolves a ref it is handed, which
-     * matters because a second MANUAL-mode resolve of an already-resolved ref would report it back
-     * under {@link com.github.oinsio.gnomish.baseref.BaseRule#EXPLICIT_ARGUMENT} regardless of the
-     * tier that actually produced it (FR7 of add-base-ref-resolution: the pin records the REAL
+     * <p><b>The branch starts at the caller's law commit</b> (FR15, design D12 of
+     * add-base-ref-resolution, revised 2026-09-10): the commit its law was peeled at, handed on as
+     * a typed value so no name reaches the repository port to be resolved a second time. The pin
+     * travels beside it as metadata only.
+     *
+     * <p>{@code pin} is built by the caller: a manual-run caller resolves one first through {@link
+     * #resolveManualBase}, while a take/serve caller that already ran {@code FreshClaimBaseBinding}
+     * passes the pin that binding recorded — this method never re-resolves a ref it is handed,
+     * which matters because a second MANUAL-mode resolve of an already-resolved ref would report it
+     * back under {@link com.github.oinsio.gnomish.baseref.BaseRule#EXPLICIT_ARGUMENT} regardless of
+     * the tier that actually produced it (FR7 of add-base-ref-resolution: the pin records the REAL
      * rule, not an artifact of how this method is called).
-     *
-     * <p>The ref and the rule are pinned into the task-creation commit by {@code taskRepository}
-     * itself (FR7); this method only threads the already-resolved {@link BaseDecision} through.
      *
      * <p>{@code initialState} is the state the caller synthesized from the frozen pipeline law,
      * recorded in the STARTED commit beside the context (FR3, design D2 of
@@ -56,10 +59,11 @@ final class GitFreshTaskSupport {
             TaskRepository taskRepository,
             String taskId,
             TaskContext context,
-            BaseDecision decision,
+            ObjectId lawCommit,
+            BasePin pin,
             TaskState initialState) {
         try {
-            taskRepository.createTask(context, decision.ref(), decision.rule(), initialState);
+            taskRepository.createTask(context, lawCommit, pin, initialState);
         } catch (GitTaskRepositoryException e) {
             throw new UsageException("could not start git-mode task \"" + taskId + "\": " + e.getMessage()
                     + " — this is a fresh run, not --resume; pick a different --task-id, fix --base, or resume the"

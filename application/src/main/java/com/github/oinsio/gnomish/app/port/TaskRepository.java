@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.app.port;
 
-import com.github.oinsio.gnomish.baseref.BaseRule;
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 
 /**
  * The port through which the runner durably records a task's lifecycle events —
@@ -28,11 +29,22 @@ public interface TaskRepository {
     /**
      * Durably records the start of a new task: its {@link TaskContext} — identity,
      * title, body, and any decisions already known at start — together with the
-     * reference the task originates from. The reference is deliberately opaque to
-     * this port: git branch creation, worktree setup, and any other origination
-     * machinery are adapter concerns (design D1, out of scope for this port); this
-     * method only guarantees that the task's origin is durably recorded so it can
-     * later be audited and used by resume/divergence checks (FR7, D7).
+     * commit the task originates from. Branch creation, worktree setup, and any
+     * other origination machinery are adapter concerns (design D1, out of scope for
+     * this port); this method only guarantees that the task's origin is durably
+     * recorded so it can later be audited and used by resume/divergence checks
+     * (FR7, D7).
+     *
+     * <p><b>The start point is a commit, never a name</b> (FR15, design D12 of
+     * add-base-ref-resolution, revised 2026-09-10). The caller has already peeled its
+     * law binding exactly once — {@code lawCommit} is that peel — so an implementer
+     * resolves nothing: it verifies the object is a commit this repository holds and
+     * starts the branch there. The parameter type is the enforcement. Passing a name
+     * instead let git's bare-name lookup order (gitrevisions: {@code $GIT_DIR/<n>},
+     * {@code refs/<n>}, {@code refs/tags/<n>}, {@code refs/heads/<n>}, {@code
+     * refs/remotes/<n>}) answer with a stale local branch or a planted local tag,
+     * while the law was read from the refreshed remote-tracking ref — law and branch
+     * naming two different commits.
      *
      * <p>Implements FR1 of add-git-workflow.
      *
@@ -45,15 +57,17 @@ public interface TaskRepository {
      * therefore SHALL NOT record the context alone and synthesize state later.
      *
      * @param context the new task's identity and description; never null
-     * @param baseRef the reference this task started from — the current state of
-     *     the caller's working copy unless explicitly overridden; never blank
-     * @param baseRule the tier that produced {@code baseRef} — pinned alongside it in the
-     *     task-creation commit so resume never re-resolves the base (FR7 of
-     *     add-base-ref-resolution); never null
+     * @param lawCommit the commit this task starts from — the peeled law commit, so the
+     *     branch, the frozen law and the recorded {@code baseCommit} are one SHA by
+     *     construction; never null
+     * @param pin the durable base pin recorded beside the commit — the ref name, its
+     *     namespace and the tier that produced it, so resume never re-resolves the base
+     *     (FR7 of add-base-ref-resolution); {@link BasePin#UNPINNED} where no resolution
+     *     named a ref; never null
      * @param initialState the task's starting state — positioned at the pipeline's
      *     first stage, no attempts burned, empty totals; never null
      */
-    void createTask(TaskContext context, String baseRef, BaseRule baseRule, TaskState initialState);
+    void createTask(TaskContext context, ObjectId lawCommit, BasePin pin, TaskState initialState);
 
     /**
      * Durably appends a {@link Decision} for the task identified by {@code taskId} —

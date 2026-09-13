@@ -67,9 +67,15 @@ record GitCommandResult(int exitCode, String stdout, String stderr, Termination 
      * and into the escalation report. The log-call gate cannot see inside an exception's message,
      * so the sanitizing happens here, where the untrusted text enters it (FR6 of
      * harden-logging-observability; {@code .claude/rules/logging.md}).
+     *
+     * <p>Credentials: {@code GitProcessRunner} scrubs stderr of remote-URL userinfo at capture
+     * (NFR-S2 of fix-lifecycle-push), so every result it produces is already clean here. This
+     * method scrubs again all the same, as {@link #failureDetail} does — the invariant then holds
+     * for a result built anywhere else (a spec, a second runner), and the two details cannot
+     * diverge on which of them a token may pass through (task 12.3 of add-base-ref-resolution).
      */
     String cannotVerifyDetail() {
         return "the boundary could not be verified (git " + termination() + ", exit " + exitCode() + "): "
-                + LogText.forLog(stderr().trim());
+                + LogText.forLog(CredentialScrub.scrub(stderr().trim()));
     }
 }

@@ -132,6 +132,23 @@ class GithubDesignatorRulesSpec extends Specification {
         'one good among the bad' | [base: 'base:(.+)', t: 'x('] || ['base']
     }
 
+    // FR3: a capture that matched nothing names no value -- an optional group that did not
+    //     participate, or one that matched the empty string, is not a designator
+    def "a capture that matched nothing is not a candidate: #why"() {
+        given:
+        def rules = rulesFor(base: rule)
+
+        expect:
+        rules.extract(labels).forKind('base') == expected
+
+        where:
+        why | rule | labels || expected
+        'optional group did not participate' | 'base:(.+)?' | ['base:'] || new Designator.Absent()
+        'group matched the empty string' | 'base:(.*)' | ['base:'] || new Designator.Absent()
+        'group matched only whitespace' | 'base:(.*)' | ['base:   '] || new Designator.Absent()
+        'an empty capture beside a real one is one value' | 'base:(.*)' | ['base:', 'base:main'] || new Designator.Single('main')
+    }
+
     // FR3: the compiled rules are inert value data -- a live adapter's extraction cannot change
     def "the rules copy the map they were built from"() {
         given:

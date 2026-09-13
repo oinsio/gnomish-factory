@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.io.IOException;
 import java.util.List;
@@ -228,6 +229,16 @@ public final class ManualRunAssembly implements RunAssembly {
                             + " startup definition came from before any task tier is read");
         }
         return pipelineSource.bindTaskTier(lawBinding);
+    }
+
+    /**
+     * Peels one law binding to its commit; see {@link RunAssembly#lawCommitOf}. Uses the same
+     * {@link RunLaw} opening every assembled run uses, so the manual tier's branch start point and
+     * its frozen law are one commit by construction (FR15, D12 of add-base-ref-resolution).
+     */
+    @Override
+    public @Nullable ObjectId lawCommitOf(LawBinding lawBinding) {
+        return RunLaw.open(lawBinding).lawCommit();
     }
 
     /**

@@ -55,6 +55,18 @@ final class RunLaw {
     }
 
     /**
+     * The commit this law was opened at — the single peel of the binding's revision, and the start
+     * point every task branch cut under this binding is created from (FR15, D12 of
+     * add-base-ref-resolution, revised 2026-09-10).
+     *
+     * @return the law commit, or {@code null} where a working-tree binding's root is no repository
+     */
+    @Nullable
+    ObjectId lawCommit() {
+        return lawCommit;
+    }
+
+    /**
      * Freezes the {@code definition}'s law files in memory at invocation start (D14, FR19 of
      * add-sandbox-core), so a later edit to the same file has no effect on the running task.
      *

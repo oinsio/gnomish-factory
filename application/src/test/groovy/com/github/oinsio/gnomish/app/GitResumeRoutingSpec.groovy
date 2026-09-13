@@ -118,7 +118,9 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
     // FR7, FR12, D13 of add-base-ref-resolution: a manual resume binds the law from the LOCAL tip
     // of the ref its branch is pinned to — the clone's own checkout plays no part, so a task
-    // pinned to release/1.18 keeps reading release/1.18's law in a clone sitting on main.
+    // pinned to release/1.18 keeps reading release/1.18's law in a clone sitting on main. The pin
+    // records the namespace (D7, revised 2026-09-10), so the revision is fully qualified and a
+    // local tag planted over the branch name cannot win git's bare-name lookup here either.
     def "binds the resumed law from the task's pinned base ref, not from the clone's checkout"() {
         given:
         record = recordPinnedTo('release/1.18')
@@ -128,7 +130,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
         then:
         lawBindings == [
-            new LawBinding.AtRevision(cloneDir, 'release/1.18')
+            new LawBinding.AtRevision(cloneDir, 'refs/heads/release/1.18')
         ]
     }
 
@@ -151,8 +153,8 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     // FR8, UX3 of add-base-ref-resolution: a manual run started without --base pinned the literal
     // HEAD ref, so resuming it still binds the clone's checkout — the offline manual contract.
     def "keeps binding the clone's checkout for a task started by a manual run without --base"() {
-        given:
-        record = recordPinnedTo('HEAD')
+        given: 'a manual pin: a ref and a rule, and no kind — the manual tier classifies nothing'
+        record = recordManuallyPinnedTo('HEAD')
 
         when:
         resume()

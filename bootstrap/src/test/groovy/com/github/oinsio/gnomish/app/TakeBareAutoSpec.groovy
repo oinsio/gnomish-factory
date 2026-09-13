@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.time.Clock
 import java.time.Duration
@@ -67,7 +68,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
                 ClaimBeat.NONE, new ClaimLossFlag(),
                 wipLimit, random, ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
                 new TrustedBaseContext(BaseDefinition.none(),
-                gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD')))
+                new DefaultBranch(currentBranch(cloneDir))))
     }
 
     private static ReadyTask ready(String taskId, AbortFacts facts = AbortFacts.none(), boolean returned = false) {

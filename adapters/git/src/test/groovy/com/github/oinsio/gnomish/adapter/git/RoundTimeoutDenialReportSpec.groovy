@@ -84,7 +84,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         def outcome = runRoundKilledBy(
                 new ExecutorFailure(new RuntimeException('round timed out after PT15M'), [denial]), context)
         def repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        repository.createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         repository.recordOutcome(TASK_ID, outcome)
 
         then: 'the escalation carries the denial, and the killed round burned no attempt (FR1)'

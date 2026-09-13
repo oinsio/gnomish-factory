@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -126,7 +127,7 @@ tracker:
         new TakeDispatcher(TaskGitFixture.real(), worktreesRoot, 'taskId', testProps(), Clock.systemUTC(), [:], MapSecretsProvider.NONE, confirmation,
         ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
         new TrustedBaseContext(BaseDefinition.none(),
-        gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD')))
+        new DefaultBranch(currentBranch(cloneDir))))
     }
 
     private static TakeHeartbeat noopHeartbeat() {

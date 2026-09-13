@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
@@ -90,8 +91,8 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
                 ], SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
     }
 
-    private static void createTask(ContainerRunSupport support, String taskId = 'T-1') {
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+    private void createTask(ContainerRunSupport support, String taskId = 'T-1') {
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
     }
 
     // D19: the aborted boundary commits the outcome on the branch tip and pushes it best-effort.

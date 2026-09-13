@@ -73,7 +73,7 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
      * no ref by that name.
      */
     protected String resumableBaseRef() {
-        gitOutput(cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD')
+        currentBranch(cloneDir)
     }
 
     protected TakeResumeRunner newTakeResumeRunner(

@@ -15,6 +15,14 @@ import java.nio.file.Path;
  * bytecode-level analysis, and the duplication that rule exists to prevent is a second spelling of
  * the command, not a second question asked through it.
  *
+ * <p>Both shapes put {@code --end-of-options} before the remote name. {@code ls-remote} happens to
+ * stop parsing options at the first non-option argument today, so a ref pattern beginning with
+ * {@code -} is already read as a pattern rather than as a flag — but that is git's current
+ * positional behaviour, not a documented guarantee, and the sibling {@link NarrowFetch} shows the
+ * other posture is real ({@code fetch} does honour options after the remote). The separator states
+ * the boundary instead of inheriting it. Not {@code --}, which git reads as the start of a
+ * pathspec.
+ *
  * <p>Implements FR3 of fix-lifecycle-push; FR5, FR6 of add-base-ref-resolution.
  */
 final class LsRemote {
@@ -30,10 +38,11 @@ final class LsRemote {
      * @return the invocation's outcome — {@code <sha>\t<ref>} lines on a zero exit
      */
     static GitCommandResult refs(GitProcessRunner runner, Path repo, String... refPatterns) {
-        String[] argv = new String[refPatterns.length + 2];
+        String[] argv = new String[refPatterns.length + 3];
         argv[0] = "ls-remote";
-        argv[1] = OriginRemote.NAME;
-        System.arraycopy(refPatterns, 0, argv, 2, refPatterns.length);
+        argv[1] = "--end-of-options";
+        argv[2] = OriginRemote.NAME;
+        System.arraycopy(refPatterns, 0, argv, 3, refPatterns.length);
         return runner.run(repo, argv);
     }
 
@@ -47,6 +56,6 @@ final class LsRemote {
      *     names one
      */
     static GitCommandResult symrefHead(GitProcessRunner runner, Path repo) {
-        return runner.run(repo, "ls-remote", "--symref", OriginRemote.NAME, "HEAD");
+        return runner.run(repo, "ls-remote", "--symref", "--end-of-options", OriginRemote.NAME, "HEAD");
     }
 }

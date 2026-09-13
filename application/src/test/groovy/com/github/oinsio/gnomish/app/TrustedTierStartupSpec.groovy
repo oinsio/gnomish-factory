@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery
 import com.github.oinsio.gnomish.app.port.pipeline.BoundConfiguration
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
@@ -62,7 +63,7 @@ class TrustedTierStartupSpec extends Specification {
         def law = TrustedTierStartup.bind(DIR, baseRefs, pipelineSource, REGISTRY)
 
         then:
-        1 * baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered('develop')
+        1 * baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
         1 * baseRefs.refresh(DIR, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', LAW_COMMIT.hex(), BaseRefKind.BRANCH)
         1 * pipelineSource.bindConfiguration(LawBinding.atRevision(DIR, LAW_COMMIT.hex()), _) >>
                 new BoundConfiguration(new LoadOutcome.Loaded(definition), base, LAW_COMMIT)
@@ -70,7 +71,7 @@ class TrustedTierStartupSpec extends Specification {
         and:
         law.definition() == definition
         law.base() == base
-        law.defaultBranch() == 'develop'
+        law.defaultBranch() == new DefaultBranch('develop')
         law.lawCommit() == LAW_COMMIT
     }
 
@@ -113,7 +114,7 @@ class TrustedTierStartupSpec extends Specification {
     // or an origin that never answered the fetch — is the same fail-fast class as discovery.
     def "ends fail-fast with a coded GF134 ERROR when the discovered branch cannot be refreshed: #outcome"() {
         given:
-        baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered('develop')
+        baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
         def logs = LogCaptureSupport.attach(TrustedTierStartup)
 
         when:
@@ -148,7 +149,7 @@ class TrustedTierStartupSpec extends Specification {
         def errors = [
             new ConfigError('pipeline.yaml', 'stages', "missing required field 'stages'")
         ]
-        baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered('develop')
+        baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
         baseRefs.refresh(DIR, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', LAW_COMMIT.hex(), BaseRefKind.BRANCH)
         pipelineSource.bindConfiguration(_, _) >>
                 new BoundConfiguration(new LoadOutcome.Invalid(errors), BaseDefinition.none(), LAW_COMMIT)

@@ -103,6 +103,21 @@ class BasePatternSpec extends Specification {
         'release/.hidden' || "no path component may start or end with '.' or end with '.lock'"
         'release/trailing.' || "no path component may start or end with '.' or end with '.lock'"
         'release/x.lock' || "no path component may start or end with '.' or end with '.lock'"
+        '-release/*' || "must not start with '-'"
+        '--upload-pack=/bin/sh' || "must not start with '-'"
+    }
+
+    // FR4/NFR-S3: a name whose first character is '-' is an option to the git command that would
+    // receive it positionally (git's own strbuf_check_branch_ref refuses it for the same reason),
+    // so the wildcard must not hand one out — while an interior '-' stays ordinary ref material
+    def "a leading dash is not ref-name material, an interior one is"() {
+        expect:
+        !BasePattern.compile('*').matches('-oops')
+        !BasePattern.compile('*').matches('--upload-pack=/bin/sh')
+
+        and:
+        BasePattern.compile('*').matches('release/-rc1')
+        BasePattern.compile('release/*').matches('release/1.18-rc1')
     }
 
     // FR1: an ordinary printable character just above the control range is legal ref-name material

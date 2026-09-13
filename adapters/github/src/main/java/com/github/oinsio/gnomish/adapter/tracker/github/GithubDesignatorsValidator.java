@@ -5,8 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 /**
  * Validates the {@code tracker.github.designators} map (FR3 of add-base-ref-resolution, design D5):
@@ -15,6 +13,10 @@ import java.util.regex.PatternSyntaxException;
  * consumes and {@code type} the next — so the key is graded only for being a non-blank name; the
  * value is graded for compiling and for carrying <em>exactly one</em> capture group, since the
  * adapter takes that group as the value and has nowhere to put a second one.
+ *
+ * <p>What makes a rule usable is not decided here: {@link DesignatorRule} grades it, and {@link
+ * GithubDesignatorRules} extracts with the pattern of exactly the rules this validator passes, so
+ * the two cannot drift into accepting a rule that is then never extracted.
  *
  * <p>Errors are located and aggregated exactly like {@link GithubLabelsValidator}'s, so a malformed
  * rule is one located line at load rather than a mid-{@code take} adapter failure (UX1).
@@ -39,7 +41,7 @@ final class GithubDesignatorsValidator {
                     new ConfigError(file, where, "must be an object mapping designator kinds to regular expressions"));
         }
         List<ConfigError> errors = new ArrayList<>();
-        for (Map.Entry<String, Object> entry : new TreeMap<>(stringKeyed(raw)).entrySet()) {
+        for (Map.Entry<String, Object> entry : new TreeMap<>(GithubConfigMaps.stringKeyed(raw)).entrySet()) {
             String kind = entry.getKey();
             if (kind.isBlank()) {
                 errors.add(new ConfigError(file, where, "designator kind names must not be blank"));
@@ -55,27 +57,6 @@ final class GithubDesignatorsValidator {
             errors.add(new ConfigError(file, where, "must be a regular expression with exactly one capture group"));
             return;
         }
-        Pattern pattern;
-        try {
-            pattern = Pattern.compile(rule);
-        } catch (PatternSyntaxException e) {
-            errors.add(new ConfigError(
-                    file, where, "'%s' is not a valid regular expression: %s".formatted(rule, e.getDescription())));
-            return;
-        }
-        int groups = pattern.matcher("").groupCount();
-        if (groups != 1) {
-            errors.add(new ConfigError(
-                    file,
-                    where,
-                    ("'%s' must contain exactly one capture group — the designator value — but has %d; "
-                                    + "make the extra groups non-capturing with '(?:...)'")
-                            .formatted(rule, groups)));
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> stringKeyed(Map<?, ?> raw) {
-        return (Map<String, Object>) raw;
+        DesignatorRule.grade(rule).problem().ifPresent(problem -> errors.add(new ConfigError(file, where, problem)));
     }
 }

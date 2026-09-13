@@ -111,7 +111,7 @@ final class TakeContainerResumeRunner {
         return ResumeLawBinding.resolve(
                 git.baseRefs(),
                 cloneDir,
-                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 finalState,
                 ref,
                 tracker,
@@ -148,7 +148,7 @@ final class TakeContainerResumeRunner {
         return ResumeLawBinding.resolve(
                 git.baseRefs(),
                 cloneDir,
-                ResumeLawBinding.pinnedRef(bootstrap.baseRef(), bootstrap.baseCommit()),
+                ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 resetState,
                 ref,
                 tracker,

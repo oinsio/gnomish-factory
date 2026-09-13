@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app.port.tracker;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * What a task named for one designator kind, in the three shapes a tracker can present: none, one,
@@ -36,11 +38,25 @@ public sealed interface Designator {
      * spelling the same base, a field repeated) named one thing, not two, so it is a {@link Single}
      * — a conflict means the task genuinely asks for incompatible values.
      *
-     * @param candidates the values the adapter derived, in its own report order; never null
+     * <p>A candidate that names nothing — null, empty, or whitespace only — is dropped before the
+     * count is taken. Every adapter derives candidates from a representation that can yield one: a
+     * regular expression whose capture group is optional or can match the empty string, a tracker
+     * field present but blank. Such a value is the task naming nothing for the kind, so it must not
+     * become a {@link Single} with an empty value, must not make a bare label conflict with a real
+     * one, and must never reach {@link Single}'s null check as a crash. The drop lives here, in the
+     * one function every adapter shares, for the same reason the classification does (design D5).
+     *
+     * @param candidates the values the adapter derived, in its own report order; never null, though
+     *     individual entries may be null or blank
      * @return the classified shape; never null
      */
-    static Designator classify(List<String> candidates) {
-        List<String> distinct = candidates.stream().distinct().toList();
+    static Designator classify(List<@Nullable String> candidates) {
+        List<String> distinct = new ArrayList<>();
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.isBlank() && !distinct.contains(candidate)) {
+                distinct.add(candidate);
+            }
+        }
         return switch (distinct.size()) {
             case 0 -> absent();
             case 1 -> single(distinct.getFirst());

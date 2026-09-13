@@ -56,6 +56,22 @@ class DesignatorSpec extends Specification {
         Designator.classify(['a', 'b', 'a']) == new Designator.Conflict(['a', 'b'])
     }
 
+    // FR3: a candidate that names nothing is dropped before the count -- an optional capture
+    //     group that did not participate, a group that matched the empty string, a blank field
+    def "candidates that name nothing are dropped: #why"() {
+        expect:
+        Designator.classify(candidates) == expected
+
+        where:
+        why | candidates || expected
+        'a null candidate alone' | [null] || new Designator.Absent()
+        'an empty candidate alone' | [''] || new Designator.Absent()
+        'a whitespace-only candidate alone' | ['   '] || new Designator.Absent()
+        'a blank beside a real value is not a conflict' | ['', 'main'] || new Designator.Single('main')
+        'a null beside a real value is not a conflict' | [null, 'main'] || new Designator.Single('main')
+        'blanks never pad a conflict' | ['main', '', 'dev'] || new Designator.Conflict(['main', 'dev'])
+    }
+
     // FR3: the classified values are inert -- a conflict cannot change under its reader
     def "a conflict copies the values it was built from"() {
         given:

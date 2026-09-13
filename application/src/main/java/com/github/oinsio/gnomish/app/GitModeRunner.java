@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
@@ -69,10 +70,11 @@ import org.jspecify.annotations.Nullable;
  * as interrupted.
  *
  * <p>Kept in sync with {@link ContainerGitModeRunner}: both run the SAME manual fresh-run recipe
- * — harden the clone's branches, print the banner naming where the work lives (UX1), resolve the
- * {@code --base} override through {@code GitFreshTaskSupport#resolveManualBase} and create the
- * task through {@code GitFreshTaskSupport#createTask}, then drive the engine under {@code
- * ManualRunLawBinding#of(cloneDir, base)} — and both observe only the {@code Completed} and
+ * — harden the clone's branches, print the banner naming where the work lives (UX1), bind and peel
+ * the law through {@code ManualRunLawBinding#bind}, resolve the {@code --base} override through
+ * {@code GitFreshTaskSupport#resolveManualBase} and create the task through {@code
+ * GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised 2026-09-10), then drive
+ * the engine under the same binding — and both observe only the {@code Completed} and
  * {@code Aborted} terminals, recording each through the mode's own outcome/cleanup ordering. The
  * media differ (host worktree here, task environment there); the recipe and its order must not.
  *
@@ -118,8 +120,18 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
         printBanner(branchName, worktree);
 
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
+        // FR15, D12 of add-base-ref-resolution (revised 2026-09-10): the law is bound and peeled
+        // first, and the branch starts at that very commit — the manual tier's own way of keeping a
+        // base name out of the repository port.
+        var law = ManualRunLawBinding.bind(assembly, cloneDir, base);
         var baseDecision = GitFreshTaskSupport.resolveManualBase(base);
-        GitFreshTaskSupport.createTask(taskRepository, taskId, context, baseDecision, initialState);
+        GitFreshTaskSupport.createTask(
+                taskRepository,
+                taskId,
+                context,
+                law.lawCommit(),
+                new BasePin(baseDecision.ref(), null, baseDecision.rule()),
+                initialState);
 
         var persistence = git.store().attemptPersistence(worktree, taskId);
         var workspace = new DirectoryWorkspace(worktree);
@@ -127,14 +139,7 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
         // this runner is git-mode by type, so attaching here needs no flag; in-place mode never
         // reaches this line and keeps the assembly's identity default.
         var assembled = assembly.withHostGitPush(git.midRoundPush())
-                .assemble(
-                        definition,
-                        context,
-                        initialState,
-                        interactiveMode,
-                        persistence,
-                        List.of(),
-                        ManualRunLawBinding.of(cloneDir, base));
+                .assemble(definition, context, initialState, interactiveMode, persistence, List.of(), law.binding());
 
         try {
             assembled.loop().run(definition, context, initialState, workspace, assembled.ports());

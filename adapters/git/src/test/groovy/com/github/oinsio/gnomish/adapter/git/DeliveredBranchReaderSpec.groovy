@@ -61,7 +61,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     // recovers the delivered context + finalState from the cleanup commit's parent.
     def "reads the delivered context and final state from the pre-cleanup commit"() {
         given: 'a branch delivered via recordOutcome(Completed), whose tip no longer carries the files'
-        repository.createTask(context('PROJ-1'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        repository.createTask(context('PROJ-1'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')
         persistOneRound('PROJ-1', finalState)
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(finalState))
@@ -85,7 +85,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         def bare = initBareRepo(tempDir, 'origin.git')
         runner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
         runner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
-        repository.createTask(context('PROJ-6'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        repository.createTask(context('PROJ-6'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')
         persistOneRound('PROJ-6', finalState)
         repository.recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState))
@@ -119,7 +119,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     // as BranchStateFileMissingException, distinct from "branch not found".
     def "throws BranchStateFileMissingException when the parent commit lacks the state files"() {
         given: 'a fresh task branch with a single commit — its parent is the base, carrying no .gnomish-task/'
-        repository.createTask(context('PROJ-2'), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        repository.createTask(context('PROJ-2'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         when:
         reader.read(cloneDir, 'PROJ-2')

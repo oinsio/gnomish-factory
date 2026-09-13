@@ -50,6 +50,6 @@ class GitBaseRefsDelegationSpec extends Specification implements BareGitRepoFixt
         def localTip = gitOutput(clone, 'rev-parse', 'HEAD')
 
         expect:
-        newGitBaseRefs().resolveForResume(clone, 'HEAD') == new ResumeBaseOutcome.Bound('HEAD', localTip)
+        newGitBaseRefs().resolveForResume(clone, 'HEAD', null) == new ResumeBaseOutcome.Bound('HEAD', localTip)
     }
 }

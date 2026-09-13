@@ -43,6 +43,11 @@ import org.jspecify.annotations.Nullable;
  * @param baseRule the wire token of the {@code BaseRule} tier that produced {@code baseRef}, or
  *     {@code null} when unpinned; always present together with {@code baseRef} (FR7 of
  *     add-base-ref-resolution)
+ * @param baseKind the wire token of the {@code BaseRefKind} namespace origin held {@code baseRef}
+ *     in, or {@code null} when the pin was written without one — the manual tier classifies
+ *     nothing, and every document written before this field existed binds it to {@code null}, so
+ *     resume classifies the name at resume time as it did before (D7 of add-base-ref-resolution,
+ *     revised 2026-09-10); additive under contract v1, exactly like {@code baseRef}
  */
 public record TaskJsonDto(
         int version,
@@ -57,7 +62,8 @@ public record TaskJsonDto(
         @Nullable Boolean trackerWritePending,
         @Nullable EgressCursorDto egressCursor,
         @Nullable String baseRef,
-        @Nullable String baseRule) {
+        @Nullable String baseRule,
+        @Nullable String baseKind) {
 
     /**
      * This document with the tracker-write-pending marker set to {@code pending} and every other
@@ -94,7 +100,8 @@ public record TaskJsonDto(
                 pending,
                 egressCursor,
                 baseRef,
-                baseRule);
+                baseRule,
+                baseKind);
     }
 
     /**
@@ -120,6 +127,7 @@ public record TaskJsonDto(
                 trackerWritePending,
                 cursor,
                 baseRef,
-                baseRule);
+                baseRule,
+                baseKind);
     }
 }

@@ -27,17 +27,19 @@ import spock.util.concurrent.PollingConditions
 /**
  * M4, G5 of add-base-ref-resolution (task 7.5): the end-to-end proof that the feed
  * ({@link FeedAutomaton}/{@link FeedCycle}), the remote outage gate ({@link RemoteOutageGate}) and a
- * slot's own outage signal ({@link TakeSlotRunner#signalRemoteOutageGate}, mirrored here by a
- * lightweight {@link SlotRunner} double) compose correctly on virtual time: three slots claim three
+ * slot's own outage signal ({@link RemoteOutageSignalingBaseRefGit}, the base-ref decoration every
+ * slot reads through, mirrored here by a lightweight {@link SlotRunner} double) compose correctly
+ * on virtual time: three slots claim three
  * seeded tasks, the remote goes dead for an hour, and comes back.
  *
  * <p>The scenario drives a REAL {@link InMemoryTracker} (so the tracker-state read-back — Ready
  * again, zero abort facts — is genuine) and a REAL {@link RemoteOutageGate} wired to a stubbed
  * {@link BaseRefGit} whose {@code probe} answers strictly off the SAME {@link VirtualClock} the
  * automaton runs on: false before the one-hour recovery instant, true at and after it. The double
- * standing in for {@code TakeSlotRunner} does exactly what that class's own javadoc documents: an
- * outage-shaped outcome opens the gate and releases the claim back to {@code Ready}; a
- * post-recovery outcome confirms the refresh instead.
+ * standing in for {@code TakeSlotRunner} does exactly what the decoration does at the slot's
+ * base read: an outage opens the gate and the claim is released (the reaper, stood in for here, returns
+ * the task to {@code Ready}); a
+ * post-recovery refresh confirms the refresh instead.
  *
  * <p><b>Scope of its "one WARN" assertions.</b> The capture below is attached to {@link
  * RemoteOutageGate}'s own logger, so it proves the gate transitions exactly once per outage — NOT
@@ -131,7 +133,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
         def gate = gate(baseRefGit)
         def logs = LogCaptureSupport.attach(RemoteOutageGate)
 
-        and: 'a SlotRunner double mirroring TakeSlotRunner.signalRemoteOutageGate: while the remote is dead, a claimed slot opens the gate and releases its claim; once recovered, it confirms the refresh instead'
+        and: 'a SlotRunner double mirroring RemoteOutageSignalingBaseRefGit: while the remote is dead, a claimed slot opens the gate and releases its claim; once recovered, it confirms the refresh instead'
         def claims = new CopyOnWriteArrayList<TaskRef>()
         def releases = new CopyOnWriteArrayList<TaskRef>()
         // The three initial claims land at virtual-thread speed with no simulated round work in
@@ -185,7 +187,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
             it.level == Level.WARN
         }[0].formattedMessage.startsWith(OperatorEvent.REMOTE_OUTAGE_GATE_OPENED.head())
 
-        and: 'every seeded task was released back to Ready, with no abort marker recorded for any of them'
+        and: 'every seeded task was released and (by the stand-in reaper) is Ready again, with no abort marker recorded for any of them'
         REFS.every { ref ->
             tracker.fetchTask(ref).state() instanceof TrackerTaskState.Ready
         }

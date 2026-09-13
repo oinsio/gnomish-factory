@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
@@ -13,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -80,7 +83,9 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         1 * branches.harden(CLONE_DIR)
 
         then: 'the branch is created from the trusted-tier default branch'
-        1 * repository.createTask({ it.taskId() == 'PROJ-1' }, 'main', _, _)
+        1 * repository.createTask({
+            it.taskId() == 'PROJ-1'
+        }, LAW_COMMIT, DEFAULT_BRANCH_PIN, _)
 
         and: 'the engine really ran the stage, and the run finished on the tracker'
         1 * tracker.finish(_, _)
@@ -114,7 +119,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         then:
         1 * repository.createTask({
             it.taskId() == 'PROJ-9'
-        }, 'release/1.2', _, _)
+        }, LAW_COMMIT, new BasePin('release/1.2', BaseRefKind.BRANCH, BaseRule.EXPLICIT_ARGUMENT), _)
         1 * tracker.finish(_, _)
     }
 

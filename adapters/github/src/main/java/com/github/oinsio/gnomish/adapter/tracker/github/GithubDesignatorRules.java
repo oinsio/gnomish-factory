@@ -6,11 +6,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 /**
  * The GitHub adapter's own designator extraction: the compiled {@code tracker.github.designators}
@@ -22,7 +20,9 @@ import java.util.regex.PatternSyntaxException;
  * single capture group of every full match is one candidate value. Classifying those candidates
  * into absent/single/conflict is not done here: that decision belongs to {@link
  * Designator#classify}, the one function every adapter shares, so no adapter can drift on what
- * "several" means or quietly pick a winner (design D5).
+ * "several" means or quietly pick a winner (design D5). A capture that named nothing — an optional
+ * group that did not participate, or one that matched the empty string — is dropped there too, for
+ * the same reason: it is the task naming no value, and every adapter can produce one.
  *
  * <p>Which kinds exist is configuration, not code: a kind with no rule is never extracted and never
  * reported through the factory seam, and a kind the factory has never heard of costs nothing here.
@@ -44,10 +44,10 @@ record GithubDesignatorRules(Map<String, Pattern> byKind) {
     /**
      * Compiles the rules declared in {@code subsection}, or none when it declares no map.
      *
-     * <p>The values are already graded by {@link GithubDesignatorsValidator} at load, so anything
-     * this method cannot use is a configuration the loader has already refused; it skips such an
-     * entry rather than throwing, because the load errors — not an adapter crash — are what the
-     * operator needs to see.
+     * <p>The values are graded by {@link DesignatorRule} — the same grading {@link
+     * GithubDesignatorsValidator} reports at load — so anything this method cannot use is a
+     * configuration the loader has already refused; it skips such an entry rather than throwing,
+     * because the load errors — not an adapter crash — are what the operator needs to see.
      *
      * @param subsection the validated {@code tracker.github} subsection
      * @return the compiled rules; never null, empty when none are declared
@@ -62,7 +62,7 @@ record GithubDesignatorRules(Map<String, Pattern> byKind) {
                     && !kind.isBlank()
                     && entry.getValue() instanceof String rule
                     && !rule.isBlank()) {
-                compilePattern(rule).ifPresent(pattern -> compiled.put(kind, pattern));
+                DesignatorRule.grade(rule).pattern().ifPresent(pattern -> compiled.put(kind, pattern));
             }
         }
         return new GithubDesignatorRules(compiled);
@@ -107,18 +107,5 @@ record GithubDesignatorRules(Map<String, Pattern> byKind) {
             }
         }
         return values;
-    }
-
-    /** Compiles one rule, skipping a value the loader has already refused. */
-    private static Optional<Pattern> compilePattern(String rule) {
-        try {
-            Pattern pattern = Pattern.compile(rule);
-            return pattern.matcher("").groupCount() == 1 ? Optional.of(pattern) : Optional.empty();
-        } catch (PatternSyntaxException e) {
-            // throwable-not-subject: a rule that does not compile is already one located ConfigError
-            //     from GithubDesignatorsValidator; this adapter never runs on a config that carries
-            //     one, so there is nothing here to report a second time (one failure, one log).
-            return Optional.empty();
-        }
     }
 }

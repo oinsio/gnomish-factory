@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery;
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome;
 import java.nio.file.Path;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The git realization of {@link BaseRefGit}: default-branch discovery through {@link
@@ -48,8 +50,8 @@ public final class GitBaseRefs implements BaseRefGit {
     }
 
     @Override
-    public ResumeBaseOutcome resolveForResume(Path cloneDir, String ref) {
-        return resumeResolution.resolve(cloneDir, ref);
+    public ResumeBaseOutcome resolveForResume(Path cloneDir, String ref, @Nullable BaseRefKind kind) {
+        return resumeResolution.resolve(cloneDir, ref, kind);
     }
 
     @Override

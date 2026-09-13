@@ -58,6 +58,54 @@ final class ClaimKillPoints {
                 converged: 'Ready/no-branch')
     }
 
+    /**
+     * The same window entered the other way (NFR-R3, task 8.4 of add-base-ref-resolution): the base
+     * refresh meets an unreachable {@code origin}, and the claim release that answers it (D9) is the
+     * next durable write. Three points, because the claim of NFR-R3 is precisely that the middle one
+     * is not a new shape: the failed fetch is a read, so a kill straight after it freezes the same
+     * {@code Claimed/no-branch} the bare claim freezes, converged by the same reaper. The kill after
+     * the release freezes {@code ClaimAbandoned/no-branch}, not {@code Ready}: a release drops the
+     * claim footprint and leaves the working label (FR15, D2 of add-tracker-port), so the queue is
+     * restored by the reaper's grace-then-stale-claim-removal — the same owner the {@code
+     * claim-heartbeat} capability names for that shape, which is why NFR-R3's "no new recovery
+     * owner" still holds. The next claimant then re-resolves and re-refreshes from scratch, legal by
+     * construction because nothing durable references the dead holder's failed read (NFR-R1,
+     * NFR-R2).
+     *
+     * <p>The refresh is listed as a step although it lands nothing: a table that only enumerated
+     * durable writes could not assert the emptiness this requirement is about.
+     *
+     * @param world builds a fresh {@link ClaimWorld} whose claimant clone points at an unreachable
+     *     {@code origin}, with the real base-ref capability wired over it
+     */
+    static KillPointTransition outageTransition(Closure world) {
+        new KillPointTransition(
+                name: 'tracker claim, failed base refresh, claim release',
+                steps: [
+                    'the tracker claim',
+                    'the failed base refresh',
+                    'the claim release'
+                ],
+                world: world,
+                step: { ClaimWorld w, int index ->
+                    switch (index) {
+                        case 0 -> w.tracker.claim(w.ref, w.instanceId.value())
+                        case 1 -> w.failRefresh()
+                        default -> w.releaseClaim()
+                    }
+                },
+                shape: { ClaimWorld w -> w.shape() },
+                pickup: { ClaimWorld w -> w.reap() },
+                fingerprint: { ClaimWorld w -> w.fingerprint() },
+                invariant: { ClaimWorld w -> queued(w) },
+                frozenShapes: [
+                    'Claimed/no-branch',
+                    'Claimed/no-branch',
+                    'ClaimAbandoned/no-branch'
+                ],
+                converged: 'Ready/no-branch')
+    }
+
     /** The converged state's own obligation: the task is back in the listing a fresh claim draws from. */
     private static void queued(ClaimWorld world) {
         assert world.tracker.listReady(50).any { it.ref() == world.ref }:

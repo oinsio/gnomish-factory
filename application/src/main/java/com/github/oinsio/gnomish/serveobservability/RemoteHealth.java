@@ -9,6 +9,12 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Inert value data compared by content.
  *
+ * <p>Kept in sync with {@link com.github.oinsio.gnomish.app.serve.RemoteOutageHealth}: the two carry
+ * the same seven facts about one gate, and {@link RemoteHealthAssembler} copies them across field by
+ * field — a fact added there and not here is dropped from the snapshot silently, since the copy
+ * still compiles. The duplication is deliberate layer decoupling (the same reason {@code FeedState}
+ * and {@code FeedPhase} are two types), so a fact belongs in both or in neither.
+ *
  * <p>Implements NFR-O3, UX6 of add-base-ref-resolution.
  *
  * @param target the remote target identity this entry reports on; never blank

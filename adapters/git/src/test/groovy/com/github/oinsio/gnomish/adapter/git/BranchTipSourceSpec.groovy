@@ -40,7 +40,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         commitAll(cloneDir)
         worktreesRoot = tempDir.resolve('worktrees')
         repository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        repository.createTask(new TaskContext('PROJ-1', 'Fix the thing', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext('PROJ-1', 'Fix the thing', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
     }
 
     private Path worktree(String taskId = 'PROJ-1') {
@@ -154,7 +154,8 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         } as ClaimEpochSource
         new GitTaskRepository(runner, cloneDir, worktreesRoot, held)
                 .createTask(new TaskContext('PROJ-2', 'Fix the other thing', 'Body', []),
-                'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+                TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
+                TaskState.atStageStart('implement'))
 
         expect:
         allSources('PROJ-2').every {

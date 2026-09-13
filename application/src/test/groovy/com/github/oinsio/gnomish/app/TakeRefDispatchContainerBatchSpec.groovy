@@ -121,8 +121,12 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
         1 * tracker.fetchTask(new TaskRef('PROJ-1')) >> readyTask('PROJ-1')
         1 * tracker.fetchTask(new TaskRef('PROJ-2')) >> readyTask('PROJ-2')
         2 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
-        1 * repoOne.createTask({ it.taskId() == 'PROJ-1' }, 'main', _, _)
-        1 * repoTwo.createTask({ it.taskId() == 'PROJ-2' }, 'main', _, _)
+        1 * repoOne.createTask({
+            it.taskId() == 'PROJ-1'
+        }, LAW_COMMIT, DEFAULT_BRANCH_PIN, _)
+        1 * repoTwo.createTask({
+            it.taskId() == 'PROJ-2'
+        }, LAW_COMMIT, DEFAULT_BRANCH_PIN, _)
 
         and:
         thrown(TakeExitCodeException)

@@ -20,6 +20,16 @@ import java.time.Clock;
  * ContainerResumeRunner} for file size; the behavior is unchanged, drawing every collaborator from
  * the passed-in runner exactly as {@code ContainerResumeRunner.run} did.
  *
+ * <p>Kept in sync with {@link GitResumeContinuation}: both implement the same four outcome arms
+ * dispatched by {@link ContainerResumeRunner}/{@link GitResumeRunner} — {@code null} salvages the
+ * interrupted round's leftovers (or honours {@code --discard-work}) before continuing, {@code
+ * escalated} runs the same {@link EscalationResumeDialog} and appends any resulting decision
+ * before continuing, {@code paused} prints the same checkpoint prompt before continuing, and
+ * {@code completed} builds and prints the same status report with no further engine run —
+ * differing only in medium (the in-box sandbox environment here via {@link SandboxRunSupport} vs.
+ * a git worktree there). Adding or re-meaning an arm on one side alone is the divergence this pair
+ * guards against (UX2).
+ *
  * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core.
  */
 final class ContainerResumeOutcomes {
@@ -61,7 +71,7 @@ final class ContainerResumeOutcomes {
                 taskJson.context(),
                 state,
                 interactiveMode,
-                ManualResumeLawBinding.of(cloneDir, taskJson.baseRef(), taskJson.baseCommit()),
+                ManualResumeLawBinding.of(cloneDir, taskJson.pin(), taskJson.baseCommit()),
                 pending);
     }
 
@@ -103,7 +113,7 @@ final class ContainerResumeOutcomes {
                 resumption.context(),
                 resumption.state(),
                 interactiveMode,
-                ManualResumeLawBinding.of(cloneDir, taskJson.baseRef(), taskJson.baseCommit()),
+                ManualResumeLawBinding.of(cloneDir, taskJson.pin(), taskJson.baseCommit()),
                 null);
     }
 
@@ -131,7 +141,7 @@ final class ContainerResumeOutcomes {
                 taskJson.context(),
                 state,
                 interactiveMode,
-                ManualResumeLawBinding.of(cloneDir, taskJson.baseRef(), taskJson.baseCommit()),
+                ManualResumeLawBinding.of(cloneDir, taskJson.pin(), taskJson.baseCommit()),
                 null);
     }
 

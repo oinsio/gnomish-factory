@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import java.nio.file.Path
 
 /**
@@ -74,16 +72,26 @@ trait BareGitRepoFixture {
     }
 
     /**
-     * Wires a real {@code origin} remote for {@code repo}: a fresh local bare repo under {@code
-     * parent}, {@code repo}'s current branch pushed to it, and the bare repo's own {@code HEAD}
-     * symref pointed at that same branch name — so {@code git ls-remote --symref origin HEAD}
-     * (the real default-branch discovery {@code RemoteDefaultBranch} runs, FR5 of
-     * add-base-ref-resolution) names the branch that was actually pushed, whatever {@code
-     * init.defaultBranch} happens to be configured to in this environment.
+     * Wires a real {@code origin} remote for {@code repo} and then <b>diverges the clone from it</b>
+     * — the adversarial default this project's git fixtures owe (`.claude/rules/testing.md`, "Git
+     * fixtures are adversarial by default").
      *
-     * <p>Specs whose real {@code take}/{@code serve} startup resolves and refreshes a base ref
-     * (FR2, FR6, FR13 of add-base-ref-resolution) need a real, reachable {@code origin} exactly
-     * like this — an autonomous run never falls back to the clone's local {@code HEAD} (D4).
+     * <p>The wiring half: a fresh local bare repo under {@code parent}, {@code repo}'s current
+     * branch pushed to it, and the bare repo's own {@code HEAD} symref pointed at that same branch
+     * name — so {@code git ls-remote --symref origin HEAD} (the real default-branch discovery
+     * {@code RemoteDefaultBranch} runs, FR5 of add-base-ref-resolution) names the branch that was
+     * actually pushed, whatever {@code init.defaultBranch} happens to be configured to here.
+     *
+     * <p>The adversarial half (see {@link #divergeFromOrigin}): a clone whose local refs equal
+     * origin's cannot see a resolution that took the wrong ref, so every take/serve spec would pass
+     * whether the base was read from origin or from the clone's own {@code refs/heads}. After this
+     * call the clone's local branch is one commit BEHIND origin and a local TAG of the same name
+     * points at that stale commit — the two shapes that actually reproduced a task branch cut from
+     * the wrong commit (FR15, NFR-S1). A bare-name resolution now fails an existing spec instead of
+     * waiting for a regression spec someone thought to write.
+     *
+     * <p>A spec that genuinely needs the converged posture asks for it by name: {@link
+     * #addConvergedOrigin}.
      *
      * @param repo the working repo whose current branch becomes origin's default; never null
      * @param parent the directory the new bare repo is created under; never null
@@ -91,15 +99,63 @@ trait BareGitRepoFixture {
      * @return the bare repo's path
      */
     Path addOrigin(Path repo, Path parent, String originName = 'origin.git') {
+        Path origin = addConvergedOrigin(repo, parent, originName)
+        divergeFromOrigin(repo, parent)
+        origin
+    }
+
+    /**
+     * The wiring half of {@link #addOrigin} without the divergence — for a spec whose subject is
+     * something other than base resolution and that reads the clone's own checkout as if it were
+     * origin's tip. Naming it at the call site is the point: the converged posture is a deliberate
+     * request, never the default a spec silently inherits.
+     *
+     * @param repo the working repo whose current branch becomes origin's default; never null
+     * @param parent the directory the new bare repo is created under; never null
+     * @param originName the bare repo's directory name; defaults to {@code origin.git}
+     * @return the bare repo's path
+     */
+    Path addConvergedOrigin(Path repo, Path parent, String originName = 'origin.git') {
         Path origin = initBareRepo(parent, originName)
         addRemote(repo, 'origin', origin.toString())
-        String branch = gitOutput(repo, 'rev-parse', '--abbrev-ref', 'HEAD')
+        String branch = currentBranch(repo)
         def runner = new GitProcessRunner()
         def push = runner.run(repo, 'push', 'origin', "HEAD:refs/heads/${branch}")
         assert push.exitCode() == 0: "git push origin failed: ${push.stderr()}"
         def symref = runner.run(origin, 'symbolic-ref', 'HEAD', "refs/heads/${branch}")
         assert symref.exitCode() == 0: "git symbolic-ref failed in origin: ${symref.stderr()}"
         origin
+    }
+
+    /**
+     * Moves origin's branch one commit ahead of {@code repo}'s local branch of the same name, and
+     * plants a local tag of that name on the stale commit.
+     *
+     * <p>The advance is an <b>empty</b> commit, made in a throwaway clone: origin's tree stays
+     * byte-for-byte what the spec seeded, so nothing about the law, the pipeline definition or any
+     * file assertion changes — only which commit the base name resolves to. That is exactly the
+     * distinction a bare-name resolution gets wrong and a resolution through the refreshed
+     * remote-tracking ref gets right.
+     *
+     * <p>The tag is git's own preference trap: an unqualified name resolves to {@code refs/tags/}
+     * before {@code refs/heads/} (gitrevisions), so a planted tag silently wins any {@code
+     * rev-parse} of a bare base name.
+     *
+     * @param repo the clone to leave behind origin; never null
+     * @param parent the directory the throwaway clone is created under; never null
+     */
+    void divergeFromOrigin(Path repo, Path parent) {
+        def runner = new GitProcessRunner()
+        String branch = currentBranch(repo)
+        String origin = gitOutput(repo, 'remote', 'get-url', 'origin')
+        Path advance = parent.resolve("origin-advance-${branch.replace('/', '-')}-${System.nanoTime()}")
+        assert runner.run(parent, 'clone', origin, advance.toString()).exitCode() == 0
+        assert runner.run(advance, '-c', 'user.email=a@b.c', '-c', 'user.name=a',
+        'commit', '--allow-empty', '-m', 'origin moves ahead').exitCode() == 0
+        def push = runner.run(advance, 'push', 'origin', "HEAD:refs/heads/${branch}")
+        assert push.exitCode() == 0: "advancing origin failed: ${push.stderr()}"
+        def tag = runner.run(repo, 'tag', branch, 'HEAD')
+        assert tag.exitCode() == 0: "planting the decoy tag failed: ${tag.stderr()}"
     }
 
     /**
@@ -111,9 +167,28 @@ trait BareGitRepoFixture {
      * is invisible to it until this is called again.
      */
     void pushOrigin(Path repo) {
-        String branch = gitOutput(repo, 'rev-parse', '--abbrev-ref', 'HEAD')
-        def push = new GitProcessRunner().run(repo, 'push', 'origin', "HEAD:refs/heads/${branch}")
+        String branch = currentBranch(repo)
+        // --force because the adversarial default of addOrigin leaves origin one (empty) commit
+        // ahead of this clone: the spec's intent here is "origin's tip is now what I just
+        // committed", and a fixture is the one place where saying so outright is right.
+        def push = new GitProcessRunner().run(repo, 'push', '--force', 'origin', "HEAD:refs/heads/${branch}")
         assert push.exitCode() == 0: "git push origin failed: ${push.stderr()}"
+    }
+
+    /**
+     * The name of the branch {@code repo} has checked out.
+     *
+     * <p>Read from the symbolic ref rather than {@code rev-parse --abbrev-ref HEAD}: that command
+     * shortens the name only as far as stays UNAMBIGUOUS, so once {@link #divergeFromOrigin} has
+     * planted a decoy tag of the same name it answers {@code heads/main} instead of {@code main} —
+     * and a fixture pushing to {@code refs/heads/heads/main} silently stops updating the branch
+     * every spec reads its law from. The full symbolic ref has no such ambiguity.
+     *
+     * @param repo the repository to ask; never null
+     * @return the checked-out branch's short name; never null
+     */
+    String currentBranch(Path repo) {
+        gitOutput(repo, 'symbolic-ref', 'HEAD') - 'refs/heads/'
     }
 
     /** Runs an arbitrary read-only {@code git} command in {@code repo} and returns trimmed stdout. */
@@ -200,8 +275,55 @@ trait BareGitRepoFixture {
      * hand-duplicated per spec.
      */
     GitBaseRefs newGitBaseRefs() {
-        def retry = new GitInfrastructureRetry(new VirtualSleeper(new VirtualClock()),
-                GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF)
-        new GitBaseRefs(new GitProcessRunner(), retry)
+        new GitBaseRefs(new GitProcessRunner(), VirtualTimeGitRetries.gitInfrastructure())
+    }
+
+    /**
+     * Creates a task branch off {@code repo}'s current {@code HEAD} via a real {@link
+     * TaskBranchCreator} and returns its branch name — the standard "give me a task branch to
+     * work against" step shared by specs that only need the resulting branch name, not the
+     * creation result itself.
+     *
+     * @param repo the clone the branch is cut in; never null
+     * @param taskId the task identifier to derive the branch name from; never null
+     * @return the created branch's name; never null
+     */
+    String createTaskBranch(Path repo, String taskId) {
+        def result = new TaskBranchCreator(new GitProcessRunner()).createBranch(repo, taskId, TaskStart.commit(repo, 'HEAD'))
+        (result as BranchCreationResult.Created).branchName()
+    }
+
+    /**
+     * Builds the topology shared by every {@link BaseRefresh} spec: a work repo with {@code main}
+     * and {@code develop} branches (one commit each), a fresh origin bare repo carrying both, and a
+     * real clone of it. {@code beforePush} runs against {@code work} once both branches exist and
+     * before the push, for a spec that also needs a tag or other ref seeded alongside {@code
+     * develop}'s commit; anything it creates that also needs pushing goes in {@code extraRefs}.
+     *
+     * @return {@code [work, origin, clone]} paths, in that order
+     */
+    List<Path> initBaseRefTopology(Path tempDir, List<String> extraRefs = [], Closure beforePush = null) {
+        Path work = initWorkingRepo(tempDir, 'work')
+        gitOutput(work, 'checkout', '-b', 'main')
+        commit(work, 'a.txt', 'one')
+        gitOutput(work, 'checkout', '-b', 'develop')
+        commit(work, 'b.txt', 'two')
+        beforePush?.call(work)
+        Path origin = initBareRepo(tempDir, 'origin.git')
+        addRemote(work, 'origin', origin.toString())
+        List<String> pushArgs = [
+            'push',
+            'origin',
+            'main',
+            'develop'
+        ]
+        pushArgs.addAll(extraRefs)
+        assert gitExitCode(work, pushArgs as String[]) == 0
+        assert gitExitCode(tempDir, 'clone', origin.toString(), 'clone') == 0
+        [
+            work,
+            origin,
+            tempDir.resolve('clone')
+        ]
     }
 }

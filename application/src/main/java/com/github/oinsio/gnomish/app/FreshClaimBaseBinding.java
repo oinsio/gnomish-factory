@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.base.BaseDesignatorMapping;
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
@@ -45,10 +46,11 @@ import org.slf4j.LoggerFactory;
  * report, no stage attempt burned; a configured remote that never answers is the daemon's
  * infrastructure condition, so the claim is released with no penalty (D9). An {@code
  * UnderdeterminedCause.NO_DEFAULT_BRANCH} refusal is structurally unreachable from this call site
- * — {@link TrustedBaseContext#defaultBranch()} is always a resolved branch name, established once
- * at startup ({@link TrustedTierStartup}) — but is still routed through the same park rather than
- * assumed away, so a future caller that ever did pass a blank default fails closed instead of
- * silently falling through to a local checkout.
+ * — {@link TrustedBaseContext#defaultBranch()} is a non-null {@link
+ * com.github.oinsio.gnomish.baseref.DefaultBranch}, established once at startup ({@link
+ * TrustedTierStartup}) from the one place the remote is asked — but is still routed through the
+ * same park rather than assumed away, so a future caller that ever did pass none fails closed
+ * instead of silently falling through to a local checkout.
  *
  * <p>Implements FR2, FR6, D6, D15 of add-base-ref-resolution.
  */
@@ -66,10 +68,13 @@ final class FreshClaimBaseBinding {
      *
      * @param lawBinding the binding the task's law and task tier are both read from — the
      *     refreshed commit, so law and pin name one SHA by construction
-     * @param decision the ref, the tier that produced it and the reason, for the caller to pass
-     *     into branch creation and (task 6.3) the durable pin
+     * @param pin the durable base pin the caller records beside the start commit: the resolved ref
+     *     name, the namespace origin held it in as the refresh established it, and the tier that
+     *     produced the name. The kind is carried rather than discarded (D7 of
+     *     add-base-ref-resolution, revised 2026-09-10) so a later resume fetches that namespace
+     *     only instead of re-classifying a name that may since have been reused
      */
-    record Bound(LawBinding lawBinding, BaseDecision decision) implements Outcome {}
+    record Bound(LawBinding lawBinding, BasePin pin) implements Outcome {}
 
     /**
      * No base could be determined, or a resolved ref's refresh refused it; the task was parked.
@@ -154,8 +159,8 @@ final class FreshClaimBaseBinding {
             TaskRef ref,
             Tracker tracker) {
         return switch (baseRefGit.refresh(cloneDir, decision.ref())) {
-            case BaseRefreshOutcome.Refreshed(var ignoredRef, String commit, var ignoredKind) ->
-                new Bound(LawBinding.atRevision(cloneDir, commit), decision);
+            case BaseRefreshOutcome.Refreshed(var ignoredRef, String commit, var kind) ->
+                new Bound(LawBinding.atRevision(cloneDir, commit), new BasePin(decision.ref(), kind, decision.rule()));
             case BaseRefreshOutcome.Refused(String report) ->
                 new Parked(parkRefused(finalState, ref, tracker, decision.ref(), report));
             case BaseRefreshOutcome.Unavailable(String reason) ->
@@ -188,7 +193,7 @@ final class FreshClaimBaseBinding {
                 OperatorEvent.FRESH_CLAIM_BASE_REFUSED.head()
                         + "parking task {}: its resolved base ref '{}' could not be refreshed: {}",
                 ref.id(),
-                resolvedRef,
+                LogText.forLog(resolvedRef),
                 LogText.forLog(report));
         parkBestEffort(tracker, ref, fullReport);
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, fullReport);
@@ -213,11 +218,17 @@ final class FreshClaimBaseBinding {
                         + "releasing claim on task {}: origin never answered the refresh of its resolved base ref"
                         + " '{}': {}",
                 ref.id(),
-                resolvedRef,
+                LogText.forLog(resolvedRef),
                 LogText.forLog(reason));
         releaseBestEffort(tracker, ref);
-        return new TakeResult.InfrastructureUnavailable("Task " + ref.id() + " was returned to Ready: origin did"
-                + " not answer the refresh of its resolved base ref '" + resolvedRef + "': " + reason);
+        // Sanitized here, not at the sinks: this text becomes TakeResult.InfrastructureUnavailable's
+        // reason, which SlotOutcomeLog and the drain/batch summaries log whole — by then no
+        // untrusted accessor is left for UntrustedLogTextGateSpec to see (FR6 of
+        // harden-logging-observability).
+        return new TakeResult.InfrastructureUnavailable("Task " + ref.id() + " claim released (the reaper returns"
+                + " it to Ready after the claim TTL): origin did not answer the refresh of its resolved base ref '"
+                + LogText.forLog(resolvedRef) + "': "
+                + LogText.forLog(reason));
     }
 
     private static void releaseBestEffort(Tracker tracker, TaskRef ref) {

@@ -46,4 +46,4 @@ import org.jspecify.annotations.Nullable;
 public record BaseDto(
         @Nullable String type,
         @Nullable @JsonProperty("default") String defaultRef,
-        @Nullable List<AllowedBaseDto> allowed) {}
+        @Nullable List<@Nullable AllowedBaseDto> allowed) {}

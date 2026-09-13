@@ -44,9 +44,16 @@ public final class GitObjects {
         return new GitObjects(new GitExec(gitDir, gitBinary), tempDir);
     }
 
-    /** Resolves {@code ref} to the commit it points at, or empty if the ref does not exist. */
+    /**
+     * Resolves {@code ref} to the commit it points at, or empty if the ref does not exist.
+     *
+     * <p>{@code --end-of-options} — not {@code --}, which in {@code rev-parse} starts a
+     * <em>pathspec</em> and would make every revision unresolvable — so a caller-supplied name is
+     * read as a revision even when it begins with {@code -}, instead of being run as an option.
+     */
     public Optional<ObjectId> resolveRef(String ref) {
-        GitExec.Result result = exec.run(List.of("rev-parse", "--verify", "--quiet", ref + "^{commit}"));
+        GitExec.Result result =
+                exec.run(List.of("rev-parse", "--verify", "--quiet", "--end-of-options", ref + "^{commit}"));
         if (result.exitCode() != 0) {
             return Optional.empty();
         }

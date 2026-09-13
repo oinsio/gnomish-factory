@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -96,7 +97,7 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
         def sandboxProps = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def support = ContainerRunSupport.create(cloneDir, taskId, segments(), sandboxProps,
                 new FactoryProperties(null, null, null, null, null), List.<String> of(), [], OwnershipMode.TRACKED, ClaimEpochSource.NONE)
-        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        support.taskRepository().createTask(new TaskContext(taskId, 'title', 'body', List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         support.lease().environmentFor('work')
         def boxName = "gnomish-box-${taskId}"
         assert ContainerE2eDocker.containerRunning(boxName)

@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink;
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGates;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecycleTick;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
@@ -70,7 +71,6 @@ final class ServeRuntimeAssembly {
             TrustedBaseContext trustedBase) {
         // FR8, D12: shared by every downstream caller (heartbeat, slot runner, feed automaton).
         TrackerHealthTracker trackerHealth = new TrackerHealthTracker(liveTracker, feedClock);
-        Tracker tracker = trackerHealth;
 
         // FR1: stand-in bound to SnapshotWriter::markDirty by the writer ObservabilityAssembly
         // builds; built before the heartbeat so its state trigger (FR7) wakes it too.
@@ -79,7 +79,7 @@ final class ServeRuntimeAssembly {
         // FR13: joins the assembly before TakeSlotRunner is built (reused for the daemon's lifetime).
         // FR7 (design D4): the heartbeat's state transitions wake the same writer.
         TakeHeartbeat heartbeat =
-                TakeHeartbeat.forRun(tracker, trackerConfig, new ThreadSleeper(), dirtyNotifier::markDirty);
+                TakeHeartbeat.forRun(trackerHealth, trackerConfig, new ThreadSleeper(), dirtyNotifier::markDirty);
         RunAssembly serveAssembly = assembly.withExtraListener(heartbeat.progress());
 
         SlotLedger slotLedger = new SlotLedger(effectiveSlots, feedClock, dirtyNotifier);
@@ -91,7 +91,7 @@ final class ServeRuntimeAssembly {
         // ledger sink is a forwarding stand-in — same construction-order cycle ForwardingDirtyNotifier
         // already breaks for the snapshot writer, bound below once ObservabilityAssembly returns.
         ForwardingRemoteOutageLedgerSink remoteOutageLedgerSink = new ForwardingRemoteOutageLedgerSink();
-        RemoteOutageGate remoteOutageGate = RemoteOutageGate.system(
+        RemoteOutageGate remoteOutageGate = RemoteOutageGates.system(
                 git.baseRefs(),
                 serveArguments.dir(),
                 serveProperties.idlePollInterval(),
@@ -106,7 +106,7 @@ final class ServeRuntimeAssembly {
                 definition,
                 trackerConfig,
                 factory,
-                tracker,
+                trackerHealth,
                 instanceId,
                 serveAssembly,
                 git,
@@ -121,7 +121,7 @@ final class ServeRuntimeAssembly {
                 serveProperties,
                 feedClock,
                 trackerConfig,
-                tracker,
+                trackerHealth,
                 instanceId,
                 slotLedger,
                 slotRunner,

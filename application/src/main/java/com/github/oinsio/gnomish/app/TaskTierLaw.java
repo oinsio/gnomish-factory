@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,10 +59,25 @@ final class TaskTierLaw {
      * The task tier loaded cleanly.
      *
      * @param definition the definition this task runs under
-     * @param lawBinding the binding the run freezes its law from — the peeled law commit, so law
-     *     and pin name one SHA by construction
+     * @param repositoryRoot the repository the law was read from — the clone whose objects hold
+     *     {@code lawCommit}
+     * @param lawCommit the peeled law commit, kept typed (design D12, revised 2026-09-10): it is
+     *     both the revision the run re-opens its law at and the start point the task branch is cut
+     *     from, so law, branch and pin name one SHA by construction. Downgrading it to hex and
+     *     re-resolving that string is what let a stale local ref win the start point.
      */
-    record Bound(PipelineDefinition definition, LawBinding lawBinding) implements Outcome {}
+    record Bound(PipelineDefinition definition, Path repositoryRoot, ObjectId lawCommit) implements Outcome {
+
+        /**
+         * The binding this task's run assembles its law under — the commit itself, so re-opening
+         * the law resolves nothing.
+         *
+         * @return the commit binding; never null
+         */
+        LawBinding lawBinding() {
+            return LawBinding.atCommit(repositoryRoot, lawCommit);
+        }
+    }
 
     /**
      * The base's definition failed to load and the task was parked.
@@ -98,10 +114,7 @@ final class TaskTierLaw {
         }
         return switch (taskTier.outcome()) {
             case LoadOutcome.Loaded(var definition) ->
-                new Bound(
-                        definition,
-                        LawBinding.atRevision(
-                                binding.repositoryRoot(), taskTier.lawCommit().hex()));
+                new Bound(definition, binding.repositoryRoot(), taskTier.lawCommit());
             case LoadOutcome.Invalid(List<ConfigError> errors) ->
                 new Parked(park(binding, taskTier.lawCommit(), errors, startupDefinition, trackerTask, tracker));
         };
@@ -148,6 +161,7 @@ final class TaskTierLaw {
     private static String revisionOf(LawBinding binding) {
         return switch (binding) {
             case LawBinding.AtRevision atRevision -> atRevision.revision();
+            case LawBinding.AtCommit atCommit -> atCommit.commit().hex();
             case LawBinding.WorkingTree workingTree -> "working tree at " + workingTree.repositoryRoot();
         };
     }

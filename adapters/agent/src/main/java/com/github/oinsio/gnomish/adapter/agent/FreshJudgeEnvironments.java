@@ -17,6 +17,15 @@ import org.jspecify.annotations.Nullable;
  * a new one pinned at the new commit; {@link #disposeCurrent()} tears the last one down when
  * the stage's verification ends.
  *
+ * <p><b>Lock scope</b> (`lock-scope.md`, the resource-serializing exception): the monitor is held
+ * across {@code materialize}/{@code dispose} — real Docker work — deliberately, because the box
+ * itself is the guarded resource. Every waiter wants that same box, so waiting for it is the
+ * intended outcome rather than collateral; the alternative is a second box for one attempt
+ * commit, which is the defect this class exists to prevent. The hold is bounded by the sandbox
+ * adapter's own container deadlines, and the only cross-purpose waiter is {@link
+ * #disposeCurrent()} at the stage's end — which must not tear a box down mid-materialization
+ * anyway.
+ *
  * <p>Landed additively (integration-pass precedent of task 4.8): the app wiring that binds this
  * source into the container-mode assembly follows with the sandbox integration pass; the
  * component and its contract are complete here.

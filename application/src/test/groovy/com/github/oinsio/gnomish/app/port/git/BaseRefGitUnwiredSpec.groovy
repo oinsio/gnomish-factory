@@ -34,7 +34,7 @@ class BaseRefGitUnwiredSpec extends Specification {
 
     def "resolveForResume refuses, naming itself"() {
         when:
-        BaseRefGit.UNWIRED.resolveForResume(DIR, 'main')
+        BaseRefGit.UNWIRED.resolveForResume(DIR, 'main', null)
 
         then:
         def e = thrown(IllegalStateException)

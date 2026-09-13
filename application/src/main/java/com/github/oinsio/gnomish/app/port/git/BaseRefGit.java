@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
 import java.nio.file.Path;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The base-ref half of the task-git capability set (FR5, FR6 of add-base-ref-resolution): what the
@@ -47,11 +48,20 @@ public interface BaseRefGit {
      * origin} at all binds from the ref's local tip instead of refusing, since a resume with
      * nothing to fetch from is a legitimate shape a fresh claim never sees.
      *
+     * <p><b>The pinned kind decides the namespace</b> (D7 of add-base-ref-resolution, revised
+     * 2026-09-10). Where the task's pin records which namespace origin held the name in, that
+     * namespace alone is read and fetched: a tag pushed later under a pinned branch's name — or the
+     * reverse — then neither redirects the task nor parks it, which classifying afresh at every
+     * resume would do to every task whose base name was reused. Where the pin carries no kind (a
+     * manual pin, or one written before the kind existed) the name is classified exactly as {@link
+     * #refresh} classifies it.
+     *
      * @param cloneDir the factory clone the resolution runs against; never null
      * @param ref the task's pinned base ref — a branch, a tag, or a bare commit id; never null
+     * @param kind the namespace the pin recorded for {@code ref}, or {@code null} to classify it
      * @return the resolved tip, or the typed refusal or outage; never null
      */
-    ResumeBaseOutcome resolveForResume(Path cloneDir, String ref);
+    ResumeBaseOutcome resolveForResume(Path cloneDir, String ref, @Nullable BaseRefKind kind);
 
     /**
      * The tracker-free reachability probe the remote outage gate consults (FR14, task 7.3 of
@@ -91,7 +101,7 @@ public interface BaseRefGit {
         }
 
         @Override
-        public ResumeBaseOutcome resolveForResume(Path cloneDir, String ref) {
+        public ResumeBaseOutcome resolveForResume(Path cloneDir, String ref, @Nullable BaseRefKind kind) {
             throw unwired("resolveForResume");
         }
 

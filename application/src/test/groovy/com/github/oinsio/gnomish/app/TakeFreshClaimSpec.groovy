@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -12,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -127,7 +130,9 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         1 * branches.harden(cloneDir)
 
         then: 'the branch is created once from the trusted-tier default branch, then the run reaches its terminal boundary'
-        1 * lifecycleStore.createTask({ it.taskId() == 'PROJ-1' }, 'main', _, _)
+        1 * lifecycleStore.createTask({
+            it.taskId() == 'PROJ-1'
+        }, LAW_COMMIT, DEFAULT_BRANCH_PIN, _)
         1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed)
         1 * tracker.finish(REF, _)
 
@@ -172,7 +177,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         then: 'the explicit --base is passed through, and the context carries the tracker taskId'
         1 * lifecycleStore.createTask({
             it.taskId() == 'PROJ-9'
-        }, 'release/1.2', _, _)
+        }, LAW_COMMIT, new BasePin('release/1.2', BaseRefKind.BRANCH, BaseRule.EXPLICIT_ARGUMENT), _)
         1 * tracker.finish(REF, _)
     }
 

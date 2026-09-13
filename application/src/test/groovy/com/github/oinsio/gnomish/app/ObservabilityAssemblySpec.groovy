@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGate
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.SlotRunner
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
@@ -142,7 +143,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
                 //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
                 //     stamp a transition this spec never drives.
-                RemoteOutageGate.system(
+                RemoteOutageGates.system(
                         BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
 
         then: 'a genuine, non-null wiring is returned'
@@ -218,7 +219,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
                 //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
                 //     stamp a transition this spec never drives.
-                RemoteOutageGate.system(
+                RemoteOutageGates.system(
                         BaseRefGit.UNWIRED, homeDir, Duration.ofSeconds(30)))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))

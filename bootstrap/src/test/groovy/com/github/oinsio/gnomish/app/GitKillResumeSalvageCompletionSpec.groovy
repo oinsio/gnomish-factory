@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
@@ -108,7 +109,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     def "M1: interrupted round is salvaged (not counted as a round) then the task completes"() {
         given: 'a task with one durably committed round, as a live run would leave it'
         def taskId = 'PROJ-100'
-        repository().createTask(context(taskId), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         persistOneRound(taskId, TaskState.atStageStart('build'))
         def worktree = expectedWorktree(taskId)
         def stateBeforeKill = StateJsonMapper.fromDto(

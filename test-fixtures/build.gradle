@@ -33,6 +33,9 @@ dependencies {
     // suite extends Specification), so a consuming spec compiles against them.
     api project(':domain')
     api project(':gitobjects')
+    // `TaskStart` names `BaseRule` directly; no longer reachable transitively now that
+    // `:adapters:git` scopes its own `:baseref` edge to `implementation`.
+    api project(':baseref')
     // The tracker port-contract suites are typed in the port's own DTOs.
     api project(':gnomish-plugin-api')
     // RepeatSuppressorFixture returns a RepeatSuppressor in its own signature.

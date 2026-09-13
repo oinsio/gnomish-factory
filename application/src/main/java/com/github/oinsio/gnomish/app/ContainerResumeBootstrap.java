@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
-import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import org.jspecify.annotations.Nullable;
@@ -15,6 +15,10 @@ import org.jspecify.annotations.Nullable;
  * table to switch on {@code outcome} without re-deriving any of it. Its host twin is {@link
  * ResumeBootstrap}; what the two add beyond {@link ResumedBranch} — a sandbox bundle here, a
  * worktree there — is reached only through {@link ContainerResumeMechanics}.
+ *
+ * <p>Kept in sync with {@link ResumeBootstrap}: both carry {@code baseCommit} and {@code pin} with
+ * identical semantics for the resume law rebind, since neither field is part of the shared {@link
+ * ResumedBranch} contract.
  *
  * @param taskId the tracker's original (un-sanitized) taskId, as supplied to {@code take <ref>}
  * @param context the resumed task's identity, description and decisions, read from {@code
@@ -34,12 +38,9 @@ import org.jspecify.annotations.Nullable;
  *     resume always re-delivers the park as orphaned rather than distinguishing a settled one
  *     (safe, idempotent, just not the fast path host mode gets — see {@link
  *     TakeContainerEngineExecution}'s class javadoc for the identical tradeoff on the fresh path)
- * @param baseRef the resolved ref {@code baseCommit} was resolved from, or {@code null} when
- *     unpinned (FR7 of add-base-ref-resolution) — the resume law rebind's preferred pinned-ref-name
- *     input (task 6.4)
- * @param baseRule the tier that produced {@code baseRef}, or {@code null} together with it when
- *     unpinned (FR7 of add-base-ref-resolution); not consumed by resume law rebinding — resume only
- *     re-resolves a ref, it does not re-derive the audit-trail rule (task 6.4)
+ * @param pin the branch's durable base pin, or {@link BasePin#UNPINNED} for a legacy {@code
+ *     baseCommit}-only document (FR7 of add-base-ref-resolution). The resume law rebind reads its
+ *     ref name and its kind — the namespace to fetch (D7, revised 2026-09-10) — and never its rule
  */
 record ContainerResumeBootstrap(
         String taskId,
@@ -50,6 +51,5 @@ record ContainerResumeBootstrap(
         String branchName,
         String baseCommit,
         boolean trackerWritePending,
-        @Nullable String baseRef,
-        @Nullable BaseRule baseRule)
+        BasePin pin)
         implements ResumedBranch {}

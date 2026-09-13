@@ -32,7 +32,7 @@ public sealed interface BaseResolution {
      * No base could be determined, and the policy refuses to substitute one. Every field is report
      * material: the human who fixes this reads the values found and the allowed bases that rejected them.
      *
-     * @param cause which of the three causes it is — what the caller routes on
+     * @param cause which of the causes it is — what the caller routes on
      * @param values the designator values found on the task, in the order the adapter reported them;
      *     empty when the cause is not a designator one
      * @param reason one sentence naming what was found and what the configuration allows

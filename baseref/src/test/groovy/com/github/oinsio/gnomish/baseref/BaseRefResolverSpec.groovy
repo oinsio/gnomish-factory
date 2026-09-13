@@ -28,7 +28,25 @@ class BaseRefResolverSpec extends Specification {
                 overrides.containsKey('allowedBases') ? overrides.allowedBases : ALLOWED,
                 overrides.containsKey('configuredDefault') ? overrides.configuredDefault : null,
                 overrides.mode ?: ResolutionMode.AUTONOMOUS,
-                overrides.containsKey('defaultBranch') ? overrides.defaultBranch : null)
+                overrides.defaultBranch ? new DefaultBranch(overrides.defaultBranch as String) : null)
+    }
+
+    // FR4, FR10, M2: the tier that speaks for the remote cannot be made to answer the clone's own
+    //     checkout. Not a text scan of who may spell "HEAD", but the tier's input type: there is no
+    //     BaseRefRequest carrying LOCAL_HEAD_REF as a default branch to resolve in the first place.
+    def "FR4, FR10, M2: the default-branch tier can never answer the local HEAD"() {
+        when: 'a caller tries to hand the remote tier the one ref the manual tier owns'
+        request(defaultBranch: BaseRefResolver.LOCAL_HEAD_REF)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        and: 'so LOCAL_HEAD_REF is reachable only where a human is at the clone'
+        BaseRefResolver.resolve(request(mode: ResolutionMode.MANUAL)).decision().rule() == BaseRule.LOCAL_HEAD
+        BaseRefResolver.resolve(request(mode: ResolutionMode.MANUAL)).decision().ref() == BaseRefResolver.LOCAL_HEAD_REF
+
+        and: 'an autonomous run with nothing to go on refuses instead of reaching it'
+        BaseRefResolver.resolve(request([:])) instanceof BaseResolution.Underdetermined
     }
 
     // FR4: the whole priority matrix — each row silences every tier above it and exercises one tier
@@ -80,6 +98,11 @@ class BaseRefResolverSpec extends Specification {
         'a designator with no allowed base' | [designator: BaseDesignator.single('release/1.18'), allowedBases: AllowedBases.empty(), defaultBranch: 'trunk'] || UnderdeterminedCause.DESIGNATOR_NOT_ALLOWED | ['release/1.18'] | 'the allowed bases are (empty)'
         'an autonomous run with no default branch' | [allowedBases: AllowedBases.empty()] || UnderdeterminedCause.NO_DEFAULT_BRANCH | [] | "never falls back to the clone's local HEAD"
         'a manual run under a conflict' | [mode: ResolutionMode.MANUAL, designator: BaseDesignator.conflict(['a', 'b'])] || UnderdeterminedCause.DESIGNATOR_CONFLICT | ['a', 'b'] | 'more than one base'
+        // NFR-S3 (task 12.2): the explicit tier is bounded by no pattern, so the grammar is its only check
+        'a malformed --base' | [explicitBase: 'release/../../secrets', configuredDefault: 'develop', defaultBranch: 'trunk'] || UnderdeterminedCause.EXPLICIT_BASE_MALFORMED | ['release/../../secrets'] | 'not a well-formed ref name'
+        'a --base with a control character, in a manual run' | [mode: ResolutionMode.MANUAL, explicitBase: 'main' + Character.toString(27 as char)] || UnderdeterminedCause.EXPLICIT_BASE_MALFORMED | [
+            'main' + Character.toString(27 as char)
+        ] | 'control characters'
     }
 
     // FR5: the manual tier is the only fallback to the working copy; autonomous refuses instead
@@ -138,6 +161,7 @@ class BaseRefResolverSpec extends Specification {
         UnderdeterminedCause.values() as List == [
             UnderdeterminedCause.DESIGNATOR_NOT_ALLOWED,
             UnderdeterminedCause.DESIGNATOR_CONFLICT,
+            UnderdeterminedCause.EXPLICIT_BASE_MALFORMED,
             UnderdeterminedCause.NO_DEFAULT_BRANCH,
         ]
 

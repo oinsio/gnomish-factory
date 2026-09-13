@@ -15,19 +15,21 @@ import org.jspecify.annotations.Nullable;
  * <p>The explicit {@code --base} argument is not held against the allowed bases. They bound what a
  * task's author may choose; an operator typing a ref at a terminal is not that author, and a list
  * that could veto them would make {@code --base v1.2.3} unusable on any project whose allowed bases
- * are branches.
+ * are branches. It is held to the ref-name grammar, though — the one check every entry of a ref
+ * name shares — since no pattern match stands between it and the refresh fetch (NFR-S3).
  *
  * <p>Values in, a value out: no subprocess, no port, no clock, no I/O. Whether the resolved ref
  * exists, and how fresh it is, are the fetching layer's questions.
  *
- * <p>Implements FR4, FR5, FR8, FR10, NFR-C1 of add-base-ref-resolution.
+ * <p>Implements FR4, FR5, FR8, FR10, NFR-C1, NFR-S3 of add-base-ref-resolution.
  */
 public final class BaseRefResolver {
 
     /**
      * The ref a manual run without {@code --base} branches from: the clone's current HEAD, whatever
      * a human has checked out. This is the one tier where the working copy is the answer, and the
-     * only place in the factory where the literal remains legitimate.
+     * only place in the factory where the literal remains legitimate — {@link DefaultBranch}
+     * refuses it precisely so the tier above cannot reach the same ref under the remote's name.
      */
     public static final String LOCAL_HEAD_REF = "HEAD";
 
@@ -42,7 +44,12 @@ public final class BaseRefResolver {
     public static BaseResolution resolve(BaseRefRequest request) {
         String explicit = request.explicitBase();
         if (explicit != null) {
-            return resolved(explicit, BaseRule.EXPLICIT_ARGUMENT, "explicit --base argument");
+            return RefNameSyntax.refNameViolation(explicit)
+                    .<BaseResolution>map(violation -> new BaseResolution.Underdetermined(
+                            UnderdeterminedCause.EXPLICIT_BASE_MALFORMED,
+                            List.of(explicit),
+                            "the --base argument is not a well-formed ref name: " + violation))
+                    .orElseGet(() -> resolved(explicit, BaseRule.EXPLICIT_ARGUMENT, "explicit --base argument"));
         }
         BaseResolution fromDesignator = fromDesignator(request);
         if (fromDesignator != null) {
@@ -52,10 +59,10 @@ public final class BaseRefResolver {
         if (configured != null) {
             return resolved(configured, BaseRule.CONFIGURED_DEFAULT, "the configured task-branch.base.default");
         }
-        String defaultBranch = request.defaultBranch();
+        DefaultBranch defaultBranch = request.defaultBranch();
         if (defaultBranch != null) {
             return resolved(
-                    defaultBranch,
+                    defaultBranch.name(),
                     BaseRule.REPOSITORY_DEFAULT_BRANCH,
                     "the repository default branch reported by the remote");
         }

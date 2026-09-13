@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import java.nio.file.Path;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The law binding of a manual {@code gnomish run --resume} in git mode (design D13 of
@@ -30,12 +30,31 @@ final class ManualResumeLawBinding {
      * <p>Implements FR7, FR12, D13 of add-base-ref-resolution.
      *
      * @param cloneDir the {@code --dir} project clone the pinned ref is resolved in
-     * @param baseRef the branch's durable pin, or {@code null} for a legacy branch that carries
-     *     none
+     * @param pin the branch's durable pin, {@link BasePin#UNPINNED} for a legacy branch
      * @param baseCommit the commit the task branch was created from — the legacy fallback
      * @return the git-objects binding at the pinned ref's local tip; never null
      */
-    static LawBinding of(Path cloneDir, @Nullable String baseRef, String baseCommit) {
-        return LawBinding.atRevision(cloneDir, ResumeLawBinding.pinnedRef(baseRef, baseCommit));
+    static LawBinding of(Path cloneDir, BasePin pin, String baseCommit) {
+        ResumeLawBinding.PinnedBase pinned = ResumeLawBinding.pinnedRef(pin, baseCommit);
+        return LawBinding.atRevision(cloneDir, qualified(pinned));
+    }
+
+    /**
+     * The pinned base as a revision this clone resolves unambiguously. Where the pin records the
+     * namespace (D7 of add-base-ref-resolution, revised 2026-09-10) the revision is fully qualified,
+     * so git's bare-name lookup order cannot answer with a local tag planted over the pinned branch
+     * name — the same ambiguity the autonomous refresh closes by fetching one namespace only. A pin
+     * with no kind (a manual run's own pin, or one written before the kind existed) keeps the bare
+     * name, so nothing about the pre-kind manual flow changes.
+     */
+    private static String qualified(ResumeLawBinding.PinnedBase pinned) {
+        if (pinned.kind() == null) {
+            return pinned.ref();
+        }
+        return switch (pinned.kind()) {
+            case BRANCH -> "refs/heads/" + pinned.ref();
+            case TAG -> "refs/tags/" + pinned.ref();
+            case COMMIT -> pinned.ref();
+        };
     }
 }

@@ -103,6 +103,27 @@ class LawSourcesSpec extends Specification implements GitObjectsFixture {
         bound.lawCommit() == lawCommit
     }
 
+    // FR15, D12 (revised 2026-09-10): a commit binding is opened with NO resolution at all. Proven
+    //     over a repository whose git directory has been made unreadable after the peel: a source
+    //     that still ran a rev-parse would fail, and the law read itself still works because the
+    //     objects were already located. The point is that a moved ref cannot answer a second
+    //     lookup differently, because there is no second lookup.
+    def "FR15: a commit binding opens the law with no resolution of its own"() {
+        given: 'a repo whose base is peeled once'
+        Path bare = seedBareRepo(tempDir, TREE)
+        def git = openGitObjects(bare, tempDir)
+        def lawCommit = git.resolveRef('refs/heads/base').get()
+
+        when: 'the ref is then deleted outright — nothing is left for a resolution to find'
+        gitOutput(bare, 'update-ref', '-d', 'refs/heads/base')
+        def bound = LawSources.open(LawBinding.atCommit(tempDir, lawCommit), git)
+
+        then:
+        bound.source() instanceof GitObjectsLawSource
+        bound.source().read('instructions.md') == new LawSource.Text('Committed law.')
+        bound.lawCommit() == lawCommit
+    }
+
     // FR11: a revision nothing resolves is an operator-visible refusal, never a silent fall back
     //     to the clone's checkout — that fall back is exactly what would hide an obsolete base.
     def "FR11: a revision that resolves to no commit refuses instead of falling back"() {

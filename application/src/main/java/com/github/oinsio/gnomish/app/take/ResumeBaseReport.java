@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.logtext.LogText;
+
 /**
  * The report a resumed task parks with when its pinned base ref no longer resolves (FR12, design
  * D13 of add-base-ref-resolution): named ref, the resolution's own detail, and the standing
@@ -8,6 +10,11 @@ package com.github.oinsio.gnomish.app.take;
  * resolution is refused.
  *
  * <p>Pure text assembly, no I/O: the tracker write and the log line are the caller's.
+ *
+ * <p>The pinned ref is read back from the task branch's {@code task.json} and the detail is built
+ * around remote-supplied names, so both pass {@link LogText} here, where they enter the factory's
+ * own text — the assembled report is logged whole and posted as a tracker comment, past the reach
+ * of {@code UntrustedLogTextGateSpec} (FR6 of harden-logging-observability).
  *
  * <p>Implements FR12, D13 of add-base-ref-resolution.
  */
@@ -25,8 +32,8 @@ public final class ResumeBaseReport {
      */
     public static String unresolved(String taskId, String pinnedRef, String detail) {
         return "Task " + taskId + " is parked: its pinned base ref no longer resolves.\n"
-                + "Pinned ref: " + pinnedRef + "\n"
-                + "Detail: " + detail + "\n"
+                + "Pinned ref: " + LogText.forLog(pinnedRef) + "\n"
+                + "Detail: " + LogText.forLog(detail) + "\n"
                 + "No stage attempt was spent and the claim was not released: the failure is deterministic,"
                 + " so re-claiming would only repeat it. Fix or re-point the base and return the task to work.";
     }

@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -12,7 +10,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -23,33 +20,22 @@ import spock.lang.TempDir
  * origin tip equal to the local branch tip, cleanup at the tip, and not one manual push anywhere in
  * the drive. A run in a clone with no origin at all stays entirely silent.
  */
-class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoFixture {
+class LifecyclePushIntegrationSpec extends Specification implements LifecyclePushFixture {
 
     @TempDir
     Path tempDir
 
-    private static final String TASK_ID = 'PROJ-1'
-    private static final String BRANCH = 'gnomish/PROJ-1'
-
-    private final GitProcessRunner runner = new GitProcessRunner()
-    private Path origin
-    private Path cloneDir
-
     def setup() {
         origin = initBareRepo(tempDir, 'origin.git')
         cloneDir = tempDir.resolve('clone')
-        runner.run(tempDir, 'clone', '-q', origin.toString(), cloneDir.toString())
+        git.run(tempDir, 'clone', '-q', origin.toString(), cloneDir.toString())
         Files.writeString(cloneDir.resolve('a.txt'), 'first')
         commitAll(cloneDir, 'init')
-        runner.run(cloneDir, 'push', '-q', 'origin', 'HEAD:refs/heads/main')
+        git.run(cloneDir, 'push', '-q', 'origin', 'HEAD:refs/heads/main')
     }
 
     private String localTip() {
         gitOutput(cloneDir, 'rev-parse', "refs/heads/${BRANCH}")
-    }
-
-    private Optional<String> originTip() {
-        new RemoteBranchTip(runner).read(cloneDir, BRANCH)
     }
 
     /**
@@ -59,12 +45,12 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
      */
     private TaskLifecycleStore repositoryFor(String mode, Path clone) {
         if (mode == 'host') {
-            return new GitTaskStore(runner, ClaimEpochSource.NONE).taskRepository(clone, tempDir.resolve("worktrees-${clone.fileName}"))
+            return new GitTaskStore(git, ClaimEpochSource.NONE).taskRepository(clone, tempDir.resolve("worktrees-${clone.fileName}"))
         }
         Path indexDir = tempDir.resolve("index-${clone.fileName}")
         Files.createDirectories(indexDir)
         def bare = new GitObjectsTaskRepository(GitObjects.open(clone.resolve('.git'), indexDir), ClaimEpochSource.NONE, DenialCursorSource.NONE)
-        new PushBestEffortTaskLifecycleStore(bare, runner, clone)
+        new PushBestEffortTaskLifecycleStore(bare, git, clone)
     }
 
     def "M1: a task driven to Completed in #mode mode leaves origin at the local tip, with no manual push"() {
@@ -72,8 +58,8 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
         def repository = repositoryFor(mode, cloneDir)
 
         when: 'the whole lifecycle runs — creation, then the terminal outcome and its cleanup commit'
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
-        def tipAfterStart = originTip()
+        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        def tipAfterStart = remoteTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
         repository.finishCleanup(TASK_ID)
 
@@ -81,7 +67,7 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
         tipAfterStart.isPresent()
 
         and: 'origin now holds exactly the local tip'
-        originTip() == Optional.of(localTip())
+        remoteTip() == Optional.of(localTip())
 
         and: 'UX1: that tip is the cleanup commit — the PR diff carries no .gnomish-task files'
         gitOutput(cloneDir, 'log', '-1', '--format=%s', "refs/heads/${BRANCH}") == ServiceCommitMessages.cleanup()
@@ -100,7 +86,9 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
 
         when:
         List<ILoggingEvent> events = capture {
-            repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+            repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []),
+            TaskStart.commit(local, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
+            TaskState.atStageStart('implement'))
             repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')))
             repository.finishCleanup(TASK_ID)
         }
@@ -114,20 +102,5 @@ class LifecyclePushIntegrationSpec extends Specification implements BareGitRepoF
 
         where:
         mode << ['host', 'sandbox']
-    }
-
-    /** The {@code LifecyclePush} log events emitted while {@code emit} runs. */
-    private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(LifecyclePush)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        appender.list
     }
 }

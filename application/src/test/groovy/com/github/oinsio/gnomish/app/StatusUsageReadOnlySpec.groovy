@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -58,7 +59,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
     /** Builds {@code gnomish/PROJ-1} with one round, in a throwaway worktree root of its own. */
     private void buildTaskBranch(Path repo, Path taskWorktrees, String taskId) {
         new GitTaskRepository(runner, repo, taskWorktrees, ClaimEpochSource.NONE).createTask(
-                new TaskContext(taskId, 'Fix the thing', 'Body', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+                new TaskContext(taskId, 'Fix the thing', 'Body', []), TaskStart.commit(repo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def worktree = taskWorktrees.resolve(repo.fileName.toString()).resolve(taskId)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))

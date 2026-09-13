@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome;
 import java.nio.file.Path;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The resume-time counterpart of {@link BaseRefresh} (FR12, design D13 of add-base-ref-resolution):
@@ -32,15 +34,16 @@ final class ResumeBaseResolution {
      *
      * @param cloneDir the factory clone; never null
      * @param ref the task's pinned base ref; never null
+     * @param kind the namespace the pin recorded, or {@code null} to classify {@code ref}
      * @return the resolved tip, or the typed refusal or outage; never null
      */
-    ResumeBaseOutcome resolve(Path cloneDir, String ref) {
+    ResumeBaseOutcome resolve(Path cloneDir, String ref, @Nullable BaseRefKind kind) {
         if (!origin.isConfigured(cloneDir)) {
             return localTip(cloneDir, ref)
                     .<ResumeBaseOutcome>map(commit -> new ResumeBaseOutcome.Bound(ref, commit))
                     .orElseGet(() -> new ResumeBaseOutcome.Refused(noRemoteUnresolvedReport(ref)));
         }
-        return switch (refresh.refresh(cloneDir, ref)) {
+        return switch (refresh.refresh(cloneDir, ref, kind)) {
             case BaseRefreshOutcome.Refreshed(String resolved, String commit, var ignoredKind) ->
                 new ResumeBaseOutcome.Bound(resolved, commit);
             case BaseRefreshOutcome.Refused(String report) -> new ResumeBaseOutcome.Refused(report);
@@ -48,9 +51,15 @@ final class ResumeBaseResolution {
         };
     }
 
-    /** The local-only equivalent of the narrow fetch: {@code rev-parse}, no network attempted. */
+    /**
+     * The local-only equivalent of the narrow fetch: {@code rev-parse}, no network attempted.
+     *
+     * <p>{@code --end-of-options} keeps a pin that begins with {@code -} a revision rather than an
+     * option; {@code --} would not, since {@code rev-parse} reads it as the start of a pathspec.
+     */
     private Optional<String> localTip(Path cloneDir, String ref) {
-        return VerifiedTip.read(runner.run(cloneDir, "rev-parse", "--verify", "--quiet", ref + "^{commit}"));
+        return VerifiedTip.read(
+                runner.run(cloneDir, "rev-parse", "--verify", "--quiet", "--end-of-options", ref + "^{commit}"));
     }
 
     private static String noRemoteUnresolvedReport(String ref) {

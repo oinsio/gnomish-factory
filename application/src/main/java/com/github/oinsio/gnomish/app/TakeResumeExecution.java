@@ -23,32 +23,14 @@ import java.util.function.Function;
  *
  * <p>Implements FR9, FR12, D3 of add-tracker-port; FR12, D13 of add-base-ref-resolution.
  */
-final class TakeResumeExecution {
-
-    private final RunAssembly assembly;
-    private final TaskGit git;
-    private final Path worktreesRoot;
-    private final AbortHandler abortHandler;
-    private final int abortThreshold;
-    private final List<String> credentialEnvVarsToScrub;
-    private final ClaimLossFlag claimLossFlag;
-
-    TakeResumeExecution(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            List<String> credentialEnvVarsToScrub,
-            ClaimLossFlag claimLossFlag) {
-        this.assembly = assembly;
-        this.git = git;
-        this.worktreesRoot = worktreesRoot;
-        this.abortHandler = abortHandler;
-        this.abortThreshold = abortThreshold;
-        this.credentialEnvVarsToScrub = credentialEnvVarsToScrub;
-        this.claimLossFlag = claimLossFlag;
-    }
+record TakeResumeExecution(
+        RunAssembly assembly,
+        TaskGit git,
+        Path worktreesRoot,
+        AbortHandler abortHandler,
+        int abortThreshold,
+        List<String> credentialEnvVarsToScrub,
+        ClaimLossFlag claimLossFlag) {
 
     /**
      * Resolves the resumed law binding for {@code pinnedRef} and, once bound, drives {@code
@@ -57,7 +39,7 @@ final class TakeResumeExecution {
      */
     TakeResult run(
             Path cloneDir,
-            String pinnedRef,
+            ResumeLawBinding.PinnedBase pinnedRef,
             TaskState state,
             TaskRef ref,
             Tracker tracker,

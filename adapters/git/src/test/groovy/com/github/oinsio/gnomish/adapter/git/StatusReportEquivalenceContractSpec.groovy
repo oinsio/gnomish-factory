@@ -73,7 +73,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
 
         and: 'the equivalent task.json + state.json content, committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        taskRepository.createTask(new TaskContext(taskId, context.title(), context.body(), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
 
         and: 'the task escalated (recording lastEscalation durably, FR5) and was then resumed with the decision — outcome resets to null while lastEscalation is retained, exactly like the reference fixture (outcome: null, lastEscalation populated)'
@@ -121,7 +121,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
 
         and: 'the round committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        taskRepository.createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('build'))
+        taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
                 .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
@@ -155,7 +155,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
 
         and: 'the park committed to the task branch exactly as the git adapters would'
         def taskRepository = new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-        taskRepository.createTask(context, 'HEAD', BaseRule.LOCAL_HEAD, state)
+        taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), state)
         taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation))
 
         when: 'the branch is read back and both renderings go through the same mapper'

@@ -42,7 +42,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Kept in sync with {@link TakeContainerFreshClaim}: both run the SAME fresh-claim recipe —
  * harden, resolve+refresh the base, bind the task tier at that base, synthesize, create the
- * branch, run the engine once — over their own execution medium (host worktree vs. sandbox task
+ * branch FROM THE BOUND LAW COMMIT with the base pin beside it (FR15, D12 revised 2026-09-10),
+ * run the engine once — over their own execution medium (host worktree vs. sandbox task
  * repository).
  *
  * <p>Implements FR9, FR11, D3 of add-tracker-port; FR2, FR6, FR13, D6, D15 of
@@ -137,10 +138,15 @@ final class TakeFreshClaim {
 
         var synthesized = TrackerTaskSynthesizer.synthesize(trackerTask.snapshot(), taskDefinition);
         var taskRepository = git.store().taskRepository(cloneDir, worktreesRoot);
-        // FR4, FR10 of add-base-ref-resolution: the resolved ref, not the raw --base argument, is
-        // what the branch is created from.
+        // FR15, D12 of add-base-ref-resolution: the branch starts at the very commit the task's law
+        // was peeled at — the refreshed base — and the resolved ref travels beside it as the pin.
         GitFreshTaskSupport.createTask(
-                taskRepository, taskId, synthesized.context(), baseBound.decision(), synthesized.initialState());
+                taskRepository,
+                taskId,
+                synthesized.context(),
+                bound.lawCommit(),
+                baseBound.pin(),
+                synthesized.initialState());
 
         Path worktree = TaskWorktreePath.resolve(worktreesRoot, cloneDir, taskId);
         TaskRecord content = git.store().readTaskRecord(worktree);
@@ -154,8 +160,7 @@ final class TakeFreshClaim {
                 branchName,
                 content.baseCommit(),
                 content.trackerWritePending(),
-                content.baseRef(),
-                content.baseRule());
+                content.pin());
 
         var execution = new TakeEngineExecution(
                 assembly,

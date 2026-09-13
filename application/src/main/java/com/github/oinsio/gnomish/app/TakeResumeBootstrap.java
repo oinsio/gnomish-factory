@@ -17,7 +17,7 @@ import org.slf4j.MDC;
  *
  * <p>Kept in sync with {@link TakeContainerResumeBootstrap}: both must harden the clone,
  * reconcile the remote on resume-start, and build the same resume bundle shape (context,
- * outcome, last escalation, base commit/ref/rule) from the loaded task record.
+ * outcome, last escalation, base commit and the durable base pin) from the loaded task record.
  *
  * <p>Implements FR9 of add-tracker-port; FR6 of harden-task-branch-contract.
  *
@@ -80,7 +80,6 @@ record TakeResumeBootstrap(TaskGit git, Path worktreesRoot, String taskIdMdcKey)
                 branchName,
                 content.baseCommit(),
                 content.trackerWritePending(),
-                content.baseRef(),
-                content.baseRule());
+                content.pin());
     }
 }

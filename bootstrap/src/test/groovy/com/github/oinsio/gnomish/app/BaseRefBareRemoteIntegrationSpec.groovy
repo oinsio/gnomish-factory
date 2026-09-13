@@ -150,7 +150,7 @@ advancement: auto
         and: 'the pin came from the remote tip observed at claim, under the zero-config tier'
         def record = readTaskRecord('PROJ-1')
         record.baseCommit() == remoteTip
-        record.baseRule() == BaseRule.REPOSITORY_DEFAULT_BRANCH
+        record.pin().rule() == BaseRule.REPOSITORY_DEFAULT_BRANCH
     }
 
     // M1: staleness does not grow with serve uptime — a second, later claim against an advanced
@@ -221,8 +221,8 @@ task-branch:
 
         and: 'the pin names release/1.18, its real remote tip, and the DESIGNATOR rule'
         def record = readTaskRecord('PROJ-4')
-        record.baseRef() == 'release/1.18'
+        record.pin().ref() == 'release/1.18'
         record.baseCommit() == releaseTip
-        record.baseRule() == BaseRule.DESIGNATOR
+        record.pin().rule() == BaseRule.DESIGNATOR
     }
 }

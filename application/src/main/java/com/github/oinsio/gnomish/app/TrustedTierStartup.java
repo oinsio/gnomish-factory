@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.pipeline.BoundConfiguration;
 import com.github.oinsio.gnomish.app.port.pipeline.ConfiguredDesignatorKinds;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.baseref.BaseDefinition;
+import com.github.oinsio.gnomish.baseref.DefaultBranch;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -49,10 +50,12 @@ final class TrustedTierStartup {
      *
      * @param definition the validated definition, the daemon's own for the process lifetime
      * @param base the trusted tier's base policy, bound once here and never re-read per claim
-     * @param defaultBranch the branch origin named as its default
+     * @param defaultBranch the branch origin named as its default, typed so no later holder can
+     *     stand in a value origin never reported (FR4, FR10, M2)
      * @param lawCommit the refreshed tip the definition was read from
      */
-    record StartupLaw(PipelineDefinition definition, BaseDefinition base, String defaultBranch, ObjectId lawCommit) {}
+    record StartupLaw(
+            PipelineDefinition definition, BaseDefinition base, DefaultBranch defaultBranch, ObjectId lawCommit) {}
 
     /**
      * Binds the trusted tier from the refreshed default branch of the clone at {@code dir}.
@@ -71,7 +74,7 @@ final class TrustedTierStartup {
     static StartupLaw bind(
             Path dir, BaseRefGit baseRefs, PipelineSource pipelineSource, Map<String, TrackerAdapterFactory> registry)
             throws IOException {
-        String branch = discover(dir, baseRefs);
+        DefaultBranch branch = discover(dir, baseRefs);
         String tip = refresh(dir, baseRefs, branch);
         BoundConfiguration bound = pipelineSource.bindConfiguration(
                 LawBinding.atRevision(dir, tip), ConfiguredDesignatorKinds.fromRegistry(registry));
@@ -84,9 +87,9 @@ final class TrustedTierStartup {
         };
     }
 
-    private static String discover(Path dir, BaseRefGit baseRefs) {
+    private static DefaultBranch discover(Path dir, BaseRefGit baseRefs) {
         return switch (baseRefs.discoverDefaultBranch(dir)) {
-            case DefaultBranchDiscovery.Discovered(String branch) -> branch;
+            case DefaultBranchDiscovery.Discovered(DefaultBranch branch) -> branch;
             case DefaultBranchDiscovery.NoRemote() ->
                 throw unbound(
                         dir,
@@ -99,12 +102,13 @@ final class TrustedTierStartup {
         };
     }
 
-    private static String refresh(Path dir, BaseRefGit baseRefs, String branch) {
-        return switch (baseRefs.refresh(dir, branch)) {
+    private static String refresh(Path dir, BaseRefGit baseRefs, DefaultBranch branch) {
+        return switch (baseRefs.refresh(dir, branch.name())) {
             case BaseRefreshOutcome.Refreshed(var ignored, String commit, var _) -> commit;
             case BaseRefreshOutcome.Refused(String report) -> throw unbound(dir, report);
             case BaseRefreshOutcome.Unavailable(String reason) ->
-                throw unbound(dir, "origin did not answer the refresh of default branch '" + branch + "': " + reason);
+                throw unbound(
+                        dir, "origin did not answer the refresh of default branch '" + branch.name() + "': " + reason);
         };
     }
 

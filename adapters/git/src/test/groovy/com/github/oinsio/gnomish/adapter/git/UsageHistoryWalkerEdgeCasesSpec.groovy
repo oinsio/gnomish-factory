@@ -28,7 +28,8 @@ import spock.lang.TempDir
  * {@link UsageHistoryWalkerSpec}; split out to keep both files under the 200-line cap
  * (.claude/rules/process-invariants.md).
  */
-class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHistoryFixture {
+class UsageHistoryWalkerEdgeCasesSpec extends Specification
+implements UsageHistoryFixture, FailingSubcommandGitFixture {
 
     @TempDir
     Path tempDir
@@ -39,7 +40,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
 
     def "FR14: service commits are not rounds — a salvage commit and a cleanup commit produce no usage rows"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-3', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-3', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-3', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
 
@@ -65,7 +66,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
     // NOT be seen as a new round — proving the boundary is <=, not <.
     def "FR14: a same-stage commit whose attempts list did not grow contributes no extra row"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-6', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-6', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-6', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
 
@@ -89,7 +90,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
     // a new row rather than being folded away as "no new round".
     def "FR14: advancing from a stage to pipeline end starts a fresh round and still yields a row for it"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-7', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-7', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-7', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
 
@@ -118,7 +119,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
         runner.run(seedClone, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedWorktrees = tempDir.resolve('seed-worktrees')
-        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        new GitTaskRepository(runner, seedClone, seedWorktrees, ClaimEpochSource.NONE).createTask(new TaskContext('PROJ-5', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         new GitAttemptPersistence(runner, seedWorktrees.resolve('seed-clone').resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
                 .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound),
@@ -153,7 +154,7 @@ class UsageHistoryWalkerEdgeCasesSpec extends Specification implements UsageHist
     // other subcommand to the real git binary unchanged).
     def "FR14: a blank line in git log's output never crashes the walk nor produces a bogus row"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-8', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-8', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
         persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
         def realCommit = runner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-8').stdout().trim()
@@ -177,25 +178,19 @@ exec git "\$@"
         result.rows()[0].attempt().round() == 0
     }
 
-    /** A walker over a stand-in git that fails one subcommand and delegates the rest (see above). */
+    /**
+     * A walker over a stand-in git that fails one subcommand and delegates the rest — the shared
+     * {@link FailingSubcommandGitFixture}, also used by {@code GitShowTipTerminationSpec} et al.
+     */
     private UsageHistoryWalker walkerFailing(String subcommand) {
-        def fakeGit = tempDir.resolve("fail-${subcommand}-git.sh")
-        fakeGit.toFile().text = """#!/bin/sh
-if [ "\$1" = "${subcommand}" ]; then
-  echo 'fatal: stand-in git refuses' >&2
-  exit 128
-fi
-exec git "\$@"
-"""
-        fakeGit.toFile().setExecutable(true)
-        new UsageHistoryWalker(new GitProcessRunner(fakeGit.toString()))
+        new UsageHistoryWalker(new GitProcessRunner(gitFailingOn(tempDir, subcommand).toString()))
     }
 
     // FR5 of harden-logging-observability: a refused commit listing renders as a report with no
     // rounds at all — the same shape a task that never ran produces. Only the WARN separates them.
     def "FR5: a refused commit listing warns before the report renders empty"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-9', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-9', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         persistRound('PROJ-9', TaskState.atStageStart('implement')
                 .recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)), 'implement', 0)
         def logs = LogCaptureSupport.attach(UsageHistoryWalker, Level.DEBUG)
@@ -220,7 +215,7 @@ exec git "\$@"
     // so the classification is DEBUG, below the console, and never an alarm.
     def "FR5: a commit carrying no state.json is classified at DEBUG, not warned about"() {
         given:
-        taskRepository().createTask(new TaskContext('PROJ-10', 'T', 'B', []), 'HEAD', BaseRule.LOCAL_HEAD, TaskState.atStageStart('implement'))
+        taskRepository().createTask(new TaskContext('PROJ-10', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         persistRound('PROJ-10', TaskState.atStageStart('implement')
                 .recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)), 'implement', 0)
         def logs = LogCaptureSupport.attach(UsageHistoryWalker, Level.DEBUG)

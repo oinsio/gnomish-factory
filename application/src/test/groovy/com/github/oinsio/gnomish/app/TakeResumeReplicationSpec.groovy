@@ -64,7 +64,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
      * {@code when:}) misfiles its background interaction into the ordered sequence.
      */
     BaseRefGit baseRefGit = Stub(BaseRefGit) {
-        resolveForResume(_, _) >> { cloneDir, ref ->
+        resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
             new ResumeBaseOutcome.Bound(ref, ref)
         }
     }
