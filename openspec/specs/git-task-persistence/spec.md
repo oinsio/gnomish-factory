@@ -628,7 +628,19 @@ reachability failure classifies as an infrastructure failure — no stage
 attempt burned, resolution and fetch precede every durable task-branch
 write; a diverging local tag or a remote refusing fetch-by-SHA is a
 task-level park. Pull remains forbidden on every path.
+
+A successful refresh SHALL state whether origin was contacted, as a fact
+with exactly two values set where the path taken is known: a branch or tag
+narrow fetch and a fetch-by-SHA that delivered the object are contacts; a
+commit SHA served from the clone's own object store is not. The resume-time
+resolution of a pinned base carries the same fact: a refresh through a
+configured origin carries the refresh's value, a bind from the local tip of
+a clone with no origin is not a contact. The fact is not persisted and
+changes no binding, park, or release decision; its one reader is the remote
+outage gate (see factory-serve, "Remote outage gate holds the feed off the
+tracker").
 <!-- implements FR6, FR9, NFR-P1, NFR-R1 of add-base-ref-resolution -->
+<!-- implements FR1, FR4, NFR-R1, NFR-S1 of signal-outage-gate-on-origin-contact -->
 
 #### Scenario: Fresh base at claim
 - **WHEN** origin's `develop` has advanced past the factory clone's last
@@ -677,6 +689,20 @@ task-level park. Pull remains forbidden on every path.
 - **WHEN** the base fetch exhausts its bounded retries against a dead remote
 - **THEN** no task branch exists, no stage attempt is burned, and the
   failure is reported as infrastructure, not as a gnome or quality failure
+
+#### Scenario: A clone-served success says origin was not contacted
+- **WHEN** the resolution decision names a commit SHA the clone already
+  holds, or a resume rebinds a pinned ref from the local tip of a clone
+  with no origin remote
+- **THEN** the successful outcome states that origin was not contacted,
+  and the commit it names is the same one the refresh named before this
+  fact existed
+
+#### Scenario: A fetched success says origin was contacted
+- **WHEN** a branch, a tag, or an absent commit SHA is delivered by a
+  narrow fetch, or a resume rebinds through a configured origin
+- **THEN** the successful outcome states that origin was contacted, with no
+  additional fetch, probe, or subprocess run to learn it
 
 ### Requirement: Base pin in task.json
 `task.json` SHALL carry the base pin — the resolved ref, its kind (branch,
