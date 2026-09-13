@@ -89,6 +89,12 @@ Answer in the thread, then return the label. Useful things to say:
   asking for permission from an operator who is not there, the stage's checks fail
   on the missing artifact, and the attempt is spent. Before adding a shell command
   to a stage's instructions, check it against that deny list.
+- **A check's only remedy is another whole round.** There is no warning channel:
+  a `command` check either passes or re-runs the stage from scratch, and a second
+  miss escalates to a human. So a check must fail only on output that is unusable
+  or unsafe — missing, wrong verdict, files it had no business writing. Anything
+  that is merely untidy belongs in the stage's instructions, where it shapes the
+  work for free instead of buying a second analysis to reformat the first.
 - **A claim has a 15-minute time-to-live** (a 5-minute heartbeat, three beats).
   A task stuck in `gnomish:working` with no live factory is reaped, not lost.
 - **The escalation does not burn an attempt**, so a question costs one round, not
@@ -97,10 +103,12 @@ Answer in the thread, then return the label. Useful things to say:
 
 ## Reading the result
 
-The stage leaves `temporary-docs/gnomish/dependencies.md` on the task branch:
-the change it resolved, the verdict, every other active change it examined and
-why each is or is not a dependency. The tracker thread carries the short version
-— the claim, the question if there was one, and the outcome.
+The stage leaves `temporary-docs/gnomish/dependencies.md` on the task branch: the
+change it resolved, the verdict, and the dependency chain with a `file:line`
+pointer for each link. The instructions budget it at 1200 bytes — the report
+is a verdict, not a transcript, and the changes it ruled out are deliberately not
+listed. The tracker thread carries the claim, the question if there was one, and
+the outcome.
 
 ## Running it by hand
 

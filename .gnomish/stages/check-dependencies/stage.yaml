@@ -54,10 +54,13 @@ verify:
         echo "the report names change '$change', but openspec/changes/$change is not an active change directory"
         exit 1
       fi
-      if ! grep -q '^## Examined' "$report"; then
-        echo "the report has no '## Examined' section - list the active changes you checked against, so a reader can tell an analysis from an opinion"
-        exit 1
-      fi
+      # A length check deliberately does NOT live here. The report's size budget is
+      # in the instructions, where it shapes the writing for free; as a check it
+      # would fail a correct, usable verdict and buy a whole second round - a new
+      # analysis from scratch - to reformat prose. That costs more than every
+      # verbose report it could ever prevent, and on a second miss it escalates to
+      # a human over formatting. A check earns its round only when its failure
+      # means the output is unusable or unsafe, which is what the other three are.
       verdict=$(sed -n 's/^Verdict:[[:space:]]*//p' "$report" | head -1)
       if [ "$verdict" != "no-blocking-dependencies" ]; then
         echo "the report's verdict is '$verdict'; the only verdict that finishes this stage is 'no-blocking-dependencies'."

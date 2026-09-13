@@ -126,24 +126,36 @@ in English, in this shape — both on the startable path and the blocked one:
 Change: <change-name>
 Verdict: no-blocking-dependencies | blocked
 
-## Examined
-- <other-change>: <one line - why it is or is not a dependency>
+## Dependencies
+1. <change> - <one line: what forces the order> (<file>:<line>)
 ...
 
-## Dependencies
-<the chain, in the order it must land, each entry naming the evidence
-(file:line) that makes it a dependency - or "none" when there are none>
-
 ## Notes
-<what a human would like to know while work proceeds anyway: other changes this
-one blocks, an archived namesake, a dependency that has already landed,
-uncertain calls. Nothing here is a reason to stop - a reason to stop is an
-escalation>
+- <only what changes what a human does next>
 ```
 
-The `Change:`, `Verdict:` and `## Examined` lines are checked mechanically, so
-keep them exactly in this form. When you escalate at step 3 there is no change to
-report on — skip the report and escalate.
+The `Change:` and `Verdict:` lines are checked mechanically, so keep them exactly
+in this form. When you escalate at step 3 there is no change to report on — skip
+the report and escalate.
+
+**The whole report fits in 1200 bytes.** Nothing checks this — a rewrite would
+cost more than any overrun — so it is yours to keep. Count bytes, not lines: one
+600-character paragraph costs as much as ten real lines. It is a verdict with its
+evidence, not
+a record of your reasoning, and every line of it is paid for twice — once to write
+and once by whoever reads it. So:
+
+- `## Dependencies` is `none`, or one line per dependency. The evidence is a
+  `file:line` pointer; the reader opens it if they doubt you. Do not quote the
+  passage, do not explain how you found it.
+- **Never list the changes you ruled out.** The verdict already says you checked
+  them, and a paragraph each for two dozen changes is the single most expensive
+  thing this stage can produce.
+- `## Notes` earns its place only when a human would act differently for knowing
+  it — an archived namesake you disambiguated, a decision you applied, a call you
+  are unsure of. Nothing to say is the normal case: drop the section entirely.
+- No summary of the task, no description of your method, no restating these
+  instructions back.
 
 ## Step 6: the two exits
 
