@@ -79,8 +79,16 @@ Answer in the thread, then return the label. Useful things to say:
   a pointer to file a new one — reopening is never a way to ask for more work.
 - **Never rebase or force-push a task branch.** The factory harvests it
   fast-forward-only; rewritten history is refused and the task aborts with its
-  evidence left on the branch. Merging into it is fine, which is exactly what the
-  gnome itself does.
+  evidence left on the branch. Merging into it is fine; the gnome itself does not
+  merge (see the next point).
+- **This repository's own `.claude/settings.json` governs the gnome.** The gnome
+  is Claude Code running in this project, so the `permissions.deny` list there —
+  `git commit`, `git merge`, `git rebase`, ... — applies to it exactly as it
+  applies to an interactive session, and a stage manifest's `allowedTools` cannot
+  widen it. A denied command does not fail loudly: the round ends with the gnome
+  asking for permission from an operator who is not there, the stage's checks fail
+  on the missing artifact, and the attempt is spent. Before adding a shell command
+  to a stage's instructions, check it against that deny list.
 - **A claim has a 15-minute time-to-live** (a 5-minute heartbeat, three beats).
   A task stuck in `gnomish:working` with no live factory is reaped, not lost.
 - **The escalation does not burn an attempt**, so a question costs one round, not

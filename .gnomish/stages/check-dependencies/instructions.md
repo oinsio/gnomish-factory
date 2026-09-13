@@ -13,27 +13,29 @@ decide whether to go on. So every finding that means "work must not start" leave
 through the escalation exit; the report's notes are only for what a human would
 like to know while the work proceeds anyway.
 
-## Step 1: bring the branch up to date with its base
+## Step 1: ask `origin/main` what has already landed
 
-Your working copy is a worktree sharing its object store with the factory's
-clone, and the factory refreshes `origin/main` there every time it starts or
-resumes this task — so `origin/main` is current, while your branch, cut from a
-pinned base commit and never rebased, is not. Merge it in:
+Your working copy is not the whole truth. It was cut from a pinned base commit
+and is never rebased, so a change archived since then still sits in
+`openspec/changes/` here as though it were active. Your workspace shares its
+object store with the factory's clone, and the factory refreshes `origin/main`
+there every time it starts or resumes this task — so that ref is current. Read
+it directly:
 
 ```
-git merge --no-edit origin/main
+git ls-tree -d --name-only origin/main openspec/changes/
+git ls-tree -d -r --name-only origin/main openspec/changes/archive/
 ```
 
-That is what makes a dependency archived since this task branched visible as
-archived. It is a no-op when nothing has landed, so run it every round.
+The first lists the changes still active on the base, the second the archived
+ones. Where they disagree with your working copy, `origin/main` decides the
+question "has it landed?".
 
-- **Merge, never rebase.** A merge keeps your branch's previous tip as an
-  ancestor, which the round-boundary check and the fast-forward-only harvest
-  require. A rebase rewrites history: the harvest refuses it and the task aborts.
-- **A conflict is not yours to resolve.** Run `git merge --abort`, then escalate
-  naming the conflicting paths — a human decides whether the task continues on
-  its old base or is re-cut. The same for any other refusal, a missing committer
-  identity for instance: abort and escalate with git's message.
+- **Never merge, rebase or pull.** You do not need the landed files, only the
+  knowledge of what landed — and this repository denies those commands outright,
+  so attempting one loses the round rather than updating anything.
+- If `origin/main` does not resolve — a run outside a task branch — say so in the
+  report's `## Notes` and judge from the working copy alone.
 
 ## Step 2: read what a human already decided
 
@@ -149,8 +151,8 @@ report on — skip the report and escalate.
 turn, touch no decision file. That is the whole stage.
 
 **Anything else** — a chain, a cycle, a dangling reference, a superseded change,
-a change already under way, an unresolvable name, a merge you had to abort, or an
-analysis you cannot finish within the round's budget: do **not** finish the round
+a change already under way, an unresolvable name, a tool the environment refused,
+or an analysis you cannot finish within the round's budget: do **not** finish the round
 as done. Hand it to a human, unless step 2 shows a decision that already answers
 exactly this:
 
@@ -174,13 +176,18 @@ exactly this:
 
 ## Rules
 
-- Never commit and never push: the factory owns both, and the merge in step 1 is
-  the one exception it expects.
+- **Nobody is watching this round.** Your closing summary is read by no human in
+  time to answer it, so a turn that ends in a question is a lost attempt. When you
+  cannot proceed — including when a tool is refused — take the escalation exit of
+  step 6 instead; that is the channel a human actually reads.
+- Never run a git command that writes: `commit`, `push`, `merge`, `rebase`,
+  `pull`, `checkout`, `reset`. The factory owns the branch, and this repository
+  denies several of them outright.
 - Write exactly one file, `temporary-docs/gnomish/dependencies.md`, plus the
   decision file on the escalating path. Everything else in the working copy —
   `openspec/`, `src/`, `.gnomish/`, `.gnomish-task/` — stays as you found it.
-- Use the shell only for step 1's merge, its `--abort` if it conflicts, and step
-  6's `echo`. Read with Read/Glob/Grep, write with Write.
+- Use the shell only for step 1's two `ls-tree` reads and step 6's `echo`. Read
+  with Read/Glob/Grep, write with Write.
 - Every byte you read or print is context and money: rule each other active
   change in or out from its proposal's opening sections and its delta-spec
   headings rather than reading it whole, and keep your closing summary to a few

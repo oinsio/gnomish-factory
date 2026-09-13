@@ -9,10 +9,13 @@ executor:
   settings:
     maxTurns: 40
     roundTimeout: 1200s
-    # A read-only analysis plus one report file. Bash is allowed for one purpose
-    # only - the decision-file path reaches the gnome as an environment variable,
-    # and nothing but a shell can expand it; the instructions keep shell use to
-    # that single `echo` and write every file through Write/Edit.
+    # A read-only analysis plus one report file. Bash is allowed for two reads and
+    # one echo: the decision-file path reaches the gnome as an environment variable
+    # and nothing but a shell can expand it, and `git ls-tree origin/main` is how
+    # the gnome sees what has landed since its branch was cut. Every file is
+    # written through Write/Edit. Note that `allowedTools` cannot widen what the
+    # repository's own .claude/settings.json denies - its `Bash(git merge*)` and
+    # friends apply to the gnome too, which is why the instructions never merge.
     allowedTools:
       - Read
       - Glob
