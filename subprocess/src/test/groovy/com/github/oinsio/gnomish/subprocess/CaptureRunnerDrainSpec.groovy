@@ -80,10 +80,18 @@ sleep 600
     }
 
     def "design D2, NFR-R3: a normal exit waits for its output rather than truncating it"() {
-        given: 'a binary that exits at once but leaves a holder of its stdout still writing'
+        given: 'a binary that leaves a holder of its stdout still writing after it has exited'
+        // The parent lingers half a second between its own line and its exit on purpose. The JDK
+        // hands back a pipe stream whose process reaper, on exit, keeps only the bytes already
+        // available and closes the real descriptor — everything a leaked holder writes afterwards
+        // is lost. A drain parked inside read() holds that stream's own monitor and so blocks the
+        // reaper until the holder is done, which is what makes post-exit output observable at all.
+        // Without the linger the drain's virtual thread races the exit for that first read, and a
+        // loaded runner loses it: observed as a CI-only failure of this feature on 2026-09-13.
         Path binary = fakeBinary(dir, 'trailing', """
-( sleep 1; echo from-the-holder ) &
+( sleep 2; echo from-the-holder ) &
 echo from-the-parent
+sleep 0.5
 """)
 
         and: 'a runner whose kill-path drain bound is far too short to have produced that output'
