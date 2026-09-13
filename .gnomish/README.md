@@ -4,9 +4,10 @@ This directory is the whole configuration: what the pipeline is (`config.yaml`,
 `pipeline.yaml`, `stages/`) and how it is launched (`bin/`). The loader reads
 only the first three, so `bin/` and this file are invisible to it.
 
-The pipeline is one stage wide today. `check-dependencies` resolves the OpenSpec
-change a task names and decides whether work on it can start now, or whether a
-human has to settle something first.
+**What the stages are is not written down here.** `pipeline.yaml` lists them in
+order, and each `stages/<name>/stage.yaml` opens with a `purpose` line saying what
+that stage decides and a comment saying what it leaves behind. This file stays
+about the things that are true whatever the stages happen to be.
 
 ## One-time setup
 
@@ -59,10 +60,10 @@ Answer in the thread, then return the label. Useful things to say:
   branch as a decision and is shown to every later stage of that task, so it
   keeps working long after the question that produced it;
 - **what you changed outside the task**: "`fix-claim-epoch-fence` is merged and
-  archived". The gnome merges `origin/main` into the task branch at the start of
-  every round and will see it — but its own branch is pinned to the base it was
-  cut from, so anything you did not merge to `main` is invisible to it, and only
-  your reply can convey that;
+  archived". Anything you landed on `main` the gnome can see for itself — the
+  factory keeps `origin/main` current in its clone and the stage reads that ref
+  rather than its own pinned files. Anything you did *not* land there is invisible
+  to it, and only your reply can convey it;
 - **that a question is settled**, plainly. The round that follows your reply is
   the same stage again; a vague answer earns the same question a second time.
 
@@ -81,39 +82,42 @@ Answer in the thread, then return the label. Useful things to say:
   fast-forward-only; rewritten history is refused and the task aborts with its
   evidence left on the branch. Merging into it is fine; the gnome itself does not
   merge (see the next point).
-- **This repository's own `.claude/settings.json` governs the gnome.** The gnome
-  is Claude Code running in this project, so the `permissions.deny` list there —
-  `git commit`, `git merge`, `git rebase`, ... — applies to it exactly as it
-  applies to an interactive session, and a stage manifest's `allowedTools` cannot
-  widen it. A denied command does not fail loudly: the round ends with the gnome
-  asking for permission from an operator who is not there, the stage's checks fail
-  on the missing artifact, and the attempt is spent. Before adding a shell command
-  to a stage's instructions, check it against that deny list.
-- **A check's only remedy is another whole round.** There is no warning channel:
-  a `command` check either passes or re-runs the stage from scratch, and a second
-  miss escalates to a human. So a check must fail only on output that is unusable
-  or unsafe — missing, wrong verdict, files it had no business writing. Anything
-  that is merely untidy belongs in the stage's instructions, where it shapes the
-  work for free instead of buying a second analysis to reformat the first.
 - **A claim has a 15-minute time-to-live** (a 5-minute heartbeat, three beats).
   A task stuck in `gnomish:working` with no live factory is reaped, not lost.
 - **The escalation does not burn an attempt**, so a question costs one round, not
   a share of the task's budget. Answering properly is cheap; answering vaguely
   buys the same round again.
 
+## If you add a stage
+
+Lessons that cost a round each to learn. They are about stages in general, so this
+list grows with what we learn, not with how many stages there are.
+
+- **This repository's own `.claude/settings.json` governs the gnome.** The gnome is
+  Claude Code running in this project, so the `permissions.deny` list there —
+  `git commit`, `git merge`, `git rebase`, ... — binds it exactly as it binds an
+  interactive session, and a manifest's `allowedTools` cannot widen it. A denied
+  command does not fail loudly: the round ends with the gnome asking permission
+  from an operator who is not there, the checks then fail on the missing artifact,
+  and the attempt is spent. Check every shell command you put in a stage's
+  instructions against that list.
+- **A check's only remedy is another whole round.** There is no warning channel: a
+  `command` check either passes or re-runs the stage from scratch, and a second
+  miss escalates to a human. So a check must fail only on output that is unusable
+  or unsafe. Anything merely untidy belongs in the instructions, where it shapes
+  the work for free instead of buying a second round to reformat the first.
+- **A check's failure text is read as an order, not as a report.** It is handed to
+  the next attempt as feedback, and the gnome does what it says. Write it as the
+  instruction you actually want followed — including what must *not* be touched.
+  "Restore those paths" is how the operator's work ended up in a stash.
+
 ## Reading the result
 
-The two outcomes leave their evidence in different places, and neither repeats the
-other:
-
-- **Startable** — `temporary-docs/gnomish/dependencies.md` on the task branch, a
-  few lines naming the change and the verdict, with a note only where one earns
-  its place. The instructions budget it at 1200 bytes: it is a verdict, not a
-  transcript, and the changes it ruled out are deliberately not listed.
-- **Blocked** — the question in the tracker thread, carrying the chain with a
-  `file:line` pointer per link. No report is written; a blocked change never
-  finishes the stage, so a report saying so could only be a second copy of the
-  question.
+Two places, and they never repeat each other. A stage that **finished** left its
+artifact on the task branch — which file, and how small it is meant to be, is
+written in that stage's own `stage.yaml`. A stage that **could not finish** left a
+question in the tracker thread, and no artifact at all: an answer and a file
+saying the same thing would be one of them too many.
 
 ## Running it by hand
 
@@ -127,12 +131,10 @@ other:
 to this directory before committing it. `--mode=in-place` keeps the run out of
 git entirely: no branch, no resume, and the gnome works in this very clone.
 
-**Commit your own work before an in-place run.** The stage checks that nothing but
-its report changed, and in-place that check measures your clone — so your
-uncommitted edits fail it, and the gnome is then told, in the failure text it gets
-as feedback, that the tree is dirty. A gnome has read that as an instruction and
-moved the operator's work into `git stash` to make the check pass. It labelled the
-entry and said so plainly, and nothing was lost, but the stash stack is shared with
-every worktree and session on the machine. The stage now forbids stash, restore,
-checkout and clean outright, and the check's own text says to leave a foreign
-change alone and escalate — belt and braces. Your commit is the third.
+**Commit your own work before an in-place run.** A stage that checks it wrote
+nothing but its own artifact measures your clone in this mode, so your uncommitted
+edits fail it, and the failure text reaches the gnome as feedback about a dirty
+tree. One has already read that as an instruction and moved the operator's work
+into `git stash` to pass. Nothing was lost, and the stage now forbids that in two
+places (see the third check in `stages/check-dependencies/stage.yaml`) — your
+commit is the third guard, and the only one that costs nothing.

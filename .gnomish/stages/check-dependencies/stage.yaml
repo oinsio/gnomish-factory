@@ -1,6 +1,16 @@
 purpose: resolve the OpenSpec change the task names - in its title or its body - and decide whether work on it can start now, or whether a human must first resolve an ambiguous name or an ordering the gnome cannot settle
 inputs:
   - kind: source
+# What this stage leaves behind, and where to read it afterwards:
+#   finished  -> temporary-docs/gnomish/dependencies.md on the task branch. A few
+#                lines: the change, the verdict, and a note only where one earns
+#                its place. Budgeted at 1200 bytes in the instructions - it is a
+#                verdict, not a transcript, and the changes ruled out are
+#                deliberately not listed.
+#   could not -> the question in the tracker thread, carrying the dependency chain
+#                with a file:line pointer per link, and no file at all. A blocked
+#                change never finishes this stage, so a report saying so could
+#                only be a second copy of the question.
 outputs:
   - id: dependency-verdict
 executor:
@@ -80,7 +90,7 @@ verify:
         echo "if you did not: an in-place run measures the operator's own clone, so these are someone else's work in progress. Leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - write no report, and escalate through \$GNOMISH_DECISION_FILE naming the paths."
         exit 1
       fi
-      # Committed strays, measured against the base the branch merged in at step 1.
+      # Committed strays, measured against the base the branch was cut from.
       # Skipped off a task branch (an in-place run has no branch of its own to
       # measure) and when origin/main is not at hand. `.gnomish-task/` is the
       # factory's own bookkeeping, never the gnome's work.
