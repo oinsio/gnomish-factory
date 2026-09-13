@@ -44,8 +44,6 @@ public final class BaseLawReport {
                 + "Law commit: " + lawCommit.hex() + "\n"
                 + "Located errors (" + errors.size() + "):\n"
                 + located + "\n"
-                + "No stage attempt was spent and the claim was not released: the failure is deterministic,"
-                + " so re-claiming would only repeat it. Fix .gnomish/ on the base and return the task to"
-                + " work.";
+                + ParkedBaseTrailer.withRemedy("Fix .gnomish/ on the base and return the task to work.");
     }
 }

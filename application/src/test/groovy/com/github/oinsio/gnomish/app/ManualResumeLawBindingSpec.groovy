@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -35,7 +36,7 @@ class ManualResumeLawBindingSpec extends Specification {
     //     clone's checkout exactly as it did before the pin existed.
     def "FR8: a task started by a manual run without --base still binds the clone's checkout"() {
         expect:
-        ManualResumeLawBinding.of(CLONE, pin('HEAD', null), 'c0ffee') == LawBinding.atCheckout(CLONE)
+        ManualResumeLawBinding.of(CLONE, pin('HEAD', null), 'c0ffee') == LawBinding.atRevision(CLONE, GitObjects.HEAD)
     }
 
     // FR7, D7 (revised 2026-09-10): a pin that recorded the namespace binds the fully qualified

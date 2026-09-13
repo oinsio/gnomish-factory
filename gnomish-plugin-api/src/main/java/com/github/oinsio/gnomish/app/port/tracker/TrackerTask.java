@@ -18,7 +18,8 @@ package com.github.oinsio.gnomish.app.port.tracker;
  *
  * <p>Implements FR1 of add-tracker-port. Implements FR1, FR5 of
  * enforce-finish-terminality (the {@code finished} fact carried into the
- * explicit-take path).
+ * explicit-take path). Implements FR3 of add-base-ref-resolution (the {@code
+ * designators} fact: the adapter classifies per kind, core resolves).
  *
  * @param ref the task's canonical identity; never null
  * @param snapshot the task's frozen id/title/body; never null

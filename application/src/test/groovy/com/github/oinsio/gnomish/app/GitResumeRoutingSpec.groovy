@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -161,7 +162,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
         then:
         lawBindings == [
-            LawBinding.atCheckout(cloneDir)
+            LawBinding.atRevision(cloneDir, GitObjects.HEAD)
         ]
     }
 

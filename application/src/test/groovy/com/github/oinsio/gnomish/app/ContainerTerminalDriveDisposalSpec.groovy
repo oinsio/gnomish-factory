@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.gitobjects.GitObjects
 import spock.lang.Specification
 
 /**
@@ -44,7 +45,7 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
     private void drive(ScriptedConsoleIO io = new ScriptedConsoleIO(['']), Verdict verdict = new Verdict.Pass()) {
         ContainerTerminalDrive.run(assemblyRunningLoop(executor, io, verdict), support, completingPipeline(),
                 CONTEXT, TaskState.atStageStart('build'), RunArguments.InteractiveMode.NONE,
-                LawBinding.atCheckout(CLONE_DIR), null)
+                LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD), null)
     }
 
     // FR11, NFR-R2: runner start sweeps environments a dead instance left labelled, BEFORE the run

@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.baseref
 import spock.lang.Specification
 
 /**
- * {@link BaseRule}'s wire vocabulary round-trip (FR7 of add-base-ref-resolution): every constant,
+ * {@link BaseRule}'s wire vocabulary round-trip (FR7, M3 of add-base-ref-resolution): every constant,
  * {@link BaseRule#UNKNOWN} included, survives a {@code wireValue()}/{@code fromWire} round trip —
  * the "every wire vocabulary has a round-trip spec" rule of `.claude/rules/testing.md`, data-driven
  * over {@link BaseRule#values()} rather than a hand-listed subset so a new constant fails this spec

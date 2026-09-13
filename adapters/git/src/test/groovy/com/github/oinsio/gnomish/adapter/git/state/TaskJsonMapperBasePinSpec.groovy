@@ -13,6 +13,10 @@ import spock.lang.Specification
  * separate file from {@code TaskJsonMapperSpec} — that file is already at this project's file-size
  * cap (`.claude/rules/process-invariants.md`) — covering the pin's own round-trip, its unpinned
  * (legacy or absent) shape, and its preservation across a rewrite.
+ *
+ * <p>NFR-O2, M3 of add-base-ref-resolution: {@code task.json} is the surface an operator answers
+ * "why did this task branch from there" from, so the pin triple every newly created document
+ * carries is asserted here, field by field, on the wire shape itself.
  */
 class TaskJsonMapperBasePinSpec extends Specification {
 

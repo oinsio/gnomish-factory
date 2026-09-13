@@ -47,9 +47,8 @@ public final class FreshClaimBaseReport {
                 + "Cause: " + cause + "\n"
                 + named
                 + "Detail: " + LogText.forLog(reason) + "\n"
-                + "No stage attempt was spent and the claim was not released: the failure is deterministic,"
-                + " so re-claiming would only repeat it. Fix the task's base designator or the project's"
-                + " allowed bases, then return the task to work.";
+                + ParkedBaseTrailer.withRemedy("Fix the task's base designator or the project's"
+                        + " allowed bases, then return the task to work.");
     }
 
     /**
@@ -65,8 +64,6 @@ public final class FreshClaimBaseReport {
         return "Task " + taskId + " is parked: its resolved base ref could not be refreshed.\n"
                 + "Resolved ref: " + LogText.forLog(ref) + "\n"
                 + "Detail: " + LogText.forLog(detail) + "\n"
-                + "No stage attempt was spent and the claim was not released: the failure is deterministic,"
-                + " so re-claiming would only repeat it. Fix or re-point the base and return the task to"
-                + " work.";
+                + ParkedBaseTrailer.withRemedy(ParkedBaseTrailer.REPOINT_BASE);
     }
 }

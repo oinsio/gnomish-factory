@@ -23,7 +23,6 @@ import java.util.Set;
 public interface ConfiguredDesignatorKinds {
 
     /** No adapter extracts anything: the answer where no tracker registry is in play. */
-    @SuppressWarnings("unused")
     ConfiguredDesignatorKinds NONE = config -> Set.of();
 
     /**

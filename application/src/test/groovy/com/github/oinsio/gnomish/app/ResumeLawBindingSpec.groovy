@@ -24,6 +24,10 @@ import spock.lang.Specification
  * four branches {@link BaseRefGit#resolveForResume} can answer with: the pinned ref's tip resolved
  * (fetched from a configured origin, or read locally when the clone has none), a ref that resolves
  * nowhere (park), and a configured origin that never answered (release).
+ *
+ * <p>NFR-R2 of add-base-ref-resolution: once the pin exists, base resolution never runs again —
+ * every scenario here rebinds from the pinned {@code (ref, kind)} alone, and none of them consults
+ * the task's designators or the project's allowed bases a second time.
  */
 class ResumeLawBindingSpec extends Specification {
 

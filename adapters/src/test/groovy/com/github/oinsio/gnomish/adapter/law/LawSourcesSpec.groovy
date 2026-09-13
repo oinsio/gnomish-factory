@@ -90,7 +90,7 @@ class LawSourcesSpec extends Specification implements GitObjectsFixture {
         given: 'a clone checked out at the law commit'
         def git = openGitObjects(checkedOutAtBase(seedBareRepo(tempDir, TREE)), tempDir)
         def lawCommit = git.resolveRef(GitObjects.HEAD).get()
-        def bound = LawSources.open(LawBinding.atCheckout(tempDir), git)
+        def bound = LawSources.open(LawBinding.atRevision(tempDir, GitObjects.HEAD), git)
 
         when: 'HEAD moves on to a commit with different law'
         git.commit(new CommitRequest('refs/heads/base', Optional.of(lawCommit), lawCommit, [

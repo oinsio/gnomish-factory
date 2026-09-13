@@ -263,9 +263,11 @@ public final class RemoteOutageGate {
         onTransition.run();
     }
 
-    // PIT documented exception: openOnFailure and close() are the only writers of `lastError`, and
-    // they always set it together with `openedAt` (never one without the other) and clear it to null
-    // together on close — so by the time close() reads it here, `openedAt` being non-null already
+    // PIT documented exception: `lastError` has three writers — openOnFailure, onProbeFailed and
+    // close(). openOnFailure is the only one that sets `openedAt`, and it sets `lastError` in the
+    // same synchronized transition (never one without the other); onProbeFailed only ever runs
+    // while the gate is open, so it replaces a non-null value with another non-null one; close()
+    // clears both together. So by the time close() reads it here, `openedAt` being non-null already
     // guarantees `lastError` is non-null too. The "unknown" arm has no reachable input under the
     // class's own invariant; isolated to its own method per the project's convention for an
     // unkillable branch, so it does not hide as a false SURVIVED against close()'s real logic.

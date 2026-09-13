@@ -34,7 +34,6 @@ public final class ResumeBaseReport {
         return "Task " + taskId + " is parked: its pinned base ref no longer resolves.\n"
                 + "Pinned ref: " + LogText.forLog(pinnedRef) + "\n"
                 + "Detail: " + LogText.forLog(detail) + "\n"
-                + "No stage attempt was spent and the claim was not released: the failure is deterministic,"
-                + " so re-claiming would only repeat it. Fix or re-point the base and return the task to work.";
+                + ParkedBaseTrailer.withRemedy(ParkedBaseTrailer.REPOINT_BASE);
     }
 }

@@ -45,13 +45,6 @@ class LawBindingSpec extends Specification {
         LawBinding.atCommit(REPO, commit) == new LawBinding.AtCommit(REPO, commit)
     }
 
-    // FR11: "this path resolved no base of its own yet" is spelled once, here, rather than as a
-    //     "HEAD" literal repeated across the take, serve, container and resume paths.
-    def "FR11: the checkout binding is the clone's HEAD, named rather than spelled"() {
-        expect:
-        LawBinding.atCheckout(REPO) == new LawBinding.AtRevision(REPO, GitObjects.HEAD)
-    }
-
     // D12: every shape knows the repository its law belongs to — the root the pin guard reads its
     //     repository-relative pin paths from — so law and pin cannot be read from two repositories
     //     by a transposed argument.
@@ -63,7 +56,7 @@ class LawBindingSpec extends Specification {
         shape | binding
         'working tree' | LawBinding.workingTree(REPO)
         'revision' | LawBinding.atRevision(REPO, 'v1.2.3')
-        'checkout' | LawBinding.atCheckout(REPO)
+        'clone checkout' | LawBinding.atRevision(REPO, GitObjects.HEAD)
         'commit' | LawBinding.atCommit(REPO, ObjectId.of('0123456789abcdef0123456789abcdef01234567'))
     }
 

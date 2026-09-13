@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.nio.file.Path;
 
@@ -83,19 +82,6 @@ public sealed interface LawBinding {
      */
     static LawBinding atCommit(Path repositoryRoot, ObjectId commit) {
         return new AtCommit(repositoryRoot, commit);
-    }
-
-    /**
-     * Binds law to the commit the factory clone at {@code repositoryRoot} is checked out at — the
-     * commit its task branches are cut from until base resolution (FR4) supplies each task its
-     * own. This is where "this path resolved no base of its own yet" is spelled, once, instead of
-     * a {@code "HEAD"} literal scattered across the take, serve, container and resume paths.
-     *
-     * @param repositoryRoot the factory clone whose checkout is the law
-     * @return the git-objects binding at the clone's checkout; never null
-     */
-    static LawBinding atCheckout(Path repositoryRoot) {
-        return atRevision(repositoryRoot, GitObjects.HEAD);
     }
 
     /**
