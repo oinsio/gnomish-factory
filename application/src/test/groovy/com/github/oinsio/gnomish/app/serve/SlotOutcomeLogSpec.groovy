@@ -80,6 +80,26 @@ class SlotOutcomeLogSpec extends Specification {
         capture.detach()
     }
 
+    // "One failure, one log" (.claude/rules/logging.md): a released claim is already stated at WARN
+    // by the layer that decided to release it (FreshClaimBaseBinding / ResumeLawBinding) and by the
+    // remote outage gate's own transition line, so the slot's detail line is DEBUG and carries no
+    // code — GF144 is retired. Skipped, which no other layer announces, keeps its WARN.
+    def "a released-for-infrastructure task is DEBUG detail, not a second WARN for the same fault"() {
+        given:
+        def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec, Level.DEBUG)
+
+        when:
+        outcomeLog.detail(ref, new TakeResult.InfrastructureUnavailable('origin never answered'))
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].level == Level.DEBUG
+        capture.list[0].formattedMessage.contains('origin never answered')
+
+        cleanup:
+        capture.detach()
+    }
+
     // FR3: the canonical summary is emitted for every outcome that ran, at the level the outcome
     // warrants — and for the two that never ran, not at all.
     def "summarize writes one summary line for an outcome that ran"() {
@@ -114,7 +134,8 @@ class SlotOutcomeLogSpec extends Specification {
         where:
         result << [
             new TakeResult.EmptyQueue(),
-            new TakeResult.Skipped('lost claim race')
+            new TakeResult.Skipped('lost claim race'),
+            new TakeResult.InfrastructureUnavailable('origin never answered')
         ]
     }
 

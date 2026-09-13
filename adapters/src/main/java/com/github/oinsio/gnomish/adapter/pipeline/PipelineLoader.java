@@ -1,21 +1,22 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.adapter.law.LawSource;
+import com.github.oinsio.gnomish.adapter.law.WorkingTreeLawSource;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishFiles.RawConfig;
-import com.github.oinsio.gnomish.adapter.pipeline.GnomishFiles.RawStage;
-import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Ok;
-import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Result;
 import com.github.oinsio.gnomish.app.CheckParamsValidator;
 import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
+import com.github.oinsio.gnomish.app.port.pipeline.ConfiguredDesignatorKinds;
+import com.github.oinsio.gnomish.baseref.BaseDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The composition point of the whole capability (task 6.5, FR1/FR8): turns a
@@ -86,9 +87,6 @@ import java.util.Map;
  */
 public final class PipelineLoader {
 
-    private static final String CONFIG = "config.yaml";
-    private static final String PIPELINE = "pipeline.yaml";
-
     /**
      * Loads and validates the {@code .gnomish/} tree rooted at {@code gnomishRoot}, delegating each
      * {@code tracker.<type>} subsection's content validation to {@code trackerValidators} (FR17 of
@@ -144,81 +142,110 @@ public final class PipelineLoader {
             Map<String, CheckParamsValidator> checkProviders,
             ConnectionProfiles profiles)
             throws IOException {
-        RawConfig raw = GnomishFiles.read(gnomishRoot);
-        List<ConfigError> errors = new ArrayList<>();
-
-        Result<ConfigDto> config = StructuralParse.parse(CONFIG, raw.configText(), ConfigDto.class);
-        Result<PipelineDto> pipeline = StructuralParse.parse(PIPELINE, raw.pipelineText(), PipelineDto.class);
-        Map<String, StageDto> stages = parseStages(raw.stages(), errors);
-        collectParse(errors, config, pipeline);
-
-        structural(errors, pipeline, stages);
-
-        List<String> pipelineNames = pipelineStageNames(pipeline);
-        errors.addAll(StageConsistency.check(pipelineNames, raw.stages()));
-
-        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(
-                gnomishRoot, config, pipeline, stages, trackerValidators, checkProviders, profiles, errors);
-
-        if (errors.isEmpty() && model != null) {
-            return new LoadOutcome.Loaded(model);
-        }
-        return new LoadOutcome.Invalid(errors);
-    }
-
-    /** Parses each discovered manifest (skipping null-text ones), keyed by name in discovery order. */
-    private static Map<String, StageDto> parseStages(List<RawStage> discovered, List<ConfigError> errors) {
-        Map<String, StageDto> parsed = new LinkedHashMap<>();
-        for (RawStage stage : discovered) {
-            String text = stage.text();
-            if (text == null) {
-                continue;
-            }
-            String file = manifest(stage.name());
-            switch (StructuralParse.parse(file, text, StageDto.class)) {
-                case Ok<StageDto> ok -> parsed.put(stage.name(), ok.value());
-                case StructuralParse.Failed<StageDto> failed -> errors.addAll(failed.errors());
-            }
-        }
-        return parsed;
-    }
-
-    /** Appends config then pipeline parse errors, keeping the coarsest-file-first order. */
-    private static void collectParse(List<ConfigError> errors, Result<ConfigDto> config, Result<PipelineDto> pipeline) {
-        if (config instanceof StructuralParse.Failed<ConfigDto>(List<ConfigError> errors1)) {
-            errors.addAll(errors1);
-        }
-        if (pipeline instanceof StructuralParse.Failed<PipelineDto>(List<ConfigError> errors1)) {
-            errors.addAll(errors1);
-        }
+        return loadConfiguration(gnomishRoot, trackerValidators, checkProviders, profiles, Set.of())
+                .outcome();
     }
 
     /**
-     * Structural shape checks on the parsed-OK DTOs (a failed parse short-circuits
-     * its own shape). {@code config.yaml} needs no shape check — its only required
-     * field, {@code schemaVersion}, is the domain {@code SchemaVersionRule}'s
-     * concern — so only {@code pipeline.yaml} and each stage manifest are checked.
+     * The whole of one pass (FR1, FR2 of add-base-ref-resolution): the task tier's
+     * {@link LoadOutcome} <em>and</em> the trusted tier's {@link BaseDefinition}, from one read of
+     * the tree. Every {@code load} overload above is this method with no designator kinds declared,
+     * keeping the base definition out of the way of callers that only want the pipeline.
+     *
+     * <p>The {@code task-branch.base} tier runs on the parsed {@code config.yaml} alone, so a broken
+     * {@code pipeline.yaml} never hides a broken base section and vice versa, and its errors join the same
+     * one-pass aggregate (UX1). It is followed by the designator seam
+     * ({@link DesignatorAllowedBasesSeam}), the one check that needs both the adapter's extraction rule
+     * and the allowed bases in hand.
+     *
+     * <p>The tree is read from wherever this invocation's law is bound (design D12 of
+     * add-base-ref-resolution) — the working tree, or the law commit's own tree in git objects; the
+     * {@link Path} overload below is the working-tree boundary for a caller holding a directory.
+     *
+     * @param law the law source rooted at the {@code .gnomish/} tree
+     * @param configuredDesignatorKinds the designator kinds the configured tracker adapter reports
+     *     it extracts (design D5); empty when none is configured, under which the seam check has
+     *     nothing to hold a selection against
+     * @return the task tier's outcome and the trusted tier's base definition
+     * @throws IOException when a required file cannot be read (an I/O fault, never a validation
+     *     problem — FR8/D3)
      */
-    private static void structural(
-            List<ConfigError> errors, Result<PipelineDto> pipeline, Map<String, StageDto> stages) {
-        if (pipeline instanceof Ok<PipelineDto>(PipelineDto value)) {
-            errors.addAll(StructuralValidation.checkPipeline(value));
-        }
-        for (Map.Entry<String, StageDto> entry : stages.entrySet()) {
-            errors.addAll(StructuralValidation.checkStage(manifest(entry.getKey()), entry.getValue()));
-        }
+    public static ConfigurationLoad loadConfiguration(
+            LawSource law,
+            Map<String, TrackerSubsectionValidator> trackerValidators,
+            Map<String, CheckParamsValidator> checkProviders,
+            ConnectionProfiles profiles,
+            Set<String> configuredDesignatorKinds)
+            throws IOException {
+        return loadConfiguration(law, trackerValidators, checkProviders, profiles, _ -> configuredDesignatorKinds);
     }
 
-    /** The pipeline stage names in declaration order, or empty when pipeline.yaml did not parse cleanly. */
-    private static List<String> pipelineStageNames(Result<PipelineDto> pipeline) {
-        if (pipeline instanceof Ok<PipelineDto>(PipelineDto value) && value.stages() != null) {
-            return value.stages();
-        }
-        return List.of();
+    /**
+     * The composition root's form of the pass (FR3, FR13 of add-base-ref-resolution): the
+     * designator kinds are asked of {@code designatorKinds} once the {@code tracker} section has
+     * been mapped — the adapter that answers is chosen by {@code tracker.type}, and its rules live
+     * in the subsection, so a fixed set cannot be known before the read. A tree with no mappable
+     * tracker section asks nothing and the seam has nothing to hold a selection against.
+     *
+     * @param designatorKinds the adapter-side answer, keyed on the mapped tracker section
+     */
+    public static ConfigurationLoad loadConfiguration(
+            LawSource law,
+            Map<String, TrackerSubsectionValidator> trackerValidators,
+            Map<String, CheckParamsValidator> checkProviders,
+            ConnectionProfiles profiles,
+            ConfiguredDesignatorKinds designatorKinds)
+            throws IOException {
+        RawConfig raw = GnomishFiles.read(law);
+        List<ConfigError> errors = new ArrayList<>();
+
+        ParsedTree tree = ParsedTree.parse(raw, errors);
+
+        TrustedTierSections trusted = new TrustedTierSections(tree.configDto());
+        BaseDefinition base = BaseConfigMapper.map(trusted.baseSection(), errors);
+        errors.addAll(DesignatorAllowedBasesSeam.check(
+                trusted.trackerType(), trusted.designatorKinds(profiles, designatorKinds), base));
+
+        tree.checkShape(errors);
+        errors.addAll(StageConsistency.check(tree.pipelineStageNames(), raw.stages()));
+
+        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(
+                law,
+                tree.config(),
+                tree.pipeline(),
+                tree.stages(),
+                trackerValidators,
+                checkProviders,
+                profiles,
+                errors);
+
+        LoadOutcome outcome =
+                errors.isEmpty() && model != null ? new LoadOutcome.Loaded(model) : new LoadOutcome.Invalid(errors);
+        return new ConfigurationLoad(outcome, base);
     }
 
-    private static String manifest(String stageName) {
-        return "stages/%s/stage.yaml".formatted(stageName);
+    /**
+     * The working-tree boundary form of the pass above: the same read of the {@code .gnomish/}
+     * directory rooted at {@code gnomishRoot} — the in-place mode and manual {@code run} without
+     * {@code --base}, where an uncommitted edit is meant to be law (FR11 of add-base-ref-resolution).
+     *
+     * @param gnomishRoot the {@code .gnomish/} directory root
+     * @return the task tier's outcome and the trusted tier's base definition
+     * @throws IOException when a required file cannot be read
+     */
+    public static ConfigurationLoad loadConfiguration(
+            Path gnomishRoot,
+            Map<String, TrackerSubsectionValidator> trackerValidators,
+            Map<String, CheckParamsValidator> checkProviders,
+            ConnectionProfiles profiles,
+            Set<String> configuredDesignatorKinds)
+            throws IOException {
+        return loadConfiguration(
+                new WorkingTreeLawSource(gnomishRoot),
+                trackerValidators,
+                checkProviders,
+                profiles,
+                configuredDesignatorKinds);
     }
 
     private PipelineLoader() {}

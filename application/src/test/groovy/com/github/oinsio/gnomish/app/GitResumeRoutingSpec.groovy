@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.UnaryOperator
@@ -98,10 +99,13 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         attached[0].is(marker)
     }
 
+    /** Every law binding the resumed chain assembled with, in order (FR12 of add-base-ref-resolution). */
+    List lawBindings = []
+
     private String resume(List<String> consoleScript = [''], boolean discardWork = false) {
         console = new ScriptedConsoleIO(consoleScript)
-        def runner = new GitResumeRunner(assemblyRunningLoop(executor, console),
-                new TaskGit(store, branches, worktrees), worktreesRoot, 'taskId')
+        def runner = new GitResumeRunner(assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
+        new TaskGit(store, branches, worktrees), worktreesRoot, 'taskId')
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')
@@ -111,6 +115,55 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
             System.out = originalOut
         }
         captured.toString('UTF-8')
+    }
+
+    // FR7, FR12, D13 of add-base-ref-resolution: a manual resume binds the law from the LOCAL tip
+    // of the ref its branch is pinned to — the clone's own checkout plays no part, so a task
+    // pinned to release/1.18 keeps reading release/1.18's law in a clone sitting on main. The pin
+    // records the namespace (D7, revised 2026-09-10), so the revision is fully qualified and a
+    // local tag planted over the branch name cannot win git's bare-name lookup here either.
+    def "binds the resumed law from the task's pinned base ref, not from the clone's checkout"() {
+        given:
+        record = recordPinnedTo('release/1.18')
+
+        when:
+        resume()
+
+        then:
+        lawBindings == [
+            new LawBinding.AtRevision(cloneDir, 'refs/heads/release/1.18')
+        ]
+    }
+
+    // FR7 of add-base-ref-resolution: a legacy branch carries no baseRef, so the recorded base
+    // commit — itself a revision the clone resolves — names the law, the same fallback the
+    // tracker-driven resume takes.
+    def "falls back to the recorded base commit when the branch carries no pin"() {
+        given:
+        record = freshRecord()
+
+        when:
+        resume()
+
+        then:
+        lawBindings == [
+            new LawBinding.AtRevision(cloneDir, 'base-sha')
+        ]
+    }
+
+    // FR8, UX3 of add-base-ref-resolution: a manual run started without --base pinned the literal
+    // HEAD ref, so resuming it still binds the clone's checkout — the offline manual contract.
+    def "keeps binding the clone's checkout for a task started by a manual run without --base"() {
+        given: 'a manual pin: a ref and a rule, and no kind — the manual tier classifies nothing'
+        record = recordManuallyPinnedTo('HEAD')
+
+        when:
+        resume()
+
+        then:
+        lawBindings == [
+            LawBinding.atRevision(cloneDir, GitObjects.HEAD)
+        ]
     }
 
     // FR8, FR10: no recorded outcome means the branch was interrupted mid-round. The leftovers are

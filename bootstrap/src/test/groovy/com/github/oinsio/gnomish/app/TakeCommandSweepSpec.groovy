@@ -51,8 +51,6 @@ executor:
 instructions: stages/build/instructions.md
 advancement: auto
 ''')
-        commitAll(projectDir)
-        worktreesRoot = tempDir.resolve('worktrees')
         Files.writeString(
                 projectDir.resolve('.gnomish/config.yaml'),
                 '''schemaVersion: "1"
@@ -64,6 +62,11 @@ tracker:
     api-url: https://api.github.com
     repo: acme/widgets
 ''')
+        commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
+        worktreesRoot = tempDir.resolve('worktrees')
         tracker.listOpen() >> { openTasks }
         // Finished -> Skipped: the shortest run that still passes through the sweep call site.
         tracker.fetchTask(_) >> new TrackerTask(

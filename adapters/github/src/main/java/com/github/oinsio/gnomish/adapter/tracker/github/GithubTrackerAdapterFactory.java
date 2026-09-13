@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Assembles a live, ready-to-use {@link GithubTracker} from a validated {@link TrackerConfig}
@@ -121,7 +122,12 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
 
         return new GithubTracker(
                 new GithubFeedQuery(cache, owner, repo, readyLabel.name()),
-                new GithubTaskFetcher(cache, workingLabel.name(), needsHumanLabel.name(), deliveredLabel.name()),
+                new GithubTaskFetcher(
+                        cache,
+                        workingLabel.name(),
+                        needsHumanLabel.name(),
+                        deliveredLabel.name(),
+                        GithubDesignatorRules.from(subsection)),
                 new GithubClaimLease(httpClient, labelOps, readyLabel.name(), workingLabel.name()),
                 new GithubStateWrites(
                         httpClient,
@@ -197,6 +203,18 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     @Override
     public List<String> credentialEnvVars(TrackerConfig config) {
         return List.of(GithubCredential.nameOr(config.subsection(), TOKEN_ENV_VAR));
+    }
+
+    /**
+     * Declares the designator kinds this adapter extracts (FR3 of add-base-ref-resolution): exactly
+     * the keys of the {@code tracker.github.designators} map, and nothing else — a kind with no rule
+     * is never extracted, so it is never reported. Core reads this instead of the GitHub keys
+     * themselves, and turns "kind {@code base} extracted, {@code task-branch.base.allowed} empty" into a located
+     * load error rather than a stream of parked tasks.
+     */
+    @Override
+    public Set<String> configuredDesignatorKinds(TrackerConfig config) {
+        return GithubDesignatorRules.from(config.subsection()).kinds();
     }
 
     /**

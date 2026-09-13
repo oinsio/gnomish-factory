@@ -1,7 +1,10 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskRecord
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -36,7 +39,30 @@ trait TaskRecordFakes {
         new TaskRecord(new TaskContext(taskId, 'title', 'body', [
             new Decision(body, 'build', 'tracker', NOW)
         ]),
-        'base-sha', NOW, null, null, false)
+        'base-sha', NOW, null, null, false, BasePin.UNPINNED)
+    }
+
+    /**
+     * The {@code task.json} of a branch carrying a durable base pin as an AUTONOMOUS claim writes
+     * it — ref, the namespace origin classified it into, and the tier that produced the name. That
+     * is the shape every task created by {@code take}/{@code serve} has, and the one a resume
+     * rebinds its law from (FR7, FR12, D7 revised 2026-09-10).
+     */
+    TaskRecord recordPinnedTo(String baseRef, String baseCommit = 'base-sha', String taskId = 'PROJ-1') {
+        new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+                baseCommit, NOW, null, null, false,
+                new BasePin(baseRef, BaseRefKind.BRANCH, BaseRule.CONFIGURED_DEFAULT))
+    }
+
+    /**
+     * The {@code task.json} of a branch pinned by the MANUAL tier, which classifies nothing: ref
+     * and rule without a kind (D7, revised 2026-09-10). The same shape every document written
+     * before the kind existed has, so this is also the legacy-pin fixture.
+     */
+    TaskRecord recordManuallyPinnedTo(String baseRef, String baseCommit = 'base-sha', String taskId = 'PROJ-1') {
+        new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
+                baseCommit, NOW, null, null, false,
+                new BasePin(baseRef, null, BaseRule.EXPLICIT_ARGUMENT))
     }
 
     /**
@@ -46,6 +72,6 @@ trait TaskRecordFakes {
     TaskRecord recordWith(RecordedOutcome outcome, EscalationReport escalation = null,
             boolean pendingTerminalWrite = false, String taskId = 'PROJ-1') {
         new TaskRecord(new TaskContext(taskId, 'title', 'body', List.<Decision> of()),
-                'base-sha', NOW, outcome, escalation, pendingTerminalWrite)
+                'base-sha', NOW, outcome, escalation, pendingTerminalWrite, BasePin.UNPINNED)
     }
 }

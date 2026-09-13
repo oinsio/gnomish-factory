@@ -4,19 +4,20 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
-import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -55,7 +56,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     private ServeCommand newServeCommand() {
         new ServeCommand(
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
-                testProperties(), new ServeProperties(0, null, null, null, null, null, null), Clock.systemUTC(),
+                testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(),
                 { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
                 new ClaimEpochBook())
@@ -124,7 +125,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
         new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'), ClaimEpochSource.NONE)
-                .createTask(new TaskContext('PROJ-1', 'T', 'B', []), null, TaskState.atStageStart('build'))
+                .createTask(new TaskContext('PROJ-1', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
 
         def args = new DefaultApplicationArguments('usage', "--dir=${cloneDir}".toString(), 'PROJ-1')
         def originalOut = System.out
@@ -171,7 +172,11 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // handled — proven by TakeCommand's own distinct failure mode (a project with no .gnomish/
     // at all fails pipeline load, never StatusCommand's/UsageCommand's own error shapes).
     def "dispatchNonRun() routes to TakeCommand for the 'take' subcommand and returns true"() {
-        given:
+        given: 'a real git repo with a real origin (FR5, FR13 of add-base-ref-resolution), but no .gnomish/ tree at all'
+        assert gitExitCode(worktreesRoot, 'init') == 0
+        Files.writeString(worktreesRoot.resolve('README.md'), 'placeholder\n')
+        commitAll(worktreesRoot)
+        addOrigin(worktreesRoot, homeDir)
         def args = new DefaultApplicationArguments('take', "--dir=${worktreesRoot}".toString())
 
         when:
@@ -179,17 +184,6 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
 
         then: 'no .gnomish/ tree under worktreesRoot: pipeline load fails, proving TakeCommand#run ran'
         thrown(IOException)
-    }
-
-    // `expandRef` is intentionally unimplemented (never called by this fixture's `serve` path):
-    // Groovy's map-to-interface coercion throws UnsupportedOperationException if it ever were.
-    private static TrackerAdapterFactory factoryReturning(Tracker t) {
-        [
-            type: { 'github' },
-            create: { SecretsProvider secrets, TrackerConfig config, String instanceId ->
-                t
-            },
-        ] as TrackerAdapterFactory
     }
 
     /** A minimal, valid `.gnomish/` tree with a `tracker: github` section, under {@code root}. */
@@ -211,14 +205,22 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // complete normally, exercising dispatchNonRun's `return true` for SERVE (BooleanFalseReturnValsMutator survivor).
     def "dispatchNonRun() routes to ServeCommand for the 'serve' subcommand and returns true"() {
         given: 'a serve-only dispatch, wired with a reachable tracker factory and a starter that records invocation'
+        assert gitExitCode(worktreesRoot, 'init') == 0
         writeMinimalPipeline(worktreesRoot)
+        // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
+        // base against a real 'origin' remote, never the clone's local HEAD.
+        commitAll(worktreesRoot)
+        addOrigin(worktreesRoot, homeDir)
         def starterInvoked = new AtomicBoolean(false)
+        def trackerStub = Stub(Tracker)
         def serveDispatch = new SubcommandDispatch(
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 new ServeCommand(
                         newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
-                        testProperties(), new ServeProperties(0, null, null, null, null, null, null), Clock.systemUTC(),
-                        new SystemClock(), [github: factoryReturning(Stub(Tracker))],
+                        testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
+                        new SystemClock(), [github: new FixedTrackerAdapterFactory({
+                                trackerStub
+                            })],
                         MapSecretsProvider.NONE,
                         TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                             starterInvoked.set(true)
@@ -259,11 +261,14 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     def "dispatchNonRun() returns true for a 'board' subcommand that completes without error"() {
         given: 'a board-only dispatch with a valid pipeline and a tracker returning empty listings'
         writeMinimalPipeline(worktreesRoot)
+        def boardTrackerStub = Stub(Tracker)
         def boardDispatch = new SubcommandDispatch(
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 dispatch.serveCommand(),
                 new BoardCommand(Clock.systemUTC(), testProperties(),
-                [github: factoryReturning(Stub(Tracker))], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                [github: new FixedTrackerAdapterFactory({
+                        boardTrackerStub
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
                 dispatch.dashboardCommand())
         def args = new DefaultApplicationArguments('board', "--dir=${worktreesRoot}".toString())
         def originalOut = System.out
@@ -302,11 +307,14 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     def "dispatchNonRun() returns true for a 'dashboard' subcommand that completes without error"() {
         given: 'a dashboard-only dispatch with a valid pipeline and a tracker returning empty listings'
         writeMinimalPipeline(worktreesRoot)
+        def dashboardTrackerStub = Stub(Tracker)
         def dashboardDispatch = new SubcommandDispatch(
                 dispatch.statusCommand(), dispatch.usageCommand(), dispatch.takeCommand(),
                 dispatch.serveCommand(), dispatch.boardCommand(),
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(),
-                [github: factoryReturning(Stub(Tracker))], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
+                [github: new FixedTrackerAdapterFactory({
+                        dashboardTrackerStub
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()))
         def args = new DefaultApplicationArguments('dashboard', "--dir=${worktreesRoot}".toString())
 
         when:

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.killpoint
 
+import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 
@@ -64,7 +66,10 @@ final class CreationKillPoints {
     private static void step(CreationWorld world, int index) {
         if (index == 0) {
             world.creating.createTask(
-                    new TaskContext(world.taskId, 'title', 'body', []), null, TaskState.atStageStart('build'))
+                    new TaskContext(world.taskId, 'title', 'body', []),
+                    TaskStart.commit(world.creatingClone, 'HEAD'),
+                    TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
+                    TaskState.atStageStart('build'))
         } else {
             world.gitOutput(world.creatingClone, 'push', 'origin',
                     "refs/heads/${world.branch()}:refs/heads/${world.branch()}")
@@ -81,6 +86,9 @@ final class CreationKillPoints {
             return
         }
         world.recovering.createTask(
-                new TaskContext(world.taskId, 'title', 'body', []), null, TaskState.atStageStart('build'))
+                new TaskContext(world.taskId, 'title', 'body', []),
+                TaskStart.commit(world.recoveringClone, 'HEAD'),
+                TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
+                TaskState.atStageStart('build'))
     }
 }

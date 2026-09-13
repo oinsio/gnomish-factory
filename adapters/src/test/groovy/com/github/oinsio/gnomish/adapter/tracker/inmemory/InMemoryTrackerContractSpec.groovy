@@ -1,18 +1,20 @@
 package com.github.oinsio.gnomish.adapter.tracker.inmemory
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.Designator
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
+import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerShapeFactsContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReleaseContract
 
 /**
  * Wires the production {@link InMemoryTracker} (via {@link
  * InMemoryTrackerHarness}) into the full port contract suite (task 2.4/2.7,
  * 1.2 of add-factory-serve; FR3, FR4, FR5, M1, M2): {@link
- * TrackerEpochContract} — the most-derived link in the chain —
+ * TrackerReleaseContract} — the most-derived link in the chain —
  * transitively runs every property from {@code TrackerContract}, {@code
  * TrackerMarkerContract}, {@code TrackerFetchContract}, {@code
  * TrackerLeaseContract}, {@code TrackerHeartbeatContract}, {@code
@@ -29,7 +31,7 @@ import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerShapeFactsCont
  * <p>Implements FR3, FR4, FR5 of add-tracker-port and add-claim-heartbeat;
  * M1 of add-claim-heartbeat (the extended contract passes on this adapter).
  */
-class InMemoryTrackerContractSpec extends TrackerShapeFactsContract {
+class InMemoryTrackerContractSpec extends TrackerReleaseContract {
 
     private InMemoryTrackerHarness harness
 
@@ -75,5 +77,13 @@ class InMemoryTrackerContractSpec extends TrackerShapeFactsContract {
     @Override
     protected List<String> postedTexts(Tracker adapter, TaskRef ref) {
         harness.thread(ref)*.text()
+    }
+
+    @Override
+    protected void seedDesignatorCandidates(Tracker adapter, TaskRef ref, String kind, List<String> values) {
+        // The reference tracker has no labels and no native fields to derive candidates from, so
+        // its own "representation" of them is the port's shared classification applied directly —
+        // which is exactly the obligation every adapter carries: classify, never resolve.
+        harness.seedDesignators(ref, TaskDesignators.of(kind, Designator.classify(values)))
     }
 }

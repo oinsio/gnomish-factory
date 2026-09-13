@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -28,7 +27,7 @@ import spock.lang.TempDir
  * wires by passing {@code cloneDir} as the law source while rooting the workspace at the worktree.
  *
  * <p>The reward-hacking move it defends against: mid-run, the gnome rewrites its own {@code
- * instructions.md} control file in the worktree (the {@code law-tamper-then-plain} fake-agent
+ * .gnomish/instructions.md} control file in the worktree (the {@code law-tamper-then-plain} fake-agent
  * scenario). The first attempt's tampered write is real — it is committed onto the gnome branch by
  * the round snapshot — and it makes a {@code files_exist} check fail, forcing a second attempt in
  * the same worktree. If the law were re-read lazily from the gnome-writable working copy, that
@@ -48,13 +47,11 @@ class GitModeLawBindingSpec extends Specification implements BareGitRepoFixture,
 
     Path cloneDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'law-binding-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), ORIGINAL_LAW + '\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        commit(cloneDir, '.gnomish/instructions.md', ORIGINAL_LAW + '\n')
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 
@@ -106,15 +103,15 @@ exec sh '${scriptPath}' "\$@"
                 RunArguments.InteractiveMode.NONE)
 
         then: 'the run reached Completed and left the delivered branch behind'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/LAW-1').exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/LAW-1') == 0
 
         and: 'the gnome really did rewrite its own instructions.md — the tampered text is committed on the gnome branch'
-        def branchInstructions = gitRunner.run(cloneDir, 'show', 'gnomish/LAW-1:instructions.md').stdout()
+        def branchInstructions = gitOutput(cloneDir, 'show', 'gnomish/LAW-1:.gnomish/instructions.md')
         branchInstructions.contains(TAMPERED_MARKER)
         !branchInstructions.contains(ORIGINAL_LAW)
 
         and: "the clone's own working copy was never touched — its instructions.md is still the original law"
-        Files.readString(cloneDir.resolve('instructions.md')).contains(ORIGINAL_LAW)
+        Files.readString(cloneDir.resolve('.gnomish/instructions.md')).contains(ORIGINAL_LAW)
 
         and: 'exactly two attempts ran (the tamper attempt burned by the failed check, then the completing one)'
         def prompts = captureFile.text.split('(?m)^---$').collect {

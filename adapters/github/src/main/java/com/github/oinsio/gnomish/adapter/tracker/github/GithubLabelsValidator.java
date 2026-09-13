@@ -40,7 +40,7 @@ final class GithubLabelsValidator {
             return List.of(new ConfigError(file, where, "must be an object mapping label keys to {name, color}"));
         }
         List<ConfigError> errors = new ArrayList<>();
-        for (Map.Entry<String, Object> entry : new TreeMap<>(stringKeyed(raw)).entrySet()) {
+        for (Map.Entry<String, Object> entry : new TreeMap<>(GithubConfigMaps.stringKeyed(raw)).entrySet()) {
             String key = entry.getKey();
             String entryWhere = where + "." + key;
             if (!KNOWN_KEYS.contains(key)) {
@@ -61,7 +61,7 @@ final class GithubLabelsValidator {
             errors.add(new ConfigError(file, where, "must be an object with 'name' and 'color'"));
             return;
         }
-        Map<String, Object> entry = stringKeyed(raw);
+        Map<String, Object> entry = GithubConfigMaps.stringKeyed(raw);
         Object name = entry.get("name");
         if (!(name instanceof String s) || s.isBlank()) {
             errors.add(new ConfigError(file, where + ".name", "missing required key 'name'"));
@@ -75,10 +75,5 @@ final class GithubLabelsValidator {
                     where + ".color",
                     "'%s' is not a valid 6-digit hex color (e.g. '2ea44f', no leading '#')".formatted(c)));
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> stringKeyed(Map<?, ?> raw) {
-        return (Map<String, Object>) raw;
     }
 }

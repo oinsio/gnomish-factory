@@ -78,6 +78,35 @@ rejected alternative. A change with no such surface states it explicitly:
 pair.` Silence is a format violation — the explicit "none" is what makes the question
 checkable by `/review-artifacts` and `/audit-implementation`.
 
+## Mandatory decision: single-owner mechanisms
+
+Sync surfaces answer "where is one rule implemented twice". This decision answers the
+reverse question: "who must use the one implementation, and what stops them from not using
+it". Whenever a decision says that one component is the only source of a value or the only
+place a step happens ("resolve once", "one funnel", "the adapter peels once", "the only
+sanitizer"), `design.md` MUST carry a table for it:
+
+| Owner | Value (type) | Consumers | Old way removed | Enforced by |
+|-------|--------------|-----------|-----------------|-------------|
+
+- **Value (type)** names the type the result travels as. If it is a primitive a consumer could
+  obtain elsewhere (`String`, `Path`, `boolean`), the owner is not enforced — introduce the
+  typed value or explain why the primitive cannot be replaced.
+- **Consumers** lists every call site that must take the value from the owner, by file. "All
+  paths" is not an entry; the implementer's sub-agent (see `implementation.md`) can only check
+  a list.
+- **Old way removed** names the raw call, default, or signature the owner replaces and states
+  that the change deletes it — or lists each surviving exemption (a manual tier, an offline
+  path) with its reason.
+- **Enforced by** names the mechanism that keeps it true after the change: the parameter type,
+  an architecture spec in `:bootstrap`, or a grep gate. Convention is not an entry.
+
+Where the decision claims two values "are one by construction" or "cannot diverge", the table
+row is paired with an identity spec on the real medium (`testing.md`, "Invariant specs across
+a flow"). A change with no single-owner mechanism states it: `Single-owner mechanisms: none.`
+`/review-artifacts` checks the table exists; `/audit-implementation` checks the code matches
+every row.
+
 ## Rules
 
 - Always reference the FR/NFR/UX from proposal.md that drove the decision

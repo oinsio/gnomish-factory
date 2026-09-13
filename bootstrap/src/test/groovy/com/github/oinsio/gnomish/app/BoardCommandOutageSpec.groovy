@@ -1,15 +1,6 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
-import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
-import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
-import com.github.oinsio.gnomish.app.console.SystemConsoleIO
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
@@ -27,8 +18,6 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
@@ -45,7 +34,7 @@ import spock.lang.TempDir
  * RunExceptionReporting} already gives every subcommand (task 3.3) — proven here end to end
  * through {@link ManualRunRunner#run}, the real dispatch path a live invocation takes.
  */
-class BoardCommandOutageSpec extends Specification {
+class BoardCommandOutageSpec extends Specification implements AppAssemblyFixture {
 
     private static final String INSTANCE_NAME = 'board-instance'
 
@@ -63,10 +52,8 @@ class BoardCommandOutageSpec extends Specification {
     def setup() {
         projectDir = tempDir.resolve('project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -89,37 +76,12 @@ tracker:
     }
 
     private ManualRunRunner newRunner(BoardCommand boardCommand) {
-        new ManualRunRunner(
-                new RunArgumentsParser(),
-                new PipelineStartup(TrackerValidatorStub.plainSource()),
-                new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
-                new SystemConsoleIO(System.in, System.out),
-                new FilesExistCheckRunner(),
-                new ShellCommandCheckRunner(),
-                [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
-                new InMemoryAttemptPersistence(),
-                new SystemClock(),
-                new ThreadSleeper(),
-                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
+        newManualRunRunner(worktreesRoot, homeDir,
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]),
-                DiscoveredBindings.real(),
                 TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
-                new StatusCommand(TaskGitFixture.real(), worktreesRoot),
-                new UsageCommand(TaskGitFixture.real()),
-                boardCommand,
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir,
-                new FactoryProperties(INSTANCE_NAME, null, null, null, null), [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource()),
-                Clock.systemUTC(),
-                [:],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null),
-                new ClaimEpochBook())
+                testProperties(instanceName: INSTANCE_NAME),
+                boardCommand)
     }
 
     // NFR-R1: the tracker outage message ("gnomish run failed: <adapter message>") reaches stderr
@@ -131,7 +93,7 @@ tracker:
         def factory = new OutageTrackerAdapterFactory(tracker)
         def boardCommand = new BoardCommand(
                 Clock.systemUTC(),
-                new FactoryProperties(INSTANCE_NAME, null, null, null, null),
+                testProperties(instanceName: INSTANCE_NAME),
                 [github: factory],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource())

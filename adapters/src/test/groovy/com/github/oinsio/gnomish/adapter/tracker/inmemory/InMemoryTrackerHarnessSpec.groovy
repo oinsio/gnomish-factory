@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
+import com.github.oinsio.gnomish.app.port.tracker.Designator
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -280,5 +282,54 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
             "${CorrespondenceEntry.Kind.CLAIM}: ${harness.thread(ref)[0].text()}".toString(),
             "${CorrespondenceEntry.Kind.FINISH}: ${harness.thread(ref)[1].text()}".toString()
         ]
+    }
+
+    // FR3 of add-base-ref-resolution: the reference adapter has no labels and no native fields to
+    //     derive candidates from, so its test operation sets the port's classified shapes directly
+    def "seedDesignators sets what fetchTask reports, and an unseeded task names nothing"() {
+        given: 'a seeded fixture task'
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:seed-designators')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+
+        expect: 'before the operation, every kind is absent'
+        tracker.fetchTask(ref).designators().forKind('base') == new Designator.Absent()
+
+        when: 'a base designator is set on it'
+        harness.seedDesignators(ref, TaskDesignators.of('base', Designator.single('release/1.18')))
+
+        then: 'fetchTask reports it back unchanged'
+        tracker.fetchTask(ref).designators().forKind('base') == new Designator.Single('release/1.18')
+    }
+
+    // FR3: the operation names an existing task -- setting designators on a task nobody seeded
+    //     is a fixture mistake, refused the same way seedReply refuses one
+    def "seedDesignators refuses a task that was never seeded"() {
+        given:
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+
+        when:
+        harness.seedDesignators(new TaskRef('fixture:never-seeded'),
+                TaskDesignators.of('base', Designator.single('main')))
+
+        then:
+        thrown(NoSuchTrackedTaskException)
+    }
+
+    // FR3: the operation releases the store lock on exit, like every other seeding operation
+    def "seedDesignators releases the store lock on exit"() {
+        given:
+        def tracker = new InMemoryTracker()
+        def harness = new InMemoryTrackerHarness(tracker)
+        def ref = new TaskRef('fixture:seed-designators-lock')
+        harness.seed(ref, new TaskSnapshot(ref.id(), 't', 'b'), new TrackerTaskState.Ready(), AbortFacts.none())
+
+        when:
+        harness.seedDesignators(ref, TaskDesignators.of('base', Designator.single('main')))
+
+        then:
+        !tracker.lock.isLocked()
     }
 }

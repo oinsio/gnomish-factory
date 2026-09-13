@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.serveobservability.JanitorVital;
 import com.github.oinsio.gnomish.serveobservability.KeptEnvironmentEntry;
 import com.github.oinsio.gnomish.serveobservability.LifecycleState;
 import com.github.oinsio.gnomish.serveobservability.ReaperVital;
+import com.github.oinsio.gnomish.serveobservability.RemoteHealth;
 import com.github.oinsio.gnomish.serveobservability.SlotEntry;
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
@@ -19,6 +20,8 @@ import com.github.oinsio.gnomish.serveobservability.SweepVital;
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -66,7 +69,8 @@ public final class SnapshotJsonReader {
                 fromFeed(dto.feed()),
                 fromSlots(dto.slots()),
                 fromVitals(dto.vitals()),
-                fromTracker(dto.tracker()));
+                fromTracker(dto.tracker()),
+                fromRemote(dto.remote()));
     }
 
     private static LifecycleState fromLifecycle(LifecycleDto dto) {
@@ -173,6 +177,29 @@ public final class SnapshotJsonReader {
 
     private static @Nullable Instant fromInstant(@Nullable String instant) {
         return instant == null ? null : Instant.parse(instant);
+    }
+
+    /**
+     * NFR-O3, UX6 of add-base-ref-resolution: a document written before this contract carries no
+     * {@code remote} section at all ({@code null}) — read back as an empty map, "no gate known",
+     * never as a gate that is known to be closed.
+     */
+    private static Map<String, RemoteHealth> fromRemote(@Nullable Map<String, RemoteDto> remote) {
+        if (remote == null) {
+            return Map.of();
+        }
+        Map<String, RemoteHealth> result = new LinkedHashMap<>();
+        remote.forEach((target, dto) -> result.put(
+                target,
+                new RemoteHealth(
+                        target,
+                        "open".equals(dto.state()),
+                        fromInstant(dto.openSince()),
+                        dto.lastError(),
+                        fromInstant(dto.nextProbeAt()),
+                        dto.consecutiveFailures(),
+                        fromInstant(dto.lastSuccessAt()))));
+        return Map.copyOf(result);
     }
 
     private static String requireReason(@Nullable String reason) {

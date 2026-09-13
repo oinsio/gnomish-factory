@@ -6,12 +6,17 @@ import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
+import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.gitobjects.GitObjects
@@ -33,11 +38,12 @@ trait KillPointWorlds implements BareGitRepoFixture {
     /** The host medium: a real working clone, worktrees, {@link GitTaskRepository}. */
     KillPointWorld hostWorld(Path root) {
         Path clone = initWorkingRepo(root, 'my-project')
-        Files.writeString(clone.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(clone.resolve('.gnomish'))
+        Files.writeString(clone.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(clone, 'init')
         def store = new GitTaskRepository(
                 new GitProcessRunner(), clone, root.resolve('worktrees-root'), ClaimEpochSource.NONE)
-        seed(clone, store, null)
+        seed(clone, store, 'HEAD')
     }
 
     /** The container medium: a real bare repo written through {@link GitObjectsTaskRepository}. */
@@ -71,7 +77,8 @@ trait KillPointWorlds implements BareGitRepoFixture {
     CreationWorld creationWorld(Path root) {
         Path origin = initBareRepo(root, 'origin.git')
         Path creating = initWorkingRepo(root, 'creating-clone')
-        Files.writeString(creating.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(creating.resolve('.gnomish'))
+        Files.writeString(creating.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(creating, 'init')
         addRemote(creating, 'origin', origin.toString())
         gitOutput(creating, 'push', 'origin', 'HEAD:refs/heads/base')
@@ -94,7 +101,51 @@ trait KillPointWorlds implements BareGitRepoFixture {
                                 runner, recovering, root.resolve('recovering-worktrees'), ClaimEpochSource.NONE),
                         runner,
                         recovering),
+                recoveringClone: recovering,
                 taskId: TASK_ID)
+    }
+
+    /**
+     * The claim transition's world: an empty {@code origin}, the claimant's clone of it, and a
+     * Ready task on an in-memory tracker. No task is claimed and no branch is cut here — claiming
+     * IS the transition, and the branch that never follows is what the window is about.
+     */
+    ClaimWorld claimWorld(Path root) {
+        Path origin = initBareRepo(root, 'origin.git')
+        Path work = initWorkingRepo(root, 'claimant-clone')
+        Files.createDirectories(work.resolve('.gnomish'))
+        Files.writeString(work.resolve('.gnomish/instructions.md'), 'build it\n')
+        commitAll(work, 'init')
+        addRemote(work, 'origin', origin.toString())
+        gitOutput(work, 'push', 'origin', 'HEAD:refs/heads/base')
+
+        def tracker = new InMemoryTracker()
+        def ref = new TaskRef(TASK_ID)
+        new InMemoryTrackerHarness(tracker).seed(
+                ref, new TaskSnapshot(TASK_ID, 'title', 'body'), new TrackerTaskState.Ready(), AbortFacts.none())
+
+        def world = new ClaimWorld(
+                origin: origin,
+                claimantClone: work,
+                taskId: TASK_ID,
+                ref: ref,
+                instanceId: new InstanceId('gnomish-factory', 'kp0002'),
+                tracker: tracker)
+        world.armReaper()
+        world
+    }
+
+    /**
+     * The outage row's world: the same claim world, with the claimant's {@code origin} URL pointed
+     * at a path no repository sits at — a remote that cannot answer, which is the condition NFR-R3
+     * is about. The bare {@code origin} itself stays on disk, because the branch medium's emptiness
+     * is still what the row asserts, and a deleted repository would make that assertion vacuous.
+     */
+    ClaimWorld claimOutageWorld(Path root) {
+        def world = claimWorld(root)
+        gitOutput(world.claimantClone, 'remote', 'set-url', 'origin', root.resolve('no-such-origin.git').toString())
+        world.baseRefGit = newGitBaseRefs()
+        world
     }
 
     private KillPointWorld seed(Path repoDir, TaskLifecycleStore store, String baseRef) {
@@ -103,7 +154,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         def instanceId = new InstanceId('gnomish-factory', 'kp0001')
         def ref = new TaskRef(TASK_ID)
         trackerHarness.seedWorkingWithClaim(tracker, ref, instanceId.value())
-        store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), baseRef, TaskState.atStageStart('build'))
+        store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), TaskStart.commit(repoDir, baseRef), TaskStart.pin(baseRef, BaseRule.EXPLICIT_ARGUMENT), TaskState.atStageStart('build'))
         new KillPointWorld(
                 repoDir: repoDir,
                 store: store,

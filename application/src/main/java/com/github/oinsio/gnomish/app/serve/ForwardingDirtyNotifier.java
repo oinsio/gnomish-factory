@@ -31,6 +31,14 @@ public final class ForwardingDirtyNotifier implements DirtyNotifier {
         this.delegate = delegate;
     }
 
+    /**
+     * Whether {@link #bind} has already rebound this instance away from the {@link
+     * DirtyNotifier#NOOP} default.
+     */
+    public boolean isBound() {
+        return delegate != DirtyNotifier.NOOP;
+    }
+
     @Override
     public void markDirty() {
         delegate.markDirty();

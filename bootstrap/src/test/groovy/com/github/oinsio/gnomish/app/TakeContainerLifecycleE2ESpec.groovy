@@ -80,10 +80,8 @@ class TakeContainerLifecycleE2ESpec extends Specification implements BareGitRepo
     def setup() {
         projectDir = initWorkingRepo(tempDir, 'container-take-project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:

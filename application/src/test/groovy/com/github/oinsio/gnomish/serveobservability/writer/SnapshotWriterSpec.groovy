@@ -309,7 +309,7 @@ class SnapshotWriterSpec extends Specification {
     static Snapshot stoppedSnapshot() {
         def base = fixtureSnapshot()
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                new LifecycleState.Stopped('signal'), base.feed(), base.slots(), base.vitals(), base.tracker())
+                new LifecycleState.Stopped('signal'), base.feed(), base.slots(), base.vitals(), base.tracker(), [:])
     }
 
     static Snapshot fixtureSnapshot() {
@@ -321,6 +321,6 @@ class SnapshotWriterSpec extends Specification {
                 new ReaperVital(Instant.parse('2026-08-02T08:55:00Z'), 0, 300L),
                 new JanitorVital(Instant.parse('2026-08-02T08:00:00Z')))
         def tracker = new TrackerHealth(Instant.parse('2026-08-02T08:59:55Z'), 0)
-        return new Snapshot(1, Instant.parse('2026-08-02T09:00:00Z'), 30L, instance, new LifecycleState.Running(), feed, slots, vitals, tracker)
+        return new Snapshot(1, Instant.parse('2026-08-02T09:00:00Z'), 30L, instance, new LifecycleState.Running(), feed, slots, vitals, tracker, [:])
     }
 }

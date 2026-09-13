@@ -41,7 +41,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
     private ScriptedExternalCheckClient delegate = new ScriptedExternalCheckClient([new PollStatus.Pass()])
 
     private PinCheckedExternalCheckClient guard(ExternalCheckPinContributor contributor) {
-        new PinCheckedExternalCheckClient(delegate, contributor, gitObjects, 'refs/heads/base')
+        new PinCheckedExternalCheckClient(delegate, contributor, gitObjects, baseTip)
     }
 
     def "untouched pins pass and the poll goes through to the delegate"() {
@@ -50,14 +50,17 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
             new TreeEdit.PutFile('src/Main.java', bytes('code'))
         ])
 
-        when:
-        def status = guard({ c ->
+        def guarded = guard({ c ->
             [c.checkId()] as Set
-        }).poll(check([]), workspaceAt(attempt))
+        })
+
+        when:
+        def status = guarded.poll(check([]), workspaceAt(attempt))
 
         then:
         status == new PollStatus.Pass()
         delegate.pollCount == 1
+        guarded.delegate().is(delegate)
     }
 
     def "a rewritten adapter-contributed definition file fails before the adapter is invoked"() {
@@ -205,23 +208,51 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
         delegate.pollCount == 0
     }
 
-    def "an unresolvable base ref is CannotVerify, never a silent pass"() {
+    // D12 of add-base-ref-resolution: a run whose repository resolved no commit at all (an in-place
+    //     workspace that is no repository) has no law commit; a pinned check then fails closed.
+    def "a law bound to no commit is CannotVerify, never a silent pass"() {
         given:
         def attempt = attemptCommitWith([
             new TreeEdit.PutFile('src/Main.java', bytes('code'))
         ])
-        def brokenGuard = new PinCheckedExternalCheckClient(
+        def unpinnedGuard = new PinCheckedExternalCheckClient(
                 delegate, { c ->
                     [c.checkId()] as Set
-                }, gitObjects, 'refs/heads/no-such-branch')
+                }, gitObjects, null)
 
         when:
-        def status = brokenGuard.poll(check([]), workspaceAt(attempt))
+        def status = unpinnedGuard.poll(check([]), workspaceAt(attempt))
 
         then:
         status instanceof PollStatus.CannotVerify
-        ((PollStatus.CannotVerify) status).reason().contains('base branch')
+        ((PollStatus.CannotVerify) status).reason().contains('law commit')
         delegate.pollCount == 0
+    }
+
+    // M5, D12 of add-base-ref-resolution: the guard compares against the typed commit it was
+    //     handed and re-resolves nothing — so the base branch moving on after the law was bound
+    //     changes no verdict, and law and pin stay one SHA.
+    def "the guard compares against the bound commit, not the base branch's later tip"() {
+        given: 'an attempt cut from the bound commit that leaves every pinned file untouched'
+        def attempt = attemptCommitWith([
+            new TreeEdit.PutFile('src/Main.java', bytes('code'))
+        ])
+        def guard = guard({ c -> [c.checkId()] as Set })
+
+        and: 'the base branch moves on with a different workflow file after the binding'
+        gitObjects.commit(new CommitRequest(
+                        'refs/heads/base', Optional.of(baseTip), baseTip,
+                        [
+                            new TreeEdit.PutFile('.github/workflows/ci.yml', bytes('name: changed'))
+                        ], metadata()))
+        assert gitObjects.resolveRef('refs/heads/base').get() != baseTip
+
+        when:
+        def status = guard.poll(check([]), workspaceAt(attempt))
+
+        then: 'identical to the bound commit: pass, and the delegate is reached'
+        status == new PollStatus.Pass()
+        delegate.pollCount == 1
     }
 
     def "law-declared and adapter-contributed paths are one union — the same path is compared once"() {

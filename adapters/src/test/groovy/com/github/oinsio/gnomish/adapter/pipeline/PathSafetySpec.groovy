@@ -92,6 +92,26 @@ class PathSafetySpec extends Specification {
     }
 
     @IgnoreIf({ !symlinksSupported() })
+    def "FR11 of add-base-ref-resolution: the lexical half alone never follows a symlink"() {
+        given: 'a file OUTSIDE the root, and a symlink INSIDE the root pointing at it'
+        Path outsideDir = Files.createTempDirectory('gnomish-outside')
+        Path outside = Files.writeString(outsideDir.resolve('secret.md'), 'secret\n')
+        Files.createDirectories(root.resolve('stages/plan'))
+        Files.createSymbolicLink(root.resolve('stages/plan/instructions.md'), outside)
+
+        expect: 'lexically the reference stays under the root — the link is invisible to it'
+        PathSafety.resolveWithinRootLexically(root, 'stages/plan/instructions.md') ==
+                new Within(root.resolve('stages/plan/instructions.md').normalize())
+
+        and: 'while a lexical climb out of the root is still refused'
+        PathSafety.resolveWithinRootLexically(root, '../outside.md') == new Escapes('../outside.md')
+
+        cleanup:
+        Files.deleteIfExists(outside)
+        Files.deleteIfExists(outsideDir)
+    }
+
+    @IgnoreIf({ !symlinksSupported() })
     def "a symlink whose real target stays within the root is Within"() {
         given: 'a real file inside the root and a symlink inside the root pointing at it'
         Files.createDirectories(root.resolve('stages/plan'))

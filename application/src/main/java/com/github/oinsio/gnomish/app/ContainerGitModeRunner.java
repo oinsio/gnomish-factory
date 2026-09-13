@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -23,6 +24,15 @@ import org.jspecify.annotations.Nullable;
  * ordering: Completed disposes the environment before the outcome and cleanup
  * commits; every non-completed exit keeps the environment stopped with volume
  * and network retained.
+ *
+ * <p>Kept in sync with {@link GitModeRunner}: both run the SAME manual fresh-run recipe — harden
+ * the clone's branches, print the banner naming where the work lives (UX1), bind and peel the law
+ * through {@code ManualRunLawBinding#bind}, resolve the {@code --base} override through {@code
+ * GitFreshTaskSupport#resolveManualBase} and create the task through {@code
+ * GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised 2026-09-10), then drive
+ * the engine under the same binding — and both observe only the {@code Completed} and
+ * {@code Aborted} terminals, recording each through the mode's own outcome/cleanup ordering. The
+ * media differ (host worktree there, task environment here); the recipe and its order must not.
  *
  * <p>Implements FR3, FR12, FR21, FR25, D19 of add-sandbox-core.
  */
@@ -71,9 +81,20 @@ record ContainerGitModeRunner(
 
         var support = supportFactory.create(
                 cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());
-        GitFreshTaskSupport.createTask(support.taskRepository(), taskId, context, base, initialState);
+        // FR15, D12 of add-base-ref-resolution (revised 2026-09-10): the law is bound and peeled
+        // first, and the branch starts at that very commit — the manual tier's own way of keeping a
+        // base name out of the repository port.
+        var law = ManualRunLawBinding.bind(assembly, cloneDir, base);
+        var baseDecision = GitFreshTaskSupport.resolveManualBase(base);
+        GitFreshTaskSupport.createTask(
+                support.taskRepository(),
+                taskId,
+                context,
+                law.lawCommit(),
+                new BasePin(baseDecision.ref(), null, baseDecision.rule()),
+                initialState);
 
         ContainerTerminalDrive.run(
-                assembly, support, definition, context, initialState, interactiveMode, cloneDir, null);
+                assembly, support, definition, context, initialState, interactiveMode, law.binding(), null);
     }
 }

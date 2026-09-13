@@ -104,13 +104,14 @@ class RunSummaryAccumulatorSpec extends Specification {
         accumulator.tokensByModel() == ['claude-x': new LedgerTokenUsage(total, total, total, total)]
     }
 
-    def "does not count EmptyQueue or Skipped, and does not add their (nonexistent) tokens"() {
+    def "does not count EmptyQueue, Skipped or InfrastructureUnavailable, and does not add their (nonexistent) tokens"() {
         given:
         def accumulator = new RunSummaryAccumulator()
 
         when:
         accumulator.record(new TakeResult.EmptyQueue())
         accumulator.record(new TakeResult.Skipped('lost claim race'))
+        accumulator.record(new TakeResult.InfrastructureUnavailable('origin never answered'))
 
         then:
         accumulator.counts() == new OutcomeCounts(0, 0, 0, 0)

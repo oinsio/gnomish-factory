@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
 import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
+import com.github.oinsio.gnomish.serveobservability.RemoteHealth
 import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot
@@ -106,14 +107,78 @@ class AlertConditionEvaluatorSpec extends Specification {
         def base = SnapshotJsonMapperSpec.referenceSnapshot()
         def feed = new FeedSnapshot(FeedPhase.IDLE_BLOCKED, since, base.feed().lastPollAt(), base.feed().openFronts(), base.feed().wipLimit())
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), feed, base.slots(), base.vitals(), base.tracker())
+                base.lifecycle(), feed, base.slots(), base.vitals(), base.tracker(), [:])
+    }
+
+    // NFR-O3, UX6 of add-base-ref-resolution.
+    def "an open remote gate is flagged, a closed one is quiet, and an absent section raises nothing"() {
+        given:
+        def open = snapshotWithRemote([origin: new RemoteHealth(
+                    'origin', true, FRESH_NOW.minusSeconds(30), 'connection refused', FRESH_NOW.plusSeconds(60), 3, null)])
+        def closed = snapshotWithRemote([origin: new RemoteHealth('origin', false, null, null, null, 0, FRESH_NOW)])
+        def absent = SnapshotJsonMapperSpec.referenceSnapshot()
+
+        expect:
+        AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(open), FRESH_NOW)
+                .any {
+                    it instanceof AlertCondition.RemoteGateOpen && it.target() == 'origin'
+                }
+        !AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(closed), FRESH_NOW)
+                .any { it instanceof AlertCondition.RemoteGateOpen }
+        // referenceSnapshot's own remote entry is closed, so no line either.
+        !AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(absent), FRESH_NOW)
+                .any { it instanceof AlertCondition.RemoteGateOpen }
+    }
+
+    def "a gate open past the sustained-open threshold flags sustainedOpen"() {
+        given:
+        def justOpened = snapshotWithRemote([origin: new RemoteHealth(
+                    'origin', true, FRESH_NOW.minusSeconds(60), 'boom', FRESH_NOW.plusSeconds(60), 1, null)])
+        def longOpen = snapshotWithRemote([origin: new RemoteHealth(
+                    'origin', true, FRESH_NOW.minusSeconds(3661), 'boom', FRESH_NOW.plusSeconds(60), 40, null)])
+
+        expect:
+        !(AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(justOpened), FRESH_NOW)
+                .find {
+                    it instanceof AlertCondition.RemoteGateOpen
+                } as AlertCondition.RemoteGateOpen).sustainedOpen()
+        (AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(longOpen), FRESH_NOW)
+                .find {
+                    it instanceof AlertCondition.RemoteGateOpen
+                } as AlertCondition.RemoteGateOpen).sustainedOpen()
+    }
+
+    // Pins the exact threshold boundary (1 hour): elapsed exactly equal to the threshold already
+    // counts as sustained (>=, not >), one tick under it does not.
+    def "an outage open for exactly the sustained-open threshold is already flagged sustained"() {
+        given:
+        def exactlyAtThreshold = snapshotWithRemote([origin: new RemoteHealth(
+                    'origin', true, FRESH_NOW.minusSeconds(3600), 'boom', FRESH_NOW.plusSeconds(60), 1, null)])
+        def oneSecondUnder = snapshotWithRemote([origin: new RemoteHealth(
+                    'origin', true, FRESH_NOW.minusSeconds(3599), 'boom', FRESH_NOW.plusSeconds(60), 1, null)])
+
+        expect:
+        (AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(exactlyAtThreshold), FRESH_NOW)
+                .find {
+                    it instanceof AlertCondition.RemoteGateOpen
+                } as AlertCondition.RemoteGateOpen).sustainedOpen()
+        !(AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(oneSecondUnder), FRESH_NOW)
+                .find {
+                    it instanceof AlertCondition.RemoteGateOpen
+                } as AlertCondition.RemoteGateOpen).sustainedOpen()
+    }
+
+    private static Snapshot snapshotWithRemote(Map<String, RemoteHealth> remote) {
+        def base = SnapshotJsonMapperSpec.referenceSnapshot()
+        return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
+                base.lifecycle(), base.feed(), base.slots(), base.vitals(), base.tracker(), remote)
     }
 
     private static Snapshot snapshotWithConsecutiveFailures(int count) {
         def base = SnapshotJsonMapperSpec.referenceSnapshot()
         def tracker = new TrackerHealth(base.tracker().lastSuccessAt(), count)
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), base.slots(), base.vitals(), tracker)
+                base.lifecycle(), base.feed(), base.slots(), base.vitals(), tracker, [:])
     }
 
     private static Snapshot snapshotWithReaper(Instant lastRunAt, int restartCount) {
@@ -125,6 +190,6 @@ class AlertConditionEvaluatorSpec extends Specification {
 
     private static Snapshot withVitals(Snapshot base, VitalsSnapshot vitals) {
         return new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
-                base.lifecycle(), base.feed(), base.slots(), vitals, base.tracker())
+                base.lifecycle(), base.feed(), base.slots(), vitals, base.tracker(), [:])
     }
 }

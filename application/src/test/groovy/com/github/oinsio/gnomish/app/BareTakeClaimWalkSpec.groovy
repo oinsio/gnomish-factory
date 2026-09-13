@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 /**
@@ -106,8 +107,11 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit))
-        def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
+        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+        def subject = new BareTakeClaimWalk(
+                claimAndWork(git, tracker, Stub(RunAssembly) {
+                    bindTaskTier(_) >> boundTaskTier()
+                }), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
 
         when:
@@ -135,8 +139,11 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit))
-        def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
+        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+        def subject = new BareTakeClaimWalk(
+                claimAndWork(git, tracker, Stub(RunAssembly) {
+                    bindTaskTier(_) >> boundTaskTier()
+                }), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
         def capture = LogCaptureSupport.attach(AnchorLog)
 
@@ -169,8 +176,11 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit))
-        def subject = new BareTakeClaimWalk(claimAndWork(git, tracker, Stub(RunAssembly)), 'taskId',
+        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+        def subject = new BareTakeClaimWalk(
+                claimAndWork(git, tracker, Stub(RunAssembly) {
+                    bindTaskTier(_) >> boundTaskTier()
+                }), 'taskId',
                 BACKOFF_BASE, BACKOFF_CAP, FIXED_CLOCK, 10, new Random(1))
 
         when:

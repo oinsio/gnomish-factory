@@ -102,7 +102,8 @@ class GithubRetryableFailureSpec extends Specification {
                 'gnomish:delivered')
         new GithubTracker(
                 new GithubFeedQuery(cache, 'acme', 'widgets', 'gnomish:ready'),
-                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered'),
+                new GithubTaskFetcher(cache, 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered',
+                GithubDesignatorRules.none()),
                 new GithubClaimLease(httpClient, labelOps, 'gnomish:ready', 'gnomish:working'),
                 newStateWrites(httpClient, labelOps),
                 new GithubCorrespondence(markerWriter(httpClient)),

@@ -87,12 +87,10 @@ abstract class TakeLifecycleRevocationSpecBase extends Specification implements 
         projectDir = initWorkingRepo(tempDir, 'project')
         ['first', 'second'].each { stageName ->
             Files.createDirectories(projectDir.resolve(".gnomish/stages/${stageName}"))
-            Files.createDirectories(projectDir.resolve("stages/${stageName}"))
-            // Written at both paths: the pipeline loader resolves `instructions:` relative to the
-            // .gnomish/ root, while the runtime engine resolves the same string relative to the
-            // workspace root (the task worktree) — see TakeCommandCredentialScrubSpec's own note.
+            // One copy only, under the law root: since D12 of add-base-ref-resolution the runtime
+            // resolves `instructions:` against the same `.gnomish/` root the loader validates it
+            // against, so a project-root copy would be law in neither medium.
             Files.writeString(projectDir.resolve(".gnomish/stages/${stageName}/instructions.md"), 'do it\n')
-            Files.writeString(projectDir.resolve("stages/${stageName}/instructions.md"), 'do it\n')
             Files.writeString(projectDir.resolve(".gnomish/stages/${stageName}/stage.yaml"), """\
 purpose: ${stageName} stage
 executor:
@@ -124,9 +122,10 @@ tracker:
         commitAll(projectDir)
         // A real origin remote so BranchPush actually pushes (with none configured, push is a
         // silent no-op, per BranchPush's own contract) — every task worktree created via `git
-        // worktree add` under projectDir inherits this remote from the shared .git.
-        bareRepo = initBareRepo(tempDir, 'origin.git')
-        addRemote(projectDir, 'origin', bareRepo.toString())
+        // worktree add` under projectDir inherits this remote from the shared .git. Also the real
+        // remote a real take startup/fresh-claim now resolves and refreshes its base against (FR5,
+        // FR13 of add-base-ref-resolution), never the clone's local HEAD.
+        bareRepo = addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
     }
 

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
+import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
@@ -51,6 +52,13 @@ import org.slf4j.LoggerFactory;
  * {@code Completed} outcome and cleanup commits are created after the environment is disposed — the
  * last in-box commit was the state commit (D15), so no live environment is required here. Host mode
  * keeps {@link GitTaskRepository}'s worktree commits unchanged (G4, D20).
+ *
+ * <p>Kept in sync with {@link GitTaskRepository}: both media run the same task-lifecycle write
+ * protocol, and in particular both take the task's start point as an already-peeled {@code
+ * ObjectId} — the caller's single peel of its law binding — resolve no base <em>name</em> of their
+ * own, verify the object is a commit this repository holds, and record that same commit as {@code
+ * baseCommit} beside the {@code (ref, kind, rule)} pin (FR15, D12 of add-base-ref-resolution,
+ * revised 2026-09-10).
  *
  * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
  * GitTaskRepositoryException}, matching {@link GitTaskRepository}. Implements FR25 of
@@ -108,24 +116,26 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     }
 
     @Override
-    public void createTask(TaskContext context, String baseRef, TaskState initialState) {
+    public void createTask(TaskContext context, ObjectId lawCommit, BasePin pin, TaskState initialState) {
         String taskId = context.taskId();
         String ref = refFor(taskId);
         if (gitObjects.resolveRef(ref).isPresent()) {
             throw new GitTaskRepositoryException(
                     taskId, TaskLifecycleEvent.STARTED, "creating branch", "branch \"" + ref + "\" already exists");
         }
+        // The start point is already an object name (FR15, D12 revised 2026-09-10): this asks only
+        // whether the clone holds it, never what a base name would resolve to here.
         ObjectId base = gitObjects
-                .resolveRef(baseRef)
+                .resolveRef(lawCommit.hex())
                 .orElseThrow(() -> new GitTaskRepositoryException(
                         taskId,
                         TaskLifecycleEvent.STARTED,
                         "creating branch",
-                        "base ref \"" + baseRef + "\" did not resolve"));
+                        "base commit \"" + lawCommit.hex() + "\" is not in this clone"));
 
         Instant now = Instant.now(clock);
         var writer = new TaskLifecycleCommitWriter(gitObjects, identity, now, epochs);
-        TaskJsonDto dto = TaskJsonMapper.toDto(context, base.hex(), now, null, null, false);
+        TaskJsonDto dto = TaskJsonMapper.toDto(context, base.hex(), now, null, null, false, pin);
         writer.commit(
                 taskId,
                 ref,
@@ -158,7 +168,13 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         // denial read, so it has no position of its own to record and must not erase the one the
         // tip carries — that erasure is what sent every resumed run back to a full log re-read.
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                        updated, current.baseCommit(), current.createdAt(), null, current.lastEscalation(), false)
+                        updated,
+                        current.baseCommit(),
+                        current.createdAt(),
+                        null,
+                        current.lastEscalation(),
+                        false,
+                        current.pin())
                 .withEgressCursor(currentDto.egressCursor());
         // One transition, one commit (FR4): the decision and its attempt-counter reset are two
         // tree edits of a single bare-object commit, never two tips.
@@ -188,7 +204,13 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         // tracker write follows. Aborted's tracker write is best-effort and carries no marker.
         boolean pending = !(outcome instanceof TaskOutcome.Aborted);
         TaskJsonDto dto = TaskJsonMapper.toDto(
-                        current.context(), current.baseCommit(), current.createdAt(), outcome, lastEscalation, pending)
+                        current.context(),
+                        current.baseCommit(),
+                        current.createdAt(),
+                        outcome,
+                        lastEscalation,
+                        pending,
+                        current.pin())
                 .withEgressCursor(cursorFor(lastEscalation, currentDto.egressCursor()));
         writer.commit(taskId, ref, false, tip, writer.putTaskJson(taskId, dto), event);
     }

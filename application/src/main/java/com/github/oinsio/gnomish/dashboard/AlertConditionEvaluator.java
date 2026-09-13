@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.dashboard;
 
 import com.github.oinsio.gnomish.serveobservability.FeedPhase;
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState;
+import com.github.oinsio.gnomish.serveobservability.RemoteHealth;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import java.time.Duration;
 import java.time.Instant;
@@ -44,6 +45,17 @@ public final class AlertConditionEvaluator {
     /** The reaper's own staleness multiplier {@code k} (design D10), same as rule 1's. */
     private static final int REAPER_STALENESS_MULTIPLIER = 3;
 
+    /**
+     * The sustained-open escalation threshold (NFR-O3, UX6 of add-base-ref-resolution), matching
+     * {@code RemoteOutageGate}'s own default. The dashboard reads only the persisted snapshot,
+     * which carries no configured threshold of its own (a known limitation: a daemon configured
+     * with a different {@code factory.serve.remote-sustained-open-threshold} escalates its own
+     * ERROR at a different point than this label does) — until the snapshot carries the
+     * configured value, this constant is the closest approximation available to a reader with no
+     * other source of the daemon's configuration.
+     */
+    private static final Duration REMOTE_GATE_SUSTAINED_OPEN_THRESHOLD = Duration.ofHours(1);
+
     private AlertConditionEvaluator() {}
 
     /**
@@ -79,12 +91,30 @@ public final class AlertConditionEvaluator {
         if (reaperStale(snapshot, now) || snapshot.vitals().reaper().restartCount() > 0) {
             flagged.add(new AlertCondition.ReaperDegraded());
         }
+        for (RemoteHealth remote : snapshot.remote().values()) {
+            if (remote.open()) {
+                flagged.add(remoteGateOpen(remote, now));
+            }
+        }
         return List.copyOf(flagged);
     }
 
     /**
-     * Rules 2–5 read {@link Fresh} and {@link DeadDaemon} snapshots alike — the only two variants
-     * reachable here, {@link StoppedStale} and {@link Absent} having already returned above.
+     * NFR-O3, UX6 of add-base-ref-resolution: a snapshot without a {@code remote} section (an old
+     * document, or one written before any gate ever opened) raises no line at all — {@link
+     * Snapshot#remote()} is never null, only empty, so the loop above simply has nothing to flag.
+     */
+    private static AlertCondition.RemoteGateOpen remoteGateOpen(RemoteHealth remote, Instant now) {
+        boolean sustained = remote.openSince() != null
+                && Duration.between(remote.openSince(), now).compareTo(REMOTE_GATE_SUSTAINED_OPEN_THRESHOLD) >= 0;
+        return new AlertCondition.RemoteGateOpen(
+                remote.target(), remote.openSince(), remote.lastError(), remote.nextProbeAt(), sustained);
+    }
+
+    /**
+     * Rules 2–5 read {@link DaemonSnapshotView.Fresh} and {@link DaemonSnapshotView.DeadDaemon}
+     * snapshots alike — the only two variants reachable here, {@link DaemonSnapshotView.StoppedStale}
+     * and {@link DaemonSnapshotView.Absent} having already returned above.
      */
     private static Snapshot snapshotOf(DaemonSnapshotView view) {
         return switch (view) {

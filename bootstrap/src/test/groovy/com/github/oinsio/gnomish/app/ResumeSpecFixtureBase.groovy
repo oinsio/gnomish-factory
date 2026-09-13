@@ -44,7 +44,33 @@ abstract class ResumeSpecFixtureBase extends Specification implements BareGitRep
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        // FR13, D14 of add-base-ref-resolution: TakeResumeSpecBase's own fresh-claim scenarios
+        // read their task tier from git objects at the resolved base commit, so this shared clone
+        // carries a real, loadable pipeline matching #stage()/#pipeline() below, alongside the
+        // root-level instructions.md the manual-run (GitResumeSpecBase) specs read directly.
+        Files.createDirectories(cloneDir.resolve('.gnomish/stages/build'))
+        Files.writeString(cloneDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
+purpose: purpose
+executor:
+  type: agent-cli
+  model: model-x
+instructions: stages/build/instructions.md
+advancement: auto
+''')
+        Files.writeString(cloneDir.resolve('.gnomish/config.yaml'), '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+    repo: acme/widgets
+''')
         commitAll(cloneDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
     }

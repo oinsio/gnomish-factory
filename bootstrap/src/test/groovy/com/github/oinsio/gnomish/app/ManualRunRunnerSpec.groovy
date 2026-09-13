@@ -4,10 +4,12 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -592,7 +594,7 @@ advancement: auto
         def gitRunner = new GitProcessRunner()
         def repository = new GitTaskRepository(gitRunner, projectRoot, worktreesRoot, ClaimEpochSource.NONE)
         def context = new TaskContext(taskId, 'title', 'body', List.<Decision> of())
-        repository.createTask(context, null, TaskState.atStageStart('build'))
+        repository.createTask(context, TaskStart.commit(projectRoot, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve(projectRoot.getFileName().toString()).resolve(taskId)
         def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
         def state = TaskState.atStageStart('build')

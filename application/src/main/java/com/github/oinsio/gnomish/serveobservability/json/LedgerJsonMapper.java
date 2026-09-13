@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage;
 import com.github.oinsio.gnomish.serveobservability.LifecycleLine;
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts;
+import com.github.oinsio.gnomish.serveobservability.RemoteOutageLine;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLine;
 import com.github.oinsio.gnomish.serveobservability.SweepActionLine;
 import com.github.oinsio.gnomish.serveobservability.SweepTickLine;
@@ -53,6 +54,7 @@ public final class LedgerJsonMapper {
                     case RunSummaryLine runSummary -> toDto(runSummary);
                     case SweepActionLine sweepAction -> toDto(sweepAction);
                     case SweepTickLine sweepTick -> toDto(sweepTick);
+                    case RemoteOutageLine remoteOutage -> toDto(remoteOutage);
                 };
         try {
             return mapper.writeValueAsString(dto);
@@ -167,6 +169,27 @@ public final class LedgerJsonMapper {
                 InstanceDto.from(line.instance()),
                 line.at().toString(),
                 SnapshotJsonMapper.toSweepCounts(line.counts()));
+    }
+
+    /**
+     * Builds the JSON-contract DTO for a {@code remoteOutage} line (NFR-O1, NFR-O3 of
+     * add-base-ref-resolution).
+     *
+     * @param line the line to map; never null
+     * @return the equivalent DTO
+     */
+    public RemoteOutageLineDto toDto(RemoteOutageLine line) {
+        return new RemoteOutageLineDto(
+                1,
+                "remoteOutage",
+                InstanceDto.from(line.instance()),
+                line.target(),
+                line.openedAt().toString(),
+                line.closedAt().toString(),
+                line.duration().toMillis(),
+                line.probeCount(),
+                line.releasedClaims(),
+                line.lastError());
     }
 
     /**

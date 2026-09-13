@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter;
+import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender;
 import com.github.oinsio.gnomish.serveobservability.writer.RunSummaryLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
@@ -37,6 +38,7 @@ final class ObservabilityWiring {
     private final LifecycleLedgerWriter lifecycleLedgerWriter;
     private final TaskOutcomeLedgerWriter taskOutcomeLedgerWriter;
     private final SweepLedgerWriter sweepLedgerWriter;
+    private final RemoteOutageLedgerWriter remoteOutageLedgerWriter;
     private final RotatingLedgerAppender ledgerAppender;
     private final InstanceInfo instance;
     private final Clock clock;
@@ -48,6 +50,7 @@ final class ObservabilityWiring {
             LifecycleLedgerWriter lifecycleLedgerWriter,
             TaskOutcomeLedgerWriter taskOutcomeLedgerWriter,
             SweepLedgerWriter sweepLedgerWriter,
+            RemoteOutageLedgerWriter remoteOutageLedgerWriter,
             RotatingLedgerAppender ledgerAppender,
             InstanceInfo instance,
             Clock clock) {
@@ -56,6 +59,7 @@ final class ObservabilityWiring {
         this.lifecycleLedgerWriter = lifecycleLedgerWriter;
         this.taskOutcomeLedgerWriter = taskOutcomeLedgerWriter;
         this.sweepLedgerWriter = sweepLedgerWriter;
+        this.remoteOutageLedgerWriter = remoteOutageLedgerWriter;
         this.ledgerAppender = ledgerAppender;
         this.instance = instance;
         this.clock = clock;
@@ -69,6 +73,15 @@ final class ObservabilityWiring {
     /** The sweep's ledger write point, both its verdict and its tick sink (NFR-O2); never null. */
     SweepLedgerWriter sweepLedgerWriter() {
         return sweepLedgerWriter;
+    }
+
+    /**
+     * The {@code remoteOutage} ledger write point {@link
+     * com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink} is bound to once this
+     * wiring exists (NFR-O1, NFR-O3 of add-base-ref-resolution); never null.
+     */
+    RemoteOutageLedgerWriter remoteOutageLedgerWriter() {
+        return remoteOutageLedgerWriter;
     }
 
     /** Starts the snapshot writer thread and records the {@code started} ledger line (FR1, FR12). */

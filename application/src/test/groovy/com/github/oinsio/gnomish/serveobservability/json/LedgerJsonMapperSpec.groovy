@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.serveobservability.LedgerLifecycleEvent
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage
 import com.github.oinsio.gnomish.serveobservability.LifecycleLine
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
+import com.github.oinsio.gnomish.serveobservability.RemoteOutageLine
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLine
 import com.github.oinsio.gnomish.serveobservability.SweepActionLine
 import com.github.oinsio.gnomish.serveobservability.SweepCounts
@@ -41,6 +42,24 @@ class LedgerJsonMapperSpec extends Specification {
         mapper.serialize(runSummaryLine()) == referenceLines[4]
         mapper.serialize(sweepActionLine()) == referenceLines[5]
         mapper.serialize(sweepTickLine()) == referenceLines[6]
+        mapper.serialize(remoteOutageLine()) == referenceLines[7]
+    }
+
+    // NFR-O1, NFR-O3 of add-base-ref-resolution.
+    def "remoteOutage carries version 1, the type discriminator, and every field of the closed outage"() {
+        given:
+        def dto = mapper.toDto(remoteOutageLine())
+
+        expect:
+        dto.version() == 1
+        dto.type() == "remoteOutage"
+        dto.target() == "origin"
+        dto.openedAt() == "2026-08-02T21:10:00Z"
+        dto.closedAt() == "2026-08-02T22:10:00Z"
+        dto.durationMillis() == Duration.ofHours(1).toMillis()
+        dto.probeCount() == 12
+        dto.releasedClaims() == 3
+        dto.lastError() == "connection refused"
     }
 
     // NFR-O2 of add-serve-sandbox-lifecycle.
@@ -243,5 +262,11 @@ class LedgerJsonMapperSpec extends Specification {
                 instance(), Instant.parse("2026-08-02T07:00:05Z"), Instant.parse("2026-08-02T22:30:05Z"), 55800000L,
                 new OutcomeCounts(3, 1, 0, 0),
                 ["claude-sonnet-5": new LedgerTokenUsage(5000, 900, 100, 40)])
+    }
+
+    static RemoteOutageLine remoteOutageLine() {
+        new RemoteOutageLine(
+                instance(), "origin", Instant.parse("2026-08-02T21:10:00Z"), Instant.parse("2026-08-02T22:10:00Z"),
+                Duration.ofHours(1), 12, 3, "connection refused")
     }
 }

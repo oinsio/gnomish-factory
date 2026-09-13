@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -28,13 +27,12 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
 
     Path cloneDir
     Path worktreesRoot
-    def gitRunner = new GitProcessRunner()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        commitAll(cloneDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 
@@ -106,16 +104,16 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         def out = new ByteArrayOutputStream()
         def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')),
                 new PrintStream(out, true, 'UTF-8'))
-        def cloneStatusBefore = gitRunner.run(cloneDir, 'status', '--porcelain').stdout()
+        def cloneStatusBefore = gitOutput(cloneDir, 'status', '--porcelain')
 
         when:
         runner.run(cloneDir, null, pipeline(), context('PROJ-2'), initialState(), RunArguments.InteractiveMode.ALL)
 
         then: 'the branch exists'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-2').exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-2') == 0
 
         and: "the clone's working copy is untouched"
-        gitRunner.run(cloneDir, 'status', '--porcelain').stdout() == cloneStatusBefore
+        gitOutput(cloneDir, 'status', '--porcelain') == cloneStatusBefore
     }
 
     // FR6, FR15/M4: Completed removes the worktree (branch stays, history preserved)
@@ -130,7 +128,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
 
         then:
         !Files.exists(expectedWorktree('PROJ-3'))
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-3').exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-3') == 0
     }
 
     // FR6: run() prunes stale worktree registrations before creating the task's own worktree — a
@@ -141,13 +139,13 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         given: 'a worktree for this exact taskId was registered, then deleted without git worktree remove'
         def worktree = expectedWorktree('PROJ-7')
         Files.createDirectories(worktree.getParent())
-        gitRunner.run(cloneDir, 'worktree', 'add', worktree.toString(), 'HEAD')
-        gitRunner.run(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
-        assert gitRunner.run(cloneDir, 'rev-parse', 'HEAD').exitCode() == 0
+        gitExitCode(cloneDir, 'worktree', 'add', worktree.toString(), 'HEAD')
+        gitExitCode(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
+        assert gitExitCode(cloneDir, 'rev-parse', 'HEAD') == 0
 
         // Simulate the exact "missing but already registered" state git worktree remove would
         // never itself leave behind, by re-creating the directory-only registration bypassing git.
-        gitRunner.run(cloneDir, 'worktree', 'add', worktree.toString(), 'HEAD')
+        gitExitCode(cloneDir, 'worktree', 'add', worktree.toString(), 'HEAD')
         worktree.toFile().deleteDir()
         assert !Files.exists(worktree)
 
@@ -158,13 +156,13 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
 
         then: 'the stale registration was pruned first, so the fresh worktree add succeeded'
         noExceptionThrown()
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-7').exitCode() == 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-7') == 0
     }
 
     // FR7: a fresh run whose taskId already has a branch is a usage error, not a silent resume
     def "run() throws UsageException when the task branch already exists"() {
         given:
-        gitRunner.run(cloneDir, 'branch', 'gnomish/PROJ-4', 'HEAD')
+        gitExitCode(cloneDir, 'branch', 'gnomish/PROJ-4', 'HEAD')
         def runner = newRunner(new ByteArrayInputStream(new byte[0]), System.out)
 
         when:
@@ -187,7 +185,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         thrown(UsageException)
 
         and: 'no branch was created for the failed attempt'
-        gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-5').exitCode() != 0
+        gitExitCode(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-5') != 0
     }
 
     // FR6, FR8, task 4.7: a broken durability guarantee (round-boundary violation, design D12) is
@@ -199,7 +197,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         def taskId = 'PROJ-6'
         def worktree = expectedWorktree(taskId)
         Files.createDirectories(worktree.getParent())
-        gitRunner.run(cloneDir, 'worktree', 'add', '-b', 'not-the-task-branch', worktree.toString())
+        gitExitCode(cloneDir, 'worktree', 'add', '-b', 'not-the-task-branch', worktree.toString())
         def runner = newRunner(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')), System.out)
 
         when:
@@ -211,7 +209,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
 
         and: 'the outcome is durably recorded in the worktree HEAD (GitTaskRepository commits wherever'
         and: 'the worktree currently is, unlike the round-boundary check that caused this Aborted)'
-        def taskJson = gitRunner.run(worktree, 'show', 'HEAD:.gnomish-task/task.json').stdout()
+        def taskJson = gitOutput(worktree, 'show', 'HEAD:.gnomish-task/task.json')
         taskJson.contains('"aborted"')
 
         and: 'the worktree is kept, unconditionally, for forensics'

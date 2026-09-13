@@ -50,13 +50,11 @@ class TakeCommandBatchSpec extends Specification implements BareGitRepoFixture, 
     def setup() {
         projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.createDirectories(projectDir.resolve('stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        // Written at both paths: the runtime now reads control files from the frozen pipeline law
-        // (D14 of add-sandbox-core), resolved — like the loader's referenced-file check — relative
-        // to the clone's .gnomish/ root; the project-root copy is retained but no longer consulted.
+        // One copy only, under the law root: since D12 of add-base-ref-resolution the runtime
+        // resolves `instructions:` against the same `.gnomish/` root the loader validates it
+        // against, so a project-root copy would be law in neither medium.
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('stages/build/instructions.md'), 'build it\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
 purpose: build it
 executor:
@@ -65,8 +63,6 @@ executor:
 instructions: stages/build/instructions.md
 advancement: auto
 ''')
-        commitAll(projectDir)
-        worktreesRoot = tempDir.resolve('worktrees')
         Files.writeString(projectDir.resolve('.gnomish/config.yaml'), '''\
 schemaVersion: "1"
 autonomy:
@@ -77,6 +73,11 @@ tracker:
     api-url: https://api.github.com
     repo: acme/widgets
 ''')
+        commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
+        worktreesRoot = tempDir.resolve('worktrees')
         tracker.listOpen() >> []
     }
 
@@ -131,7 +132,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -159,7 +160,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
 
         when:
         command.run(args('take', refA.id(), refB.id(), "--dir=$projectDir"))
@@ -209,7 +210,7 @@ tracker:
         // fixture) — a short ref like '42' reaches it, so the ref fails for a reason outside this
         // fixture's control, exactly the "tool could not operate" shape.
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
         def appender = attachAppender()
 
         when:
@@ -250,7 +251,7 @@ tracker:
             claimedByB = instanceId; new ClaimResult.Acquired(new ClaimEpoch(1))
         }
         def registry = [github: fakeFactory(tracker)]
-        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null))
+        def command = newCommand(registry, new ServeProperties(2, null, null, null, null, null, null, null, null))
         def appender = attachAppender()
 
         when:

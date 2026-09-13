@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.dashboard;
 
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts;
+import java.time.Duration;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -61,7 +62,34 @@ final class DashboardOutcomesCardRenderer {
                 .append(DashboardHtmlFormatter.escape(DashboardBar.ariaLabel(values, SEGMENT_LABELS)))
                 .append("\">");
         DashboardBar.appendSegments(out, values, SEGMENT_TOKENS);
-        out.append("</div></div>\n");
+        out.append("</div>");
+        appendOutageLine(out, day);
+        out.append("</div>\n");
+    }
+
+    /**
+     * NFR-O3 of add-base-ref-resolution: a compact line under the day's bar, never a bar of its
+     * own — an outage is not an outcome. Days with no outage render nothing for it.
+     */
+    private static void appendOutageLine(StringBuilder out, DayOutcomeCounts day) {
+        if (day.outageCount() == 0) {
+            return;
+        }
+        out.append("<div class=\"bar-outage\">")
+                .append(day.outageCount())
+                .append(day.outageCount() == 1 ? " remote outage, " : " remote outages, ")
+                .append(DashboardHtmlFormatter.escape(formatDuration(day.outageDuration())))
+                .append(" total</div>");
+    }
+
+    private static String formatDuration(Duration duration) {
+        long totalMinutes = duration.toMinutes();
+        long hours = totalMinutes / 60;
+        long minutes = totalMinutes % 60;
+        if (hours == 0) {
+            return minutes + "m";
+        }
+        return hours + "h" + (minutes == 0 ? "" : " " + minutes + "m");
     }
 
     private static void appendLegend(StringBuilder out) {

@@ -56,6 +56,15 @@ include 'atomicfile'
 // `:subprocess` are kept empty to avoid.
 include 'logtext'
 include 'gitobjects'
+// The base-resolution leaf (FR10, design D2 of add-base-ref-resolution): the pure
+// policy that decides which ref a new task branch starts from — the allowed-base
+// pattern grammar, the per-task designator's validation against it, the source
+// priority order, and the decision value it hands back. Values in, a decision out:
+// no subprocess, no port, no factory type. Dependency-free for the same reason
+// `:subprocess` and `:atomicfile` are, plus one of its own — an empty allowlist is
+// what constructively guarantees the policy can know nothing of trackers, git
+// remotes, or configuration formats (NFR-S3).
+include 'baseref'
 include 'gnomish-plugin-api'
 // Not a layer of the factory: a stand-in third-party adapter that keeps the
 // api's "one declared dependency" promise honest by compiling against it and

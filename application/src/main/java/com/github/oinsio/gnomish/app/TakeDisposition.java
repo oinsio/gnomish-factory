@@ -75,6 +75,8 @@ final class TakeDisposition {
      *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
      * @param epochs this instance's tenure record, read by the routing point for the repair line it
      *     leaves on a non-clean pickup (NFR-O1 of harden-task-branch-contract); never null
+     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
+     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
     TakeDisposition(
             RunAssembly assembly,
@@ -90,7 +92,8 @@ final class TakeDisposition {
             Clock clock,
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -102,40 +105,9 @@ final class TakeDisposition {
                 heartbeat,
                 claimLossFlag,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
-    }
-
-    /**
-     * The heartbeat- and takeover-free construction used where neither a beat nor an explicit
-     * takeover runs (the {@code Ready}/{@code AwaitingHuman}/{@code Finished}/{@code Gone}
-     * disposition unit specs): delegates with {@link ClaimBeat#NONE}, no {@code --takeover}, the
-     * {@link TakeoverConfirmation#UNAVAILABLE} headless default on a system clock, and a fresh empty
-     * {@link ClaimLossFlag} that never trips, so those call sites are unaffected by the added seams.
-     */
-    TakeDisposition(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            String taskIdMdcKey,
-            List<String> credentialEnvVarsToScrub) {
-        this(
-                assembly,
-                git,
-                worktreesRoot,
-                abortHandler,
-                abortThreshold,
-                taskIdMdcKey,
-                credentialEnvVarsToScrub,
-                ClaimBeat.NONE,
-                false,
-                TakeoverConfirmation.UNAVAILABLE,
-                Clock.systemUTC(),
-                new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook());
     }
 
     /**

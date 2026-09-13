@@ -125,7 +125,7 @@ final class ManualRunDrive {
                 runArguments.interactiveMode(),
                 runner.inPlacePersistence,
                 List.of(),
-                loaded.workspace().root());
+                LawBinding.workingTree(loaded.workspace().root()));
         run.loop().run(definition, synthesized.context(), synthesized.initialState(), loaded.workspace(), run.ports());
     }
 }

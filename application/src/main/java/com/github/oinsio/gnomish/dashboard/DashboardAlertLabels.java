@@ -40,6 +40,18 @@ final class DashboardAlertLabels {
             case AlertCondition.StoppedOrphanIncident incident ->
                 "an instance died or hung: stopped " + incident.objectName() + " of task " + incident.taskKey() + " ("
                         + incident.reason() + ")";
+            case AlertCondition.RemoteGateOpen gate -> remoteGateOpenLabel(gate);
         };
+    }
+
+    /**
+     * NFR-O3, UX6 of add-base-ref-resolution: names the target, how long the gate has been open,
+     * the last error, and the next probe time — escalating from "remote outage, probing" to
+     * "blocked on the remote" once {@code sustainedOpen} is true.
+     */
+    private static String remoteGateOpenLabel(AlertCondition.RemoteGateOpen gate) {
+        String verb = gate.sustainedOpen() ? "blocked on the remote" : "remote outage, probing";
+        return verb + ": " + gate.target() + " open since " + gate.openSince() + ", last error: " + gate.lastError()
+                + ", next probe at " + gate.nextProbeAt();
     }
 }

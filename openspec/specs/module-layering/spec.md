@@ -8,7 +8,7 @@ Defines the layered Gradle module tree of the factory — which modules exist, t
 
 ### Requirement: Layered Gradle module tree
 The build SHALL be organized into layered Gradle modules by hexagonal layer:
-`domain`, `subprocess`, `atomicfile`, `logtext`, `gitobjects`,
+`domain`, `subprocess`, `atomicfile`, `logtext`, `gitobjects`, `baseref`,
 `gnomish-plugin-api`, `application`, one or more `adapters` modules, `sandbox`
 modules, and `bootstrap`. `atomicfile` is the dependency-free leaf holding the
 shared atomic file writer (temp file + atomic rename) consumed by the host-side
@@ -16,47 +16,67 @@ shared atomic file writer (temp file + atomic rename) consumed by the host-side
 persisters reach durability at commit granularity — round state committed
 in-box, lifecycle commits built from bare objects — so neither consumes the
 writer. `logtext` is the logging-support leaf holding the untrusted-text
-sanitizer, the repeat suppressor, and the MDC-propagation helper — the pieces
-every layer's log emitters share.
+sanitizer, the repeat suppressor, the MDC-propagation helper, and the
+subprocess access-log emitter with its argv redactor — the pieces every
+layer's log emitters share, so the access-record format and redaction have
+exactly one owner reachable from every spawn family. `baseref` is the base-resolution leaf
+holding the pure resolution policy — allowed-bases pattern grammar, designator
+validation against the allowed bases, source priority, and the decision value types —
+a function
+from values to a decision, with no subprocess, no port, and no factory type
+inside; extractability is a declared property.
 <!-- implements FR9 of bound-subprocess-commands; originally FR1 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
 <!-- implements FR4, FR6, FR8 of harden-logging-observability -->
+<!-- implements FR2, FR3 of add-subprocess-access-log -->
+<!-- implements FR10 of add-base-ref-resolution -->
 
 #### Scenario: Modules resolve as distinct Gradle projects
 - **WHEN** `./gradlew projects` is run
 - **THEN** `:domain`, `:subprocess`, `:atomicfile`, `:logtext`, `:gitobjects`,
-  `:gnomish-plugin-api`, `:application`, the adapter module(s),
+  `:baseref`, `:gnomish-plugin-api`, `:application`, the adapter module(s),
   `:sandbox:core`, `:sandbox:docker`, and `:bootstrap` each appear as a
   separate project
 - **AND** no production Java class remains in the former single root module
 
 ### Requirement: Enforced acyclic dependency direction
 The module dependency direction SHALL be acyclic and enforced by the build:
-`domain`, `subprocess`, `atomicfile`, and `logtext` depend on nothing
-internal; `gitobjects` depends only on `subprocess`; `gnomish-plugin-api`
-depends only on `domain`; `:sandbox:core` depends only on `domain` /
-`gitobjects`; `application` depends only on `domain`, `subprocess`,
-`atomicfile`, `logtext`, `gitobjects`, `gnomish-plugin-api`, and
+`domain`, `subprocess`, `atomicfile`, `logtext`, and `baseref` depend on
+nothing internal; `gitobjects` depends only on `subprocess`;
+`gnomish-plugin-api` depends only on `domain`; `:sandbox:core` depends only on
+`domain` / `gitobjects`; `application` depends only on `domain`, `subprocess`,
+`atomicfile`, `logtext`, `gitobjects`, `baseref`, `gnomish-plugin-api`, and
 `:sandbox:core`; each adapter module depends on `gnomish-plugin-api` and
 `application` (plus `subprocess` where it launches OS processes, `atomicfile`
 where it writes factory-owned files atomically, `logtext` where it logs
-untrusted text, `:sandbox:core` where it bridges to the execution environment,
-and a sandbox backend module where it drives that backend) but never on a
-sibling adapter's internals — with one declared exception: `:adapters:agent`
-depends on the coarse `:adapters` remainder for the shared pipeline-law and
-briefing packages, narrowed to exactly those packages by a named ArchUnit
-rule; sandbox backend modules depend on `:sandbox:core` and `subprocess`,
-plus `logtext` where they log untrusted text, plus `application` where the
-backend realizes an application-owned port; no production module depends on
-the test-fixtures module; `bootstrap` is the only module that wires adapters
-together and the only one that reaches every adapter. `subprocess` and
-`atomicfile` SHALL never acquire a dependency — their emptiness is what keeps
-their consumers free of transitive coupling. `logtext` SHALL declare no
+untrusted text or emits subprocess access-log records, `baseref` where it maps configuration into the resolution
+policy's value types, `:sandbox:core` where it bridges to the execution
+environment, and a sandbox backend module where it drives that backend) but
+never on a sibling adapter's internals — with one declared exception:
+`:adapters:agent` depends on the coarse `:adapters` remainder for the shared
+pipeline-law and briefing packages, narrowed to exactly those packages by a
+named ArchUnit rule; sandbox backend modules depend on `:sandbox:core` and
+`subprocess`, plus `logtext` where they log untrusted text or emit
+subprocess access-log records, plus `application`
+where the backend realizes an application-owned port; no production module
+depends on the test-fixtures module; `bootstrap` is the only module that wires
+adapters together and the only one that reaches every adapter. `subprocess`
+and `atomicfile` SHALL never acquire a dependency — their emptiness is what
+keeps their consumers free of transitive coupling. `logtext` SHALL declare no
 internal module dependency and at most the logging API (`slf4j-api`) — never
-an implementation, framework, or any other external library.
+an implementation, framework, or any other external library. `baseref` SHALL
+declare no internal module dependency and no external library — not Jackson,
+not slf4j: its inputs and outputs are plain values, which is what
+constructively guarantees the resolution policy can know nothing of
+subprocesses, trackers, or configuration formats. `gitobjects` SHALL
+likewise acquire no dependency for access-log emission: it reports
+execution facts through a JDK-only observer hook on its own public API,
+wired to the emitter by `bootstrap`, defaulting to a no-op.
 <!-- implements FR9, NFR-S3 of bound-subprocess-commands; originally FR2 of split-into-modules -->
 <!-- implements FR5 of harden-task-branch-contract -->
 <!-- implements FR4, FR6, FR8 of harden-logging-observability -->
+<!-- implements FR2, FR3 of add-subprocess-access-log -->
+<!-- implements FR10, NFR-S3 of add-base-ref-resolution -->
 
 #### Scenario: A vendor adapter reaches the tenure record through the contract
 - **WHEN** a vendor adapter module stamps its writes with the claim epoch of
@@ -98,6 +118,11 @@ an implementation, framework, or any other external library.
 - **THEN** it declares no internal module dependency and no external
   dependency beyond `slf4j-api`
 
+#### Scenario: The baseref leaf stays empty of dependencies
+- **WHEN** the dependency gates run against `:baseref`
+- **THEN** it declares no internal module dependency and no external
+  dependency at all — the layering gate lists no allowed project for it
+
 #### Scenario: Host-side writers and the dashboard writer share one atomic writer
 - **WHEN** the host persister and the dashboard writer perform an atomic file
   write
@@ -105,6 +130,13 @@ an implementation, framework, or any other external library.
   copy of the temp-file-plus-rename discipline — while the container-side
   persisters reach durability at commit granularity and consume no host
   filesystem writer
+
+#### Scenario: Access-log emission adds no edge to gitobjects
+- **WHEN** the dependency gates run against `:gitobjects` after the access
+  log lands
+- **THEN** its production dependency set is unchanged (`:subprocess` only),
+  and its access-record reporting reaches the emitter only through the
+  caller-supplied observer hook
 
 ### Requirement: Composition root isolated in bootstrap
 `app` SHALL be split into `application` (use cases and ports, adapter-free) and

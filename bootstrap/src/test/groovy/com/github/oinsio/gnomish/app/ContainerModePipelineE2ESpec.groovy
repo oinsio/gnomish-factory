@@ -69,8 +69,9 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'container-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        gitRunner.run(cloneDir, 'add', '.gnomish/instructions.md')
         gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         originUrl = gitea.createRepository("container-pipeline-${System.nanoTime()}")
         gitRunner.run(cloneDir, 'remote', 'add', 'origin', originUrl)
@@ -86,7 +87,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
                 'work', 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
-                [
+                (List<VerifyCheck>) [
                     new VerifyCheck.Builtin('files_exist', [files: ['output.txt']]),
                     // FR13/UX5: the final gate runs in a fresh box materialized from the attempt
                     // commit — passing proves the branch alone is self-sufficient.

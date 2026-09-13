@@ -527,6 +527,34 @@ mean every new adapter has to edit executor code; declaring the names on your
 own adapter's registration seam keeps the `Tracker` runtime port at exactly
 its fourteen operations while staying extensible.
 
+### 6.2 Designator obligations (base-ref resolution)
+
+If your adapter wants to support kind `base` — letting a task select which
+ref its branch starts from (see the glossary's *designator* and *base ref*
+entries) — it derives candidate values from its own representation and
+classifies them through the **one shared function** `tracker-port` publishes
+(absent | single value | conflict listing every value found); it never
+resolves a conflict or applies a default itself. The GitHub adapter's
+worked shape (task 6.1 of the tracker-port grammar): a `tracker.github.
+designators` map of kind → a regular expression with exactly one capture
+group, validated on your adapter's own config seam exactly like any other
+key, applied to each issue label, taking every full match's capture group as
+one candidate. Two rules carry over from §6:
+
+- **Report only the kinds you are configured to extract**, through your
+  `TrackerAdapterFactory`'s kinds-reported seam — a kind with no rule is
+  never extracted and never reported. The trusted-tier startup validation
+  turns "kind `base` reported, `task-branch.base.allowed` empty" into a
+  located load error naming both places, because such a rule could only ever
+  reject a selection.
+- **No tracker concept (a label, a native field) reaches core.** The port
+  carries only the classified designator; the regex, the field name, or
+  whatever else identifies a candidate in your tracker stays inside your
+  adapter.
+
+A future kind (`type`, for task routing) plugs into the same map and the same
+classification function — do not invent a second mechanism per kind.
+
 ## 7. Known limitations
 
 - **Branch-name sanitize collisions.** Task branch names and worktree

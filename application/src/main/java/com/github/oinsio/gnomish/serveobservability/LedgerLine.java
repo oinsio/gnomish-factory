@@ -8,7 +8,8 @@ package com.github.oinsio.gnomish.serveobservability;
  * a drain run's aggregate, and — added by add-serve-sandbox-lifecycle
  * (NFR-O2) — {@link SweepActionLine} for one stop/dispose the
  * sandbox-lifecycle sweep performed and {@link SweepTickLine} for one
- * completed sweep tick's counts. Each variant is a standalone JSON document; the
+ * completed sweep tick's counts; and — added by add-base-ref-resolution (NFR-O1, NFR-O3) — {@link
+ * RemoteOutageLine} for one closed remote outage gate episode. Each variant is a standalone JSON document; the
  * ledger file itself is not a JSON document (no enclosing array) — one line,
  * one object (FR10).
  *
@@ -21,7 +22,7 @@ package com.github.oinsio.gnomish.serveobservability;
  * <p>Implements FR10, FR11, FR12, FR13 of add-serve-observability.
  */
 public sealed interface LedgerLine
-        permits TaskOutcomeLine, LifecycleLine, RunSummaryLine, SweepActionLine, SweepTickLine {
+        permits TaskOutcomeLine, LifecycleLine, RunSummaryLine, SweepActionLine, SweepTickLine, RemoteOutageLine {
 
     /** The writing process's identity, common to every line type. */
     InstanceInfo instance();

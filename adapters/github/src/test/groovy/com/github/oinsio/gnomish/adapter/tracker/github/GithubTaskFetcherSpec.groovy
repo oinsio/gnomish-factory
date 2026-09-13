@@ -7,6 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.app.port.tracker.Designator
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
@@ -57,7 +58,8 @@ class GithubTaskFetcherSpec extends Specification {
 
     private GithubTaskFetcher newFetcher(String workingLabel = 'gnomish:working',
             String needsHumanLabel = 'gnomish:needs-human', String deliveredLabel = 'gnomish:delivered') {
-        new GithubTaskFetcher(newCache(), workingLabel, needsHumanLabel, deliveredLabel)
+        new GithubTaskFetcher(newCache(), workingLabel, needsHumanLabel, deliveredLabel,
+                GithubDesignatorRules.none())
     }
 
     private GithubConditionalRequestCache newCache() {
@@ -413,5 +415,69 @@ class GithubTaskFetcherSpec extends Specification {
                 .withHeader('If-None-Match', WireMock.equalTo('"iss1"')))
         wireMock.verify(getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100'))
                 .withHeader('If-None-Match', WireMock.equalTo('"com1"')))
+    }
+
+    // FR3 of add-base-ref-resolution: fetchTask carries the task's designators, derived from the
+    //     very labels it already read for the logical state -- the state label plays no part
+    def "fetchTask carries the base designator extracted from the issue labels"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/31'))
+                .willReturn(aResponse().withStatus(200).withBody("""
+                        {"number":31,"title":"t","body":"b","state":"open",
+                         "labels":[{"name":"base:release/1.18"},{"name":"gnomish:ready"}]}
+                        """)))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/31/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        def fetcher = new GithubTaskFetcher(newCache(), 'gnomish:working', 'gnomish:needs-human',
+                'gnomish:delivered', GithubDesignatorRules.from([designators: [base: 'base:(.+)']]))
+
+        when:
+        def result = fetcher.fetchTask(refFor(31))
+
+        then:
+        result.designators().forKind('base') == new Designator.Single('release/1.18')
+        result.state() == new TrackerTaskState.Ready()
+    }
+
+    // FR3: two labels naming different bases are a conflict -- the adapter never picks one
+    def "fetchTask reports conflicting base labels as a conflict, resolving nothing"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/32'))
+                .willReturn(aResponse().withStatus(200).withBody("""
+                        {"number":32,"title":"t","body":"b","state":"open",
+                         "labels":[{"name":"base:release/1.18"},{"name":"base:release/1.19"}]}
+                        """)))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/32/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+        def fetcher = new GithubTaskFetcher(newCache(), 'gnomish:working', 'gnomish:needs-human',
+                'gnomish:delivered', GithubDesignatorRules.from([designators: [base: 'base:(.+)']]))
+
+        when:
+        def result = fetcher.fetchTask(refFor(32))
+
+        then:
+        result.designators().forKind('base') ==
+                new Designator.Conflict([
+                    'release/1.18',
+                    'release/1.19'
+                ])
+    }
+
+    // FR3: an adapter with no rule declares no kind, so every designator the facts carry is absent
+    def "fetchTask carries only absent designators when no rule is declared"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/33'))
+                .willReturn(aResponse().withStatus(200).withBody("""
+                        {"number":33,"title":"t","body":"b","state":"open",
+                         "labels":[{"name":"base:release/1.18"}]}
+                        """)))
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/33/comments?per_page=100'))
+                .willReturn(aResponse().withStatus(200).withBody('[]')))
+
+        when:
+        def result = newFetcher().fetchTask(refFor(33))
+
+        then:
+        result.designators().forKind('base') == new Designator.Absent()
     }
 }

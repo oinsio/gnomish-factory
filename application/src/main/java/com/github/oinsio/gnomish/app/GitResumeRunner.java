@@ -39,6 +39,18 @@ import java.nio.file.Path;
  * uncommitted on top of an otherwise-reconciled worktree; see {@link
  * GitResumeContinuation#resumeFromRecordedPosition}.
  *
+ * <p>Kept in sync with {@link ContainerResumeRunner}: both bootstrap a resumed task through the
+ * same claimless reconciliation — {@code run --resume} holds no claim, so a truly diverged
+ * local/origin pair fails closed with {@link
+ * com.github.oinsio.gnomish.app.port.git.DivergedBranchException} rather than discarding the
+ * local line — and both then dispatch on the branch's recorded {@code task.json} outcome over
+ * one closed set, with the same meaning per arm: {@code null} salvages the interrupted round and
+ * continues from the recorded position (honouring {@code --discard-work}), {@code escalated}
+ * runs the same {@link EscalationResumeDialog}, {@code paused} the same checkpoint confirmation,
+ * {@code completed} reports without another engine run, and {@code aborted} refuses with a usage
+ * error naming the kept working copy. Adding or re-meaning an arm on one side alone is the
+ * divergence this pair guards against (UX2).
+ *
  * <p>Implements FR5, FR8, FR9, FR10, NFR-R3, UX2 of add-git-workflow.
  */
 final class GitResumeRunner {

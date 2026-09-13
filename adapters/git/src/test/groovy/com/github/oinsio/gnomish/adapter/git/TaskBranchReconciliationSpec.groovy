@@ -1,17 +1,16 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -62,22 +61,13 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
      */
     private void driveWithoutPushing() {
         def repository = undecoratedHostRepository()
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))
     }
 
+    /** Migrated to the shared helper (`.claude/rules/logging.md`) during the duplication sweep. */
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(OriginReconciliation)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        appender.list
+        LogCaptureSupport.capture(OriginReconciliation, Level.DEBUG, emit)
     }
 
     def "a terminal commit that never reached origin is delivered by the next touchpoint"() {
@@ -95,7 +85,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     def "a partially delivered branch is caught up to its local tip"() {
         given: 'the creation commit reached origin, the terminal one did not'
         def repository = undecoratedHostRepository()
-        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), 'HEAD', TaskState.atStageStart('implement'))
+        repository.createTask(new TaskContext(TASK_ID, 'Fix it', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         assert new RefspecPush(runner).push(cloneDir, BRANCH).exitCode() == 0
         def deliveredTip = originTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'))

@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+
 /**
  * One of the operator-guide's dead-man's-switch rules 1–5 (design D9 of
  * add-serve-observability), flagged by {@link AlertConditionEvaluator} as
@@ -31,7 +34,8 @@ public sealed interface AlertCondition
                 AlertCondition.ReaperDegraded,
                 AlertCondition.SweepTickOverdue,
                 AlertCondition.SweepTicksSkipped,
-                AlertCondition.StoppedOrphanIncident {
+                AlertCondition.StoppedOrphanIncident,
+                AlertCondition.RemoteGateOpen {
 
     /**
      * Rule 1: the snapshot is stale and its last reported lifecycle is not
@@ -82,4 +86,27 @@ public sealed interface AlertCondition
      * @param reason the verdict's short reason; never blank
      */
     record StoppedOrphanIncident(String objectName, String taskKey, String reason) implements AlertCondition {}
+
+    /**
+     * NFR-O3, UX6 of add-base-ref-resolution: the snapshot's {@code remote[target]} section shows
+     * an open gate — the daemon is releasing claims with no tracker call because the remote is
+     * unreachable. {@code sustainedOpen} escalates the label from "remote outage, probing" to
+     * "blocked on the remote" once the gate has been open longer than the sustained-open duration
+     * (the same threshold {@code RemoteOutageGate}'s own ERROR uses).
+     *
+     * @param target the remote target identity; never blank
+     * @param openSince when the gate opened; null only if the source snapshot's own data is
+     *     inconsistent (open with no openSince) — never in practice
+     * @param lastError the scrubbed cause of the last failed fetch or probe; null under the same
+     *     inconsistent-source condition as {@code openSince}
+     * @param nextProbeAt when the next probe is scheduled; null under the same condition
+     * @param sustainedOpen whether the gate has been open longer than the sustained-open duration
+     */
+    record RemoteGateOpen(
+            String target,
+            @Nullable Instant openSince,
+            @Nullable String lastError,
+            @Nullable Instant nextProbeAt,
+            boolean sustainedOpen)
+            implements AlertCondition {}
 }

@@ -111,8 +111,10 @@ final class ReplicaPairReconciler {
         String trackingRef = "refs/remotes/origin/" + branch;
         // The fetch's own outcome is deliberately not read: everything below is decided from refs
         // the clone actually holds, so a fetch killed on its deadline degrades to "no fresher
-        // tracking ref", never to a wrong verdict (FR7 of bound-subprocess-commands).
-        runner.run(repo, "fetch", "origin", branch + ":" + trackingRef);
+        // tracking ref", never to a wrong verdict (FR7 of bound-subprocess-commands). Its argv is
+        // NarrowFetch's, the one construction site every factory fetch of origin shares, so this
+        // one cannot auto-follow a tag or truncate FETCH_HEAD either (ADR 0006).
+        NarrowFetch.of(runner, repo, branch + ":" + trackingRef);
 
         String lastLostSwap = null;
         for (int pass = 0; pass < MAX_PASSES; pass++) {

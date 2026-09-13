@@ -9,14 +9,18 @@ import com.github.oinsio.gnomish.app.ContainerSupportFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
 import com.github.oinsio.gnomish.app.TaskGitFixture
+import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -34,6 +38,7 @@ import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import spock.lang.IgnoreIf
@@ -84,8 +89,37 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'container-slots-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish/stages/work'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        // FR13, D14 of add-base-ref-resolution: a claimed task runs under the definition read from
+        // ITS OWN base's law, so the committed .gnomish/ must carry the same pipeline this spec
+        // hands the runner — an instructions file alone leaves the per-task law read with nothing
+        // to bind, and the slot aborts before a container is ever started.
+        Files.writeString(cloneDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - work\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/work/stage.yaml'), '''\
+purpose: purpose
+executor:
+  type: agent-cli
+  model: model-x
+instructions: instructions.md
+advancement: auto
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      files:
+        - output.txt
+''')
+        Files.writeString(cloneDir.resolve('.gnomish/config.yaml'), '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+''')
         commitAll(cloneDir, 'init')
+        // FR2, FR6 of add-base-ref-resolution: an autonomous claim resolves and refreshes its base
+        // against a real 'origin' and never falls back to the clone's local state, so a slot
+        // dispatched without one parks before any container is started.
+        addOrigin(cloneDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
         // Both tasks already claimed by THIS instance — the state a slot is dispatched in.
         TASK_IDS.each {
@@ -129,7 +163,12 @@ class TakeSlotRunnerContainerConcurrencySpec extends Specification implements Ba
         new TakeSlotRunner(
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler,
                 ABORT_THRESHOLD, MDC_KEY, [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE,
-                containerTakeSupport, new ClaimEpochBook())
+                containerTakeSupport, new ClaimEpochBook(),
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
+                // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
+                //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
+                //     stamp a transition this spec never drives.
+                RemoteOutageGates.system(BaseRefGit.UNWIRED, cloneDir, Duration.ofSeconds(30)))
     }
 
     // Scenario (factory-serve): two slots hold container-bound tasks at once — each task runs in

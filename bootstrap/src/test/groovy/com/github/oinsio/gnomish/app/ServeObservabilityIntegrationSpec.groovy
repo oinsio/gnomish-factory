@@ -1,16 +1,10 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.engine.time.SystemClock
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneOffset
 import org.springframework.boot.DefaultApplicationArguments
@@ -39,7 +33,7 @@ import spock.lang.Timeout
  * <p>Implements FR9 of add-serve-observability.
  */
 class ServeObservabilityIntegrationSpec extends Specification
-implements AppAssemblyFixture, ServeObservabilityFixture {
+implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
 
     static final String INSTANCE_NAME = 'gnomish-observability'
     static final String INSTANCE_ID_PATTERN = /^gnomish-observability-[0-9a-z]{6}$/
@@ -53,28 +47,19 @@ implements AppAssemblyFixture, ServeObservabilityFixture {
     Tracker tracker = Mock()
 
     def setup() {
-        projectDir = tempDir.resolve('project')
+        // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
+        // base against a real 'origin' remote, never a bare directory or the clone's local HEAD.
+        projectDir = initWorkingRepo(tempDir, 'project')
         writeMinimalProject(projectDir)
+        commitAll(projectDir)
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
     }
 
     ServeCommand newCommand() {
-        new ServeCommand(
-                newAssembly(testProperties(instanceName: INSTANCE_NAME)),
-                TaskGitFixture.real(),
-                worktreesRoot,
-                homeDir,
-                'taskId',
-                testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(1, null, null, null, null, null, null),
-                Clock.systemUTC(),
-                new SystemClock(),
-                [github: fakeFactory(tracker)],
-                MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource(),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook())
+        def factoryProperties = testProperties(instanceName: INSTANCE_NAME)
+        newDrainCommand(factoryProperties, newAssembly(factoryProperties), worktreesRoot, homeDir, fakeFactory(tracker))
     }
 
     @Timeout(10)

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.json
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ObjectNode
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
@@ -95,6 +97,26 @@ class SnapshotJsonReaderSpec extends Specification {
         and: 'tracker — fromTracker and fromInstant present-branch'
         parsed.tracker().lastSuccessAt() == Instant.parse('2026-08-02T08:59:55Z')
         parsed.tracker().consecutiveFailures() == 0
+
+        and: 'remote — fromRemote, keyed by target (NFR-O3, UX6 of add-base-ref-resolution)'
+        parsed.remote() == expected.remote()
+    }
+
+    // NFR-O3 of add-base-ref-resolution: a document written before this change carries no
+    // "remote" key at all — the reader must not throw, and must treat it as "no gate known"
+    // rather than an empty-but-known section.
+    def "a snapshot with no remote section reads back as an empty remote map"() {
+        given:
+        def json = mapper.serialize(SnapshotJsonMapperSpec.referenceSnapshot())
+        def withoutRemote = new ObjectMapper()
+                .readTree(json)
+        ((ObjectNode) withoutRemote).remove('remote')
+
+        when:
+        def parsed = reader.read(withoutRemote.toString())
+
+        then:
+        parsed.remote() == [:]
     }
 
     // FR4: tracker.lastSuccessAt is the one nullable instant. A null wire value must
@@ -109,7 +131,7 @@ class SnapshotJsonReaderSpec extends Specification {
         def neverSucceeded = new Snapshot(
                 base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
                 base.lifecycle(), base.feed(), base.slots(), base.vitals(),
-                new TrackerHealth(null, 7))
+                new TrackerHealth(null, 7), [:])
 
         when:
         def parsed = reader.read(mapper.serialize(neverSucceeded))
@@ -128,7 +150,7 @@ class SnapshotJsonReaderSpec extends Specification {
         def preSweep = new Snapshot(
                 base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
                 base.lifecycle(), base.feed(), base.slots(),
-                new VitalsSnapshot(vitals.heartbeat(), vitals.reaper(), vitals.janitor()), base.tracker())
+                new VitalsSnapshot(vitals.heartbeat(), vitals.reaper(), vitals.janitor()), base.tracker(), [:])
 
         when:
         def parsed = reader.read(mapper.serialize(preSweep))
@@ -230,7 +252,7 @@ class SnapshotJsonReaderSpec extends Specification {
     private static Snapshot withLifecycle(LifecycleState lifecycle) {
         def s = SnapshotJsonMapperSpec.referenceSnapshot()
         return new Snapshot(s.version(), s.writtenAt(), s.intervalSeconds(), s.instance(),
-                lifecycle, s.feed(), s.slots(), s.vitals(), s.tracker())
+                lifecycle, s.feed(), s.slots(), s.vitals(), s.tracker(), [:])
     }
 
     private static Snapshot withFeedPhase(FeedPhase phase) {
@@ -238,7 +260,7 @@ class SnapshotJsonReaderSpec extends Specification {
         def f = s.feed()
         def feed = new FeedSnapshot(phase, f.since(), f.lastPollAt(), f.openFronts(), f.wipLimit())
         return new Snapshot(s.version(), s.writtenAt(), s.intervalSeconds(), s.instance(),
-                s.lifecycle(), feed, s.slots(), s.vitals(), s.tracker())
+                s.lifecycle(), feed, s.slots(), s.vitals(), s.tracker(), [:])
     }
 
     private static Snapshot withHeartbeatState(HeartbeatState state) {
@@ -247,6 +269,6 @@ class SnapshotJsonReaderSpec extends Specification {
         def hb = v.heartbeat()
         def vitals = new VitalsSnapshot(new HeartbeatVital(state, hb.lastTickAt(), hb.heldClaims()), v.reaper(), v.janitor())
         return new Snapshot(s.version(), s.writtenAt(), s.intervalSeconds(), s.instance(),
-                s.lifecycle(), s.feed(), s.slots(), vitals, s.tracker())
+                s.lifecycle(), s.feed(), s.slots(), vitals, s.tracker(), [:])
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.adapter.law.LawSource;
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineMapper.StageEntry;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Ok;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Result;
@@ -9,7 +10,6 @@ import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineValidator;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +48,7 @@ final class PipelineModelBuilder {
      *     be produced
      */
     static @Nullable PipelineDefinition mapAndValidate(
-            Path root,
+            LawSource law,
             Result<ConfigDto> config,
             Result<PipelineDto> pipeline,
             Map<String, StageDto> stages,
@@ -76,7 +76,7 @@ final class PipelineModelBuilder {
             return null;
         }
         errors.addAll(PipelineValidator.validate(model));
-        errors.addAll(ReferencedFiles.check(root, model.stages()));
+        errors.addAll(ReferencedFiles.check(law, model.stages()));
         errors.addAll(AgentSettingsValidator.validate(model));
         errors.addAll(ExternalCheckSeamValidator.validate(model.stages(), checkProviders));
         return model;

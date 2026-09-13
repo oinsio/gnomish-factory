@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
 import com.github.oinsio.gnomish.app.CheckParamsValidator
+import com.github.oinsio.gnomish.app.LawBinding
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator
+import com.github.oinsio.gnomish.app.port.pipeline.ConfiguredDesignatorKinds
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
+import com.github.oinsio.gnomish.gitobjects.LocalGitRepoFixture
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -19,7 +22,7 @@ import spock.lang.TempDir
  * covered by that module's own specs, and this adapter was previously driven only by the
  * composition root's command suites in {@code :bootstrap}.
  */
-class GnomishDirPipelineSourceSpec extends Specification {
+class GnomishDirPipelineSourceSpec extends Specification implements LocalGitRepoFixture {
 
     @TempDir
     Path tempDir
@@ -40,6 +43,63 @@ class GnomishDirPipelineSourceSpec extends Specification {
             }
         }
         project
+    }
+
+    /** A real, non-bare git repository whose HEAD commit carries the valid fixture's law. */
+    private Path repoWithCommittedLaw() {
+        Path project = projectWithDefinition()
+        gitOutput(project, 'init')
+        commitAll(project, 'law')
+        project
+    }
+
+    // FR2, FR13, D12-D15 of add-base-ref-resolution: bindConfiguration reads both tiers from git
+    //     objects at the bound revision, and pins the exact commit it read — never a blank/null one.
+    def "bindConfiguration reads the law at the bound revision, pinning the peeled commit"() {
+        given:
+        def repo = repoWithCommittedLaw()
+        def sha = gitOutput(repo, 'rev-parse', 'HEAD')
+        def binding = LawBinding.atRevision(repo, 'HEAD')
+
+        when:
+        def bound = source.bindConfiguration(binding, ConfiguredDesignatorKinds.NONE)
+
+        then:
+        bound.outcome() instanceof LoadOutcome.Loaded
+        bound.lawCommit().hex() == sha
+    }
+
+    // FR13, D14 of add-base-ref-resolution: bindTaskTier reads the task tier alone, pinning the
+    //     same peeled commit bindConfiguration would.
+    def "bindTaskTier reads the task tier at the bound revision, pinning the peeled commit"() {
+        given:
+        def repo = repoWithCommittedLaw()
+        def sha = gitOutput(repo, 'rev-parse', 'HEAD')
+        def binding = LawBinding.atRevision(repo, 'HEAD')
+
+        when:
+        def bound = source.bindTaskTier(binding)
+
+        then:
+        bound.outcome() instanceof LoadOutcome.Loaded
+        bound.lawCommit().hex() == sha
+    }
+
+    // FR11, D12 of add-base-ref-resolution: a working-tree binding over a root that is no git
+    //     repository at all resolves no checkout, so bindConfiguration/bindTaskTier refuse loudly
+    //     instead of silently pinning a blank commit.
+    def "bindConfiguration over a working tree with no repository refuses instead of pinning a blank commit"() {
+        given: 'a law directory with no .git at all — the in-place workspace shape'
+        def project = projectWithDefinition()
+        def binding = LawBinding.workingTree(project)
+
+        when:
+        source.bindConfiguration(binding, ConfiguredDesignatorKinds.NONE)
+
+        then:
+        def e = thrown(IllegalStateException)
+        e.message.contains('cannot bind the pipeline law')
+        e.message.contains(project.toString())
     }
 
     def "load resolves the project's .gnomish subdirectory and returns the loader's outcome"() {

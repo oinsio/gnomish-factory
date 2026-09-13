@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
+import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -16,8 +18,9 @@ import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock;
 import com.github.oinsio.gnomish.domain.engine.time.ThreadSleeper;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
-import java.nio.file.Path;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.function.UnaryOperator;
@@ -72,6 +75,9 @@ public final class ManualRunAssembly implements RunAssembly {
     // Identity by default (design D3 of wire-host-mid-round-push): consumers apply the decoration
     // unconditionally, so "no decoration" needs no null check and no mode conditional.
     final UnaryOperator<RoundEnvironmentSource> hostGitPush;
+    // Attached per invocation by take/serve (FR13 of add-base-ref-resolution); a manual run never
+    // reads a task tier by binding, so it stays unattached and bindTaskTier is never reached.
+    final @Nullable PipelineSource pipelineSource;
 
     private ManualRunAssembly(
             SystemConsoleIO systemConsoleIO,
@@ -85,7 +91,8 @@ public final class ManualRunAssembly implements RunAssembly {
             SandboxProperties sandboxProperties,
             @Nullable EngineEventListener extraListener,
             @Nullable SandboxRunPieces sandbox,
-            UnaryOperator<RoundEnvironmentSource> hostGitPush) {
+            UnaryOperator<RoundEnvironmentSource> hostGitPush,
+            @Nullable PipelineSource pipelineSource) {
         this.systemConsoleIO = systemConsoleIO;
         this.filesExistCheckRunner = filesExistCheckRunner;
         this.shellCommandCheckRunner = shellCommandCheckRunner;
@@ -98,6 +105,7 @@ public final class ManualRunAssembly implements RunAssembly {
         this.extraListener = extraListener;
         this.sandbox = sandbox;
         this.hostGitPush = hostGitPush;
+        this.pipelineSource = pipelineSource;
     }
 
     /**
@@ -127,7 +135,8 @@ public final class ManualRunAssembly implements RunAssembly {
                 sandboxProperties,
                 null,
                 null,
-                UnaryOperator.identity());
+                UnaryOperator.identity(),
+                null);
     }
 
     /**
@@ -139,14 +148,15 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withExtraListener(EngineEventListener listener) {
-        return copyWith(listener, sandbox, hostGitPush);
+        return copyWith(listener, sandbox, hostGitPush, pipelineSource);
     }
 
-    /** Shared copy construction: collaborators carried over, the three optional seams supplied. */
+    /** Shared copy construction: collaborators carried over, the four optional seams supplied. */
     private ManualRunAssembly copyWith(
             @Nullable EngineEventListener listener,
             @Nullable SandboxRunPieces pieces,
-            UnaryOperator<RoundEnvironmentSource> decoration) {
+            UnaryOperator<RoundEnvironmentSource> decoration,
+            @Nullable PipelineSource source) {
         return new ManualRunAssembly(
                 systemConsoleIO,
                 filesExistCheckRunner,
@@ -159,7 +169,8 @@ public final class ManualRunAssembly implements RunAssembly {
                 sandboxProperties,
                 listener,
                 pieces,
-                decoration);
+                decoration,
+                source);
     }
 
     /**
@@ -175,7 +186,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withSandbox(SandboxRunPieces pieces) {
-        return copyWith(extraListener, pieces, hostGitPush);
+        return copyWith(extraListener, pieces, hostGitPush, pipelineSource);
     }
 
     /**
@@ -190,7 +201,44 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withHostGitPush(UnaryOperator<RoundEnvironmentSource> decoration) {
-        return copyWith(extraListener, sandbox, decoration);
+        return copyWith(extraListener, sandbox, decoration, pipelineSource);
+    }
+
+    /**
+     * Returns a copy of this assembly whose runs read their task tier through {@code source}
+     * (FR13, design D14 of add-base-ref-resolution); see {@link RunAssembly#withPipelineSource}.
+     *
+     * @param source where a task's law is read from by binding; never null
+     * @return a new assembly identical but for the attached source; never null
+     */
+    @Override
+    public ManualRunAssembly withPipelineSource(PipelineSource source) {
+        return copyWith(extraListener, sandbox, hostGitPush, source);
+    }
+
+    /**
+     * Reads one task's tier of the law through the attached source; see {@link
+     * RunAssembly#bindTaskTier}. Unattached is a wiring fault of the invocation, not a per-task
+     * condition, so it refuses loudly instead of reading anything.
+     */
+    @Override
+    public BoundTaskTier bindTaskTier(LawBinding lawBinding) throws IOException {
+        if (pipelineSource == null) {
+            throw new IllegalStateException(
+                    "no PipelineSource attached to this assembly: take and serve attach the one their"
+                            + " startup definition came from before any task tier is read");
+        }
+        return pipelineSource.bindTaskTier(lawBinding);
+    }
+
+    /**
+     * Peels one law binding to its commit; see {@link RunAssembly#lawCommitOf}. Uses the same
+     * {@link RunLaw} opening every assembled run uses, so the manual tier's branch start point and
+     * its frozen law are one commit by construction (FR15, D12 of add-base-ref-resolution).
+     */
+    @Override
+    public @Nullable ObjectId lawCommitOf(LawBinding lawBinding) {
+        return RunLaw.open(lawBinding).lawCommit();
     }
 
     /**
@@ -208,7 +256,7 @@ public final class ManualRunAssembly implements RunAssembly {
             RunArguments.InteractiveMode interactiveMode,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
-            Path lawSourceRoot) {
+            LawBinding lawBinding) {
         return RunAssembler.assemble(
                 this,
                 definition,
@@ -217,17 +265,18 @@ public final class ManualRunAssembly implements RunAssembly {
                 interactiveMode,
                 attemptPersistence,
                 credentialEnvVarsToScrub,
-                lawSourceRoot);
+                lawBinding);
     }
 
     /**
      * Selects and pin-guards the run's {@link ExternalCheckClient}. Delegated to {@link
-     * RunAssembler#externalCheckClient} for file size; package-private testing seam: specs inject a
+     * CheckProviderWiring#externalCheckClient}; package-private testing seam: specs inject a
      * {@code registry} of hand-built providers over a fake secrets provider.
      */
     ExternalCheckClient externalCheckClient(
-            DialogConsole console, Path lawSourceRoot, Map<String, CheckClientFactory> registry) {
-        return RunAssembler.externalCheckClient(this, console, lawSourceRoot, registry, CheckRunContext.none());
+            DialogConsole console, LawBinding lawBinding, Map<String, CheckClientFactory> registry) {
+        return CheckProviderWiring.externalCheckClient(
+                this, console, RunLaw.open(lawBinding), registry, CheckRunContext.none());
     }
 
     /**

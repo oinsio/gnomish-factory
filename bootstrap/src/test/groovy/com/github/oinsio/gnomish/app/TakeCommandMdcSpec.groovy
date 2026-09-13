@@ -59,6 +59,9 @@ instructions: stages/build/instructions.md
 advancement: auto
 ''')
         commitAll(projectDir)
+        // FR5, FR13 of add-base-ref-resolution: a real take startup/fresh-claim resolves and
+        // refreshes its base against a real 'origin' remote, never the clone's local HEAD.
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
         // FR6, D5 of add-factory-serve: TakeBareAuto reads the open-front count unconditionally now
         // (FeedPolicy snapshot + OpenFrontGate per-claim re-check); default to no open fronts so
@@ -80,6 +83,10 @@ tracker:
         Files.writeString(
                 projectDir.resolve('.gnomish/config.yaml'),
                 "schemaVersion: \"1\"\nautonomy:\n  attemptLimit: 3\n$trackerSection")
+        // FR13, D14 of add-base-ref-resolution: a real take startup reads its definition from git
+        // objects at origin's refreshed tip, never from the checkout.
+        commitAll(projectDir, 'config')
+        pushOrigin(projectDir)
     }
 
     private TakeCommand newCommand(Map<String, TrackerAdapterFactory> registry) {

@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
@@ -54,7 +55,10 @@ class ServeCommandSpec extends Specification implements AppAssemblyFixture, Bare
     Tracker tracker = Mock()
 
     def setup() {
-        projectDir = tempDir.resolve('project')
+        // A real git repo with a real 'origin' (FR5, FR13 of add-base-ref-resolution): serve's own
+        // startup resolves and refreshes its base against origin's default branch before it can
+        // load a definition at all, never from a bare directory or the clone's local HEAD.
+        projectDir = initWorkingRepo(tempDir, 'project')
         Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
         Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
         Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
@@ -66,6 +70,8 @@ executor:
 instructions: stages/build/instructions.md
 advancement: auto
 ''')
+        commitAll(projectDir, 'init')
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
         homeDir = tempDir.resolve('home')
     }
@@ -74,6 +80,10 @@ advancement: auto
         Files.writeString(
                 projectDir.resolve('.gnomish/config.yaml'),
                 "schemaVersion: \"1\"\nautonomy:\n  attemptLimit: 3\n$trackerSection")
+        // FR13, D14 of add-base-ref-resolution: a real serve startup reads its definition from git
+        // objects at origin's refreshed tip, never from the checkout.
+        commitAll(projectDir, 'config')
+        pushOrigin(projectDir)
     }
 
     private static final String GITHUB_TRACKER_SECTION = '''
@@ -105,20 +115,10 @@ tracker:
         return captured.toString('UTF-8')
     }
 
+    // Kept in sync with com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory:
+    // this is the same "fixed tracker, expandRef unsupported" fixture other specs use directly.
     private static TrackerAdapterFactory factoryReturning(Tracker t) {
-        new TrackerAdapterFactory() {
-                    String type() {
-                        'github'
-                    }
-
-                    Tracker create(SecretsProvider secrets, TrackerConfig config, String instanceId) {
-                        t
-                    }
-
-                    TaskRef expandRef(TrackerConfig config, String rawRef) {
-                        throw new UnsupportedOperationException('not used by this fixture')
-                    }
-                }
+        new FixedTrackerAdapterFactory({ t })
     }
 
     private static TrackerAdapterFactory factoryThrowingOnCreate(RuntimeException failure) {
@@ -155,7 +155,7 @@ tracker:
                 homeDir,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(0, null, null, null, null, null, null),
+                new ServeProperties(0, null, null, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 registry,
@@ -371,9 +371,7 @@ tracker:
     // SystemClock, out of scope for this file to change), so this drives a real `git worktree
     // add`/`git worktree remove --force` round trip and polls for the directory's disappearance.
     def "the worktree janitor is actually started and disposes an aged unheld worktree on startup"() {
-        given: 'projectDir is a real git repo with one commit, and a registered, aged worktree'
-        initWorkingRepo(tempDir, 'project')
-        commitAll(projectDir, 'init')
+        given: 'projectDir is a real git repo with one commit (from setup()), and a registered, aged worktree'
         def worktreePath = worktreesRoot.resolve('project').resolve('aged-task')
         Files.createDirectories(worktreePath.parent)
         addWorktree(projectDir, worktreePath, 'task/aged-task')
@@ -395,7 +393,7 @@ tracker:
                 homeDir,
                 'taskId',
                 testProperties(instanceName: INSTANCE_NAME),
-                new ServeProperties(0, null, null, Duration.ofMillis(1), null, null, null),
+                new ServeProperties(0, null, null, Duration.ofMillis(1), null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: factory],

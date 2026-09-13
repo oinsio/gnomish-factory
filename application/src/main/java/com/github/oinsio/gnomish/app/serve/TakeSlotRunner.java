@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.RunArguments;
 import com.github.oinsio.gnomish.app.RunAssembly;
 import com.github.oinsio.gnomish.app.TakeClaimAndWork;
 import com.github.oinsio.gnomish.app.TakeClaimAndWorkFactory;
+import com.github.oinsio.gnomish.app.TrustedBaseContext;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
@@ -49,6 +50,15 @@ import org.slf4j.MDC;
  * #run(TaskRef)}: {@link FeedAutomaton} installs no uncaught-exception handler on its virtual
  * thread. This class catches every {@link Throwable} here, hands it to {@link SlotOutcomeLog} and
  * swallows it — a failed slot must not take down the daemon. Implements FR1, M2 of add-factory-serve.
+ *
+ * <p><b>Remote outage gate (task 7.3 of add-base-ref-resolution, FR14).</b> The slot signals the
+ * shared {@link RemoteOutageGate} from its base reads themselves, not from its terminal {@link
+ * TakeResult}: the {@link com.github.oinsio.gnomish.app.port.git.BaseRefGit} inside the {@link
+ * TaskGit} handed to {@link TakeClaimAndWorkFactory#forSlot} is wrapped in {@link
+ * RemoteOutageSignalingBaseRefGit}, so an outage opens the gate and a refresh confirms recovery at
+ * the instant either happens — a terminal result arrives hours after the refresh it implies (see
+ * that class for the stale-signal defect this closes). Opening the gate never touches an in-flight
+ * slot: it only changes what the NEXT feed cycle's {@link FeedCycle#claimOrAbandon} does.
  */
 public final class TakeSlotRunner implements SlotRunner {
 
@@ -82,6 +92,12 @@ public final class TakeSlotRunner implements SlotRunner {
      * @param instanceId this factory instance's identity; never null
      * @param epochs this instance's tenure record, read by the routing point for the repair line it
      *     leaves on a non-clean pickup (NFR-O1 of harden-task-branch-contract); never null
+     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
+     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
+     * @param remoteOutageGate the remote outage gate every base read of this slot reports to
+     *     through {@link RemoteOutageSignalingBaseRefGit} (FR14, task 7.3 of
+     *     add-base-ref-resolution) — the SAME instance the daemon's {@link FeedAutomaton}
+     *     consults; never null
      */
     public TakeSlotRunner(
             RunAssembly assembly,
@@ -98,10 +114,12 @@ public final class TakeSlotRunner implements SlotRunner {
             Tracker tracker,
             InstanceId instanceId,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase,
+            RemoteOutageGate remoteOutageGate) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
-                git,
+                git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), remoteOutageGate)),
                 worktreesRoot,
                 taskIdMdcKey,
                 abortHandler,
@@ -110,7 +128,8 @@ public final class TakeSlotRunner implements SlotRunner {
                 heartbeat,
                 claimLossFlag,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
         this.cloneDir = cloneDir;
         this.definition = definition;
         this.tracker = tracker;

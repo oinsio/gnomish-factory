@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
+import com.github.oinsio.gnomish.adapter.git.GitBaseRefs;
+import com.github.oinsio.gnomish.adapter.git.GitInfrastructureRetry;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskBranches;
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore;
@@ -122,7 +124,10 @@ public class ManualRunConfiguration {
                 // RunAssembly.withHostGitPush, and the selector applies it to the host rounds.
                 // The operator is stateless; per-task state (the shared poll suppressor) lives
                 // in the MidRoundPushRounds instance each application creates.
-                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner));
+                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner),
+                // FR5, FR6 of add-base-ref-resolution: default-branch discovery and the narrow base
+                // refresh, under the production git infrastructure retry.
+                new GitBaseRefs(gitProcessRunner, GitInfrastructureRetry.system()));
     }
 
     /**

@@ -26,6 +26,15 @@ import java.util.List;
  * terminal-boundary handling; {@code Escalated}/{@code Paused} are never observed here, since the
  * loop resolves them in-process via its own dialogs first.
  *
+ * <p>Kept in sync with {@link ContainerResumeOutcomes}: both implement the same four outcome arms
+ * dispatched by {@link GitResumeRunner}/{@link ContainerResumeRunner} — {@code null} salvages the
+ * interrupted round's leftovers (or honours {@code --discard-work}) before continuing, {@code
+ * escalated} runs the same {@link EscalationResumeDialog} and appends any resulting decision
+ * before continuing, {@code paused} prints the same checkpoint prompt before continuing, and
+ * {@code completed} builds and prints the same status report with no further engine run —
+ * differing only in medium (a git worktree here vs. the in-box sandbox environment there).
+ * Adding or re-meaning an arm on one side alone is the divergence this pair guards against (UX2).
+ *
  * <p>Implements FR5, FR8, UX2 of add-git-workflow.
  */
 final class GitResumeContinuation {
@@ -161,7 +170,14 @@ final class GitResumeContinuation {
                 // Git-mode host resume attaches the same mid-round push decoration the fresh
                 // run does (FR1, FR3, design D3 of wire-host-mid-round-push).
                 assembly.withHostGitPush(git.midRoundPush())
-                        .assemble(definition, context, state, interactiveMode, persistence, List.of(), cloneDir);
+                        .assemble(
+                                definition,
+                                context,
+                                state,
+                                interactiveMode,
+                                persistence,
+                                List.of(),
+                                ManualResumeLawBinding.of(cloneDir, bootstrap.pin(), bootstrap.baseCommit()));
 
         try {
             assembled.loop().run(definition, context, state, workspace, assembled.ports());

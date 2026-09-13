@@ -23,6 +23,20 @@ class ForwardingDirtyNotifierSpec extends Specification {
         noExceptionThrown()
     }
 
+    def "isBound() reports the NOOP default before bind() and the rebind after it"() {
+        given:
+        def notifier = new ForwardingDirtyNotifier()
+
+        expect:
+        !notifier.isBound()
+
+        when:
+        notifier.bind({ -> } as DirtyNotifier)
+
+        then:
+        notifier.isBound()
+    }
+
     def "markDirty() after bind() forwards to the bound delegate"() {
         given:
         def notifier = new ForwardingDirtyNotifier()

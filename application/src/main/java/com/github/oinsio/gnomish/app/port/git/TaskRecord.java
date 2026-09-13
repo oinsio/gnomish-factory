@@ -29,6 +29,9 @@ import org.jspecify.annotations.Nullable;
  * @param trackerWritePending {@code true} when a recorded terminal park's tracker write is still
  *     outstanding — the durable "tracker-write pending" marker reconcile-on-resume reads (FR10 of
  *     add-claim-heartbeat)
+ * @param pin the durable base pin — the ref name, its namespace and the tier that produced it, or
+ *     {@link BasePin#UNPINNED} for a legacy {@code baseCommit}-only document (FR7 of
+ *     add-base-ref-resolution)
  */
 public record TaskRecord(
         TaskContext context,
@@ -36,4 +39,5 @@ public record TaskRecord(
         Instant createdAt,
         @Nullable RecordedOutcome outcome,
         @Nullable EscalationReport lastEscalation,
-        boolean trackerWritePending) {}
+        boolean trackerWritePending,
+        BasePin pin) {}

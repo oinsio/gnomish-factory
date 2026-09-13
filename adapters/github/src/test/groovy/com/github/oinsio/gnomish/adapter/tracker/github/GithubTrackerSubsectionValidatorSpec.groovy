@@ -84,7 +84,7 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
 
     def "missing api-url and repo both aggregate as located errors"() {
         given:
-        def subsection = [:]
+        Map<String, Object> subsection = [:]
 
         when:
         def errors = validator.validate(FILE, WHERE, subsection)
@@ -270,5 +270,46 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
             new ConfigError(FILE, 'tracker.github.labels.bogus2',
             "unknown label key 'bogus2'; expected one of ready, working, needs-human, delivered")
         ] as Set
+    }
+
+    // FR3 of add-base-ref-resolution: the designators map is graded on this same seam, and its
+    //     problems aggregate with every other subsection problem in one pass
+    def "a malformed designator rule aggregates with the other subsection problems"() {
+        given:
+        def subsection = [
+            repo: 'acme/widgets',
+            designators: [base: 'base:.+']
+        ]
+
+        when:
+        def errors = validator.validate(FILE, WHERE, subsection)
+
+        then:
+        errors*.where() as Set == [
+            'tracker.github.api-url',
+            'tracker.github.designators.base'
+        ] as Set
+    }
+
+    // FR3: a well-formed designators map is accepted alongside the mandatory keys
+    def "a well-formed designators map loads clean"() {
+        given:
+        def subsection = [
+            'api-url': 'https://api.github.com',
+            repo: 'acme/widgets',
+            designators: [base: 'base:(.+)']
+        ]
+
+        expect:
+        validator.validate(FILE, WHERE, subsection).isEmpty()
+    }
+
+    // FR3: a subsection with no designators map is the ordinary case and grades clean
+    def "an absent designators map is not a problem"() {
+        given:
+        def subsection = ['api-url': 'https://api.github.com', repo: 'acme/widgets']
+
+        expect:
+        validator.validate(FILE, WHERE, subsection).isEmpty()
     }
 }

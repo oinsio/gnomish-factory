@@ -14,8 +14,10 @@ import spock.lang.TempDir
 /**
  * Path traversal in referenced files (task 6.4): ReferencedFiles delegates the
  * resolve-within-root decision to PathSafety, so a reference that escapes the .gnomish/
- * root — via {@code ../}, via an absolute path, or via a symlink whose real target lies
- * outside — is reported as a located traversal error instead of being read.
+ * root — via {@code ../}, via an absolute path, or via a symlink entry, whatever its target
+ * (revised by D12 of add-base-ref-resolution: a git tree has no {@code realpath}, so a symlink
+ * that would be law in a working tree and not in a git tree is refused in both) — is reported as
+ * a located traversal error instead of being read.
  *
  * <p>Traversal is checked first: an escaping reference never has its existence checked,
  * so a single reference never yields both a traversal and a "does not exist" error. The
@@ -96,15 +98,18 @@ class ReferencedFilesTraversalSpec extends Specification implements GnomishTreeW
     }
 
     @IgnoreIf({ !PathSafetySpec.symlinksSupported() })
-    def "a symlink whose target stays within the root is allowed and existence-checked (NFR-S2)"() {
+    def "a symlink whose target stays within the root is refused all the same (NFR-S2, D12)"() {
         given: 'a real file inside the root and a symlink inside the root pointing at it'
         Files.createDirectories(root.resolve('stages/plan'))
         Path realFile = Files.writeString(root.resolve('stages/plan/real.md'), 'ok\n')
         Files.createSymbolicLink(root.resolve('stages/plan/instructions.md'), realFile)
 
-        expect: 'a within-root symlink is not an escape and its target exists — no error'
+        expect: 'the git-objects law source cannot follow a symlink at all, so neither medium does'
         ReferencedFiles.check(root, [
             stage('plan', 'stages/plan/instructions.md')
-        ]).isEmpty()
+        ]) ==
+        [
+            escapingInstructions('plan', 'stages/plan/instructions.md')
+        ]
     }
 }

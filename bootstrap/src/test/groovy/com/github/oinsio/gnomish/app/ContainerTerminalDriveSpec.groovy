@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -12,6 +14,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
@@ -36,16 +39,16 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
     @TempDir
     Path tempDir
 
-    def gitRunner = new GitProcessRunner()
     def docker = new ScriptedSandboxDocker()
     def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     Path cloneDir
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
-        gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        gitOutput(cloneDir, 'add', '.gnomish/instructions.md')
+        gitOutput(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
     }
 
     private static StageDefinition stage() {
@@ -68,7 +71,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         def environments = docker.environments(KEY, cloneDir, sandbox, tempDir.resolve('guard'))
         def support = new ContainerRunSupport(new GitProcessRunner(), cloneDir, 'T-ABORT', environments, segments, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         def context = new TaskContext('T-ABORT', 'title', 'body', List.<Decision> of())
-        support.taskRepository().createTask(context, 'HEAD', TaskState.atStageStart('build'))
+        support.taskRepository().createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def assembly = newAssembly()
         def originalErr = System.err
         System.err = new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8')
@@ -76,7 +79,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         when:
         ContainerTerminalDrive.run(
                 assembly, support, definition, context, TaskState.atStageStart('build'),
-                RunArguments.InteractiveMode.ALL, cloneDir, null)
+                RunArguments.InteractiveMode.ALL, LawBinding.atRevision(cloneDir, GitObjects.HEAD), null)
 
         then: 'the durability break escapes as AbortedException, carrying the outcome'
         def e = thrown(AbortedException)

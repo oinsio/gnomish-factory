@@ -39,7 +39,10 @@ final class RunExceptionReporting {
     static void run(ThrowingAction action, Logger log) throws IOException, InterruptedException {
         try {
             action.run();
-        } catch (UsageException | PipelineLoadFailedException | InternalErrorException ex) {
+        } catch (UsageException
+                | PipelineLoadFailedException
+                | InternalErrorException
+                | DefaultBranchUnboundException ex) {
             System.err.println(ex.getMessage());
             throw ex;
         } catch (InputExhaustedException | ConsoleClosedException ex) {

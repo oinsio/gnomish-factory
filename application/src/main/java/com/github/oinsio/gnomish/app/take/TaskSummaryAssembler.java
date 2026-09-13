@@ -12,9 +12,9 @@ import org.jspecify.annotations.Nullable;
  * {@code AnchorLog.taskSummary} renders.
  *
  * <p>Only the four variants carrying a {@code finalState} map to a summary. {@link
- * TakeResult.EmptyQueue} and {@link TakeResult.Skipped} map to {@code null} — no engine run
- * happened, so there is no task to summarize, the same boundary {@code
- * TaskOutcomeLineAssembler} draws for the ledger.
+ * TakeResult.EmptyQueue}, {@link TakeResult.Skipped} and {@link TakeResult.InfrastructureUnavailable}
+ * map to {@code null} — no engine run happened, so there is no task to summarize, the same boundary
+ * {@code TaskOutcomeLineAssembler} draws for the ledger.
  *
  * <p>This is deliberately the <em>shared</em> fact extraction rather than a second one:
  * {@code serveobservability.TaskOutcomeLineAssembler} builds the ledger's {@code taskOutcome}
@@ -42,7 +42,8 @@ public final class TaskSummaryAssembler {
      *
      * @param result the terminal result of a claimed-and-worked task; never null
      * @param wall how long the work took; never negative
-     * @return the summary facts, or {@code null} for {@code EmptyQueue}/{@code Skipped}
+     * @return the summary facts, or {@code null} for {@code EmptyQueue}/{@code Skipped}/{@code
+     *     InfrastructureUnavailable}
      */
     public static @Nullable TaskSummary assemble(TakeResult result, Duration wall) {
         return switch (result) {
@@ -58,6 +59,7 @@ public final class TaskSummaryAssembler {
             case TakeResult.Revoked revoked -> summary(TaskSummary.Outcome.REVOKED, null, revoked.finalState(), wall);
             case TakeResult.EmptyQueue ignored -> null;
             case TakeResult.Skipped ignored -> null;
+            case TakeResult.InfrastructureUnavailable ignored -> null;
         };
     }
 

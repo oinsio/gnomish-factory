@@ -73,5 +73,15 @@
   "tracker" : {
     "lastSuccessAt" : "2026-08-02T08:59:55Z",
     "consecutiveFailures" : 0
+  },
+  "remote" : {
+    "origin" : {
+      "state" : "closed",
+      "openSince" : null,
+      "lastError" : null,
+      "nextProbeAt" : null,
+      "consecutiveFailures" : 0,
+      "lastSuccessAt" : "2026-08-02T08:59:50Z"
+    }
   }
 }

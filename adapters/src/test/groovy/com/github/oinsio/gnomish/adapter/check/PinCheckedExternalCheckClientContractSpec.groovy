@@ -31,7 +31,7 @@ class PinCheckedExternalCheckClientContractSpec extends ExternalCheckClientContr
                 new ScriptedExternalCheckClient([scriptedStatus(variant)]),
                 ExternalCheckPinContributor.none(),
                 gitObjects,
-                'refs/heads/base')
+                gitObjects.resolveRef('refs/heads/base').orElseThrow())
         def check = new VerifyCheck.External(
                 'ci', 'github', Duration.ofSeconds(1), Duration.ofSeconds(10), VerifyCheck.TimeoutClass.QUALITY)
         Optional.of(guarded.poll(check, new FakeWorkspace()))

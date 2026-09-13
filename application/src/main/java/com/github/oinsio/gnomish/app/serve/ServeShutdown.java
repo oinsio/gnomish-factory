@@ -22,7 +22,10 @@ import org.slf4j.LoggerFactory;
  * existing round-boundary check ({@code RevocationCheckingAttemptPersistence}, consulted after
  * every committed engine round) already reacts to a set flag exactly as FR11 requires: salvage any
  * uncommitted leftovers, best-effort push the branch, post a "work stopped" note carrying the
- * reason, and release the claim — an instant return to {@code Ready}. A round that outlives the
+ * reason, and release the claim. The release itself returns nothing to {@code Ready}: the
+ * working label stays and the reaper restores the queue once the claim is stale (FR15 of
+ * add-tracker-port — the deliberate, fenced immediate return is {@code add-claim-return}'s verb),
+ * so the grace window buys a clean round boundary, not a shorter wait. A round that outlives the
  * grace window is deliberately left alone (design risk note: "most SIGTERM stops send mid-round
  * tasks down the TTL path by design") — this sequence still proceeds to kill the process tree and
  * let the process exit; the existing lease/reaper path (add-claim-heartbeat) recovers that task
@@ -59,7 +62,7 @@ public record ServeShutdown(
      * by a human on the tracker who would otherwise be told the wrong thing about half the stops
      * (task 3.4 of harden-logging-observability).
      */
-    static final String SHUTDOWN_REASON = "daemon shutting down (signal)";
+    public static final String SHUTDOWN_REASON = "daemon shutting down (signal)";
 
     /**
      * @param slotLedger the shared slot ledger whose {@link SlotLedger#occupiedRefs()} names the

@@ -97,6 +97,15 @@ would silently continue on the wrong pipeline.
 
 ## Impact
 
+- **Sequencing (noted 2026-09-13)**: this change adds work to both ends of the
+  fresh-claim pair (`TakeFreshClaim` / `TakeContainerFreshClaim`) and the resume
+  pair (`TakeResumeRunner` / `TakeContainerResumeRunner`), which
+  `introduce-take-order` and `introduce-slot-wiring` restructure first — the
+  static recipes become objects holding the slot wiring, and the per-invocation
+  fields travel as one order. Rebase this change's task text onto those shapes
+  after they land (`introduce-take-order` task 6.2). The routing decision itself
+  is unaffected; where a task says "thread the pipeline name through the
+  fresh-claim recipe", the thread becomes a component of the order.
 - `domain`: `PipelineDefinition` gains a name; task-type value object;
   per-pipeline validation scopes.
 - `application`: selection point after claim in take/serve/run flows (both

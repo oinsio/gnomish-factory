@@ -2,23 +2,30 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
+import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.nio.file.Path;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Creates the task branch as a plain ref — {@code git branch <name> <start-point>}, never {@code
  * checkout -b} — so the clone's own checked-out branch, HEAD, and working tree stay untouched
- * (FR7: "the clone itself is untouched"). The branch's starting point is the clone's current
- * {@code HEAD} by default; an explicit {@code baseRef} (branch, tag, or commit-ish) overrides it.
- * Neither path ever fetches or pulls — updating the clone is the human's job (design D7).
+ * (FR7: "the clone itself is untouched").
+ *
+ * <p><b>The start point is a commit this class never resolves</b> (FR15, design D12 of
+ * add-base-ref-resolution, revised 2026-09-10). It arrives as an {@link ObjectId} the caller
+ * peeled once — the law commit — and the only question left here is whether this repository holds
+ * that object as a commit. No {@code rev-parse} of a base <em>name</em> runs, and none may: git
+ * resolves a bare name through a fixed lookup order (gitrevisions) that reaches a stale local
+ * branch and a planted local tag but never the {@code refs/remotes/origin/<n>} the refresh writes,
+ * so a name here would let the branch start somewhere the frozen law never was. Nothing is ever
+ * fetched or pulled — updating the clone is the human's job (design D7).
  *
  * <p>The returned {@link BranchCreationResult} distinguishes the three possible outcomes rather
  * than throwing, matching {@link GitProcessRunner}'s "expected git-level outcomes are results,
- * not exceptions" idiom: a caller such as the {@code TaskRepository} adapter (task 3.4) needs to
- * branch on "already exists" (re-run with the same taskId) and "base ref didn't resolve" (bad
- * {@code --base}) without wrapping this call in try/catch.
+ * not exceptions" idiom: a caller such as the {@code TaskRepository} adapter needs to branch on
+ * "already exists" (re-run with the same taskId) and "the clone holds no such commit" without
+ * wrapping this call in try/catch.
  *
- * <p>Implements FR2, FR7 of add-git-workflow (design D7).
+ * <p>Implements FR2, FR7 of add-git-workflow (design D7); FR15 of add-base-ref-resolution.
  */
 public final class TaskBranchCreator {
 
@@ -34,20 +41,22 @@ public final class TaskBranchCreator {
      * @param cloneDir the working directory of an existing git clone (the {@code --dir} target)
      * @param taskId the tracker's original taskId; sanitized via {@link
      *     TaskIdSanitizer#branchName}
-     * @param baseRef when non-null, the ref (branch/tag/commit-ish) to branch from instead of the
-     *     clone's current {@code HEAD}; never fetched or pulled, must already resolve locally
-     * @return the outcome: the created branch's base commit SHA, "already exists", or "base ref
-     *     did not resolve"
+     * @param lawCommit the commit to branch from — the caller's single peel; never fetched, never
+     *     re-resolved, only verified to be a commit this repository holds
+     * @return the outcome: the created branch's start commit, "already exists", or "the clone holds
+     *     no such commit"
      * @throws InvalidTaskIdException if {@code taskId} cannot be sanitized into a safe branch name
      */
-    public BranchCreationResult createBranch(Path cloneDir, String taskId, @Nullable String baseRef) {
+    public BranchCreationResult createBranch(Path cloneDir, String taskId, ObjectId lawCommit) {
         String branchName = TaskIdSanitizer.branchName(taskId);
+        String baseCommit = lawCommit.hex();
 
-        GitCommandResult resolve = runner.run(cloneDir, "rev-parse", "--verify", startPoint(baseRef));
-        if (resolve.exitCode() != 0) {
-            return new BranchCreationResult.BaseRefNotResolved(baseRef);
+        // Existence only: the object is already named, so this asks "does this repository hold it,
+        // and is it a commit" and never "what does this string resolve to".
+        GitCommandResult exists = runner.run(cloneDir, "cat-file", "-e", baseCommit + "^{commit}");
+        if (exists.exitCode() != 0) {
+            return new BranchCreationResult.BaseCommitMissing(baseCommit);
         }
-        String baseCommit = resolve.stdout().trim();
 
         GitCommandResult branch = runner.run(cloneDir, "branch", branchName, baseCommit);
         if (branch.exitCode() != 0) {
@@ -55,9 +64,5 @@ public final class TaskBranchCreator {
         }
 
         return new BranchCreationResult.Created(branchName, baseCommit);
-    }
-
-    private static String startPoint(@Nullable String baseRef) {
-        return baseRef != null ? baseRef : "HEAD";
     }
 }

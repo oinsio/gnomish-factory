@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import java.time.LocalDate
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -151,6 +152,36 @@ class LedgerAggregatorSpec extends Specification {
     def "the default window is 7 days"() {
         expect:
         LedgerAggregator.DEFAULT_WINDOW_DAYS == 7
+    }
+
+    // NFR-O3 of add-base-ref-resolution: one remoteOutage line rolls into that day's count and
+    // total blocked duration, and days with none render the zero default.
+    def "one closed outage adds to that day's outage count and duration, other days stay at zero"() {
+        given:
+        writeLedgerFile(TODAY.minusDays(1), [
+            taskOutcomeLine('delivered', [:])
+        ])
+        writeLedgerFile(TODAY, [
+            taskOutcomeLine('delivered', [:]),
+            remoteOutageLine(3_600_000L),
+            remoteOutageLine(1_800_000L)
+        ])
+
+        when:
+        def view = aggregator.aggregate(tempDir, INSTANCE, TODAY, 2)
+
+        then:
+        view.perDay()[0].outageCount() == 0
+        view.perDay()[0].outageDuration() == Duration.ZERO
+        view.perDay()[1].outageCount() == 2
+        view.perDay()[1].outageDuration() == Duration.ofMillis(3_600_000L + 1_800_000L)
+    }
+
+    private static String remoteOutageLine(long durationMillis) {
+        return "{\"version\":1,\"type\":\"remoteOutage\",\"target\":\"origin\"," +
+                "\"openedAt\":\"2026-08-06T00:00:00Z\",\"closedAt\":\"2026-08-06T01:00:00Z\"," +
+                "\"durationMillis\":${durationMillis},\"probeCount\":5,\"releasedClaims\":1," +
+                "\"lastError\":\"boom\"}"
     }
 
     private void writeLedgerFile(LocalDate date, List<String> lines) {

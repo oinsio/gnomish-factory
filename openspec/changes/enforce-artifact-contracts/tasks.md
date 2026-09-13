@@ -11,7 +11,9 @@ Every code task follows TDD (red Spock spec first) and carries traceability comm
       round-trips into the typed model unchanged (FR1)
 - [ ] 1.2 Implement lexical path validation (relative, normalized — no `.`/`..` — not
       absolute, valid `glob:` syntax) as located `ConfigError`s naming the stage manifest
-      and output id, wired into the existing aggregation pass beside the pin-path rule;
+      and output id, reusing the lexical guard of `PathSafety` for the path half and
+      adding only the glob-syntax check, wired into the existing aggregation pass beside
+      the pin-path rule;
       verify with a data-driven spec covering absolute, `..`, `.`, malformed-glob, and
       valid cases (FR2, NFR-S1)
 - [ ] 1.3 Confirm path-less mode is untouched: extend the loader specs to assert a
@@ -54,10 +56,12 @@ Every code task follows TDD (red Spock spec first) and carries traceability comm
 
 ## 4. Git adapter for the port (D2, D4, D5)
 
-- [ ] 4.1 Implement the single git `ArtifactFileSource` adapter (`git ls-tree -r
-      --name-only <tip>` of the task branch tip), constructor-parameterized by repo
-      directory; verify against local bare-repo fixtures listing committed paths only
-      (FR7)
+- [ ] 4.1 Implement the single git `ArtifactFileSource` adapter over `:gitobjects`
+      (`GitObjects.listTree` / a recursive listing added there, typed `TreeEntry` kinds;
+      no second `ls-tree` subprocess seam) of the task branch tip,
+      constructor-parameterized by repo directory; verify against local bare-repo
+      fixtures listing committed paths only, a symlink entry listed and never followed
+      (FR7, NFR-S1)
 - [ ] 4.2 Wire it in both composition roots: host mode over the worktree repo, container
       mode over the factory clone — one class, two wirings, no sync pair (D5); verify via
       the existing mode-parity/composition specs and confirm `grep -rn "Kept in sync

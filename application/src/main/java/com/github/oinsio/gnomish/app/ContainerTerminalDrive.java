@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -34,7 +33,7 @@ final class ContainerTerminalDrive {
             TaskContext context,
             TaskState state,
             RunArguments.InteractiveMode interactiveMode,
-            Path cloneDir,
+            LawBinding lawBinding,
             @Nullable PendingVerification pending) {
         // Runner start prunes objects a dead instance left labelled (FR11, NFR-R2), keeping this
         // task's own environments so a reattaching resume is never swept; no daemon = a no-op.
@@ -44,7 +43,7 @@ final class ContainerTerminalDrive {
         // replaying the container's whole log onto this round (FR5 of fix-denial-report-attachment).
         support.restoreDenials();
         var assembled = assembly.withSandbox(support.pieces(pending))
-                .assemble(definition, context, state, interactiveMode, support.persistence(), List.of(), cloneDir);
+                .assemble(definition, context, state, interactiveMode, support.persistence(), List.of(), lawBinding);
 
         boolean completed = false;
         try {

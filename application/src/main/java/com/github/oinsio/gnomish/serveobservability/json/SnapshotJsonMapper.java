@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.serveobservability.JanitorVital;
 import com.github.oinsio.gnomish.serveobservability.KeptEnvironmentEntry;
 import com.github.oinsio.gnomish.serveobservability.LifecycleState;
 import com.github.oinsio.gnomish.serveobservability.ReaperVital;
+import com.github.oinsio.gnomish.serveobservability.RemoteHealth;
 import com.github.oinsio.gnomish.serveobservability.SlotEntry;
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
@@ -18,7 +19,9 @@ import com.github.oinsio.gnomish.serveobservability.SweepVital;
 import com.github.oinsio.gnomish.serveobservability.TrackerHealth;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -73,7 +76,8 @@ public final class SnapshotJsonMapper {
                 toFeed(snapshot.feed()),
                 toSlots(snapshot.slots()),
                 toVitals(snapshot.vitals()),
-                toTracker(snapshot.tracker()));
+                toTracker(snapshot.tracker()),
+                toRemote(snapshot.remote()));
     }
 
     private static LifecycleDto toLifecycle(LifecycleState state) {
@@ -180,5 +184,22 @@ public final class SnapshotJsonMapper {
 
     private static @Nullable String toInstant(@Nullable Instant instant) {
         return instant == null ? null : instant.toString();
+    }
+
+    /** NFR-O3, UX6 of add-base-ref-resolution: one entry per remote target, keyed by target. */
+    private static Map<String, RemoteDto> toRemote(Map<String, RemoteHealth> remote) {
+        Map<String, RemoteDto> result = new LinkedHashMap<>();
+        remote.forEach((target, health) -> result.put(target, toRemoteEntry(health)));
+        return result;
+    }
+
+    private static RemoteDto toRemoteEntry(RemoteHealth health) {
+        return new RemoteDto(
+                health.open() ? "open" : "closed",
+                toInstant(health.openSince()),
+                health.lastError(),
+                toInstant(health.nextProbeAt()),
+                health.consecutiveFailures(),
+                toInstant(health.lastSuccessAt()));
     }
 }

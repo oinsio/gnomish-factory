@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.serveobservability.JanitorVital
 import com.github.oinsio.gnomish.serveobservability.KeptEnvironmentEntry
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
+import com.github.oinsio.gnomish.serveobservability.RemoteHealth
 import com.github.oinsio.gnomish.serveobservability.SlotEntry
 import com.github.oinsio.gnomish.serveobservability.SlotsSnapshot
 import com.github.oinsio.gnomish.serveobservability.Snapshot
@@ -196,17 +197,39 @@ class SnapshotJsonMapperSpec extends Specification {
         def neverSucceeded = new Snapshot(
                 snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
                 snapshot.lifecycle(), snapshot.feed(), snapshot.slots(), snapshot.vitals(),
-                new TrackerHealth(null, 7))
+                new TrackerHealth(null, 7), [:])
 
         expect:
         mapper.toDto(neverSucceeded).tracker() == new TrackerDto(null, 7)
+    }
+
+    def "remote section renders one entry per target, keyed by target"() {
+        expect:
+        mapper.toDto(referenceSnapshot()).remote() ==
+                [origin: new RemoteDto("closed", null, null, null, 0, "2026-08-02T08:59:50Z")]
+    }
+
+    def "an open gate renders openSince, lastError, and nextProbeAt"() {
+        given:
+        def snapshot = referenceSnapshot()
+        def open = [origin: new RemoteHealth(
+            "origin", true, Instant.parse("2026-08-02T08:00:00Z"), "connection refused",
+            Instant.parse("2026-08-02T08:05:00Z"), 3, Instant.parse("2026-08-02T07:00:00Z"))]
+        def replacement = new Snapshot(
+                snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
+                snapshot.lifecycle(), snapshot.feed(), snapshot.slots(), snapshot.vitals(), snapshot.tracker(), open)
+
+        expect:
+        mapper.toDto(replacement).remote() == [origin: new RemoteDto(
+            "open", "2026-08-02T08:00:00Z", "connection refused", "2026-08-02T08:05:00Z", 3,
+            "2026-08-02T07:00:00Z")]
     }
 
     private static Snapshot snapshotWithLifecycle(LifecycleState lifecycle) {
         def snapshot = referenceSnapshot()
         return new Snapshot(
                 snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
-                lifecycle, snapshot.feed(), snapshot.slots(), snapshot.vitals(), snapshot.tracker())
+                lifecycle, snapshot.feed(), snapshot.slots(), snapshot.vitals(), snapshot.tracker(), [:])
     }
 
     private static Snapshot snapshotWithFeedPhase(FeedPhase phase) {
@@ -215,7 +238,7 @@ class SnapshotJsonMapperSpec extends Specification {
         def replacement = new FeedSnapshot(phase, feed.since(), feed.lastPollAt(), feed.openFronts(), feed.wipLimit())
         return new Snapshot(
                 snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
-                snapshot.lifecycle(), replacement, snapshot.slots(), snapshot.vitals(), snapshot.tracker())
+                snapshot.lifecycle(), replacement, snapshot.slots(), snapshot.vitals(), snapshot.tracker(), [:])
     }
 
     private static Snapshot snapshotWithHeartbeatState(HeartbeatState state) {
@@ -230,7 +253,7 @@ class SnapshotJsonMapperSpec extends Specification {
     private static Snapshot withVitals(Snapshot snapshot, VitalsSnapshot vitals) {
         return new Snapshot(
                 snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
-                snapshot.lifecycle(), snapshot.feed(), snapshot.slots(), vitals, snapshot.tracker())
+                snapshot.lifecycle(), snapshot.feed(), snapshot.slots(), vitals, snapshot.tracker(), [:])
     }
 
     /**
@@ -266,6 +289,8 @@ class SnapshotJsonMapperSpec extends Specification {
                         2,
                         0))
         def tracker = new TrackerHealth(Instant.parse("2026-08-02T08:59:55Z"), 0)
+        def remote = [origin: new RemoteHealth(
+            "origin", false, null, null, null, 0, Instant.parse("2026-08-02T08:59:50Z"))]
 
         return new Snapshot(
                 1,
@@ -276,6 +301,6 @@ class SnapshotJsonMapperSpec extends Specification {
                 feed,
                 slots,
                 vitals,
-                tracker)
+                tracker, remote)
     }
 }

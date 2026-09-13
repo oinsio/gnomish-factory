@@ -75,7 +75,8 @@ exec sh '${scriptPath}' "\$@"
     // and the resumed CLI invocation's actual stdin prompt carrying the operator's answer verbatim.
     def "an agent-raised decision escalates as a dialog, the operator's answer resumes the stage, and the resumed CLI round's prompt carries the decision verbatim"() {
         given: 'instructions.md the stage control file reads, and a captured-stdin file the fake will append to'
-        Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
+        Files.createDirectories(workspaceDir.resolve('.gnomish'))
+        Files.writeString(workspaceDir.resolve('.gnomish/instructions.md'), 'Do the thing.')
         def captureFile = File.createTempFile('fake-agent-stdin', '.log')
         captureFile.deleteOnExit()
 
@@ -89,7 +90,7 @@ exec sh '${scriptPath}' "\$@"
         def context = new TaskContext('task-1', 'title', 'body', List.<Decision> of())
         def initialState = TaskState.atStageStart('build')
         def run = assembly.assemble(pipeline(), context, initialState, RunArguments.InteractiveMode.NONE,
-                new InMemoryAttemptPersistence(), [], workspaceDir)
+                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
 
         when:
         run.loop().run(pipeline(), context, initialState, new DirectoryWorkspace(workspaceDir), run.ports())

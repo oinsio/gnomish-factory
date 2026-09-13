@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -32,21 +33,13 @@ import spock.lang.TempDir
  * BranchStateReaderSpec}/{@code StatusCommandSpec}'s adapter-layer convention — no stubbing of the
  * branch reader.
  */
-class StatusInterruptedHonestySpec extends Specification implements BareGitRepoFixture, StdoutCaptureFixture {
+class StatusInterruptedHonestySpec extends Specification implements SeededCloneFixture, StdoutCaptureFixture {
 
     @TempDir
     Path tempDir
 
-    def runner = new GitProcessRunner()
-    Path cloneDir
-    Path worktreesRoot
-
     def setup() {
-        cloneDir = initWorkingRepo(tempDir, 'clone')
-        new File(cloneDir.toFile(), 'a.txt').text = 'first'
-        runner.run(cloneDir, 'add', 'a.txt')
-        runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        worktreesRoot = tempDir.resolve('worktrees')
+        setupSeededClone()
     }
 
     private StatusCommand newCommand() {
@@ -57,7 +50,7 @@ class StatusInterruptedHonestySpec extends Specification implements BareGitRepoF
      * the branch state a process leaves behind if it dies right after the round commit. */
     private void recordInterruptedRound(String taskId, String stage = 'implement', int round = 0) {
         new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-                .createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), null, TaskState.atStageStart('verify'))
+                .createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('verify'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)
         def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [

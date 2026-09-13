@@ -17,7 +17,7 @@ import spock.lang.Specification
  * <p>Two independent checks per leaf, both must agree:
  * <ol>
  *   <li>the field's key (last path segment) is on an explicit allow-list
- *       mapping it to a {@link FieldCategory} — new fields MUST be added
+ *       mapping it to a {@link FieldInventorySpec.FieldCategory} — new fields MUST be added
  *       here deliberately, so an unreviewed field (e.g. a future {@code
  *       notes} or {@code prompt} string) fails closed instead of silently
  *       passing;
@@ -108,6 +108,16 @@ class FieldInventorySpec extends Specification {
         output : FieldCategory.TOKEN_COUNT,
         cacheCreation: FieldCategory.TOKEN_COUNT,
         cacheRead : FieldCategory.TOKEN_COUNT,
+        // remote outage gate (add-base-ref-resolution, task 7.4): snapshot section + ledger line
+        target : FieldCategory.IDENTIFIER,
+        openSince : FieldCategory.TIMESTAMP,
+        lastError : FieldCategory.SHORT_PHRASE,
+        nextProbeAt : FieldCategory.TIMESTAMP,
+        openedAt : FieldCategory.TIMESTAMP,
+        closedAt : FieldCategory.TIMESTAMP,
+        durationMillis : FieldCategory.COUNTER,
+        probeCount : FieldCategory.COUNTER,
+        releasedClaims : FieldCategory.COUNTER,
     ]
 
     /**
@@ -135,6 +145,13 @@ class FieldInventorySpec extends Specification {
     /** {@code tokensByModel}'s own children are dynamic model-id keys, not on the allow-list by name. */
     static final String TOKENS_BY_MODEL_KEY = 'tokensByModel'
 
+    /**
+     * {@code remote}'s own children are dynamic target-name keys (add-base-ref-resolution, task
+     * 7.4) — unlike {@code tokensByModel}'s entries, each target's own value is a normal object
+     * whose fields (state, openSince, ...) are checked via the allow-list as usual.
+     */
+    static final String REMOTE_KEY = 'remote'
+
     static final ISO_INSTANT = ~/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
     static final SHORT_TOKEN = ~/^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}$/
     static final SHORT_PHRASE = ~/^[A-Za-z0-9][A-Za-z0-9._\-, ]{0,79}$/
@@ -158,7 +175,7 @@ class FieldInventorySpec extends Specification {
             def root = LedgerJson.mapper().readTree(line)
             assertSubtree('$', root, false)
         }
-        lines.size() == 7
+        lines.size() == 8
     }
 
     /**
@@ -170,15 +187,23 @@ class FieldInventorySpec extends Specification {
      */
     private static boolean assertSubtree(String path, JsonNode node, boolean underTokensByModel) {
         if (node.isObject()) {
-            node.fields().each { entry ->
+            node.properties().each { entry ->
                 def key = entry.key
                 def childPath = "${path}.${key}"
-                boolean childUnderModel = underTokensByModel
                 if (key == TOKENS_BY_MODEL_KEY) {
                     // children of tokensByModel are dynamic model-id keys
-                    node.get(key).fields().each { modelEntry ->
+                    node.get(key).properties().each { modelEntry ->
                         assertIdentifier("${childPath}.${modelEntry.key}", modelEntry.key)
                         assertSubtree("${childPath}.${modelEntry.key}", modelEntry.value, true)
+                    }
+                    return
+                }
+                if (key == REMOTE_KEY) {
+                    // children of remote are dynamic target-name keys; each target's own value
+                    // walks as a normal object against the allow-list (task 7.4).
+                    node.get(key).properties().each { targetEntry ->
+                        assertIdentifier("${childPath}.${targetEntry.key}", targetEntry.key)
+                        assertSubtree("${childPath}.${targetEntry.key}", targetEntry.value, false)
                     }
                     return
                 }

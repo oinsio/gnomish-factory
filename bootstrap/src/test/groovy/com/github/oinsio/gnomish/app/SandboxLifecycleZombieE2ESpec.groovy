@@ -85,7 +85,8 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'zombie-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(cloneDir)
         originUrl = gitea.createRepository("zombie-${System.nanoTime()}")
         addRemote(cloneDir, 'origin', originUrl)

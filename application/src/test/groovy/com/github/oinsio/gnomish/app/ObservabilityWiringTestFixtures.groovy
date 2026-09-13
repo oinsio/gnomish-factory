@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.serveobservability.writer.LedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter
+import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter
@@ -45,7 +46,7 @@ class ObservabilityWiringTestFixtures {
                 new ReaperVital(Instant.EPOCH, 0, 300L),
                 new JanitorVital(Instant.EPOCH))
         return new Snapshot(1, Instant.EPOCH, 0L, instance, LifecycleSnapshotAssembler.assemble(tracker), feed,
-                new SlotsSnapshot(2, []), vitals, new TrackerHealth(null, 0))
+                new SlotsSnapshot(2, []), vitals, new TrackerHealth(null, 0), [:])
     }
 
     static class Built {
@@ -76,6 +77,7 @@ class ObservabilityWiringTestFixtures {
                 new LifecycleLedgerWriter(appender, instance, clock),
                 taskOutcomeLedgerWriter,
                 new SweepLedgerWriter(appender, instance, clock),
+                new RemoteOutageLedgerWriter(appender, instance),
                 appender,
                 instance,
                 clock)

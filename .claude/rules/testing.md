@@ -91,8 +91,9 @@ on real I/O instead of failing fast" mode recorded above. Because there is nothi
 notice, review is the wrong instrument for it.
 
 So `check` asks instead: **`checkTestTimeInjection`** (registered by `test-conventions` in every
-module, and by `:test-fixtures` over its own `src/main`) fails on a `SomeType.system()` call in a
-test source. Satisfy it by building the component with virtual time — which keeps the production
+module, and by `:test-fixtures` over its own `src/main`) fails on a `SomeType.system(...)` call in a
+test source — with or without arguments, since a factory that takes collaborators and bounds
+(`RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)`) wires the real clock just the same. Satisfy it by building the component with virtual time — which keeps the production
 bound and elapses it instantly — or, where the call really is right (a spec asserting the
 production defaults themselves, a factory with no time in it), justify it in place:
 
@@ -118,3 +119,16 @@ justification lives beside the call rather than in a central allowlist — the s
   hand-listed subset — and pin the unknown-token behavior (the documented forward-compat
   `default` arm). This is what keeps a writer/reader pair (see `manual-sync-pairs.md`) from
   drifting silently: adding a constant mapped on only one side fails the spec, not production
+- **Invariant specs across a flow.** When a design decision claims that two values are one by
+  construction (the law commit and the branch's start point; the pin and the commit it was
+  read from), one spec asserts the identity end to end on the real medium — a bare origin, a
+  clone, the real adapters — rather than trusting that each component's spec passed. Component
+  specs prove each link is correct; only the flow spec proves the links are joined. The spec
+  is named in the design's single-owner table (`design-decisions.md`)
+- **Git fixtures are adversarial by default.** A clone fixture whose local refs equal origin's
+  cannot see a resolution that took the wrong ref. The shared clone fixture
+  (`BareGitRepoFixture` and its callers) therefore diverges the clone from origin as its
+  default posture: a local branch under the base's name behind origin's tip, and a local tag
+  under the same name pointing elsewhere. A spec that needs the converged posture asks for it
+  explicitly. Any bare-name resolution then fails an existing spec instead of waiting for a
+  regression spec someone thought to write

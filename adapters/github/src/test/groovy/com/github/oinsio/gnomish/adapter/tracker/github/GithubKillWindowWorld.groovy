@@ -115,7 +115,7 @@ class GithubKillWindowWorld {
         new GithubTracker(
                 new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
                 new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
-                FixtureSeeder.DELIVERED_LABEL),
+                FixtureSeeder.DELIVERED_LABEL, GithubDesignatorRules.none()),
                 new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL),
                 new GithubStateWrites(httpClient, labelOps, markers, FixtureSeeder.WORKING_LABEL,
                 FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL, FixtureSeeder.READY_LABEL),

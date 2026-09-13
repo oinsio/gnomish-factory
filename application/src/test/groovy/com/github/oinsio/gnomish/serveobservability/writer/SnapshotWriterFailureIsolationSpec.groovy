@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.writer
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -60,9 +61,10 @@ class SnapshotWriterFailureIsolationSpec extends Specification {
         def malformed = SnapshotWriterSpec.fixtureSnapshot().withSelfDescription(Instant.parse('2026-08-03T09:59:00Z'), 30L)
         // instance() is required by SnapshotJsonMapper#toInstance; a fresh record built with a
         // null instance triggers a real, unstubbed NPE deep inside toDto().
-        def poisoned = new com.github.oinsio.gnomish.serveobservability.Snapshot(
+        def poisoned = new Snapshot(
                 malformed.version(), malformed.writtenAt(), malformed.intervalSeconds(), null,
-                malformed.lifecycle(), malformed.feed(), malformed.slots(), malformed.vitals(), malformed.tracker())
+                malformed.lifecycle(), malformed.feed(), malformed.slots(), malformed.vitals(), malformed.tracker(),
+                malformed.remote())
         def writer = new SnapshotWriter(target, {
             -> poisoned
         }, mapper, Duration.ofSeconds(30), clock, 1)

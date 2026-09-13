@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
+import com.github.oinsio.gnomish.app.port.git.BasePin;
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
+import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
@@ -33,13 +36,25 @@ public final class TaskJsonMapper {
      * before attempting to bind the rest of the document (FR4). Unknown fields
      * elsewhere are tolerated per {@link TaskStateJson#mapper()}.
      *
+     * <p>A bound document is then held to the one content rule this reader owns: a pinned {@code
+     * baseRef} must be a well-formed ref name. The pin is the name a resume narrow-fetches, and it
+     * was written by another instance into a branch a human can push to, so it is checked where it
+     * enters the process — refused, never escaped — and a malformed one becomes the corrupt branch
+     * shape naming this document, before any fetch could carry it to origin (NFR-S3 of
+     * add-base-ref-resolution, task 12.2).
+     *
      * @param json the raw {@code task.json} text; never null
      * @return the parsed and version-gated DTO
      * @throws UnsupportedStateFileVersionException if {@code "version"} is
      *     missing or is not {@code 1}
+     * @throws MalformedStateFileException if the document pins a {@code baseRef} that is not a
+     *     well-formed ref name
      */
     public static TaskJsonDto readDto(String json) {
-        return StateFileVersionGate.readGated(TaskStateJson.mapper(), "task.json", json, 1, TaskJsonDto.class);
+        TaskJsonDto dto =
+                StateFileVersionGate.readGated(TaskStateJson.mapper(), "task.json", json, 1, TaskJsonDto.class);
+        PinnedRefGate.check(dto.baseRef());
+        return dto;
     }
 
     /**
@@ -58,6 +73,9 @@ public final class TaskJsonMapper {
      * @param trackerWritePending {@code true} to record the durable "tracker-write
      *     pending" marker for a terminal park whose tracker write has not confirmed
      *     (FR10 of add-claim-heartbeat); {@code false} to leave no marker
+     * @param basePin the {@code (ref, kind, rule)} metadata half of the durable base pin (FR7 of
+     *     add-base-ref-resolution), or {@link BasePin#UNPINNED} for a document with no pin — bundled
+     *     into one parameter object to keep this method within the project's 7-parameter limit
      * <p>The document's {@code egressCursor} is not a parameter here (design D8 of
      * fix-denial-attribution-durability): it is environment bookkeeping no caller of
      * this mapper holds, and one more positional argument on an already-six-wide
@@ -74,7 +92,8 @@ public final class TaskJsonMapper {
             Instant createdAt,
             @Nullable TaskOutcome outcome,
             @Nullable EscalationReport lastEscalation,
-            boolean trackerWritePending) {
+            boolean trackerWritePending,
+            BasePin basePin) {
         return new TaskJsonDto(
                 1,
                 context.taskId(),
@@ -86,7 +105,10 @@ public final class TaskJsonMapper {
                 outcome == null ? null : toOutcome(outcome),
                 lastEscalation == null ? null : toEscalation(lastEscalation),
                 trackerWritePending ? Boolean.TRUE : null,
-                null);
+                null,
+                basePin.ref(),
+                basePin.rule() == null ? null : basePin.rule().wireValue(),
+                basePin.kind() == null ? null : basePin.kind().wireValue());
     }
 
     /**
@@ -107,13 +129,20 @@ public final class TaskJsonMapper {
     public static TaskRecord fromDto(TaskJsonDto dto) {
         TaskContext context = new TaskContext(dto.taskId(), dto.title(), dto.body(), fromDecisions(dto.decisions()));
         EscalationReport lastEscalation = dto.lastEscalation() == null ? null : fromEscalation(dto.lastEscalation());
+        // A legacy baseCommit-only document carries no pin field at all: it reads as unpinned
+        // rather than guessing a rule (FR7 of add-base-ref-resolution). The kind is separately
+        // optional — a pin written before it existed, or by the manual tier which classifies
+        // nothing, carries ref and rule without it (D7, revised 2026-09-10).
+        BaseRule baseRule = dto.baseRule() == null ? null : BaseRule.fromWire(dto.baseRule());
+        BasePin pin = new BasePin(dto.baseRef(), BaseRefKind.fromWire(dto.baseKind()), baseRule);
         return new TaskRecord(
                 context,
                 dto.baseCommit(),
                 Instant.parse(dto.createdAt()),
                 dto.outcome() == null ? null : fromOutcome(dto.outcome()),
                 lastEscalation,
-                Boolean.TRUE.equals(dto.trackerWritePending()));
+                Boolean.TRUE.equals(dto.trackerWritePending()),
+                pin);
     }
 
     private static List<TaskDecisionDto> toDecisions(List<Decision> decisions) {

@@ -36,6 +36,28 @@ record GitCommandResult(int exitCode, String stdout, String stderr, Termination 
     }
 
     /**
+     * Why an invocation did not deliver what its caller asked for, phrased for an operator report:
+     * the termination first, the exit code and git's own words only when the command actually ran
+     * to its own exit. {@code what} names the invocation in the caller's vocabulary ("fetch",
+     * "refs read"), so one sentence shape serves every network call site.
+     *
+     * <p>Extracted when the base refresh became the third caller of what {@link TaskBranchLocator}
+     * and {@link RemoteDefaultBranch} both needed (rule of three, {@code manual-sync-pairs.md}).
+     * git's stderr is subprocess output that reaches logs, {@code task.json}, and escalation
+     * reports, so it is scrubbed and sanitized here, where it enters the factory's own text.
+     *
+     * <p>Implements FR5, FR9 of add-base-ref-resolution.
+     */
+    String failureDetail(String what) {
+        return switch (termination()) {
+            case TIMED_OUT -> "the " + what + " timed out";
+            case INTERRUPTED -> "the " + what + " was interrupted";
+            case EXITED ->
+                "the " + what + " exited " + exitCode() + ": " + LogText.forLog(CredentialScrub.scrub(stderr().trim()));
+        };
+    }
+
+    /**
      * The git evidence a cannot-verify outcome carries: how this result ended, and what it said.
      * Shared by {@link RoundBoundaryCheck} and {@link HarvestedBoundaryCheck}, whose boundary
      * diffs both classify a non-zero or non-exiting invocation as cannot-verify.
@@ -45,9 +67,15 @@ record GitCommandResult(int exitCode, String stdout, String stderr, Termination 
      * and into the escalation report. The log-call gate cannot see inside an exception's message,
      * so the sanitizing happens here, where the untrusted text enters it (FR6 of
      * harden-logging-observability; {@code .claude/rules/logging.md}).
+     *
+     * <p>Credentials: {@code GitProcessRunner} scrubs stderr of remote-URL userinfo at capture
+     * (NFR-S2 of fix-lifecycle-push), so every result it produces is already clean here. This
+     * method scrubs again all the same, as {@link #failureDetail} does — the invariant then holds
+     * for a result built anywhere else (a spec, a second runner), and the two details cannot
+     * diverge on which of them a token may pass through (task 12.3 of add-base-ref-resolution).
      */
     String cannotVerifyDetail() {
         return "the boundary could not be verified (git " + termination() + ", exit " + exitCode() + "): "
-                + LogText.forLog(stderr().trim());
+                + LogText.forLog(CredentialScrub.scrub(stderr().trim()));
     }
 }

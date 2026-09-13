@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Wraps a discovered provider so that every {@link Tracker} it builds keeps this instance's {@link
@@ -25,8 +26,8 @@ import java.util.Optional;
  * point and read by every writer — never a second, adapter-local copy that could disagree with it.
  *
  * <p>Everything except {@link #create} is plain delegation: the provider decides its type, ref
- * expansion, foreign-ref refusal, subsection validation, and credential names, and this decorator
- * has no opinion on any of them.
+ * expansion, foreign-ref refusal, subsection validation, credential names, and the designator kinds
+ * it extracts, and this decorator has no opinion on any of them.
  *
  * <p>Implements FR13 of harden-task-branch-contract.
  */
@@ -61,5 +62,10 @@ record EpochRecordingTrackerFactory(TrackerAdapterFactory delegate, ClaimEpochBo
     @Override
     public List<String> credentialEnvVars(TrackerConfig config) {
         return delegate.credentialEnvVars(config);
+    }
+
+    @Override
+    public Set<String> configuredDesignatorKinds(TrackerConfig config) {
+        return delegate.configuredDesignatorKinds(config);
     }
 }

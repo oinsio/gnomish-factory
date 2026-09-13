@@ -30,9 +30,10 @@ import org.gradle.api.tasks.TaskAction
  * notice, and the reviewer has to reason about a state the spec does not currently reach. So the
  * build asks instead, at the one moment the question is cheap — when the call is written.
  *
- * <p><b>What it looks for.</b> A call of the shape {@code SomeType.system()} in a test source. That
- * shape is this codebase's naming convention for "production wiring, real clock" ({@code
- * TerminalWriteRetry.system()}, {@code GitInfrastructureRetry.system()}), so the rule needs no list
+ * <p><b>What it looks for.</b> A call of the shape {@code SomeType.system(...)} in a test source,
+ * with or without arguments. That shape is this codebase's naming convention for "production
+ * wiring, real clock" ({@code TerminalWriteRetry.system()}, {@code GitInfrastructureRetry.system()},
+ * {@code RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)}), so the rule needs no list
  * of type names to keep in step — a component that adopts the convention tomorrow is covered the
  * day it is written. Comment lines are skipped, so prose about a factory is not a violation.
  *
@@ -50,7 +51,15 @@ abstract class TestTimeInjectionCheck extends DefaultTask {
     /** The comment marker that excuses one call, followed by the reason it is excused. */
     static final String MARKER = 'real-time-wiring:'
 
-    private static final Pattern SYSTEM_FACTORY = ~/\b[A-Z][A-Za-z0-9_]*\.system\s*\(\s*\)/
+    /**
+     * A call of the shape {@code SomeType.system(} — arity deliberately unconstrained. The wiring
+     * a {@code system()} factory performs is the same whether or not the factory takes arguments:
+     * {@code RemoteOutageGate.system(baseRefGit, cloneDir, idleInterval)} builds a real {@code
+     * SystemClock} exactly as {@code GitInfrastructureRetry.system()} does, and its arguments name
+     * collaborators and bounds, never the time source. Requiring an empty argument list let that
+     * whole class of factories through unseen.
+     */
+    private static final Pattern SYSTEM_FACTORY = ~/\b[A-Z][A-Za-z0-9_]*\.system\s*\(/
 
     /** Test sources to scan; Groovy and Java alike. */
     @InputFiles
@@ -83,7 +92,7 @@ Test sources wire production real time instead of injecting it (${violations.siz
 
 ${violations.join('\n')}
 
-A `.system()` factory wires the real ThreadSleeper/SystemClock with the production bound. In a
+A `.system(...)` factory wires the real ThreadSleeper/SystemClock with the production bound. In a
 spec that is a latent hang, not a bug you can see: it sleeps only once some collaborator starts
 reporting the failure the retry waits on, and then it blocks for the whole bound per exercise.
 

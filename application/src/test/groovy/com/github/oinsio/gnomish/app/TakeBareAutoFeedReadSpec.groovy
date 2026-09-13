@@ -1,10 +1,9 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.lease.ClaimBeat
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ReadyTask
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -13,9 +12,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import java.time.Duration
-import java.util.Random
 import spock.lang.Specification
-
 /**
  * FR10, NFR-C1 of add-tracker-port and FR3, FR4 of enforce-finish-terminality: bare mode's FEED
  * READ — the three tracker reads that happen before any claim is attempted, and their order. The
@@ -39,7 +36,9 @@ class TakeBareAutoFeedReadSpec extends Specification implements RunChainFakes {
             classifyShape(_, _) >> new BranchShape.Bare()
         }, Stub(TaskWorktreeGit))
         new TakeBareAuto(Stub(RunAssembly), git, WORKTREES_ROOT, new AbortHandler(tracker, FIXED_CLOCK),
-                3, 'taskId', Duration.ofMinutes(1), Duration.ofHours(1), FIXED_CLOCK, [], 10, new Random(1))
+                3, 'taskId', Duration.ofMinutes(1), Duration.ofHours(1), FIXED_CLOCK, [],
+                ClaimBeat.NONE, new ClaimLossFlag(), 10, new Random(1),
+                ContainerTakeSupport.hostOnly(), new ClaimEpochBook(), DEFAULT_TRUSTED_BASE)
     }
 
     private TakeResult run() {

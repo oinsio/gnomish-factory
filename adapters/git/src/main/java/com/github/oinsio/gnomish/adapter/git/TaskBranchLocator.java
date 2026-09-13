@@ -22,8 +22,11 @@ import org.slf4j.LoggerFactory;
  * explicit source:destination refspec naming exactly one branch, never {@code --all} or a
  * wildcard — which both retrieves the one ref needed and leaves a proper {@code
  * refs/remotes/origin/...} tracking ref behind, verified empirically to be readable by both {@code
- * git show} and usable as a {@code git worktree add} start point. This satisfies FR8's "never
- * fetching anything else".
+ * git show} and usable as a {@code git worktree add} start point. It is built by {@link
+ * NarrowFetch}, the one construction site of a factory fetch's argv, so "exactly one ref" is
+ * enforced by the flags as well as by the refspec: without them git auto-follows tags into the
+ * operator's own {@code refs/tags/} and truncates {@code FETCH_HEAD}, two writes this clone was
+ * promised it would never see. This satisfies FR8's "never fetching anything else".
  *
  * <p>A fetch that does not produce the ref is <em>not</em> absence (FR6 of
  * harden-task-branch-contract): it is a question this clone cannot answer, and only {@code origin}
@@ -90,7 +93,7 @@ public final class TaskBranchLocator {
             return new BranchLocation.RemoteTracking(trackingRef);
         }
 
-        GitCommandResult fetch = runner.run(cloneDir, "fetch", "origin", branchName + ":" + trackingRef);
+        GitCommandResult fetch = NarrowFetch.of(runner, cloneDir, branchName + ":" + trackingRef);
         // The ref is the authority, not the fetch's exit code: a fetch killed on its deadline or
         // cut short by a shutdown cannot have created the tracking ref, and a fetch that reports
         // success without one has delivered nothing. Reading the ref answers all of those at once.
@@ -128,12 +131,7 @@ public final class TaskBranchLocator {
     }
 
     private static String why(GitCommandResult fetch) {
-        return switch (fetch.termination()) {
-            case TIMED_OUT -> "the fetch timed out";
-            case INTERRUPTED -> "the fetch was interrupted";
-            case EXITED ->
-                "the fetch exited " + fetch.exitCode() + ": " + fetch.stderr().trim();
-        };
+        return fetch.failureDetail("fetch");
     }
 
     private boolean refExists(Path cloneDir, String ref) {

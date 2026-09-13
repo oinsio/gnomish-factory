@@ -27,5 +27,6 @@ class TakeExitCodeMapperSpec extends Specification {
         new TakeResult.Aborted(STATE, 'persist failed') | 12
         new TakeResult.Revoked(STATE, 'work stopped') | 14
         new TakeResult.Skipped('held by another instance') | 15
+        new TakeResult.InfrastructureUnavailable('origin never answered') | 16
     }
 }

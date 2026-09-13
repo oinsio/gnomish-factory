@@ -10,7 +10,12 @@ the `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env seam, the
 `fix-denial-report-attachment` (archived) already delivered the
 verdict-independent denials slot NFR-O1 presumes;
 `add-serve-sandbox-lifecycle` (active, lands first) replaces startup
-orphan cleanup with the `sandbox-lifecycle` ownership scheme. Threat
+orphan cleanup with the `sandbox-lifecycle` ownership scheme;
+`fix-image-declared-volumes` (active, lands first) makes every path an
+image declares as a `VOLUME` an ephemeral, size-bounded mount on every
+factory `docker run`, through one owner (`DeclaredVolumeOverrides`) that
+every run builder takes as a typed parameter — this change's guard and
+provisioning containers are consumers of that owner (D4, D6, D7). Threat
 registry items to close: #11, #15 (L7), #16, #17, #31, #45. Explore
 sessions resolved the tool landscape; decisions below fix the rest.
 
@@ -81,6 +86,13 @@ header injection lets a host credential live only at the guard
 bodies and credentials never (NFR-S2). Alternative rejected: Matchlock
 as the interception layer (Q2 spike) — one-shot-shaped, young; the port
 keeps it available as a future adapter, not a guard replacement.
+The guard's mitmproxy confdir (`~/.mitmproxy`) is ephemeral — it is a
+declared volume of the image, made a bounded tmpfs by
+`fix-image-declared-volumes` — so the factory CA and its key are handed
+to mitmdump through the existing read-only config mount (a
+`--certs`-class option), never generated into or read from the confdir;
+should the guard side ever need a durable path, that task introduces it
+as a named, labelled object, not by relaxing the override.
 <!-- implements FR8, FR9, FR10 of add-sandbox-hardening -->
 
 ### D5. Self-check extensions mirror enabled modes
@@ -103,7 +115,12 @@ executed inside a one-shot provisioning container created from the base
 image with the working copy materialized. The gnome never runs in this
 container; secrets that provisioning may need (none by default) are
 scoped to it and the working copy is removed before snapshotting, so the
-snapshot holds toolchain state only (FR16). Alternatives rejected:
+snapshot holds toolchain state only (FR16). The provisioning
+container is a plain (not `--rm`) `docker run` of the base image — it
+must survive to be committed — so it is a consumer of the
+`DeclaredVolumeOverrides` owner like every other factory run: every
+path the base image declares as a volume is a bounded tmpfs inside it,
+and no anonymous volume is created. Alternatives rejected:
 repo-Dockerfile ownership (build/cache burden, precedent: Codex/Jules/
 Copilot all use setup scripts); running setup.sh on task start every
 time (minutes per task vs seconds from snapshot).
@@ -127,7 +144,17 @@ change owns their cleanup: after a successful build, superseded
 snapshots of the project are removed, and the provisioning flow
 reclaims orphaned provisioning containers and partial images by label.
 Concurrent provisioning of one fingerprint is serialized by a
-factory-side lock; losers reuse the winner's image.
+factory-side lock; losers reuse the winner's image. `docker commit`
+captures the container's filesystem layers only — never the content of
+a mount, tmpfs or volume alike — so anything setup.sh leaves under a
+path the base image declares as a volume would be silently absent from
+the snapshot. Provisioning therefore checks every declared path after
+setup.sh and, if any is non-empty, fails as an infrastructure failure
+naming the path and the fix (put the content under a path the image
+does not declare) — the same fail-closed stance as D8, never a snapshot
+missing part of its toolchain. A snapshot inherits the base image's
+declarations, so task boxes created from it are covered by the owner
+with no provisioning-side work.
 <!-- implements FR13, FR14, FR15, NFR-R2 of add-sandbox-hardening -->
 
 ### D8. Image resolution order: snapshot, else operator image
@@ -177,6 +204,11 @@ account pinning is the real defense).
   docs discipline (UX4).
 - [Gateway sees all gnome↔model traffic] → it is factory-owned and local
   by requirement (NFR-S1); never a hosted service.
+- [setup.sh writes its output under a path the base image declares as a
+  volume — a package cache is the typical case — and `docker commit`
+  cannot capture it] → the fail-closed declared-path check in D7 names
+  the path; the operator guide names the fix (relocate the cache to an
+  undeclared path, or choose a base image without the declaration).
 - [The active change `polish-sandbox-forensics` also carries a MODIFIED
   delta of the `sandbox-egress` requirement "Mandatory fail-closed
   self-check" (keep-on-failed-self-check semantics); this change's own

@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller;
+import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecycleTick;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
@@ -57,7 +58,9 @@ final class ServeAssembly {
             TakeHeartbeat heartbeat,
             Clock clock,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase,
+            RemoteOutageGate remoteOutageGate) {
         AbortHandler abortHandler = new AbortHandler(tracker, clock);
         return new TakeSlotRunner(
                 serveAssembly,
@@ -74,7 +77,9 @@ final class ServeAssembly {
                 tracker,
                 instanceId,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase,
+                remoteOutageGate);
     }
 
     static FeedAutomaton feedAutomaton(
@@ -86,7 +91,8 @@ final class ServeAssembly {
             InstanceId instanceId,
             SlotLedger slotLedger,
             TakeSlotRunner slotRunner,
-            com.github.oinsio.gnomish.app.serve.DirtyNotifier dirtyNotifier) {
+            com.github.oinsio.gnomish.app.serve.DirtyNotifier dirtyNotifier,
+            RemoteOutageGate remoteOutageGate) {
         FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
         return new FeedAutomaton(
                 tracker,
@@ -100,7 +106,8 @@ final class ServeAssembly {
                 serveProperties.idlePollInterval(),
                 trackerConfig.wipLimit(),
                 new Random(),
-                dirtyNotifier);
+                dirtyNotifier,
+                remoteOutageGate);
     }
 
     /**

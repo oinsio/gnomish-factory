@@ -56,8 +56,9 @@ requirement existed.
 ## MODIFIED Requirements
 
 ### Requirement: Outcome and report model
-`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute. CannotExecute SHALL cover the factory-fault ways a stage cannot run or the pipeline cannot advance without any gnome fault: an executor infrastructure failure (no attempt burned, no round recorded) and a missing declared artifact caught by an artifact contract gate (no attempt burned; a producer-gate miss preserves the already-recorded passing round). A missing-artifact cause SHALL name the stage, the artifact `id`, the declared `path`, and which gate fired, and SHALL attribute the miss to the factory/pipeline (dirty resume, manifest error) — never to the gnome's work. Engine-internal errors SHALL propagate as exceptions, never as outcomes. An escalation SHALL be renderable from the outcome and its final state alone.
+`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute. CannotExecute SHALL cover the factory-fault ways a stage cannot run or the pipeline cannot advance without any gnome fault: an executor infrastructure failure (no attempt burned, no round recorded) and a missing declared artifact caught by an artifact contract gate (no attempt burned; a producer-gate miss preserves the already-recorded passing round). CannotExecute SHALL additionally carry the denials list drained from the environment of the round that could not execute — the round left no attempt record to hold them, and its blocked egress attempts SHALL still reach the report. Carrying them SHALL NOT change the classification: the outcome stays a factory fault, no attempt is burned, no round is recorded, and no verdict is derived from the list. A missing-artifact cause SHALL name the stage, the artifact `id`, the declared `path`, and which gate fired, and SHALL attribute the miss to the factory/pipeline (dirty resume, manifest error) — never to the gnome's work. Engine-internal errors SHALL propagate as exceptions, never as outcomes. An escalation SHALL be renderable from the outcome and its final state alone.
 <!-- implements FR10, UX1 of add-stage-engine -->
+<!-- implements FR1 of fix-denial-attribution-durability -->
 <!-- implements FR5, NFR-O1, UX1 of enforce-artifact-contracts -->
 
 #### Scenario: Executor infrastructure failure
@@ -74,3 +75,11 @@ requirement existed.
   artifact `id`, the declared `path`, and the gate that fired
 - **AND** the cause states the pipeline/factory is broken and never phrases the miss as the
   gnome's failure, and no verify feedback is generated from it
+
+#### Scenario: A round killed before its close reports its denials
+- **WHEN** a round is killed on its round timeout after the gnome attempted a denied egress request
+- **THEN** the outcome is Escalated(CannotExecute) carrying that denial, `attemptsUsed` is unchanged, and the attempt history is unchanged
+
+#### Scenario: Denials of a failed round gate nothing
+- **WHEN** a CannotExecute escalation carries denials
+- **THEN** the stage's recorded verdicts and the feedback context of any later retry are identical to those of the same failure with no denials

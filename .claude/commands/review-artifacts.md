@@ -72,6 +72,13 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
   touches, and search for an existing same-rule implementation in another mode/layer that
   the artifacts fail to mention. A missing answer, or a "none" contradicted by an existing
   counterpart, is ❌ CRITICAL.
+- **Single-owner mechanisms** (`design-decisions.md`, mandatory category): every decision
+  worded as "once", "only", "funnel", or "the one place" has a table row naming owner, value
+  type, consumers by file, the old way removed (or each exemption), and the enforcement; or
+  the design states `Single-owner mechanisms: none`. Verify against reality: grep the
+  codebase for the old-way pattern and for call sites the consumer column omits. A row whose
+  value type is a primitive a consumer could obtain elsewhere, or whose consumers say "all
+  paths" instead of naming them, is ⚠️; a missing table for such a decision is ❌.
 - **tasks.md**: every FR/NFR/UX maps to at least one task; every task traces back to a
   requirement or decision; verification steps are automated (specs, gates), not manual.
 - **Coverage matrix**: for each requirement ID report proposal → delta spec → task presence;

@@ -79,6 +79,14 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 new ThreadSleeper(),
                 factoryProperties,
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null))
+                // FR13, D14 of add-base-ref-resolution: production wiring (TakeCommand/ServeCommand)
+                // always attaches the pipeline source it read its startup definition from before a
+                // fresh claim can read its task tier through it; a spec building this assembly
+                // directly (bypassing TakeCommand) needs the same real source so TaskTierLaw#bind
+                // never sees "no PipelineSource attached" as a wiring fault. The accept-anything
+                // 'github' registry matches every fixture's own tracker: section (design D15's
+                // pre-wiring-seam permissiveness), never validating GitHub subsection content.
+                .withPipelineSource(TrackerValidatorStub.acceptingGithubSource())
     }
 
     /**
@@ -107,6 +115,11 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
      * everything else is the dominant literal every call site used to repeat
      * verbatim.
      *
+     * <p>{@code factoryProperties} and {@code boardCommand} default to the identity literals
+     * every prior call site used inline; a spec that needs a non-default instance name (fed to
+     * both the runner and its embedded {@link BoardCommand}/{@link DashboardCommand}) or a
+     * fake {@link BoardCommand} (e.g. one wired to an outage tracker) supplies its own.
+     *
      * <p>Implements FR1, FR2 of add-serve-sandbox-lifecycle.
      */
     ManualRunRunner newManualRunRunner(
@@ -119,7 +132,10 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             BindingProperties bindingProperties = new BindingProperties('host', [:]),
             // Defaulted last so every existing call site is untouched: only the specs that need to
             // tell the runner's own git bundle apart from the identity default supply their own.
-            TaskGit git = TaskGitFixture.real()) {
+            TaskGit git = TaskGitFixture.real(),
+            FactoryProperties factoryProperties = testProperties(),
+            BoardCommand boardCommand = new BoardCommand(Clock.systemUTC(), factoryProperties, [:],
+            MapSecretsProvider.NONE, TrackerValidatorStub.plainSource())) {
         new ManualRunRunner(
                 new RunArgumentsParser(),
                 new PipelineStartup(TrackerValidatorStub.plainSource()),
@@ -131,7 +147,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 new InMemoryAttemptPersistence(),
                 new SystemClock(),
                 new ThreadSleeper(),
-                testProperties(),
+                factoryProperties,
                 sandboxProperties,
                 bindingProperties,
                 DiscoveredBindings.real(),
@@ -140,16 +156,15 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 homeDir,
                 new StatusCommand(TaskGitFixture.real(), worktreesRoot),
                 new UsageCommand(TaskGitFixture.real()),
-                new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE,
-                TrackerValidatorStub.plainSource()),
-                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, testProperties(), [:],
+                boardCommand,
+                new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, factoryProperties, [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource()),
                 Clock.systemUTC(),
                 [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null),
+                new ServeProperties(0, null, null, null, null, null, null, null, null),
                 new ClaimEpochBook())
     }
 

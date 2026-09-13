@@ -26,6 +26,7 @@ import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.function.UnaryOperator
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -52,7 +53,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
     private static final Logger LOG = LoggerFactory.getLogger(TakeSummaryAnchorSpec)
     private static final TrackerConfig TRACKER_CONFIG = new TrackerConfig('github', 3)
     private static final ServeProperties SERVE_PROPERTIES = new ServeProperties(
-    1, Duration.ofMillis(1), null, null, null, null, null)
+    1, Duration.ofMillis(1), null, null, null, null, null, null, null)
 
     @TempDir
     Path tempDir
@@ -86,10 +87,13 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
         }
+        def git = new TaskGit(
+                store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
         new TakeDispatcher(
-                new TaskGit(store, branches, Stub(TaskWorktreeGit)), worktreesRoot, 'taskId', testProperties(),
+                git, worktreesRoot, 'taskId', testProperties(),
                 FIXED_CLOCK, ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE,
-                TakeoverConfirmation.UNAVAILABLE, ContainerTakeSupport.hostOnly(), new ClaimEpochBook())
+                TakeoverConfirmation.UNAVAILABLE, ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
+                DEFAULT_TRUSTED_BASE)
     }
 
     private void dispatch(List<String> refs) {

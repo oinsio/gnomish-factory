@@ -1,12 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
-import com.github.oinsio.gnomish.adapter.check.PinCheckedExternalCheckClient;
-import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient;
-import com.github.oinsio.gnomish.adapter.console.InteractiveExternalCheckClient;
-import com.github.oinsio.gnomish.adapter.law.PipelineLawReader;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
-import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -14,9 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.status.CompositeEngineEventListener;
 import com.github.oinsio.gnomish.status.ConsoleStatusRenderer;
@@ -26,17 +18,15 @@ import com.github.oinsio.gnomish.status.SnapshotActivityTracker;
 import com.github.oinsio.gnomish.status.StatusEventListener;
 import com.github.oinsio.gnomish.status.StatusSnapshotHolder;
 import com.github.oinsio.gnomish.status.StatusTextRenderer;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 /**
- * Builds the {@link Run} and selects the {@link ExternalCheckClient} for one {@link
- * ManualRunAssembly#assemble} call. Extracted from {@link ManualRunAssembly} purely to keep both
- * files within the project's file-size guidance (`.claude/rules/process-invariants.md`); the
- * behavior is unchanged.
+ * Builds the {@link Run} for one {@link ManualRunAssembly#assemble} call: the console, the event
+ * listeners, the child-environment allowlist and the engine ports. Two responsibilities it does
+ * not own live beside it — {@link RunLaw} opens and freezes the law and builds its pin guard, and
+ * {@link CheckProviderWiring} derives what the configured check providers contribute — so this
+ * class wires, and asks.
  *
  * <p>Implements FR7, FR10, NFR-O1, UX1, D6, D10 of add-agent-executor; D10 of add-manual-run; FR7
  * of add-git-workflow; FR11 of add-claim-heartbeat; FR16, FR26, D14 of add-sandbox-core.
@@ -65,14 +55,14 @@ final class RunAssembler {
      *     CLI executor/judge adapters and the command-check runner all compose their child
      *     environments from the resulting positive allowlist, so a credential reaches neither the
      *     gnome nor a command check by construction; empty for plain {@code gnomish run}
-     * @param lawSourceRoot the root the pipeline law is frozen from at invocation start (D14,
-     *     FR19 of add-sandbox-core), against which control-file and criteria references resolve —
-     *     the same root the runtime has always resolved them against: the {@code --dir} workspace
-     *     root in-place, the factory clone's working-tree root in git/take modes. In git/take
-     *     modes this is the clone, never the gnome's per-task worktree, so a running task cannot
-     *     rewrite its own instructions or acceptance criteria; in-place it is the workspace
-     *     itself, and the read is frozen in memory so a later edit to the same file has no effect
-     *     on the running task
+     * @param lawBinding which repository and tree the pipeline law is frozen from at invocation
+     *     start (D14, FR19 of add-sandbox-core; D12 of add-base-ref-resolution): git objects at
+     *     the law commit wherever a ref was resolved, the working tree of the {@code --dir}
+     *     workspace in-place and in a manual {@code run} without {@code --base}. Never the gnome's
+     *     per-task worktree, so a running task cannot rewrite its own instructions or acceptance
+     *     criteria; and the read is frozen in memory, so a later edit to the same file has no
+     *     effect on the running task. The binding's repository is also where the external-check
+     *     pin guard reads its repository-relative pin paths — opened once by {@link RunLaw}
      * @return the outcome loop and the ports it drives; never null
      */
     static Run assemble(
@@ -83,8 +73,9 @@ final class RunAssembler {
             RunArguments.InteractiveMode interactiveMode,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
-            Path lawSourceRoot) {
-        var law = PipelineLawReader.freeze(lawSourceRoot, definition);
+            LawBinding lawBinding) {
+        var runLaw = RunLaw.open(lawBinding);
+        var law = runLaw.freeze(definition);
         var holder = new StatusSnapshotHolder(
                 initialState, AttemptLimitResolver.resolve(definition, initialState.position()));
         var statusRenderer = new ConsoleStatusRenderer(holder, context, new StatusTextRenderer());
@@ -106,7 +97,7 @@ final class RunAssembler {
         // credential name in passthrough fails the run at assembly time.
         var childEnv = ChildEnvAllowlist.of(
                 assembly.sandboxProperties.envPassthrough(),
-                credentialNames(assembly, definition, credentialEnvVarsToScrub));
+                CheckProviderWiring.credentialNames(assembly, definition, credentialEnvVarsToScrub));
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
         var builtinRunner = sandbox == null
@@ -120,10 +111,10 @@ final class RunAssembler {
                 ExecutorAdapterSelector.stageExecutor(console, interactiveMode, holder, assembly, childEnv, law),
                 builtinRunner,
                 commandRunner,
-                externalCheckClient(
+                CheckProviderWiring.externalCheckClient(
                         assembly,
                         console,
-                        lawSourceRoot,
+                        runLaw,
                         assembly.checkClientRegistry,
                         RunCheckRunContext.of(context, holder)),
                 ExecutorAdapterSelector.judgeVoter(
@@ -142,86 +133,5 @@ final class RunAssembler {
 
         var loop = new RunnerOutcomeLoop(new Engine(), console, java.time.Clock.systemUTC());
         return new Run(loop, ports, holder);
-    }
-
-    /**
-     * The declared credential names the run's {@link ChildEnvAllowlist} refuses in passthrough
-     * and scrubs from every composed child environment: the active tracker adapter's (supplied by
-     * the caller) unioned with every configured check provider's own SPI declaration (FR17, design
-     * D11 of add-plugin-architecture).
-     *
-     * <p>This used to name {@code GithubCheckClientFactory.TOKEN_ENV_VAR} here, in core. It cannot:
-     * once github is a discovered plugin, core has no vendor constant to name, and a credential
-     * name supplied as configuration data by a connection profile is invisible to a compile-time
-     * constant anyway. So the names come from the providers themselves, and a plugin's credential
-     * is scrubbed — and barred from the passthrough allowlist — with no core source naming it.
-     *
-     * <p>Two declarations are unioned, because credentials reach a provider two ways: from its
-     * configured connection subsection, and — for the built-in {@code http} provider, which serves
-     * arbitrary endpoints — from each check's own manifest params (FR11). A manifest-named
-     * credential is therefore scrubbed and refused in passthrough exactly like a configured one.
-     */
-    private static List<String> credentialNames(
-            ManualRunAssembly assembly, PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
-        var names = new ArrayList<>(credentialEnvVarsToScrub);
-        names.addAll(CheckProviderSeam.credentialEnvVars(checkSubsections(assembly), assembly.checkClientRegistry));
-        names.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, assembly.checkClientRegistry));
-        return names;
-    }
-
-    /**
-     * The operator's {@code factory.check.<provider>} subsections with every {@code connection:
-     * <name>} reference resolved against {@code factory.connections} (FR16, design D8 of
-     * add-plugin-architecture), so a provider is built — and asked for its credential names — over
-     * the same inline-shaped connection data whether the operator inlined it or shared a profile
-     * between the ports one vendor serves.
-     */
-    private static Map<String, Map<String, Object>> checkSubsections(ManualRunAssembly assembly) {
-        return CheckProviderSeam.resolve(
-                assembly.factoryProperties.check(), ConnectionProfiles.of(assembly.factoryProperties.connections()));
-    }
-
-    /**
-     * Selects and pin-guards the run's {@link ExternalCheckClient} (task 8.4 of add-sandbox-core;
-     * FR5, FR6, design D10 of add-plugin-architecture): with any {@code factory.check.<provider>}
-     * subsection configured, a {@link ProviderDispatchingExternalCheckClient} over the discovered
-     * {@code registry} — each check routed to its provider's client, built lazily on first
-     * selection so a dormant provider resolves no credential; otherwise the interactive console
-     * client, which contributes no pin paths.
-     *
-     * <p>The engine port is unchanged either way: the composite <em>is</em> an {@code
-     * ExternalCheckClient}, so per-check provider selection stays wiring rather than engine
-     * semantics. Either client is wrapped in the {@link PinCheckedExternalCheckClient} (FR16, D10)
-     * comparing against the law source clone: {@code lawSourceRoot} is the factory clone checked
-     * out at the base branch in git/take modes (D14), so {@code HEAD} there <em>is</em> the bound
-     * base branch; the in-place mode's workspace may not be a git repository at all, in which case
-     * a check that declares pin paths degrades fail-closed to CannotVerify while a pinless
-     * interactive check passes vacuously. The pin contribution dispatches per provider too, so the
-     * guard unions the selected provider's paths exactly as the single-provider wiring did.
-     *
-     * <p>Package-private testing seam: specs call {@link ManualRunAssembly#externalCheckClient}
-     * with a hand-built registry over a fake secrets provider.
-     */
-    static ExternalCheckClient externalCheckClient(
-            ManualRunAssembly assembly,
-            DialogConsole console,
-            Path lawSourceRoot,
-            Map<String, CheckClientFactory> registry,
-            CheckRunContext runContext) {
-        var configured = checkSubsections(assembly);
-        ExternalCheckClient client;
-        ExternalCheckPinContributor contributor;
-        if (configured.isEmpty()) {
-            client = new InteractiveExternalCheckClient(console);
-            contributor = ExternalCheckPinContributor.none();
-        } else {
-            var dispatching = new ProviderDispatchingExternalCheckClient(
-                    registry, configured, assembly.secretsProvider, runContext);
-            client = dispatching;
-            contributor = dispatching.pinContributor();
-        }
-        var gitObjects = GitObjects.open(
-                lawSourceRoot.resolve(".git"), Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir"))));
-        return new PinCheckedExternalCheckClient(client, contributor, gitObjects, "HEAD");
     }
 }

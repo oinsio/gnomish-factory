@@ -56,7 +56,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def clone = initWorkingRepo(tempDir, 'clone-local')
         commit(clone, 'a.txt', 'first')
         def creator = new TaskBranchCreator(runner)
-        creator.createBranch(clone, 'PROJ-1', null)
+        creator.createBranch(clone, 'PROJ-1', TaskStart.commit(clone, 'HEAD'))
         def emptyOrigin = initBareRepo(tempDir, 'empty-origin.git')
         runner.run(clone, 'remote', 'add', 'origin', emptyOrigin.toString())
 
@@ -127,6 +127,33 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         runner.run(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/OTHER').exitCode() != 0
     }
 
+    // FR8 of add-git-workflow, ADR 0006: the locate fetch is a factory fetch like any other, so it
+    //     is built by NarrowFetch and carries the same protective flags. Without them git
+    //     auto-follows tags into the operator's own refs/tags and truncates FETCH_HEAD — two
+    //     writes the factory promised never to make in a clone the operator also uses.
+    def "FR8: the locate fetch writes neither an auto-followed tag nor FETCH_HEAD"() {
+        given: "origin carries the task branch and a tag reachable only from it"
+        def bare = initBareWithBranch(tempDir, 'origin-narrow.git', 'gnomish/PROJ-11', 'f.txt', 'wanted')
+        def seed = tempDir.resolve('origin-narrow.git-seed')
+        runner.run(seed, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'tag', 'v9.9')
+        runner.run(seed, 'push', 'origin', 'v9.9')
+        def clone = cloneOf(bare, 'clone-narrow')
+        // The clone itself auto-follows the tag; dropping it locally is what leaves the locate
+        // fetch as the only thing that could write refs/tags/ in this spec.
+        assert gitExitCode(clone, 'tag', '-d', 'v9.9') == 0
+        assert gitOutput(clone, 'for-each-ref', '--format=%(refname)', 'refs/tags').isEmpty()
+
+        when:
+        def location = locator.locate(clone, 'PROJ-11')
+
+        then: 'the one named ref arrived'
+        location instanceof BranchLocation.RemoteTracking
+
+        and: "nothing else did — the operator's tags and FETCH_HEAD are untouched"
+        gitOutput(clone, 'for-each-ref', '--format=%(refname)', 'refs/tags').isEmpty()
+        !Files.exists(clone.resolve('.git/FETCH_HEAD'))
+    }
+
     def "FR13: branch absent everywhere is reported as not-found, not a crash"() {
         given: 'a clone pointed at a bare origin that has no branches at all'
         def bare = initBareRepo(tempDir, 'origin5.git')
@@ -170,7 +197,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         given:
         def clone = initWorkingRepo(tempDir, 'clone-sanitized')
         commit(clone, 'a.txt', 'first')
-        new TaskBranchCreator(runner).createBranch(clone, 'PROJ 7: fix/it', null)
+        new TaskBranchCreator(runner).createBranch(clone, 'PROJ 7: fix/it', TaskStart.commit(clone, 'HEAD'))
 
         when:
         def location = locator.locate(clone, 'PROJ 7: fix/it')

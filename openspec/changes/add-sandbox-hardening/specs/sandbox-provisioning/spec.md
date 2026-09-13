@@ -37,6 +37,11 @@ a silent fallback to an image without the project toolchain.
 - **WHEN** setup.sh content changes and a task starts
 - **THEN** the new fingerprint misses the cache, provisioning runs once, and subsequent tasks reuse the new snapshot
 
+#### Scenario: Content under a declared volume path is never silently dropped
+- **WHEN** setup.sh leaves content under a path the base image declares as a volume (a path the snapshot commit cannot capture)
+- **THEN** provisioning fails as an infrastructure failure naming that path and the fix, and no snapshot is committed
+<!-- implements FR13, UX5 of add-sandbox-hardening -->
+
 ### Requirement: Snapshots exist only in the provisioning flow
 The snapshot operation SHALL exist only in the provisioning flow; the
 task-environment port SHALL remain snapshot-free, so an environment a

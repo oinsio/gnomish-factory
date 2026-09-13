@@ -17,12 +17,12 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 
 /**
- * The pipeline-load and tracker-resolution helpers {@link TakeCommand} needs before it can
- * dispatch (task 5.13): loading {@code .gnomish/} for {@code take} (mirroring {@link
- * PipelineStartup#load}, but narrower — {@code take} has no {@link RunArguments}, and no
- * {@code DirectoryWorkspace} is needed), the FR17 no-{@code tracker:}-section refusal, and
- * resolving a live {@link Tracker} from the {@link TrackerAdapterFactory} registry by {@code
- * tracker.type}. Split out of {@link TakeCommand} purely to keep that class within the project's
+ * The pipeline-load and tracker-resolution helpers the tracker-facing commands need before they
+ * can dispatch (task 5.13): the working-tree load {@code board} and {@code dashboard} keep
+ * (mirroring {@link PipelineStartup#load}, but narrower), the FR17 no-{@code tracker:}-section
+ * refusal, and resolving a live {@link Tracker} from the {@link TrackerAdapterFactory} registry by
+ * {@code tracker.type}. The startup load of {@code take} and {@code serve} moved to {@link
+ * TrustedTierStartup} (FR13 of add-base-ref-resolution). Split out of {@link TakeCommand} purely to keep that class within the project's
  * file-size target (`.claude/rules/process-invariants.md`).
  *
  * <p>Implements FR9, FR17 of add-tracker-port.
@@ -32,7 +32,9 @@ final class TakeCommandSupport {
     private TakeCommandSupport() {}
 
     /**
-     * Loads the pipeline definition from {@code dir}'s {@code .gnomish/}, once.
+     * Loads the pipeline definition from {@code dir}'s working-tree {@code .gnomish/}, once — the
+     * read {@code board} and {@code dashboard} display from, deliberately unchanged by
+     * add-base-ref-resolution.
      *
      * @param dir the target project directory; never null
      * @param pipelineSource where the definition is loaded from; the configured realization also

@@ -1,7 +1,7 @@
 # ADR 0006: Base Refresh Fetch
 
-Status: accepted (2026-09-06, introduced by `add-base-ref-resolution`;
-implementation pending)
+Status: accepted-and-implemented (2026-09-06, introduced by
+`add-base-ref-resolution`; implemented 2026-09-08)
 
 ## Context
 
@@ -36,7 +36,7 @@ protocol v0 without those options refuses it.
 |-----------|---------|-----|
 | branch | `+refs/heads/<n>:refs/remotes/origin/<n>` | the remote-tracking ref is the clone's cache of origin; updating it is what fetch is for, it is what the resume locate step already does, and `git log origin/<n>` stays truthful for the operator |
 | tag | `refs/tags/<n>:refs/tags/<n>`, without force | tags have no remote-tracking namespace and an ordinary fetch auto-follows them into `refs/tags/` anyway; no force keeps git's own semantics — create if absent, refuse to move an existing tag. A refusal means the operator clone's tag diverges from origin's: a task-level park with a report naming both commits, never a silent pick |
-| SHA | `<sha>`, no destination | a commit has no tip to refresh; the only question is "do I hold it". Check `cat-file -e <sha>^{commit}` first (zero network when present, the usual manual `--base` case), fetch by SHA only when absent, check again. No ref is needed: the task-creation commit references the object seconds later, far inside git's prune grace |
+| SHA | `<sha>`, no destination | a commit has no tip to refresh; the only question is "do I hold it". Check `rev-parse --verify --quiet <sha>^{commit}` first (zero network when present, the usual manual `--base` case), fetch by SHA only when absent, check again. No ref is needed: the task-creation commit references the object seconds later, far inside git's prune grace. An abbreviation a *ref* of this clone answers to is refused rather than resolved (`rev-parse --symbolic-full-name`): git's lookup order would otherwise let a local branch or tag named in hex stand in for the object of the same prefix. A full 40/64-character name needs no such guard — git ignores any ref whose name is a whole object name |
 
 ### Flags on every refresh
 
@@ -46,11 +46,38 @@ non-standard `remote.origin.fetch` cannot make the fetch move refs the
 factory did not name). Full depth, never shallow: resume must resolve
 history.
 
+`NarrowFetch` is the one construction site of that argv, and it serves every
+factory fetch rather than the base refresh alone: the resume/inspection task-branch
+locate (`TaskBranchLocator`) is built there too, so no caller can quietly acquire a
+different flag set.
+
 ### The SHA is read from the destination, never from `FETCH_HEAD`
 
 After a successful fetch the factory reads `refs/remotes/origin/<n>`,
 `refs/tags/<n>`, or verifies the object itself. `FETCH_HEAD` is never read
 anywhere in the factory.
+
+### The commit read from the destination is the only start point
+
+Once the refresh has read a commit back from its destination ref, **that
+commit is what everything downstream uses**: the law is read at it, the task
+branch is created from it, and it is recorded as `baseCommit`. A ref *name*
+crosses a port only as pin metadata or inside a `LawBinding` — never as a
+value a component below is expected to resolve.
+
+The rule exists because git's bare-name lookup order (gitrevisions:
+`$GIT_DIR/<n>`, `refs/<n>`, `refs/tags/<n>`, `refs/heads/<n>`,
+`refs/remotes/<n>`, `refs/remotes/<n>/HEAD`) does not reach
+`refs/remotes/origin/<n>`, which is where the branch refresh above lands. A
+component re-resolving the base name after a successful refresh therefore
+answers with a *stale local branch*, a *planted local tag*, or nothing at all
+— reproduced on a bare origin on 2026-09-10, once for each of the three.
+Passing the fully qualified name instead would still leave two resolutions,
+and a human's own `git fetch` can move `refs/remotes/origin/<n>` between them.
+
+Enforcement is the type: `TaskRepository.createTask` takes an `ObjectId`, and
+the two lifecycle adapters only verify the object is a commit this repository
+holds. Provenance: `add-base-ref-resolution`, section 10.
 
 ### Serialization is the clone lock, not git's ref lock
 
@@ -69,17 +96,63 @@ other `refs/remotes/origin/*`. Pull remains forbidden on every path.
 
 ### Resume
 
-Resume never re-resolves the base; it re-fetches the *pinned ref name* to
-bind the law from its current tip, with the same destinations and flags. A
-SHA base needs no fetch at all: the object is already in the task branch's
-history.
+Autonomous resume never re-resolves the base; it re-fetches the *pinned ref
+name* to bind the law from its current tip, with the same destinations and
+flags. A SHA base needs no fetch at all: the object is already in the task
+branch's history. Manual `run --resume` fetches nothing at all — see ADR 0007.
+
+### Auth refusal vs. genuine outage: the origin probe
+
+*Landed wider than this ADR originally scoped it.* At planning time (design
+D11) the probe-based disambiguation was sketched only for the SHA path,
+where a fetch is asked for blind with no prior refs read to lean on. Task
+7.1 generalized it: a fetch that **failed** and left no object at the named
+destination is ambiguous on **every** kind, not only SHA — a remote that
+answered a `refs/heads/<n>`/`refs/tags/<n>` read a moment earlier can
+still refuse the fetch itself (most often an authentication or permission
+problem scoped to that ref), and git's own exit detail cannot tell that
+apart from the remote going dark in between. `OriginProbe` (one bounded
+`git ls-remote origin HEAD`, no object transfer, no ref written) answers
+that second, simpler question directly instead of parsing git's localized
+wording. It is the single mechanism behind all three undelivered-fetch
+paths:
+
+- **Branch and tag** — `RefreshedTip.of`, shared by `BaseRefresh.fetchBranch`
+  and `TagBaseFetch.fetch`, probes a fetch that did not exit zero and returns a
+  task-level `Refused` (probe answers) or an `Unavailable` (probe fails or
+  the invocation itself did not exit). A fetch that exits **zero** and still
+  leaves no ref is not put to the probe: git reported success, so nothing
+  points at a per-ref refusal, and the honest class is `Unavailable` — the
+  clone could not establish freshness, and the daemon is charged for it
+  (`BaseRefreshSpec`, "a fetch that exits zero without delivering the ref").
+  The SHA path differs deliberately: it has no prior refs read, so it probes
+  on any non-delivery, exit code included.
+- **Commit SHA** — `CommitBaseFetch`'s own `OriginProbe` instance, same
+  classification, since a SHA fetch has no prior refs read to lean on at
+  all.
+- **The remote outage gate's own probe** — `GitBaseRefs.probe`
+  (`BaseRefGit.probe`, task 7.3) reuses the identical `OriginProbe.answers`
+  call for the gate's tracker-free reachability check; it deliberately runs
+  outside the bounded infrastructure retry the other three reads share,
+  since the probe *is* the outage/recovery signal and retrying it here would
+  double-count against the gate's own jittered schedule.
+
+Each fetch path constructs its own `OriginProbe` (package-private, over the
+same `GitProcessRunner`) rather than sharing one instance — it is stateless,
+so there is nothing to share; what is shared is the classification rule
+itself.
 
 ### Failure classes
 
-A remote that never answers is a reachability failure, charged to the
-daemon per ADR 0005. A diverging local tag, a remote that refuses
-fetch-by-SHA (the report names the `uploadpack.allow*SHA1InWant` option),
-and a ref origin reports absent are the task's, and park it with a report.
+A remote that never answers a fetch or a probe is a reachability failure,
+charged to the daemon per ADR 0005. So is a remote that refuses the refs
+read itself — a revoked or mis-scoped daemon credential, which no ref and no
+task can be blamed for; ADR 0005 draws that line and this change's
+`RemoteAuthRefusalSpec` pins it. A diverging local tag, a remote that
+refuses fetch-by-SHA (the report names the `uploadpack.allow*SHA1InWant`
+option), a remote that answers but refuses a branch or tag fetch after
+confirming the ref exists, and a ref origin reports absent are the task's,
+and park it with a report.
 
 ## Alternatives Considered
 
@@ -114,6 +187,11 @@ and a ref origin reports absent are the task's, and park it with a report.
   silent choice, at the cost of a rare human intervention.
 - The SHA path is the only one that can succeed with zero network, which
   is exactly the manual `--base <sha>` case D7 protected.
+- Because the start point is a commit rather than a name, a clone whose local
+  refs disagree with origin — the normal state of a clone a human also uses —
+  can no longer redirect a task branch. The cost is that every caller must
+  hold the peel, which is why the manual `run` tier binds its law before it
+  creates its branch.
 
 ## See also
 

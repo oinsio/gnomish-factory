@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
@@ -29,6 +30,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -73,6 +75,9 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     TaskWorktreeGit worktrees = Stub(TaskWorktreeGit)
     TaskStoreGit store = Stub(TaskStoreGit)
 
+    /** Shared with the container twin's field of the same name; see {@link RunChainFakes#resumingBaseRefGit}. */
+    BaseRefGit baseRefGit = resumingBaseRefGit()
+
     def setup() {
         worktreesRoot = tempDir.resolve('worktrees')
         worktree = worktreesRoot.resolve('PROJ-1')
@@ -90,7 +95,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     private TaskGit git() {
-        new TaskGit(store, branches, worktrees)
+        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)
     }
 
     /** The real routing chain, over the ports above. */
@@ -210,6 +215,31 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         result instanceof TakeResult.Delivered
     }
 
+    // FR7, NFR-S2 of add-base-ref-resolution (task 6.4): a resumed task never re-resolves its base
+    // from data a gnome or a triager can write. The fetched task names a CONFLICTING base
+    // designator (unresolvable — reading it could only park), the base-ref fake throws on every
+    // fresh-claim read (discovery, refresh), and the resume chain takes no TrustedBaseContext at all;
+    // the one base read of the whole resume is the re-resolution of the pinned ref name.
+    def "FR7: resume re-resolves only the pinned ref — the task's conflicting base designator is never read"() {
+        given:
+        def resolved = []
+        baseRefGit = recordingResumingBaseRefGit(resolved)
+        store.readTaskRecord(_) >> recordPinnedTo('release/1.18')
+        tracker.fetchTask(_) >> heldByUsNamingConflictingBase()
+
+        when:
+        def result = resume(resumeChain())
+
+        then:
+        0 * tracker.park(*_)
+        0 * tracker.release(*_)
+        1 * tracker.finish(REF, _)
+        result instanceof TakeResult.Delivered
+
+        and: 'the pinned ref name was the only base read; the designator values never reached git'
+        resolved == ['release/1.18']
+    }
+
     // FR9, FR12, D3, D12: an ESCALATION-kind park with a DecisionNeeded report and NO human reply
     // yet is re-parked with the question restated — the run must not proceed on a question nobody
     // answered.
@@ -325,10 +355,11 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         }
         store.readTaskRecord(_) >> recordWith(null, null, false)
         tracker.fetchTask(_) >> heldByUs()
+        def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit)
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
-        new TaskGit(store, branches, ownWorktrees), worktreesRoot, 'taskId',
+        ownGit, worktreesRoot, 'taskId',
         new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
-        def chain = chainOver(runner, new TaskGit(store, branches, ownWorktrees))
+        def chain = chainOver(runner, ownGit)
 
         when:
         resume(chain, discardWork)

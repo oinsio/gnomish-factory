@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * byte-identical to the base branch before the delegate is contacted. The pin set is the
  * union of the stage law's declared {@link VerifyCheck.External#pinPaths()} and the
  * {@link ExternalCheckPinContributor}'s adapter contribution; comparison reads both sides
- * as bare git objects in the factory clone ({@link GitObjects}, D11) — the base branch tip
+ * as bare git objects in the factory clone ({@link GitObjects}, D11) — the <em>law commit</em>
  * versus the harvested attempt commit carried by the {@link RecordedAttemptCommitWorkspace}.
  *
  * <p>Outcomes: an empty union passes vacuously and the poll goes straight through (the
@@ -36,20 +36,43 @@ import org.slf4j.LoggerFactory;
  * with one finding per differing path, and the delegate is never invoked. Comparing
  * against the base branch, not the previous round, catches a substitution made at any
  * earlier stage right here. Fail-closed degradations are {@link PollStatus.CannotVerify}:
- * a non-empty pin set with a workspace that carries no attempt commit, an unresolvable
- * base ref, or a pinned blob too large to compare — the pin can then not be evaluated,
+ * a non-empty pin set with a workspace that carries no attempt commit, a law bound to no
+ * commit, or a pinned blob too large to compare — the pin can then not be evaluated,
  * so no adapter contact happens either.
  *
- * <p>Implements FR16 of add-sandbox-core.
+ * <p>A plain class rather than a record: a {@code @Nullable} record component carries a type-use
+ * annotation in the class's {@code Record} attribute, which the JVM refuses to redefine under the
+ * mutation engine's hot swap — every mutation of every method would then report RUN_ERROR (the
+ * JVMTI limit {@code .claude/rules/testing.md} records for records).
  *
- * @param delegate the real external-check client, contacted only after the pin passes
- * @param contributor the delegate's pin-path contribution seam
- * @param gitObjects the factory clone's bare-object reader the comparison runs over
- * @param baseRef the base branch ref the pin compares against (the law source branch)
+ * <p>Implements FR16 of add-sandbox-core.
  */
-public record PinCheckedExternalCheckClient(
-        ExternalCheckClient delegate, ExternalCheckPinContributor contributor, GitObjects gitObjects, String baseRef)
-        implements ExternalCheckClient {
+public final class PinCheckedExternalCheckClient implements ExternalCheckClient {
+
+    private final ExternalCheckClient delegate;
+    private final ExternalCheckPinContributor contributor;
+    private final GitObjects gitObjects;
+    private final @Nullable ObjectId lawCommit;
+
+    /**
+     * @param delegate the real external-check client, contacted only after the pin passes
+     * @param contributor the delegate's pin-path contribution seam
+     * @param gitObjects the factory clone's bare-object reader the comparison runs over
+     * @param lawCommit the peeled commit the run's law was frozen from (design D12 of
+     *     add-base-ref-resolution) — a typed id the guard compares against as is, never a ref it
+     *     re-resolves, so law and pin name one SHA by construction; {@code null} when the run's
+     *     repository resolves no commit at all, which fails every pinned check closed
+     */
+    public PinCheckedExternalCheckClient(
+            ExternalCheckClient delegate,
+            ExternalCheckPinContributor contributor,
+            GitObjects gitObjects,
+            @Nullable ObjectId lawCommit) {
+        this.delegate = delegate;
+        this.contributor = contributor;
+        this.gitObjects = gitObjects;
+        this.lawCommit = lawCommit;
+    }
 
     /**
      * The read cap for one pinned definition file on either side of the comparison:
@@ -59,6 +82,16 @@ public record PinCheckedExternalCheckClient(
     static final long PIN_READ_CAP_BYTES = 1024 * 1024;
 
     private static final Logger log = LoggerFactory.getLogger(PinCheckedExternalCheckClient.class);
+
+    /**
+     * The client this guard fronts — for the wiring specs that assert which client the composition
+     * root put behind the guard.
+     *
+     * @return the wrapped external-check client; never null
+     */
+    public ExternalCheckClient delegate() {
+        return delegate;
+    }
 
     @Override
     public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
@@ -75,17 +108,17 @@ public record PinCheckedExternalCheckClient(
                             + " but the workspace is " + workspace.getClass().getName()
                             + ", which carries no attempt commit to compare against");
         }
-        Optional<ObjectId> base = gitObjects.resolveRef(baseRef);
-        if (base.isEmpty()) {
+        if (lawCommit == null) {
             return new PollStatus.CannotVerify(
-                    "pin-check cannot resolve the base branch",
-                    "base ref '" + baseRef + "' does not resolve in the factory clone");
+                    "pin-check has no law commit to compare against",
+                    "the run's law is bound to no commit — its repository root resolves no checkout — so"
+                            + " pinned definition files " + pins + " cannot be compared");
         }
         ObjectId attempt = ObjectId.of(attemptWorkspace.attemptCommitSha());
 
         List<Finding> diffs = new ArrayList<>();
         for (String path : pins) {
-            PinnedBlob baseBlob = read(base.get(), path);
+            PinnedBlob baseBlob = read(lawCommit, path);
             PinnedBlob attemptBlob = read(attempt, path);
             if (baseBlob.tooLarge() || attemptBlob.tooLarge()) {
                 return new PollStatus.CannotVerify(
@@ -102,7 +135,7 @@ public record PinCheckedExternalCheckClient(
                             + " the adapter is not invoked",
                     check.checkId(),
                     diffs.size(),
-                    baseRef);
+                    lawCommit.hex());
             return new PollStatus.Fail(diffs);
         }
         return delegate.poll(check, workspace);

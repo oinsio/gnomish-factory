@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.ServeProperties
+import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
@@ -11,7 +12,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.time.SystemClock
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
@@ -39,7 +39,8 @@ import spock.lang.TempDir
  *
  * <p>Implements FR12 of add-factory-serve; FR1, FR2, FR5, NFR-R1 of fix-reaper-idle-liveness.
  */
-class ServeRestartIntegrationSpec extends Specification implements AppAssemblyFixture, ApplicationArgumentsFixture {
+class ServeRestartIntegrationSpec extends Specification
+implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, ServeObservabilityFixture {
 
     private static final TaskRef TASK_A = new TaskRef('github:o/r#restart-a')
     private static final TaskRef TASK_B = new TaskRef('github:o/r#restart-b')
@@ -65,29 +66,12 @@ class ServeRestartIntegrationSpec extends Specification implements AppAssemblyFi
 
     def setup() {
         homeDir = tempDir.resolve('home')
-        projectDir = tempDir.resolve('project')
-        Files.createDirectories(projectDir.resolve('.gnomish/stages/build'))
-        Files.writeString(projectDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
-purpose: build it
-executor:
-  type: agent-cli
-  model: model-x
-instructions: stages/build/instructions.md
-advancement: auto
-''')
-        Files.writeString(projectDir.resolve('.gnomish/config.yaml'), '''\
-schemaVersion: "1"
-autonomy:
-  attemptLimit: 3
-tracker:
-  type: github
-  github:
-    api-url: https://api.github.com
-    repo: acme/widgets
-  heartbeat-interval: 100ms
-''')
+        // FR5, FR13 of add-base-ref-resolution: a real serve startup resolves and refreshes its
+        // base against a real 'origin' remote, never a bare directory or the clone's local HEAD.
+        projectDir = initWorkingRepo(tempDir, 'project')
+        writeMinimalProject(projectDir, '100ms')
+        commitAll(projectDir)
+        addOrigin(projectDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees')
 
         // The "previous life": two claims held by a now-dead instance id, seeded directly —
@@ -105,7 +89,7 @@ tracker:
                 homeDir,
                 'taskId',
                 testProperties(instanceName: 'gnomish-factory'),
-                new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null),
+                new ServeProperties(2, Duration.ofMillis(20), null, null, null, null, null, null, null),
                 Clock.systemUTC(),
                 new SystemClock(),
                 [github: fakeFactory(tracker)],

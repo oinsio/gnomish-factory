@@ -35,6 +35,6 @@ class BaselineSnapshotFixture {
                         new HeartbeatVital(HeartbeatState.RUNNING, writtenAt, 0),
                         new ReaperVital(writtenAt, 0, 300L),
                         new JanitorVital(writtenAt)),
-                new TrackerHealth(writtenAt, 0))
+                new TrackerHealth(writtenAt, 0), [:])
     }
 }

@@ -45,7 +45,8 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
+        Files.createDirectories(cloneDir.resolve('.gnomish'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(cloneDir, 'init')
     }
 

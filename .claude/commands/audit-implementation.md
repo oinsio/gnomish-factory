@@ -88,6 +88,13 @@ Check the new/modified files (from the diff) against `.claude/rules/`:
   logging use the shared capture helper and no test writes to the operator's log.
 - `design-decisions.md` adherence: implementation matches each D/DEC decision in `design.md`;
   contradictions are ⚠️ with "fix code or revise design.md" recommendations.
+- `implementation.md` + the design's single-owner table: for every row, verify each listed
+  consumer takes the value from the owner (not a recomputation), grep the "old way" column's
+  pattern across `src/main` and confirm every hit is removed or listed as an exemption, confirm
+  the port/constructor no longer accepts the raw form, and confirm the named enforcement (type,
+  architecture spec, grep gate) and identity spec exist. An unlisted old-way survivor is
+  ❌ CRITICAL; a missing table for a decision that says "once"/"only"/"funnel" is ⚠️ against
+  `design-decisions.md`.
 - `diagrams.md`/docs: if the change altered behavior described in `docs/` or `README.md`,
   check the prose and Mermaid diagrams still match.
 

@@ -90,6 +90,32 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         outcome == DivergenceOutcome.EQUAL
     }
 
+    // ADR 0006: the reconcile fetch is a factory fetch of origin like any other, built by
+    //     NarrowFetch — so it cannot auto-follow a tag into the operator's refs/tags or truncate
+    //     the clone's single FETCH_HEAD file while doing its own narrow job.
+    def "the reconcile fetch writes neither an auto-followed tag nor FETCH_HEAD"() {
+        given: 'origin carries a tag on the branch this reconcile will fetch'
+        def env = setUpClonedBranch()
+        commit(env.seed, 'b.txt', 'second')
+        runner.run(env.seed, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'tag', 'v9.9')
+        runner.run(env.seed, 'push', 'origin', branchName)
+        runner.run(env.seed, 'push', 'origin', 'v9.9')
+        assert gitOutput(env.clone, 'for-each-ref', '--format=%(refname)', 'refs/tags').isEmpty()
+        // The fixture's own clone and seeding fetch wrote one; removing it leaves the reconcile
+        // fetch as the only thing that could put it back.
+        Files.deleteIfExists(env.clone.resolve('.git/FETCH_HEAD'))
+
+        when:
+        def outcome = ReplicaPairReconciler.forWorktree(runner, env.worktree, underTenure).reconcile('PROJ-1', branchName)
+
+        then: 'the branch was reconciled'
+        outcome == DivergenceOutcome.BEHIND
+
+        and: "and nothing else in the operator's clone moved"
+        gitOutput(env.clone, 'for-each-ref', '--format=%(refname)', 'refs/tags').isEmpty()
+        !Files.exists(env.clone.resolve('.git/FETCH_HEAD'))
+    }
+
     def "local behind origin fast-forwards the worktree and discards uncommitted leftovers"() {
         given: 'a worktree at the old tip, plus another instance pushing a new commit to origin'
         def env = setUpClonedBranch()
@@ -308,7 +334,9 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
         and: 'the passes are counted from one, so the third line is the last the bound allows'
         lost.collect {
-            (it.formattedMessage =~ /pass=(\d+)/)[0][1]
+            def matcher = it.formattedMessage =~ /pass=(\d+)/
+            matcher.find()
+            matcher.group(1)
         } == ['1', '2', '3']
     }
 

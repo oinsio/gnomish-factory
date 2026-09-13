@@ -50,6 +50,15 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
             reason: 'the unforwarded 4-parameter create default self-delegates into the 3-parameter' +
             ' form this class does override, so forwarding it would bypass the epoch recording' +
             ' the decorator exists to do'
+        ],
+        [
+            type: 'com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink',
+            method: 'andThen',
+            params: 'Consumer',
+            reason: 'Consumer.andThen must compose on THIS forwarder, not on the delegate held at' +
+            ' the moment of composition: this stand-in exists precisely because its delegate is' +
+            ' rebound once at wiring time, and a forwarded andThen would freeze the composed' +
+            ' consumer onto the no-op the forwarder starts with'
         ]
     ]
 

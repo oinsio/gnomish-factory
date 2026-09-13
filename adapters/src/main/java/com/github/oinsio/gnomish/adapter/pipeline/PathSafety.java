@@ -77,12 +77,33 @@ public final class PathSafety {
      *     {@link Escapes} naming {@code ref}
      */
     public static Resolution resolveWithinRoot(Path root, String ref) {
+        Resolution lexical = resolveWithinRootLexically(root, ref);
+        if (lexical instanceof Within within && escapesViaSymlink(root.normalize(), within.path())) {
+            return new Escapes(ref);
+        }
+        return lexical;
+    }
+
+    /**
+     * The lexical half of the guard alone: resolves {@code ref} against {@code root} and classifies
+     * it by path structure only — no filesystem is consulted, so no symlink is followed.
+     *
+     * <p>This is the whole guard where there is no filesystem to canonicalize against: law read out
+     * of git objects has no {@code realpath}, and the reader there closes the symlink half by
+     * refusing symlink entries outright instead (design D12 of add-base-ref-resolution). Callers
+     * that do have a filesystem use {@link #resolveWithinRoot}, which adds the symlink half.
+     *
+     * <p>Implements FR11 of add-base-ref-resolution.
+     *
+     * @param root the law root the reference resolves against
+     * @param ref a referenced path from a manifest
+     * @return {@link Within} with the normalized resolved path when it stays under the root
+     *     lexically, else {@link Escapes} naming {@code ref}
+     */
+    public static Resolution resolveWithinRootLexically(Path root, String ref) {
         Path normalizedRoot = root.normalize();
         Path resolved = normalizedRoot.resolve(ref).normalize();
         if (!resolved.startsWith(normalizedRoot)) {
-            return new Escapes(ref);
-        }
-        if (escapesViaSymlink(normalizedRoot, resolved)) {
             return new Escapes(ref);
         }
         return new Within(resolved);

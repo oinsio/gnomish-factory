@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -37,7 +38,8 @@ class TakeLoadedBranchRoutesSpec extends Specification {
                 Path.of('/tmp/unused'),
                 'gnomish/PROJ-1',
                 'base-commit',
-                pending)
+                pending,
+                BasePin.UNPINNED)
     }
 
     // FR10, D10, NFR-C1: a branch is an orphaned park to reconcile ONLY when the tracker-write marker

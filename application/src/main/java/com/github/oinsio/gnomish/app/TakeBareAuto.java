@@ -69,6 +69,8 @@ public final class TakeBareAuto {
      *     claimable only while the open-front count stays below it
      * @param random the source of randomness for {@link FeedPolicy}'s head-zone pick (design D4);
      *     never null — a seeded instance makes the pick deterministic for tests
+     * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
+     *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
     TakeBareAuto(
             RunAssembly assembly,
@@ -86,7 +88,8 @@ public final class TakeBareAuto {
             int wipLimit,
             Random random,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ClaimEpochBook epochs,
+            TrustedBaseContext trustedBase) {
         var claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
                 git,
@@ -98,45 +101,9 @@ public final class TakeBareAuto {
                 heartbeat,
                 claimLossFlag,
                 containerTakeSupport,
-                epochs);
+                epochs,
+                trustedBase);
         this.walk = new BareTakeClaimWalk(claimAndWork, taskIdMdcKey, backoffBase, backoffCap, clock, wipLimit, random);
-    }
-
-    /**
-     * The heartbeat-free construction used where no beat runs (the bare-auto unit spec): delegates
-     * with {@link ClaimBeat#NONE} and a fresh empty {@link ClaimLossFlag} that never trips, so call
-     * sites unconcerned with task 6.1's and 6.3's added seams don't need to supply them.
-     */
-    TakeBareAuto(
-            RunAssembly assembly,
-            TaskGit git,
-            Path worktreesRoot,
-            AbortHandler abortHandler,
-            int abortThreshold,
-            String taskIdMdcKey,
-            Duration backoffBase,
-            Duration backoffCap,
-            Clock clock,
-            List<String> credentialEnvVarsToScrub,
-            int wipLimit,
-            Random random) {
-        this(
-                assembly,
-                git,
-                worktreesRoot,
-                abortHandler,
-                abortThreshold,
-                taskIdMdcKey,
-                backoffBase,
-                backoffCap,
-                clock,
-                credentialEnvVarsToScrub,
-                ClaimBeat.NONE,
-                new ClaimLossFlag(),
-                wipLimit,
-                random,
-                ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook());
     }
 
     /**

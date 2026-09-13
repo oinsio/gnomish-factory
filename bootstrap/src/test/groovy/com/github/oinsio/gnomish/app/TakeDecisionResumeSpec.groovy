@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -7,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -33,7 +35,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "DecisionNeeded with empty replies re-parks restating the question, no engine run"() {
         given:
         def taskId = 'PROJ-1'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -66,7 +68,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "DecisionNeeded with one pending reply acks before acting, then resumes"() {
         given:
         def taskId = 'PROJ-2'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -107,7 +109,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "DecisionNeeded with multiple pending replies acts on the freshest one"() {
         given:
         def taskId = 'PROJ-3'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded('continue?', ['yes', 'no'])
@@ -138,7 +140,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "AttemptsExhausted with no pending reply resumes without ack, attempt counter reset applies"() {
         given: 'attempt limit 1, already exhausted before resume'
         def taskId = 'PROJ-4'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
@@ -167,7 +169,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "AttemptsExhausted with a pending reply acks and appends it, then resumes"() {
         given:
         def taskId = 'PROJ-5'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
@@ -192,12 +194,14 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         result instanceof TakeResult.Delivered
 
         and: 'the reply text was appended durably via GitTaskRepository#appendDecision'
-        def historicalTaskJsons = gitRunner.run(cloneDir, 'log', "gnomish/${taskId}", '--format=%H').stdout()
-                .lines().collect {
-                    gitRunner.run(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+        def historicalTaskJsons = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%H')
+                .lines()
+                .findAll {
+                    gitExitCode(cloneDir, 'show', "${it}:.gnomish-task/task.json") == 0
                 }
-                .findAll { it.exitCode() == 0 }
-                .collect { it.stdout() }
+                .collect {
+                    gitOutput(cloneDir, 'show', "${it}:.gnomish-task/task.json")
+                }
         historicalTaskJsons.any { it.contains('try again') }
     }
 
@@ -206,7 +210,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
     def "an INFRA-kind lastEscalation throws IllegalStateException"() {
         given:
         def taskId = 'PROJ-6'
-        repository().createTask(context(taskId), null, TaskState.atStageStart('build'))
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
         def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())

@@ -12,6 +12,16 @@ branch (cf. `RoundBoundaryCheck` / `HarvestedBoundaryCheck`, `GitAttemptPersiste
 advanced position (FR4 of harden-task-branch-contract). Canon: Tekton validates declared
 params/workspaces before a run starts, as a class distinct from task failure.
 
+Sequenced after `add-base-ref-resolution` (review of 2026-09-07): that change
+settles the two roots a stage manifest speaks in — the **law root**
+(`.gnomish/`, for `instructions`/`criteriaFile`, read through `LawSource`
+from the law commit) and the **working copy root** (for pin paths and, here,
+artifact `path`s, read from the task branch tip) — records them in
+`docs/adr/0007-pipeline-law-source.md` and the glossary, makes the lexical
+half of `PathSafety` a public guard, and adds `GitObjects.listTree` with
+typed `TreeEntry` kinds. It also rewrites the reference-pipeline fixtures
+this change's 3.4 extends. Applying this change first would fork all three.
+
 ## Decisions
 
 **D1 — `path` lives on outputs only, validated lexically at load (FR1, FR2, NFR-S1).**
@@ -20,7 +30,11 @@ domain model): one file path or glob relative to the working copy root. Inputs n
 declare paths — an `internal` input's path is its producer's; `source` inputs stay
 symbolic. Load-time validation is the pin-paths class of check: relative, normalized (no
 `.`/`..` segments), not absolute, and accepted by `FileSystem#getPathMatcher("glob:…")` as
-syntactically valid — reported as located `ConfigError`s, with no existence check (no
+syntactically valid — the relative/normalized/not-absolute half reuses the
+lexical guard `PathSafety` already exposes (one owner for the rule that pin
+paths, law references, and artifact paths all share — a third copy would
+trip the rule of three in `manual-sync-pairs.md`), with only the glob-syntax
+check added on top — reported as located `ConfigError`s, with no existence check (no
 working copy exists at load time, and the `.gnomish/`-root confinement of file references
 deliberately does not apply). *Rationale:* one declaration point keeps the DAG the single
 source of the producer–consumer link; lexical validation keeps the loader read-only and
@@ -63,9 +77,12 @@ through a small new engine port — `ArtifactFileSource` with a single "enumerat
 relative paths of the current persisted working-copy state" operation; the domain matches
 globs against that one listing (one enumeration per gate, NFR-P1; symlinks are entries in
 the listing, never followed out of the root, NFR-S1). The production adapter is a single
-git implementation (`git ls-tree -r --name-only <tip>`), wired with the worktree repo in
-host mode and the factory clone in container mode — same class, different constructor
-argument. *Alternative rejected:* a `boolean exists(glob)` port — it pushes the matching
+git implementation built on `:gitobjects` — `GitObjects.listTree` and its typed
+`TreeEntry` kinds (`FILE | DIRECTORY | SYMLINK | OTHER`), walked recursively or
+extended with a recursive `-r` listing in that module — never a second `git ls-tree`
+subprocess seam; a `SYMLINK` entry is listed by its own path and never followed,
+which is NFR-S1 for free. It is wired with the worktree repo in host mode and the
+factory clone in container mode — same class, different constructor argument. *Alternative rejected:* a `boolean exists(glob)` port — it pushes the matching
 rule into every adapter, multiplying the surface D5 must then declare.
 
 **D5 — Sync surfaces.** None new: this change adds no parallel implementation and touches

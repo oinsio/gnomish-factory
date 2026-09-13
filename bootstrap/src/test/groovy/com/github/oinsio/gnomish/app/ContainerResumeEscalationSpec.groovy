@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -13,7 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
 
     private void recordEscalated(String taskId) {
-        repository.createTask(context(taskId), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         repository.recordOutcome(taskId,
                 new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded('how?', ['a'])))
         commitStateAtPipelineEnd(taskId)
@@ -52,7 +54,7 @@ class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
     // an internal error naming the task, never a dialog over a missing report.
     def "an escalated outcome without a recorded escalation is an internal error"() {
         given:
-        repository.createTask(context('T-NOREP'), 'HEAD', TaskState.atStageStart('build'))
+        repository.createTask(context('T-NOREP'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         commitTaskJson('T-NOREP',
                 new TaskOutcome.Escalated(pipelineEndState(), new EscalationReport.DecisionNeeded('q', ['a'])),
                 null)

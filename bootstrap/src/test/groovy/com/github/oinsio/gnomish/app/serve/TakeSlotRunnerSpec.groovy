@@ -10,9 +10,11 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.AppAssemblyFixture
 import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.TaskGitFixture
+import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -21,6 +23,8 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortHandler
+import com.github.oinsio.gnomish.baseref.BaseDefinition
+import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -40,6 +44,7 @@ import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
 import org.slf4j.LoggerFactory
@@ -75,12 +80,43 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     Path worktreesRoot
     def gitRunner = new GitProcessRunner()
     Tracker tracker = Mock()
+    // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and over
+    //     BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to stamp the
+    //     slot's own refresh, which this spec reads back but never paces.
+    RemoteOutageGate remoteOutageGate = RemoteOutageGates.system(BaseRefGit.UNWIRED, Path.of('.'), Duration.ofSeconds(30))
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
-        Files.writeString(cloneDir.resolve('instructions.md'), 'build it\n')
-        gitRunner.run(cloneDir, 'add', 'instructions.md')
+        Files.createDirectories(cloneDir.resolve('.gnomish/stages/build'))
+        Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), 'build it\n')
+        // FR13, D14 of add-base-ref-resolution: a fresh claim reads its task tier from git objects
+        // at the resolved base commit, so this clone carries a real, loadable pipeline too,
+        // alongside the root-level instructions.md #stage() names.
+        Files.writeString(cloneDir.resolve('.gnomish/pipeline.yaml'), 'stages:\n  - build\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/build/instructions.md'), 'build it\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
+purpose: purpose
+executor:
+  type: agent-cli
+  model: model-x
+instructions: stages/build/instructions.md
+advancement: auto
+''')
+        Files.writeString(cloneDir.resolve('.gnomish/config.yaml'), '''\
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+tracker:
+  type: github
+  github:
+    api-url: https://api.github.com
+    repo: acme/widgets
+''')
+        gitRunner.run(cloneDir, 'add', '.gnomish')
         gitRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
+        // FR2, FR13 of add-base-ref-resolution: a fresh claim resolves and refreshes its base
+        // against a real 'origin' remote before it ever reaches branch creation.
+        addOrigin(cloneDir, tempDir)
         worktreesRoot = tempDir.resolve('worktrees-root')
     }
 
@@ -116,7 +152,9 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         new TakeSlotRunner(
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, ABORT_THRESHOLD, MDC_KEY,
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook())
+                new ClaimEpochBook(), new TrustedBaseContext(BaseDefinition.none(),
+                new DefaultBranch(currentBranch(cloneDir))),
+                remoteOutageGate)
     }
 
     // Scenario: slot body unchanged — a pre-claimed fresh task dispatches through
@@ -133,6 +171,24 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
         then:
         gitRunner.run(cloneDir, 'rev-parse', '--verify', 'gnomish/PROJ-1').exitCode() == 0
         0 * tracker.claim(*_)
+    }
+
+    // FR14, D9 of add-base-ref-resolution: the slot's REAL base refresh — the narrow fetch against
+    //     the spec's own origin — reaches the remote outage gate through the slot's own TaskGit,
+    //     proven on the gate's observable state: it records the refresh as the remote's last
+    //     successful contact. The slot's terminal result plays no part in it.
+    def "a slot's real base refresh is reported to the remote outage gate"() {
+        given:
+        tracker.fetchTask(new TaskRef('PROJ-1')) >> workingTask('PROJ-1')
+        def slotRunner = newSlotRunner()
+        remoteOutageGate.health().lastSuccessAt() == null
+
+        when:
+        slotRunner.run(new TaskRef('PROJ-1'))
+
+        then:
+        remoteOutageGate.health().lastSuccessAt() != null
+        !remoteOutageGate.isOpen()
     }
 
     // Scenario: MDC is set to the claimed ref's id for the duration of the run and cleared once it
