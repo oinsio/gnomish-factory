@@ -103,12 +103,17 @@ Answer in the thread, then return the label. Useful things to say:
 
 ## Reading the result
 
-The stage leaves `temporary-docs/gnomish/dependencies.md` on the task branch: the
-change it resolved, the verdict, and the dependency chain with a `file:line`
-pointer for each link. The instructions budget it at 1200 bytes — the report
-is a verdict, not a transcript, and the changes it ruled out are deliberately not
-listed. The tracker thread carries the claim, the question if there was one, and
-the outcome.
+The two outcomes leave their evidence in different places, and neither repeats the
+other:
+
+- **Startable** — `temporary-docs/gnomish/dependencies.md` on the task branch, a
+  few lines naming the change and the verdict, with a note only where one earns
+  its place. The instructions budget it at 1200 bytes: it is a verdict, not a
+  transcript, and the changes it ruled out are deliberately not listed.
+- **Blocked** — the question in the tracker thread, carrying the chain with a
+  `file:line` pointer per link. No report is written; a blocked change never
+  finishes the stage, so a report saying so could only be a second copy of the
+  question.
 
 ## Running it by hand
 
@@ -122,6 +127,12 @@ the outcome.
 to this directory before committing it. `--mode=in-place` keeps the run out of
 git entirely: no branch, no resume, and the gnome works in this very clone.
 
-One consequence of that last point: the stage checks that nothing but its report
-changed, and in an in-place run it measures your clone. Commit or stash your own
-work in progress first, or the check fails on your edits rather than the gnome's.
+**Commit your own work before an in-place run.** The stage checks that nothing but
+its report changed, and in-place that check measures your clone — so your
+uncommitted edits fail it, and the gnome is then told, in the failure text it gets
+as feedback, that the tree is dirty. A gnome has read that as an instruction and
+moved the operator's work into `git stash` to make the check pass. It labelled the
+entry and said so plainly, and nothing was lost, but the stash stack is shared with
+every worktree and session on the machine. The stage now forbids stash, restore,
+checkout and clean outright, and the check's own text says to leave a foreign
+change alone and escalate — belt and braces. Your commit is the third.

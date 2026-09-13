@@ -74,9 +74,10 @@ verify:
       report=temporary-docs/gnomish/dependencies.md
       dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -v "^$report$" || true)
       if [ -n "$dirty" ]; then
-        echo "this stage may only write $report, but the working copy also carries:"
+        echo "this stage writes only $report, but the working copy also carries:"
         echo "$dirty"
-        echo "restore those paths - an analysis changes nothing else"
+        echo "if you made these edits, undo each of them yourself and nothing else."
+        echo "if you did not: an in-place run measures the operator's own clone, so these are someone else's work in progress. Leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - write no report, and escalate through \$GNOMISH_DECISION_FILE naming the paths."
         exit 1
       fi
       # Committed strays, measured against the base the branch merged in at step 1.

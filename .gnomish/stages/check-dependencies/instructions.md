@@ -117,43 +117,44 @@ of work resolves them:
   proposes is already there. Someone is mid-flight or has finished; starting
   again duplicates or undoes their work.
 
-## Step 5: write the report
+## Step 5: write the report — on the startable path only
 
-Once a change is resolved, always write `temporary-docs/gnomish/dependencies.md`,
-in English, in this shape — both on the startable path and the blocked one:
+The report is what a startable change looks like. **A blocked change has no
+report**: its finding belongs in the decision file of step 6 and nowhere else.
+Writing both would say the same thing twice, and a report reading
+`Verdict: blocked` could never pass this stage's checks anyway — finishing the
+round is precisely the claim that work may start.
+
+So when, and only when, nothing blocks the change, write
+`temporary-docs/gnomish/dependencies.md`, in English:
 
 ```
 Change: <change-name>
-Verdict: no-blocking-dependencies | blocked
-
-## Dependencies
-1. <change> - <one line: what forces the order> (<file>:<line>)
-...
+Verdict: no-blocking-dependencies
 
 ## Notes
 - <only what changes what a human does next>
 ```
 
 The `Change:` and `Verdict:` lines are checked mechanically, so keep them exactly
-in this form. When you escalate at step 3 there is no change to report on — skip
-the report and escalate.
+in this form; `Verdict:` has one legal value, because it is your assertion that
+the work may begin.
 
 **The whole report fits in 1200 bytes.** Nothing checks this — a rewrite would
 cost more than any overrun — so it is yours to keep. Count bytes, not lines: one
-600-character paragraph costs as much as ten real lines. It is a verdict with its
-evidence, not
-a record of your reasoning, and every line of it is paid for twice — once to write
+600-character paragraph costs as much as ten real lines. It is a verdict, not a
+record of your reasoning, and every line of it is paid for twice — once to write
 and once by whoever reads it. So:
 
-- `## Dependencies` is `none`, or one line per dependency. The evidence is a
-  `file:line` pointer; the reader opens it if they doubt you. Do not quote the
-  passage, do not explain how you found it.
 - **Never list the changes you ruled out.** The verdict already says you checked
   them, and a paragraph each for two dozen changes is the single most expensive
   thing this stage can produce.
 - `## Notes` earns its place only when a human would act differently for knowing
-  it — an archived namesake you disambiguated, a decision you applied, a call you
-  are unsure of. Nothing to say is the normal case: drop the section entirely.
+  it — an archived namesake you disambiguated, a decision you applied, a
+  dependency that turned out to have landed already, a call you are unsure of.
+  Each is one line with a `file:line` pointer where there is one to give. Nothing
+  to say is the normal case: drop the section entirely and the report is three
+  lines long.
 - No summary of the task, no description of your method, no restating these
   instructions back.
 
@@ -164,9 +165,9 @@ turn, touch no decision file. That is the whole stage.
 
 **Anything else** — a chain, a cycle, a dangling reference, a superseded change,
 a change already under way, an unresolvable name, a tool the environment refused,
-or an analysis you cannot finish within the round's budget: do **not** finish the round
-as done. Hand it to a human, unless step 2 shows a decision that already answers
-exactly this:
+or an analysis you cannot finish within the round's budget: do **not** finish the
+round as done, and write no report. Hand it to a human, unless step 2 shows a
+decision that already answers exactly this:
 
 1. Run one shell command to learn where the decision file goes:
    `echo "$GNOMISH_DECISION_FILE"`.
@@ -192,9 +193,17 @@ exactly this:
   time to answer it, so a turn that ends in a question is a lost attempt. When you
   cannot proceed — including when a tool is refused — take the escalation exit of
   step 6 instead; that is the channel a human actually reads.
+- **Never undo work you did not do.** A change in the working copy that is not
+  yours is not a mess to tidy: an in-place run happens inside somebody's own
+  clone, and their uncommitted work is sitting right there. Say what you found
+  and escalate; the one thing you must not do is make it go away. `git stash`
+  counts — a stash is a stack shared with every worktree and every other session
+  on the machine, and pushing onto it moves another author's files out from under
+  them.
 - Never run a git command that writes: `commit`, `push`, `merge`, `rebase`,
-  `pull`, `checkout`, `reset`. The factory owns the branch, and this repository
-  denies several of them outright.
+  `pull`, `checkout`, `reset`, `stash`, `restore`, `clean`. Reading is free;
+  `ls-tree`, `log`, `show` and `status` are all you need. The factory owns the
+  branch, and this repository denies several of the writing commands outright.
 - Write exactly one file, `temporary-docs/gnomish/dependencies.md`, plus the
   decision file on the escalating path. Everything else in the working copy —
   `openspec/`, `src/`, `.gnomish/`, `.gnomish-task/` — stays as you found it.
