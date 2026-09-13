@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
@@ -65,7 +66,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
      */
     BaseRefGit baseRefGit = Stub(BaseRefGit) {
         resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
-            new ResumeBaseOutcome.Bound(ref, ref)
+            new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
         }
     }
 

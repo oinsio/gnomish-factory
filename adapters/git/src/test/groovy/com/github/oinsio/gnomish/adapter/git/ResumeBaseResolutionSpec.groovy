@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -56,13 +57,17 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     // exactly the base-refresh fetch — reuse, not a second implementation.
     def "a configured origin narrow-fetches the pinned ref to its current tip"() {
         given:
+        Path log = tempDir.resolve('configured-origin.log')
         def advanced = advance('develop', 'c.txt')
 
         when:
-        def outcome = resolution().resolve(clone, 'develop', null)
+        def outcome = resolution(new GitProcessRunner(recordingGit(log).toString())).resolve(clone, 'develop', null)
 
         then:
-        outcome == new ResumeBaseOutcome.Bound('develop', advanced)
+        outcome == new ResumeBaseOutcome.Bound('develop', advanced, OriginContact.CONTACTED)
+
+        and: 'the bind says CONTACTED exactly because the delegated refresh fetched (FR1)'
+        recordedSubcommands(log).count('fetch') == 1
     }
 
     // FR7, D7 (revised 2026-09-10): a pinned kind names the namespace to fetch, so a tag pushed
@@ -79,7 +84,8 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         resolution().resolve(clone, 'develop', null) instanceof ResumeBaseOutcome.Refused
 
         and: 'the pinned kind fetches the branch namespace only'
-        resolution().resolve(clone, 'develop', BaseRefKind.BRANCH) == new ResumeBaseOutcome.Bound('develop', advanced)
+        resolution().resolve(clone, 'develop', BaseRefKind.BRANCH)
+                == new ResumeBaseOutcome.Bound('develop', advanced, OriginContact.CONTACTED)
     }
 
     // D13: a pinned ref that resolves nowhere on a configured origin parks the task.
@@ -108,15 +114,20 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     // of refusing — a resume with nothing to fetch from is a legitimate shape.
     def "a clone with no origin binds from the ref's local tip"() {
         given:
+        Path log = tempDir.resolve('no-origin.log')
         assert gitExitCode(clone, 'branch', 'release/1.18', 'refs/remotes/origin/develop') == 0
         def localTip = gitOutput(clone, 'rev-parse', 'release/1.18')
         assert gitExitCode(clone, 'remote', 'remove', 'origin') == 0
 
         when:
-        def outcome = resolution().resolve(clone, 'release/1.18', null)
+        def outcome = resolution(new GitProcessRunner(recordingGit(log).toString()))
+                .resolve(clone, 'release/1.18', null)
 
-        then:
-        outcome == new ResumeBaseOutcome.Bound('release/1.18', localTip)
+        then: 'a local-tip bind never reached origin — there is none to reach (FR1)'
+        outcome == new ResumeBaseOutcome.Bound('release/1.18', localTip, OriginContact.CLONE_ONLY)
+
+        and: 'CLONE_ONLY is the path taken, not a label: no fetch ran at all (FR1, NFR-R1)'
+        !recordedSubcommands(log).contains('fetch')
     }
 
     // D13: a clone with no origin AND a ref that resolves nowhere locally either parks the task —
@@ -146,8 +157,8 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         when:
         def outcome = resolution(new GitProcessRunner(recordingGit(log).toString())).resolve(clone, held, null)
 
-        then:
-        outcome == new ResumeBaseOutcome.Bound(held, held)
+        then: 'the refresh served it from the clone, and the resume passes that value through (FR1)'
+        outcome == new ResumeBaseOutcome.Bound(held, held, OriginContact.CLONE_ONLY)
 
         and:
         !recordedSubcommands(log).contains('fetch')

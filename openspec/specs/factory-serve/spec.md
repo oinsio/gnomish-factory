@@ -355,12 +355,18 @@ check on a jittered interval that grows from the idle interval to a
 configured cap; the first successful probe closes the gate and a failed
 probe re-arms the next interval. Recovery SHALL be established by a probe,
 never by claiming a task; the interval SHALL reset to the idle interval only
-after the first successful base refresh following the close, never on the
-closing probe, so a remote that answers probes but fails fetches meets a
-growing pause rather than a claim-and-release cycle. Slots already working
-SHALL continue under an open gate. The gate is process-local: a restart forgets it and re-learns on the
-next failure.
+after the first successful base refresh following the close that contacted
+origin, never on the closing probe and never on a success the clone served
+from its own object store, so a remote that answers probes but fails fetches
+meets a growing pause rather than a claim-and-release cycle. The remote's
+last successful contact, as the gate reports it, SHALL advance only on such
+a refresh or on a successful probe. Both slot-side signals are taken from
+the base read at the instant it returns, never inferred from the slot's
+terminal result. Slots already working SHALL continue under an open gate.
+The gate is process-local: a restart forgets it and re-learns on the next
+failure.
 <!-- implements FR14, NFR-R3, M4 of add-base-ref-resolution -->
+<!-- implements FR2, FR3, NFR-O1, UX1 of signal-outage-gate-on-origin-contact -->
 
 #### Scenario: At most one claim per slot for the whole outage
 - **WHEN** the remote is unreachable for an hour under a three-slot serve
@@ -384,6 +390,15 @@ next failure.
 - **WHEN** eight consecutive probes fail on virtual time
 - **THEN** the intervals between them grow from the idle interval toward the
   cap, no two are identical, and none exceeds the cap
+
+#### Scenario: A clone-served success after a close keeps the grown interval
+- **WHEN** the gate closes on a successful probe, the next claim's base is a
+  commit SHA the clone already holds, and the base refresh after that fails
+  against the remote
+- **THEN** the gate reopens with an interval longer than the one before the
+  close, the remote's last successful contact still names the closing probe,
+  and only a later refresh that contacted origin returns the interval to
+  idle
 
 ### Requirement: Gate transitions are the outage's log and snapshot signal
 Opening the gate SHALL log one WARN with an operator-event code naming the

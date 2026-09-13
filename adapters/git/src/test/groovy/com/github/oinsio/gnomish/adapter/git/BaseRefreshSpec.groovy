@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import java.nio.file.Files
@@ -54,31 +55,39 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
 
     def "FR6: a branch base is refreshed to origin's current tip"() {
         given: 'origin has moved past what the clone fetched at clone time'
+        Path log = tempDir.resolve('branch.log')
         def advanced = advance('develop', 'c.txt')
         assert gitOutput(clone, 'rev-parse', 'refs/remotes/origin/develop') != advanced
 
         when:
-        def outcome = refresh().refresh(clone, 'develop')
+        def outcome = refresh(new GitProcessRunner(recordingGit(log).toString())).refresh(clone, 'develop')
 
         then: 'the answer is origin\'s tip, and the remote-tracking ref now carries it'
-        outcome == new BaseRefreshOutcome.Refreshed('develop', advanced, BaseRefKind.BRANCH)
+        outcome == new BaseRefreshOutcome.Refreshed('develop', advanced, BaseRefKind.BRANCH, OriginContact.CONTACTED)
         gitOutput(clone, 'rev-parse', 'refs/remotes/origin/develop') == advanced
+
+        and: 'the outcome says CONTACTED exactly because a fetch ran (FR1)'
+        recordedSubcommands(log).count('fetch') == 1
     }
 
     def "FR6: a tag base lands in refs/tags and reports the commit, not the tag object"() {
         given: 'a clone that does not yet hold the tag'
+        Path log = tempDir.resolve('tag.log')
         assert gitExitCode(clone, 'tag', '-d', 'v1.0') == 0
         def tagged = gitOutput(work, 'rev-parse', 'v1.0^{commit}')
 
         when:
-        def outcome = refresh().refresh(clone, 'v1.0')
+        def outcome = refresh(new GitProcessRunner(recordingGit(log).toString())).refresh(clone, 'v1.0')
 
         then: 'the annotated tag is peeled, so the branch can start from a commit'
-        outcome == new BaseRefreshOutcome.Refreshed('v1.0', tagged, BaseRefKind.TAG)
+        outcome == new BaseRefreshOutcome.Refreshed('v1.0', tagged, BaseRefKind.TAG, OriginContact.CONTACTED)
         gitOutput(clone, 'rev-parse', 'refs/tags/v1.0^{commit}') == tagged
 
         and: 'no other tag was auto-followed in'
         gitOutput(clone, 'for-each-ref', '--format=%(refname)', 'refs/tags') == 'refs/tags/v1.0'
+
+        and: 'the outcome says CONTACTED exactly because a fetch ran (FR1)'
+        recordedSubcommands(log).count('fetch') == 1
     }
 
     def "FR6: a local tag diverging from origin's refuses without moving it, naming both commits"() {
@@ -109,8 +118,10 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         def outcome = refresh(new GitProcessRunner(recordingGit(log).toString())).refresh(clone, held)
 
         then:
-        outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT)
+        outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT, OriginContact.CLONE_ONLY)
 
+        // NFR-R1 of signal-outage-gate-on-origin-contact: learning the contact fact adds no
+        //     subprocess of its own — CLONE_ONLY is read off the path taken, not off the network.
         and: 'neither the refs read nor the fetch was needed — this is the offline --base case'
         !recordedSubcommands(log).contains('fetch')
         !recordedSubcommands(log).contains('ls-remote')
@@ -129,7 +140,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
                 .refresh(clone, held, BaseRefKind.COMMIT)
 
         then:
-        outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT)
+        outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT, OriginContact.CLONE_ONLY)
 
         and: 'no refs read ran at all — the pin already said which namespace this is'
         !recordedSubcommands(log).contains('ls-remote')
@@ -162,24 +173,31 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         outcome instanceof BaseRefreshOutcome.Refreshed
         (outcome as BaseRefreshOutcome.Refreshed).commit() == held
         (outcome as BaseRefreshOutcome.Refreshed).kind() == BaseRefKind.COMMIT
+
+        and: 'the object was already here, so nothing reached origin (FR1)'
+        (outcome as BaseRefreshOutcome.Refreshed).contact() == OriginContact.CLONE_ONLY
     }
 
     def "FR6: a commit base the clone lacks is fetched as objects only, with no ref written"() {
         given: 'a commit published to origin after this clone was made'
+        Path log = tempDir.resolve('sha-absent.log')
         def advanced = advance('develop', 'd.txt')
         assert gitExitCode(clone, 'cat-file', '-e', advanced + '^{commit}') != 0
         def refsBefore = gitOutput(clone, 'for-each-ref', '--format=%(refname)')
 
         when:
-        def outcome = refresh().refresh(clone, advanced)
+        def outcome = refresh(new GitProcessRunner(recordingGit(log).toString())).refresh(clone, advanced)
 
         then:
-        outcome == new BaseRefreshOutcome.Refreshed(advanced, advanced, BaseRefKind.COMMIT)
+        outcome == new BaseRefreshOutcome.Refreshed(advanced, advanced, BaseRefKind.COMMIT, OriginContact.CONTACTED)
         gitExitCode(clone, 'cat-file', '-e', advanced + '^{commit}') == 0
 
         and: 'no ref was created for it, and FETCH_HEAD was never even written'
         gitOutput(clone, 'for-each-ref', '--format=%(refname)') == refsBefore
         !Files.exists(clone.resolve('.git/FETCH_HEAD'))
+
+        and: 'the outcome says CONTACTED exactly because a fetch-by-SHA ran (FR1)'
+        recordedSubcommands(log).count('fetch') == 1
     }
 
     def "D11a: a name origin holds as both a branch and a tag parks the task, fetching neither"() {

@@ -43,7 +43,7 @@ changes no binding, park, or release decision; its one reader is the remote
 outage gate (see factory-serve, "Remote outage gate holds the feed off the
 tracker").
 <!-- implements FR6, FR9, NFR-P1, NFR-R1 of add-base-ref-resolution -->
-<!-- implements FR1, FR4, NFR-R1 of signal-outage-gate-on-origin-contact -->
+<!-- implements FR1, FR4, NFR-R1, NFR-S1 of signal-outage-gate-on-origin-contact -->
 
 #### Scenario: Fresh base at claim
 - **WHEN** origin's `develop` has advanced past the factory clone's last

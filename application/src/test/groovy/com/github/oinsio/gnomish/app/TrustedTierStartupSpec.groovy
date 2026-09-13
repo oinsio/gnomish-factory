@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.pipeline.BoundConfiguration
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.baseref.BaseDefinition
@@ -64,7 +65,7 @@ class TrustedTierStartupSpec extends Specification {
 
         then:
         1 * baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
-        1 * baseRefs.refresh(DIR, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', LAW_COMMIT.hex(), BaseRefKind.BRANCH)
+        1 * baseRefs.refresh(DIR, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', LAW_COMMIT.hex(), BaseRefKind.BRANCH, OriginContact.CONTACTED)
         1 * pipelineSource.bindConfiguration(LawBinding.atRevision(DIR, LAW_COMMIT.hex()), _) >>
                 new BoundConfiguration(new LoadOutcome.Loaded(definition), base, LAW_COMMIT)
 
@@ -150,7 +151,7 @@ class TrustedTierStartupSpec extends Specification {
             new ConfigError('pipeline.yaml', 'stages', "missing required field 'stages'")
         ]
         baseRefs.discoverDefaultBranch(DIR) >> new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
-        baseRefs.refresh(DIR, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', LAW_COMMIT.hex(), BaseRefKind.BRANCH)
+        baseRefs.refresh(DIR, 'develop') >> new BaseRefreshOutcome.Refreshed('develop', LAW_COMMIT.hex(), BaseRefKind.BRANCH, OriginContact.CONTACTED)
         pipelineSource.bindConfiguration(_, _) >>
                 new BoundConfiguration(new LoadOutcome.Invalid(errors), BaseDefinition.none(), LAW_COMMIT)
         def logs = LogCaptureSupport.attach(TrustedTierStartup)

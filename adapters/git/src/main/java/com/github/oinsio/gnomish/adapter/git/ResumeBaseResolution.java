@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
+import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -39,13 +40,20 @@ final class ResumeBaseResolution {
      */
     ResumeBaseOutcome resolve(Path cloneDir, String ref, @Nullable BaseRefKind kind) {
         if (!origin.isConfigured(cloneDir)) {
+            // There is no origin to reach, so this bind is local by construction (design D2 of
+            // signal-outage-gate-on-origin-contact).
+            // Implements FR1 of signal-outage-gate-on-origin-contact.
             return localTip(cloneDir, ref)
-                    .<ResumeBaseOutcome>map(commit -> new ResumeBaseOutcome.Bound(ref, commit))
+                    .<ResumeBaseOutcome>map(
+                            commit -> new ResumeBaseOutcome.Bound(ref, commit, OriginContact.CLONE_ONLY))
                     .orElseGet(() -> new ResumeBaseOutcome.Refused(noRemoteUnresolvedReport(ref)));
         }
         return switch (refresh.refresh(cloneDir, ref, kind)) {
-            case BaseRefreshOutcome.Refreshed(String resolved, String commit, var ignoredKind) ->
-                new ResumeBaseOutcome.Bound(resolved, commit);
+            // The remote-backed path takes the refresh's own answer rather than restating one: it
+            // did whatever the refresh did (design D2 of signal-outage-gate-on-origin-contact).
+            // Implements FR1 of signal-outage-gate-on-origin-contact.
+            case BaseRefreshOutcome.Refreshed(String resolved, String commit, var ignoredKind, OriginContact contact) ->
+                new ResumeBaseOutcome.Bound(resolved, commit, contact);
             case BaseRefreshOutcome.Refused(String report) -> new ResumeBaseOutcome.Refused(report);
             case BaseRefreshOutcome.Unavailable(String reason) -> new ResumeBaseOutcome.Unavailable(reason);
         };

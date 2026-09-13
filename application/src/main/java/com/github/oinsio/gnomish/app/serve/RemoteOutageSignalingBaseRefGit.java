@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefGit;
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery;
+import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
@@ -23,20 +24,23 @@ import org.jspecify.annotations.Nullable;
  * construction — nothing downstream has to guess which outage a result belongs to.
  *
  * <p><b>Which outcomes signal.</b> {@link BaseRefreshOutcome.Refreshed} and {@link
- * ResumeBaseOutcome.Bound} confirm a refresh; the {@code Unavailable} arm of either opens the
- * gate, already sanitized by the gate itself. A {@code Refused} arm signals nothing: origin
- * answered, but no base was refreshed. {@link #discoverDefaultBranch} and {@link #probe} pass
- * through untouched — discovery is a startup read that precedes the gate, and the probe IS the
- * gate's own recovery check.
+ * ResumeBaseOutcome.Bound} confirm a refresh <em>only when their {@link OriginContact} says origin
+ * was contacted</em>; the {@code Unavailable} arm of either opens the gate, already sanitized by
+ * the gate itself. A {@code Refused} arm signals nothing: origin answered, but no base was
+ * refreshed. {@link #discoverDefaultBranch} and {@link #probe} pass through untouched — discovery
+ * is a startup read that precedes the gate, and the probe IS the gate's own recovery check.
  *
- * <p><b>Known imprecision, accepted.</b> A commit-pinned base the clone already holds refreshes
- * without a network round trip and still reports {@code Refreshed}; a resume in a clone with no
- * {@code origin} binds from the local tip the same way. Both are read here as a successful
- * refresh, since the port's outcome does not say whether origin was contacted. The cost is a
- * possible early interval reset for a SHA-pinned task, never a wrongly opened or closed gate —
- * recovery is confirmed by a probe alone.
+ * <p><b>Why the contact fact and not the success arm.</b> A success arm answers "is the base
+ * bound", not "did origin answer": a commit-pinned base the clone already holds, and a resume in a
+ * clone with no {@code origin} at all, both bind with no round trip. Read as refreshes they would
+ * spend the pending interval reset a genuine post-close refresh needs, so the next flap would meet
+ * the idle floor instead of the grown pause FR14 promises, and the remote's last-contact time
+ * would name a moment origin was never asked. The adapter states the fact at the path it took, and
+ * this is the only consumer that branches on it (FR2, FR3 of
+ * signal-outage-gate-on-origin-contact).
  *
- * <p>Implements FR14, D9 of add-base-ref-resolution.
+ * <p>Implements FR14, D9 of add-base-ref-resolution; FR2, FR3 of
+ * signal-outage-gate-on-origin-contact.
  *
  * @param delegate the real base-ref capability every read is forwarded to; never null
  * @param gate the gate the slot's reads report to — the SAME instance the feed consults; never
@@ -53,7 +57,7 @@ record RemoteOutageSignalingBaseRefGit(BaseRefGit delegate, RemoteOutageGate gat
     public BaseRefreshOutcome refresh(Path cloneDir, String ref) {
         BaseRefreshOutcome outcome = delegate.refresh(cloneDir, ref);
         switch (outcome) {
-            case BaseRefreshOutcome.Refreshed _ -> gate.onSuccessfulRefresh();
+            case BaseRefreshOutcome.Refreshed(var _, var _, var _, OriginContact contact) -> confirm(contact);
             case BaseRefreshOutcome.Unavailable(String reason) -> gate.openOnFailure(reason);
             case BaseRefreshOutcome.Refused _ -> {
                 // origin answered; nothing about its reachability changed either way.
@@ -66,7 +70,7 @@ record RemoteOutageSignalingBaseRefGit(BaseRefGit delegate, RemoteOutageGate gat
     public ResumeBaseOutcome resolveForResume(Path cloneDir, String ref, @Nullable BaseRefKind kind) {
         ResumeBaseOutcome outcome = delegate.resolveForResume(cloneDir, ref, kind);
         switch (outcome) {
-            case ResumeBaseOutcome.Bound _ -> gate.onSuccessfulRefresh();
+            case ResumeBaseOutcome.Bound(var _, var _, OriginContact contact) -> confirm(contact);
             case ResumeBaseOutcome.Unavailable(String reason) -> gate.openOnFailure(reason);
             case ResumeBaseOutcome.Refused _ -> {
                 // origin answered; nothing about its reachability changed either way.
@@ -78,5 +82,16 @@ record RemoteOutageSignalingBaseRefGit(BaseRefGit delegate, RemoteOutageGate gat
     @Override
     public boolean probe(Path cloneDir) {
         return delegate.probe(cloneDir);
+    }
+
+    /**
+     * Reports a success outcome to the gate, but only when it reached origin: a clone-served
+     * success is silent on both the probe interval and the remote's last successful contact, the
+     * one branch design D3 of signal-outage-gate-on-origin-contact draws.
+     */
+    private void confirm(OriginContact contact) {
+        if (contact == OriginContact.CONTACTED) {
+            gate.onSuccessfulRefresh();
+        }
     }
 }

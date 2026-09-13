@@ -4,11 +4,13 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.DefaultBranchDiscovery
+import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicInteger
 import spock.lang.Specification
 
 /**
@@ -22,6 +24,11 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
 
     private static final Path CLONE = Path.of('.')
     private static final Duration IDLE = Duration.ofSeconds(30)
+    private static final Random NO_JITTER = new Random() {
+        double nextDouble() {
+            0.0
+        }
+    }
 
     private VirtualClock clock = new VirtualClock()
     private RemoteOutageGate gate = new RemoteOutageGate(
@@ -49,11 +56,14 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         gate.health().lastError() == 'connection refused'
     }
 
-    // FR14: a successful refresh is the "successful base refresh" signal, stamped at the read's
-    //     own instant — the fact's time, not the slot's end.
-    def "a successful refresh confirms the refresh at the read's instant and is forwarded"() {
+    // FR2, FR3 of signal-outage-gate-on-origin-contact: a successful refresh is the "successful
+    //     base refresh" signal ONLY when it reached origin, stamped at the read's own instant —
+    //     the fact's time, not the slot's end. A base the clone already held answers with no round
+    //     trip and says nothing about the remote, so it neither stamps the contact time nor spends
+    //     the pending interval reset; either way the outcome is forwarded unchanged.
+    def "a successful refresh confirms the refresh only when it contacted origin, and is forwarded"() {
         given:
-        def refreshed = new BaseRefreshOutcome.Refreshed('main', 'abc', BaseRefKind.BRANCH)
+        def refreshed = new BaseRefreshOutcome.Refreshed('main', 'abc', BaseRefKind.BRANCH, contact)
         def git = signaling([refresh: { Path d, String r ->
                 refreshed
             }] as BaseRefGit)
@@ -65,7 +75,12 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         then:
         outcome.is(refreshed)
         !gate.isOpen()
-        gate.health().lastSuccessAt() == clock.now()
+        gate.health().lastSuccessAt() == (confirms ? clock.now() : null)
+
+        where:
+        contact | confirms
+        OriginContact.CONTACTED | true
+        OriginContact.CLONE_ONLY | false
     }
 
     // FR14: a refusal means origin answered but no base was refreshed — neither signal fires.
@@ -85,7 +100,9 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         gate.health().lastSuccessAt() == null
     }
 
-    // FR14, D13: the resume rebind is the other claim-time base read — same three arms.
+    // FR14, D13 of add-base-ref-resolution; FR2, FR3 of signal-outage-gate-on-origin-contact: the
+    //     resume rebind is the other claim-time base read — same three arms, and its success arm
+    //     draws the same origin-contact distinction as the refresh above.
     def "a resume rebind signals the gate by its outcome arm"() {
         given:
         def git = signaling([resolveForResume: { Path d, String r, BaseRefKind k ->
@@ -103,8 +120,71 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         where:
         outcome | opens | confirms
         new ResumeBaseOutcome.Unavailable('timed out') | true | false
-        new ResumeBaseOutcome.Bound('main', 'abc') | false | true
+        new ResumeBaseOutcome.Bound('main', 'abc', OriginContact.CONTACTED) | false | true
+        new ResumeBaseOutcome.Bound('main', 'abc', OriginContact.CLONE_ONLY) | false | false
         new ResumeBaseOutcome.Refused('gone') | false | false
+    }
+
+    // UX1, FR2, FR3, NFR-O1 of signal-outage-gate-on-origin-contact — the operator-facing promise,
+    //     carried entirely by the existing remote health: no new log line, operator-event code,
+    //     ledger line or snapshot field, only an accurate lastSuccessAt (NFR-O1). Driven
+    //     through a real gate on virtual time: after an outage closes, a base served by the clone
+    //     alone must NOT spend the pending interval reset, so the next flap meets the grown pause
+    //     FR14 of add-base-ref-resolution promised rather than the idle floor. The mirror of
+    //     RemoteOutageGateSpec's "the first successful refresh after a close resets the interval to
+    //     idle", which ends with a third probe where this one must stay at two.
+    def "a clone-served success after a close keeps the grown probe interval"() {
+        given:
+        def probes = new AtomicInteger()
+        def answer = true
+        def remote = [
+            probe: { Path d ->
+                probes.incrementAndGet()
+                answer
+            },
+            refresh: { Path d, String r ->
+                new BaseRefreshOutcome.Refreshed('main', 'abc', BaseRefKind.COMMIT, OriginContact.CLONE_ONLY)
+            },
+        ] as BaseRefGit
+        def grownGate = new RemoteOutageGate(remote, CLONE, clock, NO_JITTER, IDLE, Duration.ofMinutes(10))
+        def git = new RemoteOutageSignalingBaseRefGit(remote, grownGate)
+        grownGate.openOnFailure('boom')
+
+        when: 'the first probe fails, growing the interval past idle'
+        clock.advance(IDLE)
+        answer = false
+        grownGate.probeIfDue()
+
+        then:
+        grownGate.isOpen()
+        probes.get() == 1
+
+        when: 'the grown (doubled) interval elapses and a probe closes the gate'
+        clock.advance(IDLE.multipliedBy(2))
+        answer = true
+        grownGate.probeIfDue()
+
+        then:
+        !grownGate.isOpen()
+        probes.get() == 2
+
+        when: 'time passes and the base read that follows is served by the clone alone'
+        def closedAt = clock.now()
+        clock.advance(Duration.ofSeconds(5))
+        git.refresh(CLONE, 'main')
+
+        then: 'it is no contact, so the remote last-contact time stays the close instant'
+        grownGate.health().lastSuccessAt() == closedAt
+
+        when: 'a new failure reopens the gate and exactly the idle interval elapses'
+        grownGate.openOnFailure('boom')
+        answer = false
+        clock.advance(IDLE)
+        grownGate.probeIfDue()
+
+        then: 'no third probe: the reset was never spent, so the grown interval still stands'
+        probes.get() == 2
+        grownGate.isOpen()
     }
 
     // The two reads that are not claim-time base reads pass through with no gate effect: the

@@ -29,7 +29,7 @@ terminal result. Slots already working SHALL continue under an open gate.
 The gate is process-local: a restart forgets it and re-learns on the next
 failure.
 <!-- implements FR14, NFR-R3, M4 of add-base-ref-resolution -->
-<!-- implements FR2, FR3, NFR-O1 of signal-outage-gate-on-origin-contact -->
+<!-- implements FR2, FR3, NFR-O1, UX1 of signal-outage-gate-on-origin-contact -->
 
 #### Scenario: At most one claim per slot for the whole outage
 - **WHEN** the remote is unreachable for an hour under a three-slot serve

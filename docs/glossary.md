@@ -218,10 +218,10 @@ trusted/task tier split, and the law-root rule.
   which the external-check pin guard and artifact output paths resolve
   against instead:
 
-  | Manifest field                                    | Relative to                     |
-  |----------------------------------------------------|----------------------------------|
-  | `instructions`, `criteriaFile`                      | law root (`.gnomish/`)          |
-  | external-check pin paths, artifact output paths     | working copy root               |
+  | Manifest field                                  | Relative to            |
+  |-------------------------------------------------|------------------------|
+  | `instructions`, `criteriaFile`                  | law root (`.gnomish/`) |
+  | external-check pin paths, artifact output paths | working copy root      |
 
   A symlink entry at any segment of a reference's path under the law root is
   refused as unreadable, never followed, regardless of its target.
@@ -232,6 +232,14 @@ trusted/task tier split, and the law-root rule.
 - **Task tier** — the half of pipeline configuration (stages, stage
   instructions, judge criteria, the remainder of `config.yaml`) bound per
   task from the task's own law commit.
+- **Origin contact** — the fact a successful base refresh (or resume bind)
+  carries about the path it took: either the factory reached **origin** for
+  the answer — a branch or tag fetch, or a fetch of a commit the clone
+  lacked — or the answer came from the **clone alone**, with no network
+  round trip: a commit object the clone already held, or a resume bound from
+  the local tip in a clone with no `origin` remote. It is set by the adapter
+  at the return the path arrives at, never derived from git's output, and it
+  costs no extra call. Only the **remote outage gate** reads it.
 - **Remote outage gate** — the one daemon-level state per remote target that
   a slot's base-refresh (or default-branch-discovery) reachability failure
   opens: while open, the feed claims nothing and the daemon probes the
@@ -239,8 +247,11 @@ trusted/task tier split, and the law-root rule.
   capped interval; the first successful probe closes it. Transitions are
   operator events and a `remote` snapshot section beside `tracker`; the probe
   interval resets to idle only after the first successful base refresh
-  following a close, never on the probe itself. The outage is charged to the
-  daemon, never to any task's abort accounting.
+  following a close, never on the probe itself — and only a refresh that
+  contacted origin counts: a refresh served from the clone alone neither
+  resets the interval nor advances the remote's last successful contact
+  time, since it is no evidence that origin answered. The outage is charged
+  to the daemon, never to any task's abort accounting.
 
 ## Sandbox
 

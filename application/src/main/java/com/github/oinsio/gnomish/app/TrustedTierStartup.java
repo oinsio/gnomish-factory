@@ -103,8 +103,11 @@ final class TrustedTierStartup {
     }
 
     private static String refresh(Path dir, BaseRefGit baseRefs, DefaultBranch branch) {
+        // FR4 of signal-outage-gate-on-origin-contact: the origin-contact fact is ignored here by
+        // design — the trusted-tier startup read precedes the gate (NG4) and takes the same commit
+        // whichever path the adapter took.
         return switch (baseRefs.refresh(dir, branch.name())) {
-            case BaseRefreshOutcome.Refreshed(var ignored, String commit, var _) -> commit;
+            case BaseRefreshOutcome.Refreshed(var ignored, String commit, var _, var _) -> commit;
             case BaseRefreshOutcome.Refused(String report) -> throw unbound(dir, report);
             case BaseRefreshOutcome.Unavailable(String reason) ->
                 throw unbound(

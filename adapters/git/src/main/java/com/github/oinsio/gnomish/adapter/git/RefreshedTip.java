@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind;
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome;
+import com.github.oinsio.gnomish.app.port.git.OriginContact;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 
@@ -55,8 +56,12 @@ final class RefreshedTip {
         if (fetch.termination() != Termination.EXITED || fetch.exitCode() != 0) {
             return undelivered(runner, cloneDir, fetch, name, kind);
         }
+        // This method is only ever called with a completed fetch, so a delivery here always came
+        // from origin (design D2 of signal-outage-gate-on-origin-contact).
+        // Implements FR1 of signal-outage-gate-on-origin-contact.
         return VerifiedTip.read(runner.run(cloneDir, "rev-parse", "--verify", "--quiet", ref + "^{commit}"))
-                .<BaseRefreshOutcome>map(commit -> new BaseRefreshOutcome.Refreshed(name, commit, kind))
+                .<BaseRefreshOutcome>map(
+                        commit -> new BaseRefreshOutcome.Refreshed(name, commit, kind, OriginContact.CONTACTED))
                 .orElseGet(() -> new BaseRefreshOutcome.Unavailable(
                         "the " + label(kind) + " fetch of " + name + " reported success but left no " + ref));
     }
