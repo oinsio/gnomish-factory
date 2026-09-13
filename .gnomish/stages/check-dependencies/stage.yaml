@@ -1,0 +1,93 @@
+purpose: resolve the OpenSpec change the task names - in its title or its body - and decide whether work on it can start now, or whether a human must first resolve an ambiguous name or an ordering the gnome cannot settle
+inputs:
+  - kind: source
+outputs:
+  - id: dependency-verdict
+executor:
+  type: agent-cli
+  model: sonnet
+  settings:
+    maxTurns: 40
+    roundTimeout: 1200s
+    # A read-only analysis plus one report file. Bash is allowed for one purpose
+    # only - the decision-file path reaches the gnome as an environment variable,
+    # and nothing but a shell can expand it; the instructions keep shell use to
+    # that single `echo` and write every file through Write/Edit.
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+    disallowedTools:
+      - Agent
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/check-dependencies/instructions.md
+verify:
+  # Cheapest first: without the report there is nothing else to check.
+  - type: command
+    command: |
+      if [ ! -f temporary-docs/gnomish/dependencies.md ]; then
+        echo "no dependency report at temporary-docs/gnomish/dependencies.md - write it before finishing the round"
+        exit 1
+      fi
+  # The report is the stage's only output, and its verdict is also the stage's
+  # protocol: finishing the round asserts the change is startable. A blocked
+  # change leaves through the decision file, not through here.
+  - type: command
+    command: |
+      report=temporary-docs/gnomish/dependencies.md
+      change=$(sed -n 's/^Change:[[:space:]]*//p' "$report" | head -1)
+      if [ -z "$change" ]; then
+        echo "the report has no 'Change: <name>' line - name the change the task asked about"
+        exit 1
+      fi
+      if [ "$change" = "archive" ] || [ ! -d "openspec/changes/$change" ]; then
+        echo "the report names change '$change', but openspec/changes/$change is not an active change directory"
+        exit 1
+      fi
+      if ! grep -q '^## Examined' "$report"; then
+        echo "the report has no '## Examined' section - list the active changes you checked against, so a reader can tell an analysis from an opinion"
+        exit 1
+      fi
+      verdict=$(sed -n 's/^Verdict:[[:space:]]*//p' "$report" | head -1)
+      if [ "$verdict" != "no-blocking-dependencies" ]; then
+        echo "the report's verdict is '$verdict'; the only verdict that finishes this stage is 'no-blocking-dependencies'."
+        echo "If the change IS blocked, do not finish the round: write the dependency chain to the path in \$GNOMISH_DECISION_FILE as {\"question\": \"...\", \"options\": [\"...\"]} and end your turn - the factory posts it to the tracker and parks the task for a human."
+        exit 1
+      fi
+  # The stage is an analysis: the report is the only thing it may leave behind.
+  # Two sweeps, because a gnome can hide an edit by committing it.
+  - type: command
+    command: |
+      report=temporary-docs/gnomish/dependencies.md
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -v "^$report$" || true)
+      if [ -n "$dirty" ]; then
+        echo "this stage may only write $report, but the working copy also carries:"
+        echo "$dirty"
+        echo "restore those paths - an analysis changes nothing else"
+        exit 1
+      fi
+      # Committed strays, measured against the base the branch merged in at step 1.
+      # Skipped off a task branch (an in-place run has no branch of its own to
+      # measure) and when origin/main is not at hand. `.gnomish-task/` is the
+      # factory's own bookkeeping, never the gnome's work.
+      branch=$(git branch --show-current)
+      case "$branch" in
+        gnomish/*)
+          if git rev-parse --verify --quiet origin/main > /dev/null; then
+            committed=$(git diff --name-only origin/main HEAD | grep -v "^$report$" | grep -v "^\.gnomish-task/" || true)
+            if [ -n "$committed" ]; then
+              echo "the branch carries committed changes this stage had no business making:"
+              echo "$committed"
+              exit 1
+            fi
+          fi
+          ;;
+      esac
+advancement: auto

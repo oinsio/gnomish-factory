@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# The agent CLI the factory launches for gnome and judge rounds
+# (factory.agent-cli-binary points here; .gnomish/bin/gnomish wires the path).
+#
+# Why it exists: the factory renders the stage manifest's `allowedTools` into
+# --allowedTools, but in print mode there is nobody to answer Claude Code's own
+# permission prompts, so a gated Edit/Write ends the round with no result event
+# rather than with work. --permission-mode acceptEdits auto-approves file edits
+# and nothing else; shell commands still go through the allowlist the factory
+# rendered.
+#
+# --strict-mcp-config with no --mcp-config means "no MCP servers at all": the
+# operator's own servers have no business in a gnome round, and their tool
+# definitions alone cost tens of kilobytes of the round's starting context.
+set -euo pipefail
+
+exec claude --permission-mode acceptEdits --strict-mcp-config "$@"

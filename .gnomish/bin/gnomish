@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Wrapper around the locally built factory jar, for running the factory against
+# this repository itself.
+#
+# It adds what every invocation from this clone needs and passes the rest through:
+#   --dir=<this clone, absolute>              (a relative --dir breaks law-file resolution)
+#   --factory.instance-name=<clone name>      (keeps serve state, logs and claim ids per clone)
+#   --factory.bindings.default=host           (no sandbox image is built for this project yet)
+#   --factory.agent-cli-binary=<claude-gnome> (lifts Claude Code's permission gate; see that script)
+#
+# All of them are defaults: pass your own and yours wins.
+#
+# The GitHub token uses the factory's own file indirection - for a secret N it reads
+# N_FILE as a path and takes the file's contents, so the token never enters this
+# process's environment. The file lives outside the clone, under a directory named
+# for the REPOSITORY (SECRETS_PROJECT below), not for the clone: every factory
+# started from any clone or worktree of this repository talks to the same tracker
+# with the same credential, so keying the directory by clone would only scatter
+# copies of one token. Per-clone keying stays where it earns its keep - the log
+# directory and the instance name, which must differ so two daemons do not
+# interleave their narratives or overwrite each other's snapshot.
+#
+#   mkdir -p ~/.gnomish/secrets/gnomish-factory
+#   install -m 600 /dev/null ~/.gnomish/secrets/gnomish-factory/github-token
+#   # paste the token in - the whole file is the value, no quotes, no KEY= prefix
+#
+# GNOMISH_SECRETS_DIR moves the directory; GNOMISH_GITHUB_TOKEN_FILE names one file
+# directly; an already-exported GNOMISH_GITHUB_TOKEN is left alone. A referenced but
+# unreadable file resolves the secret as absent - the provider is fail-closed.
+#
+#   .gnomish/bin/gnomish take <issue-ref>
+#   .gnomish/bin/gnomish status --task=<id>
+#
+# It lives beside the manifests on purpose: the whole configuration of the factory
+# for this repository - what the pipeline is and how it is launched - travels as
+# one directory, and the loader reads only config.yaml, pipeline.yaml and stages/,
+# so neighbours here are invisible to it.
+set -euo pipefail
+
+# This script lives at <clone>/.gnomish/bin/, so the clone is two levels up.
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+project_name="$(basename "$project_dir")"
+
+jar="${GNOMISH_JAR:-}"
+if [[ -z "$jar" ]]; then
+    jar="$(ls -t "$project_dir"/bootstrap/build/libs/*.jar 2>/dev/null | head -1 || true)"
+fi
+if [[ -z "$jar" || ! -f "$jar" ]]; then
+    echo "gnomish: no factory jar - build one with: ./gradlew :bootstrap:bootJar" >&2
+    exit 1
+fi
+
+# The repository's own name, fixed rather than derived: see the token block above.
+SECRETS_PROJECT="gnomish-factory"
+secrets_dir="${GNOMISH_SECRETS_DIR:-$HOME/.gnomish/secrets/$SECRETS_PROJECT}"
+
+# The factory's own default is one log file per host, so two factories started from
+# two clones would interleave their narratives into a single file. Exported rather
+# than passed as a flag: logback reads it before Spring starts.
+export GNOMISH_LOG_DIR="${GNOMISH_LOG_DIR:-$HOME/.gnomish/logs/$project_name}"
+
+# Point <SECRET>_FILE at the local file, but only when that file exists: a _FILE
+# naming a missing path resolves the secret as absent instead of falling back to the
+# plain variable, which would break an operator who exports the token the old way.
+point_at_file() {
+    local var="$1" file="$2"
+    [[ -f "$file" ]] || return 0
+    [[ -z "${!var:-}" ]] || return 0  # an explicit path from the caller wins
+    local perms
+    perms="$(stat -f %Lp "$file" 2>/dev/null || stat -c %a "$file" 2>/dev/null || echo "600")"
+    if [[ "${perms: -2}" != "00" ]]; then
+        echo "gnomish: $file is mode $perms - it holds a token, run: chmod 600 $file" >&2
+    fi
+    export "$var=$file"
+}
+
+point_at_file GNOMISH_GITHUB_TOKEN_FILE "$secrets_dir/github-token"
+
+# A repeated Spring option is joined with a comma rather than overridden, so an
+# explicit --factory.instance-name from the caller replaces this default instead of
+# competing with it.
+instance_name=(--factory.instance-name="$project_name")
+for arg in "$@"; do
+    case "$arg" in
+        --factory.instance-name=*) instance_name=() ;;
+    esac
+done
+
+if [[ -z "${GNOMISH_GITHUB_TOKEN_FILE:-}" && -z "${GNOMISH_GITHUB_TOKEN:-}" \
+      && "${1:-}" != "--help" && "${1:-}" != "-h" ]]; then
+    echo "gnomish: no $secrets_dir/github-token and no GNOMISH_GITHUB_TOKEN - tracker calls will fail" >&2
+fi
+
+exec java -jar "$jar" \
+    --dir="$project_dir" \
+    ${instance_name[@]+"${instance_name[@]}"} \
+    --factory.bindings.default=host \
+    --factory.agent-cli-binary="$project_dir/.gnomish/bin/claude-gnome" \
+    "$@"

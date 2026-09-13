@@ -25,3 +25,6 @@ hs_err_pid*
 replay_pid*
 
 uncommitted-files.md
+
+# Factory-run artifacts of this clone (the factory jar is built, not committed)
+/logs/
