@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
@@ -20,6 +21,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -350,6 +352,45 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         0 * builtSupport.reattachFor(_)
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
+    }
+
+    // FR7, NFR-S2 of add-base-ref-resolution (task 6.4), container twin of the host feature of the
+    // same name: the fetched task names a CONFLICTING base designator (unresolvable — reading it
+    // could only park), the base-ref fake throws on every fresh-claim read, and the resume chain
+    // takes no TrustedBaseContext; the one base read is the re-resolution of the pinned ref name.
+    def "FR7: resume re-resolves only the pinned ref — the task's conflicting base designator is never read"() {
+        given:
+        def resolved = []
+        baseRefGit = recordingResumingBaseRefGit(resolved)
+        def branches = Mock(TaskBranchGit) {
+            ensureLocalTaskBranch(_, _) >> true
+        }
+        def report = new EscalationReport.AttemptsExhausted(3)
+        builtSupport = Mock(SandboxRunSupport) {
+            readTaskJson() >> new TaskRecord(
+            taskContext(), 'base', Instant.EPOCH, new RecordedOutcome.Escalated(report), report, false,
+            new BasePin('release/1.18', BaseRefKind.BRANCH, BaseRule.CONFIGURED_DEFAULT))
+            readFinalState() >> TaskState.atStageStart('build')
+            persistence() >> new InMemoryAttemptPersistence()
+            workspace() >> new FakeWorkspace()
+            pieces(_) >> pieces()
+            pendingVerification() >> Optional.empty()
+        }
+        tracker.collectDecisions(REF) >> []
+        tracker.fetchTask(_) >> heldByUsNamingConflictingBase()
+
+        when:
+        def result = disposition(gitWith(branches)).resumeExisting(
+                CLONE_DIR, new BranchShape.InProgress(), RunArguments.InteractiveMode.NONE, false, 'PROJ-1', tracker, REF, INSTANCE)
+
+        then:
+        0 * tracker.park(*_)
+        0 * tracker.release(*_)
+        1 * tracker.finish(REF, _)
+        result instanceof TakeResult.Delivered
+
+        and: 'the pinned ref name was the only base read; the designator values never reached git'
+        resolved == ['release/1.18']
     }
 
     // FR12: a DecisionNeeded escalation with a fresh human reply is acked, then resumed with it —

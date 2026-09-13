@@ -196,8 +196,10 @@
       files read as unpinned; data-driven round-trip spec over every rule
       constant plus the unknown-token forward-compat arm (FR7)
 - [x] 6.4 TDD resume behavior: pinned tasks never re-resolve (no trusted-tier
-      read, no designator read on resume — asserted with throwing fakes;
-      the task-tier read of 5.6 is the only law read);
+      read, no designator read on resume — asserted with a base-ref fake
+      that throws on every fresh-claim read and a fetched task whose `base`
+      designator is a conflict, which could only ever park, in both resume
+      routing specs; the task-tier read of 5.6 is the only law read);
       a kill between claim and creation commit freezes `Claimed` with no
       branch ref; the reaper restores `Ready` on virtual-time TTL, a second
       reaper pass is a no-op, and the next claimant re-resolves from

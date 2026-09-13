@@ -13,7 +13,9 @@ import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.Designator
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
+import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -274,6 +276,39 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
     /** The task as the tracker reports it mid-run: {@code Working}, held by THIS instance — not revoked. */
     TrackerTask heldByUs(String taskId = 'PROJ-1') {
         trackerTask(new TrackerTaskState.Working(INSTANCE.value()), taskId)
+    }
+
+    /**
+     * {@link #heldByUs} whose fetched facts carry a {@code base} designator that could only ever
+     * park: a conflict is underdetermined by definition, so a resume that read it would have to
+     * escalate. Assigned to a resume scenario as the tracker's answer, it is the "throwing" fake for
+     * the designator read — a sealed {@code Designator} admits no subclass that throws, but a value
+     * that cannot be resolved is the same proof: a resume that ends {@code Delivered} never read it
+     * (FR7, NFR-S2 of add-base-ref-resolution, task 6.4).
+     */
+    TrackerTask heldByUsNamingConflictingBase(String taskId = 'PROJ-1') {
+        new TrackerTask(REF, new TaskSnapshot(taskId, 'title', 'body'),
+                new TrackerTaskState.Working(INSTANCE.value()), AbortFacts.none(), false,
+                TaskDesignators.of('base', Designator.conflict(['hostile/one', 'hostile/two'])))
+    }
+
+    /**
+     * {@link #resumingBaseRefGit} that also records every ref it is asked to re-resolve, so a spec
+     * can assert the pinned ref name was the ONLY base read of the resume (FR7, task 6.4).
+     */
+    BaseRefGit recordingResumingBaseRefGit(List<String> resolved) {
+        [
+            refresh: { Path cloneDir, String ref ->
+                throw new UnsupportedOperationException('not exercised by a resume scenario')
+            },
+            discoverDefaultBranch: { Path cloneDir ->
+                throw new UnsupportedOperationException('not exercised by a resume scenario')
+            },
+            resolveForResume: { Path cloneDir, String ref, BaseRefKind kind ->
+                resolved << ref
+                new ResumeBaseOutcome.Bound(ref, ref)
+            },
+        ] as BaseRefGit
     }
 
     /**

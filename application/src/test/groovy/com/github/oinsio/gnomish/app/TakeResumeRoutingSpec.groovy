@@ -215,6 +215,31 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         result instanceof TakeResult.Delivered
     }
 
+    // FR7, NFR-S2 of add-base-ref-resolution (task 6.4): a resumed task never re-resolves its base
+    // from data a gnome or a triager can write. The fetched task names a CONFLICTING base
+    // designator (unresolvable — reading it could only park), the base-ref fake throws on every
+    // fresh-claim read (discovery, refresh), and the resume chain takes no TrustedBaseContext at all;
+    // the one base read of the whole resume is the re-resolution of the pinned ref name.
+    def "FR7: resume re-resolves only the pinned ref — the task's conflicting base designator is never read"() {
+        given:
+        def resolved = []
+        baseRefGit = recordingResumingBaseRefGit(resolved)
+        store.readTaskRecord(_) >> recordPinnedTo('release/1.18')
+        tracker.fetchTask(_) >> heldByUsNamingConflictingBase()
+
+        when:
+        def result = resume(resumeChain())
+
+        then:
+        0 * tracker.park(*_)
+        0 * tracker.release(*_)
+        1 * tracker.finish(REF, _)
+        result instanceof TakeResult.Delivered
+
+        and: 'the pinned ref name was the only base read; the designator values never reached git'
+        resolved == ['release/1.18']
+    }
+
     // FR9, FR12, D3, D12: an ESCALATION-kind park with a DecisionNeeded report and NO human reply
     // yet is re-parked with the question restated — the run must not proceed on a question nobody
     // answered.
