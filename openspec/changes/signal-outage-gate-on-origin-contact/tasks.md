@@ -12,11 +12,13 @@ commit.
       a javadoc stating the rule of design D2 (a label on the path taken, never
       derived from git output) and append it as the last component of
       `BaseRefreshOutcome.Refreshed` and `ResumeBaseOutcome.Bound`; no
-      convenience constructor (design D1). Traceability: `Implements FR1 of
+      convenience constructor (design D1). The enum's javadoc also states
+      that the fact is a closed type, never text: no untrusted-text carrier
+      and no new sink (NFR-S1). Traceability: `Implements FR1, NFR-S1 of
       signal-outage-gate-on-origin-contact`. Verify: `./gradlew
       :application:compileJava` fails only at the production consumers named
-      in 1.2 and the adapter sites of 2.1 — the compiler's list is the
-      consumer list.
+      in 1.2, and `./gradlew :adapters:git:compileJava` only at the five
+      adapter sites of 2.1/2.2 — the compilers' lists are the consumer list.
 - [ ] 1.2 Update the four production pattern-match consumers to destructure the
       new component as `var _` and change nothing else: `FreshClaimBaseBinding`
       (`refresh` switch), `ResumeLawBinding` (`bind` switch),
@@ -54,7 +56,9 @@ commit.
       `ResumeLawBindingSpec`, `TakeClaimAndWorkSpec`, `TakeResumeReplicationSpec`,
       `TakeFenceScopeSpec`, `TakeResumeShapeTailSpec`, `TrustedTierStartupSpec`,
       `RemoteOutageSignalingBaseRefGitSpec`; `adapters/git` —
-      `GitBaseRefsDelegationSpec` (plus 2.1/2.2's own); `bootstrap` —
+      `GitBaseRefsDelegationSpec`, `HexNamedRefBaseRefreshSpec` (both of its
+      `Refreshed` sites are `CLONE_ONLY`: the object is held by the clone and
+      no fetch runs) (plus 2.1/2.2's own); `bootstrap` —
       `TakeResumeRunnerLawBindingSpec`. Verify: `./gradlew compileTestGroovy`
       across the three modules green; `git diff` on these files touches only
       constructor argument lists.
@@ -69,7 +73,9 @@ commit.
       `RemoteOutageSignalingBaseRefGit` (design D3) and delete the "known
       imprecision" javadoc paragraph. Verify: the `CLONE_ONLY` rows and the
       scenario feature red before, green after; `:application:check` green
-      with PIT 100% (FR2, FR3, NFR-O1, M1).
+      with PIT 100%. The scenario feature is the operator-facing promise of
+      UX1: the pause is as long as FR14 said, and the last-contact time names
+      a moment origin answered (FR2, FR3, NFR-O1, UX1, M1).
 - [ ] 3.3 Run the `:bootstrap` slot specs that drive the real decoration
       (`TakeSlotRunnerSpec`, `TakeSlotRunnerContainerConcurrencySpec`,
       `ServeShutdownWiringSpec`) and `:bootstrap:spotlessCheck`. Verify: green;
@@ -92,8 +98,11 @@ commit.
       "first base refresh succeeds" is unchanged; the qualification lives in
       prose).
 - [ ] 4.3 Single-owner sweep per `implementation.md`: grep for every
-      construction of `Refreshed(`/`Bound(` in `src/main` and confirm each is
-      one of the five sites in design's table; grep for every reader of
+      construction of `BaseRefreshOutcome.Refreshed(` and
+      `ResumeBaseOutcome.Bound(` in `src/main` (qualified, since a bare
+      `Bound(` also matches the unrelated `Bound` records of
+      `FreshClaimBaseBinding`, `ResumeLawBinding` and `TaskTierLaw`) and
+      confirm each is one of the five sites in design's table; grep for every reader of
       `OriginContact` and confirm the decoration is the only one that branches
       on it. Record the grep, the hits, and the disposition of each in the
       task report. Verify: five constructors, one branching reader, zero

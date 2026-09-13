@@ -70,7 +70,7 @@ return, `CONTACTED` on the post-fetch return. `RefreshedTip.of`: `CONTACTED`
 value on the remote-backed path. *Rationale:* each site already is the
 decision "did we go to the network"; the fact is a label on a branch the code
 has taken, so no new I/O, no parsing of git's wording (NFR-R1). *Alternative
-rejected — derive it in `GitBaseRefs` from whether `NarrowFetch` ran:* that
+rejected — derive it in `GitBaseRefs` from whether the fetch ran:* that
 needs a side channel (a flag or a listener) across three collaborators to
 carry what each already knows at its own return statement.
 
@@ -104,7 +104,7 @@ the invariant spec the row requires.
 
 ## Risks / Trade-offs
 
-- [Thirteen test files construct the records and all break at once] → the
+- [Fourteen test files construct the records and all break at once] → the
   compiler lists them; the update is mechanical (`CONTACTED` wherever the
   spec stubs a remote answer, `CLONE_ONLY` where it stubs a local hit), and
   M3 requires no assertion to change. Kept in one task so the tree is never

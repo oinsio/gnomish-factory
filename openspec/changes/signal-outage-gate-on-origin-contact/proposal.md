@@ -1,7 +1,9 @@
 # Proposal: signal-outage-gate-on-origin-contact
 
 Sequenced after `add-base-ref-resolution`: both delta specs below are layered
-on that change's deltas, not on `openspec/specs/`.
+on that change's deltas, not on `openspec/specs/`. Sequenced before
+`own-git-transfer-argv`, which layers its own delta of "Base refresh fetch
+before task creation" on this change's delta of that requirement.
 
 ## Why
 
@@ -126,8 +128,8 @@ None.
 
 ### Non-Functional Security
 
-- NFR-S1: the fact is an enum, not text; it adds no untrusted-text carrier
-  and no new sink. The `Refused`/`Unavailable` reason fields, which
+- NFR-S1: the fact is a closed two-valued type, not text; it adds no
+  untrusted-text carrier and no new sink. The `Refused`/`Unavailable` reason fields, which
   `type-untrusted-text` retypes, are untouched.
 
 ## Operator Experience Criteria
@@ -167,7 +169,7 @@ None.
   `ResumeBaseResolution` (two) set the value.
 - `:application` serve: `RemoteOutageSignalingBaseRefGit` reads it; its
   "known imprecision" javadoc paragraph goes away.
-- Test construction sites of the two records: 13 spec and fixture files
+- Test construction sites of the two records: 14 spec and fixture files
   across `:application`, `:adapters:git`, `:bootstrap` (listed in tasks.md).
 - Docs: the glossary entry "Remote outage gate" and the gate section of
   `docs/adr/0005-dependency-outage-accounting.md` gain the contact rule.
