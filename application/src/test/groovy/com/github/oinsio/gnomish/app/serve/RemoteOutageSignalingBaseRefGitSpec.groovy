@@ -125,7 +125,9 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         new ResumeBaseOutcome.Refused('gone') | false | false
     }
 
-    // UX1, FR2, FR3 of signal-outage-gate-on-origin-contact — the operator-facing promise, driven
+    // UX1, FR2, FR3, NFR-O1 of signal-outage-gate-on-origin-contact — the operator-facing promise,
+    //     carried entirely by the existing remote health: no new log line, operator-event code,
+    //     ledger line or snapshot field, only an accurate lastSuccessAt (NFR-O1). Driven
     //     through a real gate on virtual time: after an outage closes, a base served by the clone
     //     alone must NOT spend the pending interval reset, so the next flap meets the grown pause
     //     FR14 of add-base-ref-resolution promised rather than the idle floor. The mirror of
@@ -166,11 +168,13 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
         !grownGate.isOpen()
         probes.get() == 2
 
-        when: 'the base read that follows the close is served by the clone alone'
+        when: 'time passes and the base read that follows is served by the clone alone'
+        def closedAt = clock.now()
+        clock.advance(Duration.ofSeconds(5))
         git.refresh(CLONE, 'main')
 
         then: 'it is no contact, so the remote last-contact time stays the close instant'
-        grownGate.health().lastSuccessAt() == clock.now()
+        grownGate.health().lastSuccessAt() == closedAt
 
         when: 'a new failure reopens the gate and exactly the idle interval elapses'
         grownGate.openOnFailure('boom')

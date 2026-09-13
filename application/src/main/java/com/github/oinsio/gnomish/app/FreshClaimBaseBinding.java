@@ -158,6 +158,9 @@ final class FreshClaimBaseBinding {
             TaskState finalState,
             TaskRef ref,
             Tracker tracker) {
+        // FR4 of signal-outage-gate-on-origin-contact: the origin-contact fact is ignored here by
+        // design — the fresh-claim binding takes the same commit and the same pin whichever path
+        // the adapter took; only the remote outage gate's decoration branches on it.
         return switch (baseRefGit.refresh(cloneDir, decision.ref())) {
             case BaseRefreshOutcome.Refreshed(var ignoredRef, String commit, var kind, var _) ->
                 new Bound(LawBinding.atRevision(cloneDir, commit), new BasePin(decision.ref(), kind, decision.rule()));

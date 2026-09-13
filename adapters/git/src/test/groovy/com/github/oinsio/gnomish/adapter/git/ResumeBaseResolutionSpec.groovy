@@ -114,15 +114,20 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     // of refusing — a resume with nothing to fetch from is a legitimate shape.
     def "a clone with no origin binds from the ref's local tip"() {
         given:
+        Path log = tempDir.resolve('no-origin.log')
         assert gitExitCode(clone, 'branch', 'release/1.18', 'refs/remotes/origin/develop') == 0
         def localTip = gitOutput(clone, 'rev-parse', 'release/1.18')
         assert gitExitCode(clone, 'remote', 'remove', 'origin') == 0
 
         when:
-        def outcome = resolution().resolve(clone, 'release/1.18', null)
+        def outcome = resolution(new GitProcessRunner(recordingGit(log).toString()))
+                .resolve(clone, 'release/1.18', null)
 
         then: 'a local-tip bind never reached origin — there is none to reach (FR1)'
         outcome == new ResumeBaseOutcome.Bound('release/1.18', localTip, OriginContact.CLONE_ONLY)
+
+        and: 'CLONE_ONLY is the path taken, not a label: no fetch ran at all (FR1, NFR-R1)'
+        !recordedSubcommands(log).contains('fetch')
     }
 
     // D13: a clone with no origin AND a ref that resolves nowhere locally either parks the task —

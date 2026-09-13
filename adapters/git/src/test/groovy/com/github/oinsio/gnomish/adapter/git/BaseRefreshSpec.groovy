@@ -120,6 +120,8 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         then:
         outcome == new BaseRefreshOutcome.Refreshed(held, held, BaseRefKind.COMMIT, OriginContact.CLONE_ONLY)
 
+        // NFR-R1 of signal-outage-gate-on-origin-contact: learning the contact fact adds no
+        //     subprocess of its own — CLONE_ONLY is read off the path taken, not off the network.
         and: 'neither the refs read nor the fetch was needed — this is the offline --base case'
         !recordedSubcommands(log).contains('fetch')
         !recordedSubcommands(log).contains('ls-remote')

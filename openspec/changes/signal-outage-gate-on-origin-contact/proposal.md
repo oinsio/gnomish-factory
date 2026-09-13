@@ -145,9 +145,10 @@ None.
   success leaves it armed; the pre-change behaviour of the clone-served row
   is red first.
 - M2: adapter specs against a local bare origin show the fact set correctly
-  on all five construction sites: present commit (not contacted), fetched
-  commit (contacted), branch fetch (contacted), tag fetch (contacted),
-  no-origin resume bind (not contacted), remote-backed resume (pass-through).
+  on all five construction sites, across six scenarios — branch and tag share
+  the `RefreshedTip` site: present commit (not contacted), fetched commit
+  (contacted), branch fetch (contacted), tag fetch (contacted), no-origin
+  resume bind (not contacted), remote-backed resume (pass-through).
 - M3: `:application:check`, `:adapters:git:check` and the `:bootstrap` slot
   specs stay green with 100% of mutations killed; every pre-existing spec
   passes without an assertion changed, only construction sites updated.

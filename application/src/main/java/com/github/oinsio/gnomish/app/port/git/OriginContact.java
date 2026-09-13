@@ -25,6 +25,6 @@ public enum OriginContact {
     /** Origin answered: a narrow fetch of a branch or a tag, or a fetch-by-SHA, delivered the base. */
     CONTACTED,
 
-    /** None round trip happened: the clone already held the object, or a resume bound from a local tip. */
+    /** No round trip happened: the clone already held the object, or a resume bound from a local tip. */
     CLONE_ONLY
 }

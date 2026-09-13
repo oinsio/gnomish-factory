@@ -107,6 +107,9 @@ final class ResumeLawBinding {
             TaskRef ref,
             Tracker tracker) {
         String name = pinnedRef.ref();
+        // FR4 of signal-outage-gate-on-origin-contact: the origin-contact fact is ignored here by
+        // design — a resume rebinds the law to the same commit whether origin answered or the
+        // clone served it; only the remote outage gate's decoration branches on it.
         return switch (baseRefGit.resolveForResume(cloneDir, name, pinnedRef.kind())) {
             case ResumeBaseOutcome.Bound(var ignoredRef, String commit, var _) ->
                 new Bound(LawBinding.atRevision(cloneDir, commit));
