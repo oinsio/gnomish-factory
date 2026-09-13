@@ -1,0 +1,110 @@
+purpose: resolve the OpenSpec change the task names - in its title or its body - and decide whether work on it can start now, or whether a human must first resolve an ambiguous name or an ordering the gnome cannot settle
+inputs:
+  - kind: source
+# What this stage leaves behind, and where to read it afterwards:
+#   finished  -> temporary-docs/gnomish/dependencies.md on the task branch. A few
+#                lines: the change, the verdict, and a note only where one earns
+#                its place. Budgeted at 1200 bytes in the instructions - it is a
+#                verdict, not a transcript, and the changes ruled out are
+#                deliberately not listed.
+#   could not -> the question in the tracker thread, carrying the dependency chain
+#                with a file:line pointer per link, and no file at all. A blocked
+#                change never finishes this stage, so a report saying so could
+#                only be a second copy of the question.
+outputs:
+  - id: dependency-verdict
+executor:
+  type: agent-cli
+  model: sonnet
+  settings:
+    maxTurns: 40
+    roundTimeout: 1200s
+    # A read-only analysis plus one report file. Bash is allowed for two reads and
+    # one echo: the decision-file path reaches the gnome as an environment variable
+    # and nothing but a shell can expand it, and `git ls-tree origin/main` is how
+    # the gnome sees what has landed since its branch was cut. Every file is
+    # written through Write/Edit. Note that `allowedTools` cannot widen what the
+    # repository's own .claude/settings.json denies - its `Bash(git merge*)` and
+    # friends apply to the gnome too, which is why the instructions never merge.
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Write
+      - Edit
+      - Bash
+    disallowedTools:
+      - Agent
+      - ScheduleWakeup
+      - SendMessage
+      - ToolSearch
+      - WebFetch
+      - WebSearch
+instructions: stages/check-dependencies/instructions.md
+verify:
+  # Cheapest first: without the report there is nothing else to check.
+  - type: command
+    command: |
+      if [ ! -f temporary-docs/gnomish/dependencies.md ]; then
+        echo "no dependency report at temporary-docs/gnomish/dependencies.md - write it before finishing the round"
+        exit 1
+      fi
+  # The report is the stage's only output, and its verdict is also the stage's
+  # protocol: finishing the round asserts the change is startable. A blocked
+  # change leaves through the decision file, not through here.
+  - type: command
+    command: |
+      report=temporary-docs/gnomish/dependencies.md
+      change=$(sed -n 's/^Change:[[:space:]]*//p' "$report" | head -1)
+      if [ -z "$change" ]; then
+        echo "the report has no 'Change: <name>' line - name the change the task asked about"
+        exit 1
+      fi
+      if [ "$change" = "archive" ] || [ ! -d "openspec/changes/$change" ]; then
+        echo "the report names change '$change', but openspec/changes/$change is not an active change directory"
+        exit 1
+      fi
+      # A length check deliberately does NOT live here. The report's size budget is
+      # in the instructions, where it shapes the writing for free; as a check it
+      # would fail a correct, usable verdict and buy a whole second round - a new
+      # analysis from scratch - to reformat prose. That costs more than every
+      # verbose report it could ever prevent, and on a second miss it escalates to
+      # a human over formatting. A check earns its round only when its failure
+      # means the output is unusable or unsafe, which is what the other three are.
+      verdict=$(sed -n 's/^Verdict:[[:space:]]*//p' "$report" | head -1)
+      if [ "$verdict" != "no-blocking-dependencies" ]; then
+        echo "the report's verdict is '$verdict'; the only verdict that finishes this stage is 'no-blocking-dependencies'."
+        echo "If the change IS blocked, do not finish the round: write the dependency chain to the path in \$GNOMISH_DECISION_FILE as {\"question\": \"...\", \"options\": [\"...\"]} and end your turn - the factory posts it to the tracker and parks the task for a human."
+        exit 1
+      fi
+  # The stage is an analysis: the report is the only thing it may leave behind.
+  # Two sweeps, because a gnome can hide an edit by committing it.
+  - type: command
+    command: |
+      report=temporary-docs/gnomish/dependencies.md
+      dirty=$(git status --porcelain --untracked-files=all | sed 's/^...//' | grep -v "^$report$" || true)
+      if [ -n "$dirty" ]; then
+        echo "this stage writes only $report, but the working copy also carries:"
+        echo "$dirty"
+        echo "if you made these edits, undo each of them yourself and nothing else."
+        echo "if you did not: an in-place run measures the operator's own clone, so these are someone else's work in progress. Leave every one of them exactly as it is - do not stash, restore, checkout or clean anything - write no report, and escalate through \$GNOMISH_DECISION_FILE naming the paths."
+        exit 1
+      fi
+      # Committed strays, measured against the base the branch was cut from.
+      # Skipped off a task branch (an in-place run has no branch of its own to
+      # measure) and when origin/main is not at hand. `.gnomish-task/` is the
+      # factory's own bookkeeping, never the gnome's work.
+      branch=$(git branch --show-current)
+      case "$branch" in
+        gnomish/*)
+          if git rev-parse --verify --quiet origin/main > /dev/null; then
+            committed=$(git diff --name-only origin/main HEAD | grep -v "^$report$" | grep -v "^\.gnomish-task/" || true)
+            if [ -n "$committed" ]; then
+              echo "the branch carries committed changes this stage had no business making:"
+              echo "$committed"
+              exit 1
+            fi
+          fi
+          ;;
+      esac
+advancement: auto

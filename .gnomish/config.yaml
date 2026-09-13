@@ -1,0 +1,18 @@
+# Pipeline configuration for developing the factory with the factory itself.
+#
+# The pipeline is deliberately one stage wide while the setup is being debugged:
+# a task names an OpenSpec change, and the gnome decides whether that change can
+# be started now or is blocked by another active change that must land first.
+schemaVersion: "1"
+
+autonomy:
+  attemptLimit: 2
+
+tracker:
+  type: github
+  abort-threshold: 3
+  heartbeat-interval: 5m
+  heartbeat-ttl-multiplier: 3
+  github:
+    api-url: https://api.github.com
+    repo: oinsio/gnomish-factory
