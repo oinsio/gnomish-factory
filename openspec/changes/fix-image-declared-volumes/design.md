@@ -97,18 +97,43 @@ either, so nothing is lost by failing here. *Alternative rejected — log and
 continue with no overrides:* the failure mode `implementation.md` exists to
 prevent (green build, wrong behaviour).
 
-**D5 — Size bound is a constant, not a knob.** `tmpfs-size=64m` for every
-override, on both guard and box. *Rationale:* the guard has no memory limit,
-so this constant is what caps it (Q1 of the proposal); mitmproxy's generated
-CA set is 24 KB. For the box, 64 MB per declared path sits well under the
-2 GB default memory limit and is not a cache a build could usefully fill; a
-tool that needs more at a declared path is a tool that needs the content in
-the image or under the working copy (UX2 documents this). The mount sets no
-`tmpfs-mode`: Docker's default for a tmpfs mount is `1777`, so the image's
-non-root user (the guard's `mitmproxy`, the box's `gnome`) can write there
-without the factory naming a uid or mode. *Alternative
-rejected — operator knob under `factory.sandbox`:* a knob for a value nobody
-should tune invites tuning; revisit only if a real image needs it.
+**D5 — Size bound and mode are constants, not knobs.** Every override carries
+`tmpfs-size=64m,tmpfs-mode=1777`, on both guard and box. *Size rationale:* the
+guard has no memory limit, so this constant is what caps it (Q1 of the
+proposal); mitmproxy's generated CA set is 24 KB. For the box, 64 MB per
+declared path sits well under the 2 GB default memory limit and is not a cache
+a build could usefully fill; a tool that needs more at a declared path is a
+tool that needs the content in the image or under the working copy (UX2
+documents this). *Mode rationale — measured on Docker 29.4.0 / runc 1.3.4,
+2026-09-14:* the runtime copies the declared directory's **mode** from the
+image onto the tmpfs but never its **owner** — the mount is always `root:root`
+(runc's tmpfs path has no `chown`; moby/moby#39466). The documented `1777`
+default applies only to a destination the image does not contain, which a
+`VOLUME` path almost always is not. An anonymous volume, by contrast, copies
+mode *and* owner, so an image whose non-root user owned its declared path
+(the factory's own `gnome`) could write there before the override and could
+not after it — a silent behaviour change the identity spec of FR5 caught.
+`--mount type=tmpfs` exposes no uid/gid (docker/cli `opts/mount.go`: only
+`tmpfs-size` and `tmpfs-mode`), so ownership cannot be preserved; a
+world-writable sticky directory is the same answer Kubernetes gives for
+`emptyDir` (`root:root 0777`) and `/tmp` convention, and the box has a single
+user, so the widening costs nothing. Floor: `tmpfs-mode` over an existing
+directory is honoured by runc ≥ 1.1.8 (opencontainers/runc#3912, 2023-06);
+older runc silently restores the image's mode, and the FR5 spec is the gate
+that reports it. The runtime's own tmpfs defaults — `nosuid,nodev,noexec`,
+the hardening CIS Docker 5.12 asks for — stay in force; an image that ran
+binaries from under a declared path loses that, and the operator guide (UX2)
+names the same fix as for content: put it under a path the image does not
+declare. *Alternative rejected — the raw `--tmpfs <path>:uid=,gid=,…` form,
+which can set an owner:* the uid must come from the image's `Config.User`,
+which is empty on the default guard image and a user *name* on the reference
+image, unresolvable without running a container — so the resolver would need
+an "owner known / unknown" branch whose fallback is 1777 anyway; two paths
+for a case no configured image reaches. *Alternative rejected — a `chown`
+step after start:* needs a root exec into the box, against FR20 of
+add-sandbox-core. *Alternative rejected — operator knob under
+`factory.sandbox`:* a knob for a value nobody should tune invites tuning;
+revisit only if a real image needs it.
 
 **D6 — Seed helper stays exempt.** `seedClone` runs with `--rm`; Docker removes
 a `--rm` container's anonymous volumes with the container. The override would
@@ -129,8 +154,8 @@ override is container-only by nature, not by omission.)
 
 **Single-owner mechanisms:**
 
-| Owner | Value (type) | Consumers | Old way removed | Enforced by |
-|-------|--------------|-----------|-----------------|-------------|
+| Owner                                                                  | Value (type)                                                                     | Consumers                                                                                                                                                                                    | Old way removed                                                                                                                                                                                                                                                   | Enforced by                                                                                                                                                                                                                                                                                                                                   |
+|------------------------------------------------------------------------|----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `DeclaredVolumeOverrides.resolve(docker, image, explicitDestinations)` | `DeclaredVolumeOverrides` (immutable value; ordered paths + bound; renders argv) | `EgressGuard.create` → `GuardCommands.runGuard`; `ContainerMaterializer.create` → `DockerCommands.runContainer` (serves `<key>`, `<key>-j`, `<key>-v` through `ContainerEnvironmentBuilder`) | The previous signatures `runGuard(key, image, configDir, ownership)` and the 7-argument `runContainer(...)` are deleted — both now require the value; no builder accepts extra mounts as raw strings. Exemption: `DockerSeedCloneCommand.seedClone` (`--rm`, D6). | Parameter type (a call site without the value does not compile); `DockerCommandsSpec` asserts the fragments appear in both builders' argv and that `seedClone` still starts with `run --rm`; M2's grep (`/home/mitmproxy`, `.mitmproxy`) as a build-independent check in `tasks.md`; the Docker-gated identity spec of FR5 on the real daemon |
 
 Identity claim: "the set of paths overridden equals the set of paths the
@@ -140,6 +165,10 @@ copy) rather than by the unit spec alone.
 
 ## Risks / Trade-offs
 
+- [A declared path held executables the image's tooling ran] → the tmpfs is
+  `noexec` by the runtime's default (visible in `mount` inside the box), so the
+  run fails with EACCES instead of executing from an untracked object; the guide
+  names the fix (bake binaries under a path the image does not declare).
 - [tmpfs content is lost on stop → start (keep, then resume)] → acceptable by
   D1: declared paths hold no factory state; the resume re-materializes tool
   state from the image. Stated in the operator guide (UX2).

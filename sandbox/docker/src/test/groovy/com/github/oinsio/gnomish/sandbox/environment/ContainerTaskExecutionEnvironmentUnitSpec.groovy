@@ -43,11 +43,28 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         // Default fake daemon: no container exists yet (inspect fails), every create succeeds —
         // the fresh-materialize baseline. Features override onRun for reattach and failure paths.
         docker.onRun = { List<String> args ->
-            args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
+            declaredVolumes(args)
+            ?: (args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
         }
     }
 
     static final List<String> INSPECT = DockerCommands.inspectContainerState('gnomish-box-' + KEY)
+    static final List<String> IMAGE_INSPECT = DockerCommands.inspectImageVolumes('gnomish/img')
+    static final DeclaredVolumeOverrides NO_OVERRIDES = new DeclaredVolumeOverrides([])
+
+    /**
+     * The image-declared-volume read every fresh materialize now issues (FR1 of
+     * fix-image-declared-volumes), answered as the runtime answers an image declaring none.
+     * Returns null for every other argv, so a feature's own closure decides those.
+     */
+    private static DockerResult declaredVolumes(List<String> args, String answer = 'null') {
+        args[0] == 'image' ? new DockerResult(0, answer, '') : null
+    }
+
+    private static List<String> runArgv(DeclaredVolumeOverrides overrides = NO_OVERRIDES) {
+        DockerCommands.runContainer(new ContainerRunSpec(
+                        KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP, overrides))
+    }
 
     def "FR3: materialize inspects, then creates network, volume, seed clone, container, scratch dir, in order"() {
         when:
@@ -59,7 +76,8 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
             DockerCommands.createNetwork(KEY, OWNERSHIP),
             DockerCommands.createVolume(KEY, OWNERSHIP),
             DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', null, OWNERSHIP),
-            DockerCommands.runContainer(KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP),
+            IMAGE_INSPECT,
+            runArgv(),
             DockerCommands.exec(KEY, '/gnomish/work', [:], false, [
                 'mkdir',
                 '-p',
@@ -82,7 +100,31 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         capture.list.size() == 1
         capture.list[0].level == Level.INFO
         capture.list[0].formattedMessage ==
-                "container environment ${KEY} created for branch gnomish/task-x (image gnomish/img)"
+                "container environment ${KEY} created for branch gnomish/task-x (image gnomish/img);" +
+                " declared volumes made ephemeral: none"
+
+        cleanup:
+        capture.detach()
+    }
+
+    // NFR-O1, UX1, design D7 of fix-image-declared-volumes: what the image's declared paths became
+    // rides the creation anchor rather than a line of its own — one lifecycle event, one anchor.
+    def "NFR-O1: the creation anchor names every declared path the box made ephemeral"() {
+        given:
+        def capture = LogCaptureSupport.attach(ContainerMaterializer)
+        docker.onRun = { List<String> args ->
+            declaredVolumes(args, '{"/cache":{},"/opt/tool-state":{}}')
+            ?: (args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
+        }
+
+        when:
+        env().materialize('gnomish/task-x', null)
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].formattedMessage ==
+                "container environment ${KEY} created for branch gnomish/task-x (image gnomish/img);" +
+                " declared volumes made ephemeral: [/cache, /opt/tool-state]"
 
         cleanup:
         capture.detach()
@@ -186,7 +228,8 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
             if (args[0] == 'inspect') {
                 return new DockerResult(1, '', 'No such object')
             }
-            args[0] == 'network' && args[1] == 'create'
+            declaredVolumes(args)
+                    ?: args[0] == 'network' && args[1] == 'create'
                     ? new DockerResult(1, '', 'network with name gnomish-net-' + KEY + ' already exists')
                     : new DockerResult(0, '', '')
         }
@@ -228,7 +271,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         seed.last() == 'gnomish/task-x'
 
         and: 'the task container run mounts only the task volume'
-        def run = docker.runs[4]
+        def run = docker.runs[5]
         run.findAll {
             it.toString().contains(':') && it.toString().contains('/gnomish')
         } ==
@@ -271,7 +314,8 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         docker.onRun = { List<String> args ->
             args[0] == 'inspect'
             ? new DockerResult(1, '', 'No such object')
-            : (refuse(args) ? new DockerResult(1, '', 'no space left on device') : new DockerResult(0, '', ''))
+            : (declaredVolumes(args)
+            ?: (refuse(args) ? new DockerResult(1, '', 'no space left on device') : new DockerResult(0, '', '')))
         }
 
         when:
@@ -296,6 +340,52 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
             args[0] == 'run' && !args.contains('--rm')
         }
         'create scratch' | { List<String> args -> args[0] == 'exec' }
+    }
+
+    // FR1, FR2, NFR-C1 of fix-image-declared-volumes: the declared-volume read happens once per
+    // create, before the run it feeds — the box's paths are occupied by the same argv that starts
+    // it, so no window exists in which the daemon could make an anonymous volume for this image.
+    def "FR1: a fresh materialize reads the image's declared volumes once, before the run"() {
+        given:
+        docker.onRun = { List<String> args ->
+            declaredVolumes(args, '{"/cache":{},"/gnomish/work":{}}')
+            ?: (args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', ''))
+        }
+
+        when:
+        env().materialize('gnomish/task-x', null)
+
+        then: 'exactly one image inspect, and it precedes the run'
+        docker.runs.count { it == IMAGE_INSPECT } == 1
+        docker.runs.indexOf(IMAGE_INSPECT) <docker.runs.findIndexOf {
+            it[0] == 'run' && !it.contains('--rm')
+        }
+
+        and: 'the run carries the declared path the factory does not mount, and not the one it does'
+        docker.runs.contains(runArgv(new DeclaredVolumeOverrides(['/cache'])))
+    }
+
+    // NFR-R1, design D4: an unreadable answer must fail the materialize, never degrade to an empty
+    // override set — that would silently recreate the anonymous-volume leak with a green build.
+    def "NFR-R1: an image inspect the runtime refuses fails the materialize and starts no container"() {
+        given:
+        docker.onRun = { List<String> args ->
+            if (args[0] == 'image') {
+                return new DockerResult(1, '', 'No such image: gnomish/img')
+            }
+            args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
+        }
+
+        when:
+        env().materialize('gnomish/task-x', null)
+
+        then: 'the failure names the task container, ready to paste (FR2 of polish-sandbox-forensics)'
+        def ex = thrown(IllegalStateException)
+        ex.message.contains('gnomish-box-' + KEY)
+        ex.message.contains('No such image: gnomish/img')
+
+        and: 'no container was started — the leak window never opened'
+        !docker.runs.any { it[0] == 'run' && !it.contains('--rm') }
     }
 
     def "NFR-R1: a daemon outage at materialize propagates as an infrastructure failure, not a quality failure"() {

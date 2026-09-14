@@ -37,15 +37,39 @@ class EgressGuardSpec extends Specification {
         new DockerResult(0, stdout, '')
     }
 
+    /**
+     * Wraps a feature's daemon script so the image-declared-volume read the guard now issues
+     * before every {@code run} (FR1 of fix-image-declared-volumes) is answered as the runtime
+     * answers an image declaring nothing. Features about that read itself set {@code onRun}
+     * directly instead, so the refusal path stays assertable.
+     */
+    private static Closure<DockerResult> daemon(Closure<DockerResult> script) {
+        return { List<String> args ->
+            args[0] == 'image' ? ok('null') : script.call(args)
+        }
+    }
+
     private static DockerResult failed(String stderr = 'boom') {
         new DockerResult(1, '', stderr)
     }
 
+    /** The run argv this spec's guard really issues, overrides included. */
+    private List<String> runGuardArgv(DeclaredVolumeOverrides overrides = new DeclaredVolumeOverrides([])) {
+        GuardCommands.runGuard(
+                'k1',
+                'mitmproxy/mitmproxy:12',
+                tempDir.resolve('guard-cfg').toAbsolutePath().toString(),
+                OWNERSHIP,
+                overrides)
+    }
+
+    private static final List<String> GUARD_IMAGE_INSPECT =
+    DockerCommands.inspectImageVolumes('mitmproxy/mitmproxy:12')
+
     def "FR7: a missing guard is created on the task network and connected to the bridge"() {
         given: 'no guard container exists, and every create step succeeds'
-        docker.onRun = { List<String> args ->
-            args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.contains(GuardCommands.runGuard(
-                    'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString(), OWNERSHIP))
+        docker.onRun = daemon { List<String> args ->
+            args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.contains(runGuardArgv())
             ? failed('No such object')
             : ok('true\n')
         }
@@ -54,8 +78,7 @@ class EgressGuardSpec extends Specification {
         guard().ensureRunning()
 
         then: 'the guard is run with the rendered config and given its bridge leg'
-        docker.runs.contains(GuardCommands.runGuard(
-                        'k1', 'mitmproxy/mitmproxy:12', tempDir.resolve('guard-cfg').toAbsolutePath().toString(), OWNERSHIP))
+        docker.runs.contains(runGuardArgv())
         docker.runs.contains(GuardCommands.connectBridge('k1'))
 
         and: 'the first create sufficed — the recreate repair path never ran'
@@ -66,9 +89,90 @@ class EgressGuardSpec extends Specification {
         Files.exists(tempDir.resolve('guard-cfg').resolve('allowlist.json'))
     }
 
+    // FR1, FR2 of fix-image-declared-volumes: the default guard image declares its mitmproxy
+    // confdir, and every guard start used to leave one anonymous volume behind for it. The read
+    // happens before the run it feeds, so the guard is never started without its paths occupied.
+    def "FR1: the guard image's declared volumes are read before the guard is run"() {
+        given:
+        docker.onRun = { List<String> args ->
+            if (args == GUARD_IMAGE_INSPECT) {
+                return ok('{"/home/mitmproxy/.mitmproxy":{},"/gnomish-guard":{}}')
+            }
+            args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.any {
+                it[0] == 'run'
+            }
+            ? failed('No such object')
+            : ok('true\n')
+        }
+
+        when:
+        guard().ensureRunning()
+
+        then: 'the inspect precedes the run'
+        docker.runs.indexOf(GUARD_IMAGE_INSPECT) <docker.runs.findIndexOf {
+            it[0] == 'run'
+        }
+
+        and: 'the guard runs with the confdir overridden, and the config mount left alone'
+        docker.runs.contains(runGuardArgv(new DeclaredVolumeOverrides(['/home/mitmproxy/.mitmproxy'])))
+    }
+
+    // NFR-O1, design D7: the guard has no INFO creation anchor of its own, so what its declared
+    // paths became is stated at DEBUG — where an operator diagnosing a guard that lost its
+    // confdir between runs looks.
+    def "NFR-O1: the guard states at DEBUG which declared paths it made ephemeral"() {
+        given:
+        docker.onRun = { List<String> args ->
+            if (args == GUARD_IMAGE_INSPECT) {
+                return ok(answer)
+            }
+            args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.any {
+                it[0] == 'run'
+            }
+            ? failed('No such object')
+            : ok('true\n')
+        }
+
+        when:
+        def events = captureDebug(EgressGuard) { guard().ensureRunning() }
+
+        then:
+        events.any {
+            it.level == Level.DEBUG &&
+            it.formattedMessage == "egress guard for k1 declared volumes made ephemeral: ${described}"
+        }
+
+        where:
+        answer || described
+        'null' || 'none'
+        '{"/home/mitmproxy/.mitmproxy":{},"/opt/state":{}}' || '[/home/mitmproxy/.mitmproxy, /opt/state]'
+    }
+
+    // NFR-R1, design D4: the guard is an infrastructure dependency, so an unreadable image takes
+    // it down as one — never a start with an empty override set, which would leak again quietly.
+    def "NFR-R1: an unreadable guard image fails the guard and starts no container"() {
+        given:
+        docker.onRun = { List<String> args ->
+            args == GUARD_IMAGE_INSPECT
+            ? failed('No such image: mitmproxy/mitmproxy:12')
+            : failed('No such object')
+        }
+
+        when:
+        guard().ensureRunning()
+
+        then: 'the failure names the guard container, ready to paste'
+        def failure = thrown(GuardUnavailableException)
+        failure.message.contains('gnomish-guard-k1')
+        failure.message.contains('No such image: mitmproxy/mitmproxy:12')
+
+        and: 'no guard container was ever started'
+        !docker.runs.any { it[0] == 'run' }
+    }
+
     def "FR7: a running guard is left alone"() {
         given:
-        docker.onRun = { List<String> args -> ok('true\n') }
+        docker.onRun = daemon { List<String> args -> ok('true\n') }
 
         when:
         guard().ensureRunning()
@@ -82,7 +186,7 @@ class EgressGuardSpec extends Specification {
     def "NFR-R1: a stopped guard is restarted in place"() {
         given: 'the guard container exists but is stopped, and start brings it up'
         def started = false
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (args == GuardCommands.startGuard('k1')) {
                 started = true
                 return ok()
@@ -103,7 +207,7 @@ class EgressGuardSpec extends Specification {
     def "NFR-R1: a guard that will not start is recreated once"() {
         given: 'the guard exists, start does nothing, and only the recreated container runs'
         def recreated = false
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (args[0] == 'run') {
                 recreated = true
                 return ok()
@@ -139,7 +243,7 @@ class EgressGuardSpec extends Specification {
     def "FR5: a repair sub-step the daemon refuses leaves a DEBUG trace"() {
         given: 'the guard exists but start is refused; only the recreated container runs'
         def recreated = false
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (args[0] == 'run') {
                 recreated = true
                 return ok()
@@ -169,7 +273,7 @@ class EgressGuardSpec extends Specification {
     def "FR5: a refused removal before the recreate leaves a DEBUG trace"() {
         given: 'the guard exists, start does nothing, removal is refused, and only the recreate runs'
         def recreated = false
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (args[0] == 'run') {
                 recreated = true
                 return ok()
@@ -197,7 +301,7 @@ class EgressGuardSpec extends Specification {
 
     def "NFR-R1: a guard nothing can bring up is an infrastructure failure"() {
         given: 'the guard is never running, whatever is tried'
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             args == GuardCommands.inspectGuardRunning('k1') ? ok('false\n') : ok()
         }
 
@@ -210,7 +314,7 @@ class EgressGuardSpec extends Specification {
 
     def "NFR-R1: a failing docker run of the guard is an infrastructure failure"() {
         given:
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             args[0] == 'run' ? failed('image not found') : failed('No such object')
         }
 
@@ -227,7 +331,7 @@ class EgressGuardSpec extends Specification {
     // each of the three sites that can throw it, which is what M2 counts.
     def "FR2: every guard-unavailable failure names the guard container ready-to-paste"() {
         given:
-        docker.onRun = refuse
+        docker.onRun = daemon(refuse)
 
         when:
         guard().ensureRunning()
@@ -257,7 +361,7 @@ class EgressGuardSpec extends Specification {
 
     def "FR7: an already-connected bridge leg is not an error"() {
         given: 'run succeeds and the bridge connect reports the endpoint already exists'
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (args == GuardCommands.connectBridge('k1')) {
                 return failed('endpoint with name gnomish-guard-k1 already exists in network bridge')
             }
@@ -279,7 +383,7 @@ class EgressGuardSpec extends Specification {
 
     def "NFR-O1: denial findings are parsed from a bounded guard log tail"() {
         given:
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             args == GuardCommands.guardLogs('k1', 1000, null)
             ? ok(denialLine('2026-08-19T10:00:00.000000000Z', 'evil.example.com'))
             : ok()
@@ -296,7 +400,9 @@ class EgressGuardSpec extends Specification {
 
     def "NFR-O1: an unreadable guard log yields no findings, never a failure"() {
         given: 'the guard container is gone'
-        docker.onRun = { List<String> args -> failed('No such container') }
+        docker.onRun = daemon { List<String> args ->
+            failed('No such container')
+        }
 
         expect:
         guard().readDenials().denials()*.finding() == []
@@ -309,7 +415,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args -> ok(logsSince(args, log)) }
+        docker.onRun = daemon { List<String> args -> ok(logsSince(args, log)) }
         def g = guard()
 
         when: 'the first round closes and reads'
@@ -336,7 +442,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args -> ok(logsSince(args, log)) }
+        docker.onRun = daemon { List<String> args -> ok(logsSince(args, log)) }
         def g = guard()
 
         when: 'nothing new happened between the two reads'
@@ -354,7 +460,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args -> ok(logsSince(args, log)) }
+        docker.onRun = daemon { List<String> args -> ok(logsSince(args, log)) }
         def g = guard()
 
         when: 'a first read moves the cursor, then a quiet round reads nothing'
@@ -381,7 +487,7 @@ class EgressGuardSpec extends Specification {
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com'),
             denialLine('2026-08-19T10:05:00.000000000Z', 'second.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-1')
         }
 
@@ -418,7 +524,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-1')
         }
 
@@ -465,7 +571,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-2')
         }
 
@@ -486,7 +592,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-3')
         }
         def g = guard()
@@ -506,7 +612,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             args == GuardCommands.inspectGuardId('k1') ? failed('No such object') : ok(logsSince(args, log))
         }
         def g = guard()
@@ -531,7 +637,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-4')
         }
         def g = guard()
@@ -553,7 +659,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (args[0] == 'run') {
                 recreated = true
                 return ok()
@@ -585,7 +691,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             args == GuardCommands.inspectGuardId('k1') ? failed('No such object') : ok(logsSince(args, log))
         }
 
@@ -606,7 +712,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (args == GuardCommands.inspectGuardId('k1')) {
                 throw new DockerUnavailableException('docker daemon is unreachable', null)
             }
@@ -658,7 +764,7 @@ class EgressGuardSpec extends Specification {
     //     permanent loss as a quiet round.
     def "NFR-O1: a read that fills the tail window is warned about"() {
         given: 'the daemon returns exactly as many lines as the tail cap asked for'
-        docker.onRun = { List<String> args -> ok(chatter(1000)) }
+        docker.onRun = daemon { List<String> args -> ok(chatter(1000)) }
 
         when:
         def warnings = capture { guard().readDenials().denials()*.finding() }
@@ -672,7 +778,7 @@ class EgressGuardSpec extends Specification {
 
     def "NFR-O1: a read below the tail window warns about nothing"() {
         given: 'the daemon returns one line short of the cap'
-        docker.onRun = { List<String> args -> ok(chatter(999)) }
+        docker.onRun = daemon { List<String> args -> ok(chatter(999)) }
 
         when:
         def warnings = capture { guard().readDenials().denials()*.finding() }
@@ -731,7 +837,7 @@ class EgressGuardSpec extends Specification {
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
         def refuse = false
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             refuse ? failed('daemon gone') : ok(logsSince(args, log))
         }
         def g = guard()
@@ -774,7 +880,7 @@ class EgressGuardSpec extends Specification {
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
         def down = false
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             if (down) {
                 throw new DockerUnavailableException('docker daemon is unreachable', null)
             }
@@ -853,7 +959,7 @@ class EgressGuardSpec extends Specification {
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com'),
             denialLine('2026-08-19T10:05:00.000000000Z', 'second.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-1')
         }
         def recorded = guard().readDenials().denials()*.identity() as Set
@@ -876,7 +982,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-1')
         }
         def recorded = guard().readDenials().denials()*.identity() as Set
@@ -908,7 +1014,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             'GNOMISH-EGRESS-DENY {"kind":"connect","host":"first.example.com","port":443}\n'
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-1')
         }
         def first = guard().readDenials()
@@ -932,7 +1038,7 @@ class EgressGuardSpec extends Specification {
         def log = (1..1000).collect {
             denialLine("2026-08-19T10:00:0${it % 10}.00000000${it % 9}Z", "h${it}.example.com")
         }
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-1')
         }
 
@@ -957,7 +1063,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-live')
         }
         def recorded = [
@@ -984,7 +1090,7 @@ class EgressGuardSpec extends Specification {
     // FR8: "no denials" and "no data" are different answers, and a quiet task gives the first
     def "FR8: a quiet task emits neither a denial nor a loss marker"() {
         given: 'a guard that blocked nothing, resumed with a position of its own live container'
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, [], 'sha256:container-1')
         }
 
@@ -1004,7 +1110,7 @@ class EgressGuardSpec extends Specification {
         def log = [
             denialLine('2026-08-19T10:00:00.000000000Z', 'first.example.com')
         ]
-        docker.onRun = { List<String> args ->
+        docker.onRun = daemon { List<String> args ->
             guardDaemon(args, log, 'sha256:container-live')
         }
         guard().readDenials()

@@ -157,9 +157,9 @@ _None._
   configuration knob to get the fix.
 - UX2: An operator whose image relies on a declared path for something that
   must persist, or that ships content there, gets a clear statement in `docs/`
-  that the factory makes such paths ephemeral and empty — content the image
-  holds under a declared path is not visible in the box — with the
-  alternatives (bake the content into the image under a path it does not
+  that the factory makes such paths ephemeral, empty, root-owned but
+  world-writable, and non-executable — content or binaries the image holds
+  under a declared path are not usable in the box — with the alternatives (bake the content into the image under a path it does not
   declare, or keep it under the working copy).
 
 ## Success Metrics

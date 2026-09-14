@@ -9,15 +9,22 @@ sandbox chapter explains how the image fits the whole setup.
 
 The container adapter and the egress self-check assume, in any image you build:
 
-| Contract item | Why |
-|---|---|
-| `git` on `PATH` | the seed clone and snapshot commits run in-box |
-| `curl` on `PATH` | the fail-closed self-check probes run via `exec` (FR8) |
-| non-root user `gnome`, uid 1000, owning `/gnomish/**` | every process — seed clone included — runs as the image user, never root |
-| control surfaces root-owned | agent-CLI policy, proxy/CA/build configs must survive a hostile round (FR20) |
+| Contract item                                         | Why                                                                          |
+|-------------------------------------------------------|------------------------------------------------------------------------------|
+| `git` on `PATH`                                       | the seed clone and snapshot commits run in-box                               |
+| `curl` on `PATH`                                      | the fail-closed self-check probes run via `exec` (FR8)                       |
+| non-root user `gnome`, uid 1000, owning `/gnomish/**` | every process — seed clone included — runs as the image user, never root     |
+| control surfaces root-owned                           | agent-CLI policy, proxy/CA/build configs must survive a hostile round (FR20) |
 
 Everything else — JDK version, extra toolchains, language runtimes — is your
 project's choice: swap `BASE_IMAGE` or extend the Dockerfile.
+
+One thing the image must **not** do is rely on a `VOLUME` declaration: the
+factory mounts an empty, bounded, non-executable ephemeral filesystem over
+every declared path it does not mount itself, so content baked under such a
+path is invisible in the box. Keep toolchains and caches under paths the image
+does not declare — see [Declared volumes in your
+image](../../guides/operator-guide-sandbox.md#declared-volumes-in-your-image).
 
 ## Build
 
@@ -29,13 +36,13 @@ docker build -t my-project-sandbox:1 docs/examples/sandbox-image/
 
 Build arguments (all optional):
 
-| Arg | Default | Purpose |
-|---|---|---|
-| `BASE_IMAGE` | `eclipse-temurin:21-jdk-noble` | JDK base; pick your project's toolchain |
-| `NPM_REGISTRY` | npmjs.org | registry the agent CLI installs from at build time |
-| `MAVEN_MIRROR_URL` | Maven Central | the baked Maven mirror — the artifact-depot seam |
-| `AGENT_CLI_PACKAGE` | `@anthropic-ai/claude-code` | the agent CLI baked into the image |
-| `PROXY_HOST` / `PROXY_PORT` | `gnomish-guard` / `8080` | the egress guard's stable alias on the task network |
+| Arg                         | Default                        | Purpose                                             |
+|-----------------------------|--------------------------------|-----------------------------------------------------|
+| `BASE_IMAGE`                | `eclipse-temurin:21-jdk-noble` | JDK base; pick your project's toolchain             |
+| `NPM_REGISTRY`              | npmjs.org                      | registry the agent CLI installs from at build time  |
+| `MAVEN_MIRROR_URL`          | Maven Central                  | the baked Maven mirror — the artifact-depot seam    |
+| `AGENT_CLI_PACKAGE`         | `@anthropic-ai/claude-code`    | the agent CLI baked into the image                  |
+| `PROXY_HOST` / `PROXY_PORT` | `gnomish-guard` / `8080`       | the egress guard's stable alias on the task network |
 
 Registry endpoints are deliberately parameters (D7): pointing the image at a
 private depot or mirror is a `--build-arg`, never an image edit.

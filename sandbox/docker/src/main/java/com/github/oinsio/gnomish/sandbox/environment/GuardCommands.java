@@ -42,8 +42,20 @@ final class GuardCommands {
      * read-only. Config lives outside the box; the task container has no route
      * to the guard's filesystem (NFR-S2). {@code connection_strategy=lazy} keeps
      * the guard from dialing upstream before the addon's allowlist decision.
+     *
+     * <p>The guard image's own declared volume paths — the default mitmproxy image
+     * declares its confdir — are occupied by {@code overrides} after the read-only
+     * config mount, so the guard leaves no anonymous volume behind (FR2, FR3 of
+     * fix-image-declared-volumes). The CA the guard serves arrives through the config
+     * mount, so an ephemeral confdir costs it nothing. The value is a required
+     * parameter: a call site that skipped resolving it does not compile.
      */
-    static List<String> runGuard(String key, String guardImage, String configDirHostPath, ObjectOwnership ownership) {
+    static List<String> runGuard(
+            String key,
+            String guardImage,
+            String configDirHostPath,
+            ObjectOwnership ownership,
+            DeclaredVolumeOverrides overrides) {
         List<String> argv = new ArrayList<>(List.of("run", "-d", "--name", FactoryDockerLabels.guardName(key)));
         argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
         argv.addAll(List.of(
@@ -52,7 +64,9 @@ final class GuardCommands {
                 "--network-alias",
                 PROXY_ALIAS,
                 "-v",
-                configDirHostPath + ":" + CONFIG_MOUNT + ":ro",
+                configDirHostPath + ":" + CONFIG_MOUNT + ":ro"));
+        argv.addAll(overrides.argv());
+        argv.addAll(List.of(
                 guardImage,
                 "mitmdump",
                 "--mode",
@@ -89,7 +103,7 @@ final class GuardCommands {
      * from container start.
      */
     static List<String> guardLogs(String key, int tailLines, @Nullable String since) {
-        var argv = new ArrayList<String>(List.of("logs", "--tail", Integer.toString(tailLines), "--timestamps"));
+        var argv = new ArrayList<>(List.of("logs", "--tail", Integer.toString(tailLines), "--timestamps"));
         if (since != null) {
             argv.add("--since");
             argv.add(since);

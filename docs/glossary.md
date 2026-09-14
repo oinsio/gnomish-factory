@@ -264,6 +264,11 @@ trusted/task tier split, and the law-root rule.
 - **Box** — the disposable isolated execution environment a gnome runs in;
   destroyed after the task. *Not:* a synonym for container — a box may be a
   container or a VM.
+- **Declared volume** — a path an image's Dockerfile marks with `VOLUME`. The
+  factory makes every declared path ephemeral (a size-bounded `tmpfs`) unless
+  it already mounts that path explicitly, so no anonymous volume is ever
+  created; content the image ships under a declared path is therefore not
+  visible in the box. *Never:* implicit volume, image volume.
 - **Passport (capability passport)** — the capability declaration a sandbox
   backend ships with its binding (isolation level, egress control, ...). A
   stage's needs are reconciled against the bound adapter's passport,
