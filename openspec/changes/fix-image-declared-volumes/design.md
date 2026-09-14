@@ -16,7 +16,7 @@ experience (kubernetes/kubernetes#128500) is that declared paths left to the
 runtime also escape the container's storage accounting — the same quota bypass
 the box's opt-in `--storage-opt size=` has today.
 
-Driven by FR1–FR6, NFR-R1, NFR-O1 of the proposal.
+Driven by FR1–FR6, NFR-R1, NFR-R2, NFR-O1, NFR-S1, NFR-C1 of the proposal.
 
 ## Goals / Non-Goals
 
@@ -55,7 +55,9 @@ change introduces the named object explicitly for that path alone.
 **D2 — One owner: `DeclaredVolumeOverrides`.** A small package-private class in
 `sandbox/docker` with one static entry point: given the `DockerCli`, the image
 reference and the set of destinations the factory mounts explicitly, it runs
-`docker image inspect -f '{{json .Config.Volumes}}' <image>`, parses the JSON
+`docker image inspect -f {{json .Config.Volumes}} <image>` — the template is
+one argv element, passed as a distinct list entry with no shell quoting, like
+every builder in `DockerCommands` — parses the JSON
 object's keys, subtracts the explicit destinations, and returns an immutable
 value type `DeclaredVolumeOverrides` holding the ordered path list and the
 size bound; the value renders itself as argv fragments. Parsing needs no JSON
@@ -77,6 +79,9 @@ before building the run argv, passing their explicit destinations
 object (key, image, runtime, limits, disk-quota flag, working copy, ownership,
 overrides) in the same task — the limit says a gate lands with the refactor
 that brings offenders under it, and this change would otherwise add one.
+`ContainerMaterializer.create` itself (already ten parameters) obtains the
+value locally and gains no parameter here; bringing its own signature under
+the limit stays with `add-parameter-count-gate` task 2.3.
 *Rationale:* the builders stay pure and daemon-free for `DockerCommandsSpec`;
 the daemon call happens at the call site, where the outage policy already
 lives. *Alternative rejected — have the builder call the daemon:* breaks the
@@ -98,7 +103,10 @@ so this constant is what caps it (Q1 of the proposal); mitmproxy's generated
 CA set is 24 KB. For the box, 64 MB per declared path sits well under the
 2 GB default memory limit and is not a cache a build could usefully fill; a
 tool that needs more at a declared path is a tool that needs the content in
-the image or under the working copy (UX2 documents this). *Alternative
+the image or under the working copy (UX2 documents this). The mount sets no
+`tmpfs-mode`: Docker's default for a tmpfs mount is `1777`, so the image's
+non-root user (the guard's `mitmproxy`, the box's `gnome`) can write there
+without the factory naming a uid or mode. *Alternative
 rejected — operator knob under `factory.sandbox`:* a knob for a value nobody
 should tune invites tuning; revisit only if a real image needs it.
 
@@ -137,8 +145,20 @@ copy) rather than by the unit spec alone.
   state from the image. Stated in the operator guide (UX2).
 - [An image relies on a declared path for large persistent data] → the 64 MB
   bound makes this fail visibly (ENOSPC inside the box) instead of silently
-  leaking; the guide names the two alternatives (bake in, or under the working
-  copy).
+  leaking; the guide names the two alternatives (bake in under an undeclared
+  path, or under the working copy).
+- [Image content under a declared path becomes invisible] → today an anonymous
+  volume receives a copy of whatever the image holds at the declared path; a
+  tmpfs mounts empty, so that content is not visible in the box. This is a
+  deliberate behaviour change, not a side effect: the `execution-environment`
+  freshness requirement wants image content plus branch state, and content
+  the image ships under a `VOLUME` was never guaranteed to be there either
+  (any explicit mount hides it the same way). The default guard image holds
+  nothing at its declared path. The FR5 spec pins the behaviour with a file
+  baked under the fixture's declared path and asserted absent in the box; the
+  operator guide states it and names the fix (bake the content under a path
+  the image does not declare) — the same wording `add-sandbox-hardening` uses
+  for its provisioning snapshots.
 - [`image inspect` adds a daemon round-trip per container start] → bounded by
   the existing management deadline; measured cost is milliseconds against a
   container start that takes seconds. NFR-C1.
