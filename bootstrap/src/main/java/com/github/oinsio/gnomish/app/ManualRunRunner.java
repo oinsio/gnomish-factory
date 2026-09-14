@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -164,8 +163,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             SecretsProvider secretsProvider,
             PipelineSource pipelineSource,
-            ServeProperties serveProperties,
-            ClaimEpochBook claimEpochBook) {
+            ServeProperties serveProperties) {
         this.argumentsParser = argumentsParser;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
@@ -205,7 +203,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                         factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections())),
                 checkClientRegistry);
         ContainerSupportFactory containerSupport =
-                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.MANUAL, claimEpochBook);
+                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.MANUAL, git.epochs());
         this.containerGitModeRunner =
                 new ContainerGitModeRunner(assembly, git, sandboxProperties, factoryProperties, containerSupport);
         this.containerResumeRunner = new ContainerResumeRunner(
@@ -217,7 +215,7 @@ public final class ManualRunRunner implements ApplicationRunner {
         // identical to run's above except for the ownership label it closes over (`tracked`, not
         // `manual` — take/serve claim tasks through the tracker, run never does).
         ContainerSupportFactory takeContainerSupport =
-                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.TRACKED, claimEpochBook);
+                containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.TRACKED, git.epochs());
         this.containerTakeSupport = new ContainerTakeSupport(
                 factoryProperties,
                 bindingProperties,
@@ -243,8 +241,7 @@ public final class ManualRunRunner implements ApplicationRunner {
                 boardCommand,
                 dashboardCommand,
                 SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, javaTimeClock),
-                containerTakeSupport,
-                claimEpochBook);
+                containerTakeSupport);
     }
 
     /**

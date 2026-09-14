@@ -63,7 +63,7 @@ final class TakeWorkRouter {
         REPAIR_LOG.classified(
                 taskId,
                 shape,
-                w.epochs.epochFor(taskId).orElse(null),
+                w.git.epochs().epochFor(taskId).orElse(null),
                 BranchRepairAction.phrase(shape),
                 trackerTask.abortFacts().recoveryCount());
         return resume(w, cloneDir, shape, definition, interactiveMode, discardWork, taskId, tracker, ref, instanceId);

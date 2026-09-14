@@ -107,8 +107,9 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
         def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
+        def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(factoryProps), TaskGitFixture.real(), sandbox, factoryProps, ContainerSupportFixture.real())
+                newAssembly(factoryProps), git, sandbox, factoryProps, ContainerSupportFixture.real(git.epochs()))
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]

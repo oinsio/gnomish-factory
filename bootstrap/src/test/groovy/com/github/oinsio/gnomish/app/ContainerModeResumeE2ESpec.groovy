@@ -131,9 +131,10 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def context = new TaskContext(taskId, 'title', 'body', List.<Decision> of())
 
         when: 'instance one runs with an immediately-EOF console and dies at the escalation dialog'
+        def gitOne = TaskGitFixture.real()
         def instanceOne = new ContainerGitModeRunner(
-                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), TaskGitFixture.real(),
-                sandboxProps, factoryProps, ContainerSupportFixture.real())
+                newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), gitOne,
+                sandboxProps, factoryProps, ContainerSupportFixture.real(gitOne.epochs()))
         instanceOne.run(cloneDir, null, pipeline(), segments(), context,
                 TaskState.atStageStart('work'), RunArguments.InteractiveMode.NONE)
 
@@ -155,8 +156,9 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         ContainerE2eDocker.execInBox(boxName, 'cd /gnomish/work && echo leftover > leftover.txt')
 
         and: 'a second instance resumes from the branch alone'
-        new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), sandboxProps, factoryProps, 'taskId',
-                ContainerSupportFixture.real())
+        def resumeGit = TaskGitFixture.real()
+        new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
+                ContainerSupportFixture.real(resumeGit.epochs()))
                 .run(cloneDir, taskId, pipeline(), segments(), RunArguments.InteractiveMode.NONE, false)
 
         then: 'the leftover was salvaged in-box and harvested (FR6)'
@@ -207,8 +209,9 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         support.keepStopped()
 
         when: 'a second instance resumes'
-        new ContainerResumeRunner(newAssembly(factoryProps), TaskGitFixture.real(), sandboxProps, factoryProps, 'taskId',
-                ContainerSupportFixture.real())
+        def resumeGit = TaskGitFixture.real()
+        new ContainerResumeRunner(newAssembly(factoryProps), resumeGit, sandboxProps, factoryProps, 'taskId',
+                ContainerSupportFixture.real(resumeGit.epochs()))
                 .run(cloneDir, taskId, pipeline(), segments(), RunArguments.InteractiveMode.NONE, false)
 
         then: 'the task completed — verification judged the harvested attempt commit, no agent ran'

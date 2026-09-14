@@ -4,18 +4,11 @@ import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
-import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolCall
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -30,13 +23,13 @@ import spock.lang.TempDir
  * only thing driving this facade was the composition root's run-assembly integration suites in
  * {@code :bootstrap} — a different module's test task, invisible to {@code :adapters:pitest}.
  */
-class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture {
+class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, TaskSeedFixture {
 
     @TempDir
     Path tempDir
 
-    def runner = new GitProcessRunner()
-    def branches = new GitTaskBranches(runner)
+    GitProcessRunner runner = new GitProcessRunner()
+    def branches = new GitTaskBranches(runner, ClaimEpochSource.NONE)
     Path cloneDir
     Path worktreesRoot
 
@@ -45,18 +38,6 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture {
         Files.writeString(cloneDir.resolve('a.txt'), 'first')
         commitAll(cloneDir, 'init')
         worktreesRoot = tempDir.resolve('worktrees')
-    }
-
-    private Path worktreeFor(String taskId) {
-        worktreesRoot.resolve('clone').resolve(taskId)
-    }
-
-    private void seedTask(String taskId) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
-            new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
-        ])
-        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, TaskState.atStageStart('implement'), trace)
     }
 
     def "harden delegates to FactoryCloneHardening — the clone's hooksPath is repointed"() {

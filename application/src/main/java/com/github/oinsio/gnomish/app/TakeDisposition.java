@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -73,8 +72,6 @@ final class TakeDisposition {
      * @param claimLossFlag the per-run heartbeat claim-loss flag (task 6.3, FR8 of
      *     add-claim-heartbeat), threaded down to every {@link TakeEngineExecution} this disposition
      *     constructs so the round boundary reacts to a beat-detected loss as a revocation; never null
-     * @param epochs this instance's tenure record, read by the routing point for the repair line it
-     *     leaves on a non-clean pickup (NFR-O1 of harden-task-branch-contract); never null
      * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
      *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
@@ -92,7 +89,6 @@ final class TakeDisposition {
             Clock clock,
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs,
             TrustedBaseContext trustedBase) {
         this.claimAndWork = TakeClaimAndWorkFactory.forSlot(
                 assembly,
@@ -105,7 +101,6 @@ final class TakeDisposition {
                 heartbeat,
                 claimLossFlag,
                 containerTakeSupport,
-                epochs,
                 trustedBase);
         this.takeover = new TakeTakeover(claimAndWork, confirmation, takeoverFlag, clock);
     }

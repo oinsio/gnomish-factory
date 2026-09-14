@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
@@ -35,7 +36,7 @@ class TakeTakeoverSpec extends Specification implements RunChainFakes {
 
     private static final String HOLDER = 'gnomish-other-99xxyy'
 
-    private TaskGit git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit))
+    private TaskGit git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
 
     /** A tracker whose queue reports {@code ref} with {@code version}, and which refuses every claim. */
     private Tracker trackerHolding(ClaimVersion version) {

@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -110,8 +109,7 @@ tracker:
                 [github: fakeFactory(tracker)],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook())
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     def "M1: a healthy drain cycle that claims, works and delivers one task logs no WARN or ERROR"() {

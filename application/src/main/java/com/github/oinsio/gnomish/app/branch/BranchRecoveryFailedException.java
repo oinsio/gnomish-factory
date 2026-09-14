@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import java.io.Serial;
 
 /**
- * Thrown when the recovery owner of a non-clean branch shape fails to converge it — the reconcile
- * of a stale-epoch tip, the completion of a park's pending tracker write, the finish of a
+ * Thrown when the recovery owner of a non-clean branch shape fails to converge it — the
+ * completion of a park's pending tracker write, the finish of a
  * `Completed`-without-cleanup tip. The failure is still an infrastructure abort and still spends
  * one attempt of the unified accounting, but it spends it in the recovery category rather than the
  * crash one (FR14, design D9 of harden-task-branch-contract), which is what lets a quarantine

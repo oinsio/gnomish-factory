@@ -1,22 +1,13 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
-import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
-import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolCall
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -38,17 +29,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     }
 
     private StatusCommand newCommand() {
-        new StatusCommand(TaskGitFixture.real(), worktreesRoot)
-    }
-
-    private void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
-        def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
-        def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
-            new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
-        ])
-        persistence.persist(taskId, state, trace)
+        new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot)
     }
 
     def "FR13: text render of a found task prints the status block"() {

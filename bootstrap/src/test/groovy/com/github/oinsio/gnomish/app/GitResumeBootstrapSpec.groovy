@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
+import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -199,7 +199,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         def originTip = gitOutput(bare, 'rev-parse', 'refs/heads/gnomish/PROJ-22')
 
         when:
-        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out, TaskGitFixture.real(tenureOn('PROJ-22')))
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out, tenureOn('PROJ-22'))
                 .bootstrap(cloneDir, 'PROJ-22')
 
         then: 'resume continues from origin, with no exception demanding git surgery'
@@ -253,10 +253,14 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         !Files.exists(worktree.resolve('peer-only.txt'))
     }
 
-    /** A tenure held on {@code taskId} and nothing else — the take path's shape. */
-    private static ClaimEpochSource tenureOn(String taskId) {
-        { String asked ->
-            asked == taskId ? Optional.of(new ClaimEpoch(11L)) : Optional.empty()
-        } as ClaimEpochSource
+    /**
+     * The base's own bundle, with a claim on {@code taskId} recorded in the tenure record it
+     * already owns — the take path's shape. The record is the bundle's, never one minted beside it
+     * (FR5, design D3 of fix-claim-epoch-fence): one book, stamped from and read back through the
+     * same object, so the branch this spec seeds and the run it drives cannot disagree.
+     */
+    private TaskGit tenureOn(String taskId) {
+        taskGit.epochs().issued(taskId, new ClaimEpoch(11L))
+        taskGit
     }
 }

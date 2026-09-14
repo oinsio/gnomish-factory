@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
@@ -90,7 +91,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
     private TaskGit gitWith(TaskBranchGit branches) {
         new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), baseRefGit)
+                UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
     }
 
     // FR3 of fix-lifecycle-push: resume start is a touchpoint — once the local branch is reconciled

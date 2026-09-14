@@ -102,16 +102,23 @@ ever stamped and no live epoch ever exists.
 - FR4: the tenure record SHALL have one owner. The `TaskGit` bundle SHALL carry the
   `ClaimEpochBook` its writers stamp from; `take` and `serve` SHALL wrap the tracker they resolve
   with that book; no other component SHALL construct a book or wrap a tracker for it. The registry
-  wrapper in `:bootstrap` and the `TakeCommandSeams.epochs` seam SHALL be removed.
-- FR5: a git layer built with `ClaimEpochSource.NONE` SHALL exist only in the claimless commands
-  (`status`, `usage`, `board`, plain `run`); every other assembly, test fixtures included, SHALL
-  build through the owner of FR4. An architecture spec in `:bootstrap` SHALL enforce the allowlist.
+  wrapper in `:bootstrap`, the `TakeCommandSeams.epochs` seam, and every separate `ClaimEpochBook`
+  parameter beside a `TaskGit` parameter (`TakeCommandFactory`, `SubcommandDispatchFactory`,
+  `ServeCommand`, `TakeClaimAndWork`) SHALL be removed.
+- FR5: a git layer built with `ClaimEpochSource.NONE` SHALL exist in production only on the plain
+  `run` path (the claimless commands `status`, `usage`, and `board` read through the shared
+  `TaskGit` bean and need no claimless layer of their own); every assembly that claims, test
+  fixtures included, SHALL build through the owner of FR4, and no test SHALL hold a second book
+  beside the bundle's. An architecture spec in `:bootstrap` SHALL enforce both rules over an
+  allowlist that names every exempt file.
 - FR6: two regression specs on a real bare origin with two independently assembled instances SHALL
   assert, with the tip stamped by the first tenure: (a) escalate → human reply and return → reclaim
   resumes and delivers; (b) crash mid-round → salvage → reap → reclaim resumes at the recorded
   position. Each SHALL assert the reclaiming tenure's commits carry the new epoch.
-- FR7: the `task-branch-contract` delta, `docs/adr/0003-crash-consistency.md`, `docs/glossary.md`,
-  and the testing rule SHALL be updated in this change (see design D4).
+- FR7: the `task-branch-contract`, `tracker-port`, and `claim-heartbeat` deltas,
+  `docs/adr/0003-crash-consistency.md`, `docs/glossary.md`, and the testing rule SHALL be updated
+  in this change (see design D4); no durable document SHALL keep the sentence that readers classify
+  older-epoch artifacts as stale.
 
 ### Non-Functional Reliability
 
@@ -119,7 +126,8 @@ ever stamped and no live epoch ever exists.
   shape. The kill-point matrix gains the two reclaim cycles of FR6 with a second pickup asserted as
   a no-op.
 - NFR-R2: no new durable step, commit, push, or tracker write is introduced; a reclaim performs
-  the same writes as before minus the reconcile-then-reclassify pass.
+  the same writes as before minus the reconcile-then-reclassify pass (checked by the diff review of
+  task 8.2).
 
 ### Non-Functional Observability
 
@@ -135,7 +143,7 @@ ever stamped and no live epoch ever exists.
 ### Non-Functional Cost
 
 - NFR-C1: no additional git network calls on any path; the removed reconcile pass saves one fetch
-  per formerly quarantined reclaim.
+  per formerly quarantined reclaim (checked by the diff review of task 8.2).
 
 ## Operator Experience Criteria
 
@@ -146,12 +154,16 @@ ever stamped and no live epoch ever exists.
 
 ## Success Metrics
 
-- M1: `grep -rn "StaleEpoch" --include='*.java' --include='*.groovy' --include='*.md'` over
-  `src/`, `docs/`, and `openspec/specs/` returns zero hits after archive.
+- M1: `grep -rin "StaleEpoch\|stale.epoch" --include='*.java' --include='*.groovy' --include='*.md'`
+  over `src/`, `docs/`, `.claude/rules/`, and `openspec/specs/` returns zero hits after archive
+  (case-insensitive, so `stale-epoch` and `stale epoch` count too), with one accepted exception:
+  the scenario heading "Stale-epoch artifact is its own shape" in `task-branch-contract`, which
+  the OpenSpec archive refuses to drop from a MODIFIED block and whose body now states the reversal.
 - M2: both FR6 regression specs are green and are red when the FR1 fence is reintroduced
   locally (verified once during implementation and recorded in the task report).
-- M3: the FR5 architecture spec passes and lists every `ClaimEpochSource.NONE` site by file; the
-  list contains only the claimless commands and their fixtures.
+- M3: the FR5 architecture spec passes and lists every `ClaimEpochSource.NONE` site and every
+  two-book test file it found; the allowlist it passed on contains only the sites design D4 names,
+  each with the reason it never claims.
 - M4: PIT stays at the module gates with no new exemption; the removed `isStaleAgainst` and the
   dead reconcile route leave no surviving mutant behind.
 
@@ -176,6 +188,10 @@ ever stamped and no live epoch ever exists.
 - `lifecycle/task-branch-contract`: "Total branch-shape classification" loses `StaleEpoch` and the
   live-epoch input; "Claim-epoch fencing" is rewritten as provenance plus the two real fences; a
   new requirement pins the single-owned tenure record.
+- `tracker-port`: "Claim issues a monotonic claim token" loses its closing sentence that readers
+  classify older-token artifacts as stale-epoch.
+- `lifecycle/claim-heartbeat`: "Every (re)claim issues a monotonically increasing epoch" loses the
+  same sentence.
 
 ## Impact
 
@@ -191,21 +207,34 @@ ever stamped and no live epoch ever exists.
 - `:domain` — `BranchShape` (shape removed), `BranchShapeClassifier` (fence rule removed),
   `BranchTipFacts` (live-epoch field removed), `ClaimEpoch` (`isStaleAgainst` removed; `Comparable`
   stays only if a consumer remains).
+- `:gnomish-plugin-api` — the surface re-exposes the four `:domain` types this change cuts, so the
+  break is a versioned one: `0.5.0` -> `0.6.0` (the fifth BREAKING move, recorded in the module's
+  `build.gradle` header beside the four before it), `compat-baseline/gnomish-plugin-api-0.5.0.jar`
+  renamed to `-0.6.0.jar` and `compat-baseline/domain-0.1.0-SNAPSHOT.jar` regenerated so
+  `japicmpApiGate` compares against the accepted shape, and `TrackerAdapterFactory.create`'s
+  javadoc swept with the rest of FR7. No source of the module changes otherwise.
 - `:adapters:git` — `BranchTipFactsReader`, `TipEnvelopeReader`, `GitTaskBranches.shapeAt` (no
-  live epoch threaded to the classifier; the book is still needed for stamping).
+  live epoch threaded to the classifier; the book is still needed for stamping), the
+  `GitTaskBranches(GitProcessRunner)` constructor that defaults to `ClaimEpochSource.NONE`
+  (deleted: no production caller), `BranchTipSource.tipEpoch` with its `RefTipSource` and
+  `GitShowTip` implementations and `ClaimEpochTrailer.parse` (deleted: the classifier was their only
+  consumer), `BranchStateReader` javadoc.
 - `:application` — `TakeDispositionResume` (route and `afterReconciliation` removed),
-  `TakeLoadedBranchRoutes`, `BranchRepairAction`, `BranchShapeDiagnosis`, `TakeCommandSeams`
-  (seam removed), `TakeCommandSupport.resolveTracker` and `ServeCommand.provisionTracker`
-  (wrap with the book), `TaskGit` (carries the book), `EpochRecordingTracker` (unchanged class,
-  new application site).
+  `BranchRepairAction`, `BranchRepairLog`, `BranchShapeDiagnosis` (`StaleEpoch` arms and the
+  `DISCARD` phrase removed), `TakeCommandSeams` (seam removed), `TakeCommandFactory`,
+  `SubcommandDispatchFactory`, `ServeCommand`, `TakeClaimAndWork` (the separate `ClaimEpochBook`
+  parameter removed; the book comes from `TaskGit`), `TrackerResolution.resolveTracker` and
+  `ServeCommand.provisionTracker` (wrap with the book), `TaskGit` (carries the book; every
+  constructor takes it), `EpochRecordingTracker` (unchanged class, new application site).
 - `:bootstrap` — `TrackerAdapterConfiguration.trackerAdapterRegistry` (wrapping removed),
   `EpochRecordingTrackerFactory` and its spec (deleted), `ManualRunConfiguration.taskGit`
   (book into the bundle), fixtures listed in design D3, one new architecture spec, two regression
   specs, kill-point matrix rows.
 - `:test-fixtures` — `TaskGitFixture.real()` builds a book by default.
-- Docs — `openspec/specs/lifecycle/task-branch-contract` (via delta), `docs/adr/0003`,
-  `docs/glossary.md`, `.claude/rules/testing.md`, `.claude/rules/manual-sync-pairs.md` is not
-  touched (no pair affected).
+- Docs — `openspec/specs/lifecycle/task-branch-contract`, `openspec/specs/tracker-port`,
+  `openspec/specs/lifecycle/claim-heartbeat` (via deltas), `docs/adr/0003`, `docs/glossary.md`,
+  `docs/guides/operator-guide.md`, `.claude/rules/testing.md`;
+  `.claude/rules/manual-sync-pairs.md` is not touched (no pair affected).
 - Sequencing — independent of `add-claim-return` (which reads the book through the same
   `ClaimEpochBook` API and is unaffected by where the wrapper is applied) and of
   `signal-outage-gate-on-origin-contact` (no push or fetch path is modified here).

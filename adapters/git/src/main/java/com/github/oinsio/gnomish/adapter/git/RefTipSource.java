@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -27,11 +26,6 @@ public final class RefTipSource implements BranchTipSource {
     @Override
     public Optional<String> readAtTip(String path) {
         return tip.readAtTip(path);
-    }
-
-    @Override
-    public Optional<ClaimEpoch> tipEpoch() {
-        return tip.tipEpoch();
     }
 
     @Override

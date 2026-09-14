@@ -289,8 +289,8 @@ Two kinds of failure spend it:
 - **crashed runs** — the take run died with an uncaught exception, or a round
   could not be persisted durably;
 - **failed branch repairs** — the pickup found the task branch in a state that
-  needed converging (a park whose tracker write never landed, a stale-epoch tip,
-  a completed-but-uncleaned tip) and the repair itself failed.
+  needed converging (a park whose tracker write never landed, a
+  completed-but-uncleaned tip) and the repair itself failed.
 
 Both trip the same threshold; the split exists so the park report can tell you
 *which* kind keeps happening. Stage verification failures are a different count

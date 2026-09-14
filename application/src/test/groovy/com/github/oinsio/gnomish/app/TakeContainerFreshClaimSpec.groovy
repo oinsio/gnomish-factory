@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
@@ -62,7 +63,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def branches = Mock(TaskBranchGit)
         def git = new TaskGit(
                 Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit())
+                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         def repository = Mock(TaskRepository)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
@@ -99,7 +100,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def tracker = Mock(Tracker)
         def git = new TaskGit(
                 Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit())
+                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         def repository = Mock(TaskRepository)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
@@ -131,7 +132,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def tracker = Mock(Tracker)
         def git = new TaskGit(
                 Stub(TaskStoreGit), Mock(TaskBranchGit), Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit())
+                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         def repository = Mock(TaskRepository)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository

@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.domain.branch.BranchTipFacts;
-import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus;
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal;
 import java.util.List;
@@ -37,17 +36,28 @@ public final class BranchTipFactsReader {
     /**
      * Reads every fact the classification needs from one tip.
      *
-     * @param source the medium to read the tip through; never null — the tip's own stamped epoch
-     *     is read through it, so no caller has to know where a commit carries one
-     * @param liveEpoch the epoch of the claim currently held, or {@code null} for a reader holding
-     *     no claim
+     * @param source the medium to read the tip through; never null
      * @return the facts, always complete and never a thrown content failure
      */
-    public BranchTipFacts read(BranchTipSource source, @Nullable ClaimEpoch liveEpoch) {
-        Optional<TaskJsonDto> task = Optional.empty();
-        Optional<StateJsonDto> state = Optional.empty();
+    public BranchTipFacts read(BranchTipSource source) {
         Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
         Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
+        return factsFrom(taskJson, stateJson, source.cleanupCommitInHistory());
+    }
+
+    /**
+     * Turns envelope texts already read from a tip into facts, so a caller that also needs the raw
+     * texts (e.g. {@link TipEnvelopeReader}) reads {@code task.json} / {@code state.json} exactly
+     * once instead of once here and once more for itself.
+     *
+     * @param taskJson the tip's {@code task.json} text, or empty when absent
+     * @param stateJson the tip's {@code state.json} text, or empty when absent
+     * @param cleanupCommitInHistory whether the same tip's cleanup commit appears in its history
+     * @return the facts, always complete and never a thrown content failure
+     */
+    BranchTipFacts factsFrom(Optional<String> taskJson, Optional<String> stateJson, boolean cleanupCommitInHistory) {
+        Optional<TaskJsonDto> task = Optional.empty();
+        Optional<StateJsonDto> state = Optional.empty();
 
         EnvelopeStatus taskEnvelope;
         try {
@@ -73,9 +83,7 @@ public final class BranchTipFactsReader {
                         .orElse(RecordedTerminal.NONE),
                 state.map(dto -> isNotEmpty(dto.attempts())).orElse(false),
                 task.map(dto -> isNotEmpty(dto.decisions())).orElse(false),
-                source.cleanupCommitInHistory(),
-                source.tipEpoch().orElse(null),
-                liveEpoch);
+                cleanupCommitInHistory);
     }
 
     private static EnvelopeStatus statusOf(boolean present) {

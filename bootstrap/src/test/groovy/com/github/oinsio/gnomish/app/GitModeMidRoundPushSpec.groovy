@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.GitTaskBranches
 import com.github.oinsio.gnomish.adapter.git.GitTaskStore
 import com.github.oinsio.gnomish.adapter.git.GitTaskWorktrees
 import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -102,7 +103,7 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
                 new GitTaskBranches(runner, ClaimEpochSource.NONE),
                 new GitTaskWorktrees(runner, ClaimEpochSource.NONE), { RoundEnvironmentSource rounds ->
                     new MidRoundPushRounds(rounds, runner)
-                })
+                }, new ClaimEpochBook())
     }
 
     // M1: gnome commit mid-round -> next progress event -> the remote tip equals the new commit,

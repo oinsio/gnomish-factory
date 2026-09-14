@@ -28,7 +28,6 @@ public final class BranchRepairAction {
     public static String phrase(BranchShape shape) {
         return switch (shape.disposition()) {
             case ROLL_FORWARD -> "resuming from the recorded position";
-            case DISCARD -> "reconciling the tip against origin, then classifying it again";
             case QUARANTINE -> "parking for a human on this first classification";
             case TERMINAL -> "finishing the delivered branch";
         };

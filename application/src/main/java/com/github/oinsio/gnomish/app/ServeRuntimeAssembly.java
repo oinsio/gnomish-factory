@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -67,7 +66,6 @@ final class ServeRuntimeAssembly {
             com.github.oinsio.gnomish.domain.engine.port.Clock feedClock,
             SandboxLifecyclePass sandboxLifecyclePass,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs,
             TrustedBaseContext trustedBase) {
         // FR8, D12: shared by every downstream caller (heartbeat, slot runner, feed automaton).
         TrackerHealthTracker trackerHealth = new TrackerHealthTracker(liveTracker, feedClock);
@@ -113,7 +111,6 @@ final class ServeRuntimeAssembly {
                 heartbeat,
                 clock,
                 containerTakeSupport,
-                epochs,
                 trustedBase,
                 remoteOutageGate);
         FeedAutomaton automaton = ServeAssembly.feedAutomaton(

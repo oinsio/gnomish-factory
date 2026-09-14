@@ -41,17 +41,12 @@ public final class GitTaskBranches implements TaskBranchGit {
     private final ParkDeliveryFence parkFence;
     private final BranchTipFactsReader facts;
     private final BranchShapeClassifier classifier;
-    private final ClaimEpochSource epochs;
-
-    /** The claimless facade — {@code status}, {@code usage} and specs, which hold no tenure. */
-    public GitTaskBranches(GitProcessRunner runner) {
-        this(runner, ClaimEpochSource.NONE);
-    }
 
     /**
      * @param runner the git subprocess runner shared across this facade's collaborators; never null
-     * @param epochs the tenure a shape classification is fenced against (FR13); {@link
-     *     ClaimEpochSource#NONE} where no claim is held
+     * @param epochs the tenure whose epoch a container resume branch is stamped with; {@link
+     *     ClaimEpochSource#NONE} where no claim is held — spelled out rather than defaulted, so a
+     *     claimless assembly is a written choice (fix-claim-epoch-fence FR4)
      */
     public GitTaskBranches(GitProcessRunner runner, ClaimEpochSource epochs) {
         this.hardening = new FactoryCloneHardening(runner);
@@ -65,7 +60,6 @@ public final class GitTaskBranches implements TaskBranchGit {
         this.parkFence = new ParkDeliveryFence(runner);
         this.facts = new BranchTipFactsReader();
         this.classifier = new BranchShapeClassifier();
-        this.epochs = epochs;
         this.runner = runner;
     }
 
@@ -89,17 +83,16 @@ public final class GitTaskBranches implements TaskBranchGit {
         // The located ref is the medium: no worktree is created, and a branch that lives only on
         // origin classifies from its remote-tracking ref exactly as a local one does (design D3).
         return switch (locator.locate(cloneDir, taskId)) {
-            case BranchLocation.Local(String ref) -> shapeAt(cloneDir, taskId, ref);
-            case BranchLocation.RemoteTracking(String ref) -> shapeAt(cloneDir, taskId, ref);
+            case BranchLocation.Local(String ref) -> shapeAt(cloneDir, ref);
+            case BranchLocation.RemoteTracking(String ref) -> shapeAt(cloneDir, ref);
             case BranchLocation.NotFound() -> new BranchShape.Bare();
             case BranchLocation.Unavailable(String reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
         };
     }
 
-    private BranchShape shapeAt(Path cloneDir, String taskId, String ref) {
-        return classifier.classify(facts.read(
-                new RefTipSource(runner, cloneDir, ref), epochs.epochFor(taskId).orElse(null)));
+    private BranchShape shapeAt(Path cloneDir, String ref) {
+        return classifier.classify(facts.read(new RefTipSource(runner, cloneDir, ref)));
     }
 
     @Override

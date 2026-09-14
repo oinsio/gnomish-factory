@@ -54,8 +54,9 @@ final class ContainerRunSupportFactory {
      *     for {@code take}/{@code serve} — the caller's lambda closes over its own constant, this
      *     factory never decides it
      * @param epochs the tenure this run's commits are stamped with (FR13 of
-     *     harden-task-branch-contract); {@link ClaimEpochSource#NONE} for plain {@code gnomish run},
-     *     which holds no claim
+     *     harden-task-branch-contract) — always the bundle's own tenure record (FR4 of
+     *     fix-claim-epoch-fence), which on the plain {@code gnomish run} path is simply never
+     *     written to, since {@code run} claims nothing
      */
     static ContainerRunSupport create(
             Path cloneDir,

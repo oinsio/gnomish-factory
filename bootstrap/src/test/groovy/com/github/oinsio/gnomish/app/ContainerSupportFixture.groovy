@@ -17,28 +17,36 @@ final class ContainerSupportFixture {
 
     private ContainerSupportFixture() {}
 
-    /** The real per-run container support, over the real Docker runtime, {@code manual}-owned. */
-    static ContainerSupportFactory real() {
-        forOwnership(OwnershipMode.MANUAL)
+    /**
+     * The real per-run container support, over the real Docker runtime, {@code manual}-owned.
+     *
+     * <p>{@code epochs} is the tenure record of the bundle the spec drives this support beside —
+     * {@code git.epochs()}, never a record minted here (FR5, design D3 of fix-claim-epoch-fence).
+     * It is a required argument for the reason the production bundle's is: a container run whose
+     * commits stamp from one record while the claim fills another is exactly the assembly this
+     * change makes unbuildable. On the {@code run} path the record is simply never filled.
+     */
+    static ContainerSupportFactory real(ClaimEpochSource epochs) {
+        forOwnership(OwnershipMode.MANUAL, epochs)
     }
 
     /**
-     * As {@link #real()}, but {@code tracked}-owned — the ownership label a {@code take}/{@code
+     * As {@link #real}, but {@code tracked}-owned — the ownership label a {@code take}/{@code
      * serve} dispatch of an already-claimed tracker task carries, as opposed to {@code run}'s
      * {@code manual} label.
      */
-    static ContainerSupportFactory tracked() {
-        forOwnership(OwnershipMode.TRACKED)
+    static ContainerSupportFactory tracked(ClaimEpochSource epochs) {
+        forOwnership(OwnershipMode.TRACKED, epochs)
     }
 
-    private static ContainerSupportFactory forOwnership(OwnershipMode ownershipMode) {
+    private static ContainerSupportFactory forOwnership(OwnershipMode ownershipMode, ClaimEpochSource epochs) {
         { Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox, FactoryProperties factory, definition, List<String> credentialEnvVarsToScrub ->
             // The check providers' credential declarations are resolved by the composition root and
             // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
             // provider, so the declared set is empty.
             ContainerRunSupport.create(
             cloneDir, taskId, segments, sandbox, factory,
-            List.<String> of(), credentialEnvVarsToScrub, ownershipMode, ClaimEpochSource.NONE)
+            List.<String> of(), credentialEnvVarsToScrub, ownershipMode, epochs)
         } as ContainerSupportFactory
     }
 }

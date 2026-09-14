@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
@@ -81,9 +80,6 @@ final class ServeCommand {
     private final FeedAutomatonStarter starter;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final ContainerTakeSupport containerTakeSupport;
-    // NFR-O1, FR13 of harden-task-branch-contract: the instance's tenure record, threaded to every
-    // slot so a repair line names the claim epoch its pickup runs under.
-    private final ClaimEpochBook epochs;
     /**
      * @param starter drives the assembled {@link FeedAutomaton} (task 5.1's test seam — see its
      *     Javadoc); production wiring passes {@link FeedAutomaton#run} itself
@@ -105,10 +101,8 @@ final class ServeCommand {
             PipelineSource pipelineSource,
             FeedAutomatonStarter starter,
             SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs) {
+            ContainerTakeSupport containerTakeSupport) {
         this.containerTakeSupport = containerTakeSupport;
-        this.epochs = epochs;
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
@@ -149,7 +143,7 @@ final class ServeCommand {
         TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
         int effectiveSlots = serveArguments.slots() != null ? serveArguments.slots() : serveProperties.slots();
         InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-        TrackerAdapterFactory factory = TakeCommandSupport.resolveFactory(trackerConfig, trackerAdapterRegistry);
+        TrackerAdapterFactory factory = TrackerResolution.resolveFactory(trackerConfig, trackerAdapterRegistry);
 
         // FR12, D7: the startup smoke test stays here (the command owns the exit-code failure);
         // ServeAssembly.runtime wires everything else off the live tracker (process-invariants.md).
@@ -175,7 +169,6 @@ final class ServeCommand {
                 feedClock,
                 sandboxLifecyclePass,
                 containerTakeSupport,
-                epochs,
                 trustedBase);
 
         // FR2 of harden-logging-observability: the start anchor names the configuration the daemon
@@ -223,14 +216,16 @@ final class ServeCommand {
     }
 
     /**
-     * FR12, design D7: the startup label-provisioning smoke test — the same {@code factory.create}
-     * call {@link TakeCommand} makes, so an unreachable repo or bad token surfaces here, before any
-     * task is claimed.
+     * FR12, design D7: the startup label-provisioning smoke test — the same {@link
+     * TrackerResolution#resolveTracker} funnel {@link TakeCommand} resolves through (FR4, design D2
+     * of fix-claim-epoch-fence), so an unreachable repo or bad token surfaces here, before any task
+     * is claimed, and every slot's claim lands in the same tenure record its writers stamp from.
      */
     private Tracker provisionTracker(
             TrackerAdapterFactory factory, TrackerConfig trackerConfig, InstanceId instanceId) {
         try {
-            return factory.create(secretsProvider, trackerConfig, instanceId.value());
+            return TrackerResolution.resolveTracker(
+                    factory, trackerConfig, secretsProvider, instanceId.value(), git.epochs());
         } catch (RuntimeException startupFailure) {
             // The operator's console gets the plain sentence; the log file gets the same failure
             // with its stack and cause chain (FR2, FR7 of harden-logging-observability). Until now

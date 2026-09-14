@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
@@ -63,10 +62,6 @@ public final class TakeClaimAndWork {
     private final TakeCrashAbort crashAbort;
     final ContainerTakeSupport containerTakeSupport;
     final TakeContainerResumeRunner containerResumeRunner;
-    // NFR-O1, FR13: this instance's tenure record — read by the routing point so a repair line names
-    // the epoch it runs under, and ended here at the claim-holding choke point (see
-    // dispatchAfterClaim's finally). An empty book where no claim epoch is recorded.
-    final ClaimEpochBook epochs;
     // FR13, D15 of add-base-ref-resolution: the trusted tier bound once at startup, read by the
     // routing point's fresh-claim base resolution — never re-read per claim.
     final TrustedBaseContext trustedBase;
@@ -83,7 +78,6 @@ public final class TakeClaimAndWork {
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
             TakeContainerResumeRunner containerResumeRunner,
-            ClaimEpochBook epochs,
             TrustedBaseContext trustedBase) {
         this.assembly = assembly;
         this.git = git;
@@ -97,7 +91,6 @@ public final class TakeClaimAndWork {
         this.crashAbort = new TakeCrashAbort(abortHandler, abortThreshold);
         this.containerTakeSupport = containerTakeSupport;
         this.containerResumeRunner = containerResumeRunner;
-        this.epochs = epochs;
         this.trustedBase = trustedBase;
     }
 
@@ -162,8 +155,8 @@ public final class TakeClaimAndWork {
      * harden-task-branch-contract): the {@link com.github.oinsio.gnomish.app.lease.ClaimEpochBook}
      * entry the claim recorded is forgotten in that same {@code finally}, so every commit made
      * under the claim — including the receipt and cleanup commits that run <em>after</em> the
-     * terminal tracker write, behind a confirmed effect — carries the tenure's epoch and stays
-     * inside the fence. {@link com.github.oinsio.gnomish.app.lease.EpochRecordingTracker} still
+     * terminal tracker write, behind a confirmed effect — carries the tenure's epoch as its
+     * provenance. {@link com.github.oinsio.gnomish.app.lease.EpochRecordingTracker} still
      * ends a tenure early on the two events that mean the claim is genuinely no longer ours: a
      * {@code release}, and a beat reporting the claim gone.
      *
@@ -202,9 +195,9 @@ public final class TakeClaimAndWork {
             // FR13 of harden-task-branch-contract: the tenure ends HERE, not at the terminal
             // tracker write, because the receipt and cleanup commits of park/finish run after that
             // write and still belong to this tenure — forgetting the epoch earlier left the last
-            // commit of every tenure unstamped, hence outside the fence. Beats and tenure end
-            // together: past this point nothing more is written under this claim.
-            epochs.ended(ref.id());
+            // commit of every tenure without the provenance naming who wrote it. Beats and tenure
+            // end together: past this point nothing more is written under this claim.
+            git.epochs().ended(ref.id());
         }
     }
 

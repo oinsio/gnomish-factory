@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.board.BoardComposition;
 import com.github.oinsio.gnomish.board.BoardModel;
 import com.github.oinsio.gnomish.board.json.BoardJsonMapper;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.io.IOException;
 import java.time.Clock;
@@ -65,14 +64,12 @@ final class BoardCommand {
      */
     void run(ApplicationArguments args) throws IOException {
         BoardArguments boardArguments = argumentsParser.parse(args);
-        PipelineDefinition definition = TakeCommandSupport.loadPipeline(boardArguments.dir(), pipelineSource);
-        TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
-        InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-        Tracker tracker = TakeCommandSupport.resolveTracker(
-                trackerConfig, trackerAdapterRegistry, secretsProvider, instanceId.value());
+        TrackerResolution.ReadOnlyTrackerResolution resolution = TrackerResolution.resolveReadOnlyTrackerFromDir(
+                boardArguments.dir(), pipelineSource, factoryProperties, trackerAdapterRegistry, secretsProvider);
+        TrackerConfig trackerConfig = resolution.trackerConfig();
 
         BoardModel model = BoardComposition.compose(
-                tracker, trackerConfig, factoryProperties.tracker(), clock, boardArguments.limit());
+                resolution.tracker(), trackerConfig, factoryProperties.tracker(), clock, boardArguments.limit());
 
         String output = boardArguments.json()
                 ? jsonMapper.serialize(model, trackerConfig.wipLimit())

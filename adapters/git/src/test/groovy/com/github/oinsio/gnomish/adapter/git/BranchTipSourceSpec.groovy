@@ -61,6 +61,21 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         ]
     }
 
+    /**
+     * The same three access paths as {@link #allSources}, as the (repository, revision) pairs a raw
+     * {@code git log} reads — used where the subject is the commit text rather than the seam.
+     */
+    private List<List<Object>> allRevisions(String taskId = 'PROJ-1') {
+        [
+            [worktree(taskId), 'HEAD'],
+            [cloneDir, "gnomish/$taskId"],
+            [
+                cloneDir.resolve('.git'),
+                "gnomish/$taskId"
+            ]
+        ]
+    }
+
     // FR1: a file present at the tip reads back identically through all three media.
     def "every medium reads a file the tip carries"() {
         expect:
@@ -102,27 +117,6 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         events[0].formattedMessage.contains('.gnomish-task/decisions/implement-a0.json')
     }
 
-    // FR5: the same classification for the epoch read — an unresolvable revision and an unstamped
-    // tip both answer empty, and only the line says which happened.
-    def "FR5: an unresolvable revision's empty epoch carries git's reason at DEBUG"() {
-        given:
-        def logs = LogCaptureSupport.attach(GitShowTip, Level.DEBUG)
-
-        when:
-        def epoch = new RefTipSource(runner, cloneDir, 'gnomish/NO-SUCH-TASK').tipEpoch()
-        def events = List.copyOf(logs.list)
-        logs.detach()
-
-        then:
-        epoch.isEmpty()
-
-        and:
-        events.size() == 1
-        events[0].level == Level.DEBUG
-        events[0].formattedMessage.contains('gnomish/NO-SUCH-TASK')
-        events[0].formattedMessage.contains('reading as absent')
-    }
-
     // FR3: the STARTED commit carries the initial state.json beside task.json, so a tip read
     // right after branch creation already answers the classifier's state question.
     def "every medium reads the initial state.json the STARTED commit carries"() {
@@ -145,9 +139,10 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
         read.orElse('').contains('PROJ-1')
     }
 
-    // FR13: the tenure's epoch rides every commit as a trailer, and all three media read it back
-    //     — the branch half of the fence works whichever way a reader reaches the tip.
-    def "every medium reads the claim epoch stamped on the tip"() {
+    // FR13: the tenure's epoch rides every commit as a trailer, whichever revision a reader
+    //     reaches the tip through. Read as raw commit text (fix-claim-epoch-fence FR3): the stamp
+    //     is provenance an operator reads in the log, and the factory parses it back nowhere.
+    def "every medium's revision carries the claim epoch stamped on the tip"() {
         given: 'a task branch created by an instance holding the tenure epoch 4711'
         def held = { String id ->
             Optional.of(new ClaimEpoch(4711))
@@ -158,16 +153,20 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
                 TaskState.atStageStart('implement'))
 
         expect:
-        allSources('PROJ-2').every {
-            it.tipEpoch().orElse(null) == new ClaimEpoch(4711)
+        allRevisions('PROJ-2').every { pair ->
+            runner.run(pair[0] as Path, 'log', '-1', '--format=%B', pair[1] as String).stdout()
+            .contains('Gnomish-Claim-Epoch: 4711')
         }
     }
 
     // FR13: a tip written with no tenure carries no stamp, and that is a legal answer — such a tip
-    //     stands outside the fence rather than reading as stale.
-    def "every medium reports no epoch for an unstamped tip"() {
+    //     simply records no provenance.
+    def "every medium's revision carries no epoch trailer for an unstamped tip"() {
         expect:
-        allSources().every { it.tipEpoch().isEmpty() }
+        allRevisions().every { pair ->
+            !runner.run(pair[0] as Path, 'log', '-1', '--format=%B', pair[1] as String).stdout()
+            .contains('Gnomish-Claim-Epoch')
+        }
     }
 
     // FR1: delivery is a history question, so every medium answers "not delivered" for a live branch.

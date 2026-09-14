@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.board.BoardComposition;
 import com.github.oinsio.gnomish.board.BoardModel;
@@ -13,7 +12,6 @@ import com.github.oinsio.gnomish.dashboard.DashboardBoardCache;
 import com.github.oinsio.gnomish.dashboard.DashboardRenderCycle;
 import com.github.oinsio.gnomish.dashboard.DashboardWatchLoop;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
 import java.io.IOException;
@@ -83,17 +81,15 @@ final class DashboardCommand {
      */
     void run(ApplicationArguments args) throws IOException {
         DashboardArguments dashboardArguments = argumentsParser.parse(args);
-        PipelineDefinition definition = TakeCommandSupport.loadPipeline(dashboardArguments.dir(), pipelineSource);
-        TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
-        InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-        Tracker tracker = TakeCommandSupport.resolveTracker(
-                trackerConfig, trackerAdapterRegistry, secretsProvider, instanceId.value());
+        TrackerResolution.ReadOnlyTrackerResolution resolution = TrackerResolution.resolveReadOnlyTrackerFromDir(
+                dashboardArguments.dir(), pipelineSource, factoryProperties, trackerAdapterRegistry, secretsProvider);
+        TrackerConfig trackerConfig = resolution.trackerConfig();
         String instanceName = factoryProperties.instanceName();
         Path outputFile = dashboardArguments.out() != null
                 ? dashboardArguments.out()
                 : ObservabilityPaths.directory(homeDir, instanceName).resolve(DEFAULT_FILE_NAME);
-        Supplier<BoardModel> boardFetch = () ->
-                BoardComposition.compose(tracker, trackerConfig, factoryProperties.tracker(), clock, BOARD_READY_LIMIT);
+        Supplier<BoardModel> boardFetch = () -> BoardComposition.compose(
+                resolution.tracker(), trackerConfig, factoryProperties.tracker(), clock, BOARD_READY_LIMIT);
 
         if (dashboardArguments.watch()) {
             new DashboardWatchLoop(renderCycle, sleeper, clock).run(homeDir, instanceName, outputFile, boardFetch);

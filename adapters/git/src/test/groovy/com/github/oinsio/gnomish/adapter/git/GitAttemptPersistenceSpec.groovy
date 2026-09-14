@@ -110,7 +110,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
 
         then:
         def full = runner.run(repo, 'log', '-1', '--format=%B').stdout()
-        ClaimEpochTrailer.parse(full).orElse(null) == new ClaimEpoch(4711)
+        full.contains('Gnomish-Claim-Epoch: 4711')
         runner.run(repo, 'log', '-1', '--format=%s').stdout().trim() == ServiceCommitMessages.round('verify', 3)
     }
 
@@ -123,7 +123,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         persistence.persist('PROJ-1', sampleState(), sampleTrace('verify', 3))
 
         then:
-        ClaimEpochTrailer.parse(runner.run(repo, 'log', '-1', '--format=%B').stdout()).isEmpty()
+        !runner.run(repo, 'log', '-1', '--format=%B').stdout().contains('Gnomish-Claim-Epoch')
     }
 
     def "FR2: pre-existing uncommitted gnome file changes are included in the same round commit"() {

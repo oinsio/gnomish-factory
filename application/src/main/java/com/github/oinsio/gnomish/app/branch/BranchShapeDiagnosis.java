@@ -44,8 +44,7 @@ public final class BranchShapeDiagnosis {
                     BranchShape.Parked(),
                     BranchShape.Answered(),
                     BranchShape.CompletedUncleaned(),
-                    BranchShape.Delivered(),
-                    BranchShape.StaleEpoch() -> shape.getClass().getSimpleName();
+                    BranchShape.Delivered() -> shape.getClass().getSimpleName();
         };
     }
 

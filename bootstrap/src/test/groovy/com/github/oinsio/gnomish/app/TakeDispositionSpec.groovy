@@ -45,12 +45,13 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     private static final Instant NOW = Instant.parse('2026-07-29T12:00:00Z')
 
     /**
-     * The instance's tenure record, as production wires it: one book shared by the disposition and
-     * by every git writer it hands work to. Filled at the claim by {@code EpochRecordingTracker},
-     * which this spec's mock tracker stands in for — a feature that needs a held tenure records it
-     * with {@link ClaimEpochBook#issued} in its given block.
+     * The instance's tenure record, read off the bundle {@link ResumeSpecFixtureBase} builds:
+     * one book, owned by that bundle, shared by the disposition and by every git writer it hands
+     * work to (FR4, design D2 of fix-claim-epoch-fence). Filled at the claim by {@code
+     * EpochRecordingTracker}, which this spec's mock tracker stands in for — a feature that needs
+     * a held tenure records it with {@link ClaimEpochBook#issued} in its given block.
      */
-    def claimEpochBook = new ClaimEpochBook()
+    def claimEpochBook = taskGit.epochs()
 
     /**
      * FR13, D15 of add-base-ref-resolution: the trusted tier for this spec's real-git fixtures —
@@ -66,10 +67,10 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
     private TakeDisposition newDisposition() {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
-        new TakeDisposition(newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler,
+        new TakeDisposition(newAssembly(), taskGit, worktreesRoot, abortHandler,
                 ABORT_THRESHOLD, 'taskId', [],
                 ClaimBeat.NONE, false, TakeoverConfirmation.UNAVAILABLE, Clock.systemUTC(), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(), claimEpochBook, trustedBase())
+                ContainerTakeSupport.hostOnly(), trustedBase())
     }
 
     // The takeover-aware construction (task 6.2, FR6): a chosen confirmation seam and --takeover flag
@@ -77,10 +78,10 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     private TakeDisposition newTakeoverDisposition(TakeoverConfirmation confirmation, boolean takeoverFlag) {
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeDisposition(
-                newAssembly(), TaskGitFixture.real(claimEpochBook), worktreesRoot, abortHandler, ABORT_THRESHOLD,
+                newAssembly(), taskGit, worktreesRoot, abortHandler, ABORT_THRESHOLD,
                 'taskId', [],
                 ClaimBeat.NONE, takeoverFlag, confirmation, Clock.fixed(NOW, ZoneOffset.UTC), new ClaimLossFlag(),
-                ContainerTakeSupport.hostOnly(), claimEpochBook, trustedBase())
+                ContainerTakeSupport.hostOnly(), trustedBase())
     }
 
     private static OpenTask workingOpenTask(String holder, Instant beatAt = NOW.minusSeconds(47 * 60)) {
@@ -235,9 +236,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         def disposition = new TakeDisposition(
-                newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
+                newAssembly(), taskGit, worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', [],
                 beat, false, TakeoverConfirmation.UNAVAILABLE, Clock.fixed(NOW, ZoneOffset.UTC),
-                new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook(), trustedBase())
+                new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), trustedBase())
 
         when:
         disposition.dispose(

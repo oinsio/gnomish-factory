@@ -4,9 +4,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The one place a task branch tip becomes a named shape (design D3): a total mapping of file set ×
- * envelope version × claim epoch onto the closed set of {@link BranchShape}. Three media reach it
- * through the tip-reader seam, and all three get the same verdict — three access paths must not
- * become three classifiers.
+ * envelope version onto the closed set of {@link BranchShape}. Three media reach it through the
+ * tip-reader seam, and all three get the same verdict — three access paths must not become three
+ * classifiers.
  *
  * <p>Total and non-throwing by construction: unreadable content is a {@link
  * EnvelopeStatus.Unreadable} fact that classifies to {@link BranchShape.Corrupt}, and a combination
@@ -17,15 +17,19 @@ import org.jspecify.annotations.Nullable;
  * <p>The order the rules are applied in is itself contract:
  *
  * <ol>
- *   <li>the epoch fence first — a stale artifact is {@code StaleEpoch} whatever its content says;
- *   <li>delivery second — a delivered branch is finished, so a stray post-cleanup file never
+ *   <li>delivery first — a delivered branch is finished, so a stray post-cleanup file never
  *       re-parks a task that is done;
  *   <li>then the envelope diagnoses (version before parse failure, so a version diagnosis can name
  *       the version);
  *   <li>then the content progression.
  * </ol>
  *
- * <p>Implements FR1, FR2, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract.
+ * <p>The claim epoch stamped on the tip is not an input: a tip written by an earlier tenure
+ * classifies exactly as the same tip unstamped would, so a reclaim routes on content and resumes
+ * (fix-claim-epoch-fence FR1, FR2).
+ *
+ * <p>Implements FR1, FR2, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of
+ * fix-claim-epoch-fence.
  */
 public final class BranchShapeClassifier {
 
@@ -42,9 +46,6 @@ public final class BranchShapeClassifier {
      * @return exactly one shape; never null, and never a thrown exception for any content
      */
     public BranchShape classify(BranchTipFacts facts) {
-        if (isStale(facts.tipEpoch(), facts.liveEpoch())) {
-            return new BranchShape.StaleEpoch();
-        }
         if (facts.cleanupCommitInHistory()) {
             return new BranchShape.Delivered();
         }
@@ -58,10 +59,6 @@ public final class BranchShapeClassifier {
                     : new BranchShape.Unknown(STATE_FILE + " present without " + TASK_FILE);
         }
         return progression(facts);
-    }
-
-    private static boolean isStale(@Nullable ClaimEpoch tip, @Nullable ClaimEpoch live) {
-        return tip != null && live != null && tip.isStaleAgainst(live);
     }
 
     /**

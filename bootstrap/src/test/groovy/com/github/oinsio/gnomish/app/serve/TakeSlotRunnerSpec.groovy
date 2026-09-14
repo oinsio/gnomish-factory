@@ -12,7 +12,6 @@ import com.github.oinsio.gnomish.app.ContainerTakeSupport
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -152,7 +151,7 @@ tracker:
         new TakeSlotRunner(
                 newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, ABORT_THRESHOLD, MDC_KEY,
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook(), new TrustedBaseContext(BaseDefinition.none(),
+                new TrustedBaseContext(BaseDefinition.none(),
                 new DefaultBranch(currentBranch(cloneDir))),
                 remoteOutageGate)
     }

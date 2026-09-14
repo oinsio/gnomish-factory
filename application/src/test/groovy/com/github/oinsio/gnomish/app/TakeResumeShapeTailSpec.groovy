@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -52,19 +53,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     /** What the worktree's state.json read answers; reassigned by the scenario that deletes it. */
     Closure<TaskState> recordedState = { TaskState.atStageStart('build') }
 
-    /**
-     * FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so the
-     * port-fake chain needs a working {@link BaseRefGit} rather than {@link BaseRefGit#UNWIRED} —
-     * the resolved tip echoes the pinned ref back, which is exactly today's placeholder SHA input.
-     * A field, not a per-call helper: Spock's ordered {@code then:} verification tracks every
-     * mock/stub invocation, and creating the stub lazily inside the routing chain (i.e. during
-     * {@code when:}) misfiles its background interaction into the ordered sequence.
-     */
-    BaseRefGit baseRefGit = Stub(BaseRefGit) {
-        resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
-            new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
-        }
-    }
+    BaseRefGit baseRefGit = resumingBaseRefGit()
 
     def setup() {
         worktreesRoot = tempDir.resolve('worktrees')
@@ -82,7 +71,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
 
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
-        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)
+        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(assemblyRunning(executor), git,
                 worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
         def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())
@@ -183,20 +172,5 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
 
         and:
         result instanceof TakeResult.Aborted
-    }
-
-    // FR2: a stale-epoch tip is reconciled by loading the branch, then classified AGAIN and routed
-    // on what it has become — one pass, depth-one by construction.
-    def "FR2: a StaleEpoch tip is re-routed on the shape it holds after reconciliation"() {
-        given:
-        branches.classifyShape(_, _) >> new BranchShape.InProgress()
-
-        when:
-        def result = resume(new BranchShape.StaleEpoch())
-
-        then:
-        result instanceof TakeResult.Delivered
-        executor.requests.size() == 1
-        1 * tracker.finish(REF, _)
     }
 }

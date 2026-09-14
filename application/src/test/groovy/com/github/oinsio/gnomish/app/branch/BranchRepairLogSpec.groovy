@@ -108,13 +108,4 @@ class BranchRepairLogSpec extends Specification {
         new BranchShape.Unknown('state.json without task.json') || 'Unknown(state.json without task.json)'
         new BranchShape.UnsupportedVersion('state.json', 7, 1) || 'UnsupportedVersion(state.json: 7, supported 1)'
     }
-
-    // NFR-O1: the stale-epoch discard is a repair like any other and names its own shape.
-    def "a stale-epoch discard logs its shape"() {
-        expect:
-        capture {
-            repairLog.classified('PROJ-1', new BranchShape.StaleEpoch(), new ClaimEpoch(9), 'discarding', 0)
-        }
-        .first().formattedMessage.contains('shape=StaleEpoch')
-    }
 }

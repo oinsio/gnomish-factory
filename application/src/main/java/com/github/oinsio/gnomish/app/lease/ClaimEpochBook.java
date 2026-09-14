@@ -15,8 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Keyed by task id and mutated from more than one thread — {@code serve} claims several tasks
  * concurrently, and the writers run on the slot threads — so the map is concurrent. Entries are
  * removed when the tenure ends, in the same {@code finally} that stops the beats: a stamp made
- * after the claim was dropped would carry an epoch this instance no longer holds, which is exactly
- * the write the fence exists to catch.
+ * after the claim was dropped would name a tenure this instance no longer holds, so the provenance
+ * would be a lie. The fences against such a write live on the media — the fast-forward-only push
+ * and the round-boundary revocation check — not on this record.
  *
  * <p>The book records only what the tracker issued; it never mints an epoch of its own, so a task
  * this instance never claimed answers empty rather than a fabricated token.

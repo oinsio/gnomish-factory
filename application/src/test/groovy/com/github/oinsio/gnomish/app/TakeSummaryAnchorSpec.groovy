@@ -88,11 +88,11 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
             classifyShape(_, _) >> new BranchShape.Bare()
         }
         def git = new TaskGit(
-                store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+                store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeDispatcher(
                 git, worktreesRoot, 'taskId', testProperties(),
                 FIXED_CLOCK, ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE,
-                TakeoverConfirmation.UNAVAILABLE, ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
+                TakeoverConfirmation.UNAVAILABLE, ContainerTakeSupport.hostOnly(),
                 DEFAULT_TRUSTED_BASE)
     }
 

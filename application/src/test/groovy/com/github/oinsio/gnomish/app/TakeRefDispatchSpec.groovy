@@ -68,10 +68,10 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeDispatcher(git, WORKTREES_ROOT, 'taskId', testProperties(), FIXED_CLOCK,
                 ['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TakeoverConfirmation.UNAVAILABLE,
-                ContainerTakeSupport.hostOnly(), new ClaimEpochBook(), DEFAULT_TRUSTED_BASE)
+                ContainerTakeSupport.hostOnly(), DEFAULT_TRUSTED_BASE)
     }
 
     private void dispatch(List<String> refs) {

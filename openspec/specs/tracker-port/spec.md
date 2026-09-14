@@ -568,8 +568,11 @@ readable in the claim facts of `listOpen`, `listReady`, and `heartbeat`
 observations. Each adapter chooses its own monotonic source (the GitHub
 adapter uses the tracker-assigned claim comment id); core compares tokens only
 for order — it never interprets their structure. This token is the claim epoch
-of the `task-branch-contract` fencing: holders stamp it into commits and
-tracker writes, and readers classify older-token artifacts as stale-epoch.
+of the `task-branch-contract` capability: holders stamp it into commits and
+tracker writes as provenance of the tenure that wrote them, and a fenced
+tracker operation compares it as the holder's identity. No reader classifies
+an older-token artifact as stale; the branch's fence is the fast-forward-only
+push and the tracker's fence is the round-boundary revocation check.
 <!-- implements FR13 of harden-task-branch-contract -->
 
 #### Scenario: Reclaim returns a greater token

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
@@ -73,8 +72,7 @@ trait ServeObservabilityFixture {
                 [github: trackerFactory],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook())
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     /**

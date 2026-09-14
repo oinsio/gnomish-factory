@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException
 import com.github.oinsio.gnomish.app.branch.BranchRecoveryFailedException
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
@@ -19,12 +20,15 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
 
     private void route(BranchShape shape) {
         def mechanics = Stub(ResumeMechanics)
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit))
+        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
                 .resumeExisting(CLONE_DIR, shape, RunArguments.InteractiveMode.NONE, false,
                 'PROJ-1', Stub(Tracker), REF, INSTANCE)
     }
 
+    // All three shapes are non-clean, so each verdict is raised inside the repair boundary of
+    // resumeExisting: the assertion below is also FR15's "a quarantine keeps its own
+    // classification" — it is a decision about the branch, never a failed repair to be retried.
     def "FR15: #description is quarantined, never resumed"() {
         when:
         route(shape)
@@ -45,45 +49,24 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
     // a failed recovery here — the one place that knows a repair was underway — so the crash
     // boundary can spend the right category of the unified accounting.
     def "FR14: a failure repairing a non-clean shape is named a failed recovery"() {
-        given: 'loading the branch of a stale-epoch tip fails'
+        given: 'loading the branch of a parked tip fails'
         def mechanics = Stub(ResumeMechanics) {
             loadBranch(_, _) >> {
                 throw new IllegalStateException('fetch exploded')
             }
         }
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit))
+        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
 
         when:
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
-                .resumeExisting(CLONE_DIR, new BranchShape.StaleEpoch(), RunArguments.InteractiveMode.NONE, false,
+                .resumeExisting(CLONE_DIR, new BranchShape.Parked(), RunArguments.InteractiveMode.NONE, false,
                 'PROJ-1', Stub(Tracker), REF, INSTANCE)
 
         then:
         def failed = thrown(BranchRecoveryFailedException)
-        failed.shape() instanceof BranchShape.StaleEpoch
+        failed.shape() instanceof BranchShape.Parked
         failed.cause.message == 'fetch exploded'
         failed.message.contains('PROJ-1')
-    }
-
-    // FR15: a quarantine verdict raised while repairing keeps its own classification — it is a
-    // decision about the branch, not a failed repair to be retried.
-    def "FR15: a quarantine raised during a repair is not re-labelled a failed recovery"() {
-        given: 'reconciliation leaves the tip still stale, which the table quarantines'
-        def mechanics = Stub(ResumeMechanics) {
-            loadBranch(_, _) >> null
-        }
-        def branches = Stub(TaskBranchGit) {
-            classifyShape(_, _) >> new BranchShape.StaleEpoch()
-        }
-        def git = new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit))
-
-        when:
-        new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git)
-                .resumeExisting(CLONE_DIR, new BranchShape.StaleEpoch(), RunArguments.InteractiveMode.NONE, false,
-                'PROJ-1', Stub(Tracker), REF, INSTANCE)
-
-        then:
-        thrown(BranchQuarantineException)
     }
 
     // Bare is the fresh-claim route's shape and is decided before resume is ever reached, so

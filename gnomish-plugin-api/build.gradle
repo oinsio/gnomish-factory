@@ -33,6 +33,15 @@ plugins {
 // growth is additive for every pre-existing type, so no pre-1.0 version bump is
 // owed and `japicmpApiGate` stays green against the committed jars.
 //
+// FR1, FR2 of fix-claim-epoch-fence: 0.5.0 -> 0.6.0, the fifth BREAKING move. The read-side
+// epoch fence left the surface: `BranchShape` lost its `StaleEpoch` variant (a sealed permitted
+// subclass, so the removal is binary-incompatible for every exhaustive reader), `BranchTipFacts`
+// lost its `liveEpoch` and `tipEpoch` components and its old canonical constructor,
+// `RecoveryDisposition` lost `DISCARD` — `StaleEpoch` was its only user — and `ClaimEpoch` is no
+// longer `Comparable`, since no core reader compares two epochs any more. Pre-1.0, a breaking
+// change is a MINOR bump; `compat-baseline/` was regenerated in the same commit so a reviewer
+// sees the break and the bump that accepts it in one diff.
+//
 // FR2 of fix-denial-attribution-durability: 0.4.0 -> 0.5.0, the fourth BREAKING move.
 // `EscalationReport.CannotExecute` — a re-exposed `:domain` type, so inside the semver
 // promise — gained a `denials` component so an escalation carries the egress denials that
@@ -64,7 +73,7 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.5.0'
+version = '0.6.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 

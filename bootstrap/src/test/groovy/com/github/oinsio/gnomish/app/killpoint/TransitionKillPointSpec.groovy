@@ -91,6 +91,17 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds {
             // middle kill point is the requirement itself — a failed fetch is a read, so it freezes
             // no new shape and needs no new recovery owner.
             ClaimKillPoints.outageTransition({ claimOutageWorld(nextRoot()) }),
+            // The two reclaim cycles (FR6 of fix-claim-epoch-fence). They add no window: the park
+            // and round windows above already own these states. What they add is the reader — a
+            // SECOND instance, holding its own live tenure, picking up a tip stamped by one that
+            // ended. That read was the production defect: every legitimate reclaim quarantined,
+            // with a green build, because no spec's branch carried a stamp at all.
+            ReclaimKillPoints.parkedTransition('host', {
+                hostWorld(nextRoot())
+            }),
+            ReclaimKillPoints.salvagedTransition('host', {
+                hostWorld(nextRoot())
+            }),
         ]
     }
 }

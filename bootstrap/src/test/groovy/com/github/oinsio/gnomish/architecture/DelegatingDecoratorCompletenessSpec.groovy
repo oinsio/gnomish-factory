@@ -44,14 +44,6 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
      */
     static final List<Map<String, String>> EXEMPT = [
         [
-            type: 'com.github.oinsio.gnomish.adapter.tracker.EpochRecordingTrackerFactory',
-            method: 'create',
-            params: 'SecretsProvider,TrackerConfig,String,ClaimEpochSource',
-            reason: 'the unforwarded 4-parameter create default self-delegates into the 3-parameter' +
-            ' form this class does override, so forwarding it would bypass the epoch recording' +
-            ' the decorator exists to do'
-        ],
-        [
             type: 'com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink',
             method: 'andThen',
             params: 'Consumer',

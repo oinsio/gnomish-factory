@@ -23,7 +23,7 @@ class TakeResumeRunnerLawBindingSpec extends TakeResumeSpecBase {
 
     private static TaskGit gitWith(BaseRefGit baseRefGit) {
         def real = TaskGitFixture.real()
-        new TaskGit(real.store(), real.branches(), real.worktrees(), real.midRoundPush(), baseRefGit)
+        new TaskGit(real.store(), real.branches(), real.worktrees(), real.midRoundPush(), baseRefGit, real.epochs())
     }
 
     // FR12, D13: the resolved tip law-binds the run and the engine proceeds normally — the

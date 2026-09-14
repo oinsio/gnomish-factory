@@ -44,12 +44,12 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit))
+        }, Stub(TaskWorktreeGit), new ClaimEpochBook())
         new TakeDisposition(Stub(RunAssembly), git, WORKTREES_ROOT,
                 new AbortHandler(tracker, FIXED_CLOCK), 3, 'taskId', [], ClaimBeat.NONE, false, { _ref, _holder, _age ->
                     TakeoverConfirmation.Decision.DECLINED
                 } as TakeoverConfirmation,
-                FIXED_CLOCK, new ClaimLossFlag(), ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
+                FIXED_CLOCK, new ClaimLossFlag(), ContainerTakeSupport.hostOnly(),
                 // The claim never reaches a fresh-claim base resolution in this spec: every Ready
                 // scenario is stopped at tracker.claim() itself (see disposition() call sites), so any
                 // well-formed branch name does. It is a name and not the clone's checkout because

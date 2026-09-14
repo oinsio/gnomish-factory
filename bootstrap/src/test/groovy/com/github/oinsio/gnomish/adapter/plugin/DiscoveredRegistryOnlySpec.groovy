@@ -55,8 +55,10 @@ class DiscoveredRegistryOnlySpec extends Specification {
     //     is evidence-based rather than a name allowlist: taking the SPI in is what proves the
     //     class wraps rather than invents, and the behavioural property below still holds — hide
     //     every service registration and the registry comes back empty, decorators included.
-    //     Introduced by harden-task-branch-contract, whose EpochRecordingTrackerFactory wraps each
-    //     discovered provider so the trackers it builds record their claim epochs (FR13).
+    //     Introduced by harden-task-branch-contract, which wrapped each discovered tracker provider
+    //     at the composition root; fix-claim-epoch-fence retired that wrapper (FR4), so the carve-out
+    //     now guards no tracker decorator — it stays because the property it states is structural,
+    //     and the next decorator of any SPI must not have to re-argue it.
     def "no production class constructs a #spi.simpleName"() {
         when:
         def offenders = productionClasses.collectMany { javaClass ->

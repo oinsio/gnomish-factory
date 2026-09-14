@@ -3,12 +3,12 @@ package com.github.oinsio.gnomish.domain.branch
 import spock.lang.Specification
 
 /**
- * M2, FR1, NFR-R2 of harden-task-branch-contract: property-generated branch tips — every
- * combination of envelope statuses, recorded outcomes, content flags and claim epochs — classify to
- * exactly one shape, and no generated input throws.
+ * M2, FR1, NFR-R2 of harden-task-branch-contract, FR1 of fix-claim-epoch-fence:
+ * property-generated branch tips — every combination of envelope statuses, recorded outcomes and
+ * content flags — classify to exactly one shape, and no generated input throws.
  *
  * <p>The generation is exhaustive rather than random: the fact space is small enough to enumerate
- * in full (a few thousand tips), which is a stronger guarantee than sampling it and needs no seed
+ * in full (a few hundred tips), which is a stronger guarantee than sampling it and needs no seed
  * to reproduce a failure.
  */
 class BranchShapeClassifierPropertySpec extends Specification {
@@ -21,13 +21,6 @@ class BranchShapeClassifierPropertySpec extends Specification {
         new EnvelopeStatus.Unreadable('malformed JSON')
     ]
 
-    private static final List<ClaimEpoch> EPOCHS = [
-        null,
-        new ClaimEpoch(0),
-        new ClaimEpoch(1),
-        new ClaimEpoch(2)
-    ]
-
     private static List<BranchTipFacts> everyTip() {
         def tips = []
         for (taskEnvelope in ENVELOPES) {
@@ -36,12 +29,8 @@ class BranchShapeClassifierPropertySpec extends Specification {
                     for (rounds in [true, false]) {
                         for (decisions in [true, false]) {
                             for (cleanup in [true, false]) {
-                                for (tipEpoch in EPOCHS) {
-                                    for (liveEpoch in EPOCHS) {
-                                        tips << new BranchTipFacts(taskEnvelope, stateEnvelope, outcome,
-                                                rounds, decisions, cleanup, tipEpoch, liveEpoch)
-                                    }
-                                }
+                                tips << new BranchTipFacts(taskEnvelope, stateEnvelope, outcome,
+                                        rounds, decisions, cleanup)
                             }
                         }
                     }
@@ -62,14 +51,14 @@ class BranchShapeClassifierPropertySpec extends Specification {
         def shapes = tips.collect { classifier.classify(it) }
 
         then: 'the space really was enumerated, not silently emptied'
-        tips.size() == ENVELOPES.size()**2 * RecordedTerminal.values().length * 8 * EPOCHS.size()**2
+        tips.size() == ENVELOPES.size()**2 * RecordedTerminal.values().length * 8
 
         and: 'each verdict is one shape of the closed set, with an owner and a disposition'
         shapes.every { it != null }
         shapes.every { it instanceof BranchShape }
         shapes.every { it.recoveryOwner() != null && it.disposition() != null }
 
-        and: 'no generated tip is left unnamed — every shape reached is one of the eleven'
+        and: 'no generated tip is left unnamed — every shape reached is one of the ten'
         shapes.collect {
             it.class
         }.toSet().every {
@@ -101,11 +90,10 @@ class BranchShapeClassifierPropertySpec extends Specification {
             BranchShape.Answered,
             BranchShape.CompletedUncleaned,
             BranchShape.Delivered,
-            BranchShape.StaleEpoch,
             BranchShape.UnsupportedVersion,
             BranchShape.Corrupt,
             BranchShape.Unknown
         ])
-        reached.size() == 11
+        reached.size() == 10
     }
 }

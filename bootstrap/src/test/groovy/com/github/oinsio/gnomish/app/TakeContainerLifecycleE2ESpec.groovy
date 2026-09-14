@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -113,24 +112,24 @@ tracker:
         ContainerE2eDocker.removeTaskObjects(REF.id())
     }
 
-    private static ContainerTakeSupport containerTakeSupport(FactoryProperties factoryProperties) {
+    private static ContainerTakeSupport containerTakeSupport(
+            FactoryProperties factoryProperties, ClaimEpochSource epochs) {
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
         def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
         def registry = AdapterBindingRegistry.ratified([
             new ContainerBindingProvider()
         ], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(BindingNames.CONTAINER, [:])
-        def containerSupport = { Path clone, String id, List<Segment> segments, SandboxProperties sandboxProps, FactoryProperties factoryProps, PipelineDefinition definition, List<String> creds ->
-            ContainerRunSupport.create(clone, id, segments, sandboxProps, factoryProps, [], creds, OwnershipMode.TRACKED, ClaimEpochSource.NONE)
-        }
         new ContainerTakeSupport(
-                factoryProperties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable, containerSupport)
+                factoryProperties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
+                ContainerSupportFixture.tracked(epochs))
     }
 
     private TakeCommand newCommand(FactoryProperties factoryProperties, TrackerAdapterFactory trackerFactory) {
+        def git = TaskGitFixture.real()
         TakeCommandFactory.of(
                 newAssembly(factoryProperties),
-                TaskGitFixture.real(),
+                git,
                 worktreesRoot,
                 'taskId',
                 factoryProperties,
@@ -139,7 +138,7 @@ tracker:
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
                 SandboxLifecyclePass.NONE,
-                containerTakeSupport(factoryProperties))
+                containerTakeSupport(factoryProperties, git.epochs()))
     }
 
     // M1-adjacent, FR1: ready -> claim -> a real fake-agent round inside a real box -> harvest ->

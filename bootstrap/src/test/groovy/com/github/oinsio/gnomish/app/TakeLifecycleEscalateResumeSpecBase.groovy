@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -46,6 +48,7 @@ import spock.lang.TempDir
 abstract class TakeLifecycleEscalateResumeSpecBase extends Specification implements TwoInstanceTakeFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
+    protected static final String TASK_BRANCH = 'gnomish/PROJ-1'
 
     @TempDir
     Path tempDir
@@ -59,10 +62,14 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
     /** Simulates the human side of the escalation: reply, then move the parked task back to Ready. */
     abstract void replyAndReturnToReady(TaskRef ref, String replyText)
 
+    /** The epochs this spec's tracker issued, in claim order — the first tenure's, then the second's. */
+    protected ClaimWatchingTrackerFactory claimWatcher
+
     def setup() {
         def seeded = seededReadyTrackerAndFactory(REF, 'Add widgets', 'please add widgets')
         tracker = seeded[0] as Tracker
-        trackerFactory = seeded[1] as TrackerAdapterFactory
+        claimWatcher = new ClaimWatchingTrackerFactory(seeded[1] as TrackerAdapterFactory)
+        trackerFactory = claimWatcher
         writeTwoInstanceProjectFixture()
     }
 
@@ -85,6 +92,14 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
 
         and: 'the environment fix lands in the shared worktree itself (not via any in-process state)'
         fixMissingFileInSharedWorktree()
+
+        and: 'the parked tip carries the FIRST tenure\'s epoch, exactly as the tracker issued it (FR3, FR6 of fix-claim-epoch-fence)'
+        def tipBeforeReclaim = gitOutput(projectDir, 'rev-parse', TASK_BRANCH)
+        def firstEpoch = claimWatcher.issuedEpochs[0]
+        assert stampOf(tipBeforeReclaim) == firstEpoch
+
+        and: 'the shape the reclaim will route on is the tip\'s own content — Parked, not a quarantine over the ended tenure\'s stamp (FR1, FR6)'
+        assert shapeAt(tipBeforeReclaim) instanceof BranchShape.Parked
 
         and: 'instance B — a second, freshly built TakeCommand sharing nothing in-process with instance A — takes the same ref'
         def instanceB = newCommand('instance-b')
@@ -110,6 +125,41 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         entries[4].contains('please retry, I fixed the environment')
         entries[5].startsWith('PROGRESS:')
         entries[6].startsWith('FINISH:')
+
+        and: 'every commit the SECOND tenure made carries the second epoch the tracker issued (FR3, FR6 of fix-claim-epoch-fence)'
+        def secondEpoch = claimWatcher.issuedEpochs[1]
+        secondEpoch != firstEpoch
+        def reclaimCommits = commitsSince(tipBeforeReclaim)
+        !reclaimCommits.isEmpty()
+        reclaimCommits.every { stampOf(it) == secondEpoch }
+
+        and: 'the reclaim resumed the parked branch on its own content rather than starting a second task on it — a tip stamped by an ended tenure is ordinary history, not a quarantine (FR2, FR6)'
+        reclaimCommits.every {
+            !subjectOf(it).startsWith('gnomish: task started')
+        }
+
+        and: 'the second tenure resumed the branch as Answered: its first act was to append the human decision, and the branch at that commit is what the engine then ran from (FR6, scenario "Escalated, returned, reclaimed")'
+        subjectOf(reclaimCommits.first()) == 'gnomish: task resumed'
+        shapeAt(reclaimCommits.first()) instanceof BranchShape.Answered
+    }
+
+    /**
+     * The claim epoch stamped on {@code rev}, read through the shared fixture's single owner of the
+     * trailer's test-side read ({@code BareGitRepoFixture.stampOf}) — this base only binds it to the
+     * spec's own repository.
+     */
+    protected ClaimEpoch stampOf(String rev) {
+        stampOf(projectDir, rev)
+    }
+
+    /** {@code rev}'s commit subject — the service message, without the epoch trailer below it. */
+    protected String subjectOf(String rev) {
+        subjectOf(projectDir, rev)
+    }
+
+    /** The commits {@code exclusiveFrom} does not already carry, oldest first — one tenure's work. */
+    private List<String> commitsSince(String exclusiveFrom) {
+        commitsIn(projectDir, "${exclusiveFrom}..${TASK_BRANCH}")
     }
 
     /**

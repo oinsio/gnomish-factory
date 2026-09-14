@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.FakeAgentSandboxImage
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.TrustedBaseContext
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -156,14 +155,15 @@ autonomy:
         def bindings = new BindingProperties(BindingNames.CONTAINER, [:])
         // Mirrors the composition root's take/serve container support lambda (ManualRunRunner):
         // `tracked` ownership, since these are dispatched as already-claimed tracker tasks.
+        def git = TaskGitFixture.real()
         def containerTakeSupport = new ContainerTakeSupport(
                 properties, bindings, sandbox, registry, DockerRuntimeProbe.&dockerAvailable,
-                ContainerSupportFixture.tracked())
+                ContainerSupportFixture.tracked(git.epochs()))
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeSlotRunner(
-                newAssembly(properties), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler,
+                newAssembly(properties), git, cloneDir, worktreesRoot, pipeline(), abortHandler,
                 ABORT_THRESHOLD, MDC_KEY, [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE,
-                containerTakeSupport, new ClaimEpochBook(),
+                containerTakeSupport,
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))),
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
                 //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to

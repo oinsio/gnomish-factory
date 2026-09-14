@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
@@ -42,6 +42,15 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
 
     @TempDir
     Path tempDir
+
+    /**
+     * The tenure record of the holder that DIED — the two helpers below rewrite the branch the way
+     * a previous instance's unconfirmed park left it, so the record they stamp from is that
+     * instance's, not this one's (FR5, design D3 of fix-claim-epoch-fence). Nothing fills it: a
+     * reaped holder's book dies with its process, and the reclaim that follows must route the
+     * branch by its content either way (FR2).
+     */
+    private final ClaimEpochBook orphanedHolderEpochs = new ClaimEpochBook()
 
     /** @return {@code [Tracker, TrackerAdapterFactory]} for one fresh Ready task seeded at {@link #REF} */
     abstract List seededReadyTrackerAndFactory(TaskRef ref, String title, String body)
@@ -128,7 +137,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
      * state.json} left by the first run.
      */
     private void markParkPending(String taskId) {
-        def repository = new GitTaskRepository(new GitProcessRunner(), projectDir, worktreesRoot, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(new GitProcessRunner(), projectDir, worktreesRoot, orphanedHolderEpochs)
         repository.recordOutcome(
                 taskId, new TaskOutcome.Escalated(TaskState.atStageStart('build'), new EscalationReport.AttemptsExhausted(1)))
     }
@@ -141,7 +150,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
      * TakePauseExit}.
      */
     private void markPausePending(String taskId) {
-        def repository = new GitTaskRepository(new GitProcessRunner(), projectDir, worktreesRoot, ClaimEpochSource.NONE)
+        def repository = new GitTaskRepository(new GitProcessRunner(), projectDir, worktreesRoot, orphanedHolderEpochs)
         repository.recordOutcome(taskId, new TaskOutcome.Paused(TaskState.atStageStart('build'), 'build'))
     }
 

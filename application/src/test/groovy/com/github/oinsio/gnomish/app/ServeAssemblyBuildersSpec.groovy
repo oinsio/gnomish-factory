@@ -48,7 +48,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
     def "builds a slot runner wired over the caller's own tracker"() {
         given:
         def tracker = Mock(Tracker)
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit))
+        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
         def heartbeat = TakeHeartbeat.forRun(tracker, new TrackerConfig('github', 3), { Duration d -> } as Sleeper)
 
         when:
@@ -56,7 +56,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
                 new ServeArguments(CLONE_DIR, null, false), WORKTREES_ROOT, 'taskId', pipeline(),
                 new TrackerConfig('github', 3), Stub(TrackerAdapterFactory), tracker, INSTANCE,
                 assemblyRunning(null), git, heartbeat, FIXED_CLOCK, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook(), DEFAULT_TRUSTED_BASE,
+                DEFAULT_TRUSTED_BASE,
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
                 //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
                 //     stamp a transition this spec never drives.
@@ -102,7 +102,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
     def "builds a worktree janitor disposing through the caller's git port"() {
         given:
         def worktrees = Mock(TaskWorktreeGit)
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), worktrees)
+        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), worktrees, new ClaimEpochBook())
 
         when:
         def janitor = ServeAssembly.worktreeJanitor(new ServeArguments(CLONE_DIR, null, false),

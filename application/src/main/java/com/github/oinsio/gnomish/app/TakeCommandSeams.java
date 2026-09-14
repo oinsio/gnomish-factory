@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.ServeProperties;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
@@ -26,50 +25,40 @@ record TakeCommandSeams(
         Sleeper reaperSleeper,
         MonotonicTime heartbeatMonotonicTime,
         TakeoverConfirmation takeoverConfirmation,
-        ServeProperties serveProperties,
-        ClaimEpochBook epochs) {
+        ServeProperties serveProperties) {
 
     // Defaults batch mode's concurrency limit N to ServeProperties's own unset-slots default (2,
     // design D3); production wiring (ManualRunRunner) overrides via withServeProperties with the
     // project's real, possibly-configured ServeProperties instead (task 6.2, FR2).
-    // Defaults the tenure record to a fresh, empty book — the claimless default a spec reads a
-    // repair line with no epoch under; production wiring (ManualRunRunner) overrides via withEpochs
-    // with the instance's own ClaimEpochBook (NFR-O1, FR13 of harden-task-branch-contract).
     static final TakeCommandSeams DEFAULTS = new TakeCommandSeams(
             new ThreadSleeper(),
             new ThreadSleeper(),
             new SystemMonotonicTime(),
             ConsoleTakeoverConfirmation.systemTty(),
-            new ServeProperties(0, null, null, null, null, null, null, null, null),
-            new ClaimEpochBook());
+            new ServeProperties(0, null, null, null, null, null, null, null, null));
 
     TakeCommandSeams withHeartbeatSleeper(Sleeper heartbeatSleeper) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, epochs);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
     }
 
     TakeCommandSeams withReaperSleeper(Sleeper reaperSleeper) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, epochs);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
     }
 
     TakeCommandSeams withHeartbeatMonotonicTime(MonotonicTime heartbeatMonotonicTime) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, epochs);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
     }
 
     TakeCommandSeams withTakeoverConfirmation(TakeoverConfirmation takeoverConfirmation) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, epochs);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
     }
 
     TakeCommandSeams withServeProperties(ServeProperties serveProperties) {
         return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, epochs);
-    }
-
-    TakeCommandSeams withEpochs(ClaimEpochBook epochs) {
-        return new TakeCommandSeams(
-                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties, epochs);
+                heartbeatSleeper, reaperSleeper, heartbeatMonotonicTime, takeoverConfirmation, serveProperties);
     }
 }

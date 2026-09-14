@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.BasePin
@@ -76,7 +77,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         tracker.fetchTask(_) >> heldByUs()
         def attached = []
         UnaryOperator<RoundEnvironmentSource> marker = { rounds -> rounds }
-        def git = new TaskGit(store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), marker, refreshingBaseRefGit())
+        def git = new TaskGit(store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), marker, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         TakeFreshClaim.claim(
@@ -114,7 +115,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, branches, worktrees, UnaryOperator.identity(), refreshingBaseRefGit())
+                store, branches, worktrees, UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = TakeFreshClaim.claim(
@@ -164,7 +165,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+                store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         TakeFreshClaim.claim(
@@ -203,7 +204,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit())
+                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = TakeFreshClaim.claim(

@@ -1,10 +1,17 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.ToolCall
+import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -31,6 +38,19 @@ trait SeededCloneFixture implements BareGitRepoFixture {
         runner.run(cloneDir, 'add', 'a.txt')
         runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         worktreesRoot = tempDir.resolve('worktrees')
+    }
+
+    void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0) {
+        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(
+                new TaskContext(taskId, 'Fix the thing', 'Body', []),
+                TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
+                TaskState.atStageStart('implement'))
+        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
+        def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
+        def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
+            new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
+        ])
+        persistence.persist(taskId, state, trace)
     }
 
     AttemptRecord round(int round, AttemptRecord.Result result, long wallMillis, long inputTokens) {
