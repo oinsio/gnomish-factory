@@ -109,7 +109,17 @@ pitest {
     // They travel with the git seam (task 10.2): each one stands up a bare repo and drives
     // `ContainerHarvestFetch` / `GitProcessRunner` / `EnvironmentSalvage` against a live
     // container, so this module's production classes are their real subject.
+    // fix-image-declared-volumes (task 4.2): the same category — `ContainerDeclaredVolumesSpec`
+    // is the identity spec of that change's single-owner table and only exists on a live daemon
+    // (an anonymous volume cannot come into existence anywhere else). It builds an image, runs a
+    // box and a real mitmproxy guard, and its assertions read `docker volume ls` between
+    // materialize and dispose — all out-of-process I/O a mutant blocks on rather than fails on.
+    // It removes no production line from the gate: `DeclaredVolumeOverrides`, `DockerCommands`,
+    // `GuardCommands`, `ContainerMaterializer` and `EgressGuard` are all mutated through the
+    // Docker-free `DeclaredVolumeOverridesSpec`, `DockerCommandsSpec`, `GuardCommandsSpec`,
+    // `ContainerTaskExecutionEnvironmentUnitSpec` and `EgressGuardSpec` in `:sandbox:docker`.
     excludedTestClasses = [
+        'com.github.oinsio.gnomish.sandbox.environment.ContainerDeclaredVolumesSpec',
         'com.github.oinsio.gnomish.sandbox.environment.EgressGuardIntegrationSpec',
         'com.github.oinsio.gnomish.sandbox.environment.JvmProxyEgressE2ESpec',
         'com.github.oinsio.gnomish.sandbox.environment.ContainerGitMechanicsSpec',

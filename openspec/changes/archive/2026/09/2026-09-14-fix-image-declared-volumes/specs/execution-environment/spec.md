@@ -20,6 +20,21 @@ Before creating any factory container from an image — the egress guard, the ma
 - **WHEN** a fresh judge or verification environment (`<key>-j`, `<key>-v`) is materialized from an image declaring a `VOLUME`
 - **THEN** its container carries the same ephemeral overrides as the main box would, and no anonymous volume is created
 
+#### Scenario: Image content under a declared path is not visible in the box
+- **WHEN** an image ships a file under a path it declares as a `VOLUME`, and an environment is materialized from it
+- **THEN** the declared path in the box is an empty ephemeral filesystem and the file is absent — content an image needs in the box lives under a path the image does not declare
+<!-- implements FR2, UX2 of fix-image-declared-volumes -->
+
+#### Scenario: The override introduces no host path
+- **WHEN** the run argv for any factory container is built with a non-empty override set
+- **THEN** every override fragment is a memory-backed mount with no host source; no bind mount or volume name is added beyond the factory's own explicit mounts
+<!-- implements NFR-S1 of fix-image-declared-volumes -->
+
+#### Scenario: The override is a pure function of image and explicit mounts
+- **WHEN** the override set is resolved twice for the same image answer and the same explicit destinations
+- **THEN** both resolutions are equal and render the same argv fragments in the image's declaration order
+<!-- implements NFR-R2 of fix-image-declared-volumes -->
+
 #### Scenario: Declared-volume read failure is an infrastructure failure
 - **WHEN** the runtime cannot report the image's declared volumes (the daemon is unreachable, or the answer is unparseable)
 - **THEN** the materialize fails as an infrastructure failure per the existing runtime-outage requirement — it never proceeds with an empty override set

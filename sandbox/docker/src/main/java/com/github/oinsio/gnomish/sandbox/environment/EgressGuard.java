@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -222,8 +223,25 @@ public final class EgressGuard {
     private void create() {
         // A new container is a new denial source: its id, and any cursor matched against it, differ.
         reads.sourceRecreated();
+        // FR2 of fix-image-declared-volumes: the default mitmproxy image declares its confdir, and
+        // a declared path left to the runtime becomes an anonymous volume outliving the guard. The
+        // read-only config directory is the one destination the guard mounts itself; an untrusted
+        // read takes the guard down as an infrastructure failure (NFR-R1, D4).
+        DeclaredVolumeOverrides overrides;
+        try {
+            overrides = DeclaredVolumeOverrides.resolve(docker, guardImage, Set.of(GuardCommands.CONFIG_MOUNT));
+        } catch (IllegalStateException e) {
+            throw new GuardUnavailableException(
+                    "reading the declared volumes of the egress guard image for " + key + " (container "
+                            + FactoryDockerLabels.guardName(key) + ") failed: " + e.getMessage(),
+                    e);
+        }
+        // NFR-O1, design D7: the guard has no INFO creation anchor of its own — its lifecycle is
+        // narrated by ensureRunning — so the override set is stated at DEBUG, where an operator
+        // diagnosing a guard that lost its confdir between runs looks.
+        log.debug("egress guard for {} declared volumes made ephemeral: {}", key, overrides.describe());
         DockerResult run = docker.run(GuardCommands.runGuard(
-                key, guardImage, configDir.toAbsolutePath().toString(), ownership));
+                key, guardImage, configDir.toAbsolutePath().toString(), ownership, overrides));
         if (!run.ok()) {
             throw new GuardUnavailableException("docker run of the egress guard for " + key + " (container "
                     + FactoryDockerLabels.guardName(key) + ") failed: "

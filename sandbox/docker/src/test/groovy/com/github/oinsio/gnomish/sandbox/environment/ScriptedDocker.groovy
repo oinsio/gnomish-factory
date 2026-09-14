@@ -21,6 +21,10 @@ final class ScriptedDockerCli extends DockerCli {
 
     @Override
     DockerResult run(List<String> args) {
+        def declared = RecordingDockerCli.answerDeclaredVolumes(args)
+        if (declared != null) {
+            return declared
+        }
         args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
     }
 

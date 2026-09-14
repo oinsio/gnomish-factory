@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
-import com.github.oinsio.gnomish.sandbox.ResourceLimits;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -79,37 +78,36 @@ final class DockerCommands {
      * quota-capable storage driver (overlay-on-xfs with {@code pquota}) that
      * ordinary daemons lack, so it stays opt-in rather than failing every
      * container start (operator docs, task 9.5).
+     *
+     * <p>Implements FR2, FR3 of fix-image-declared-volumes: the image's declared volume paths are
+     * occupied last, after the working-copy mount, by {@link DeclaredVolumeOverrides#argv()} — a
+     * required {@link ContainerRunSpec} component, so a run that skipped it does not compile.
      */
-    static List<String> runContainer(
-            String key,
-            String image,
-            String runtime,
-            ResourceLimits limits,
-            boolean enforceDiskQuota,
-            String workingCopy,
-            ObjectOwnership ownership) {
-        List<String> argv = new ArrayList<>(List.of("run", "-d", "--name", FactoryDockerLabels.containerName(key)));
-        argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
+    static List<String> runContainer(ContainerRunSpec spec) {
+        List<String> argv =
+                new ArrayList<>(List.of("run", "-d", "--name", FactoryDockerLabels.containerName(spec.key())));
+        argv.addAll(FactoryDockerLabels.ownershipLabelArgs(spec.key(), spec.ownership()));
         argv.addAll(List.of(
                 "--network",
-                FactoryDockerLabels.networkName(key),
+                FactoryDockerLabels.networkName(spec.key()),
                 "--runtime",
-                runtime,
+                spec.runtime(),
                 "--cpus",
-                limits.cpus(),
+                spec.limits().cpus(),
                 "--memory",
-                limits.memory(),
+                spec.limits().memory(),
                 "--pids-limit",
-                Long.toString(limits.pids())));
-        if (enforceDiskQuota) {
+                Long.toString(spec.limits().pids())));
+        if (spec.enforceDiskQuota()) {
             argv.add("--storage-opt");
-            argv.add("size=" + limits.disk());
+            argv.add("size=" + spec.limits().disk());
         }
         argv.add("-v");
-        argv.add(FactoryDockerLabels.volumeName(key) + ":" + workingCopy);
+        argv.add(FactoryDockerLabels.volumeName(spec.key()) + ":" + spec.workingCopy());
         argv.add("-w");
-        argv.add(workingCopy);
-        argv.add(image);
+        argv.add(spec.workingCopy());
+        argv.addAll(spec.overrides().argv());
+        argv.add(spec.image());
         argv.addAll(KEEP_ALIVE);
         return List.copyOf(argv);
     }
@@ -172,6 +170,17 @@ final class DockerCommands {
     static boolean oomKilled(String stateLine) {
         String[] fields = stateLine.strip().split("\\s+");
         return fields.length >= 3 && "true".equals(fields[2]);
+    }
+
+    /**
+     * {@code image inspect} of the image's declared volume paths — the one read behind
+     * {@link DeclaredVolumeOverrides#resolve} (FR1 of fix-image-declared-volumes), so the
+     * resolver issues no literal argv of its own. The Go template is a single argv element
+     * carrying no shell quoting: a quoted form would make the quotes part of the template. The
+     * answer is {@code null} for an image declaring nothing, else a JSON object keyed by path.
+     */
+    static List<String> inspectImageVolumes(String image) {
+        return List.of("image", "inspect", "-f", "{{json .Config.Volumes}}", image);
     }
 
     /** {@code rm -f} the container by name (force removes it even while running). */

@@ -3,7 +3,7 @@
 ## Why
 
 The container adapter runs operator-supplied images — the egress guard
-(`factory.sandbox.guard-image`, default `mitmproxy/mitmproxy`) and the task box
+(`factory.sandbox.guard-image`, default `mitmproxy/mitmproxy:12`) and the task box
 (`factory.sandbox.image`) — and honours every `VOLUME` their Dockerfiles declare.
 For each declared path with no explicit mount, Docker silently creates an
 **anonymous volume**: a hex-named object with no factory label. It escapes the
@@ -156,17 +156,22 @@ _None._
   they already read, which image paths were made ephemeral — and needs no new
   configuration knob to get the fix.
 - UX2: An operator whose image relies on a declared path for something that
-  must persist gets a clear statement in `docs/` that the factory makes such
-  paths ephemeral, with the alternatives (bake the content into the image, or
-  keep it under the working copy).
+  must persist, or that ships content there, gets a clear statement in `docs/`
+  that the factory makes such paths ephemeral, empty, root-owned but
+  world-writable, and non-executable — content or binaries the image holds
+  under a declared path are not usable in the box — with the alternatives (bake the content into the image under a path it does not
+  declare, or keep it under the working copy).
 
 ## Success Metrics
 
 - M1: `docker volume ls -qf dangling=true | wc -l` is identical before and
-  after a full run of the Docker-gated suites in `:adapters:git` and
-  `:bootstrap` (measured 2026-09-12 before the change: +4 after three specs).
+  after a full run of the Docker-gated suites in `:adapters:git` and of the
+  three guard-materializing bootstrap E2E specs `ContainerModePipelineE2ESpec`,
+  `TakeContainerLifecycleE2ESpec` and `ContainerLifecycleCoverageGapsE2ESpec`
+  (measured 2026-09-12 before the change: +4 after three specs).
 - M2: `grep -rn "/home/mitmproxy\|\.mitmproxy" sandbox/docker/src/main` returns
-  no hit.
+  no hit — it is empty today and this is a non-regression gate (G2), not a
+  metric the change moves.
 - M3: Every `docker run` builder in `sandbox/docker` (`runGuard`,
   `runContainer`) takes the typed override value; the count of `"run"`
   builders without it is 1 — the exempted seed helper.

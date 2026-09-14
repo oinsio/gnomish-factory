@@ -11,10 +11,11 @@ import spock.lang.Specification
 class GuardCommandsSpec extends Specification {
 
     static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
+    static final DeclaredVolumeOverrides NO_OVERRIDES = new DeclaredVolumeOverrides([])
 
     def "FR7: runGuard runs mitmdump on the task network with the config mounted read-only"() {
         when:
-        def argv = GuardCommands.runGuard('k1', 'mitmproxy/mitmproxy:12', '/tmp/guard-cfg', OWNERSHIP)
+        def argv = GuardCommands.runGuard('k1', 'mitmproxy/mitmproxy:12', '/tmp/guard-cfg', OWNERSHIP, NO_OVERRIDES)
 
         then: 'the guard container is named, labelled, and joined to the task network'
         argv.containsAll(['--name', 'gnomish-guard-k1'])
@@ -60,6 +61,45 @@ class GuardCommandsSpec extends Specification {
             '-s',
             '/gnomish-guard/guard.py'
         ])
+    }
+
+    // FR2, FR3 of fix-image-declared-volumes: the default guard image declares its mitmproxy
+    // confdir, and a declared path left to the runtime becomes an anonymous volume outliving the
+    // guard. The fragments sit after the read-only config mount and before the mitmdump tail.
+    def "FR3: the declared-volume overrides sit between the config mount and the mitmdump tail"() {
+        when:
+        def argv = GuardCommands.runGuard(
+                'k1',
+                'mitmproxy/mitmproxy:12',
+                '/tmp/guard-cfg',
+                OWNERSHIP,
+                new DeclaredVolumeOverrides(['/home/mitmproxy/.mitmproxy']))
+
+        then: 'the fragment follows the read-only config mount'
+        def fragment = argv.indexOf(
+                'type=tmpfs,destination=/home/mitmproxy/.mitmproxy,tmpfs-size=64m,tmpfs-mode=1777')
+        argv[fragment - 1] == '--mount'
+        argv.indexOf('/tmp/guard-cfg:/gnomish-guard:ro') <fragment
+
+        and: 'and precedes the image, whose mitmdump tail is unchanged'
+        fragment <argv.indexOf('mitmproxy/mitmproxy:12')
+        argv[argv.indexOf('mitmproxy/mitmproxy:12')..-1] == [
+            'mitmproxy/mitmproxy:12',
+            'mitmdump',
+            '--mode',
+            'regular',
+            '--listen-port',
+            '8080',
+            '--set',
+            'connection_strategy=lazy',
+            '-s',
+            '/gnomish-guard/guard.py'
+        ]
+    }
+
+    def "FR3: a guard image declaring nothing new adds no mount fragment"() {
+        expect:
+        !GuardCommands.runGuard('k1', 'img', '/tmp/guard-cfg', OWNERSHIP, NO_OVERRIDES).contains('--mount')
     }
 
     def "FR7: connectBridge gives the guard its only route out"() {

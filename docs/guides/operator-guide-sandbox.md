@@ -2,6 +2,7 @@
 
 <!-- implements UX1, UX2, UX3, UX4, UX5, UX6, NG5, NG7 of add-sandbox-core -->
 <!-- implements UX3, UX4 of add-serve-sandbox-lifecycle -->
+<!-- implements FR6, UX2 of fix-image-declared-volumes -->
 
 This guide is for the operator configuring where gnome processes actually run.
 Since add-sandbox-core, every gnome-product process — agent rounds, judge
@@ -218,6 +219,56 @@ hit them, not preemptively. The disk quota is opt-in
 quota-capable storage driver (overlay2 on xfs with `pquota`) most dev daemons
 lack, so defaulting it on would fail every container start.
 
+## Declared volumes in your image
+
+A `VOLUME` line in a Dockerfile declares a path the runtime would otherwise
+back with an **anonymous volume**: an unlabelled, hash-named object that
+outlives the container it was made for and that the factory's sweep and reaper
+cannot recognise as theirs. So the factory does not let one be created. Before
+every container start it reads the image's declared paths and mounts an
+ephemeral in-memory filesystem (`tmpfs`) over each one it does not already
+mount itself — the box's working copy and the guard's config directory keep
+their explicit mounts. The paths that were overridden are named in the
+"container environment … created" line, or stated as `none`.
+
+What this means for an image you build:
+
+- **The path starts empty.** Content the image ships under a declared path is
+  not visible in the box — the ephemeral filesystem covers it, exactly as any
+  explicit mount would.
+- **It holds at most 64 MB**, charged to the container's own memory limit.
+  Going over fails visibly inside the box (ENOSPC) instead of leaking onto the
+  host.
+- **It is gone with the container** — a stop/resume cycle re-materializes it
+  empty. Declared paths hold no factory state; the branch is the durable one.
+- **It is `root`-owned, world-writable with the sticky bit (`1777`)**, because
+  the runtime mounts a `tmpfs` as `root:root` and offers no way to set an
+  owner. Any user in the box can write there, which is what an image meaning
+  its own non-root user to use the path needs.
+- **It is mounted `noexec,nosuid,nodev`** (the runtime's own defaults).
+  Binaries the image keeps under a declared path will not run from there.
+
+If the image needs content at that path, there are two fixes — both of which
+also remove the declaration's surprise:
+
+1. **Bake it under a path the image does not declare** (drop the `VOLUME` line
+   for it, or use a different directory). This is the answer for tooling,
+   caches shipped with the image, and anything executable.
+2. **Keep it under the working copy** (`/gnomish/work`), which is the factory's
+   own named, labelled volume and the one durable place in the box.
+
+The mode is honoured only by runc ≥ 1.1.8 (older runtimes silently restore the
+image's mode and a non-root user loses its write access); the Docker-gated
+spec `ContainerDeclaredVolumesSpec` is the gate that reports it.
+
+Anonymous volumes already on a host predate this behaviour and are yours to
+prune — they carry no factory label, so the factory cannot tell its own from a
+neighbour project's:
+
+```bash
+docker volume ls -qf dangling=true    # may include other projects' volumes
+```
+
 ## `verify-in: fresh-box` for the final gate
 
 Recommend to repo authors: the final quality gate of a pipeline declares
@@ -314,14 +365,14 @@ scope permanently — still holding disk, and still running.
 
 Normalized away — these all name one project and share one sweep scope:
 
-| Difference                    | Example                                              |
-|-------------------------------|------------------------------------------------------|
-| URL userinfo (user, token)    | `https://ghp_A@host/o/r` = `https://ghp_B@host/o/r`   |
-| Scheme and host letter case   | `https://GitHub.com/o/r` = `https://github.com/o/r`   |
-| The scheme's own default port | `https://host:443/o/r` = `https://host/o/r`           |
-| One trailing `/`              | `https://host/o/r/` = `https://host/o/r`              |
-| A trailing `.git`             | `https://host/o/r.git` = `https://host/o/r`           |
-| The scp-style form            | `git@host:o/r.git` = `ssh://host/o/r`                 |
+| Difference                    | Example                                             |
+|-------------------------------|-----------------------------------------------------|
+| URL userinfo (user, token)    | `https://ghp_A@host/o/r` = `https://ghp_B@host/o/r` |
+| Scheme and host letter case   | `https://GitHub.com/o/r` = `https://github.com/o/r` |
+| The scheme's own default port | `https://host:443/o/r` = `https://host/o/r`         |
+| One trailing `/`              | `https://host/o/r/` = `https://host/o/r`            |
+| A trailing `.git`             | `https://host/o/r.git` = `https://host/o/r`         |
+| The scp-style form            | `git@host:o/r.git` = `ssh://host/o/r`               |
 
 Kept distinct — these are different projects, each with its own scope:
 a different host, a different path, a **non-default** port (`https://host:8443/…`

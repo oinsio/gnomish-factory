@@ -36,7 +36,8 @@ class KeptSelfCheckBoxSweepUniverseSpec extends Specification {
 
     def "NFR-R2: the box the keep stops was placed in the sweep universe at creation"() {
         given: 'the container the adapter really runs for this environment'
-        def argv = DockerCommands.runContainer(KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP)
+        def argv = DockerCommands.runContainer(new ContainerRunSpec(
+                        KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP, new DeclaredVolumeOverrides([])))
         def labels = labelsStampedAtCreation(argv)
 
         expect: 'its labels satisfy both filters the sweep lists by — it is enumerated, not merely present'
@@ -50,7 +51,8 @@ class KeptSelfCheckBoxSweepUniverseSpec extends Specification {
 
     def "NFR-C1: the kept box classifies with its own role and key, so the existing matrix bounds it"() {
         given: 'the same container, as the sweep listing would report it after the keep stopped it'
-        def argv = DockerCommands.runContainer(KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP)
+        def argv = DockerCommands.runContainer(new ContainerRunSpec(
+                        KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP, new DeclaredVolumeOverrides([])))
         def listed = new ListedDockerObject(
                 FactoryDockerLabels.containerName(KEY), ObjectKind.CONTAINER, labelsStampedAtCreation(argv))
 
