@@ -7,10 +7,16 @@ See proposal.md — Why. The facts that shape the approach:
 - `LogText` (`:logtext`, slf4j-api only) owns the choke-point vocabulary:
   `strip`, `capTail`, `flatten`, composed by `forLog`. `:logtext` may not
   depend on a logging backend, so a Logback converter cannot live there.
-- `bootstrap/src/main/resources/logback-spring.xml` renders three appenders
-  from one `GNOMISH_LOG_PATTERN` (`%msg%n` plain, MDC via `%X{…}`); the file
-  appender is async with `discardingThreshold=0`. `logback-test.xml` mirrors it
-  for specs.
+- `bootstrap/src/main/resources/logback-spring.xml` renders three text-log
+  appenders from one `GNOMISH_LOG_PATTERN` (`%msg%n` plain, MDC via `%X{…}`);
+  the file appender is async with `discardingThreshold=0`. `logback-test.xml`
+  mirrors it for specs. `add-subprocess-access-log`, sequenced before this
+  change, adds a fourth appender to the same bootstrap config: a dedicated
+  `gnomish.access` logger with its own JSONL encoder and its own redactor,
+  additivity off. This change's scope is the three text-log appenders (FR1
+  scoped accordingly); the access-log appender is a separate machine-readable
+  sink at a separate trust boundary and is explicitly out of scope — see D1's
+  exemption.
 - The console has a port, `ConsoleIO` (`app/port/console`), with one
   implementation, `SystemConsoleIO`, and a `DialogConsole` wrapper; 6 sites
   use it. 24 production sites in `:application` and 1 in `:bootstrap` write
@@ -47,8 +53,16 @@ and holds no vocabulary of its own. *Rationale:* a converter needs
 `logback-classic` at compile time; `:logtext`'s contract (module-layering
 spec: "no external dependency beyond slf4j-api") forbids it, and the
 composition root is where the backend is chosen (ADR 0004). Placing the
-vocabulary in `:logtext` keeps one character table (the declared pair with
-`FindingsSanitizer` is unchanged by this change). *Alternative rejected:*
+vocabulary in `:logtext` keeps one character table (the pair with
+`FindingsSanitizer` stays a *declared* pair — no shared abstraction is
+extracted by this change — even though both ends' table content changes;
+see Sync surfaces, below). **Exemption:** the `gnomish.access` JSONL
+appender `add-subprocess-access-log` attaches to the same bootstrap Logback
+config is not a consumer of these converters — it carries its own redactor
+at its own trust boundary (that change's D5/D11) and its JSON structure must
+not be flattened or capped by the text-log vocabulary. FR1 and the
+single-owner table below name this exemption explicitly so a future reader
+does not read "every appender" as including it. *Alternative rejected:*
 Logback `%replace(%msg){regex}` in the pattern — a second, hand-written
 regex vocabulary in XML beside `LogText`'s, with no cap primitive and no
 idempotence guarantee; exactly the drift the sync-pair rule exists to stop.
@@ -100,18 +114,21 @@ value's identity (the grep key) must stay raw in the map.
 are rerouted.** `ConsoleIO` gains `printMachine(String)` (verbatim); the
 existing `print(String)` becomes the human path and `SystemConsoleIO.print`
 applies the new `LogText.forConsole` (caret/`\uXXXX` visible notation,
-newlines and length preserved). The 25 direct sites, classified:
+newlines and length preserved). The 24 direct sites, classified (line
+numbers current as of 2026-09-14; re-grep
+`System\.\(out\|err\)\.print` before starting task 3.3, since numbers drift):
 
 | Site | Path |
 |---|---|
 | `StatusCommand:85,112,120` | machine when `json`, human otherwise (split per branch) |
-| `StatusCommand:102,121`, `UsageCommand:59,67`, `BoardCommand:80`, `RunExceptionReporting:46,49,56,62`, `RunnerOutcomeLoop:183,184`, `ServeCommand:220,244`, `ContainerGitModeRunner:79,80`, `GitModeRunner:186,187`, `GitResumeContinuation:143`, `ContainerResumeOutcomes:141`, `bootstrap/ManualRunDrive:26` | human |
+| `StatusCommand:102,121`, `UsageCommand:59,67`, `BoardCommand:77`, `RunExceptionReporting:46,49,56,62`, `RunnerOutcomeLoop:183,184`, `ServeCommand:213,239`, `ContainerGitModeRunner:79,80`, `GitModeRunner:186,187`, `GitResumeContinuation:152`, `ContainerResumeOutcomes:151`, `bootstrap/ManualRunDrive:26` | human |
 | `UsageCommand:65` | machine |
 
 Commands that today have no `ConsoleIO` in hand (`StatusCommand`,
 `UsageCommand`, `BoardCommand`, `ServeCommand`, `RunExceptionReporting`)
 receive it by constructor from the composition root, the same way
-`ManualRunConfiguration:174` already wires `SystemConsoleIO`. *Rationale:*
+`bootstrap/…/ManualRunConfiguration:177-178` already wires `SystemConsoleIO`.
+*Rationale:*
 the port exists, has one production implementation and a scripted test
 double; adding a second "operator output" abstraction would be the twin
 implementation `manual-sync-pairs.md` forbids. *Alternative rejected:*
@@ -158,10 +175,14 @@ gate rewrite belongs to `type-untrusted-text`.
 rules and pattern as production), attaches a capturing appender *after* the
 encoder (an `OutputStreamAppender` over a byte buffer, not `ListAppender`,
 which sees events before rendering), and asserts on bytes over the corpus
-for the three paths. The same corpus drives `SystemConsoleIO` over a
-captured `PrintStream`. *Rationale:* `testing.md`, "Invariant specs across a
-flow": component specs of the converters prove each link; only bytes off
-the real encoder prove the links are joined.
+for the three text-log paths (message, exception, MDC) on each of the three
+`GNOMISH_LOG_PATTERN` appenders. It also asserts the `gnomish.access`
+appender is untouched by this change's converters (D1's exemption) — a
+regression guard, not a fourth path under the neutralizer. The same corpus
+drives `SystemConsoleIO` over a captured `PrintStream`. *Rationale:*
+`testing.md`, "Invariant specs across a flow": component specs of the
+converters prove each link; only bytes off the real encoder prove the links
+are joined.
 
 ## Sync surfaces
 
@@ -179,8 +200,8 @@ table.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `SafeMessageConverter` / `SafeThrowableConverter` / `SafeMdcConverter` (`:bootstrap`) | the rendered record bytes | every appender in `logback-spring.xml` and `logback-test.xml` (file, stdout, stderr) | the plain `%msg`, `%ex` (implicit) and `%X{…}` conversions in `GNOMISH_LOG_PATTERN` — deleted | `LogbackConfigSpec` asserts both files declare the three conversion rules and that the pattern uses only the safe forms; the D9 byte-level spec asserts the effect |
-| `ConsoleIO` (`SystemConsoleIO`) | terminal bytes, split by `print` (human) / `printMachine` (verbatim) | the 25 sites in D5's table and the 6 existing `console.print` sites | every `System.out.print*` / `System.err.print*` in production code outside `SystemConsoleIO` — deleted | `ConsoleOwnerGateSpec` (`:bootstrap`, source scan over production sources, allowlist = `SystemConsoleIO`), same shape as `UntrustedLogTextGateSpec` |
+| `SafeMessageConverter` / `SafeThrowableConverter` / `SafeMdcConverter` (`:bootstrap`) | the rendered record bytes | the three text-log appenders in `logback-spring.xml` and `logback-test.xml` using `GNOMISH_LOG_PATTERN` (file, stdout, stderr). Exempt: the `gnomish.access` JSONL appender `add-subprocess-access-log` owns — its own encoder and redactor, a distinct trust boundary; converting it would corrupt its machine-readable structure | the plain `%msg`, `%ex` (implicit) and `%X{…}` conversions in `GNOMISH_LOG_PATTERN` — deleted | `LogbackConfigSpec` asserts both files declare the three conversion rules on `GNOMISH_LOG_PATTERN` and that the pattern uses only the safe forms; the D9 byte-level spec asserts the effect on the three text-log appenders and asserts the access-log appender is untouched |
+| `ConsoleIO` (`SystemConsoleIO`) | terminal bytes, split by `print` (human) / `printMachine` (verbatim) | the 24 sites in D5's table and the 6 existing `console.print` sites | every `System.out.print*` / `System.err.print*` in production code outside `SystemConsoleIO` — deleted | `ConsoleOwnerGateSpec` (`:bootstrap`, source scan over production sources, allowlist = `SystemConsoleIO`), same shape as `UntrustedLogTextGateSpec` |
 | `LogText` (`:logtext`) | the character-class table | `forLog`, `forConsole`, the three converters, `FindingsSanitizer` (via the declared pair) | none — the table already had one owner; the change adds consumers | `SanitizerPairEquivalenceSpec`; the converters hold no character literal (asserted by a spec that scans the converter sources for escape-character literals — the `\u001B`/`\u009B` code points and `\p{Cc}`-class patterns — and finds none) |
 
 Identity claims: FR2 says choke-point output "renders byte-identically" —
@@ -193,14 +214,16 @@ paired with the D9 spec's idempotence feature over `forLog(corpus)`.
   summary observed; the marker names the drop; the cap is a named constant
   with a derivation comment.
 - [The async appender's queue holds unrendered events; neutralization runs on
-  the appender thread] → cost is one pass per record; NFR-R2's budget is
-  unchanged; measured by the existing serve-tick specs, not by a new
-  benchmark.
+  the appender thread] → cost is one pass per record; NFR-R2's budget
+  (`queueSize`, `maxFlushTime`) is unchanged and no new benchmark is added —
+  the existing serve-tick specs (`:application`) exercise the file appender
+  under load and stay green, which is NFR-R2's implementing evidence per
+  `traceability.md`; task 5.3's module-gate run is where that is confirmed.
 - [`%safeEx` diverges from Logback's default rendering in a future Logback
   release (new trace-line shapes)] → the shape list is data in one converter;
   an unrecognized shape degrades to a marked continuation line, never to a
   column-0 line — fail-safe in the right direction.
-- [Rerouting 25 print sites touches many command classes at once] →
+- [Rerouting 24 print sites touches many command classes at once] →
   mechanical; each site is one of two calls; the gate names any survivor.
 - [A spec that captured `System.out` directly (e.g. through
   `System.setOut`) now sees the console owner's output] → those specs assert
@@ -216,7 +239,7 @@ paired with the D9 spec's idempotence feature over `forLog(corpus)`.
    updated in the same commit).
 2. `:bootstrap`: converters, both Logback files, `LogbackConfigSpec`, D9
    spec. Everything above is additive and shippable alone.
-3. `:application`: `ConsoleIO.printMachine`, `SystemConsoleIO`, the 25
+3. `:application`: `ConsoleIO.printMachine`, `SystemConsoleIO`, the 24
    reroutes, `ConsoleOwnerGateSpec`, D7, D8.
 4. ADR 0004 amendment, `logging.md`, glossary.
 No rollback concern: every step is a superset of the previous rendering for
