@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
@@ -66,7 +65,7 @@ class TakeBareAutoSpec extends TakeResumeSpecBase {
         new TakeBareAuto(
                 newAssembly(), TaskGitFixture.real(), worktreesRoot, abortHandler, ABORT_THRESHOLD, 'taskId', BASE, CAP, CLOCK, [],
                 ClaimBeat.NONE, new ClaimLossFlag(),
-                wipLimit, random, ContainerTakeSupport.hostOnly(), new ClaimEpochBook(),
+                wipLimit, random, ContainerTakeSupport.hostOnly(),
                 new TrustedBaseContext(BaseDefinition.none(),
                 new DefaultBranch(currentBranch(cloneDir))))
     }

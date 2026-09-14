@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
@@ -89,7 +90,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         def runner = new GitResumeRunner(
                 assemblyRunningLoop(executor, new ScriptedConsoleIO(['']),
                 new Verdict.Pass(), attached),
-                new TaskGit(store, branches, worktrees, marker), worktreesRoot, 'taskId')
+                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot, 'taskId')
 
         when:
         runner.run(cloneDir, 'PROJ-1', completingPipeline(), RunArguments.InteractiveMode.NONE, false)
@@ -105,7 +106,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     private String resume(List<String> consoleScript = [''], boolean discardWork = false) {
         console = new ScriptedConsoleIO(consoleScript)
         def runner = new GitResumeRunner(assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
-        new TaskGit(store, branches, worktrees), worktreesRoot, 'taskId')
+        new TaskGit(store, branches, worktrees, new ClaimEpochBook()), worktreesRoot, 'taskId')
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')

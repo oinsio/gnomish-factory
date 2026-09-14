@@ -52,7 +52,7 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         runner.run(repo, 'push', 'origin', "${BRANCH}:${BRANCH}")
 
         worktreeSalvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
-        branchPush = new GitTaskBranches(runner)
+        branchPush = new GitTaskBranches(runner, ClaimEpochSource.NONE)
         handler = new RevocationHandler(tracker, worktreeSalvage, branchPush)
     }
 

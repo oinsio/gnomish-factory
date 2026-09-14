@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -154,8 +153,8 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 git,
                 worktreesRoot,
                 homeDir,
-                new StatusCommand(TaskGitFixture.real(), worktreesRoot),
-                new UsageCommand(TaskGitFixture.real()),
+                new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot),
+                new UsageCommand(TaskGitFixture.realClaimless()),
                 boardCommand,
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, factoryProperties, [:],
                 MapSecretsProvider.NONE,
@@ -164,8 +163,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 [:],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.plainSource(),
-                new ServeProperties(0, null, null, null, null, null, null, null, null),
-                new ClaimEpochBook())
+                new ServeProperties(0, null, null, null, null, null, null, null, null))
     }
 
     /**

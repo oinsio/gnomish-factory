@@ -26,12 +26,12 @@ import spock.lang.TempDir
  * <p>Added by task 8.1 of split-into-modules for the same reason as {@link GitTaskBranchesSpec}:
  * per-module mutation scoping needs a module's classes covered by that module's own specs.
  */
-class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
+class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, TaskSeedFixture {
 
     @TempDir
     Path tempDir
 
-    def runner = new GitProcessRunner()
+    GitProcessRunner runner = new GitProcessRunner()
     def store = new GitTaskStore(runner, ClaimEpochSource.NONE)
     Path cloneDir
     Path worktreesRoot
@@ -41,20 +41,6 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
         Files.writeString(cloneDir.resolve('a.txt'), 'first')
         commitAll(cloneDir, 'init')
         worktreesRoot = tempDir.resolve('worktrees')
-    }
-
-    private Path worktreeFor(String taskId) {
-        worktreesRoot.resolve('clone').resolve(taskId)
-    }
-
-    private TaskState seedTask(String taskId) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'Fix it', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def state = TaskState.atStageStart('implement')
-        def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
-            new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
-        ])
-        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
-        state
     }
 
     def "taskRepository hands out a lifecycle store bound to this clone"() {
@@ -81,7 +67,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
 
     def "attemptPersistence hands out persistence bound to this worktree and task"() {
         given:
-        seedTask('PROJ-2')
+        seedTask('PROJ-2', 'Fix it')
         def worktree = worktreeFor('PROJ-2')
 
         when:
@@ -97,7 +83,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
 
     def "readRecordedState reads the worktree's state.json back into the domain state"() {
         given:
-        def state = seedTask('PROJ-3')
+        def state = seedTask('PROJ-3', 'Fix it')
 
         expect:
         store.readRecordedState(worktreeFor('PROJ-3')) == state
@@ -105,7 +91,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
 
     def "readTaskRecord reads the worktree's task.json back into the port record"() {
         given:
-        seedTask('PROJ-4')
+        seedTask('PROJ-4', 'Fix it')
 
         when:
         def record = store.readTaskRecord(worktreeFor('PROJ-4'))
@@ -126,7 +112,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture {
 
     def "usageHistory delegates to UsageHistoryWalker and returns the walked history"() {
         given:
-        seedTask('PROJ-5')
+        seedTask('PROJ-5', 'Fix it')
 
         when:
         def history = store.usageHistory(cloneDir, 'PROJ-5')

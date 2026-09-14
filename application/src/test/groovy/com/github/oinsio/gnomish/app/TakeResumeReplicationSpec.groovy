@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
@@ -59,16 +60,13 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     /**
      * FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so the
      * port-fake chain needs a working {@link BaseRefGit} rather than {@link BaseRefGit#UNWIRED} —
-     * the resolved tip echoes the pinned ref back, which is exactly today's placeholder SHA input.
-     * A field, not a per-call helper: Spock's ordered {@code then:} verification tracks every
-     * mock/stub invocation, and creating the stub lazily inside the routing chain (i.e. during
-     * {@code when:}) misfiles its background interaction into the ordered sequence.
+     * {@link RunChainFakes#resumingBaseRefGit} echoes the resolved tip back, which is exactly
+     * today's placeholder SHA input. A field, not a per-call helper: Spock's ordered {@code then:}
+     * verification tracks every mock/stub invocation, and building the fake lazily inside the
+     * routing chain (i.e. during {@code when:}) misfiles its background interaction into the
+     * ordered sequence.
      */
-    BaseRefGit baseRefGit = Stub(BaseRefGit) {
-        resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
-            new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
-        }
-    }
+    BaseRefGit baseRefGit = resumingBaseRefGit()
 
     def setup() {
         worktreesRoot = tempDir.resolve('worktrees')
@@ -85,7 +83,7 @@ class TakeResumeReplicationSpec extends Specification implements RunChainFakes {
     }
 
     private TaskGit git() {
-        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)
+        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
     }
 
     /** The real routing chain over the ports above; {@code verdict} decides whether a run parks. */

@@ -430,7 +430,7 @@ advancement: auto
         def real = TaskGitFixture.real()
         def git = new TaskGit(real.store(), real.branches(), real.worktrees(), { rounds ->
             decorated
-        } as UnaryOperator<RoundEnvironmentSource>)
+        } as UnaryOperator<RoundEnvironmentSource>, real.epochs())
         def source = Stub(RoundEnvironmentSource)
 
         when: 'the runner is built over that bundle'

@@ -18,7 +18,6 @@ class BranchRepairActionSpec extends Specification {
         shape || phrase
         new BranchShape.Parked() || 'resuming from the recorded position'
         new BranchShape.CompletedUncleaned() || 'resuming from the recorded position'
-        new BranchShape.StaleEpoch() || 'reconciling the tip against origin, then classifying it again'
         new BranchShape.Corrupt('task.json: bad') || 'parking for a human on this first classification'
         new BranchShape.Unknown('state without task') || 'parking for a human on this first classification'
         new BranchShape.UnsupportedVersion('s.json', 7, 1) || 'parking for a human on this first classification'
@@ -39,7 +38,6 @@ class BranchRepairActionSpec extends Specification {
             new BranchShape.Answered(),
             new BranchShape.CompletedUncleaned(),
             new BranchShape.Delivered(),
-            new BranchShape.StaleEpoch(),
             new BranchShape.Corrupt('reason'),
             new BranchShape.Unknown('reason'),
             new BranchShape.UnsupportedVersion('state.json', 7, 1)

@@ -39,12 +39,15 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Zombie** — a former claim holder whose lease went stale (or was reaped)
   while its process may still be running; its writes are stopped by the fence,
   not by asking it to stop.
-- **Fence** — a mechanism that stops a stale holder's writes. Two of them: the
-  task branch's non-fast-forward push (the task branch is never force-pushed),
-  and the **claim epoch** — a holder that cannot confirm its own heartbeat
-  self-fences, writing nothing past the next round boundary until it
-  re-verifies its claim, and any artifact carrying an older epoch than the
-  live claim is classified as stale rather than obeyed.
+- **Fence** — a mechanism that stops a stale holder's writes. Two of them, one
+  per medium: on the branch, the **fast-forward-only push** — the task branch
+  is never force-pushed, so a push from a tenure a newer one has superseded is
+  refused by the remote; at the tracker, the **round-boundary revocation
+  check** — a holder re-verifies its claim at each round boundary and writes
+  nothing past it while the claim cannot be confirmed as its own. *Not:* a
+  reader comparing a **claim epoch** it finds on the branch against the one it
+  was just issued — artifacts of earlier tenures are history, and that
+  comparison yields false positives, never a fence.
 - **Delivery fence** — the check that the task branch tip is on `origin`
   before a signal that depends on it is sent: verify the remote tip, push,
   one bounded re-attempt, then a delivered/undelivered verdict. Used before a
@@ -88,9 +91,9 @@ The vocabulary of recovery from a crash inside a multi-step transition. The
 principle and the mechanisms live in `docs/adr/0003-crash-consistency.md`; the
 checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 
-- **Branch shape** — the classification of a task branch tip: its file set,
-  envelope versions, and claim epoch mapped to exactly one name from a closed
-  set. Total by construction — every combination classifies, `Unknown`
+- **Branch shape** — the classification of a task branch tip: its file set and
+  envelope versions mapped to exactly one name from a closed set. Classified
+  by content alone — the tip's claim epoch is provenance, not an input. Total by construction — every combination classifies, `Unknown`
   included, and classification never throws on content. The closed set and the
   meaning of each name are owned by the `task-branch-contract` capability, in
   its "Total branch-shape classification" requirement
@@ -120,8 +123,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 - **Claim epoch** — the monotonically increasing token issued with every
   (re)claim (the tracker-assigned claim comment id), recorded with the claim
   and stamped into every commit and tracker write of that tenure. It carries
-  only task identity and counters. It makes a zombie's writes detectable and
-  classifiable, not impossible — see **Fence**.
+  only task identity and counters. On the branch it is **provenance**: it names
+  the tenure that wrote a commit, and a reclaim resumes from commits of earlier
+  tenures rather than treating them as suspect. At the tracker it is the
+  holder's **identity**, which a fenced claim operation compares against. It is
+  not itself a fence — see **Fence** for the two.
 - **Intent / receipt** — the two durable records bracketing an external
   effect: the intent is written before the effect, the receipt after it.
   Recovery finding an intent without a receipt probes the target to see

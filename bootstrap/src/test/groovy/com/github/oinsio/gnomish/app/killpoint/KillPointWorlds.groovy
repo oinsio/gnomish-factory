@@ -9,9 +9,9 @@ import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskRepository
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
@@ -30,6 +30,13 @@ import java.nio.file.Path
  *
  * <p>Every kill point gets its own freshly built world (its own temp subdirectory), so one window's
  * repair never seeds the next window's premise.
+ *
+ * <p>Each world builds its own {@link ClaimEpochBook} and hands it to the lifecycle writer it
+ * creates — one record per simulated instance, never a claimless source (FR5, design D3 of
+ * fix-claim-epoch-fence). The creation world therefore holds two, because it simulates two
+ * instances: the one that dies mid-creation and the one that picks the task up. A world that
+ * records no claim leaves its book unfilled, and its commits carry no epoch trailer — the same
+ * shape the plain {@code gnomish run} path has in production.
  */
 trait KillPointWorlds implements BareGitRepoFixture {
 
@@ -37,13 +44,11 @@ trait KillPointWorlds implements BareGitRepoFixture {
 
     /** The host medium: a real working clone, worktrees, {@link GitTaskRepository}. */
     KillPointWorld hostWorld(Path root) {
-        Path clone = initWorkingRepo(root, 'my-project')
-        Files.createDirectories(clone.resolve('.gnomish'))
-        Files.writeString(clone.resolve('.gnomish/instructions.md'), 'build it\n')
-        commitAll(clone, 'init')
-        def store = new GitTaskRepository(
-                new GitProcessRunner(), clone, root.resolve('worktrees-root'), ClaimEpochSource.NONE)
-        seed(clone, store, 'HEAD')
+        Path clone = initGnomishClone(root, 'my-project')
+        Path worktreesRoot = root.resolve('worktrees-root')
+        def epochs = new ClaimEpochBook()
+        def store = new GitTaskRepository(new GitProcessRunner(), clone, worktreesRoot, epochs)
+        seed(clone, store, epochs, 'HEAD', worktreesRoot.resolve('my-project').resolve(TASK_ID))
     }
 
     /** The container medium: a real bare repo written through {@link GitObjectsTaskRepository}. */
@@ -66,7 +71,8 @@ trait KillPointWorlds implements BareGitRepoFixture {
         gitOutput(work, 'push', 'origin', 'HEAD:refs/heads/base')
         Path index = root.resolve('index')
         Files.createDirectories(index)
-        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), ClaimEpochSource.NONE, cursors), 'base')
+        def epochs = new ClaimEpochBook()
+        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), epochs, cursors), epochs, 'base', null)
     }
 
     /**
@@ -95,10 +101,10 @@ trait KillPointWorlds implements BareGitRepoFixture {
                 origin: origin,
                 creatingClone: creating,
                 creating: new GitTaskRepository(
-                        runner, creating, root.resolve('creating-worktrees'), ClaimEpochSource.NONE),
+                        runner, creating, root.resolve('creating-worktrees'), new ClaimEpochBook()),
                 recovering: new PushBestEffortTaskRepository(
                         new GitTaskRepository(
-                                runner, recovering, root.resolve('recovering-worktrees'), ClaimEpochSource.NONE),
+                                runner, recovering, root.resolve('recovering-worktrees'), new ClaimEpochBook()),
                         runner,
                         recovering),
                 recoveringClone: recovering,
@@ -148,16 +154,36 @@ trait KillPointWorlds implements BareGitRepoFixture {
         world
     }
 
-    private KillPointWorld seed(Path repoDir, TaskLifecycleStore store, String baseRef) {
+    /** A working clone with a minimal {@code .gnomish/} committed, ready for {@code createTask}. */
+    private Path initGnomishClone(Path root, String name) {
+        Path clone = initWorkingRepo(root, name)
+        Files.createDirectories(clone.resolve('.gnomish'))
+        Files.writeString(clone.resolve('.gnomish/instructions.md'), 'build it\n')
+        commitAll(clone, 'init')
+        clone
+    }
+
+    private KillPointWorld seed(
+            Path repoDir, TaskLifecycleStore store, ClaimEpochBook epochs, String baseRef, Path worktree) {
         def tracker = new InMemoryTracker()
         def trackerHarness = new InMemoryTrackerHarness(tracker)
         def instanceId = new InstanceId('gnomish-factory', 'kp0001')
         def ref = new TaskRef(TASK_ID)
         trackerHarness.seedWorkingWithClaim(tracker, ref, instanceId.value())
+        // The seeded claim's epoch goes into the world's own record BEFORE the first write, exactly
+        // as EpochRecordingTracker fills it at a live claim — so every commit this world lands
+        // carries the tenure that wrote it, and a reclaim row is reading a genuinely stamped tip
+        // rather than an unstamped one that would pass for the wrong reason (FR6 of
+        // fix-claim-epoch-fence, `testing.md`: adversarial fixtures).
+        epochs.issued(TASK_ID, tracker.listOpen().find {
+            it.ref() == ref
+        }.facts().claim().liveVersion().epoch())
         store.createTask(new TaskContext(TASK_ID, 'title', 'body', []), TaskStart.commit(repoDir, baseRef), TaskStart.pin(baseRef, BaseRule.EXPLICIT_ARGUMENT), TaskState.atStageStart('build'))
         new KillPointWorld(
                 repoDir: repoDir,
                 store: store,
+                epochs: epochs,
+                worktree: worktree,
                 taskId: TASK_ID,
                 ref: ref,
                 instanceId: instanceId,

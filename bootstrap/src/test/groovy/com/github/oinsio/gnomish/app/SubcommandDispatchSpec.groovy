@@ -7,9 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
@@ -58,8 +56,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
                 testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(),
-                { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook())
+                { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
     }
 
     private BoardCommand newBoardCommand() {
@@ -73,7 +70,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     }
 
     def dispatch = new SubcommandDispatch(
-    new StatusCommand(TaskGitFixture.real(), worktreesRoot), new UsageCommand(TaskGitFixture.real()), newTakeCommand(), newServeCommand(),
+    new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot), new UsageCommand(TaskGitFixture.realClaimless()), newTakeCommand(), newServeCommand(),
     newBoardCommand(), newDashboardCommand())
 
     // FR13: 'status' actually reaches StatusCommand#run (PIT: VoidMethodCallMutator survivor) —
@@ -124,7 +121,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         def runner = new GitProcessRunner()
         new File(cloneDir.toFile(), 'a.txt').text = 'first'
         commitAll(cloneDir)
-        new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'), ClaimEpochSource.NONE)
+        new GitTaskRepository(runner, cloneDir, worktreesRoot.resolve('worktrees'), TaskGitFixture.real().epochs())
                 .createTask(new TaskContext('PROJ-1', 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
 
         def args = new DefaultApplicationArguments('usage', "--dir=${cloneDir}".toString(), 'PROJ-1')
@@ -224,8 +221,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                         MapSecretsProvider.NONE,
                         TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                             starterInvoked.set(true)
-                        } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
-                        new ClaimEpochBook()),
+                        } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly()),
                 dispatch.boardCommand(), dispatch.dashboardCommand())
         def args = new DefaultApplicationArguments('serve', "--dir=${worktreesRoot}".toString())
 

@@ -30,12 +30,12 @@ final class TipEnvelopeReader {
      *     TipEnvelopeRead.Loaded} with both envelope texts
      */
     TipEnvelopeRead read(BranchTipSource source) {
-        BranchShape shape = classifier.classify(facts.read(source, null));
+        Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
+        Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
+        BranchShape shape = classifier.classify(facts.factsFrom(taskJson, stateJson, source.cleanupCommitInHistory()));
         if (!shape.tipCarriesState()) {
             return new TipEnvelopeRead.NoState(shape);
         }
-        Optional<String> taskJson = source.readAtTip(TASK_JSON_PATH);
-        Optional<String> stateJson = source.readAtTip(STATE_JSON_PATH);
         if (taskJson.isEmpty() || stateJson.isEmpty()) {
             // A pre-contract Created tip (FR3): identity without state, or state without identity.
             return new TipEnvelopeRead.NoState(shape);

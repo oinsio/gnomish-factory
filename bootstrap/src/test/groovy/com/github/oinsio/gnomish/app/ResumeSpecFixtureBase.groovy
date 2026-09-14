@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -41,6 +41,16 @@ abstract class ResumeSpecFixtureBase extends Specification implements BareGitRep
     Path cloneDir
     Path worktreesRoot
     def gitRunner = new GitProcessRunner()
+
+    /**
+     * The production-shaped bundle every runner built here drives, and with it the one tenure
+     * record this spec instance owns (FR5, design D3 of fix-claim-epoch-fence): the helper writers
+     * below stamp from {@code taskGit.epochs()}, so a branch seeded by the fixture and a branch
+     * written by the run under test can never carry epochs from two different records. A spec that
+     * holds no claim leaves the record unfilled and its commits unstamped, exactly as plain {@code
+     * gnomish run} does in production.
+     */
+    protected final TaskGit taskGit = TaskGitFixture.real()
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
@@ -84,7 +94,7 @@ tracker:
     }
 
     protected GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
+        new GitTaskRepository(gitRunner, cloneDir, worktreesRoot, taskGit.epochs())
     }
 
     protected Path expectedWorktree(String taskDir) {
@@ -106,7 +116,7 @@ tracker:
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
     protected void persistOneRound(String taskId, TaskState state) {
         def worktree = expectedWorktree(taskId)
-        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
+        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, taskGit.epochs())
         def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))

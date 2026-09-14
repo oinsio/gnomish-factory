@@ -9,9 +9,12 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Path
 
 /**
@@ -35,6 +38,20 @@ class KillPointWorld implements BareGitRepoFixture {
     /** The lifecycle writer under test — the medium's own realization of the write protocol. */
     TaskLifecycleStore store
 
+    /**
+     * This world's tenure record, holding the epoch its seeded claim was issued (FR4, FR6 of
+     * fix-claim-epoch-fence) — the same book {@link #store} stamps from, so every commit the world
+     * lands carries the tenure that wrote it. A reclaim row reads it to prove the tip it hands the
+     * next instance really is stamped by an ended tenure.
+     */
+    ClaimEpochBook epochs
+
+    /**
+     * The host medium's materialized worktree, where a round is persisted and salvaged from;
+     * {@code null} for the container medium, whose rounds are written inside a box.
+     */
+    Path worktree
+
     String taskId
 
     TaskRef ref
@@ -47,7 +64,14 @@ class KillPointWorld implements BareGitRepoFixture {
 
     /** The classified shape's label, read through the production classifier over the real tip. */
     String shape() {
-        new GitTaskBranches(new GitProcessRunner()).classifyShape(repoDir, taskId).label()
+        new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE).classifyShape(repoDir, taskId).label()
+    }
+
+    /** The claim epoch stamped on the branch tip, or {@code null} when the tip carries no trailer. */
+    ClaimEpoch tipEpoch() {
+        def matcher = gitOutput(repoDir, 'log', '-1', '--format=%B', "gnomish/${taskId}") =~
+                /(?m)^Gnomish-Claim-Epoch: (\d+)$/
+        matcher ? new ClaimEpoch(Long.parseLong(matcher[0][1] as String)) : null
     }
 
     /** The tip's {@code task.json}, or {@code null} once the cleanup commit removed the envelope. */

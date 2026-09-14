@@ -7,7 +7,7 @@ package com.github.oinsio.gnomish.domain.branch;
  * enum names the components that table points at, and {@link BranchShape#recoveryOwner()} realizes
  * the mapping.
  *
- * <p>Implements FR1, FR2 of harden-task-branch-contract.
+ * <p>Implements FR1, FR2 of harden-task-branch-contract; FR1 of fix-claim-epoch-fence.
  */
 public enum RecoveryOwner {
 
@@ -22,9 +22,6 @@ public enum RecoveryOwner {
 
     /** The completion-finish flow: cleanup, push, tracker finish — never a re-entry of the engine. */
     COMPLETION_FINISH,
-
-    /** The replica-pair reconciler: discards artifacts that lost to the live claim's tip. */
-    REPLICA_RECONCILER,
 
     /** The recovery budget: quarantines to the needs-human status with a diagnosis. */
     RECOVERY_BUDGET,

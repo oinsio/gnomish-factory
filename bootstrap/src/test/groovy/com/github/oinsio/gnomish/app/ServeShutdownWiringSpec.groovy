@@ -8,7 +8,6 @@ import ch.qos.logback.classic.util.LogbackMDCAdapter
 import ch.qos.logback.core.FileAppender
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.lease.ReaperDuty
 import com.github.oinsio.gnomish.app.lease.StandingReaper
@@ -137,7 +136,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         new TakeSlotRunner(
                 newAssembly(), TaskGitFixture.real(), cloneDir, worktreesRoot, pipeline(), abortHandler, 3, 'taskId',
                 [], ClaimBeat.NONE, new ClaimLossFlag(), tracker, INSTANCE, ContainerTakeSupport.hostOnly(),
-                new ClaimEpochBook(), new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')),
+                new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')),
                 // real-time-wiring: the gate is an inert collaborator here — it holds no Sleeper, and
                 //     over BaseRefGit.UNWIRED no probe ever runs, so its SystemClock is only read to
                 //     stamp a transition this spec never drives.
@@ -168,27 +167,8 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // arguments exercise genuine collaborators rather than a mock.
     private ObservabilityWiring newObservability() {
         def clock = Clock.systemUTC()
-        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         def lifecycleTracker = new LifecycleStateTracker(clock.instant())
-        def snapshotWriter = new SnapshotWriter(
-                tempDir.resolve('snapshot.json'),
-                { -> fixtureSnapshot(lifecycleTracker) },
-                new SnapshotJsonMapper(), Duration.ofSeconds(30), clock, 0)
-        def appender = new RotatingLedgerAppender(
-                new LedgerAppender(tempDir.resolve('placeholder'), new LedgerJsonMapper()), tempDir, 'gnomish', clock)
-        def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
-        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
-        snapshotWriter.start()
-        new ObservabilityWiring(
-                lifecycleTracker,
-                snapshotWriter,
-                lifecycleLedgerWriter,
-                taskOutcomeLedgerWriter,
-                new SweepLedgerWriter(appender, instance, clock),
-                new RemoteOutageLedgerWriter(appender, instance),
-                appender,
-                instance,
-                clock)
+        buildObservability(lifecycleTracker, clock, '', 'gnomish')
     }
 
     // Task 6.3: same as newObservability(), but the lifecycleTracker's DirtyNotifier records every
@@ -198,32 +178,12 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // ran; the recorded sequence can.
     private ObservabilityWiring newObservability(List<DaemonLifecycleState> recordedStates) {
         def clock = Clock.systemUTC()
-        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         LifecycleStateTracker lifecycleTracker
         def notifier = {
             -> recordedStates << lifecycleTracker.view().state()
         } as DirtyNotifier
         lifecycleTracker = new LifecycleStateTracker(clock.instant(), notifier)
-        def snapshotWriter = new SnapshotWriter(
-                tempDir.resolve('snapshot-recording.json'),
-                { -> fixtureSnapshot(lifecycleTracker) },
-                new SnapshotJsonMapper(), Duration.ofSeconds(30), clock, 0)
-        def appender = new RotatingLedgerAppender(
-                new LedgerAppender(tempDir.resolve('placeholder-recording'), new LedgerJsonMapper()),
-                tempDir, 'gnomish-recording', clock)
-        def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
-        def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
-        snapshotWriter.start()
-        new ObservabilityWiring(
-                lifecycleTracker,
-                snapshotWriter,
-                lifecycleLedgerWriter,
-                taskOutcomeLedgerWriter,
-                new SweepLedgerWriter(appender, instance, clock),
-                new RemoteOutageLedgerWriter(appender, instance),
-                appender,
-                instance,
-                clock)
+        buildObservability(lifecycleTracker, clock, '-recording', 'gnomish-recording')
     }
 
     // Task 6.3, FR12/FR13: an observability whose lifecycleTracker fires the captured shutdown hook
@@ -233,7 +193,6 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // reads is already true, so the flag's value is observable in the finalized reason.
     private ObservabilityWiring newObservabilityFiringHookOnStopping(AtomicReference<Thread> hookRef) {
         def clock = Clock.systemUTC()
-        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         def lifecycleTracker
         def notifier = {
             ->
@@ -245,13 +204,22 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
             }
         } as DirtyNotifier
         lifecycleTracker = new LifecycleStateTracker(clock.instant(), notifier)
+        buildObservability(lifecycleTracker, clock, '-hookfire', 'gnomish-hookfire')
+    }
+
+    // Shared construction for the three newObservability* fixtures above: only the lifecycleTracker
+    // (and its notifier) differs between them, so the snapshot/ledger wiring lives once here,
+    // parameterized by a file-name suffix and ledger prefix so each fixture keeps its own files.
+    private ObservabilityWiring buildObservability(
+            LifecycleStateTracker lifecycleTracker, Clock clock, String suffix, String ledgerPrefix) {
+        def instance = new InstanceInfo('gnomish-ab12cd', 'worker-1', '0.1.0')
         def snapshotWriter = new SnapshotWriter(
-                tempDir.resolve('snapshot-hookfire.json'),
+                tempDir.resolve("snapshot${suffix}.json"),
                 { -> fixtureSnapshot(lifecycleTracker) },
                 new SnapshotJsonMapper(), Duration.ofSeconds(30), clock, 0)
         def appender = new RotatingLedgerAppender(
-                new LedgerAppender(tempDir.resolve('placeholder-hookfire'), new LedgerJsonMapper()),
-                tempDir, 'gnomish-hookfire', clock)
+                new LedgerAppender(tempDir.resolve("placeholder${suffix}"), new LedgerJsonMapper()),
+                tempDir, ledgerPrefix, clock)
         def lifecycleLedgerWriter = new LifecycleLedgerWriter(appender, instance, clock)
         def taskOutcomeLedgerWriter = new TaskOutcomeLedgerWriter(new SlotLedger(1), appender, instance, clock)
         snapshotWriter.start()

@@ -73,8 +73,10 @@ public interface TrackerAdapterFactory {
      * adapter-optional: a tracker whose writes are already atomic (the in-memory reference) has no
      * frozen intermediate state to attribute, and a tracker with its own monotonic source may
      * choose to carry the epoch differently. An adapter whose writes are physically non-atomic —
-     * the GitHub adapter — overrides this method and stamps every marker it writes, so a reader can
-     * classify an artifact of a superseded tenure as stale rather than as current truth.
+     * the GitHub adapter — overrides this method and stamps every marker it writes, so a reader of
+     * a frozen intermediate state can tell which tenure left it. The stamp is provenance, not a
+     * fence: a superseded holder's writes are stopped by the fast-forward-only push on the branch
+     * and by the round-boundary revocation check at the tracker.
      *
      * <p>Implementations override <em>this</em> method, never both: the three-argument form stays
      * the caller-facing entry point and always routes here.

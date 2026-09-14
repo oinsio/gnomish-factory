@@ -107,6 +107,28 @@ The marker goes on the call's own line or in the comment block directly above it
 justification lives beside the call rather than in a central allowlist — the same shape
 `@DoNotMutate` uses for the mutation gate.
 
+## Fixtures assemble through production owners
+
+A decorator, a wrapper, or a wiring step applied only at the composition root is **not**
+covered by end-to-end specs that assemble the commands by hand. Each such spec builds its own
+graph, skips the root, and stays green over an assembly production never runs — so the flow the
+spec claims to exercise is not the flow that ships.
+
+The failure this exists for: the claim epoch was recorded by a tracker decorator and stamped by
+a git layer, each wired in its own Spring bean, while every lifecycle fixture built a raw
+registry and a claimless git layer. No commit was stamped in any test, so the read-side fence
+that quarantined every legitimate reclaim in production was invisible (`fix-claim-epoch-fence`).
+
+- **The owner is a value the command receives**, not a step an assembler is expected to perform.
+  A bundle the command already takes (`TaskGit` carries the `ClaimEpochBook`) makes the wrong
+  assembly unconstructible — the "escape hatch is gone" item of `implementation.md`.
+- **An architecture spec pins the fixture path**, per `implementation.md` item 4 ("Enforcement
+  named"): an allowlisted whole-tree scan over the test sources, asserting it reached every
+  allowlisted file, so the next fixture that bypasses the owner fails the build rather than
+  passing quietly. `ClaimlessGitBoundarySpec` in `:bootstrap` is the precedent.
+- **A fixture that legitimately needs the claimless variant says so in its name**
+  (`TaskGitFixture.realClaimless()`) and is listed in the scan with its reason.
+
 ## Rules
 
 - Maximize automated verification in task plans — avoid manual testing steps

@@ -2,8 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
-import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
@@ -12,20 +10,19 @@ import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 
 /**
- * The pipeline-load and tracker-resolution helpers the tracker-facing commands need before they
- * can dispatch (task 5.13): the working-tree load {@code board} and {@code dashboard} keep
- * (mirroring {@link PipelineStartup#load}, but narrower), the FR17 no-{@code tracker:}-section
- * refusal, and resolving a live {@link Tracker} from the {@link TrackerAdapterFactory} registry by
- * {@code tracker.type}. The startup load of {@code take} and {@code serve} moved to {@link
- * TrustedTierStartup} (FR13 of add-base-ref-resolution). Split out of {@link TakeCommand} purely to keep that class within the project's
- * file-size target (`.claude/rules/process-invariants.md`).
+ * The pipeline-load helpers the tracker-facing commands need before they can dispatch (task
+ * 5.13): the working-tree load {@code board} and {@code dashboard} keep (mirroring {@link
+ * PipelineStartup#load}, but narrower), the startup sandbox-lifecycle sweep, and the FR17
+ * no-{@code tracker:}-section refusal. The startup load of {@code take} and {@code serve} moved
+ * to {@link TrustedTierStartup} (FR13 of add-base-ref-resolution). Resolving a live {@link
+ * com.github.oinsio.gnomish.app.port.tracker.Tracker} from the {@link TrackerAdapterFactory}
+ * registry moved to {@link TrackerResolution}, split out purely to keep this class within the
+ * project's file-size target (`.claude/rules/process-invariants.md`).
  *
- * <p>Implements FR9, FR17 of add-tracker-port.
+ * <p>Implements FR17 of add-tracker-port.
  */
 final class TakeCommandSupport {
 
@@ -95,60 +92,5 @@ final class TakeCommandSupport {
                     + " 'tracker' section (FR17) — add one to use tracker-driven tasks, or use 'gnomish run' instead");
         }
         return trackerConfig;
-    }
-
-    /**
-     * Resolves the registered {@link TrackerAdapterFactory} for {@code trackerConfig.type()} (task
-     * 5.13's seam), the single lookup {@link #resolveTracker} and {@link TakeCommand}'s own
-     * short-ref expansion both need — kept as one method so the "no adapter registered" refusal is
-     * worded identically everywhere it can be hit.
-     *
-     * @param trackerConfig the project's validated {@code tracker} section; never null
-     * @param registry known tracker adapter factories, keyed by {@code tracker.type}; never null
-     * @return the registered factory for {@code trackerConfig.type()}
-     * @throws UsageException if no factory is registered for {@code trackerConfig.type()}
-     */
-    static TrackerAdapterFactory resolveFactory(
-            TrackerConfig trackerConfig, Map<String, TrackerAdapterFactory> registry) {
-        TrackerAdapterFactory factory = registry.get(trackerConfig.type());
-        if (factory == null) {
-            throw new UsageException(
-                    "unknown tracker type '" + trackerConfig.type() + "' — supported: " + supportedTypes(registry));
-        }
-        return factory;
-    }
-
-    /**
-     * Resolves a live {@link Tracker} from {@code registry} by {@code trackerConfig.type()} (task
-     * 5.13's seam).
-     *
-     * @param trackerConfig the project's validated {@code tracker} section; never null
-     * @param registry known tracker adapter factories, keyed by {@code tracker.type}; never null
-     * @param secrets the seam the resolved adapter reads its credentials through — supplied here
-     *     rather than captured in the factory, which {@code ServiceLoader} builds with no args
-     *     (FR2, design D2 of add-plugin-architecture); never null
-     * @param instanceId this process's minted {@code InstanceId} value, passed through to the
-     *     resolved factory's {@link TrackerAdapterFactory#create} (task 5.15); never null
-     * @return a live {@link Tracker} for {@code trackerConfig.type()}
-     * @throws UsageException if no factory is registered for {@code trackerConfig.type()}
-     */
-    static Tracker resolveTracker(
-            TrackerConfig trackerConfig,
-            Map<String, TrackerAdapterFactory> registry,
-            SecretsProvider secrets,
-            String instanceId) {
-        return resolveFactory(trackerConfig, registry).create(secrets, trackerConfig, instanceId);
-    }
-
-    /**
-     * Renders the registered {@code tracker.type} keys as a stable, comma-separated list for the
-     * "unknown tracker type" operator message — sorted so the hint reads the same on every run
-     * regardless of registry iteration order.
-     *
-     * @param registry known tracker adapter factories, keyed by {@code tracker.type}; never null
-     * @return the sorted type keys joined by {@code ", "} (e.g. {@code "github, inmemory"})
-     */
-    static String supportedTypes(Map<String, TrackerAdapterFactory> registry) {
-        return registry.keySet().stream().sorted().collect(Collectors.joining(", "));
     }
 }

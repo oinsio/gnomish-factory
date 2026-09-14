@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import java.util.Optional;
 
 /**
@@ -30,17 +29,6 @@ public interface BranchTipSource {
      * @return the file's text, or empty when the tip does not carry it
      */
     Optional<String> readAtTip(String path);
-
-    /**
-     * The claim epoch stamped on the tip commit, read from its {@link ClaimEpochTrailer} (FR13).
-     *
-     * <p>Empty is a legal, ordinary answer, not a fault: a tip written before epochs were stamped,
-     * or by a writer holding no claim, simply stands outside the fence — the classifier then judges
-     * it on content alone rather than calling it stale.
-     *
-     * @return the tip's epoch, or empty when it carries none this factory can read
-     */
-    Optional<ClaimEpoch> tipEpoch();
 
     /**
      * Whether the cleanup commit appears anywhere in the branch's history — the delivery test,

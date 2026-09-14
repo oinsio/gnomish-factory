@@ -1,18 +1,18 @@
 package com.github.oinsio.gnomish.domain.branch;
 
 /**
- * The classification of a task branch tip: its file set, envelope versions, and claim epoch mapped
- * to exactly one name from a closed set of eleven. Sealed, so every reader switches without a
- * default branch and adding a shape fails the build until each reader names it (FR2).
+ * The classification of a task branch tip: its file set and envelope versions mapped to exactly one
+ * name from a closed set of ten. Sealed, so every reader switches without a default branch and
+ * adding a shape fails the build until each reader names it (FR2).
  *
  * <p>The shapes and their meanings are owned by the {@code task-branch-contract} capability, in its
  * "Total branch-shape classification" requirement — this type realizes that table and does not
  * restate it. The recovery owner and roll-forward/discard disposition per shape are owned by {@code
  * docs/adr/0003-crash-consistency.md} and realized by {@link #recoveryOwner()} / {@link
  * #disposition()}, which keep the whole mapping readable in one place rather than scattered over
- * eleven bodies.
+ * ten bodies.
  *
- * <p>Implements FR1, FR2, FR15 of harden-task-branch-contract.
+ * <p>Implements FR1, FR2, FR15 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence.
  */
 public sealed interface BranchShape {
 
@@ -42,9 +42,6 @@ public sealed interface BranchShape {
 
     /** Cleanup completed — found in history, so commits made after cleanup do not hide it. */
     record Delivered() implements BranchShape {}
-
-    /** The tip's artifacts carry a claim epoch older than the live claim. */
-    record StaleEpoch() implements BranchShape {}
 
     /**
      * An envelope declares a version this factory does not support — its own shape, never a flavour
@@ -82,7 +79,6 @@ public sealed interface BranchShape {
             case Parked() -> RecoveryOwner.TERMINAL_TRANSITION;
             case CompletedUncleaned() -> RecoveryOwner.COMPLETION_FINISH;
             case Delivered() -> RecoveryOwner.NONE;
-            case StaleEpoch() -> RecoveryOwner.REPLICA_RECONCILER;
             case UnsupportedVersion ignoredVersion -> RecoveryOwner.RECOVERY_BUDGET;
             case Corrupt ignoredCorrupt -> RecoveryOwner.RECOVERY_BUDGET;
             case Unknown ignoredUnknown -> RecoveryOwner.RECOVERY_BUDGET;
@@ -100,7 +96,6 @@ public sealed interface BranchShape {
             case Bare(), Created(), InProgress(), Parked(), Answered(), CompletedUncleaned() ->
                 RecoveryDisposition.ROLL_FORWARD;
             case Delivered() -> RecoveryDisposition.TERMINAL;
-            case StaleEpoch() -> RecoveryDisposition.DISCARD;
             case UnsupportedVersion ignoredVersion -> RecoveryDisposition.QUARANTINE;
             case Corrupt ignoredCorrupt -> RecoveryDisposition.QUARANTINE;
             case Unknown ignoredUnknown -> RecoveryDisposition.QUARANTINE;
@@ -122,7 +117,7 @@ public sealed interface BranchShape {
      */
     default boolean tipCarriesState() {
         return switch (this) {
-            case Created(), InProgress(), Parked(), Answered(), CompletedUncleaned(), StaleEpoch() -> true;
+            case Created(), InProgress(), Parked(), Answered(), CompletedUncleaned() -> true;
             case Bare(), Delivered() -> false;
             case UnsupportedVersion ignoredVersion -> false;
             case Corrupt ignoredCorrupt -> false;
@@ -149,7 +144,7 @@ public sealed interface BranchShape {
     default boolean isClean() {
         return switch (this) {
             case Created(), InProgress(), Answered(), Delivered() -> true;
-            case Bare(), Parked(), CompletedUncleaned(), StaleEpoch() -> false;
+            case Bare(), Parked(), CompletedUncleaned() -> false;
             case UnsupportedVersion ignoredVersion -> false;
             case Corrupt ignoredCorrupt -> false;
             case Unknown ignoredUnknown -> false;

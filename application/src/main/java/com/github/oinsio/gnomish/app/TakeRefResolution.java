@@ -28,7 +28,7 @@ final class TakeRefResolution {
         TrackerAdapterFactory factory = registry.get(trackerConfig.type());
         if (factory == null) {
             throw new UsageException("cannot expand short ref '" + ref + "': unknown tracker type '"
-                    + trackerConfig.type() + "' — supported: " + TakeCommandSupport.supportedTypes(registry));
+                    + trackerConfig.type() + "' — supported: " + TrackerResolution.supportedTypes(registry));
         }
         return factory.expandRef(trackerConfig, ref);
     }

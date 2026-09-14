@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import spock.lang.Specification
 
@@ -19,11 +18,6 @@ class TipRecordedDenialsSpec extends Specification {
                     @Override
                     Optional<String> readAtTip(String path) {
                         path.endsWith('task.json') ? Optional.ofNullable(taskJson) : Optional.ofNullable(stateJson)
-                    }
-
-                    @Override
-                    Optional<ClaimEpoch> tipEpoch() {
-                        Optional.empty()
                     }
 
                     @Override

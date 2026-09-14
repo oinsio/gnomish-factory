@@ -76,7 +76,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         assert originTip() == Optional.empty()
 
         when: 'any instance later touches the task'
-        new GitTaskBranches(runner).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
+        new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
 
         then: 'origin now carries the park commit — healed without the crashed instance coming back'
         originTip() == Optional.of(localTip())
@@ -92,7 +92,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         assert originTip() == deliveredTip
 
         when:
-        new GitTaskBranches(runner).reconcileRemote(cloneDir, TASK_ID, 'terminal-boundary')
+        new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, TASK_ID, 'terminal-boundary')
 
         then:
         originTip() == Optional.of(localTip())
@@ -105,7 +105,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
 
         when:
         def events = capture {
-            new GitTaskBranches(runner).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
+            new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, TASK_ID, 'resume-start')
         }
 
         then:
@@ -116,7 +116,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     def "a task with no local branch is nothing to reconcile"() {
         when:
         def events = capture {
-            new GitTaskBranches(runner).reconcileRemote(cloneDir, 'NO-SUCH', 'resume-start')
+            new GitTaskBranches(runner, ClaimEpochSource.NONE).reconcileRemote(cloneDir, 'NO-SUCH', 'resume-start')
         }
 
         then:

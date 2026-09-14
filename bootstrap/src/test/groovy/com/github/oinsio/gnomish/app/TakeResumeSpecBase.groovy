@@ -81,7 +81,7 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
             FactoryProperties factoryProperties = testProperties(),
             List<String> credentialEnvVarsToScrub = [],
             ClaimLossFlag claimLossFlag = new ClaimLossFlag(),
-            TaskGit git = TaskGitFixture.real()) {
+            TaskGit git = taskGit) {
         def assembly = newAssembly(input, System.out, factoryProperties)
         def abortHandler = new AbortHandler(tracker, Clock.systemUTC())
         new TakeResumeRunner(
@@ -94,6 +94,6 @@ abstract class TakeResumeSpecBase extends ResumeSpecFixtureBase {
      */
     protected TakeDecisionResume<ResumeBootstrap> newDecisionResume(
             TakeResumeRunner runner, PipelineDefinition definition) {
-        new TakeDecisionResume<>(new HostResumeMechanics(runner, TaskGitFixture.real(), worktreesRoot, definition))
+        new TakeDecisionResume<>(new HostResumeMechanics(runner, taskGit, worktreesRoot, definition))
     }
 }

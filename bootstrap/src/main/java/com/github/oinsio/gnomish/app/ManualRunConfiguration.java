@@ -127,7 +127,11 @@ public class ManualRunConfiguration {
                 rounds -> new MidRoundPushRounds(rounds, gitProcessRunner),
                 // FR5, FR6 of add-base-ref-resolution: default-branch discovery and the narrow base
                 // refresh, under the production git infrastructure retry.
-                new GitBaseRefs(gitProcessRunner, GitInfrastructureRetry.system()));
+                new GitBaseRefs(gitProcessRunner, GitInfrastructureRetry.system()),
+                // FR4, design D2 of fix-claim-epoch-fence: the same book the three writers above
+                // stamp from travels inside the bundle, so the claiming commands wrap their
+                // resolved tracker with the record their own writers read.
+                claimEpochBook);
     }
 
     /**

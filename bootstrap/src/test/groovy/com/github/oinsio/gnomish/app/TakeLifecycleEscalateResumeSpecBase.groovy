@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -46,6 +47,7 @@ import spock.lang.TempDir
 abstract class TakeLifecycleEscalateResumeSpecBase extends Specification implements TwoInstanceTakeFixture {
 
     protected static final TaskRef REF = new TaskRef('PROJ-1')
+    protected static final String TASK_BRANCH = 'gnomish/PROJ-1'
 
     @TempDir
     Path tempDir
@@ -59,10 +61,14 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
     /** Simulates the human side of the escalation: reply, then move the parked task back to Ready. */
     abstract void replyAndReturnToReady(TaskRef ref, String replyText)
 
+    /** The epochs this spec's tracker issued, in claim order — the first tenure's, then the second's. */
+    protected ClaimWatchingTrackerFactory claimWatcher
+
     def setup() {
         def seeded = seededReadyTrackerAndFactory(REF, 'Add widgets', 'please add widgets')
         tracker = seeded[0] as Tracker
-        trackerFactory = seeded[1] as TrackerAdapterFactory
+        claimWatcher = new ClaimWatchingTrackerFactory(seeded[1] as TrackerAdapterFactory)
+        trackerFactory = claimWatcher
         writeTwoInstanceProjectFixture()
     }
 
@@ -85,6 +91,11 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
 
         and: 'the environment fix lands in the shared worktree itself (not via any in-process state)'
         fixMissingFileInSharedWorktree()
+
+        and: 'the parked tip carries the FIRST tenure\'s epoch, exactly as the tracker issued it (FR3, FR6 of fix-claim-epoch-fence)'
+        def tipBeforeReclaim = gitOutput(projectDir, 'rev-parse', TASK_BRANCH)
+        def firstEpoch = claimWatcher.issuedEpochs[0]
+        assert stampOf(tipBeforeReclaim) == firstEpoch
 
         and: 'instance B — a second, freshly built TakeCommand sharing nothing in-process with instance A — takes the same ref'
         def instanceB = newCommand('instance-b')
@@ -110,6 +121,41 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         entries[4].contains('please retry, I fixed the environment')
         entries[5].startsWith('PROGRESS:')
         entries[6].startsWith('FINISH:')
+
+        and: 'every commit the SECOND tenure made carries the second epoch the tracker issued (FR3, FR6 of fix-claim-epoch-fence)'
+        def secondEpoch = claimWatcher.issuedEpochs[1]
+        secondEpoch != firstEpoch
+        def reclaimCommits = commitsSince(tipBeforeReclaim)
+        !reclaimCommits.isEmpty()
+        reclaimCommits.every { stampOf(it) == secondEpoch }
+
+        and: 'the reclaim resumed the parked branch on its own content rather than starting a second task on it — a tip stamped by an ended tenure is ordinary history, not a quarantine (FR2, FR6)'
+        reclaimCommits.every {
+            !subjectOf(it).startsWith('gnomish: task started')
+        }
+    }
+
+    /**
+     * The claim epoch stamped on {@code rev}'s commit message, read the way every other stamp
+     * assertion in this repo reads it — straight out of {@code git log -1 --format=%B}, never
+     * through an adapter reader, so the assertion survives the removal of the read-side parse
+     * (task 3.2 of fix-claim-epoch-fence).
+     */
+    protected ClaimEpoch stampOf(String rev) {
+        def matcher = gitOutput(projectDir, 'log', '-1', '--format=%B', rev) =~ /(?m)^Gnomish-Claim-Epoch: (\d+)$/
+        matcher ? new ClaimEpoch(Long.parseLong(matcher[0][1] as String)) : null
+    }
+
+    /** {@code rev}'s commit subject — the service message, without the epoch trailer below it. */
+    protected String subjectOf(String rev) {
+        gitOutput(projectDir, 'log', '-1', '--format=%s', rev).strip()
+    }
+
+    /** The commits {@code exclusiveFrom} does not already carry, oldest first — one tenure's work. */
+    private List<String> commitsSince(String exclusiveFrom) {
+        gitOutput(projectDir, 'log', '--reverse', '--format=%H', "${exclusiveFrom}..${TASK_BRANCH}")
+                .readLines()
+                .findAll { !it.isBlank() }
     }
 
     /**

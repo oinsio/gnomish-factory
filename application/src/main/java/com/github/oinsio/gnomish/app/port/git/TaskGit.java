@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import java.util.function.UnaryOperator;
 
@@ -33,21 +34,29 @@ import java.util.function.UnaryOperator;
  *     BaseRefGit#UNWIRED} in the port-fake specs of the claim chain, which never reaches a remote
  *     read — the resume chain always does (design D13), so its port-fake specs need a working
  *     stub, never {@code UNWIRED}; the real one comes from the composition root; never null
+ * @param epochs the process's tenure record: the one {@link ClaimEpochBook} the writers above stamp
+ *     their commits from, and the same book the claiming commands wrap their resolved tracker with
+ *     (FR4, design D2 of fix-claim-epoch-fence). It travels inside the bundle rather than beside it
+ *     because the stamping half and the recording half must be one object: an assembly whose
+ *     writers stamp one book while its tracker fills another looks wired and observes neither —
+ *     precisely how a read-side fence could fire on every production reclaim while every spec
+ *     stayed green. No constructor defaults it; never null
  */
 public record TaskGit(
         TaskStoreGit store,
         TaskBranchGit branches,
         TaskWorktreeGit worktrees,
         UnaryOperator<RoundEnvironmentSource> midRoundPush,
-        BaseRefGit baseRefs) {
+        BaseRefGit baseRefs,
+        ClaimEpochBook epochs) {
 
     /**
      * The dominant construction: no mid-round push decoration (identity) and no base-ref
      * capability. Keeps every pre-existing construction site — and any spec that needs neither —
-     * untouched.
+     * untouched but for the tenure record, which no form defaults.
      */
-    public TaskGit(TaskStoreGit store, TaskBranchGit branches, TaskWorktreeGit worktrees) {
-        this(store, branches, worktrees, UnaryOperator.identity());
+    public TaskGit(TaskStoreGit store, TaskBranchGit branches, TaskWorktreeGit worktrees, ClaimEpochBook epochs) {
+        this(store, branches, worktrees, UnaryOperator.identity(), epochs);
     }
 
     /** A push decoration without a base-ref capability: the specs of the mid-round push wiring. */
@@ -55,8 +64,9 @@ public record TaskGit(
             TaskStoreGit store,
             TaskBranchGit branches,
             TaskWorktreeGit worktrees,
-            UnaryOperator<RoundEnvironmentSource> midRoundPush) {
-        this(store, branches, worktrees, midRoundPush, BaseRefGit.UNWIRED);
+            UnaryOperator<RoundEnvironmentSource> midRoundPush,
+            ClaimEpochBook epochs) {
+        this(store, branches, worktrees, midRoundPush, BaseRefGit.UNWIRED, epochs);
     }
 
     /**
@@ -68,6 +78,6 @@ public record TaskGit(
      * @return a copy differing only in {@code baseRefs}; never null
      */
     public TaskGit withBaseRefs(BaseRefGit baseRefs) {
-        return new TaskGit(store, branches, worktrees, midRoundPush, baseRefs);
+        return new TaskGit(store, branches, worktrees, midRoundPush, baseRefs, epochs);
     }
 }

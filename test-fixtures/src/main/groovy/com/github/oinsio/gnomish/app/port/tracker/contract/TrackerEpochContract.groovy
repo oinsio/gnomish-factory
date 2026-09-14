@@ -18,8 +18,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
  * claim comment id, the in-memory reference its own rising sequence — so these properties are
  * stated over order alone and never over the token's structure.
  *
- * <p>The last link of the contract chain: both concrete adapter specs extend THIS class, so the
- * whole suite runs against both (M1).
+ * <p>Not the last link of the contract chain — {@link TrackerShapeFactsContract} and later links
+ * extend it — but both concrete adapter specs instantiate the full chain (via {@link
+ * TrackerReleaseContract}), so this suite runs against both (M1).
  *
  * <p>Implements FR13 of harden-task-branch-contract.
  */
@@ -27,7 +28,9 @@ abstract class TrackerEpochContract extends TrackerFinishContract {
 
     // FR13, tracker-port "Reclaim returns a greater token": a task claimed, reaped, and claimed
     //     again — by any instance — issues an epoch strictly greater than the tenure it replaced,
-    //     which is what lets a reader call the older tenure's artifacts stale
+    //     which is what makes the token a tenure ORDER and not merely a tenure name. Order is
+    //     read here and by a fenced tracker operation; no reader on the branch compares it
+    //     (fix-claim-epoch-fence FR1)
     def "a reclaim after a reap is issued a strictly greater epoch"() {
         given: 'a task held by instance-a, and the claim version a reaper observed'
         def tracker = arrange()
@@ -44,7 +47,7 @@ abstract class TrackerEpochContract extends TrackerFinishContract {
 
         then: 'the reclaim succeeded and carries an epoch strictly greater than the first tenure'
         reclaim instanceof ClaimResult.Acquired
-        ((ClaimResult.Acquired) reclaim).epoch() > first.epoch()
+        ((ClaimResult.Acquired) reclaim).epoch().token() > first.epoch().token()
     }
 
     // FR13, tracker-port "Token is observable by other instances": the epoch a holder was issued

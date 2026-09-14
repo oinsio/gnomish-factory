@@ -25,16 +25,17 @@ import java.util.List;
  *
  * <p>It ends at whichever comes first: the caller drops the claim ({@code release}), or a beat
  * reports the claim gone. Both mean the same thing — this instance no longer holds the task — and
- * recording it is what stops a superseded holder from stamping an epoch it no longer owns, the very
- * write the fence exists to catch.
+ * recording it keeps the stamp honest: a write made afterwards must not claim provenance of a
+ * tenure this instance no longer holds. What actually stops such a write is the medium's own fence
+ * — the fast-forward-only push on the branch, the round-boundary revocation check at the tracker.
  *
  * <p>A terminal write — {@code recordAbort}, {@code park}, {@code finish} — deliberately does NOT
  * end the tenure here, even though it ends the claim on the tracker. Those transitions still have
  * branch work behind them: the intent→effect→receipt protocol runs its receipt and its destructive
  * step (the park receipt commit, the finish cleanup commit) only once the tracker write has
  * confirmed, and those commits belong to the tenure that made them. Forgetting the epoch at the
- * tracker write left them unstamped — outside the fence, so a zombie's late cleanup commit could
- * not classify as {@code StaleEpoch}. The run-scoped end is where the tenure actually finishes:
+ * tracker write left them unstamped — the last commit of every tenure without the provenance that
+ * says who wrote it. The run-scoped end is where the tenure actually finishes:
  * {@code TakeClaimAndWork.dispatchAfterClaim}'s {@code finally}, the single claim-holding choke
  * point, which forgets it in the same breath that stops the beats.
  *

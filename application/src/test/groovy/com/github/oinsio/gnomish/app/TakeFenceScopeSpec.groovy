@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.OriginContact
-import com.github.oinsio.gnomish.app.port.git.ResumeBaseOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -67,22 +65,9 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         tracker.fetchTask(_) >> heldByUs()
     }
 
-    /**
-     * FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so the
-     * port-fake chain needs a working {@link BaseRefGit} rather than {@link BaseRefGit#UNWIRED} —
-     * the resolved tip echoes the pinned ref back, which is exactly today's placeholder SHA input.
-     */
-    private BaseRefGit resolvingBaseRefGit() {
-        Stub(BaseRefGit) {
-            resolveForResume(_, _, _) >> { cloneDir, ref, kind ->
-                new ResumeBaseOutcome.Bound(ref, ref, OriginContact.CONTACTED)
-            }
-        }
-    }
-
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
-        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), resolvingBaseRefGit())
+        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), resumingBaseRefGit(), new ClaimEpochBook())
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])), git,
         worktreesRoot, 'taskId', new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())
         def mechanics = new HostResumeMechanics(runner, git, worktreesRoot, completingPipeline())

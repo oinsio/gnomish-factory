@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.MonotonicTime;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
@@ -34,7 +33,8 @@ import org.springframework.boot.ApplicationArguments;
  * TakeExitCodeException} — never a direct {@code System.exit} (project convention).
  *
  * <p>Pipeline load, the FR17 no-{@code tracker:}-section refusal, and tracker-adapter resolution are
- * delegated to {@link TakeCommandSupport}; the explicit/bare dispatch to {@link TakeDispatcher} — both
+ * delegated to {@link TakeCommandSupport}; tracker-adapter resolution to {@link TrackerResolution};
+ * the explicit/bare dispatch to {@link TakeDispatcher} — all
  * split out for file size. A live {@link Tracker} and the {@link TakeHeartbeat} over it are resolved
  * per invocation, never as Spring {@code @Bean}s (which tracker adapter is active depends on the
  * project's own config, read per invocation like {@link PipelineDefinition} itself). The heartbeat's
@@ -66,9 +66,6 @@ final class TakeCommand {
     private final MonotonicTime heartbeatMonotonicTime;
     private final TakeoverConfirmation takeoverConfirmation;
     private final ServeProperties serveProperties;
-    // NFR-O1, FR13 of harden-task-branch-contract: this instance's tenure record, handed down to the
-    // routing point so a repair line names the claim epoch it runs under.
-    private final ClaimEpochBook epochs;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final ContainerTakeSupport containerTakeSupport;
 
@@ -103,8 +100,6 @@ final class TakeCommand {
      * @param serveProperties supplies batch mode's concurrency limit N ({@code factory.serve.slots}
      *     — FR2 of add-factory-serve: "the N limit applies to batch and serve", no separate batch
      *     flag); never null
-     * @param epochs this instance's tenure record, handed down to the routing point so a repair line
-     *     names the claim epoch it runs under (NFR-O1, FR13 of harden-task-branch-contract)
      * @param sandboxLifecyclePass the pre-dispatch sweep-lifecycle evaluation seam (FR6, NFR-O4 of
      *     add-serve-sandbox-lifecycle); {@code SandboxLifecyclePass.NONE} on a host-only install
      * @param containerTakeSupport the container-mode take support handed to {@link TakeDispatcher}
@@ -124,7 +119,6 @@ final class TakeCommand {
             MonotonicTime heartbeatMonotonicTime,
             TakeoverConfirmation takeoverConfirmation,
             ServeProperties serveProperties,
-            ClaimEpochBook epochs,
             SandboxLifecyclePass sandboxLifecyclePass,
             ContainerTakeSupport containerTakeSupport) {
         this.sandboxLifecyclePass = sandboxLifecyclePass;
@@ -143,7 +137,6 @@ final class TakeCommand {
         this.heartbeatMonotonicTime = heartbeatMonotonicTime;
         this.takeoverConfirmation = takeoverConfirmation;
         this.serveProperties = serveProperties;
-        this.epochs = epochs;
     }
 
     /**
@@ -173,8 +166,12 @@ final class TakeCommand {
             TrustedBaseContext trustedBase = new TrustedBaseContext(startupLaw.base(), startupLaw.defaultBranch());
             TrackerConfig trackerConfig = TakeCommandSupport.requireTrackerConfig(definition);
             InstanceId instanceId = InstanceId.generate(factoryProperties.instanceName());
-            TrackerAdapterFactory factory = TakeCommandSupport.resolveFactory(trackerConfig, trackerAdapterRegistry);
-            Tracker tracker = factory.create(secretsProvider, trackerConfig, instanceId.value());
+            TrackerAdapterFactory factory = TrackerResolution.resolveFactory(trackerConfig, trackerAdapterRegistry);
+            // FR4, design D2 of fix-claim-epoch-fence: the one funnel a claiming command resolves
+            // through — the adapter stamps from the bundle's book and the decorator fills the same
+            // book, so no assembly can stamp one record and record another.
+            Tracker tracker = TrackerResolution.resolveTracker(
+                    factory, trackerConfig, secretsProvider, instanceId.value(), git.epochs());
             List<String> credentialEnvVarsToScrub = factory.credentialEnvVars(trackerConfig);
 
             // Task 6.1 of add-claim-heartbeat (FR1): the instance heartbeat is built once per
@@ -213,7 +210,6 @@ final class TakeCommand {
                         secretsProvider,
                         takeoverConfirmation,
                         containerTakeSupport,
-                        epochs,
                         trustedBase);
                 TakeRefDispatch.run(
                         dispatcher,

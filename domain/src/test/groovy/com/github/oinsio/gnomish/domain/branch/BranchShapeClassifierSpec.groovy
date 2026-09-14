@@ -3,10 +3,10 @@ package com.github.oinsio.gnomish.domain.branch
 import spock.lang.Specification
 
 /**
- * FR1, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract: one classifier maps a tip's file
- * set, envelope versions and claim epoch onto exactly one named shape — including the pre-contract
- * tip, the unsupported version, the unreadable envelope and the unrecognized combination, none of
- * which may throw.
+ * FR1, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract, FR1 and FR2 of
+ * fix-claim-epoch-fence: one classifier maps a tip's file set and envelope versions onto exactly
+ * one named shape — including the pre-contract tip, the unsupported version, the unreadable
+ * envelope and the unrecognized combination, none of which may throw.
  */
 class BranchShapeClassifierSpec extends Specification {
 
@@ -19,9 +19,7 @@ class BranchShapeClassifierSpec extends Specification {
             recordedOutcome: RecordedTerminal.NONE,
             roundsRecorded: false,
             decisionsRecorded: false,
-            cleanupCommitInHistory: false,
-            tipEpoch: null,
-            liveEpoch: null
+            cleanupCommitInHistory: false
         ] + overrides
         new BranchTipFacts(
                 base.taskEnvelope as EnvelopeStatus,
@@ -29,9 +27,7 @@ class BranchShapeClassifierSpec extends Specification {
                 base.recordedOutcome as RecordedTerminal,
                 base.roundsRecorded as boolean,
                 base.decisionsRecorded as boolean,
-                base.cleanupCommitInHistory as boolean,
-                base.tipEpoch as ClaimEpoch,
-                base.liveEpoch as ClaimEpoch)
+                base.cleanupCommitInHistory as boolean)
     }
 
     // FR1: the happy-path progression, one row per shape it passes through.
@@ -72,30 +68,6 @@ class BranchShapeClassifierSpec extends Specification {
         classifier.classify(facts(
                         cleanupCommitInHistory: true,
                         stateEnvelope: new EnvelopeStatus.Unreadable('truncated'))) == new BranchShape.Delivered()
-    }
-
-    // FR13: an artifact older than the live claim is StaleEpoch regardless of what its content says.
-    def "a stale epoch outranks the content"() {
-        expect:
-        classifier.classify(facts(
-                        roundsRecorded: true,
-                        cleanupCommitInHistory: true,
-                        tipEpoch: new ClaimEpoch(1),
-                        liveEpoch: new ClaimEpoch(2))) == new BranchShape.StaleEpoch()
-    }
-
-    // FR13: an equal or newer tip epoch is this tenure's own writing, and a reader holding no claim
-    // (status, usage) has nothing to compare against.
-    def "an epoch that is not older classifies on content"() {
-        expect:
-        classifier.classify(facts(tipEpoch: tip, liveEpoch: live)) == new BranchShape.Created()
-
-        where:
-        tip | live
-        new ClaimEpoch(2) | new ClaimEpoch(2)
-        new ClaimEpoch(3) | new ClaimEpoch(2)
-        null | new ClaimEpoch(2)
-        new ClaimEpoch(1) | null
     }
 
     // FR15: an unsupported version is its own shape, and its diagnosis names the file and versions.

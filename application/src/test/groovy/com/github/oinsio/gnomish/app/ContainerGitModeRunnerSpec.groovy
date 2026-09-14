@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
@@ -50,7 +51,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
 
     private String run(String base = null) {
         def runner = new ContainerGitModeRunner(assemblyRunningLoop(executor),
-                new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit)),
+                new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new FactoryProperties(null, null, null, null, null), { _c, _t, _s, _sp, _fp, _def, _cred ->
                     support

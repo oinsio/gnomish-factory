@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
@@ -95,7 +96,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     private TaskGit git() {
-        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit)
+        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
     }
 
     /** The real routing chain, over the ports above. */
@@ -355,7 +356,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         }
         store.readTaskRecord(_) >> recordWith(null, null, false)
         tracker.fetchTask(_) >> heldByUs()
-        def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit)
+        def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(assemblyRunning(new ScriptedExecutor([completedRound()])),
         ownGit, worktreesRoot, 'taskId',
         new AbortHandler(tracker, FIXED_CLOCK), 3, [], new ClaimLossFlag())

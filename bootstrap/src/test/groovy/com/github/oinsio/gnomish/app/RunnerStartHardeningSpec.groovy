@@ -106,8 +106,9 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         given:
         Path clone = freshClone('container-fresh')
         gitOutput(clone, 'branch', 'gnomish/C-1', 'HEAD')
+        def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(), TaskGitFixture.real(), sandboxProperties(), testProperties(), ContainerSupportFixture.real())
+                newAssembly(), git, sandboxProperties(), testProperties(), ContainerSupportFixture.real(git.epochs()))
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]
@@ -125,8 +126,9 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     def "ContainerResumeRunner hardens the factory clone's hooks path at resume start"() {
         given: 'no branch for the resumed task, refusing the resume right after hardening'
         Path clone = freshClone('container-resume')
-        def runner = new ContainerResumeRunner(newAssembly(), TaskGitFixture.real(), sandboxProperties(), testProperties(), 'taskId',
-                ContainerSupportFixture.real())
+        def git = TaskGitFixture.real()
+        def runner = new ContainerResumeRunner(newAssembly(), git, sandboxProperties(), testProperties(), 'taskId',
+                ContainerSupportFixture.real(git.epochs()))
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]

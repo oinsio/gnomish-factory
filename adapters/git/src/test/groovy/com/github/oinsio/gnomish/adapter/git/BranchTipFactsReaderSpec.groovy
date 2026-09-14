@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
-import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal
 import spock.lang.Specification
@@ -19,14 +18,9 @@ class BranchTipFactsReaderSpec extends Specification {
     static class FixedTip implements BranchTipSource {
         Map<String, String> files = [:]
         boolean cleaned = false
-        ClaimEpoch stamped = null
 
         Optional<String> readAtTip(String path) {
             Optional.ofNullable(files[path])
-        }
-
-        Optional<ClaimEpoch> tipEpoch() {
-            Optional.ofNullable(stamped)
         }
 
         boolean cleanupCommitInHistory() {
@@ -55,17 +49,17 @@ class BranchTipFactsReaderSpec extends Specification {
         TaskStateJson.mapper().writeValueAsString(value)
     }
 
-    private static FixedTip tip(Map<String, String> files, boolean cleaned = false, ClaimEpoch stamped = null) {
+    private static FixedTip tip(Map<String, String> files, boolean cleaned = false) {
         Map<String, String> prefixed = files.collectEntries { String k, String v ->
             [('.gnomish-task/' + k): v]
         } as Map<String, String>
-        new FixedTip(files: prefixed, cleaned: cleaned, stamped: stamped)
+        new FixedTip(files: prefixed, cleaned: cleaned)
     }
 
     // FR1: a freshly created branch reads as both envelopes present, nothing recorded.
     def "a STARTED tip reads as two parsed envelopes with nothing recorded"() {
         when:
-        def facts = reader.read(tip([('task.json'): taskJson(), ('state.json'): stateJson()]), null)
+        def facts = reader.read(tip([('task.json'): taskJson(), ('state.json'): stateJson()]))
 
         then:
         facts.taskEnvelope() == new EnvelopeStatus.Parsed()
@@ -80,7 +74,7 @@ class BranchTipFactsReaderSpec extends Specification {
     // FR3: the pre-contract tip — task.json alone — is a legal absence, not a fault.
     def "a pre-contract tip reads as an absent state envelope"() {
         when:
-        def facts = reader.read(tip([('task.json'): taskJson()]), null)
+        def facts = reader.read(tip([('task.json'): taskJson()]))
 
         then:
         facts.stateEnvelope() == new EnvelopeStatus.Absent()
@@ -90,7 +84,7 @@ class BranchTipFactsReaderSpec extends Specification {
     // FR1: the four recorded outcome kinds collapse to the two the classification needs.
     def "a recorded #kind outcome reads as #expected"() {
         when:
-        def facts = reader.read(tip([('task.json'): taskJson(outcome: outcome), ('state.json'): stateJson()]), null)
+        def facts = reader.read(tip([('task.json'): taskJson(outcome: outcome), ('state.json'): stateJson()]))
 
         then:
         facts.recordedOutcome() == expected
@@ -112,7 +106,7 @@ class BranchTipFactsReaderSpec extends Specification {
                 [round: 1, result: 'passed', startedAt: '2026-07-18T09:00:00Z',
                     checks: [], denials: []]
             ])
-        ]), null)
+        ]))
 
         then:
         facts.decisionsRecorded()
@@ -126,7 +120,7 @@ class BranchTipFactsReaderSpec extends Specification {
         def facts = reader.read(tip([
             ('task.json'): taskJson(decisions: [[text: 'do it']]),
             ('state.json'): stateJson()
-        ]), null)
+        ]))
 
         then:
         classifier.classify(facts) == new BranchShape.Answered()
@@ -135,7 +129,7 @@ class BranchTipFactsReaderSpec extends Specification {
     // FR15, NFR-R2: an unsupported version is a fact carrying both versions, never a thrown refusal.
     def "an unsupported #file version becomes a fact, not an exception"() {
         when:
-        def facts = reader.read(tip(files), null)
+        def facts = reader.read(tip(files))
 
         then:
         classifier.classify(facts) == new BranchShape.UnsupportedVersion(file, 7, 1)
@@ -149,7 +143,7 @@ class BranchTipFactsReaderSpec extends Specification {
     // NFR-R2: malformed content is an unreadable envelope carrying the parser's own message.
     def "malformed #file becomes Corrupt naming the file"() {
         when:
-        def facts = reader.read(tip(files), null)
+        def facts = reader.read(tip(files))
         def shape = classifier.classify(facts)
 
         then:
@@ -165,7 +159,7 @@ class BranchTipFactsReaderSpec extends Specification {
     // NFR-R2: content that parses as JSON but not as the envelope is equally a fact.
     def "content that binds to nothing is unreadable rather than fatal"() {
         when:
-        def facts = reader.read(tip([('task.json'): '{"version": 1, "decisions": 7}']), null)
+        def facts = reader.read(tip([('task.json'): '{"version": 1, "decisions": 7}']))
 
         then:
         facts.taskEnvelope() instanceof EnvelopeStatus.Unreadable
@@ -174,48 +168,17 @@ class BranchTipFactsReaderSpec extends Specification {
     // FR1: delivery comes from the medium's history answer, not from the file set.
     def "a cleaned-up tip reads as delivered"() {
         when:
-        def facts = reader.read(tip([:], true), null)
+        def facts = reader.read(tip([:], true))
 
         then:
         facts.cleanupCommitInHistory()
         classifier.classify(facts) == new BranchShape.Delivered()
     }
 
-    // FR13: the tip's own stamp and the live claim's epoch reach the facts untouched — the reader
-    //     compares nothing, the classifier does.
-    def "both epochs are carried through to the facts"() {
-        when:
-        def facts = reader.read(tip([('task.json'): taskJson()], false, new ClaimEpoch(1)), new ClaimEpoch(2))
-
-        then:
-        facts.tipEpoch() == new ClaimEpoch(1)
-        facts.liveEpoch() == new ClaimEpoch(2)
-        classifier.classify(facts) == new BranchShape.StaleEpoch()
-    }
-
-    // FR13: a tip stamped with the live tenure's own epoch is not stale — it is this instance's work
-    def "a tip stamped with the live epoch classifies on its content"() {
-        when:
-        def facts = reader.read(tip([('task.json'): taskJson()], false, new ClaimEpoch(2)), new ClaimEpoch(2))
-
-        then:
-        classifier.classify(facts) == new BranchShape.Created()
-    }
-
-    // FR13: a tip carrying no stamp stands outside the fence — legal, and judged on content
-    def "an unstamped tip is never stale"() {
-        when:
-        def facts = reader.read(tip([('task.json'): taskJson()]), new ClaimEpoch(2))
-
-        then:
-        facts.tipEpoch() == null
-        classifier.classify(facts) == new BranchShape.Created()
-    }
-
     // FR1: a branch ref carrying nothing the factory wrote is Bare, not a failure to read.
     def "an empty tip reads as Bare"() {
         expect:
-        classifier.classify(reader.read(tip([:]), null)) == new BranchShape.Bare()
+        classifier.classify(reader.read(tip([:]))) == new BranchShape.Bare()
     }
 
     // NFR-S1, UX2: the Unreadable reason travels straight into the quarantine tracker report
@@ -227,7 +190,7 @@ class BranchTipFactsReaderSpec extends Specification {
     //     (Jackson's includes an "at [Source: ...]" excerpt whenever source inclusion is on).
     def "the #file unreadable reason never carries document content (#scenario)"() {
         when:
-        def facts = reader.read(tip([(file): document]), null)
+        def facts = reader.read(tip([(file): document]))
         def envelope = file == 'task.json' ? facts.taskEnvelope() : facts.stateEnvelope()
 
         then: 'the envelope is a fact, not a throw'
@@ -258,7 +221,7 @@ class BranchTipFactsReaderSpec extends Specification {
     def "a task.json whose pinned baseRef is malformed reads as an unreadable envelope naming the document"() {
         when:
         def facts = reader.read(tip([('task.json'): taskJson(baseRef: 'release/../../x', baseRule: 'designator'),
-            ('state.json'): stateJson()]), null)
+            ('state.json'): stateJson()]))
 
         then:
         facts.taskEnvelope() instanceof EnvelopeStatus.Unreadable

@@ -7,15 +7,19 @@ import java.nio.file.Files
 /**
  * Shared fixture for the resume specs — bootstrap (task 4.6) and outcome-driven continuation
  * (task 4.7): adds {@link GitResumeRunner}-specific helpers on top of {@link
- * ResumeSpecFixtureBase}'s bare-repo-backed clone, which both {@link GitResumeBootstrapSpec} and
- * {@link GitResumeOutcomeSpec} need to create tasks, drive a {@link GitResumeRunner}, and persist
- * rounds. Implements FR5, FR8, UX2 of add-git-workflow.
+ * ResumeSpecFixtureBase}'s bare-repo-backed clone, which {@link GitResumeBootstrapSpec}, {@link
+ * GitResumeOutcomeSpec}, and {@link GitResumeContinuationEdgeCasesSpec} need to create tasks,
+ * drive a {@link GitResumeRunner}, and persist rounds. Implements FR5, FR8, UX2 of
+ * add-git-workflow.
  */
 abstract class GitResumeSpecBase extends ResumeSpecFixtureBase {
 
-    /** The manual-run shape: {@code gnomish run --resume} holds no claim, so no tenure either. */
+    /**
+     * The manual-run shape: {@code gnomish run --resume} holds no claim, so the base's bundle
+     * carries an unfilled tenure record and nothing it writes is stamped.
+     */
     protected GitResumeRunner newResumeRunner(InputStream input, PrintStream output) {
-        newResumeRunner(input, output, TaskGitFixture.real())
+        newResumeRunner(input, output, taskGit)
     }
 
     /**

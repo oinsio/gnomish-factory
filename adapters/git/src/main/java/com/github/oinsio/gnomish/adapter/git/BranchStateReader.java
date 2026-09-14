@@ -29,8 +29,9 @@ import org.jspecify.annotations.Nullable;
  * three quarantine shapes — comes back as {@link BranchStateResult.Shaped} for the caller to render
  * calmly, so an unknown {@code "version"} or an unparseable {@code state.json} is a named shape
  * here rather than a thrown {@code UnsupportedStateFileVersionException} (NFR-R2). The classifier
- * holds no claim on this path — {@code status} is a reader, never a tenure — so the epoch fence is
- * inert and {@link BranchShape.StaleEpoch} never arises from it.
+ * holds no claim on this path — {@code status} is a reader, never a tenure — and none is needed:
+ * a tip is classified by its content alone, whichever tenure stamped it (fix-claim-epoch-fence
+ * FR1).
  *
  * <p>The resulting {@link StatusReport} is built by the same pure function ({@link
  * StatusReport#build}) manual-run's live status uses, reused verbatim per FR13. Two of its

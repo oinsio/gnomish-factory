@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
-import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
@@ -19,11 +18,11 @@ import org.slf4j.LoggerFactory;
  * <p>This is the seam that classifies a read's invocation outcome (design D3, D14): every answer
  * below is a positive fact about the tip, so an invocation that never ran to its own exit — cut
  * off on a deadline, or interrupted by a shutdown — throws {@link BranchTipUnavailableException}
- * rather than returning the answer an absent file, an unstamped commit, or an unsearched history
- * would give. Reading a non-exit as absence is how a live branch classifies as {@code Bare} and a
- * take forks a second branch for a task that already has one.
+ * rather than returning the answer an absent file or an unsearched history would give. Reading a
+ * non-exit as absence is how a live branch classifies as {@code Bare} and a take forks a second
+ * branch for a task that already has one.
  *
- * <p>Implements FR1, FR5, FR6, FR13 of harden-task-branch-contract.
+ * <p>Implements FR1, FR5, FR6 of harden-task-branch-contract.
  */
 // Not a record: a behavior-bearing reader over the git seam, kept a plain final class for parity
 // with its siblings in this package (see LocalBranchTip).
@@ -45,24 +44,10 @@ final class GitShowTip {
     Optional<String> readAtTip(String path) {
         GitCommandResult result = answered("show", runner.run(repo, "show", revision + ":" + path));
         if (result.exitCode() != 0) {
-            warnAbsent("show", path, result);
+            warnAbsent(path, result);
             return Optional.empty();
         }
         return Optional.of(result.stdout());
-    }
-
-    /**
-     * The epoch stamped on the revision's own commit message. A revision that does not resolve
-     * leaves the message unread and the epoch empty — the same answer an unstamped tip gives, since
-     * neither is a tip this factory can fence.
-     */
-    Optional<ClaimEpoch> tipEpoch() {
-        GitCommandResult result = answered("log", runner.run(repo, "log", "-1", "--format=%B", revision));
-        if (result.exitCode() != 0) {
-            warnAbsent("log", "commit message", result);
-            return Optional.empty();
-        }
-        return ClaimEpochTrailer.parse(result.stdout());
     }
 
     /**
@@ -72,11 +57,10 @@ final class GitShowTip {
      * the classification is the only place git's reason for it survives, and NG1 keeps the
      * behavior itself unchanged.
      */
-    private void warnAbsent(String command, String subject, GitCommandResult result) {
+    private void warnAbsent(String subject, GitCommandResult result) {
         // throwable-not-subject: git reported a status, not a thrown fault.
         log.debug(
-                "git {} of {} at {} exited {}, reading as absent: {}",
-                command,
+                "git show of {} at {} exited {}, reading as absent: {}",
                 subject,
                 revision,
                 result.exitCode(),

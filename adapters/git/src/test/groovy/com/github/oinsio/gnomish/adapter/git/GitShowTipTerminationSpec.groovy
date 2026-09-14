@@ -51,9 +51,11 @@ class GitShowTipTerminationSpec extends Specification implements StallingReadGit
         thrown instanceof BranchTipUnavailableException
     }
 
-    def "FR13: an interrupted epoch read is unavailability, never an unstamped tip"() {
+    def "FR1: an interrupted state-file read is unavailability, never an absent state file"() {
         when:
-        def thrown = interruptDuring { source().tipEpoch() }
+        def thrown = interruptDuring {
+            source().readAtTip('.gnomish-task/state.json')
+        }
 
         then:
         thrown instanceof BranchTipUnavailableException

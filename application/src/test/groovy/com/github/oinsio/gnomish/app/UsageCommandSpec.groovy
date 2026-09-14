@@ -1,20 +1,9 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
-import com.github.oinsio.gnomish.adapter.git.TaskStart
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
-import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolCall
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -38,18 +27,8 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
     }
 
     private static UsageCommand newCommand() {
-        new UsageCommand(TaskGitFixture.real())
+        new UsageCommand(TaskGitFixture.realClaimless())
     }
-
-    private void persistRound(String taskId, TaskState state, String stage, int round) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(new TaskContext(taskId, 'T', 'B', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
-        def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
-            new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
-        ])
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
-    }
-
 
     def "FR14: text render prints the stage/round table and a totals line"() {
         given:

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
@@ -28,8 +27,6 @@ public final class TakeClaimAndWorkFactory {
      *
      * <p>Implements FR1, M2 of add-factory-serve; NFR-O1 of harden-task-branch-contract.
      *
-     * @param epochs this instance's tenure record, so the routing point's repair line (NFR-O1) can
-     *     name the claim epoch it runs under; an empty book where none is recorded
      * @param trustedBase the trusted tier bound once at startup (FR13, D15 of
      *     add-base-ref-resolution), read by a fresh claim's base resolution and never re-read
      */
@@ -44,7 +41,6 @@ public final class TakeClaimAndWorkFactory {
             ClaimBeat heartbeat,
             ClaimLossFlag claimLossFlag,
             ContainerTakeSupport containerTakeSupport,
-            ClaimEpochBook epochs,
             TrustedBaseContext trustedBase) {
         var resumeRunner = new TakeResumeRunner(
                 assembly,
@@ -76,7 +72,6 @@ public final class TakeClaimAndWorkFactory {
                 claimLossFlag,
                 containerTakeSupport,
                 containerResumeRunner,
-                epochs,
                 trustedBase);
     }
 }

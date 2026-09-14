@@ -70,13 +70,13 @@ class TakeRepairObservabilitySpec extends Specification implements RunChainFakes
             locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
             classifyShape(_, _) >> shape
         }
-        new TaskGit(store, branches, Stub(TaskWorktreeGit))
+        new TaskGit(store, branches, Stub(TaskWorktreeGit), epoch42())
     }
 
     /** Drives one claimed pickup of a branch classifying to {@code shape}, capturing its repair log. */
     private List<ILoggingEvent> pickup(Tracker tracker, BranchShape shape, AbortFacts facts, TaskStoreGit store) {
         def subject = claimAndWork(gitClassifying(shape, store), tracker, Stub(RunAssembly), ClaimBeat.NONE,
-                new ClaimLossFlag(), WORKTREES_ROOT, epoch42())
+                new ClaimLossFlag(), WORKTREES_ROOT)
         return capture {
             subject.claimAndWork(CLONE_DIR, null, pipeline(), RunArguments.InteractiveMode.NONE, false,
             taskWith(facts), tracker, INSTANCE)

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -42,7 +41,6 @@ record TakeDispatcher(
         SecretsProvider secretsProvider,
         TakeoverConfirmation takeoverConfirmation,
         ContainerTakeSupport containerTakeSupport,
-        ClaimEpochBook epochs,
         TrustedBaseContext trustedBase) {
 
     TakeResult runExplicit(
@@ -117,7 +115,6 @@ record TakeDispatcher(
                 clock,
                 heartbeat.flag(),
                 containerTakeSupport,
-                epochs,
                 trustedBase);
         long startedNanos = System.nanoTime();
         TakeResult result = disposition.dispose(
@@ -159,7 +156,6 @@ record TakeDispatcher(
                 trackerConfig.wipLimit(),
                 new Random(),
                 containerTakeSupport,
-                epochs,
                 trustedBase);
         long startedNanos = System.nanoTime();
         TakeResult result =

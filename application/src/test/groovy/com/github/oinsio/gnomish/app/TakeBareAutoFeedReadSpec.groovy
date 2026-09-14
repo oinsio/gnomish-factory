@@ -34,11 +34,11 @@ class TakeBareAutoFeedReadSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit))
+        }, Stub(TaskWorktreeGit), new ClaimEpochBook())
         new TakeBareAuto(Stub(RunAssembly), git, WORKTREES_ROOT, new AbortHandler(tracker, FIXED_CLOCK),
                 3, 'taskId', Duration.ofMinutes(1), Duration.ofHours(1), FIXED_CLOCK, [],
                 ClaimBeat.NONE, new ClaimLossFlag(), 10, new Random(1),
-                ContainerTakeSupport.hostOnly(), new ClaimEpochBook(), DEFAULT_TRUSTED_BASE)
+                ContainerTakeSupport.hostOnly(), DEFAULT_TRUSTED_BASE)
     }
 
     private TakeResult run() {

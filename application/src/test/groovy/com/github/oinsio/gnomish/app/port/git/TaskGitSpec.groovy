@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import java.util.function.UnaryOperator
 import spock.lang.Specification
@@ -23,7 +24,7 @@ class TaskGitSpec extends Specification {
         def source = Stub(RoundEnvironmentSource)
 
         expect:
-        new TaskGit(store, branches, worktrees).midRoundPush().apply(source).is(source)
+        new TaskGit(store, branches, worktrees, new ClaimEpochBook()).midRoundPush().apply(source).is(source)
     }
 
     // FR1: a supplied operator rides the bundle verbatim — what the composition root built is
@@ -35,7 +36,7 @@ class TaskGitSpec extends Specification {
         } as UnaryOperator<RoundEnvironmentSource>
 
         expect:
-        new TaskGit(store, branches, worktrees, marker).midRoundPush().is(marker)
+        new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()).midRoundPush().is(marker)
     }
 
     // FR14 of add-base-ref-resolution: withBaseRefs swaps only the base-ref capability, so a
@@ -45,7 +46,7 @@ class TaskGitSpec extends Specification {
         def marker = { rounds ->
             rounds
         } as UnaryOperator<RoundEnvironmentSource>
-        def original = new TaskGit(store, branches, worktrees, marker)
+        def original = new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook())
         def replacement = Stub(BaseRefGit)
 
         when:

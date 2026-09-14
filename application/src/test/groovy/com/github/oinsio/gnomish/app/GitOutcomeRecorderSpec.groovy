@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -35,7 +36,7 @@ class GitOutcomeRecorderSpec extends Specification {
         def taskRepository = Mock(TaskLifecycleStore)
         def worktrees = Mock(TaskWorktreeGit)
         def branches = Mock(TaskBranchGit)
-        def git = new TaskGit(Stub(TaskStoreGit), branches, worktrees)
+        def git = new TaskGit(Stub(TaskStoreGit), branches, worktrees, new ClaimEpochBook())
         def outcome = new TaskOutcome.Completed(FINAL_STATE)
 
         when:
@@ -66,7 +67,7 @@ class GitOutcomeRecorderSpec extends Specification {
         def taskRepository = Mock(TaskLifecycleStore)
         def worktrees = Mock(TaskWorktreeGit)
         def branches = Mock(TaskBranchGit)
-        def git = new TaskGit(Stub(TaskStoreGit), branches, worktrees)
+        def git = new TaskGit(Stub(TaskStoreGit), branches, worktrees, new ClaimEpochBook())
 
         when:
         GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, CLONE_DIR, WORKTREE, 'PROJ-2', outcome)

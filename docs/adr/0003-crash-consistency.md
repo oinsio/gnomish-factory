@@ -110,7 +110,6 @@ returns to a known-good tip.
 | `Answered`           | stage engine                                  | roll forward: resume with the decision                                  |
 | `CompletedUncleaned` | completion-finish flow                        | roll forward: cleanup, push, tracker finish — never re-enter the engine |
 | `Delivered`          | none                                          | terminal: nothing to recover                                            |
-| `StaleEpoch`         | replica-pair reconciler                       | discard: the stale-epoch artifacts lose to the live claim's tip         |
 | `UnsupportedVersion` | recovery budget → quarantine                  | neither: quarantine on first classification                             |
 | `Corrupt(reason)`    | recovery budget → quarantine                  | neither: quarantine on first classification                             |
 | `Unknown`            | recovery budget → quarantine                  | neither: quarantine on first classification                             |
@@ -181,10 +180,17 @@ repositories is reconciled, never transactional.
 
 **Block-allocated sequence counters for fencing.** A second writer-owned
 counter that every resume must reconcile. The tracker already allocates a
-monotonic number per claim, which serves as the claim epoch for free. True
-server-side fencing is unavailable — git and GitHub cannot reject a
-stale-epoch write — so epochs make zombie writes *detectable and classifiable*,
-not impossible.
+monotonic number per claim, which serves as the claim epoch for free. What that
+epoch is for is *provenance*: stamped into a commit it names the tenure that
+wrote it, and at the tracker it is the identity a fenced claim operation
+compares against. The fences themselves are the two the media already provide —
+the fast-forward-only push, which the remote refuses for a superseded tenure,
+and the round-boundary revocation check, which stops a holder whose claim is no
+longer its own. An epoch comparison belongs to the medium at write time,
+against the highest epoch it has accepted; a reader that compares history
+against its own claim has no fence, only false positives (provenance:
+`fix-claim-epoch-fence`, which removed one such reader after it quarantined
+every legitimate reclaim).
 
 **Per-defect regression specs instead of a kill-point gate.** They pin the
 known findings and leave every future transition unasked.

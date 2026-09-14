@@ -53,6 +53,24 @@ class BranchQuarantineReportSpec extends Specification {
         then:
         report.contains('state without task')
         report.contains('.gnomish-task/')
+        report.contains('fix or remove the offending file')
+        report.toLowerCase().contains('ready')
+    }
+
+    // UX2 of fix-claim-epoch-fence: the closing hint has to be TRUE for every shape that can still
+    // produce a quarantine. A Bare branch carries no .gnomish-task/ files and no offending file, so
+    // it is told the truth — return the task, and report the run, because the branch is healthy and
+    // the routing is not.
+    def "a Bare branch is not sent looking for an offending file it does not have"() {
+        when:
+        def report = BranchQuarantineReport.of('PROJ-1', new BranchShape.Bare(), FACTS)
+
+        then: 'the envelope instruction is absent'
+        !report.contains('fix or remove the offending file')
+
+        and: 'and the operator is told what is actually true of this branch'
+        report.contains('no .gnomish-task/ files to inspect')
+        report.contains('routing defect')
         report.toLowerCase().contains('ready')
     }
 }

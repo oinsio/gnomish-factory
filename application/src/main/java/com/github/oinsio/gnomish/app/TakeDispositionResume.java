@@ -81,12 +81,6 @@ record TakeDispositionResume<B extends ResumedBranch>(
             // Delivery is terminal: the branch is done and only the tracker write may be owed.
             case BranchShape.Delivered() ->
                 TakeReconcileFinish.deliverCompleted(git, cloneDir, taskId, tracker, ref, instanceId);
-            // The replica reconciler owns a stale-epoch tip: loading the branch runs it (bootstrap
-            // reconciles before it reads), after which the tip is classified again and routed on
-            // what it has become. One pass only — a tip still stale after its own reconciliation is
-            // not converging, and quarantining beats looping.
-            case BranchShape.StaleEpoch() ->
-                afterReconciliation(cloneDir, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
             case BranchShape.Created(),
                     BranchShape.InProgress(),
                     BranchShape.Answered(),
@@ -105,27 +99,5 @@ record TakeDispositionResume<B extends ResumedBranch>(
 
     private TakeLoadedBranchRoutes<B> routes() {
         return new TakeLoadedBranchRoutes<>(mechanics, decisionResume, git);
-    }
-
-    /**
-     * Re-routes a stale-epoch branch on the shape it has after its replica pair reconciled. The
-     * recursion is depth-one by construction: the only shape that re-enters this method is {@link
-     * BranchShape.StaleEpoch}, and a tip that is still stale after reconciliation is quarantined
-     * instead of routed again.
-     */
-    private TakeResult afterReconciliation(
-            Path cloneDir,
-            RunArguments.InteractiveMode interactiveMode,
-            boolean discardWork,
-            String taskId,
-            Tracker tracker,
-            TaskRef ref,
-            InstanceId instanceId) {
-        mechanics.loadBranch(cloneDir, taskId);
-        BranchShape reconciled = git.branches().classifyShape(cloneDir, taskId);
-        if (reconciled instanceof BranchShape.StaleEpoch) {
-            throw new BranchQuarantineException(taskId, reconciled);
-        }
-        return resumeExisting(cloneDir, reconciled, interactiveMode, discardWork, taskId, tracker, ref, instanceId);
     }
 }

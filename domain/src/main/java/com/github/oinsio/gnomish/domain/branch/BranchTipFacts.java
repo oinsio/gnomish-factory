@@ -1,17 +1,16 @@
 package com.github.oinsio.gnomish.domain.branch;
 
-import org.jspecify.annotations.Nullable;
-
 /**
  * Everything the classifier is allowed to know about one task branch tip: the status of each
- * envelope, the content facts read out of them, whether cleanup happened somewhere in history, and
- * the epochs to compare. Assembled by the adapter that owns the wire format, over the tip-reader
- * seam — never from a dirty worktree (FR5).
+ * envelope, the content facts read out of them, and whether cleanup happened somewhere in history.
+ * No claim epoch is among them — the stamp on the tip is provenance, not a classification input
+ * (fix-claim-epoch-fence FR1). Assembled by the adapter that owns the wire format, over the
+ * tip-reader seam — never from a dirty worktree (FR5).
  *
  * <p>A value object, so classification is a pure function of it and the property-based spec can
  * generate every combination (M2).
  *
- * <p>Implements FR1, FR5 of harden-task-branch-contract.
+ * <p>Implements FR1, FR5 of harden-task-branch-contract; FR1 of fix-claim-epoch-fence.
  *
  * @param taskEnvelope what the reader found at {@code .gnomish-task/task.json}
  * @param stateEnvelope what the reader found at {@code .gnomish-task/state.json}
@@ -22,10 +21,6 @@ import org.jspecify.annotations.Nullable;
  * @param cleanupCommitInHistory whether the cleanup commit appears anywhere in the branch's
  *     history — searched rather than assumed at {@code tip^}, so commits made after cleanup do not
  *     hide it
- * @param tipEpoch the claim epoch stamped on the tip, or {@code null} on a tip written before
- *     epochs were stamped
- * @param liveEpoch the epoch of the claim currently held, or {@code null} when the reader holds no
- *     claim (status and usage read without one)
  */
 public record BranchTipFacts(
         EnvelopeStatus taskEnvelope,
@@ -33,6 +28,4 @@ public record BranchTipFacts(
         RecordedTerminal recordedOutcome,
         boolean roundsRecorded,
         boolean decisionsRecorded,
-        boolean cleanupCommitInHistory,
-        @Nullable ClaimEpoch tipEpoch,
-        @Nullable ClaimEpoch liveEpoch) {}
+        boolean cleanupCommitInHistory) {}

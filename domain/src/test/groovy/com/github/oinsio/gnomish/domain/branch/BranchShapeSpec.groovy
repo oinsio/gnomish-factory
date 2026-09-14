@@ -3,8 +3,9 @@ package com.github.oinsio.gnomish.domain.branch
 import spock.lang.Specification
 
 /**
- * FR1, FR2 of harden-task-branch-contract: the closed shape set declares, per shape, the one
- * component that converges it and whether that owner rolls the transition forward or discards.
+ * FR1, FR2 of harden-task-branch-contract, FR1 of fix-claim-epoch-fence: the closed shape set
+ * declares, per shape, the one component that converges it and whether that owner rolls the
+ * transition forward, quarantines it, or has nothing left to do.
  * The table asserted here is the one owned by {@code docs/adr/0003-crash-consistency.md}.
  */
 class BranchShapeSpec extends Specification {
@@ -24,7 +25,6 @@ class BranchShapeSpec extends Specification {
         new BranchShape.Answered() || RecoveryOwner.STAGE_ENGINE | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.CompletedUncleaned() || RecoveryOwner.COMPLETION_FINISH | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.Delivered() || RecoveryOwner.NONE | RecoveryDisposition.TERMINAL
-        new BranchShape.StaleEpoch() || RecoveryOwner.REPLICA_RECONCILER | RecoveryDisposition.DISCARD
         new BranchShape.UnsupportedVersion('state.json', 2, 1) || RecoveryOwner.RECOVERY_BUDGET | RecoveryDisposition.QUARANTINE
         new BranchShape.Corrupt('task.json: truncated') || RecoveryOwner.RECOVERY_BUDGET | RecoveryDisposition.QUARANTINE
         new BranchShape.Unknown('state without task') || RecoveryOwner.RECOVERY_BUDGET | RecoveryDisposition.QUARANTINE
@@ -45,7 +45,6 @@ class BranchShapeSpec extends Specification {
         new BranchShape.Bare() || false
         new BranchShape.Parked() || false
         new BranchShape.CompletedUncleaned() || false
-        new BranchShape.StaleEpoch() || false
         new BranchShape.UnsupportedVersion('task.json', 9, 1) || false
         new BranchShape.Corrupt('task.json: truncated') || false
         new BranchShape.Unknown('state without task') || false
@@ -76,7 +75,6 @@ class BranchShapeSpec extends Specification {
         new BranchShape.Parked() || true
         new BranchShape.Answered() || true
         new BranchShape.CompletedUncleaned() || true
-        new BranchShape.StaleEpoch() || true
         new BranchShape.Bare() || false
         new BranchShape.Delivered() || false
         new BranchShape.UnsupportedVersion('state.json', 2, 1) || false
@@ -87,7 +85,7 @@ class BranchShapeSpec extends Specification {
     // FR16: the closed set names itself once — a table cell, a log line and a diagnosis all read
     // the same word for the same shape. Labels are load-bearing (the kill-point harness asserts on
     // them), so every shape's label is pinned as a literal, and the pin is checked against the
-    // sealed set itself: a renamed shape fails its row, a twelfth shape fails the coverage check.
+    // sealed set itself: a renamed shape fails its row, an eleventh shape fails the coverage check.
     def "label() pins every shape of the closed set"() {
         given: 'one instance of every shape, each with its pinned label'
         def pinned = [
@@ -98,7 +96,6 @@ class BranchShapeSpec extends Specification {
             (new BranchShape.Answered()): 'Answered',
             (new BranchShape.CompletedUncleaned()): 'CompletedUncleaned',
             (new BranchShape.Delivered()): 'Delivered',
-            (new BranchShape.StaleEpoch()): 'StaleEpoch',
             (new BranchShape.UnsupportedVersion('state.json', 2, 1)): 'UnsupportedVersion',
             (new BranchShape.Corrupt('task.json: truncated')): 'Corrupt',
             (new BranchShape.Unknown('state without task')): 'Unknown',

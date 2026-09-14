@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BasePin
@@ -70,7 +71,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
     InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()
 
     private GitModeRunner runner() {
-        new GitModeRunner(assemblyRunningLoop(executor), new TaskGit(store, branches, worktrees), worktreesRoot)
+        new GitModeRunner(assemblyRunningLoop(executor), new TaskGit(store, branches, worktrees, new ClaimEpochBook()), worktreesRoot)
     }
 
     // FR1, FR3 of wire-host-mid-round-push (design D3): the fresh git-mode host run attaches the
@@ -84,7 +85,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         } as UnaryOperator<RoundEnvironmentSource>
         def runner = new GitModeRunner(
                 assemblyRunningLoop(executor, new ScriptedConsoleIO(['']), new Verdict.Pass(), attached),
-                new TaskGit(store, branches, worktrees, marker), worktreesRoot)
+                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot)
 
         when:
         runner.run(cloneDir, null, completingPipeline(), context(), TaskState.atStageStart('build'),

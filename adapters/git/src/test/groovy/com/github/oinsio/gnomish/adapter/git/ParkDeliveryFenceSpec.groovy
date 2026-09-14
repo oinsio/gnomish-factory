@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -56,17 +56,6 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         hook.setExecutable(true)
     }
 
-    /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
-    private static List<ILoggingEvent> capture(Closure<?> emit) {
-        def logs = LogCaptureSupport.attach(ParkDeliveryFence, Level.INFO)
-        try {
-            emit()
-            return List.copyOf(logs.list)
-        } finally {
-            logs.detach()
-        }
-    }
-
     def "an undelivered park commit is pushed and reported delivered"() {
         given:
         def parked = commitPark()
@@ -105,7 +94,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         '''.stripIndent())
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = new ParkDeliveryFence(runner).ensureDelivered(clone, TASK_ID)
         }
 
@@ -128,7 +117,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         gitOutput(clone, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = new ParkDeliveryFence(runner).ensureDelivered(clone, TASK_ID)
         }
 
@@ -154,7 +143,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         gitOutput(local, 'checkout', '-q', '-b', BRANCH)
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = new ParkDeliveryFence(runner).ensureDelivered(local, TASK_ID)
         }
 
@@ -169,7 +158,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         def parked = commitPark()
 
         when:
-        def verdict = new GitTaskBranches(runner).fenceParkDelivery(clone, TASK_ID)
+        def verdict = new GitTaskBranches(runner, ClaimEpochSource.NONE).fenceParkDelivery(clone, TASK_ID)
 
         then:
         verdict instanceof ParkDeliveryVerdict.Delivered
@@ -183,7 +172,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         ParkDeliveryVerdict verdict = null
 
         when:
-        def events = capture {
+        def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {
             verdict = new ParkDeliveryFence(runner).ensureDelivered(clone, 'NO-SUCH')
         }
 
