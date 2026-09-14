@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Path
 
 /**
@@ -189,6 +190,42 @@ trait BareGitRepoFixture {
      */
     String currentBranch(Path repo) {
         gitOutput(repo, 'symbolic-ref', 'HEAD') - 'refs/heads/'
+    }
+
+    /**
+     * The claim epoch stamped on {@code rev}'s commit message in {@code repo}, or {@code null} when
+     * the commit carries no trailer — read straight out of {@code git log -1 --format=%B}, never
+     * through an adapter reader, so the assertion survives the removal of any production-side parse
+     * (task 3.2 of fix-claim-epoch-fence).
+     *
+     * <p>The single owner of the trailer's test-side read: the key spelling and the "first
+     * {@code Gnomish-Claim-Epoch:} line of the message" semantics live here, not in each spec base
+     * that asserts over them (`.claude/rules/manual-sync-pairs.md`, rule of three).
+     *
+     * @param repo the repository to read the commit from; never null
+     * @param rev any revision {@code git log} accepts — a hash, a branch name; never null
+     */
+    ClaimEpoch stampOf(Path repo, String rev) {
+        def matcher = gitOutput(repo, 'log', '-1', '--format=%B', rev) =~ /(?m)^Gnomish-Claim-Epoch: (\d+)$/
+        matcher ? new ClaimEpoch(Long.parseLong(matcher[0][1] as String)) : null
+    }
+
+    /** {@code rev}'s commit subject in {@code repo} — the service message, without the trailers below it. */
+    String subjectOf(Path repo, String rev) {
+        gitOutput(repo, 'log', '-1', '--format=%s', rev).strip()
+    }
+
+    /**
+     * The commit hashes {@code revRange} selects in {@code repo}, oldest first — with an exclusive
+     * range ({@code <from>..<branch>}), one tenure's work.
+     *
+     * @param repo the repository to walk; never null
+     * @param revRange any range {@code git log} accepts; never null
+     */
+    List<String> commitsIn(Path repo, String revRange) {
+        gitOutput(repo, 'log', '--reverse', '--format=%H', revRange)
+                .readLines()
+                .findAll { !it.isBlank() }
     }
 
     /** Runs an arbitrary read-only {@code git} command in {@code repo} and returns trimmed stdout. */

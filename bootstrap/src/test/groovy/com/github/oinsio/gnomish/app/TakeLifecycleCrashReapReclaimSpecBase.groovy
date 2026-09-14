@@ -13,9 +13,13 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
@@ -108,6 +112,9 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
             it.startsWith('STALE_CLAIM_REMOVED') && it.contains('instance-a')
         }
 
+        and: 'the shape the reclaim will route on is the salvaged tip\'s own content — InProgress, not a quarantine over A\'s stamp (FR1, FR6)'
+        shapeAt(TASK_BRANCH) instanceof BranchShape.InProgress
+
         when: 'instance B — a freshly assembled TakeCommand sharing nothing in-process with A — takes the same ref'
         def tipBeforeReclaim = gitOutput(projectDir, 'rev-parse', TASK_BRANCH)
         def instanceB = newCommand('instance-b')
@@ -172,9 +179,14 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
                 TaskStart.pin(base, BaseRule.REPOSITORY_DEFAULT_BRANCH),
                 TaskState.atStageStart('build'))
         def worktree = worktreesRoot.resolve('project').resolve(TASK_ID)
+        // The round is recorded in state.json's own attempt history, not only as a tool trace: the
+        // history is what makes the tip InProgress rather than Created, so a state written without
+        // it would leave this scenario resuming a branch that records no round at all.
         new GitAttemptPersistence(gitRunner, worktree, TASK_ID, book).persist(
                 TASK_ID,
-                TaskState.atStageStart('build'),
+                TaskState.atStageStart('build').recordUnburnedRound(new AttemptRecord(
+                        0, AttemptRecord.Result.CANNOT_VERIFY, Instant.parse('2026-07-18T09:00:00Z'), [],
+                        ExecutorUsage.none(), JudgeUsage.none(), [])),
                 new ToolTrace(
                         new AttemptKey(TASK_ID, 'build', 0),
                         [
@@ -210,21 +222,22 @@ advancement: auto
         pushOrigin(projectDir)
     }
 
-    /** The claim epoch stamped on {@code rev}'s commit message, read straight out of {@code git log}. */
+    /**
+     * The claim epoch stamped on {@code rev}, read through the shared fixture's single owner of the
+     * trailer's test-side read ({@code BareGitRepoFixture.stampOf}) — this base only binds it to the
+     * spec's own repository.
+     */
     protected ClaimEpoch stampOf(String rev) {
-        def matcher = gitOutput(projectDir, 'log', '-1', '--format=%B', rev) =~ /(?m)^Gnomish-Claim-Epoch: (\d+)$/
-        matcher ? new ClaimEpoch(Long.parseLong(matcher[0][1] as String)) : null
+        stampOf(projectDir, rev)
     }
 
     /** {@code rev}'s commit subject — the service message, without the epoch trailer below it. */
     protected String subjectOf(String rev) {
-        gitOutput(projectDir, 'log', '-1', '--format=%s', rev).strip()
+        subjectOf(projectDir, rev)
     }
 
     /** The commits {@code exclusiveFrom} does not already carry, oldest first — one tenure's work. */
     protected List<String> commitsSince(String exclusiveFrom) {
-        gitOutput(projectDir, 'log', '--reverse', '--format=%H', "${exclusiveFrom}..${TASK_BRANCH}")
-                .readLines()
-                .findAll { !it.isBlank() }
+        commitsIn(projectDir, "${exclusiveFrom}..${TASK_BRANCH}")
     }
 }

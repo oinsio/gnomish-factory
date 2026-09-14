@@ -68,14 +68,21 @@ it** (FR4). `TaskGit` gains a `ClaimEpochBook epochs` component beside its five 
 every one of its constructors takes it — the three- and four-argument convenience constructors
 gain the parameter rather than defaulting it, and `withBaseRefs` carries it — so a bundle without
 a book cannot be built anywhere, hand-built port-fake specs included (they pass a fresh book).
-`TakeCommandSupport.resolveTracker` becomes the one funnel both `TakeCommand` and
+`TrackerResolution.resolveTracker` becomes the one funnel both `TakeCommand` and
 `ServeCommand.provisionTracker` resolve through (today `provisionTracker` calls `factory.create`
-directly); it calls the four-argument `TrackerAdapterFactory.create(secrets, config, instanceId,
-book)` and wraps the result in `EpochRecordingTracker(tracker, book)`, with `book = git.epochs()`.
+directly); it takes the already-resolved `TrackerAdapterFactory` as a parameter — callers reach it
+through `TrackerResolution.resolveFactory`, the same lookup `TakeCommand`'s short-ref expansion
+needs — calls the four-argument `TrackerAdapterFactory.create(secrets, config, instanceId, book)`
+and wraps the result in `EpochRecordingTracker(tracker, book)`, with `book = git.epochs()`.
 Its two other callers today, `BoardCommand` and `DashboardCommand`, are claimless tracker readers
 that hold no `TaskGit` and therefore no book; they keep the registry lookup under its own name,
-`resolveReadOnlyTracker`, so a command that claims cannot reach a resolution that records nothing
-by omitting an argument (added 2026-09-13 during task 5.2 — consumers the table had missed).
+`resolveReadOnlyTracker` — reached through `resolveReadOnlyTrackerFromDir`, which folds the
+`--dir`-to-resolved-reader sequence both commands previously ran by hand — so a command that claims
+cannot reach a resolution that records nothing by omitting an argument (added 2026-09-13 during
+task 5.2 — consumers the table had missed). All three methods live in `TrackerResolution`, split
+out of `TakeCommandSupport` during implementation purely to keep that class within the file-size
+target of `process-invariants.md`; the split moves no behavior and the two classes have no runtime
+relationship beyond sharing a package.
 `TrackerAdapterConfiguration.trackerAdapterRegistry` stops wrapping; `EpochRecordingTrackerFactory`
 and its spec are deleted; `TakeCommandSeams.epochs` and `withEpochs` are deleted; the separate
 `ClaimEpochBook` parameter of `TakeCommandFactory.of`, `SubcommandDispatchFactory.of`, the
@@ -100,7 +107,8 @@ and board fixtures. `TakeCommandFixture`, `TwoInstanceTakeFixture`, `AppAssembly
 `ServeObservabilityFixture`, `ContainerSupportFixture`, and `ResumeSpecFixtureBase` take their book
 from the bundle they build; `KillPointWorlds`, which builds `GitTaskRepository` and
 `GitObjectsTaskRepository` directly rather than a bundle, builds one book per world and passes it
-to both. Beyond those seven, the grep of 2026-09-13 found `ClaimEpochSource.NONE` in twenty more
+to both; the world records themselves (`CreationWorld`, `KillPointWorld`) keep a claimless
+`GitTaskBranches` for their tip-label helper — a pure reader, allowlisted under D4's rule 2. Beyond those seven, the grep of 2026-09-13 found `ClaimEpochSource.NONE` in twenty more
 files of `bootstrap/src/test` and `application/src/test`, listed in task 6.1; each is dispositioned
 by one rule — *a spec that claims (drives `take`, `serve`, or a tracker-backed resume) moves onto a
 book; a spec that never claims (plain `run`, `status`, `usage`, `board`, or a unit spec of one git
@@ -119,13 +127,24 @@ author chose) and is exactly the component-spec-green, flow-red shape this defec
 `ClaimlessGitBoundarySpec`, applies two rules over `RepoSourceTree` and asserts the scan reached
 every allowlisted file. *Rule 1, production and fixture sources* (`application/src/main`,
 `bootstrap/src/main`, `test-fixtures/src/main`): `ClaimEpochSource.NONE` may appear only in
-`ContainerRunSupportFactory` and `ManualRunRunner` (the plain-`run` path) and in
-`TaskGitFixture.realClaimless()`; `new ClaimEpochBook()` only in
+`ContainerRunSupportFactory` and `ManualRunRunner` (the plain-`run` path), in
+`TaskGitFixture.realClaimless()`, and in `SeededCloneFixture` and `TaskSeedFixture` — the last two
+build single git components (`GitTaskRepository`, `GitAttemptPersistence`) directly for
+`adapters/git` and the `status`/`usage` specs, never a `TaskGit` bundle, so they hold no tenure to
+stamp from (added 2026-09-13 during task 1.3 — fixture sites the rule's first draft had missed);
+`new ClaimEpochBook()` only in
 `ManualRunConfiguration.claimEpochBook` and `TaskGitFixture.real()`. *Rule 2, test sources*
 (`application/src/test`, `bootstrap/src/test`): `ClaimEpochSource.NONE` may appear only in the
-files task 6.1 allowlists as claimless, and no file may hold both a bundle construction
-(`TaskGitFixture.real(` or `new TaskGit(`) and a `new ClaimEpochBook()` — the two-book assembly
-`AppAssemblyFixture` and `ServeObservabilityFixture` have today. Unit specs of the book and the
+files task 6.1 allowlists as claimless, under four reasons and no others: the read-only commands
+(`status`, `usage`), unit specs whose subject is a lease component, the plain-`run` and
+`run --resume` paths, and the claimless branch readers of the kill-point matrix (`CreationWorld`,
+`KillPointWorld` — they build a `GitTaskBranches` only to classify a tip, which takes no epoch at
+all since FR1, and they never write). Second, no file may hold both a bundle construction and a
+`new ClaimEpochBook()` — the two-book assembly `AppAssemblyFixture` and `ServeObservabilityFixture`
+have today. The bundle-construction token is `TaskGitFixture.real(` alone: once the book is a
+`TaskGit` record component (task 5.1), a hand-built `new TaskGit(...)` must be handed one, and the
+port-fake spec that spells that mint inline is minting *the* bundle's record rather than a rival to
+it — counting `new TaskGit(` would fail every such spec for doing exactly what D2 requires. Unit specs of the book and the
 decorator (`ClaimEpochBookSpec`, `EpochRecordingTrackerSpec`) construct a book without a bundle
 and pass rule 2 unlisted; `adapters/git/src/test` is outside both rules, since its specs exercise
 single git components and never claim. The ADR 0003 disposition table drops its
@@ -155,12 +174,14 @@ them aligned as before; that is a documented realization, not a hand-synced impl
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |-------|--------------|-----------|-----------------|-------------|
-| `TaskGit.epochs()` — the process's tenure record, built once in `ManualRunConfiguration.taskGit` (production) and `TaskGitFixture.real()` (specs) | `ClaimEpochBook` | `TakeCommandSupport.resolveTracker` (wraps the tracker for `TakeCommand.run` and `ServeCommand.provisionTracker`); `TakeCommand` → `TakeWorkRouter` (repair log epoch; the book reaches `TakeCommand` from `TaskGit`, no longer from `TakeCommandFactory.of`/`SubcommandDispatchFactory.of`); `ServeCommand` (from `TaskGit`, no longer a constructor parameter); `TakeClaimAndWork.dispatchAfterClaim` (`epochs.ended`; from `TaskGit`, no longer a constructor parameter); `GitTaskStore`, `GitTaskBranches`, `GitTaskWorktrees` (constructed from the same book inside the bean); `ContainerRunSupportFactory`/`ContainerRunSupport` (container writers; take the book from the bundle instead of a separate parameter); `ManualRunRunner` (passes the bundle, no longer a separate book). Not consumers: `BoardCommand`, `DashboardCommand` — claimless readers, on `TakeCommandSupport.resolveReadOnlyTracker` | `TrackerAdapterConfiguration.trackerAdapterRegistry` wrapping and `EpochRecordingTrackerFactory` (deleted); `TakeCommandSeams.epochs`/`withEpochs` (deleted); the separate `ClaimEpochBook` parameter of `TakeCommandFactory.of`, `SubcommandDispatchFactory.of`, `ServeCommand`, `TakeClaimAndWork` (deleted); the `GitTaskBranches(GitProcessRunner)` constructor defaulting to `NONE` (deleted); `TaskGit` constructors without a book (none remain); `ClaimEpochSource.NONE` in every claiming assembly and fixture (replaced by the bundle's book). Exemptions: plain `run` wiring (`ContainerRunSupportFactory`, `ManualRunRunner` — both now take the bundle's book, which `run` simply never fills), `TaskGitFixture.realClaimless()`, the claimless tracker readers `BoardCommand`/`DashboardCommand`, and the claimless specs task 6.1 allowlists by name — claimless by design | the `TaskGit` record component (a claiming command cannot be handed a bundle without a book); `ClaimlessGitBoundarySpec` allowlist scan; the two FR6 flow specs asserting stamped epochs on the real medium |
+| `TaskGit.epochs()` — the process's tenure record, built once in `ManualRunConfiguration.taskGit` (production) and `TaskGitFixture.real()` (specs) | `ClaimEpochBook` | `TrackerResolution.resolveTracker` (wraps the tracker for `TakeCommand.run` and `ServeCommand.provisionTracker`); `TakeCommand` → `TakeWorkRouter` (repair log epoch; the book reaches `TakeCommand` from `TaskGit`, no longer from `TakeCommandFactory.of`/`SubcommandDispatchFactory.of`); `ServeCommand` (from `TaskGit`, no longer a constructor parameter); `TakeClaimAndWork.dispatchAfterClaim` (`epochs.ended`; from `TaskGit`, no longer a constructor parameter); `GitTaskStore`, `GitTaskBranches`, `GitTaskWorktrees` (constructed from the same book inside the bean); `ContainerRunSupportFactory`/`ContainerRunSupport` (container writers; take the book from the bundle instead of a separate parameter); `ManualRunRunner` (passes the bundle, no longer a separate book). Not consumers: `BoardCommand`, `DashboardCommand` — claimless readers, on `TrackerResolution.resolveReadOnlyTracker` | `TrackerAdapterConfiguration.trackerAdapterRegistry` wrapping and `EpochRecordingTrackerFactory` (deleted); `TakeCommandSeams.epochs`/`withEpochs` (deleted); the separate `ClaimEpochBook` parameter of `TakeCommandFactory.of`, `SubcommandDispatchFactory.of`, `ServeCommand`, `TakeClaimAndWork` (deleted); the `GitTaskBranches(GitProcessRunner)` constructor defaulting to `NONE` (deleted); `TaskGit` constructors without a book (none remain); `ClaimEpochSource.NONE` in every claiming assembly and fixture (replaced by the bundle's book). Exemptions: plain `run` wiring (`ContainerRunSupportFactory`, `ManualRunRunner` — both now take the bundle's book, which `run` simply never fills), `TaskGitFixture.realClaimless()`, the claimless tracker readers `BoardCommand`/`DashboardCommand`, and the claimless specs task 6.1 allowlists by name — claimless by design | the `TaskGit` record component (a claiming command cannot be handed a bundle without a book); `ClaimlessGitBoundarySpec` allowlist scan; the two FR6 flow specs asserting stamped epochs on the real medium, plus `ServeClaimEpochStampSpec` over the serve call site those two never reach |
 
 Identity claimed: "the epoch the tracker recorded for a claim and the epoch stamped on every
 commit of that tenure are one value". Identity spec: the escalate-return-reclaim flow spec (D3)
 asserts the second tenure's `Gnomish-Claim-Epoch` trailer equals the epoch the in-memory tracker
 issued for the second claim, end to end, with no book wired by the test.
+`ServeCommand.provisionTracker` is the funnel's second call site and is on no take-path flow, so
+`ServeClaimEpochStampSpec` asserts the same identity over one real `serve --drain` round.
 
 ## Crash consistency
 

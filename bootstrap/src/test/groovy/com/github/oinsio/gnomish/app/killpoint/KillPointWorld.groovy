@@ -67,11 +67,13 @@ class KillPointWorld implements BareGitRepoFixture {
         new GitTaskBranches(new GitProcessRunner(), ClaimEpochSource.NONE).classifyShape(repoDir, taskId).label()
     }
 
-    /** The claim epoch stamped on the branch tip, or {@code null} when the tip carries no trailer. */
+    /**
+     * The claim epoch stamped on the branch tip, or {@code null} when the tip carries no trailer —
+     * read through the shared fixture's single owner of the trailer's test-side read ({@code
+     * BareGitRepoFixture.stampOf}); this world only binds it to its own medium's repository.
+     */
     ClaimEpoch tipEpoch() {
-        def matcher = gitOutput(repoDir, 'log', '-1', '--format=%B', "gnomish/${taskId}") =~
-                /(?m)^Gnomish-Claim-Epoch: (\d+)$/
-        matcher ? new ClaimEpoch(Long.parseLong(matcher[0][1] as String)) : null
+        stampOf(repoDir, "gnomish/${taskId}")
     }
 
     /** The tip's {@code task.json}, or {@code null} once the cleanup commit removed the envelope. */

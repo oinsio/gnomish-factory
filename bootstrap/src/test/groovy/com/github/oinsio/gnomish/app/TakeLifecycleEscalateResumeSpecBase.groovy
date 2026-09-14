@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import java.nio.file.Files
 import java.nio.file.Path
@@ -97,6 +98,9 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         def firstEpoch = claimWatcher.issuedEpochs[0]
         assert stampOf(tipBeforeReclaim) == firstEpoch
 
+        and: 'the shape the reclaim will route on is the tip\'s own content — Parked, not a quarantine over the ended tenure\'s stamp (FR1, FR6)'
+        assert shapeAt(tipBeforeReclaim) instanceof BranchShape.Parked
+
         and: 'instance B — a second, freshly built TakeCommand sharing nothing in-process with instance A — takes the same ref'
         def instanceB = newCommand('instance-b')
         instanceB.run(takeArgs('take', 'PROJ-1', "--dir=$projectDir"))
@@ -133,29 +137,29 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         reclaimCommits.every {
             !subjectOf(it).startsWith('gnomish: task started')
         }
+
+        and: 'the second tenure resumed the branch as Answered: its first act was to append the human decision, and the branch at that commit is what the engine then ran from (FR6, scenario "Escalated, returned, reclaimed")'
+        subjectOf(reclaimCommits.first()) == 'gnomish: task resumed'
+        shapeAt(reclaimCommits.first()) instanceof BranchShape.Answered
     }
 
     /**
-     * The claim epoch stamped on {@code rev}'s commit message, read the way every other stamp
-     * assertion in this repo reads it — straight out of {@code git log -1 --format=%B}, never
-     * through an adapter reader, so the assertion survives the removal of the read-side parse
-     * (task 3.2 of fix-claim-epoch-fence).
+     * The claim epoch stamped on {@code rev}, read through the shared fixture's single owner of the
+     * trailer's test-side read ({@code BareGitRepoFixture.stampOf}) — this base only binds it to the
+     * spec's own repository.
      */
     protected ClaimEpoch stampOf(String rev) {
-        def matcher = gitOutput(projectDir, 'log', '-1', '--format=%B', rev) =~ /(?m)^Gnomish-Claim-Epoch: (\d+)$/
-        matcher ? new ClaimEpoch(Long.parseLong(matcher[0][1] as String)) : null
+        stampOf(projectDir, rev)
     }
 
     /** {@code rev}'s commit subject — the service message, without the epoch trailer below it. */
     protected String subjectOf(String rev) {
-        gitOutput(projectDir, 'log', '-1', '--format=%s', rev).strip()
+        subjectOf(projectDir, rev)
     }
 
     /** The commits {@code exclusiveFrom} does not already carry, oldest first — one tenure's work. */
     private List<String> commitsSince(String exclusiveFrom) {
-        gitOutput(projectDir, 'log', '--reverse', '--format=%H', "${exclusiveFrom}..${TASK_BRANCH}")
-                .readLines()
-                .findAll { !it.isBlank() }
+        commitsIn(projectDir, "${exclusiveFrom}..${TASK_BRANCH}")
     }
 
     /**

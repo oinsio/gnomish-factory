@@ -3,7 +3,12 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.BranchTipFactsReader
+import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.RefTipSource
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -107,5 +112,20 @@ tracker:
         String fakeAgentBinary = FakeAgentSupport.propertiesFor('plain-round').agentCliBinary()
         def factoryProperties = testProperties(instanceName: instanceName, agentCliBinary: fakeAgentBinary)
         newTakeCommand(factoryProperties, worktreesRoot, [github: trackerFactory])
+    }
+
+    /**
+     * The shape a pickup would classify {@code rev} as — the production reader and the production
+     * classifier over one revision of the task branch, so a lifecycle spec can name the shape its
+     * reclaim actually routed on instead of inferring it from what the reclaim did not commit.
+     *
+     * <p>Takes a revision rather than a task id (which {@code TaskBranchGit.classifyShape} resolves
+     * to the branch tip) because the shape a resume runs on is frequently NOT the tip after the run:
+     * an answered branch is {@code Answered} only between its decision commit and the round that
+     * follows it.
+     */
+    BranchShape shapeAt(String rev) {
+        new BranchShapeClassifier().classify(
+                new BranchTipFactsReader().read(new RefTipSource(new GitProcessRunner(), projectDir, rev)))
     }
 }

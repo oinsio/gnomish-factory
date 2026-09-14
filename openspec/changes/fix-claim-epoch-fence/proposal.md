@@ -162,8 +162,8 @@ ever stamped and no live epoch ever exists.
 - M2: both FR6 regression specs are green and are red when the FR1 fence is reintroduced
   locally (verified once during implementation and recorded in the task report).
 - M3: the FR5 architecture spec passes and lists every `ClaimEpochSource.NONE` site and every
-  two-book test file it found; the allowlist it passed on contains only the plain-`run` wiring, the
-  claimless fixture, and the unit specs named in design D4.
+  two-book test file it found; the allowlist it passed on contains only the sites design D4 names,
+  each with the reason it never claims.
 - M4: PIT stays at the module gates with no new exemption; the removed `isStaleAgainst` and the
   dead reconcile route leave no surviving mutant behind.
 
@@ -207,6 +207,12 @@ ever stamped and no live epoch ever exists.
 - `:domain` — `BranchShape` (shape removed), `BranchShapeClassifier` (fence rule removed),
   `BranchTipFacts` (live-epoch field removed), `ClaimEpoch` (`isStaleAgainst` removed; `Comparable`
   stays only if a consumer remains).
+- `:gnomish-plugin-api` — the surface re-exposes the four `:domain` types this change cuts, so the
+  break is a versioned one: `0.5.0` -> `0.6.0` (the fifth BREAKING move, recorded in the module's
+  `build.gradle` header beside the four before it), `compat-baseline/gnomish-plugin-api-0.5.0.jar`
+  renamed to `-0.6.0.jar` and `compat-baseline/domain-0.1.0-SNAPSHOT.jar` regenerated so
+  `japicmpApiGate` compares against the accepted shape, and `TrackerAdapterFactory.create`'s
+  javadoc swept with the rest of FR7. No source of the module changes otherwise.
 - `:adapters:git` — `BranchTipFactsReader`, `TipEnvelopeReader`, `GitTaskBranches.shapeAt` (no
   live epoch threaded to the classifier; the book is still needed for stamping), the
   `GitTaskBranches(GitProcessRunner)` constructor that defaults to `ClaimEpochSource.NONE`
@@ -217,7 +223,7 @@ ever stamped and no live epoch ever exists.
   `BranchRepairAction`, `BranchRepairLog`, `BranchShapeDiagnosis` (`StaleEpoch` arms and the
   `DISCARD` phrase removed), `TakeCommandSeams` (seam removed), `TakeCommandFactory`,
   `SubcommandDispatchFactory`, `ServeCommand`, `TakeClaimAndWork` (the separate `ClaimEpochBook`
-  parameter removed; the book comes from `TaskGit`), `TakeCommandSupport.resolveTracker` and
+  parameter removed; the book comes from `TaskGit`), `TrackerResolution.resolveTracker` and
   `ServeCommand.provisionTracker` (wrap with the book), `TaskGit` (carries the book; every
   constructor takes it), `EpochRecordingTracker` (unchanged class, new application site).
 - `:bootstrap` — `TrackerAdapterConfiguration.trackerAdapterRegistry` (wrapping removed),
