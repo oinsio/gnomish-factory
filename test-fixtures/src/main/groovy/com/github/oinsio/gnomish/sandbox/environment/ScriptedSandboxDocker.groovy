@@ -36,10 +36,9 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
             if (args[0] == 'inspect' && args == DockerCommands.inspectContainerState(args.last())) {
                 return new DockerResult(1, '', 'No such object') // fresh materialize path
             }
-            // The image-declared-volume read every fresh materialize issues (FR1 of
-            // fix-image-declared-volumes), answered as the runtime answers an image declaring none.
-            if (args == DockerCommands.inspectImageVolumes(args.last())) {
-                return new DockerResult(0, 'null', '')
+            def declared = answerDeclaredVolumes(args)
+            if (declared != null) {
+                return declared
             }
             if (args[0] == 'inspect' && args.contains('{{.Id}}')) {
                 return new DockerResult(0, 'sha256:guard-container\n', '') // the guard's denial-source identity

@@ -2,6 +2,7 @@
 
 <!-- implements UX1, UX2, UX3, UX4, UX5, UX6, NG5, NG7 of add-sandbox-core -->
 <!-- implements UX3, UX4 of add-serve-sandbox-lifecycle -->
+<!-- implements FR6, UX2 of fix-image-declared-volumes -->
 
 This guide is for the operator configuring where gnome processes actually run.
 Since add-sandbox-core, every gnome-product process — agent rounds, judge

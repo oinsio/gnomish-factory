@@ -52,13 +52,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     static final List<String> IMAGE_INSPECT = DockerCommands.inspectImageVolumes('gnomish/img')
     static final DeclaredVolumeOverrides NO_OVERRIDES = new DeclaredVolumeOverrides([])
 
-    /**
-     * The image-declared-volume read every fresh materialize now issues (FR1 of
-     * fix-image-declared-volumes), answered as the runtime answers an image declaring none.
-     * Returns null for every other argv, so a feature's own closure decides those.
-     */
+    /** The shared fake's answer to the image-declared-volume read (FR1 of fix-image-declared-volumes). */
     private static DockerResult declaredVolumes(List<String> args, String answer = 'null') {
-        args[0] == 'image' ? new DockerResult(0, answer, '') : null
+        RecordingDockerCli.answerDeclaredVolumes(args, answer)
     }
 
     private static List<String> runArgv(DeclaredVolumeOverrides overrides = NO_OVERRIDES) {

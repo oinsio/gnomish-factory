@@ -104,7 +104,14 @@ proposal); mitmproxy's generated CA set is 24 KB. For the box, 64 MB per
 declared path sits well under the 2 GB default memory limit and is not a cache
 a build could usefully fill; a tool that needs more at a declared path is a
 tool that needs the content in the image or under the working copy (UX2
-documents this). *Mode rationale — measured on Docker 29.4.0 / runc 1.3.4,
+documents this). The bound is stated per path, so an image declaring N paths
+can hold N x 64 MB at once, charged to the container's own memory limit — an
+acceptable ceiling because the image is trusted operator configuration (the
+declaration count is not attacker-chosen) and the box's own limit caps the
+total regardless; the default guard image, the one container with no memory
+limit, declares exactly one path (`/home/mitmproxy/.mitmproxy`, verified
+2026-09-14).
+*Mode rationale — measured on Docker 29.4.0 / runc 1.3.4,
 2026-09-14:* the runtime copies the declared directory's **mode** from the
 image onto the tmpfs but never its **owner** — the mount is always `root:root`
 (runc's tmpfs path has no `chown`; moby/moby#39466). The documented `1777`

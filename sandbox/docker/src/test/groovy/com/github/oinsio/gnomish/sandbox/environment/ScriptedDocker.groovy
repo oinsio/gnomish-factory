@@ -21,10 +21,9 @@ final class ScriptedDockerCli extends DockerCli {
 
     @Override
     DockerResult run(List<String> args) {
-        // The image-declared-volume read every fresh materialize issues (FR1 of
-        // fix-image-declared-volumes) is answered as the runtime answers an image declaring none.
-        if (args[0] == 'image') {
-            return new DockerResult(0, 'null', '')
+        def declared = RecordingDockerCli.answerDeclaredVolumes(args)
+        if (declared != null) {
+            return declared
         }
         args[0] == 'inspect' ? new DockerResult(1, '', 'No such object') : new DockerResult(0, '', '')
     }

@@ -9,10 +9,12 @@ package com.github.oinsio.gnomish.sandbox.environment
  * ephemeral, the explicitly mounted one keeps its named factory volume.
  *
  * <p>The declared path is owned by the image's own {@code gnome} user, as an image that
- * means its user to write there would arrange it: Docker copies an existing directory's
- * ownership and mode onto the {@code tmpfs} it mounts over it (the {@code 1777} default
- * applies only to a destination the image does not have), exactly as it does onto an
- * anonymous volume — so the override leaves the image's own arrangement in place.
+ * means its user to write there would arrange it — which is what makes the mode half of
+ * design D5 observable: the runtime mounts the {@code tmpfs} {@code root:root} and copies
+ * no ownership (runc's tmpfs path has no {@code chown}), where the anonymous volume the
+ * change prevents copied owner and mode alike. The write the spec then performs as
+ * {@code gnome} succeeds only because of {@code tmpfs-mode=1777}, so this image is what
+ * turns that assertion into the runc-floor gate.
  *
  * <p>The marker file baked at {@code /cache/baked.txt} is what makes the deliberate
  * behaviour change of design D1 observable: an anonymous volume would receive a copy

@@ -75,14 +75,20 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
         and: 'image content under the declared path is not visible in the box (design D1, UX2)'
         exitOf('test -e ' + DeclaredVolumeSandboxImage.BAKED_FILE) != 0
 
+        and: 'the override is mounted root-owned and world-writable with the sticky bit (D5)'
+        // The runtime copies the image directory's mode onto the tmpfs but never its owner — the
+        // mount comes up root:root (runc's tmpfs path has no chown; moby/moby#39466), while the
+        // anonymous volume this change prevents copied owner and mode alike. `tmpfs-mode=1777` is
+        // what gives the image's own non-root user back the write access it had before.
+        output("stat -c '%a %U' " + DeclaredVolumeSandboxImage.DECLARED_PATH).strip() == '1777 root'
+
         when: 'a round writes into the declared path as the image\'s non-root user'
         def writeExit = exitOf('echo written > ' + DeclaredVolumeSandboxImage.DECLARED_PATH + '/round.txt')
 
-        then: 'the write succeeds — the tmpfs carries the declared directory\'s own ownership'
-        // Docker copies an existing image directory's uid/gid/mode onto the tmpfs it mounts over
-        // it, exactly as it does onto an anonymous volume, so the override costs the image's user
-        // no access it had before. (The 1777 default applies only where the image has no such
-        // directory.) This is why no `tmpfs-mode` is set: the image's arrangement already stands.
+        then: 'the write succeeds — this assertion is the runc-floor gate of D5'
+        // A runtime older than runc 1.1.8 (opencontainers/runc#3912) restores the image
+        // directory's own mode after mounting and silently ignores tmpfs-mode; on such a host the
+        // declared path comes up root-owned and not writable by `gnome`, and this line reports it.
         writeExit == 0
 
         when: 'the environment is disposed'

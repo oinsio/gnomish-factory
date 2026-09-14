@@ -122,6 +122,11 @@ and the order agreed with each:
       `ContainerLifecycleCoverageGapsE2ESpec`) with `docker volume ls -qf
       dangling=true | wc -l` before and after; record both numbers in the task
       report (expected: equal).
+      **Measured 2026-09-14, Docker 29.4.0 / runc, one run of all four suites
+      in one invocation (6 `Container*` specs in `:adapters:git`, 39 features,
+      and the three bootstrap E2E specs, 4 features, all executed, none
+      skipped): dangling before 3, after 3 — equal, against +4 after three
+      specs before the change.**
 
 ## 5. Documentation and glossary (FR6, UX2, M2)
 
