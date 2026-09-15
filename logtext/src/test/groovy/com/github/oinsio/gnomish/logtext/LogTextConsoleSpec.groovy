@@ -61,7 +61,6 @@ class LogTextConsoleSpec extends Specification {
         'NUL' | 0x00 || '^@'
         'BEL' | 0x07 || '^G'
         'backspace' | 0x08 || '^H'
-        'tab' | 0x09 || '^I'
         'vertical tab' | 0x0B || '^K'
         'form feed' | 0x0C || '^L'
         'unit separator, C0 upper edge' | 0x1F || '^_'
@@ -77,9 +76,18 @@ class LogTextConsoleSpec extends Specification {
         LogText.forConsole('all tests pass\rHIDDEN') == 'all tests pass\\rHIDDEN'
     }
 
-    def "FR5: the line feed is the one control kept as itself"() {
+    def "FR5: the line feed is kept as itself"() {
         expect: 'line structure is the console plane\'s whole difference from the log plane'
         LogText.forConsole('first\nsecond\nthird') == 'first\nsecond\nthird'
+    }
+
+    // FR5: the table names the hostile characters, and the tab is not one of them — the log plane
+    // keeps it too. Caret notation here would print every stack-trace frame the operator is shown
+    // as `^Iat com.example…`, costing the indentation the diagnosis is read by.
+    def "FR5: the tab is kept as itself, as the character table says it is not neutralized"() {
+        expect:
+        LogText.forConsole('frame:\n\tat com.example.Stage.run(Stage.java:1)') ==
+                'frame:\n\tat com.example.Stage.run(Stage.java:1)'
     }
 
     def "NFR-S2: a forty-line report is printed as forty lines"() {

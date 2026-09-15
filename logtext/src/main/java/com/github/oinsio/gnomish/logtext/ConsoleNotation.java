@@ -14,8 +14,11 @@ package com.github.oinsio.gnomish.logtext;
  * {@code EscapeTerminal} convention. An operator reading {@code ^[]52;c;…} knows what they are
  * looking at without a legend.
  *
- * <p>Two characters are deliberately not in caret notation. {@code \n} is kept as itself — it is
- * the line structure this plane preserves. {@code \r} is written as the two characters {@code \r}
+ * <p>Three characters are deliberately not in caret notation. {@code \n} and {@code \t} are kept
+ * as themselves: {@link CharacterTable} does not name either of them, so neither plane neutralizes
+ * them — the line feed is the line structure this plane preserves, and the tab is the indentation
+ * a stack trace is read by, which {@code ^I} at the head of every frame would cost the operator.
+ * {@code \r} is written as the two characters {@code \r}
  * rather than {@code ^M} because a carriage return's whole trick is to return to column 0 and
  * overwrite the line the operator just read, and naming it the way every programming language does
  * reads more plainly than a caret at that one site.
@@ -42,8 +45,8 @@ final class ConsoleNotation {
     }
 
     private static void append(StringBuilder out, int codePoint) {
-        if (codePoint == '\n') {
-            out.append('\n');
+        if (codePoint == '\n' || codePoint == '\t') {
+            out.appendCodePoint(codePoint);
         } else if (codePoint == '\r') {
             out.append("\\r");
         } else if (codePoint < 0x20) {

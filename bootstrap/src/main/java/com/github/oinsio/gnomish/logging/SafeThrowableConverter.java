@@ -26,7 +26,9 @@ import java.util.regex.Pattern;
  * <p>The text is split on line breaks before anything else, so every separator — carriage return
  * and the Unicode line/paragraph separators included — becomes a marked continuation rather than
  * surviving inside a line. The whole rewriting is then bounded by {@link LogText#capRecord}: a
- * hostile message can be a megabyte, and the bound is what FR1 asks of every record.
+ * hostile message can be a megabyte, and the bound is what FR1 asks of every record. The bound is
+ * applied inside the record's terminating line separator, never over it — the pattern ends here,
+ * so that separator is what closes the record for the next one.
  *
  * <p>Implements FR3, NFR-R1 of harden-untrusted-text-sinks.
  */
@@ -95,12 +97,21 @@ public class SafeThrowableConverter extends ThrowableProxyConverter {
         StringBuilder out = new StringBuilder(rendered.length());
         for (int i = 0; i < count; i++) {
             String line = lineNeutralizer.apply(lines[i]);
-            if (i > 0 && !isTraceLine(line)) {
-                out.append(CONTINUATION);
+            // The separator goes before each line but the first, so the text the cap sees carries
+            // no terminator of its own — see the terminator written back below.
+            if (i > 0) {
+                out.append(CoreConstants.LINE_SEPARATOR);
+                if (!isTraceLine(line)) {
+                    out.append(CONTINUATION);
+                }
             }
-            out.append(line).append(CoreConstants.LINE_SEPARATOR);
+            out.append(line);
         }
-        return LogText.capRecord(out.toString());
+        // The terminator is appended after the cap, never inside it. The pattern ends at %safeEx,
+        // so this separator is what closes the whole record: capping over it would drop it, and
+        // the next record would start on the truncation marker's own line, its timestamp out of
+        // column 0 — where every reader, and every shipper splitting on it, looks for an event.
+        return LogText.capRecord(out.toString()) + CoreConstants.LINE_SEPARATOR;
     }
 
     private static boolean isTraceLine(String line) {

@@ -2,10 +2,14 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO
+import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
 import java.nio.file.Files
 import java.nio.file.Path
 import org.springframework.boot.DefaultApplicationArguments
@@ -21,6 +25,12 @@ import spock.lang.TempDir
  */
 class StatusCommandSpec extends Specification implements SeededCloneFixture, StdoutCaptureFixture {
 
+    /** U+202E RIGHT-TO-LEFT OVERRIDE: neutralized by the console's human path, kept by the machine one. */
+    private static final String BIDI_OVERRIDE = '\u202E'
+
+    /** A tracker title as an attacker would write it: an OSC 52 clipboard sequence and a bidi override. */
+    private static final String HOSTILE_TITLE = 'Fix \u001B]52;c;SGk=\u0007the ' + BIDI_OVERRIDE + 'thing'
+
     @TempDir
     Path tempDir
 
@@ -30,6 +40,10 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
 
     private StatusCommand newCommand() {
         new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, liveConsole())
+    }
+
+    private StatusCommand newCommand(ScriptedConsoleIO console) {
+        new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, console)
     }
 
     def "FR13: text render of a found task prints the status block"() {
@@ -269,5 +283,66 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         output.contains('Delivered')
         output.contains('MIXED-BAD')
         output.contains('Corrupt')
+    }
+
+    // FR5, UX3 of harden-untrusted-text-sinks: `--json` is read by a parser, so every JSON surface
+    // goes out on the console owner's machine path, byte for byte. These features assert the path
+    // itself (ScriptedConsoleIO records the machine calls separately), because a human-path render
+    // of well-formed JSON still looks like JSON — a site quietly switched to `print` would corrupt
+    // the document only for the characters that make the corruption worth catching.
+    def "FR5, UX3: the single-task --json document goes out on the machine path, byte for byte"() {
+        given: 'a task whose tracker title carries an escape sequence and a bidirectional override'
+        persistRound('MACHINE-1', TaskState.atStageStart('implement'), 'implement', 0, HOSTILE_TITLE)
+        def report = (TaskGitFixture.realClaimless().branches().readState(cloneDir, 'MACHINE-1')
+                as BranchStateResult.Found).report()
+        def expected = new StatusReportJsonMapper().serialize(report) + ConsoleIO.LINE_END
+        def console = new ScriptedConsoleIO()
+        def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'MACHINE-1', '--json')
+
+        when:
+        newCommand(console).run(args)
+
+        then: 'exactly the mapper\'s own bytes, on the machine path'
+        console.printedMachine == [expected]
+
+        and: 'which still carries the override as itself — the human path would have named it instead'
+        expected.contains(BIDI_OVERRIDE)
+    }
+
+    def "FR5, UX3: the list-mode --json array goes out on the machine path, byte for byte"() {
+        given:
+        persistRound('MACHINE-2', TaskState.atStageStart('implement'))
+        def rows = TaskGitFixture.realClaimless().branches().list(cloneDir)
+        def expected = new TaskListRenderer().renderJson(rows) + ConsoleIO.LINE_END
+        def console = new ScriptedConsoleIO()
+        def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, '--json')
+
+        when:
+        newCommand(console).run(args)
+
+        then:
+        console.printedMachine == [expected]
+    }
+
+    def "FR5, UX3: the shape --json document goes out on the machine path, byte for byte"() {
+        given: 'a branch whose state file declares an unsupported version, so the shape is the answer'
+        persistRound('MACHINE-3', TaskState.atStageStart('implement'))
+        def worktree = worktreesRoot.resolve('clone').resolve('MACHINE-3')
+        def stateFile = new File(worktree.toFile(), '.gnomish-task/state.json')
+        stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":9')
+        runner.run(worktree, 'add', '-A')
+        runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 9')
+        def shape = (TaskGitFixture.realClaimless().branches().readState(cloneDir, 'MACHINE-3')
+                as BranchStateResult.Shaped).shape()
+        def expected = new BranchShapeReportRenderer().renderJson('MACHINE-3', shape) + ConsoleIO.LINE_END
+        def console = new ScriptedConsoleIO()
+        def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'MACHINE-3', '--json')
+
+        when:
+        newCommand(console).run(args)
+
+        then:
+        thrown(BranchShapeRefusedException)
+        console.printedMachine == [expected]
     }
 }

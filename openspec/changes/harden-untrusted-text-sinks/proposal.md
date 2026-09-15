@@ -140,9 +140,9 @@ type-level work can proceed without an open terminal-injection window.
   the message, and SHALL be single-line.
 - FR5: One owner SHALL write all non-logger text to the operator's terminal.
   Its human-readable output path applies *visible* neutralization — ESC as
-  `^[`, other C0 as `^X`, DEL as `^?`, C1 and bidi/format characters as
-  `\uXXXX`, `\r` as `\r` — preserving line structure and length (operator
-  reports are long by design). Its machine-readable path (`--json` renderers,
+  `^[`, C0 other than `\n` and `\t` as `^X`, DEL as `^?`, C1 and bidi/format
+  characters as `\uXXXX`, `\r` as `\r` — preserving line structure, tab
+  indentation and length (operator reports are long by design). Its machine-readable path (`--json` renderers,
   JSON mappers) writes verbatim.
 - FR6: No production class outside the console owner SHALL write to
   `System.out` or `System.err`; a build gate fails on a new site. The 24

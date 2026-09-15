@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.logging
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.spi.ThrowableProxy
 import ch.qos.logback.core.CoreConstants
+import com.github.oinsio.gnomish.logtext.LogText
 import com.github.oinsio.gnomish.testsupport.AdversarialCorpus
 import com.github.oinsio.gnomish.testsupport.InertText
 import java.util.function.UnaryOperator
@@ -129,8 +130,14 @@ class SafeThrowableConverterSpec extends Specification {
 
     // FR1's bound applies to the whole record: a megabyte of exception message is not a log flood
     def "a hostile exception message is bounded"() {
-        expect:
-        converter.convert(event(caught('x' * 2_000_000))).length() <= com.github.oinsio.gnomish.logtext.LogText.RECORD_CAP_CHARS
+        when:
+        String rendered = converter.convert(event(caught('x' * 2_000_000)))
+
+        then:
+        rendered.length() <= LogText.RECORD_CAP_CHARS
+
+        and: 'and the bounded rendering still terminates its own record, as the pattern ends here'
+        rendered.endsWith(CoreConstants.LINE_SEPARATOR)
     }
 
     // NFR-R1: the sink never loses a record — a failing neutralization degrades to a placeholder

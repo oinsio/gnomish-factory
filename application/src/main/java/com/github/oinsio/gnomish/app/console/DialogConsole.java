@@ -23,7 +23,11 @@ import java.util.Set;
  * whether the read returns a line or raises {@link ConsoleClosedException} on
  * EOF (design D7).
  *
- * <p>Implements FR10, FR13, UX1, D7 of add-manual-run.
+ * <p>The two meta-commands take the two write paths of {@link ConsoleIO}: the text
+ * render is for a person, the {@code --json} render for a parser (FR5 of
+ * harden-untrusted-text-sinks).
+ *
+ * <p>Implements FR10, FR13, UX1, D7 of add-manual-run, FR5 of harden-untrusted-text-sinks.
  */
 public final class DialogConsole {
 
@@ -120,7 +124,10 @@ public final class DialogConsole {
                 continue;
             }
             if (STATUS_JSON_COMMAND.equals(line)) {
-                io.print(statusRenderer.render(true));
+                // The machine-readable path: the reader of a --json render is a parser, and the
+                // human path would rewrite the characters it renders visibly into escapes JSON
+                // does not define (FR5 of harden-untrusted-text-sinks).
+                io.printMachine(statusRenderer.render(true));
                 continue;
             }
             return line;

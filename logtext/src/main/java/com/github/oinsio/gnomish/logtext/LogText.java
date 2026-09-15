@@ -96,7 +96,8 @@ public final class LogText {
      * flattens the text to one line, this one renders the same set <em>visibly</em> — ESC as
      * {@code ^[}, the other C0 controls in caret notation, DEL as {@code ^?}, the widthless
      * characters as backslash-u escapes, {@code \r} as the two characters {@code \r} — and keeps
-     * {@code \n}, the line structure and the length exactly as they arrived. No cap: an operator
+     * the two characters the table does not name, {@code \n} and {@code \t}, along with the line
+     * structure and the length, exactly as they arrived. No cap: an operator
      * report is long by design, and its reader is a person who needs all of it.
      *
      * @param text the raw untrusted text; never null

@@ -55,6 +55,9 @@ class DialogConsoleSpec extends Specification {
             'json-report',
             'question? '
         ]
+
+        and: 'FR5 of harden-untrusted-text-sinks: the render went the verbatim way, not the human one'
+        io.printedMachine == ['json-report']
     }
 
     def "handles several status interceptions before a real answer"() {

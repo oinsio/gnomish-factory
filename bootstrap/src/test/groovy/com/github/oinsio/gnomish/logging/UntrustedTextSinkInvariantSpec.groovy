@@ -193,6 +193,27 @@ class UntrustedTextSinkInvariantSpec extends Specification {
         plane << planes
     }
 
+    // FR1, FR3: the record cap must not cost the file its record boundaries. The pattern ends at
+    // `%safeEx`, so the throwable rendering carries the separator that closes the record; a cap
+    // applied over that separator would drop it and start the next record mid-line, where no
+    // reader — and no log shipper splitting on a timestamp at column 0 — can find it.
+    def "a record bounded by the cap still closes, so the next one opens at column 0: #plane.appender of #plane.config"() {
+        given:
+        Capture capture = capture(plane)
+
+        when:
+        capture.logger.error('stage failed', caught('x' * 2_000_000))
+        capture.logger.info('the record after the bounded one')
+
+        then:
+        lines(capture.text()).find {
+            it.contains('the record after the bounded one')
+        } ==~ /^\d{4}-.*/
+
+        where:
+        plane << planes
+    }
+
     // NFR-S1: (c) the corpus as an MDC value — a stage name read out of the target repository's own
     // manifest, rendered ahead of the message where a forged prefix would be most convincing
     def "a hostile MDC value writes one inert, bounded record: #shape on #plane.appender of #plane.config"() {

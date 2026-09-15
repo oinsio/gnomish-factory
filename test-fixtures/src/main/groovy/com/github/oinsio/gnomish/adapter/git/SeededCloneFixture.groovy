@@ -40,9 +40,10 @@ trait SeededCloneFixture implements BareGitRepoFixture {
         worktreesRoot = tempDir.resolve('worktrees')
     }
 
-    void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0) {
+    void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0,
+            String title = 'Fix the thing') {
         new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE).createTask(
-                new TaskContext(taskId, 'Fix the thing', 'Body', []),
+                new TaskContext(taskId, title, 'Body', []),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))
         def worktree = worktreesRoot.resolve('clone').resolve(taskId)

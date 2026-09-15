@@ -12,8 +12,8 @@ production class writes to the process streams directly.
 ### Requirement: Human-readable console output is neutralized visibly
 All non-logger text written to the operator's terminal SHALL pass through one
 console owner. Its human-readable path SHALL render control and escape
-sequences *visibly* rather than dropping them — ESC as `^[`, other C0 controls
-as caret notation, DEL as `^?`, C1 controls and bidirectional-override and
+sequences *visibly* rather than dropping them — ESC as `^[`, C0 controls other
+than the line feed and the tab as caret notation, DEL as `^?`, C1 controls and bidirectional-override and
 invisible format characters as their `\uXXXX` escape, carriage return as
 `\r` — while preserving line structure and length, so an operator report of
 any length stays readable and an attempt to drive the terminal is seen as
@@ -50,6 +50,12 @@ terminal, and JSON encoding already bounds its own metacharacters.
   carries an escape sequence
 - **THEN** the printed bytes equal the JSON mapper's output exactly, escape
   sequence included as the JSON string encoded it
+
+#### Scenario: The in-dialog status meta-command takes the same path
+- **WHEN** an operator answers a dialog prompt with `status --json` and the
+  render is intercepted below the dialog
+- **THEN** the render is written on the machine-readable path, byte for byte,
+  exactly as the `--json` command would have written it
 
 ### Requirement: No direct process-stream writes in production code
 No production class other than the console owner SHALL write to the process
