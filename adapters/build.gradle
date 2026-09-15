@@ -65,6 +65,11 @@ dependencies {
     // put a manifest command and a remote-chosen redirect target into log lines, and both
     // reach the line only through `LogText`.
     implementation project(':logtext')
+    // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every
+    // WARN/ERROR site in this module takes its `[GFnnn]` head from an `OperatorEvent`
+    // constant. `implementation`, not `api`: the enum is named only inside log calls,
+    // never in a signature this module exports.
+    implementation project(':operatorevent')
 
     // The `.gnomish/` YAML loader. The domain stays Jackson-free (guarded by
     // `DomainPuritySpec`). `api` for the two the DTOs expose on public
@@ -111,11 +116,20 @@ layering {
         // The dependency-free logging-support leaf (design D5/D10 of
         // harden-logging-observability): the check runners sanitize their log lines through it.
         ':logtext',
+        // The operator-event catalog leaf (FR4, FR11, design D3/D9 of split-logtext-leaves):
+        // declared directly above, because this module's own log sites name `OperatorEvent`;
+        // also reached through `:domain`, whose engine emitters take their head from it.
+        ':operatorevent',
         ':sandbox:core',
         ':sandbox:docker',
         // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the
         // dependency-free `:subprocess` leaf onto the runtime classpath the gate
         // reads (design D9/D11 of bound-subprocess-commands).
         ':subprocess',
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
+        // `:logtext`, whose `LogText` is a facade over it, and via `:domain`, which reaches
+        // the leaf for the same primitives. No source in this module names it; the layering
+        // gate walks the transitive graph, so the reach is listed where it arrives.
+        ':untrustedtext',
     ]
 }

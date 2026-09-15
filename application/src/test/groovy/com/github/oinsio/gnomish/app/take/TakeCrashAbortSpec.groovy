@@ -21,7 +21,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset

@@ -23,8 +23,9 @@ granularity — round state committed in-box, lifecycle commits built from bare
 objects — so neither consumes the writer. `untrustedtext` is the JDK-only leaf
 holding the untrusted-text primitives — the one character-class table,
 stripping, tail and record caps, newline flattening, and the console notation
-— so text safety has exactly one owner that the domain, the published
-contract module and every layer above them can reach. `operatorevent` is the
+— so text safety has exactly one owner, sitting low enough that the domain,
+the published contract module and every layer above them can reach it; the
+published contract and the logging leaf are its first two consumers. `operatorevent` is the
 JDK-only leaf holding the operator-event catalog, so every emitter including
 the domain's renders its `[GFnnn]` head from the constant. `logtext` is the
 logging-support leaf holding the log-line sanitizer facade over
@@ -57,11 +58,11 @@ inside; extractability is a declared property.
 The module dependency direction SHALL be acyclic and enforced by the build:
 `subprocess`, `atomicfile`, `untrustedtext`, `operatorevent`, and `baseref`
 depend on nothing internal; `domain` depends only on JDK-only leafs — today
-exactly `untrustedtext` and `operatorevent` — and never on a module that
-carries a logging API, a framework, a serialization library or the
-filesystem; `logtext` depends only on `untrustedtext`; `gitobjects` depends
-only on `subprocess`; `gnomish-plugin-api` depends only on `domain` (reaching
-`untrustedtext` through it); `:sandbox:core` depends only on `domain` /
+exactly `operatorevent` — and never on a module that carries a logging API, a
+framework, a serialization library or the filesystem; `logtext` depends only on
+`untrustedtext`; `gitobjects` depends only on `subprocess`;
+`gnomish-plugin-api` depends only on `domain` and on the `untrustedtext` leaf
+its findings sanitizer delegates to; `:sandbox:core` depends only on `domain` /
 `gitobjects`; `application` depends only on `domain`, `subprocess`,
 `atomicfile`, `untrustedtext`, `operatorevent`, `logtext`, `gitobjects`,
 `baseref`, `gnomish-plugin-api`, and `:sandbox:core`; each adapter module
@@ -83,8 +84,12 @@ the test-fixtures module; `bootstrap` is the only module that wires adapters
 together and the only one that reaches every adapter. `subprocess` and
 `atomicfile` SHALL never acquire a dependency — their emptiness is what keeps
 their consumers free of transitive coupling. `untrustedtext` and
-`operatorevent` SHALL likewise never acquire a dependency: the domain and the
-published contract reach them, so any edge added there is pushed into both.
+`operatorevent` SHALL likewise never acquire a dependency: the domain reaches
+the catalog and the published contract reaches both, so any edge added there is
+pushed into both. A module SHALL declare a leaf edge in the change that uses it
+and not ahead of one — the dependency-analysis gate reports an unused
+declaration, and an edge declared for a type that does not exist yet is exactly
+that.
 Because the layering gate walks the transitive production graph, every module
 whose classpath reaches `untrustedtext` or `operatorevent` — through `domain`,
 through `logtext`, or directly — SHALL list it in its own allowlist with a
@@ -136,15 +141,19 @@ defaulting to a no-op.
 
 #### Scenario: Domain reaches only JDK-only leafs
 - **WHEN** the layering gate runs against `:domain`
-- **THEN** its allowed projects are exactly `:untrustedtext` and
-  `:operatorevent`, and each of those declares no internal module and no
-  external library
+- **THEN** every project in its allowlist — `:operatorevent` today — declares no
+  internal module and no external library, which is the whole admission rule:
+  the next leaf the domain needs is admitted by adding the edge that uses it,
+  not by amending this requirement
+- **AND** a project in that allowlist that acquired an internal edge or an
+  external artifact fails the build naming it
 
 #### Scenario: A transitive leaf is listed by every module that reaches it
 - **WHEN** the layering gate runs against a module whose production classpath
-  reaches `:untrustedtext` or `:operatorevent` only through `:domain` or
-  `:logtext` — `:sandbox:core`, `:gnomish-plugin-api`, the sample plugin,
-  `:bootstrap` among them
+  reaches `:untrustedtext` or `:operatorevent` without declaring the edge —
+  `:sandbox:core` and `:gnomish-plugin-api` reaching the catalog through
+  `:domain`, the sample plugin reaching both through `:gnomish-plugin-api`,
+  `:application` and the adapters reaching the text leaf through `:logtext`
 - **THEN** the gate passes only because that module's allowlist names the
   leaf; removing the entry fails the gate naming the leaf as an unlisted reach
 

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -16,7 +15,6 @@ import com.github.oinsio.gnomish.logtext.MdcAwareThread
 import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
-import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -110,8 +108,8 @@ class ClaimAnchorSpec extends Specification {
         def outageRetry = new FeedOutageRetry(new BudgetedVirtualSleeper(new VirtualClock()), {
             Duration.ofSeconds(1)
         }, RepeatSuppressorFixture.quiet())
-        def gate = new RemoteOutageGate(
-                BaseRefGit.UNWIRED, Path.of('.'), new VirtualClock(), new Random(0), Duration.ofSeconds(1), Duration.ofMinutes(1))
+
+        def gate = RemoteOutageGateFixtures.closedGate()
         def resilience = new FeedResilience(outageRetry, new FinishedDecline(), gate)
         new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner,
                 new FeedSelection(Duration.ofMinutes(2), Duration.ofHours(1), 2, new Random(0)),

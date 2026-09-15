@@ -2,9 +2,9 @@ package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.FailureReason;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.time.Duration;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;

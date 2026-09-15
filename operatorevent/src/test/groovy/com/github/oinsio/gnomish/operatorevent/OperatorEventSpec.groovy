@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.logtext
+package com.github.oinsio.gnomish.operatorevent
 
 import spock.lang.Specification
 

@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.BestEffortPush
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
@@ -21,9 +19,9 @@ import com.github.oinsio.gnomish.app.take.RevocationDetectedException
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
-import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -65,28 +63,28 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         def seed = cloneOrigin('seed')
         new File(seed.toFile(), 'f.txt').text = 'base'
         commitAll(seed, 'base')
-        assert runner.run(seed, 'branch', BRANCH).exitCode() == 0
-        assert runner.run(seed, 'push', '-q', 'origin', "${BRANCH}:${BRANCH}").exitCode() == 0
+        assert gitExitCode(seed, 'branch', BRANCH) == 0
+        assert gitExitCode(seed, 'push', '-q', 'origin', "${BRANCH}:${BRANCH}") == 0
     }
 
     /** Clones {@code origin} into a fresh worktree checked out on the task branch, with a fixed identity. */
     private Path cloneOrigin(String name, boolean onBranch = false) {
         Path dir = tempDir.resolve(name)
-        assert runner.run(tempDir, 'clone', '-q', origin.toString(), dir.toString()).exitCode() == 0
-        runner.run(dir, 'config', 'user.email', "${name}@b.c")
-        runner.run(dir, 'config', 'user.name', name)
+        assert gitExitCode(tempDir, 'clone', '-q', origin.toString(), dir.toString()) == 0
+        gitExitCode(dir, 'config', 'user.email', "${name}@b.c")
+        gitExitCode(dir, 'config', 'user.name', name)
         if (onBranch) {
-            assert runner.run(dir, 'checkout', '-q', BRANCH).exitCode() == 0
+            assert gitExitCode(dir, 'checkout', '-q', BRANCH) == 0
         }
         dir
     }
 
     private String originTip() {
-        runner.run(origin, 'rev-parse', BRANCH).stdout().trim()
+        gitOutput(origin, 'rev-parse', BRANCH)
     }
 
     private String head(Path repo) {
-        runner.run(repo, 'rev-parse', 'HEAD').stdout().trim()
+        gitOutput(repo, 'rev-parse', 'HEAD')
     }
 
     /** A round-boundary persist for {@code holder} over {@code worktree}, wrapping the real git persistence. */
@@ -99,18 +97,17 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         new ToolTrace(new AttemptKey('PROJ-1', 'implement', round), [])
     }
 
+    // BestEffortPush is package-private in adapter.git, so its logger is attached by name rather
+    // than by class (LogCaptureSupport#attach(String, Level)) — the same reason this spec's own
+    // git plumbing goes through BareGitRepoFixture's gitOutput/gitExitCode instead of GitProcessRunner#run.
     private static List<ILoggingEvent> capturePushWarns(Closure<?> emit) {
-        Logger logger = (Logger) LoggerFactory.getLogger('com.github.oinsio.gnomish.adapter.git.BestEffortPush')
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logger.addAppender(appender)
+        def logs = LogCaptureSupport.attach('com.github.oinsio.gnomish.adapter.git.BestEffortPush', Level.WARN)
         try {
             emit()
+            return List.copyOf(logs.list)
         } finally {
-            logger.detachAppender(appender)
-            appender.stop()
+            logs.detach()
         }
-        appender.list
     }
 
     // FR7, D6, M3: of two holders writing the same task branch, exactly one push lands; the loser
@@ -161,7 +158,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         originTip() != head(zombieWork)
 
         and: 'the zombie\'s divergent commit never reached origin — the new holder\'s branch is untouched, no data corruption'
-        runner.run(holderWork, 'fetch', '-q', 'origin').exitCode() == 0
-        runner.run(holderWork, 'merge-base', '--is-ancestor', head(zombieWork), "origin/${BRANCH}").exitCode() != 0
+        gitExitCode(holderWork, 'fetch', '-q', 'origin') == 0
+        gitExitCode(holderWork, 'merge-base', '--is-ancestor', head(zombieWork), "origin/${BRANCH}") != 0
     }
 }

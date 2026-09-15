@@ -18,7 +18,7 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.TakeSlotRunner;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import java.io.IOException;
 import java.nio.file.Path;

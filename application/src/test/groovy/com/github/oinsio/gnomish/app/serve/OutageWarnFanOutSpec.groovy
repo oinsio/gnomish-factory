@@ -1,8 +1,7 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.FreshClaimBaseBinding
-import com.github.oinsio.gnomish.app.TrustedBaseContext
+import com.github.oinsio.gnomish.app.FreshClaimBaseBindingLogRun
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -14,12 +13,9 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
-import com.github.oinsio.gnomish.baseref.BaseDefinition
-import com.github.oinsio.gnomish.baseref.DefaultBranch
-import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -34,8 +30,10 @@ import spock.lang.Specification
  * "One failure, one log" (.claude/rules/logging.md) across the three emitters a dead remote passes
  * through. {@code RemoteOutageServeEndToEndSpec} captures only {@link RemoteOutageGate}'s own
  * logger, so it cannot see a second WARN written elsewhere for the same fault; this spec walks ONE
- * released task through the exact production sequence a slot performs — {@link
- * FreshClaimBaseBinding#bind} returns the {@code InfrastructureUnavailable}, {@code
+ * released task through the exact production sequence a slot performs — {@code
+ * FreshClaimBaseBinding#bind} (run through {@link
+ * com.github.oinsio.gnomish.app.FreshClaimBaseBindingLogRun}, since that class is package-private
+ * to a sibling package) returns the {@code InfrastructureUnavailable}, {@code
  * TakeSlotRunner#run} hands it to {@link RemoteOutageGate#openOnFailure} and then to {@link
  * SlotOutcomeLog#detail} (TakeSlotRunner.java: signalRemoteOutageGate then outcomeLog.detail) — and
  * counts what the whole console sees.
@@ -67,13 +65,11 @@ class OutageWarnFanOutSpec extends Specification {
         def task = new TrackerTask(
                 REF, new TaskSnapshot('PROJ-1', 'title', 'body'), new TrackerTaskState.Ready(), AbortFacts.none(),
                 false, TaskDesignators.of('base', Designator.absent()))
-        def request = new FreshClaimBaseBinding.Request(
-                null, task, new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch('main')))
         def outcomeLog = new SlotOutcomeLog(LoggerFactory.getLogger(TakeSlotRunner))
         def gate = gate()
 
         when: 'the slot resolves its base against an origin that never answers, then reports the outcome'
-        FreshClaimBaseBinding.bind(baseRefGit, ROOT, request, TaskState.atStageStart('build'), tracker)
+        FreshClaimBaseBindingLogRun.bind(baseRefGit, ROOT, task, tracker)
         // The Released outcome's own result, restated: FreshClaimBaseBinding.Released is
         // package-private, and what this spec counts is the log fan-out, not the record's shape
         // (FreshClaimBaseBindingSpec already pins the returned variant and its text).

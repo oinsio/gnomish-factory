@@ -19,11 +19,12 @@ workspace-capability interface, and the `FindingsSanitizer` contract utility —
 and nothing from `application` or `bootstrap` internals. Domain value and
 config types referenced by these ports stay in `domain` and are exposed through
 a transitive `api` dependency; the untrusted-text primitives the findings
-sanitizer delegates to stay in the JDK-only `untrustedtext` leaf and reach a
-third party through the same transitive edge, so the single declared
-dependency contract is unchanged. The published project jar graph — and with
-it the committed compatibility baseline — is `gnomish-plugin-api`, `domain`
-and every JDK-only leaf `domain` reaches (`untrustedtext`, `operatorevent`);
+sanitizer delegates to stay in the JDK-only `untrustedtext` leaf, which this
+module declares itself and resolves alongside its own artifact, so the single
+declared dependency contract is unchanged. The published project jar graph —
+and with it the committed compatibility baseline — is `gnomish-plugin-api`,
+`domain`, the `untrustedtext` leaf this module declares, and every JDK-only
+leaf `domain` reaches (today `operatorevent`);
 a change to that set is re-baselined with a version bump even when no
 signature moves.
 <!-- implements FR4 of split-into-modules -->

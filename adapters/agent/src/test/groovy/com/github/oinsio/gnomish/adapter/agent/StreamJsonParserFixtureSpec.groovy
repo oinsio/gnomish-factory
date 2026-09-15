@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import spock.lang.Specification
 
@@ -19,7 +20,7 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: a clean round fixture parses into the full init/assistant/user/result sequence
     def "parses the plain-round fixture into the full event sequence"() {
         when: 'the plain-round fixture is parsed'
-        def events = parser.parse(readerOf('plain-round')).collect {
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('plain-round')).collect {
             it.event()
         }
 
@@ -48,7 +49,7 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: subagent nesting is preserved via parentToolUseId, top-level events have none
     def "parses the subagent-round fixture, preserving parentToolUseId on nested events only"() {
         when: 'the subagent-round fixture is parsed'
-        def events = parser.parse(readerOf('subagent-round')).collect {
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('subagent-round')).collect {
             it.event()
         }
 
@@ -76,7 +77,7 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: garbage/unknown lines mixed with valid ones are tolerated end to end
     def "parses the garbage-output fixture, keeping only the recognized lines"() {
         when: 'the garbage-output fixture is parsed'
-        def events = parser.parse(readerOf('garbage-output')).collect {
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('garbage-output')).collect {
             it.event()
         }
 
@@ -89,7 +90,7 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR4, D3: a stream ending without a result event yields no ResultEvent, no exception
     def "parses the missing-result-event fixture without producing a ResultEvent"() {
         when: 'the missing-result-event fixture is parsed'
-        def events = parser.parse(readerOf('missing-result-event')).collect {
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('missing-result-event')).collect {
             it.event()
         }
 
@@ -101,7 +102,7 @@ class StreamJsonParserFixtureSpec extends Specification {
     // FR6, NFR-O3, D3: read-time instants are non-decreasing across the fixture's lines
     def "stamps the plain-round fixture's events with non-decreasing read-time instants"() {
         when: 'the plain-round fixture is parsed'
-        def timestamped = parser.parse(readerOf('plain-round'))
+        def timestamped = parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
 
         then: 'every event carries a readAt instant, in non-decreasing wire order'
         timestamped.size() == 5
@@ -109,11 +110,5 @@ class StreamJsonParserFixtureSpec extends Specification {
         (1..<timestamped.size()).every { i ->
             !timestamped[i].readAt().isBefore(timestamped[i - 1].readAt())
         }
-    }
-
-    private static BufferedReader readerOf(String scenario) {
-        def resource = StreamJsonParserFixtureSpec.getResource("/fake-agent/scenarios/${scenario}/stdout.jsonl")
-        assert resource != null: "fixture not found for scenario '${scenario}'"
-        new BufferedReader(new InputStreamReader(resource.openStream(), 'UTF-8'))
     }
 }

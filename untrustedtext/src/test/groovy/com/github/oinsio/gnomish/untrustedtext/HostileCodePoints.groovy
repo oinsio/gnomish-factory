@@ -1,11 +1,11 @@
-package com.github.oinsio.gnomish.logtext
+package com.github.oinsio.gnomish.untrustedtext
 
 /**
  * The character-table ranges restated as data rather than reused from the production predicate: a
  * spec that imported the table could only prove the table agrees with itself.
  *
- * <p>Kept in sync with {@link LogTextConsoleSpec.CharacterTableProbe#hostile} and the private
- * {@code neutralized} predicate in {@link LogTextIdempotenceSpec}: both wrap {@link #inTable}, the
+ * <p>Kept in sync with {@link TextSafetyConsoleSpec.CharacterTableProbe#hostile} and the private
+ * {@code neutralized} predicate in {@link TextSafetyIdempotenceSpec}: both wrap {@link #inTable}, the
  * two planes differing only in whether the line feed counts — the log plane neutralizes it, the
  * console plane is the one plane that keeps it.
  */

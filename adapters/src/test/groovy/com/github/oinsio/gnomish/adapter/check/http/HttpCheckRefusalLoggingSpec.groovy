@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 

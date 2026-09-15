@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.architecture
 
+import com.github.oinsio.gnomish.testsupport.ModuleBuildFile
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
@@ -72,75 +73,54 @@ class ModuleBuildFileSpec extends Specification {
     /**
      * The shared leaf modules whose emptiness is load-bearing, each mapped to the exact set of
      * production-scope dependency declarations its build file may carry. {@code :subprocess} and
-     * {@code :atomicfile} declare nothing at all, and so does {@code :baseref}, whose emptiness is
-     * NFR-S3's constructive half (add-base-ref-resolution): a policy that can import nothing cannot
-     * reach a tracker, a remote or a configuration format. {@code :logtext} declares the SLF4J API
-     * and the BOM that pins it — MDC propagation is not expressible without the API, while a
-     * logging <em>backend</em> stays the composition root's choice (module-layering scenario "The
+     * {@code :atomicfile} declare nothing at all, and so do {@code :baseref}, {@code
+     * :untrustedtext} and {@code :operatorevent}, whose emptiness is the constructive half of a
+     * security property (NFR-S3 of add-base-ref-resolution, NFR-S1 of split-logtext-leaves): a
+     * policy that can import nothing cannot reach a tracker, a remote or a configuration format.
+     * {@code :logtext} declares the SLF4J API and the BOM that pins it — MDC propagation is not
+     * expressible without the API, while a logging <em>backend</em> stays the composition root's
+     * choice — plus the one internal edge FR7 of split-logtext-leaves grants it, to the
+     * untrusted-text leaf its {@code LogText} facade delegates to (module-layering scenario "The
      * logtext leaf carries only the logging API"). The internal half of each invariant is gated by
-     * {@code layering { allowedProjects = [] } }; this map is the external half.
+     * {@code layering { allowedProjects } }; this map is the external half.
+     *
+     * <p>This map is a named registry: it pins the leafs whose emptiness the layering depends on,
+     * whether or not anything reaches them today. {@link DomainLeafPuritySpec} asks the companion
+     * question from the other end — every project {@code :domain}'s allowlist names must satisfy
+     * the same definition, read from the allowlist rather than from a list kept here — so a leaf
+     * dropped from this map while the domain still reaches it stays gated there.
      */
     private static final Map<String, Set<String>> LEAF_PRODUCTION_DEPENDENCIES = [
         logtext: [
+            "implementation project(':untrustedtext')",
             'implementation platform(libs.spring.boot.dependencies)',
             'api libs.slf4j.api'
         ] as Set,
         subprocess: [] as Set,
         atomicfile: [] as Set,
         baseref: [] as Set,
+        untrustedtext: [] as Set,
+        operatorevent: [] as Set,
     ]
 
     // FR6: a shared leaf stays consumable from every layer only while it drags nothing behind it,
     // so its permitted external edges are enumerated by this gate rather than described in a comment
     def "the shared leaf #module declares only its permitted production dependencies"() {
-        given: 'the module build file'
-        def buildFile = RepoSourceTree.repoRoot().resolve(module).resolve('build.gradle').toFile()
+        given: 'the module build file, read as data'
+        def code = ModuleBuildFile.textOf(module)
 
-        expect: 'the build file really exists, so the scan is not vacuous'
-        buildFile.isFile()
+        expect: 'the build file really exists and was parsed, so the scan is not vacuous'
+        !code.isEmpty()
 
         and: 'its production-scope declarations are exactly the permitted set'
-        productionDependencies(buildFile) == permitted
+        ModuleBuildFile.productionDependencies(code) == permitted
+
+        and: 'and the internal half holds too: no leaf reaches a project but the one FR7 grants'
+        ModuleBuildFile.allowedProjects(code) == (module == 'logtext' ? [':untrustedtext'] as Set : [] as Set)
 
         where:
         module << LEAF_PRODUCTION_DEPENDENCIES.keySet()
         permitted << LEAF_PRODUCTION_DEPENDENCIES.values()
-    }
-
-    /**
-     * The non-test dependency declarations of a build file: the body of its {@code dependencies}
-     * block with comments and blank lines removed, minus the {@code test*} configurations, whose
-     * scope reaches no consumer. A build file with no {@code dependencies} block declares nothing.
-     */
-    private static Set<String> productionDependencies(File buildFile) {
-        dependenciesBlock(buildFile)
-                .readLines()
-                .collect { it.replaceFirst(/\/\/.*$/, '').trim() }
-                .findAll { !it.isEmpty() }
-                .findAll { !(it =~ /^test\w*\s/) }
-                .toSet()
-    }
-
-    /** The text between the braces of the {@code dependencies} block, or empty when there is none. */
-    private static String dependenciesBlock(File buildFile) {
-        def text = buildFile.text
-        def start = text.indexOf('dependencies {')
-        if (start < 0) {
-            return ''
-        }
-        def depth = 0
-        for (int i = text.indexOf('{', start); i <text.length(); i++) {
-            def ch = text.charAt(i)
-            if (ch == '{' as char) {
-                depth++
-            } else if (ch == '}' as char) {
-                depth--
-                if (depth == 0) {
-                    return text.substring(text.indexOf('{', start) + 1, i)
-                }
-            }
-        }
-        throw new IllegalStateException("unbalanced dependencies block in ${buildFile}")
     }
 
     /** Every Gradle script in the repository, skipping build outputs. */

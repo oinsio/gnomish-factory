@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import org.slf4j.LoggerFactory
 
 /**
@@ -140,6 +141,11 @@ class BrokenListenerSpec extends BrokenListenerSpecBase {
         and: 'every captured line is a WARN naming a listener failure'
         warnings.every {
             it.level == Level.WARN && it.formattedMessage.contains('listener threw')
+        }
+
+        and: 'and each carries the catalog head, rendered from the constant rather than copied'
+        warnings.every {
+            it.formattedMessage.startsWith(OperatorEvent.ENGINE_EVENT_LISTENER_THREW.head())
         }
 
         cleanup:

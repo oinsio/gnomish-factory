@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.logtext
+package com.github.oinsio.gnomish.untrustedtext
 
 /**
  * The adversarial corpus this module's specs are driven over: one entry per character class the
@@ -9,10 +9,11 @@ package com.github.oinsio.gnomish.logtext
  * character pasted into a source file is invisible to a reviewer and lost by the next tool that
  * touches the file — the two properties a corpus of exactly those characters cannot afford.
  *
- * <p>The sink-side corpora of {@code :bootstrap} (the end-to-end invariant) and of
- * {@code :application} (the declared-pair equivalence) state the same classes for their own
- * modules: {@code :logtext} reaches no other project, by the gate its build file carries, so there
- * is no home the three could share until {@code split-logtext-leaves} cuts the leaves.
+ * <p>The two corpora of {@code :bootstrap} — the sink-side end-to-end invariant, and
+ * {@code TextSafetyOwnerSpec}'s three-way identity — state the same classes for that module:
+ * this leaf reaches no other project, by the gate its build file carries, so a test tree above it
+ * cannot read this corpus. Folding the three is {@code type-untrusted-text}'s business, when it
+ * re-cuts the corpus around the carrier type (design D8 of split-logtext-leaves).
  *
  * <p>FR1, FR2, NFR-S1 of harden-untrusted-text-sinks.
  */
@@ -63,6 +64,19 @@ final class AdversarialCorpus {
         'astral character on the cap boundary': ch(0x1F600) * 3_000 + 'a',
         'a megabyte of line breaks': 'flood\n' * 200_000,
     ]
+
+    /**
+     * The log plane's composition, restated where its facade is not visible: {@code logtext.LogText}
+     * sits a module above this leaf, and its {@code forLog} is strip -> capTail -> flatten by
+     * definition (design D2 of split-logtext-leaves), so the choke-point output the specs that call
+     * this reason about is exactly what these three primitives produce.
+     *
+     * <p>Kept in one place because {@link TextSafetyIdempotenceSpec} and
+     * {@link TextSafetyRecordCapSpec} both need the same restatement of that composition.
+     */
+    static String forLog(String text) {
+        TextSafety.flatten(TextSafety.capTail(TextSafety.strip(text), TextSafety.DEFAULT_CAP_CHARS))
+    }
 
     private AdversarialCorpus() {}
 }

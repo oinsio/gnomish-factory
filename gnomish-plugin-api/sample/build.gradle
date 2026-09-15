@@ -32,5 +32,19 @@ dependencies {
 // `:test-fixtures` — fail `check` here rather than quietly widening what a
 // third-party adapter drags in (UX3, FR7).
 layering {
-    allowedProjects = [':domain', ':gnomish-plugin-api']
+    allowedProjects = [
+        ':domain',
+        ':gnomish-plugin-api',
+        // The operator-event catalog leaf (FR11, design D9 of split-logtext-leaves): transitive
+        // via `:gnomish-plugin-api` and `:domain`. No source in this module names it — a third
+        // party still compiles against one declared dependency; the layering gate walks the
+        // transitive graph, so the reach is listed where it arrives.
+        ':operatorevent',
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
+        // `:gnomish-plugin-api`, whose findings sanitizer is a facade over it. No source in
+        // this module names it — a third party still compiles against one declared
+        // dependency; the layering gate walks the transitive graph, so the reach is listed
+        // where it arrives.
+        ':untrustedtext',
+    ]
 }

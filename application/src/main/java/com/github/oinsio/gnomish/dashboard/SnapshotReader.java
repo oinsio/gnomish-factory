@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.dashboard;
 
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.LifecycleState;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonReader;

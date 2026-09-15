@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.dashboard
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.LifecycleState
 import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper
@@ -85,7 +85,7 @@ class SnapshotReaderSpec extends Specification {
 
     def "a fresh snapshot within k x intervalSeconds renders Fresh regardless of lifecycle"() {
         given:
-        def file = writeSnapshot(snapshotWithLifecycle(new LifecycleState.Running()))
+        def file = writeSnapshot(SnapshotJsonMapperSpec.snapshotWithLifecycle(new LifecycleState.Running()))
 
         when:
         def view = reader.read(file, FRESH_NOW)
@@ -98,7 +98,7 @@ class SnapshotReaderSpec extends Specification {
     @Unroll
     def "a stale snapshot with lifecycle #lifecycle renders DeadDaemon"() {
         given:
-        def file = writeSnapshot(snapshotWithLifecycle(lifecycle))
+        def file = writeSnapshot(SnapshotJsonMapperSpec.snapshotWithLifecycle(lifecycle))
 
         when:
         def view = reader.read(file, STALE_NOW)
@@ -117,7 +117,7 @@ class SnapshotReaderSpec extends Specification {
 
     def "a snapshot exactly at k x intervalSeconds is still Fresh, not stale"() {
         given: 'intervalSeconds=30, k=3 -> threshold is exactly 90s'
-        def file = writeSnapshot(snapshotWithLifecycle(new LifecycleState.Running()))
+        def file = writeSnapshot(SnapshotJsonMapperSpec.snapshotWithLifecycle(new LifecycleState.Running()))
         def atThreshold = WRITTEN_AT.plusSeconds(90)
 
         expect:
@@ -127,7 +127,7 @@ class SnapshotReaderSpec extends Specification {
     def "a stale snapshot last in Stopped renders StoppedStale, not DeadDaemon"() {
         given:
         def stopped = new LifecycleState.Stopped('drainComplete')
-        def file = writeSnapshot(snapshotWithLifecycle(stopped))
+        def file = writeSnapshot(SnapshotJsonMapperSpec.snapshotWithLifecycle(stopped))
 
         when:
         def view = reader.read(file, STALE_NOW)
@@ -145,12 +145,5 @@ class SnapshotReaderSpec extends Specification {
         def file = dir.resolve("snapshot-${UUID.randomUUID()}.json")
         Files.writeString(file, text, StandardCharsets.UTF_8)
         return file
-    }
-
-    private static Snapshot snapshotWithLifecycle(LifecycleState lifecycle) {
-        def snapshot = SnapshotJsonMapperSpec.referenceSnapshot()
-        return new Snapshot(
-                snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),
-                lifecycle, snapshot.feed(), snapshot.slots(), snapshot.vitals(), snapshot.tracker(), [:])
     }
 }

@@ -42,11 +42,12 @@ only its own semantics and none of the 140-import relocation noise.
   the four `:domain` emitters take their `[GFnnn]` head from the constant
   instead of a literal.
 - **MODIFIED** `module-layering`: the module tree gains the two leafs; `:domain`
-  may depend on JDK-only leafs (a principle, stated once); `:logtext` depends on
-  `:untrustedtext`; `:gnomish-plugin-api` reaches `:untrustedtext` transitively
-  and `FindingsSanitizer` delegates to it; because the layering gate is
-  transitive, every module whose production classpath reaches a leaf through
-  `:domain` or `:logtext` lists that leaf in its allowlist.
+  may depend on JDK-only leafs (a principle, stated once) and takes its first
+  such edge, to `:operatorevent`; `:logtext` depends on `:untrustedtext`;
+  `:gnomish-plugin-api` declares `:untrustedtext` itself, because
+  `FindingsSanitizer` delegates to it; because the layering gate is transitive,
+  every module whose production classpath reaches a leaf through `:domain`,
+  `:logtext` or `:gnomish-plugin-api` lists that leaf in its allowlist.
 - **MODIFIED** `factory-logging`: the sanitizer requirement drops the declared
   pair (one table, one owner); the operator-event requirement drops the
   literal-head exemption (every emitter reaches the catalog) and the
@@ -71,8 +72,9 @@ stated as modifications of the layering, logging and plugin capabilities._
 ### Modified Capabilities
 - `module-layering`: "Layered Gradle module tree" and "Enforced acyclic
   dependency direction" — two new leafs, the `:domain`-may-reach-JDK-only-leafs
-  principle, the `:logtext → :untrustedtext` edge, transitive allowlist
-  entries in every consumer of `:domain` / `:logtext`.
+  principle with the domain's first edge under it (`:operatorevent`), the
+  `:logtext → :untrustedtext` and `:gnomish-plugin-api → :untrustedtext` edges,
+  transitive allowlist entries in every consumer that reaches a leaf.
 - `factory-logging`: "Untrusted text enters logs only sanitized" — the
   declared-pair sentence becomes a single-owner sentence; "Operator lines carry
   a stable event identity" — the literal-head exemption is removed and the
@@ -86,10 +88,12 @@ stated as modifications of the layering, logging and plugin capabilities._
 - G1: After this change `grep -rn "Kept in sync with"` and the registry in
   `manual-sync-pairs.md` list no pair between `LogText`/`FindingsSanitizer` and
   none between `OperatorEvent` and `:domain` — both collapsed into one owner.
-- G2: `:domain`, `:gnomish-plugin-api` and `:sandbox:core` can name a type from
-  `:untrustedtext` — the precondition `type-untrusted-text` needs — while
-  `:domain` still depends on no module that carries slf4j, Spring, Jackson or
-  the filesystem.
+- G2: the `:untrustedtext` leaf exists below `:domain`, is named by
+  `:gnomish-plugin-api` already, and is admissible to `:domain` and
+  `:sandbox:core` under a stated principle rather than a per-module exemption —
+  so `type-untrusted-text` adds a build-file line per consumer and no layering
+  argument. That is the precondition it needs. Meanwhile `:domain` still depends
+  on no module that carries slf4j, Spring, Jackson or the filesystem.
 - G3: No behavior changes: every existing spec passes unchanged in substance;
   the only production source edits outside the two leafs and the two facades
   are import lines, the four domain literals and the javadoc pair markers.
@@ -119,9 +123,11 @@ stated as modifications of the layering, logging and plugin capabilities._
   them to justify the fifth logger, but no literal code and no round-trip pin
   is needed.
 - U3: `type-untrusted-text` declares `record TaskSnapshot(UntrustedText title,
-  …)` in `gnomish-plugin-api` and `EscalationReport.CannotVerify(…,
-  UntrustedText reason, …)` in `:domain`; both compile because both modules
-  reach the leaf.
+  …)` in `gnomish-plugin-api` — which already declares the leaf — and
+  `EscalationReport.CannotVerify(…, UntrustedText reason, …)` in `:domain`,
+  whose one-line edge to the leaf that change adds beside the type that needs
+  it. Neither has a layering case to make: the leaf is in place and the
+  principle already admits it.
 
 ## Requirements
 
@@ -151,10 +157,20 @@ stated as modifications of the layering, logging and plugin capabilities._
   `RoundExecution`, `VerifyOrchestrator`) SHALL render their message head from
   the `OperatorEvent` constant; the literal heads, the four `Kept in sync
   with` javadoc paragraphs on those classes, the `DomainOperatorEventHeadSpec`
-  and the registry row are removed.
-- FR6: `:domain`'s layering allowlist SHALL name exactly `:untrustedtext` and
-  `:operatorevent`; the module-layering spec SHALL state the principle that
-  `:domain` may depend on a JDK-only leaf and on nothing else internal.
+  and the registry row are removed. Every code that spec was the only test
+  source naming SHALL be re-pinned in a spec that actually provokes its event
+  through a real appender, not merely mentions its name — `GF110`-`GF113` and
+  `GF042`, the last of which rode a code example in that spec's javadoc and so
+  was never genuinely pinned.
+- FR6: `:domain`'s layering allowlist SHALL name exactly the JDK-only leafs it
+  uses — after this change `:operatorevent` alone, since the first domain type
+  naming `:untrustedtext` arrives with `type-untrusted-text`; the
+  module-layering spec SHALL state the principle that `:domain` may depend on a
+  JDK-only leaf and on nothing else internal, so admitting the next leaf is a
+  build-file line rather than a spec amendment. A leaf edge SHALL be declared by
+  the change that uses it and not ahead of one: an unused declaration is what
+  the dependency-analysis gate exists to reject, and the layering allowlist
+  describes reach, not intent.
 - FR7: `:logtext`'s layering allowlist SHALL name exactly `:untrustedtext`; its
   external dependency stays slf4j-api only.
 - FR8: `gnomish-plugin-api` SHALL bump from 0.6.0 to 0.7.0 with a regenerated
@@ -192,18 +208,21 @@ stated as modifications of the layering, logging and plugin capabilities._
 ## Operator Experience Criteria
 
 - UX1: Nothing observable changes: log lines, codes, console output, tracker
-  comments are byte-identical before and after. Evidence: no assertion in any
-  existing spec is edited — the test-tree diff holds import lines, moved files
-  and the two replaced pair specs only.
+  comments are byte-identical before and after. Evidence: no existing assertion
+  is weakened or removed — the test-tree diff holds import lines, moved files,
+  the two replaced pair specs, and five one-line assertions ADDED to specs that
+  already drive the affected path (the re-pin below), each of which passes
+  against unchanged production output.
 
 ## Success Metrics
 
 - M1: `manual-sync-pairs.md` "Declared pairs with no shared classpath" table
   has one row left (`HostRoundEnvironmentSource ↔ SandboxRoundEnvironmentSource`).
 - M2: `./gradlew projects` lists `:untrustedtext` and `:operatorevent`; the
-  layering gate passes with the new allowlists; `:domain`'s allowlist is exactly
-  the two leafs; a seeded literal head in any module fails the log-contract
-  gate.
+  layering gate and `buildHealth` both pass with the new allowlists and
+  declarations; `:domain`'s allowlist is exactly `:operatorevent`, and every
+  entry in it satisfies the JDK-only-leaf definition; a seeded literal head in
+  any module fails the log-contract gate.
 - M3: `./gradlew check` green with PIT 100% in `:untrustedtext`,
   `:operatorevent`, `:logtext`, `:domain`, `:gnomish-plugin-api`.
 - M4: Zero lines changed in any production class outside the two leafs,
@@ -222,8 +241,9 @@ stated as modifications of the layering, logging and plugin capabilities._
   allowlists of every other module that reaches `:domain` or `:logtext`
   (`:application`, `:adapters`, `:adapters:agent`, `:adapters:git`,
   `:adapters:github`, `:sandbox:core`, `:sandbox:docker`, `:bootstrap`,
-  `:gnomish-plugin-api:sample`); `LogText`, `FindingsSanitizer`, the four
-  domain emitters; ~80 production and ~96 test files for the `OperatorEvent`
+  `:gnomish-plugin-api:sample` — `:sandbox:core` lists `:operatorevent` only,
+  since `:untrustedtext` reaches it through neither `:domain` nor
+  `:gitobjects`); `LogText`, `FindingsSanitizer`, the four domain emitters; ~80 production and ~96 test files for the `OperatorEvent`
   import; `DomainOperatorEventHeadSpec` deleted; `SanitizerPairEquivalenceSpec`
   moved from `:application` to `:bootstrap` and reshaped;
   `LogContractGateSpec` (one feature inverted, one rule added);

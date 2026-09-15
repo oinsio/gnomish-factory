@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.logtext;
+package com.github.oinsio.gnomish.untrustedtext;
 
 /**
  * The log plane's one-event-one-line rule: every line separator the text can carry is rendered as a
@@ -25,15 +25,15 @@ final class LineFlattening {
 
     /**
      * Renders every line separator of {@code text} as a visible escape.
-     * Covers what {@code LogText.strip} deliberately keeps ({@code \n}, {@code \t}) and the two Unicode
-     * separators it never saw ({@code U+2028}, {@code U+2029}), which are not ISO controls but do
+     * Covers what {@link TextSafety#strip} deliberately keeps ({@code \n}, {@code \t}) and the two
+     * Unicode separators it never saw ({@code U+2028}, {@code U+2029}), which are not ISO controls but do
      * break lines for many readers — the forgery vector a control-only filter misses.
      *
-     * <p>{@code \r} is escaped too, though {@code LogText.strip} removes it: this method is public and
-     * usable on text that never went through {@link #strip}, so leaving the one line separator a
-     * caller is most likely to still hold would defeat the one-event-one-line promise. Inside
-     * {@code LogText.forLog} that arm is unreachable, which is why it carries no round-trip through the
-     * pipeline of its own.
+     * <p>{@code \r} is escaped too, though {@link TextSafety#strip} removes it: flattening is offered
+     * on its own and usable on text that never went through stripping, so leaving the one line
+     * separator a caller is most likely to still hold would defeat the one-event-one-line promise.
+     * Inside the log plane's strip-cap-flatten composition that arm is unreachable, which is why it
+     * carries no round-trip through the pipeline of its own.
      *
      * @param text the text to render on one line; never null
      * @return the flattened text; never null, never containing a line break

@@ -1,27 +1,41 @@
-package com.github.oinsio.gnomish.logtext
+package com.github.oinsio.gnomish.architecture
 
 import com.github.oinsio.gnomish.app.findings.FindingsSanitizer
+import com.github.oinsio.gnomish.logtext.LogText
+import com.github.oinsio.gnomish.testsupport.RepoSourceTree
+import com.github.oinsio.gnomish.untrustedtext.TextSafety
 import spock.lang.Specification
 
 /**
- * The executable half of the {@code LogText} ↔ {@code FindingsSanitizer} declared pair
- * (.claude/rules/manual-sync-pairs.md, design D5 of harden-logging-observability). The two guard
- * different trust boundaries and share no production edge on purpose — the log-line sanitizer is a
- * dependency-free leaf, the findings sanitizer is the published plugin contract's
- * one-declared-dependency promise — so nothing but this spec stops their shared character
- * vocabulary from drifting apart.
+ * The single-owner spec for untrusted-text neutralization (FR1, FR3, design D8 of
+ * split-logtext-leaves). {@code TextSafety} in the JDK-only {@code :untrustedtext} leaf owns the
+ * character-class table and the primitives; {@link LogText} (the log plane) and
+ * {@link FindingsSanitizer} (the findings funnel, published in the plugin contract) are facades
+ * over it. This spec is what the single-owner table names as the enforcement, in two halves:
  *
- * <p>What must stay identical: the ANSI/control stripping table and the tail-cap semantics. What
- * must NOT: newline handling — findings preserve line structure, log lines destroy it — which the
- * final feature pins as a deliberate difference rather than leaving it to be "fixed" later.
+ * <ul>
+ *   <li><b>Identity</b> — the three {@code strip}s and the three {@code capTail}s are the same
+ *       function over one adversarial corpus. This replaces {@code SanitizerPairEquivalenceSpec},
+ *       which pinned the same property when the two ends were a hand-synced pair with no shared
+ *       classpath ({@code .claude/rules/manual-sync-pairs.md}); the pair is dissolved, so the spec
+ *       asks about an owner rather than about a pair.
+ *   <li><b>No private table</b> — a source scan asserting neither facade holds an escape
+ *       character, a control-class boundary or a pattern of its own. Identity alone would stay
+ *       green if a facade re-acquired a table that happened to agree today.
+ * </ul>
  *
- * <p>Lives in {@code :application} because that is the lowest module that legitimately sees both
- * ends; giving either module a dependency on the other to host the spec is the coupling the pair
- * exists to avoid.
+ * <p>What must still differ, and is pinned as deliberate rather than left to be "fixed": newline
+ * handling. Findings preserve line structure, log lines destroy it — the facades compose the
+ * owner's primitives differently, which is the whole reason they are two facades.
  *
- * <p>FR6, NFR-S1 of harden-logging-observability.
+ * <p>Lives in {@code :bootstrap} because the source scan needs the {@code repoRoot} the module's
+ * own {@code test} task wires, and because this is the module that sees both facades and the owner
+ * on one classpath.
+ *
+ * <p>FR1, FR3, NFR-S1 of split-logtext-leaves; originally FR6, NFR-S1 of
+ * harden-logging-observability.
  */
-class SanitizerPairEquivalenceSpec extends Specification {
+class TextSafetyOwnerSpec extends Specification {
 
     /**
      * Written as code points, never as literal characters: a NUL or a U+2028 pasted into a source
@@ -35,8 +49,9 @@ class SanitizerPairEquivalenceSpec extends Specification {
     static final String ESC = ch(0x1B)
 
     /**
-     * The one adversarial corpus both ends are fed. Every entry is a character class the stripping
-     * table claims to neutralize; adding one here is how a new claim joins the pair's contract.
+     * The one adversarial corpus the owner and both facades are fed. Every entry is a character
+     * class the stripping table claims to neutralize; adding one here is how a new claim joins the
+     * owner's contract.
      */
     static final Map<String, String> CORPUS = [
         'plain text': 'fatal: not a git repository',
@@ -110,9 +125,10 @@ class SanitizerPairEquivalenceSpec extends Specification {
         'astral character on the cap boundary': ch(0x1F600) * 3_000 + 'a',
     ]
 
-    def "the stripping table is identical at both ends — #label"() {
-        expect: 'the shared half of the pair: same ANSI sequences, same control characters removed'
-        LogText.strip(input) == FindingsSanitizer.strip(input)
+    def "one owner: the three strips are the same function — #label"() {
+        expect: 'both facades hand the leaf the text and hand back what it returns, unchanged'
+        TextSafety.strip(input) == LogText.strip(input)
+        TextSafety.strip(input) == FindingsSanitizer.strip(input)
 
         where:
         label << CORPUS.keySet()
@@ -120,15 +136,18 @@ class SanitizerPairEquivalenceSpec extends Specification {
     }
 
     /**
-     * The claim behind the table, stated independently of the table's own code: after either end
-     * has run, nothing the pair promises to neutralize is left in the output. The equivalence
-     * feature above would stay green if both ends drifted together; this one would not.
+     * The claim behind the table, stated independently of the table's own code: after any of the
+     * three has run, nothing the owner promises to neutralize is left in the output. The identity
+     * feature above would stay green if all three drifted together; this one would not.
      */
-    def "neither end leaves a neutralized character class in its output — #label"() {
-        expect: 'the log-line end'
+    def "no facade leaves a neutralized character class in its output — #label"() {
+        expect: 'the owner'
+        survivors(TextSafety.strip(input)).isEmpty()
+
+        and: 'the log-line facade'
         survivors(LogText.strip(input)).isEmpty()
 
-        and: 'the findings end, by the same table'
+        and: 'the findings facade, by the same table'
         survivors(FindingsSanitizer.strip(input)).isEmpty()
 
         where:
@@ -137,9 +156,9 @@ class SanitizerPairEquivalenceSpec extends Specification {
     }
 
     /**
-     * The character classes the pair claims to neutralize, restated as data rather than reused
-     * from either implementation — a spec that imported the production predicate could only prove
-     * the predicate agrees with itself. {@code \n} and {@code \t} are the two controls both ends
+     * The character classes the owner claims to neutralize, restated as data rather than reused
+     * from the implementation — a spec that imported the production predicate could only prove the
+     * predicate agrees with itself. {@code \n} and {@code \t} are the two controls both ends
      * deliberately keep, so they are not survivors.
      */
     static List<Integer> survivors(String text) {
@@ -156,9 +175,11 @@ class SanitizerPairEquivalenceSpec extends Specification {
         }.boxed().toList()
     }
 
-    def "the tail cap is identical at both ends — #label"() {
+    def "one owner: the three tail caps are the same function — #label"() {
         expect: 'same threshold behaviour, same marker, same surviving tail'
-        LogText.capTail(input, LogText.DEFAULT_CAP_CHARS) ==
+        TextSafety.capTail(input, TextSafety.DEFAULT_CAP_CHARS) ==
+                LogText.capTail(input, LogText.DEFAULT_CAP_CHARS)
+        TextSafety.capTail(input, TextSafety.DEFAULT_CAP_CHARS) ==
                 FindingsSanitizer.capTail(input, LogText.DEFAULT_CAP_CHARS)
 
         where:
@@ -166,16 +187,17 @@ class SanitizerPairEquivalenceSpec extends Specification {
         input << CORPUS.values()
     }
 
-    def "the cap threshold is the same value at both ends"() {
-        given: 'text one character over the log sanitizer\'s own default'
-        def overlong = 'y' * (LogText.DEFAULT_CAP_CHARS + 1)
+    def "the cap threshold is the owner's value at every facade"() {
+        given: 'text one character over the owner\'s default'
+        def overlong = 'y' * (TextSafety.DEFAULT_CAP_CHARS + 1)
 
-        expect: 'the findings sanitizer truncates it too — the caps have not drifted apart'
+        expect: 'both facades truncate it — neither holds a cap of its own'
+        LogText.DEFAULT_CAP_CHARS == TextSafety.DEFAULT_CAP_CHARS
         LogText.capTail(overlong, LogText.DEFAULT_CAP_CHARS).startsWith('[truncated, showing last ')
         FindingsSanitizer.forLog(overlong).startsWith('[truncated, showing last ')
     }
 
-    def "both reject a non-positive cap the same way"() {
+    def "every facade rejects a non-positive cap the same way"() {
         when:
         LogText.capTail('text', 0)
 
@@ -210,5 +232,58 @@ class SanitizerPairEquivalenceSpec extends Specification {
 
         expect:
         LogText.forLog(input) == FindingsSanitizer.forLog(input)
+    }
+
+    /**
+     * The facades whose sources may hold no table of their own. Both are single files; naming them
+     * by path rather than scanning "everything that looks like a sanitizer" is what makes a
+     * mis-resolved {@code repoRoot} a failure instead of a silent pass.
+     */
+    static final List<String> FACADE_SOURCES = [
+        'logtext/src/main/java/com/github/oinsio/gnomish/logtext/LogText.java',
+        'gnomish-plugin-api/src/main/java/com/github/oinsio/gnomish/app/findings/FindingsSanitizer.java',
+    ]
+
+    // FR1, FR3: identity would stay green if a facade re-acquired a table that happens to agree
+    // today. The structural claim is that neither facade can hold one at all — so neither source
+    // names an escape character, a control-class boundary or a pattern.
+    def "no facade holds a character table of its own — #path"() {
+        given: 'the facade source, comments stripped: what the compiler actually sees'
+        def file = RepoSourceTree.repoRoot().resolve(path).toFile()
+
+        expect: 'the scan really reached the file, or it proves nothing'
+        file.isFile()
+
+        and: 'nothing in it names the vocabulary the owner owns'
+        tableLiterals(RepoSourceTree.code(file)).isEmpty()
+
+        where:
+        path << FACADE_SOURCES
+    }
+
+    // The detector above is only evidence if it can fail: a facade that re-acquires the table
+    // takes one of exactly these three shapes, and each is seeded here.
+    def "the scan detects a facade that re-acquires the table — #label"() {
+        expect:
+        !tableLiterals(seeded).isEmpty()
+
+        where:
+        label | seeded
+        'a private pattern' | 'private static final Pattern ANSI = Pattern.compile("x");'
+        'an escape literal' | 'if (text.indexOf(\'\\u001B\') >= 0) { return ""; }'
+        'a control-class boundary' | 'return codePoint < 0x20 || codePoint == 0x7F;'
+    }
+
+    /**
+     * The three shapes a private character table takes in this codebase's own history: the
+     * {@code Pattern} the sanitizer used to compile, the {@code \\uXXXX} escape naming a character,
+     * and the hex boundary of a code-point range. Comments are stripped before the scan, so a
+     * javadoc paragraph explaining the table — which both facades still carry, and should — is not
+     * a finding.
+     */
+    static List<String> tableLiterals(String source) {
+        source.readLines().findAll { line ->
+            line.contains('Pattern.compile') || line.contains('\\u') || (line =~ /0x[0-9A-Fa-f]{2,}/)
+        }.collect { it.trim() }
     }
 }

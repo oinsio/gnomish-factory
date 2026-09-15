@@ -15,7 +15,7 @@ import com.github.oinsio.gnomish.app.take.FinishedDecline
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.RepeatSuppressorFixture
 import java.nio.file.Path
 import java.time.Duration
@@ -53,15 +53,9 @@ class FeedCycleSpec extends Specification {
         new ReadyTask(new TaskRef(id), AbortFacts.none(), true, false, 'fixture title')
     }
 
-    // FR14 of add-base-ref-resolution: a gate that starts (and, absent openOnFailure(), stays)
-    // closed — BaseRefGit.UNWIRED is safe here because a closed gate's probeIfDue() never calls it.
-    private static RemoteOutageGate closedGate() {
-        new RemoteOutageGate(
-                BaseRefGit.UNWIRED, Path.of('.'), new VirtualClock(), new Random(0), Duration.ofSeconds(1), Duration.ofMinutes(1))
-    }
-
     private static FeedCycle cycle(
-            Tracker tracker, SlotLedger ledger, SlotRunner runner = { TaskRef ref -> } as SlotRunner, RemoteOutageGate gate = closedGate()) {
+            Tracker tracker, SlotLedger ledger, SlotRunner runner = { TaskRef ref -> } as SlotRunner,
+            RemoteOutageGate gate = RemoteOutageGateFixtures.closedGate()) {
         // Budgeted: a mutant that breaks claimOrAbandon outright (e.g. assign(null) -> NPE) spins
         // FeedOutageRetry's retry-forever loop; the budget fails the spec instead of hanging it.
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
@@ -116,7 +110,7 @@ class FeedCycleSpec extends Specification {
                 claimCalls.incrementAndGet(); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def gate = closedGate()
+        def gate = RemoteOutageGateFixtures.closedGate()
         gate.openOnFailure("boom")
 
         when:

@@ -225,7 +225,7 @@ class SnapshotJsonMapperSpec extends Specification {
             "2026-08-02T07:00:00Z")]
     }
 
-    private static Snapshot snapshotWithLifecycle(LifecycleState lifecycle) {
+    static Snapshot snapshotWithLifecycle(LifecycleState lifecycle) {
         def snapshot = referenceSnapshot()
         return new Snapshot(
                 snapshot.version(), snapshot.writtenAt(), snapshot.intervalSeconds(), snapshot.instance(),

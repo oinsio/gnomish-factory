@@ -51,6 +51,11 @@ dependencies {
     // events, decision-file content, progress payloads — and `MdcAwareThread` is the thread-hop
     // context helper. Declared, not inherited: this module names both in its own source.
     implementation project(':logtext')
+    // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every
+    // WARN/ERROR site in this module takes its `[GFnnn]` head from an `OperatorEvent`
+    // constant. `implementation`, not `api`: the enum is named only inside log calls,
+    // never in a signature this module exports.
+    implementation project(':operatorevent')
 
     implementation libs.slf4j.api
 
@@ -135,11 +140,20 @@ layering {
         // harden-logging-observability): this module's own sources name `LogText` at every
         // agent-text log site.
         ':logtext',
+        // The operator-event catalog leaf (FR4, FR11, design D3/D9 of split-logtext-leaves):
+        // declared directly above, because this module's own log sites name `OperatorEvent`;
+        // also reached through `:domain`, whose engine emitters take their head from it.
+        ':operatorevent',
         ':sandbox:core',
         ':sandbox:docker',
         // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the
         // dependency-free `:subprocess` leaf onto the runtime classpath the gate
         // reads (design D9/D11 of bound-subprocess-commands).
         ':subprocess',
+        // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves): transitive via
+        // `:logtext`, whose `LogText` is a facade over it, and via `:domain`, which reaches
+        // the leaf for the same primitives. No source in this module names it; the layering
+        // gate walks the transitive graph, so the reach is listed where it arrives.
+        ':untrustedtext',
     ]
 }

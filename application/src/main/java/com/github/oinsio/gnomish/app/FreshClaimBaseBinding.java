@@ -20,7 +20,7 @@ import com.github.oinsio.gnomish.baseref.ResolutionMode;
 import com.github.oinsio.gnomish.baseref.UnderdeterminedCause;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.logtext.LogText;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Function;

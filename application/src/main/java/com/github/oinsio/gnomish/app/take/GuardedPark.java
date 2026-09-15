@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;

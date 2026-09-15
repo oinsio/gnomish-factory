@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.logtext.LogText;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;

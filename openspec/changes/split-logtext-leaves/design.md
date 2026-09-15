@@ -117,8 +117,8 @@ gate as is and relying on review — after this change nothing else stops a
 literal head from reappearing in any module, and the single-owner table
 needs an enforcement that is not "convention".
 
-**D5 — `:domain → JDK-only leafs` is stated as a principle, not as two
-exceptions.** The module-layering spec and ADR 0004 say: the domain may
+**D5 — `:domain → JDK-only leafs` is stated as a principle, not as a list of
+exemptions.** The module-layering spec and ADR 0004 say: the domain may
 depend on a leaf that declares no internal module and no external library,
 and on nothing else internal. A new `DomainLeafPuritySpec` in `:bootstrap`
 (beside `DomainPuritySpec`, not inside it — that spec is an ArchUnit rule over
@@ -128,8 +128,24 @@ definition over every project in `:domain`'s allowlist: its
 no production-scope artifact. *Rationale:* the
 next JDK-only leaf the domain needs (a value type for something else) should
 not require a spec amendment; the principle is what the gate enforces.
-*Alternative rejected:* listing the two modules by name in the spec as
-one-off exemptions — the third one would arrive as "just one more".
+*Alternative rejected:* listing the modules by name in the spec as one-off
+exemptions — the third one would arrive as "just one more".
+
+*Amended during apply (2026-09-15).* The principle admits a leaf; it does not
+oblige the domain to declare an edge it does not use. `:domain` takes exactly
+one leaf edge here — `:operatorevent`, which its four emitters read — and
+`:untrustedtext` joins with `type-untrusted-text`, the change that brings the
+first domain type naming it. Declaring the text leaf now was the original plan
+and it fails `buildHealth`: dependency-analysis reports an unused declaration,
+which is precisely the defect that gate exists to catch, and silencing it with
+an exclusion would spend the project's only real protection against dead edges
+to hold a placeholder. Nothing in G2 is lost — the leaf exists, sits below the
+domain, and is admitted by the principle, so `type-untrusted-text` adds one
+line per consumer instead of arguing layering. The published baseline is
+unaffected, because `:gnomish-plugin-api` declares the text leaf on its own
+account (D2's facade), so all four jars are on the contract's runtime
+classpath either way. Consequence for D9: `:sandbox:core` lists
+`:operatorevent` only, since the text leaf no longer reaches it.
 
 **D6 — `gnomish-plugin-api` 0.6.0 → 0.7.0, baseline regenerated to four
 jars.** The japicmp surface is every project artifact on the contract's
@@ -144,10 +160,16 @@ took 0.6.0). `FindingsSanitizer`'s signatures are unchanged, so the japicmp
 diff records nothing incompatible — only the two added artifacts.
 *Alternative rejected:* keep 0.6.0 — the baseline jar set is part of the
 gate's input; a silently changed jar graph is the drift the gate exists to
-catch. *Alternative rejected:* `implementation project(':operatorevent')` in
-`:domain` to keep the catalog out of the contract — it still lands on the
-runtime classpath and therefore in the baseline, so the declaration buys
-nothing and hides an edge the gate lists anyway.
+catch. *Alternative rejected:* choosing `implementation project(':operatorevent')` in
+`:domain` in the belief that it keeps the catalog out of the contract — it
+still lands on the runtime classpath and therefore in the baseline, so the
+configuration cannot buy that. It is nonetheless the configuration `:domain`
+declares, for an unrelated and decisive reason: no signature of `:domain` names
+the enum — the head is a `String` read inside four method bodies — so
+dependency-analysis requires `implementation`, and `api` would be a false claim
+about the module's surface. The two facts are consistent: the configuration
+settles who compiles against the catalog, the runtime graph settles who
+resolves it, and only the second feeds the baseline.
 
 **D7 — Leaf build files follow `:baseref` verbatim.** `library-conventions`
 + `layering-conventions`, `allowedProjects = []`, no `dependencies` block for
@@ -243,7 +265,7 @@ literal-form exception).
    `:untrustedtext` (D9). Build green.
 3. `OperatorEvent` relocation commit (imports only, plus `:operatorevent` in
    every consumer's allowlist). Build green.
-4. Domain edges + emitters + literal-head gate rule +
+4. The domain's `:operatorevent` edge + emitters + literal-head gate rule +
    `DomainOperatorEventHeadSpec` deletion + `DomainLeafPuritySpec`. Build
    green.
 5. plugin-api 0.7.0 + baseline; ADR 0004, glossary, `manual-sync-pairs.md`,

@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -55,13 +55,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.4 touched this spec. */
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        def logs = LogCaptureSupport.attach(OriginReconciliation, Level.DEBUG)
-        try {
-            emit()
-            return List.copyOf(logs.list)
-        } finally {
-            logs.detach()
-        }
+        LogCaptureSupport.capture(OriginReconciliation, Level.DEBUG, emit)
     }
 
     def "an origin missing the branch entirely is caught up"() {

@@ -1,11 +1,12 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
@@ -30,7 +31,7 @@ class StreamJsonParserProgressSpec extends Specification {
         def parser = new StreamJsonParser(clock, listener)
 
         when: 'the plain-round fixture is parsed'
-        parser.parse(readerOf('plain-round'))
+        parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
 
         then: 'RoundStarted carries the model and session id, one ToolStarted for Write, RoundFinished carries the summary'
         recorded.size() == 3
@@ -52,7 +53,7 @@ class StreamJsonParserProgressSpec extends Specification {
         def parser = new StreamJsonParser(clock, listener)
 
         when: 'the subagent-round fixture is parsed'
-        parser.parse(readerOf('subagent-round'))
+        parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
 
         then: 'only Task produces ToolStarted, the nested Grep call does not'
         def toolStartedEvents = recorded.findAll {
@@ -77,7 +78,7 @@ class StreamJsonParserProgressSpec extends Specification {
         def logs = LogCaptureSupport.attach(AgentProgressEmitter)
 
         when: 'the plain-round fixture is parsed'
-        def events = parser.parse(readerOf('plain-round'))
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
 
         then: 'no exception propagates and the full event list is still returned'
         noExceptionThrown()
@@ -104,16 +105,10 @@ class StreamJsonParserProgressSpec extends Specification {
         def parser = new StreamJsonParser(clock, listener)
 
         when: 'the garbage-output fixture is parsed'
-        parser.parse(readerOf('garbage-output'))
+        parser.parse(FakeAgentScenarioReader.readerOf('garbage-output'))
 
         then: 'only progress for the recognized lines is emitted, nothing for the malformed ones'
         recorded.size() == 1
         recorded[0] instanceof AgentProgressEvent.RoundStarted
-    }
-
-    private static BufferedReader readerOf(String scenario) {
-        def resource = StreamJsonParserProgressSpec.getResource("/fake-agent/scenarios/${scenario}/stdout.jsonl")
-        assert resource != null: "fixture not found for scenario '${scenario}'"
-        new BufferedReader(new InputStreamReader(resource.openStream(), 'UTF-8'))
     }
 }

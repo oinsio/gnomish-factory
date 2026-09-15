@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -147,7 +147,7 @@ public final class Reaper implements ReaperDuty {
             if (observation.shape() instanceof TrackerShape.Foreign(String diagnosis)) {
                 // FR8/UX2: the sweep's thread carries no task scope, so each per-task line names
                 // its subject — a reap belongs to that task's `grep taskId=<id>` story.
-                try (var scope = MdcAwareThread.taskScope(observation.ref().id())) {
+                try (var ignored = MdcAwareThread.taskScope(observation.ref().id())) {
                     log.warn(
                             OperatorEvent.REAPER_FOREIGN_BRANCH_UNOWNED.head()
                                     + "{} classifies foreign; no automatic repair owns it: {}",
@@ -177,7 +177,7 @@ public final class Reaper implements ReaperDuty {
         // FR8/UX2: everything this repair decides — the convergence no-ops and the failure WARN
         // alike — is findable by taskId. The scope must wrap the catch, so the two are nested: a
         // try-with-resources with its own catch clause closes the resource before the catch runs.
-        try (var taskScope = MdcAwareThread.taskScope(repair.ref().id())) {
+        try (var ignored = MdcAwareThread.taskScope(repair.ref().id())) {
             repairInScope(repair);
         }
     }

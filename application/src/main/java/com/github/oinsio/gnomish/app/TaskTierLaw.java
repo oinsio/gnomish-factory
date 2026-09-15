@@ -12,7 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;

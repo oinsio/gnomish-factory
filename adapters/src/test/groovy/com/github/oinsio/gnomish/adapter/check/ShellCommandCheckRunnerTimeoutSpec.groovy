@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration

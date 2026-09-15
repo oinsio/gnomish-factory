@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.app.take.FeedPolicy;
 import com.github.oinsio.gnomish.app.take.FinishedDecline;
 import com.github.oinsio.gnomish.app.take.OpenFrontGate;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.status.AnchorLog;
 import java.time.Instant;
 import java.util.List;

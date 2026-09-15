@@ -1,13 +1,11 @@
 package com.github.oinsio.gnomish.app.branch
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
-import com.github.oinsio.gnomish.logtext.OperatorEvent
-import org.slf4j.LoggerFactory
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -19,19 +17,9 @@ class BranchRepairLogSpec extends Specification {
 
     def repairLog = new BranchRepairLog()
 
-    /** Runs {@code emit} with a {@link ListAppender} attached to the repair log's own logger. */
+    /** Runs {@code emit} while capturing the repair log's own logger via {@link LogCaptureSupport}. */
     private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(BranchRepairLog)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list
+        LogCaptureSupport.capture(BranchRepairLog, Level.INFO, emit)
     }
 
     // NFR-O1: one line, naming shape, task, epoch, owner and action.

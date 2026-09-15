@@ -1,14 +1,15 @@
-package com.github.oinsio.gnomish.logtext;
+package com.github.oinsio.gnomish.untrustedtext;
 
 import java.util.regex.Pattern;
 
 /**
- * The one character-class table the factory's two text exits read: {@link LogText#forLog} for the
- * log plane, which removes what this table names, and {@link LogText#forConsole} for the operator's
- * terminal, which renders the same set visibly instead. Extracted from {@link LogText} so that
- * "which characters are hostile" has one owner and "how each plane renders them" has another; the
- * pair marker on {@code LogText} governs this table's content too, because {@code LogText} is the
- * name the other end of the pair holds.
+ * The one character-class table the factory's text exits read: {@link TextSafety#strip} for the log
+ * plane, which removes what this table names, and {@link TextSafety#forConsole} for the operator's
+ * terminal, which renders the same set visibly instead. Separate from {@link TextSafety} so that
+ * "which characters are hostile" has one owner and "how each plane renders them" has another. Both
+ * facades over {@link TextSafety} — the log-line sanitizer {@code logtext.LogText} and the findings
+ * sanitizer {@code app.findings.FindingsSanitizer} — read this table through it and hold none of
+ * their own, so there is nothing here to keep in step by hand.
  *
  * <p>Two shapes of hostility, and they need different tools:
  *

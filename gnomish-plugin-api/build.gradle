@@ -33,6 +33,16 @@ plugins {
 // growth is additive for every pre-existing type, so no pre-1.0 version bump is
 // owed and `japicmpApiGate` stays green against the committed jars.
 //
+// FR8 of split-logtext-leaves: 0.6.0 -> 0.7.0, a NON-breaking move. No signature on this
+// module's surface changed — `FindingsSanitizer` keeps `strip`, `capTail` and `forLog` — but the
+// two JDK-only leafs this change carves out of `:logtext`, `:untrustedtext` and `:operatorevent`,
+// enter the published jar graph: the text leaf directly, because `FindingsSanitizer` delegates to
+// it, and the catalog leaf transitively through `:domain`, whose engine emitters take their
+// `[GFnnn]` head from it. The japicmp surface is every project artifact on this module's runtime
+// classpath, so `compat-baseline/` was regenerated in the same commit to the four jars the gate
+// now compares against. Pre-1.0, a MINOR bump records the changed jar graph: the baseline jar set
+// is part of the gate's input, and a silently changed graph is the drift the gate exists to catch.
+//
 // FR1, FR2 of fix-claim-epoch-fence: 0.5.0 -> 0.6.0, the fifth BREAKING move. The read-side
 // epoch fence left the surface: `BranchShape` lost its `StaleEpoch` variant (a sealed permitted
 // subclass, so the removal is binary-incompatible for every exhaustive reader), `BranchTipFacts`
@@ -73,7 +83,7 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.6.0'
+version = '0.7.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 
@@ -92,6 +102,16 @@ dependencies {
     // "single declared dependency" contract is unaffected.
     api project(':domain')
 
+    // `implementation`, not `api` (FR3 of split-logtext-leaves): `FindingsSanitizer` is a facade
+    // over the `:untrustedtext` leaf's primitives, and every one of its signatures is `String`, so
+    // the leaf is behind this module's surface rather than on it. It reaches a third party anyway
+    // — as a runtime artifact resolved with this one — so the "single declared dependency"
+    // promise is unaffected, and the leaf being JDK-only is what makes the edge free of anything
+    // this POM must not carry. This module is the leaf's only declared consumer below the
+    // adapters: `:domain` takes its own edge in `type-untrusted-text`, with the first domain
+    // type that names it.
+    implementation project(':untrustedtext')
+
     // Shared fakes and port-contract suites (FR7, design D8), test scope only.
     testImplementation project(':test-fixtures')
 }
@@ -107,5 +127,15 @@ dependencies {
 // gate: same assertion, same failure mode, now stated the same way by every
 // module instead of once here.
 layering {
-    allowedProjects = [':domain']
+    allowedProjects = [
+        ':domain',
+        // The operator-event catalog leaf (FR11, design D9 of split-logtext-leaves): transitive
+        // via `:domain`, whose engine emitters take their `[GFnnn]` head from it. No production
+        // source in this module names it; the layering gate walks the transitive graph, so the
+        // reach is listed where it arrives.
+        ':operatorevent',
+        // The untrusted-text leaf (FR3, FR11, design D9 of split-logtext-leaves): declared
+        // directly above, because `FindingsSanitizer` names it.
+        ':untrustedtext',
+    ]
 }

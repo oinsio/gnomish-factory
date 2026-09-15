@@ -5,7 +5,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickRecord;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.SweepActionLine;

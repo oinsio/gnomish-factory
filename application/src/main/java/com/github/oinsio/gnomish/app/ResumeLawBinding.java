@@ -11,7 +11,7 @@ import com.github.oinsio.gnomish.app.take.ResumeBaseReport;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.logtext.LogText;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;

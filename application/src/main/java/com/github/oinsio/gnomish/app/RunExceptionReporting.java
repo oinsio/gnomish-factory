@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
 import org.slf4j.Logger;
 

@@ -1,9 +1,12 @@
-package com.github.oinsio.gnomish.logtext
+package com.github.oinsio.gnomish.untrustedtext
+
+import static com.github.oinsio.gnomish.untrustedtext.AdversarialCorpus.ESC
+import static com.github.oinsio.gnomish.untrustedtext.AdversarialCorpus.ch
 
 import spock.lang.Specification
 
 /**
- * {@link LogText#forConsole}: the second exit from the one character table — the operator's
+ * {@link TextSafety#forConsole}: the second exit from the one character table — the operator's
  * terminal. Where the log plane <em>removes</em> what the table names and destroys line structure
  * so one event stays one line, the console plane <em>shows</em> it and keeps the text's shape: an
  * escalation report is forty lines long by design, and an operator who is being attacked must see
@@ -15,22 +18,11 @@ import spock.lang.Specification
  *
  * <p>FR5, NFR-S2, NFR-O1 of harden-untrusted-text-sinks.
  */
-class LogTextConsoleSpec extends Specification {
-
-    /**
-     * Written as code points, never as literal characters: a NUL or a tag character pasted into a
-     * source file is invisible to a reviewer and lost by the next tool that touches the file — the
-     * two properties a corpus of exactly those characters cannot afford.
-     */
-    static String ch(int codePoint) {
-        new String(Character.toChars(codePoint))
-    }
-
-    static final String ESC = ch(0x1B)
+class TextSafetyConsoleSpec extends Specification {
 
     def "FR5: text with nothing to show passes through byte-identically"() {
         expect: 'the notation costs a correct line nothing at all'
-        LogText.forConsole(input) == input
+        TextSafety.forConsole(input) == input
 
         where:
         input << [
@@ -44,17 +36,17 @@ class LogTextConsoleSpec extends Specification {
 
     def "FR5: ESC is shown in caret notation rather than obeyed"() {
         expect:
-        LogText.forConsole("before${ESC}[2Jafter") == 'before^[[2Jafter'
+        TextSafety.forConsole("before${ESC}[2Jafter") == 'before^[[2Jafter'
     }
 
     def "UX2: an OSC 52 clipboard write arrives as text, not as a clipboard write"() {
         expect: 'the whole sequence is legible — the operator can see what was attempted'
-        LogText.forConsole("title${ESC}]52;c;cGF5bG9hZA==${ch(0x07)}") == 'title^[]52;c;cGF5bG9hZA==^G'
+        TextSafety.forConsole("title${ESC}]52;c;cGF5bG9hZA==${ch(0x07)}") == 'title^[]52;c;cGF5bG9hZA==^G'
     }
 
     def "FR5: every other C0 control is shown in caret notation — #label"() {
         expect:
-        LogText.forConsole("a${ch(codePoint)}b") == "a${expected}b"
+        TextSafety.forConsole("a${ch(codePoint)}b") == "a${expected}b"
 
         where:
         label | codePoint || expected
@@ -68,17 +60,17 @@ class LogTextConsoleSpec extends Specification {
 
     def "FR5: DEL is shown as caret-question"() {
         expect:
-        LogText.forConsole("a${ch(0x7F)}b") == 'a^?b'
+        TextSafety.forConsole("a${ch(0x7F)}b") == 'a^?b'
     }
 
     def "FR5: carriage return is shown as a literal escape, so no line is overwritten"() {
         expect: 'CR cannot return the cursor to column 0 and rewrite what the operator just read'
-        LogText.forConsole('all tests pass\rHIDDEN') == 'all tests pass\\rHIDDEN'
+        TextSafety.forConsole('all tests pass\rHIDDEN') == 'all tests pass\\rHIDDEN'
     }
 
     def "FR5: the line feed is kept as itself"() {
         expect: 'line structure is the console plane\'s whole difference from the log plane'
-        LogText.forConsole('first\nsecond\nthird') == 'first\nsecond\nthird'
+        TextSafety.forConsole('first\nsecond\nthird') == 'first\nsecond\nthird'
     }
 
     // FR5: the table names the hostile characters, and the tab is not one of them — the log plane
@@ -86,7 +78,7 @@ class LogTextConsoleSpec extends Specification {
     // as `^Iat com.example…`, costing the indentation the diagnosis is read by.
     def "FR5: the tab is kept as itself, as the character table says it is not neutralized"() {
         expect:
-        LogText.forConsole('frame:\n\tat com.example.Stage.run(Stage.java:1)') ==
+        TextSafety.forConsole('frame:\n\tat com.example.Stage.run(Stage.java:1)') ==
                 'frame:\n\tat com.example.Stage.run(Stage.java:1)'
     }
 
@@ -95,13 +87,13 @@ class LogTextConsoleSpec extends Specification {
         def report = (1..40).collect { "line ${it}" }.join('\n')
 
         expect:
-        LogText.forConsole(report) == report
-        LogText.forConsole(report).split('\n', -1).length == 40
+        TextSafety.forConsole(report) == report
+        TextSafety.forConsole(report).split('\n', -1).length == 40
     }
 
     def "FR5: characters with no width are shown as their backslash-u escape — #label"() {
         expect:
-        LogText.forConsole("a${ch(codePoint)}b") == "a${expected}b"
+        TextSafety.forConsole("a${ch(codePoint)}b") == "a${expected}b"
 
         where:
         label | codePoint || expected
@@ -121,7 +113,7 @@ class LogTextConsoleSpec extends Specification {
 
     def "NFR-S1: an astral tag character is shown in the eight-digit long form — #label"() {
         expect: 'four hex digits cannot name a code point above the BMP, so the long form names it'
-        LogText.forConsole("a${ch(codePoint)}b") == "a${expected}b"
+        TextSafety.forConsole("a${ch(codePoint)}b") == "a${expected}b"
 
         where:
         label | codePoint || expected
@@ -136,7 +128,7 @@ class LogTextConsoleSpec extends Specification {
                 'rm -rf'.collect { ch(0xE0000 + ((int) it.charAt(0))) }.join('')
 
         when:
-        def shown = LogText.forConsole(smuggled)
+        def shown = TextSafety.forConsole(smuggled)
 
         then: 'the operator sees that something was hidden there, character by character'
         shown.startsWith('fix the login bug\\U000E0072\\U000E006D')
@@ -145,11 +137,11 @@ class LogTextConsoleSpec extends Specification {
 
     def "FR5: the console plane does not cap — an operator report stays whole"() {
         given: 'a report an order of magnitude past the log plane\'s own cap'
-        def long_ = 'x' * (LogText.DEFAULT_CAP_CHARS * 10)
+        def long_ = 'x' * (TextSafety.DEFAULT_CAP_CHARS * 10)
 
         expect:
-        LogText.forConsole(long_) == long_
-        !LogText.forConsole(long_).contains('truncated')
+        TextSafety.forConsole(long_) == long_
+        !TextSafety.forConsole(long_).contains('truncated')
     }
 
     def "FR5: the corpus leaves nothing executable behind"() {
@@ -170,7 +162,7 @@ class LogTextConsoleSpec extends Specification {
         .collect { ch(it) }.join('|')
 
         when:
-        def shown = LogText.forConsole(hostile)
+        def shown = TextSafety.forConsole(hostile)
 
         then: 'no ESC, no C1 byte, no bidi override, no invisible character, no carriage return'
         shown.codePoints().noneMatch { CharacterTableProbe.hostile(it) }
@@ -181,7 +173,7 @@ class LogTextConsoleSpec extends Specification {
 
     /**
      * The claim restated as data rather than reused from the production predicate, shared with
-     * {@link LogTextIdempotenceSpec} via {@link HostileCodePoints}: the console plane is the one
+     * {@link TextSafetyIdempotenceSpec} via {@link HostileCodePoints}: the console plane is the one
      * plane that keeps the line feed, so it is the sole exception here.
      */
     static class CharacterTableProbe {

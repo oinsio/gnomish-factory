@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,13 +48,6 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
  * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability.
- *
- * <p>Kept in sync with {@code com.github.oinsio.gnomish.logtext.OperatorEvent}: this class's
- * operator line repeats catalog code {@code GF112} as a literal head, because {@code :domain}
- * must not take a {@code :logtext} edge to reach the catalog (ADR 0004, accepted deviation 1).
- * The literal and the constant are pinned equal by {@code DomainOperatorEventHeadSpec}; there is
- * no resolvable link either way, which is why the pair is listed in
- * {@code .claude/rules/manual-sync-pairs.md}.
  */
 final class RoundExecution {
 
@@ -118,7 +112,7 @@ final class RoundExecution {
             // failure mode, and this stays ONE fault with one operator line (rules/logging.md:
             // one code, one call site).
             Throwable cause = ex instanceof ExecutorFailure failure ? failure.cause() : ex;
-            log.error("[GF112] executor threw for {}", key, cause);
+            log.error(OperatorEvent.EXECUTOR_THREW.head() + "executor threw for {}", key, cause);
             return new RoundOutcome.CannotExecute(key, StackTraces.render(cause), denialsOf(ex));
         }
         Events.emit(listener, new EngineEvent.ExecutionFinished(key, result.usage()));

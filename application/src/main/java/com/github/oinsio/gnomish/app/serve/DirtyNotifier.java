@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app.serve;
 
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import org.slf4j.LoggerFactory;
 
 /**

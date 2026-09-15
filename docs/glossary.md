@@ -420,10 +420,10 @@ trusted/task tier split, and the law-root rule.
   one call site: two emitters of the same fault are two events, because the
   code names *where* the factory degraded. Codes are never reused and the
   catalog only grows; INFO and DEBUG lines have no codes, since the catalog's
-  scope is the operator plane. Owned by `OperatorEvent` in `:logtext`; the four
-  `:domain` emitters ADR 0004 exempts carry the literal head and are pinned to
-  their constants by a round-trip spec. *Not:* an anchor line, which is an INFO
-  timeline marker and carries no code. *Never:* error code, message ID.
+  scope is the operator plane. Owned by `OperatorEvent` in `:operatorevent`, a
+  JDK-only leaf every emitter reaches — `:domain` included. *Not:* an anchor
+  line, which is an INFO timeline marker and carries no code. *Never:* error
+  code, message ID.
 - **Log contract** — the promise the factory makes about its operator plane:
   the *code* identifies the event, the prose does not. An alert, a grep or a
   spec keyed on `[GF042]` keeps matching however the sentence is rewritten, and
@@ -452,17 +452,17 @@ trusted/task tier split, and the law-root rule.
   deliberately not the same mechanism. *Never:* deduplication, throttling.
 - **Log text sanitization** — the choke point every piece of untrusted text
   passes before it becomes part of a log line: control/ANSI stripping, newline
-  flattening so one event stays one line, and a length cap. Owned by `LogText`
-  in `:logtext`. Behind it stands the **sink layer**: the Logback encoder
-  neutralizes the rendered message, the rendered throwable and every MDC value
-  through its own converters, so a hostile byte that reached a record without
+  flattening so one event stays one line, and a length cap. Applied by `LogText`
+  in `:logtext`, a facade over the `:untrustedtext` leaf, which owns the
+  character table and the primitives. Behind it stands the **sink layer**: the
+  Logback encoder neutralizes the rendered message, the rendered throwable and
+  every MDC value through its own converters, so a hostile byte that reached a record without
   passing the choke point still cannot forge a line — defense in depth, not a
   license to skip the choke point (the three layers are stated in
   `docs/adr/0004-logging-policy.md`). *Not:* findings sanitization —
   `FindingsSanitizer` guards the plugin-findings boundary and deliberately
   *preserves* line structure; the two are distinct controls at distinct trust
-  boundaries that share only their character vocabulary, kept in step as a
-  declared pair.
+  boundaries, both facades over the same `:untrustedtext` owner.
 - **Shutdown phase** — the window between the moment a stop takes ownership of
   the process and the moment it exits. Marked once, first thing in the shutdown
   hook, and read by the sites that would otherwise report the stop's own

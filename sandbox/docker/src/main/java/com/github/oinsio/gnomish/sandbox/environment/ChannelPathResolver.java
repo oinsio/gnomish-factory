@@ -14,6 +14,11 @@ import java.nio.file.Path;
  * real (symlink-resolved) path, so an existing symlink that points outside a
  * root and a not-yet-created file under a symlinked parent are both caught.
  *
+ * <p>Kept in sync with {@link ContainerFileChannel}: both refuse a path that
+ * normalizes outside the working copy and the scratch root, and both refuse
+ * {@code .git/**} under the working copy, even though this class additionally
+ * resolves symlinks where the container twin is lexical-only.
+ *
  * <p>Implements NFR-S3, FR17 of add-sandbox-core.
  */
 record ChannelPathResolver(Path workingCopyReal, Path scratchReal) {

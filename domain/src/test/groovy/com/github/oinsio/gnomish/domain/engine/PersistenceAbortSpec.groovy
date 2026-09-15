@@ -1,10 +1,8 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import org.slf4j.LoggerFactory
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 
 /**
  * StageAttemptLoop persist-failure abort behavior, task 5.4 — a thrown persist ends the run as
@@ -91,11 +89,8 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
     // NFR-O1: the caught persist failure is logged at ERROR at the point of capture, naming the
     //     round key — asserted via a Logback ListAppender on the AttemptJournal logger.
     def "logs the persist failure at ERROR at the point of capture"() {
-        given: 'a ListAppender attached to the AttemptJournal logger'
-        Logger journalLogger = (Logger) LoggerFactory.getLogger(AttemptJournal)
-        def appender = new ListAppender<ILoggingEvent>()
-        appender.start()
-        journalLogger.addAppender(appender)
+        given: 'a capture on the AttemptJournal logger'
+        def logs = LogCaptureSupport.attach(AttemptJournal)
 
         and: 'a round whose persist throws'
         def stageDef = stage('build', 5, [builtin('files_exist')])
@@ -107,11 +102,12 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'exactly one ERROR line was logged, naming the persist failure'
-        def errors = appender.list.findAll { it.level == Level.ERROR }
+        def errors = logs.list.findAll { it.level == Level.ERROR }
         errors.size() == 1
         errors[0].formattedMessage.contains('persist failed')
+        errors[0].formattedMessage.startsWith(OperatorEvent.ATTEMPT_PERSIST_FAILED.head())
 
         cleanup:
-        journalLogger.detachAppender(appender)
+        logs.detach()
     }
 }

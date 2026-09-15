@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.adapter.check
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import java.nio.file.Files

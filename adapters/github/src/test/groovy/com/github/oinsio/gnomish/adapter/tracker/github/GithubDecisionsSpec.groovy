@@ -210,13 +210,11 @@ class GithubDecisionsSpec extends Specification {
         wireMock.verify(WireMock.patchRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/11')))
     }
 
-    /** Renders one GitHub comment JSON object, JSON-escaping the marker body for embedding in a listing. */
     private static String commentJson(long id, String body) {
-        def escaped = body.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-        "{\"id\":${id},\"created_at\":\"2026-07-20T09:00:00Z\",\"body\":\"${escaped}\"}"
+        GithubCommentFixtures.commentJson(id, body, '2026-07-20T09:00:00Z')
     }
 
-    private static GithubMarkerWriter markerWriter(httpClient, String instanceId) {
+    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
         new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId)
     }
 }

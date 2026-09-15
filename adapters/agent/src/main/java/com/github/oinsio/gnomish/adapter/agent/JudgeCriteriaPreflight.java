@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

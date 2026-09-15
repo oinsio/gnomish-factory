@@ -34,8 +34,9 @@ the exemption with the `throwable-not-subject` comment below.
 ## Every WARN/ERROR carries its catalog code
 
 The message head of a production WARN or ERROR is a stable `[GFnnn]` code from
-`com.github.oinsio.gnomish.logtext.OperatorEvent` (module `:logtext`) — one
-constant per call site, never reused, additive-only:
+`com.github.oinsio.gnomish.operatorevent.OperatorEvent` (module `:operatorevent`,
+a JDK-only leaf every module can reach) — one constant per call site, never
+reused, additive-only:
 
 ```java
 log.error(OperatorEvent.SWEEP_LEDGER_APPEND_FAILED.head() + "failed to append sweep ledger line", e);
@@ -49,13 +50,17 @@ may be rewritten at any time. Rules:
 - **One code, one call site.** Two emitters of the same fault (a
   with-throwable twin, a roll-up branch) are two constants.
 - **INFO and DEBUG never carry codes.** The catalog is the operator plane only.
-- A module that cannot reach `:logtext` — today only the four `:domain`
-  emitters ADR 0004 exempts — writes the literal `[GFnnn] ` head and is pinned
-  to the catalog by `DomainOperatorEventHeadSpec`.
+- **Never spell the head as a string literal.** `"[GF110] persist failed"` is a
+  copy of a code that can drift from the constant that owns it. Every module
+  reaches the catalog — `:domain` included, since `split-logtext-leaves` moved it
+  to the JDK-only `:operatorevent` leaf — so `OperatorEvent.X.head()` is the only
+  accepted form, and `LogContractGateSpec` fails the build on a literal at any
+  level, INFO included.
 
-`LogContractGateSpec` fails the build on an uncoded site, a duplicated code, or
-a code no test source names; exempt in place with `log-contract-exempt:
-<reason>` when a site genuinely must stay uncoded.
+`LogContractGateSpec` fails the build on an uncoded site, a duplicated code, a
+code no test source names, or a literal head; exempt in place with
+`log-contract-exempt: <reason>` when a site genuinely must stay uncoded — the
+literal-head rule takes no exemption, since the fix is always available.
 
 ## Best effort must still leave a trace
 
@@ -140,9 +145,9 @@ under the rule — and replacing the accessor-name gate with typed carriers — 
 
 Never log a secret **value**; a warning about a secret names the variable only.
 `FindingsSanitizer` is a different control at a different boundary (plugin
-findings, line structure preserved) — do not use it for log lines, and do not
-add a production edge between the two (they are a declared pair, see
-`manual-sync-pairs.md`).
+findings, line structure preserved) — do not use it for log lines. Both it and
+`LogText` are facades over the `:untrustedtext` leaf, which owns the character
+table; neither may hold one of its own (`TextSafetyOwnerSpec`, `:bootstrap`).
 
 ## Never write to `System.out` / `System.err`
 
@@ -231,7 +236,8 @@ is the subject of the assertion.
 
 - **Static** (`LogContractGateSpec`, `:bootstrap`): every WARN/ERROR site
   carries a code, every code belongs to one site, every code is named by some
-  test source. In-place escape hatch: `log-contract-exempt: <reason>`.
+  test source, and no site spells its head as a literal. In-place escape hatch
+  for the first three: `log-contract-exempt: <reason>`.
 - **Console owner** (`ConsoleOwnerGateSpec`, `:bootstrap`): a source scan
   failing the build on `System.out.print*` / `System.err.print*` in any
   production class but `SystemConsoleIO`.
@@ -256,4 +262,8 @@ is the subject of the assertion.
 
   Do not invent a `[GFnnn]` literal in a test source: `GF999` is pinned by
   `LogContractGateSpec` as the code no test source names. Take codes from
-  `OperatorEvent`.
+  `OperatorEvent`. Naming a constant is what satisfies the "named by some test
+  source" check, so name it in the spec that actually provokes the line through a
+  capture — a mention in a javadoc example satisfies the check while proving
+  nothing, which is how `GF042` went unpinned until `split-logtext-leaves`
+  deleted the spec whose comment was carrying it.

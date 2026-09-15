@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.TaskSalvage;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;

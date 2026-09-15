@@ -8,8 +8,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
-import com.github.oinsio.gnomish.logtext.OperatorEvent
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.time.MovableClock
 import com.github.tomakehurst.wiremock.WireMockServer

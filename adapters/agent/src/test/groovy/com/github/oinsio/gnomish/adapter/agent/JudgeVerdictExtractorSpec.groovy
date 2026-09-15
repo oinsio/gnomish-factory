@@ -1,12 +1,9 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.logtext.OperatorEvent
-import org.slf4j.LoggerFactory
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -19,18 +16,8 @@ import spock.lang.Specification
  */
 class JudgeVerdictExtractorSpec extends Specification {
 
-    private static List<ILoggingEvent> capture(Closure<?> emit) {
-        Logger logbackLogger = (Logger) LoggerFactory.getLogger(JudgeVerdictExtractor)
-        ListAppender<ILoggingEvent> appender = new ListAppender<>()
-        appender.start()
-        logbackLogger.addAppender(appender)
-        try {
-            emit()
-        } finally {
-            logbackLogger.detachAppender(appender)
-            appender.stop()
-        }
-        return appender.list
+    private static List<?> capture(Closure<?> emit) {
+        LogCaptureSupport.capture(JudgeVerdictExtractor, Level.INFO, emit)
     }
 
     def extractor = new JudgeVerdictExtractor()

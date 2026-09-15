@@ -11,7 +11,7 @@ import com.github.oinsio.gnomish.gitobjects.BlobTooLargeException;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.MissingObjectException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.logtext.LogText;
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;

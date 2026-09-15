@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity
-import com.github.oinsio.gnomish.logtext.OperatorEvent
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRead
 import com.github.oinsio.gnomish.sandbox.DenialRestoration

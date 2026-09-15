@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.logtext;
+package com.github.oinsio.gnomish.untrustedtext;
 
 /**
  * The console plane's rendering of {@link CharacterTable}: it <em>shows</em> what the log plane

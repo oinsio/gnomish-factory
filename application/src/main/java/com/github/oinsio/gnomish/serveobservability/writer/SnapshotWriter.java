@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
-import com.github.oinsio.gnomish.logtext.OperatorEvent;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.Snapshot;
 import com.github.oinsio.gnomish.serveobservability.json.SnapshotJsonMapper;
 import com.github.oinsio.gnomish.status.DaemonComponent;

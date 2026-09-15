@@ -79,7 +79,7 @@ the fault count.
 
 Every production WARN and ERROR line begins with a stable catalog code —
 `[GF042] failed to append sweep ledger line` — drawn from one enum,
-`OperatorEvent` (`:logtext`). One constant per call site; a code is never
+`OperatorEvent` (`:operatorevent`). One constant per call site; a code is never
 reused; the catalog only grows. **The code is the contract and the sentence is
 not**: an alert, an operator's grep and a spec's assertion all key on the code,
 so wording may be rewritten freely without breaking any of them. That inverts
@@ -110,11 +110,11 @@ column 0. A pattern anchored at the start of the message (`^failed to append`,
 or a `startsWith` in a spec) no longer matches; an unanchored one still does.
 Prefer the code.
 
-The four `:domain` emitters of accepted deviation 1 cannot reach `:logtext`
-without giving the domain a module edge it exists to refuse, so they carry the
-literal `[GFnnn]` head. A round-trip spec pins each literal to its catalog
-constant, the same shape the project's wire-vocabulary rule prescribes: delete
-either side and it goes red.
+Every emitter renders its head from the catalog constant — `:domain` included,
+since `split-logtext-leaves` put the enum in the JDK-only `:operatorevent` leaf the
+domain may reach. A `[GFnnn]` head spelled as a string literal in any production
+source fails the static gate, naming the site; `OperatorEvent.X.head()` is the only
+accepted form.
 
 ### The exception is the trailing argument, always
 
@@ -144,10 +144,10 @@ operator's screen, and each is load-bearing on its own:
    the operator console's exit: it makes controls **visible** instead of removing
    them, and preserves line structure and length. `FindingsSanitizer`
    (`gnomish-plugin-api`) is the plugin-findings boundary's exit, with line
-   structure preserved deliberately; it shares only the character vocabulary with
-   `LogText` and is kept in step as a declared pair under
-   `.claude/rules/manual-sync-pairs.md`, verified by an executable equivalence
-   spec rather than by a production dependency.
+   structure preserved deliberately; it and `LogText` are both facades over the
+   `:untrustedtext` leaf, which owns the character table and the primitives; the
+   three-way identity spec verifies that neither facade has re-acquired a table of
+   its own.
 3. **Sink backstop.** The two sinks neutralize whatever reaches them, whatever the
    call site did. Logback's encoder renders the message, the throwable and every
    MDC value through the `%safeMsg` / `%safeEx` / `%safeX{…}` converters
@@ -177,10 +177,10 @@ writes verbatim: it is a parser's input, not a screen's.
 No secret value, token, or credential material appears in any log line; warnings
 about secrets name the *variable*, never the value.
 
-Two follow-ups are sequenced after the backstop: `split-logtext-leaves` moves the
-primitives into their own leaf modules, and `type-untrusted-text` replaces the
-accessor-name gate with typed carriers so layer 2 stops depending on discipline at
-all.
+`split-logtext-leaves` moved the primitives into the `:untrustedtext` leaf, so both
+layer-2 exits delegate to one owner. One follow-up remains: `type-untrusted-text`
+replaces the accessor-name gate with typed carriers, so layer 2 stops depending on
+discipline at all.
 
 ### Repeat suppression has one owner; edges are the signal
 
@@ -233,7 +233,21 @@ Recorded so they are decisions rather than drift:
    `EngineEvent.PortFailed` variant carrying them out to a listener — has no
    consumer today and was deferred as scope creep. An ArchUnit rule pins the
    list at exactly these four, so a fifth is a deliberate decision, not an
-   accident. Revisit if `:domain` must become logging-framework-free.
+   accident. Revisit if `:domain` must become logging-framework-free. Their
+   `[GFnnn]` heads are **not** part of this deviation: they read the catalog
+   constant like every other emitter, under the principle below.
+
+   The principle that admits it: **`:domain` may depend on a JDK-only leaf —
+   a module that declares no internal module and no external library — and on
+   nothing else internal.** Such a leaf carries no framework, no filesystem and
+   no wire format, so an edge to it cannot import what the domain's purity rule
+   exists to keep out; the alternative — restating the leaf's content inside the
+   domain — is the hand-synchronized duplication this ADR's history records.
+   `:operatorevent` is the first edge taken under it, and
+   `DomainLeafPuritySpec` (`:bootstrap`) enforces the definition over every
+   project in `:domain`'s allowlist, so the next leaf is a build-file line rather
+   than an ADR amendment.
+
 2. **The log stays unstructured text.** No JSON log output. The structured
    plane already exists (ledgers, snapshots, `state.json`), and the log's reader
    is a human or an AI with `grep`. Revisit only if log shipping arrives.
@@ -275,7 +289,5 @@ Recorded so they are decisions rather than drift:
 - `docs/glossary.md` — *anchor line*, *canonical task summary*, *operator
   event*, *operator console*, *log contract*, *repeat suppression*, *log text
   sanitization*.
-- `.claude/rules/manual-sync-pairs.md` — the `LogText` ↔ `FindingsSanitizer`
-  row.
 - `docs/adr/0003-crash-consistency.md` — why the durable record is the media,
   not the log.

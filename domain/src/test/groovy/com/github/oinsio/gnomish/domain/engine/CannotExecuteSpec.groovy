@@ -1,9 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
@@ -20,7 +17,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import org.slf4j.LoggerFactory
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
@@ -177,11 +175,8 @@ class CannotExecuteSpec extends Specification {
     // NFR-O1: the caught executor throw is logged at ERROR at the point of capture, naming the
     //     round key — asserted via a Logback ListAppender on the RoundExecution logger.
     def "logs the caught executor throw at ERROR at the point of capture"() {
-        given: 'a ListAppender attached to the RoundExecution logger'
-        Logger roundLogger = (Logger) LoggerFactory.getLogger(RoundExecution)
-        def appender = new ListAppender<ILoggingEvent>()
-        appender.start()
-        roundLogger.addAppender(appender)
+        given: 'a capture on the round mechanics'
+        def logs = LogCaptureSupport.attach(RoundExecution, Level.ERROR)
 
         and: 'a stage whose executor throws'
         def stageDef = stage('build', 5, [builtin('files_exist')])
@@ -191,11 +186,12 @@ class CannotExecuteSpec extends Specification {
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'exactly one ERROR line was logged, naming the executor throw'
-        def errors = appender.list.findAll { it.level == Level.ERROR }
+        def errors = logs.list.findAll { it.level == Level.ERROR }
         errors.size() == 1
         errors[0].formattedMessage.contains('executor threw')
+        errors[0].formattedMessage.startsWith(OperatorEvent.EXECUTOR_THREW.head())
 
         cleanup:
-        roundLogger.detachAppender(appender)
+        logs.detach()
     }
 }

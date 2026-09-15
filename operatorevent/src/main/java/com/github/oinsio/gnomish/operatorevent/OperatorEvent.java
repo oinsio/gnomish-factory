@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.logtext;
+package com.github.oinsio.gnomish.operatorevent;
 
 /**
  * The factory's operator-event catalog (FR14 of harden-logging-observability): one constant per
@@ -21,17 +21,10 @@ package com.github.oinsio.gnomish.logtext;
  *       the catalog downward would make every diagnostic line a versioned interface.
  * </ul>
  *
- * <p>Kept in sync with the four {@code :domain} emitters of ADR 0004's accepted deviation 1
- * ({@code AttemptJournal}, {@code Events}, {@code RoundExecution}, {@code VerifyOrchestrator}):
- * they cannot reach {@code :logtext} without giving the domain the module edge it exists to
- * refuse, so each repeats its code as a literal message head. What must stay in sync is the code
- * itself — the constants {@code ATTEMPT_PERSIST_FAILED}, {@code ENGINE_EVENT_LISTENER_THREW},
- * {@code EXECUTOR_THREW} and {@code CHECK_ADAPTER_THREW} and the literals those classes spell out.
- * Neither end can name the other with a resolvable link, so the pair is listed in {@code
- * .claude/rules/manual-sync-pairs.md} and pinned by {@code DomainOperatorEventHeadSpec}. A static gate (FR16) fails the build on an uncoded site, a duplicated code or a
+ * <p>A static gate (FR16) fails the build on an uncoded site, a duplicated code or a
  * code no test source names; a runtime gate (FR17) fails a spec that provokes an unasserted one.
  *
- * <p>Implements FR14 of harden-logging-observability.
+ * <p>Implements FR14 of harden-logging-observability, FR4 of split-logtext-leaves.
  */
 public enum OperatorEvent {
     // agent executor and judge adapters
