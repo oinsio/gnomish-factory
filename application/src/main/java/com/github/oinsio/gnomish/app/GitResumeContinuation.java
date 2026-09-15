@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
@@ -149,7 +150,11 @@ final class GitResumeContinuation {
      */
     void reportCompleted(TaskState finalState) {
         var report = StatusReport.build(bootstrap.context(), finalState, null, LiveActivity.idle());
-        System.out.println(statusRenderer.renderFull(report));
+        // The same console the resume dialogs above used (FR5, FR6 of harden-untrusted-text-sinks):
+        // the summary is the last thing the operator reads on this path, and it carries the task's
+        // own stage names and decision text.
+        assembly.dialogConsole(bootstrap.context(), finalState)
+                .print(statusRenderer.renderFull(report) + ConsoleIO.LINE_END);
     }
 
     /**

@@ -131,7 +131,7 @@ final class RunAssembler {
                 assembly.threadSleeper,
                 sandbox == null ? AttemptDelivery.assumedDelivered() : sandbox.attemptDelivery());
 
-        var loop = new RunnerOutcomeLoop(new Engine(), console, java.time.Clock.systemUTC());
+        var loop = new RunnerOutcomeLoop(new Engine(), console, assembly.errorConsole, java.time.Clock.systemUTC());
         return new Run(loop, ports, holder);
     }
 }

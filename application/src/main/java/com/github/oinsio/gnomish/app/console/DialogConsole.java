@@ -86,6 +86,18 @@ public final class DialogConsole {
     }
 
     /**
+     * Writes {@code text} to the operator byte for byte — the machine-readable path of the
+     * wrapped {@link ConsoleIO}, for blocks a parser rather than a terminal consumes
+     * (FR5 of harden-untrusted-text-sinks). Kept beside {@link #print} so a dialog that
+     * holds this wrapper never has to reach past it for one of the two paths.
+     *
+     * @param text the text to print
+     */
+    public void printMachine(String text) {
+        io.printMachine(text);
+    }
+
+    /**
      * Prints {@code prompt} and reads one line, intercepting {@code status} and
      * {@code status --json} (FR10): a meta-command renders the current status,
      * prints it, and re-prompts with the same {@code prompt} text — the caller

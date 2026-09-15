@@ -109,7 +109,8 @@ tracker:
                 [github: fakeFactory(tracker)],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                LiveConsoleIO.onStderr())
     }
 
     def "M1: a healthy drain cycle that claims, works and delivers one task logs no WARN or ERROR"() {

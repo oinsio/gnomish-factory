@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.lease.HeartbeatProgress;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -80,7 +81,11 @@ final class ServeCommand {
     private final FeedAutomatonStarter starter;
     private final SandboxLifecyclePass sandboxLifecyclePass;
     private final ContainerTakeSupport containerTakeSupport;
+    private final ConsoleIO errorConsole;
     /**
+     * @param errorConsole the console owner bound to {@code stderr} (FR5, FR6 of
+     *     harden-untrusted-text-sinks): the two startup-failure sentences go out on its human
+     *     path, since each carries a message from a tracker or a git remote
      * @param starter drives the assembled {@link FeedAutomaton} (task 5.1's test seam — see its
      *     Javadoc); production wiring passes {@link FeedAutomaton#run} itself
      * @param sandboxLifecyclePass the sweep-lifecycle evaluation seam (task 4.1 of
@@ -101,8 +106,10 @@ final class ServeCommand {
             PipelineSource pipelineSource,
             FeedAutomatonStarter starter,
             SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ConsoleIO errorConsole) {
         this.containerTakeSupport = containerTakeSupport;
+        this.errorConsole = errorConsole;
         this.assembly = assembly;
         this.git = git;
         this.worktreesRoot = worktreesRoot;
@@ -210,7 +217,7 @@ final class ServeCommand {
         } catch (DefaultBranchUnboundException unbound) {
             // throwable-not-subject: TrustedTierStartup logged the one ERROR of this failure; the
             //     console line is the operator's copy of its sentence.
-            System.err.println("gnomish serve: startup failed: " + unbound.getMessage());
+            errorConsole.print("gnomish serve: startup failed: " + unbound.getMessage() + ConsoleIO.LINE_END);
             throw new ServeExitCodeException(1);
         }
     }
@@ -236,8 +243,8 @@ final class ServeCommand {
                             + "gnomish serve: startup failed provisioning tracker {}",
                     bindingDescription(trackerConfig),
                     startupFailure);
-            System.err.println("gnomish serve: startup failed provisioning tracker " + bindingDescription(trackerConfig)
-                    + ": " + startupFailure.getMessage());
+            errorConsole.print("gnomish serve: startup failed provisioning tracker " + bindingDescription(trackerConfig)
+                    + ": " + startupFailure.getMessage() + ConsoleIO.LINE_END);
             throw new ServeExitCodeException(1);
         }
     }

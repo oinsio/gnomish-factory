@@ -62,7 +62,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
 
     private GitModeRunner newRunner(FactoryProperties factoryProperties) {
         def assembly = newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProperties)
-        new GitModeRunner(assembly, TaskGitFixture.real(), worktreesRoot)
+        new GitModeRunner(assembly, TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
     }
 
     private Path expectedWorktree(String taskId) {

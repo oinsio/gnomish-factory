@@ -24,7 +24,7 @@ import spock.lang.TempDir
  * fails the test the instant any write method is invoked, so NG3 is proven by construction, not
  * merely by the test happening to pass.
  */
-class BoardCommandSpec extends Specification implements ApplicationArgumentsFixture {
+class BoardCommandSpec extends Specification implements ApplicationArgumentsFixture, StdoutCaptureFixture {
 
     private static final String INSTANCE_NAME = 'board-instance'
 
@@ -52,7 +52,8 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
                 new FactoryProperties(INSTANCE_NAME, null, null, null, null),
                 [github: factory],
                 MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource())
+                TrackerValidatorStub.acceptingGithubSource(),
+                liveConsole())
     }
 
     def "resolves the tracker from --dir's config, minting an InstanceId passed to the factory, and calls only listReady/listOpen"() {
@@ -100,18 +101,14 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
             new ReadyTask(new TaskRef("r-$it".toString()), AbortFacts.none(), false, false, "t-$it".toString())
         }
         def command = newCommand(new RecordingReadOnlyTracker(ready, []))
-        def out = new ByteArrayOutputStream()
-        def originalOut = System.out
-        System.out = new PrintStream(out)
 
         when:
-        command.run(args('board', "--dir=${projectDir}".toString(), '--limit=2'))
+        def out = captureStdout {
+            command.run(args('board', "--dir=${projectDir}".toString(), '--limit=2'))
+        }
 
         then:
-        out.toString().contains('truncated') == expectTruncated
-
-        cleanup:
-        System.out = originalOut
+        out.contains('truncated') == expectTruncated
 
         where:
         readyCount || expectTruncated
@@ -127,24 +124,20 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
                         [
                             new ReadyTask(new TaskRef('r-1'), AbortFacts.none(), false, false, 'Add widgets')
                         ], []))
-        def out = new ByteArrayOutputStream()
-        def originalOut = System.out
-        System.out = new PrintStream(out)
 
         when: 'run once with --json and once without'
         def baseFlags = [
             'board',
             "--dir=${projectDir}".toString()
         ]
-        command.run(args((json ? baseFlags + '--json' : baseFlags) as String[]))
+        def out = captureStdout {
+            command.run(args((json ? baseFlags + '--json' : baseFlags) as String[]))
+        }
 
         then:
-        def printed = out.toString().trim()
+        def printed = out.trim()
         printed.startsWith(firstChar)
         printed.startsWith('{') == json
-
-        cleanup:
-        System.out = originalOut
 
         where:
         json || firstChar
@@ -162,21 +155,16 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
         ]
         def tracker = new RecordingReadOnlyTracker(ready, open)
         def command = newCommand(tracker)
-        def out = new ByteArrayOutputStream()
-        def originalOut = System.out
-        System.out = new PrintStream(out)
 
         when:
-        command.run(args('board', "--dir=${projectDir}".toString()))
+        def printed = captureStdout {
+            command.run(args('board', "--dir=${projectDir}".toString()))
+        }
 
         then:
-        def printed = out.toString()
         printed.contains('ready-42')
         printed.contains('Add widgets')
         printed.contains('working-7')
         printed.contains('Fix gizmos')
-
-        cleanup:
-        System.out = originalOut
     }
 }

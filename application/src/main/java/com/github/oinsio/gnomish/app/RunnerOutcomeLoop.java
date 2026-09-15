@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
@@ -26,7 +27,7 @@ import org.jspecify.annotations.Nullable;
  * every other {@code Escalated} kind resumes through {@link EscalationResumeDialog} (extracted
  * to keep this file within the file-size guidance). {@code Paused} resumes through {@link
  * #handlePaused}: confirmation only, nothing to reset. {@code Aborted} is terminal: {@link
- * #handleAborted} prints to {@link System#err} then throws {@link AbortedException} so the CLI
+ * #handleAborted} prints to the error console then throws {@link AbortedException} so the CLI
  * boundary can tell it apart from {@code Completed}, which renders a final status summary and
  * returns normally (exit 0 is Spring Boot's default for a returning runner).
  *
@@ -36,17 +37,21 @@ public final class RunnerOutcomeLoop {
 
     private final Engine engine;
     private final DialogConsole console;
+    private final ConsoleIO errorConsole;
     private final EscalationResumeDialog escalationDialog;
     private final StatusTextRenderer statusRenderer = new StatusTextRenderer();
 
     /**
      * @param engine the pure orchestrator this loop drives repeatedly; never null
      * @param console the single input choke point; never null
+     * @param errorConsole the console owner bound to {@code stderr} — the terminal error path,
+     *     deliberately not the dialog console (FR5, FR6 of harden-untrusted-text-sinks); never null
      * @param clock the time source stamped on every appended {@link Decision}; never null
      */
-    public RunnerOutcomeLoop(Engine engine, DialogConsole console, Clock clock) {
+    public RunnerOutcomeLoop(Engine engine, DialogConsole console, ConsoleIO errorConsole, Clock clock) {
         this.engine = engine;
         this.console = console;
+        this.errorConsole = errorConsole;
         this.escalationDialog = new EscalationResumeDialog(console, clock);
     }
 
@@ -163,7 +168,6 @@ public final class RunnerOutcomeLoop {
      *
      * <p>Implements FR9, D8 of add-manual-run.
      */
-    @Nullable
     private Resumption handleEscalated(TaskContext context, TaskOutcome.Escalated escalated) {
         return escalationDialog.handle(context, escalated);
     }
@@ -171,7 +175,7 @@ public final class RunnerOutcomeLoop {
     /**
      * Reports a broken durability guarantee (D8, FR9): {@code aborted.finalState()} never
      * reached durable storage, so there is nothing to resume from. Prints the cause and an
-     * unpersisted-state summary to {@link System#err} (not the dialog console — this is a
+     * unpersisted-state summary to the error console (not the dialog console — this is a
      * terminal error path), then throws {@link AbortedException} so the CLI boundary can tell
      * this apart from {@code Completed} and route it to exit 12.
      *
@@ -180,11 +184,11 @@ public final class RunnerOutcomeLoop {
     private void handleAborted(TaskContext context, TaskOutcome.Aborted aborted) {
         var finalState = aborted.finalState();
         var failedAt = aborted.failedAt();
-        System.err.println("Aborted: " + aborted.cause());
-        System.err.println("Task '" + context.taskId() + "': the round at stage '" + failedAt.stage()
+        errorConsole.print("Aborted: " + aborted.cause() + ConsoleIO.LINE_END);
+        errorConsole.print("Task '" + context.taskId() + "': the round at stage '" + failedAt.stage()
                 + "', attempt " + failedAt.attempt() + " was not persisted. Last known state: position="
                 + finalState.position() + ", attemptsUsed=" + finalState.attemptsUsed() + ", "
-                + finalState.attempts().size() + " attempt(s) recorded in this stage.");
+                + finalState.attempts().size() + " attempt(s) recorded in this stage." + ConsoleIO.LINE_END);
         throw new AbortedException(aborted);
     }
 

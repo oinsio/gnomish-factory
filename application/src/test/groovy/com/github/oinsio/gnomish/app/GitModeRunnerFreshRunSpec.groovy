@@ -38,7 +38,7 @@ import spock.lang.TempDir
  *
  * <p>Added by task 8.7 of split-into-modules.
  */
-class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
+class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, StdoutCaptureFixture {
 
     @TempDir
     Path tempDir
@@ -71,7 +71,9 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
     InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()
 
     private GitModeRunner runner() {
-        new GitModeRunner(assemblyRunningLoop(executor), new TaskGit(store, branches, worktrees, new ClaimEpochBook()), worktreesRoot)
+        new GitModeRunner(
+                assemblyRunningLoop(executor), new TaskGit(store, branches, worktrees, new ClaimEpochBook()),
+                worktreesRoot, liveConsole())
     }
 
     // FR1, FR3 of wire-host-mid-round-push (design D3): the fresh git-mode host run attaches the
@@ -85,7 +87,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes {
         } as UnaryOperator<RoundEnvironmentSource>
         def runner = new GitModeRunner(
                 assemblyRunningLoop(executor, new ScriptedConsoleIO(['']), new Verdict.Pass(), attached),
-                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot)
+                new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), worktreesRoot, liveConsole())
 
         when:
         runner.run(cloneDir, null, completingPipeline(), context(), TaskState.atStageStart('build'),

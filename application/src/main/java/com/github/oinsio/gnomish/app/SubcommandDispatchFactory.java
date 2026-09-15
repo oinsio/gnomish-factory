@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -44,7 +45,8 @@ final class SubcommandDispatchFactory {
             BoardCommand boardCommand,
             DashboardCommand dashboardCommand,
             SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport) {
+            ContainerTakeSupport containerTakeSupport,
+            ConsoleIO errorConsole) {
         var takeCommand = TakeCommandFactory.of(
                 assembly,
                 git,
@@ -73,7 +75,8 @@ final class SubcommandDispatchFactory {
                 pipelineSource,
                 FeedAutomaton::run,
                 sandboxLifecyclePass,
-                containerTakeSupport);
+                containerTakeSupport,
+                errorConsole);
         return new SubcommandDispatch(
                 statusCommand, usageCommand, takeCommand, serveCommand, boardCommand, dashboardCommand);
     }

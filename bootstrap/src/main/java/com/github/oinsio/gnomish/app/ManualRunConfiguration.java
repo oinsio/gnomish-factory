@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource;
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -26,6 +27,7 @@ import java.util.Map;
 import java.util.Random;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * Assembles every {@code gnomish run} collaborator that needs no per-invocation data — the
@@ -172,10 +174,27 @@ public class ManualRunConfiguration {
         return new ThreadSleeper();
     }
 
-    /** The real {@link com.github.oinsio.gnomish.app.port.console.ConsoleIO}, wrapping the process's own stdin/stdout. */
+    /**
+     * The real {@link com.github.oinsio.gnomish.app.port.console.ConsoleIO}, wrapping the
+     * process's own stdin/stdout — the console owner, and the default wherever a command asks for
+     * one (FR5, FR6 of harden-untrusted-text-sinks).
+     */
     @Bean
+    @Primary
     public SystemConsoleIO systemConsoleIO() {
         return new SystemConsoleIO(System.in, System.out);
+    }
+
+    /**
+     * The same owner over the process's standard error: which stream a line goes to is a wiring
+     * decision, so the composition root makes it once here rather than every failure path naming
+     * {@code System.err} for itself (FR6 of harden-untrusted-text-sinks). The startup-failure
+     * sentences, the run's exception report and the unpersisted-abort summary write through this
+     * one; everything else takes the primary.
+     */
+    @Bean
+    public ConsoleIO errorConsoleIO() {
+        return new SystemConsoleIO(System.in, System.err);
     }
 
     @Bean

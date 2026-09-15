@@ -86,7 +86,7 @@ public final class TakeCrashAbort {
         AbortFacts facts = abortFactsBestEffort(tracker, ref);
         TaskState finalState =
                 TaskState.atStageStart(definition.stages().getFirst().name());
-        return abortHandler.handle(ref, finalState, cause, facts, abortThreshold, instanceId, categoryOf(crash));
+        return abortHandler.handle(ref, finalState, cause, facts, abortThreshold, instanceId, categoryOf(crash), crash);
     }
 
     /**

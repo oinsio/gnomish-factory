@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO
+
 /**
  * Reusable Spock fixture: captures whatever a CLI command writes to {@code System.out} while it
  * runs, so specs can assert on rendered text/JSON output without touching the real console.
@@ -7,6 +9,20 @@ package com.github.oinsio.gnomish.app
  * which each repeated this identical capture-and-restore logic.
  */
 trait StdoutCaptureFixture {
+
+    /**
+     * The real console owner, writing to whatever {@code System.out} is at each write — inside a
+     * {@link #captureStdout} block, the capture buffer. See {@link LiveConsoleIO} for why a
+     * command under test is built with the production owner rather than a recording double.
+     */
+    static ConsoleIO liveConsole() {
+        LiveConsoleIO.onStdout()
+    }
+
+    /** The same owner over {@code System.err}, for the failure paths the composition root binds there. */
+    static ConsoleIO liveErrorConsole() {
+        LiveConsoleIO.onStderr()
+    }
 
     /** Runs {@code action} with {@code System.out} redirected, returning whatever it printed. */
     static String captureStdout(Closure action) {

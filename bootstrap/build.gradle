@@ -82,11 +82,11 @@ dependencies {
     // the run assemblies construct `ContainerEnvironments` and drive the
     // lease/self-check chain directly — composition, by D3's by-role rule.
     implementation project(':sandbox:docker')
-    // Test scope only: shared fakes and port-contract suites (FR7, design D8), the github bundle
-    // the discovery/seam/dispatch specs assert on, and `:logtext` for its `ShutdownPhase` (D6).
+    // Production scope since the sink converters call `LogText` (harden-untrusted-text-sinks).
+    implementation project(':logtext')
+    // Test scope: shared fakes and port-contract suites (FR7, design D8), the github bundle.
     testImplementation project(':test-fixtures')
     testImplementation project(':adapters:github')
-    testImplementation project(':logtext')
     testImplementation project(':baseref')
     // Spring-family versions are managed by the Boot BOM (design D3).
     implementation platform(libs.spring.boot.dependencies)
@@ -110,28 +110,28 @@ dependencies {
     }
 
     implementation libs.spring.boot.starter
-    // Production code compiles against the SLF4J API directly (FR4, design D10); declared
-    // honestly per the dependency-analysis gate, not via the starter. Version is BOM-managed.
+    // Declared honestly per the dependency-analysis gate rather than inherited through the
+    // starter, both BOM-managed: the SLF4J API production code compiles against (FR4, design D10),
+    // and spring-beans for the @Qualifier naming the stderr-bound console owner (FR6).
     implementation libs.slf4j.api
+    implementation libs.spring.beans
 
     // The Groovy/Spock/JUnit-launcher test stack and the JSpecify + Error Prone
     // compiler plugins are declared by the convention plugins (design D9).
 
-    // The context-level bootstrap specs (task 3.3) compile against
-    // @SpringBootTest (spring-boot-test), @ContextConfiguration (spring-test)
-    // and @Autowired (spring-beans). spock-spring is a discovered global
-    // extension with no compile-time reference from spec bytecode, hence
-    // testRuntimeOnly (buildHealth advice); it is declared per module rather
-    // than in `test-conventions` because it resolves Spring types at discovery
-    // time, so it may only go on a test classpath that has Spring — which, per
-    // design D3, is this module's alone.
+    // The context-level bootstrap specs (task 3.3) compile against @SpringBootTest
+    // (spring-boot-test) and @ContextConfiguration (spring-test); @Autowired comes with the
+    // production-scope spring-beans above. spock-spring is a discovered global extension with no
+    // compile-time reference from spec bytecode, hence testRuntimeOnly (buildHealth advice); it is
+    // declared per module rather than in `test-conventions` because it resolves Spring types at
+    // discovery time, so it may only go on a test classpath that has Spring — which, per design
+    // D3, is this module's alone.
     testRuntimeOnly libs.spock.spring
     testImplementation libs.spring.boot.test
     testImplementation libs.spring.test
-    testImplementation libs.spring.beans
-    // The logging-level spec (FR4) emits through the SLF4J API and captures
-    // events with Logback's ListAppender, so it compiles against both.
-    testImplementation libs.logback.classic
+    // Compile-time since the sink converters (D1 of harden-untrusted-text-sinks); the FR4
+    // logging-level spec captures events with Logback's ListAppender over the same edge.
+    implementation libs.logback.classic
     // ArchUnit for the whole-tree boundary gates (DomainPuritySpec and the four
     // others): the composition root is the only module that sees every layer at
     // once, which is the scope a whole-tree gate wants (task 5.2).

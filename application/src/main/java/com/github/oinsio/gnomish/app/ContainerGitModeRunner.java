@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -41,7 +42,8 @@ record ContainerGitModeRunner(
         TaskGit git,
         SandboxProperties sandboxProperties,
         FactoryProperties factoryProperties,
-        ContainerSupportFactory supportFactory) {
+        ContainerSupportFactory supportFactory,
+        ConsoleIO console) {
 
     /**
      * The support factory is injected ({@link ContainerSupportFactory}, mirroring {@link
@@ -76,8 +78,8 @@ record ContainerGitModeRunner(
         String taskId = context.taskId();
 
         git.branches().harden(cloneDir);
-        System.out.println("container mode: branch " + TaskIdSanitizer.branchName(taskId));
-        System.out.println("container mode: environment " + TaskIdSanitizer.sanitize(taskId));
+        console.print("container mode: branch " + TaskIdSanitizer.branchName(taskId) + ConsoleIO.LINE_END);
+        console.print("container mode: environment " + TaskIdSanitizer.sanitize(taskId) + ConsoleIO.LINE_END);
 
         var support = supportFactory.create(
                 cloneDir, taskId, segments, sandboxProperties, factoryProperties, definition, List.of());

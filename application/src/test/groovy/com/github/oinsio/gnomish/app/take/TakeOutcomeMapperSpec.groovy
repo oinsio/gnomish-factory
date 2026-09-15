@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take
 
+import com.github.oinsio.gnomish.app.EscalationResumeDialog
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -71,5 +72,32 @@ class TakeOutcomeMapperSpec extends Specification {
         new EscalationReport.CannotVerify(new CheckRef(0, 'tests'), 'timeout', '') || ParkReason.INFRA
         new EscalationReport.CannotExecute('executor crashed', []) || ParkReason.INFRA
         new EscalationReport.PipelineMismatch('stale-stage') || ParkReason.INFRA
+    }
+
+    // FR7, design D8 of harden-untrusted-text-sinks: the park report is the escalation render, not
+    // the record's own toString. A record's toString names its component fields — and for
+    // CannotVerify one of those fields is the check's raw output, which reaches a human unfenced
+    // and unsanitized that way, past the very fence the renderer puts around it.
+    def "the park report carries no EscalationReport record toString shape — #kind"() {
+        given:
+        def outcome = new TaskOutcome.Escalated(STATE, report)
+
+        when:
+        def awaiting = TakeOutcomeMapper.map(outcome) as TakeResult.AwaitingHuman
+
+        then: 'no record rendering anywhere in the text'
+        !(awaiting.report() =~ /[A-Za-z]+\[[a-zA-Z]+=/)
+        !awaiting.report().startsWith('Escalated: ')
+
+        and: 'it is the renderer\'s own text, word for word'
+        awaiting.report() == EscalationResumeDialog.renderEscalation(report)
+
+        where:
+        kind | report
+        'AttemptsExhausted' | new EscalationReport.AttemptsExhausted(3)
+        'DecisionNeeded' | new EscalationReport.DecisionNeeded('proceed?', ['yes', 'no'])
+        'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, 'tests'), 'timeout', 'raw output')
+        'CannotExecute' | new EscalationReport.CannotExecute('executor crashed', [])
+        'PipelineMismatch' | new EscalationReport.PipelineMismatch('stale-stage')
     }
 }

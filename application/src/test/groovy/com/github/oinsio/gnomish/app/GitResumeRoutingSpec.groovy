@@ -202,10 +202,10 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         record = recordWith(new RecordedOutcome.Completed())
 
         when:
-        def output = resume()
+        resume()
 
-        then:
-        output.contains('PROJ-1')
+        then: 'the summary reached the operator through the run\'s own console owner'
+        console.printed.join('').contains('PROJ-1')
         executor.requests.isEmpty()
         0 * lifecycleStore.recordOutcome(_, _)
         0 * salvager._

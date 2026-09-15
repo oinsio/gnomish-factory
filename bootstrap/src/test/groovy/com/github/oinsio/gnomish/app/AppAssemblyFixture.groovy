@@ -70,6 +70,9 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         new ManualRunAssembly(
                 new SystemConsoleIO(
                         input ?: new ByteArrayInputStream((System.lineSeparator() * 20).getBytes('UTF-8')), output),
+                // The error console the composition root binds to System.err; a spec capturing the
+                // run's output reads `output` above, and the terminal error paths stay on stderr.
+                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
                 [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
@@ -134,12 +137,15 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             TaskGit git = TaskGitFixture.real(),
             FactoryProperties factoryProperties = testProperties(),
             BoardCommand boardCommand = new BoardCommand(Clock.systemUTC(), factoryProperties, [:],
-            MapSecretsProvider.NONE, TrackerValidatorStub.plainSource())) {
+            MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), LiveConsoleIO.onStdout())) {
         new ManualRunRunner(
                 new RunArgumentsParser(),
                 new PipelineStartup(TrackerValidatorStub.plainSource()),
                 new AdHocTaskSynthesizer(Clock.systemUTC(), new Random()),
                 new SystemConsoleIO(System.in, System.out),
+                // The error console the composition root binds to System.err (FR6 of
+                // harden-untrusted-text-sinks); the specs that assert on it redirect that stream.
+                LiveConsoleIO.onStderr(),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
                 [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
@@ -153,8 +159,8 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 git,
                 worktreesRoot,
                 homeDir,
-                new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot),
-                new UsageCommand(TaskGitFixture.realClaimless()),
+                new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, LiveConsoleIO.onStdout()),
+                new UsageCommand(TaskGitFixture.realClaimless(), LiveConsoleIO.onStdout()),
                 boardCommand,
                 new DashboardCommand(Clock.systemUTC(), new ThreadSleeper(), homeDir, factoryProperties, [:],
                 MapSecretsProvider.NONE,

@@ -27,7 +27,7 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
     }
 
     private static UsageCommand newCommand() {
-        new UsageCommand(TaskGitFixture.realClaimless())
+        new UsageCommand(TaskGitFixture.realClaimless(), liveConsole())
     }
 
     def "FR14: text render prints the stage/round table and a totals line"() {

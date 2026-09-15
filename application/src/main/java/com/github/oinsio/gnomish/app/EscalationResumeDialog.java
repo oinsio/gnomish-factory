@@ -24,7 +24,7 @@ import java.util.ArrayList;
  *
  * <p>Implements FR9, FR13, NFR-R1, D2, D8, D10 of add-manual-run.
  */
-final class EscalationResumeDialog {
+public final class EscalationResumeDialog {
 
     private final DialogConsole console;
     private final Clock clock;
@@ -83,10 +83,16 @@ final class EscalationResumeDialog {
      *
      * <p>Implements FR9, D8 of add-manual-run; FR15 of add-sandbox-core.
      *
+     * <p>Public, and the only render of an escalation anywhere: {@code TakeOutcomeMapper} in the
+     * {@code take} package builds its park report through this method too (FR7, design D8 of
+     * harden-untrusted-text-sinks), rather than concatenating the {@link EscalationReport} record
+     * itself — whose {@code toString} would put {@code CannotVerify[check=..., details=...]} in
+     * front of a human, unfenced and unsanitized.
+     *
      * @param report the escalation reason to render; never null
      * @return the rendered text block; never null, never blank
      */
-    static String renderEscalation(EscalationReport report) {
+    public static String renderEscalation(EscalationReport report) {
         return switch (report) {
             case EscalationReport.AttemptsExhausted attemptsExhausted ->
                 "Attempt limit (" + attemptsExhausted.limit() + ") reached — every attempt failed quality.";

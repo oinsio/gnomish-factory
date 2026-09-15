@@ -81,7 +81,7 @@ class GiteaBestEffortPushE2ESpec extends Specification implements GiteaTaskSeedF
 
     private GitModeRunner newRunner() {
         def assembly = newAssembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8')))
-        new GitModeRunner(assembly, TaskGitFixture.real(), worktreesRoot)
+        new GitModeRunner(assembly, TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
     }
 
     private static TaskContext context(String taskId) {

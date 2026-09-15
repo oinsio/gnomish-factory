@@ -110,7 +110,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
 
         when: 'instance A completes only the first stage\'s round, then its stdin runs out mid-second-stage: only one Enter is supplied, enough for "build" to pass and advance, not enough for "verify" to also complete — simulating a died process (GitModeRunner deliberately leaves such an exit without any outcome write, per its own javadoc)'
         new GitModeRunner(assembly(new ByteArrayInputStream((System.lineSeparator()).getBytes('UTF-8'))),
-                TaskGitFixture.real(), worktreesA)
+                TaskGitFixture.real(), worktreesA, LiveConsoleIO.onStdout())
                 .run(instanceA, null, pipeline(), context(taskId), TaskState.atStageStart('build'),
                 RunArguments.InteractiveMode.ALL)
 

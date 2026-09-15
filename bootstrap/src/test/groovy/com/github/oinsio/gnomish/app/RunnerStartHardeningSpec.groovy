@@ -90,7 +90,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         given: 'a clone whose task branch already exists, refusing the run right after hardening'
         Path clone = freshClone('host-fresh')
         gitOutput(clone, 'branch', 'gnomish/H-1', 'HEAD')
-        def runner = new GitModeRunner(newAssembly(), TaskGitFixture.real(), worktreesRoot)
+        def runner = new GitModeRunner(newAssembly(), TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
 
         when:
         runner.run(clone, null, pipeline(), context('H-1'), TaskState.atStageStart('build'),
@@ -108,7 +108,8 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
         gitOutput(clone, 'branch', 'gnomish/C-1', 'HEAD')
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
-                newAssembly(), git, sandboxProperties(), testProperties(), ContainerSupportFixture.real(git.epochs()))
+                newAssembly(), git, sandboxProperties(), testProperties(), ContainerSupportFixture.real(git.epochs()),
+                LiveConsoleIO.onStdout())
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
         ]

@@ -96,7 +96,8 @@ tracker:
                 testProperties(instanceName: INSTANCE_NAME),
                 [github: factory],
                 MapSecretsProvider.NONE,
-                TrackerValidatorStub.acceptingGithubSource())
+                TrackerValidatorStub.acceptingGithubSource(),
+                LiveConsoleIO.onStdout())
         def runner = newRunner(boardCommand)
         def args = new DefaultApplicationArguments('board', "--dir=${projectDir}".toString())
         def originalErr = System.err

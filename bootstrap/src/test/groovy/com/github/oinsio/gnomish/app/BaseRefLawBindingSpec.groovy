@@ -87,7 +87,8 @@ exec sh '${scriptPath}' "\$@"
         new GitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, fakeAgentProperties(captureStdinPath)),
                 TaskGitFixture.real(),
-                worktreesRoot)
+                worktreesRoot,
+                LiveConsoleIO.onStdout())
     }
 
     // FR11, FR8, M5 of add-base-ref-resolution: a --base override sends both the pipeline law and

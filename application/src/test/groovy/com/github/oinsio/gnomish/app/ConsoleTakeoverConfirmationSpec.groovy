@@ -37,6 +37,11 @@ class ConsoleTakeoverConfirmationSpec extends Specification {
         void print(String text) {
             printed.append(text)
         }
+
+        @Override
+        void printMachine(String text) {
+            printed.append(text)
+        }
     }
 
     private static ConsoleTakeoverConfirmation confirmation(boolean tty, RecordingConsole console) {

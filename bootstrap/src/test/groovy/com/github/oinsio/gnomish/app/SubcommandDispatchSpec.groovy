@@ -56,11 +56,13 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 newAssembly(new ByteArrayInputStream(new byte[0])), TaskGitFixture.real(), worktreesRoot, homeDir, 'taskId',
                 testProperties(), new ServeProperties(0, null, null, null, null, null, null, null, null), Clock.systemUTC(),
                 new SystemClock(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(),
-                { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                { FeedAutomaton automaton -> } as FeedAutomatonStarter, SandboxLifecyclePass.NONE,
+                ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
     }
 
     private BoardCommand newBoardCommand() {
-        new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource())
+        new BoardCommand(Clock.systemUTC(), testProperties(), [:], MapSecretsProvider.NONE,
+        TrackerValidatorStub.acceptingGithubSource(), LiveConsoleIO.onStdout())
     }
 
     private DashboardCommand newDashboardCommand() {
@@ -70,7 +72,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     }
 
     def dispatch = new SubcommandDispatch(
-    new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot), new UsageCommand(TaskGitFixture.realClaimless()), newTakeCommand(), newServeCommand(),
+    new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, LiveConsoleIO.onStdout()),
+    new UsageCommand(TaskGitFixture.realClaimless(), LiveConsoleIO.onStdout()), newTakeCommand(), newServeCommand(),
     newBoardCommand(), newDashboardCommand())
 
     // FR13: 'status' actually reaches StatusCommand#run (PIT: VoidMethodCallMutator survivor) —
@@ -221,7 +224,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                         MapSecretsProvider.NONE,
                         TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                             starterInvoked.set(true)
-                        } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly()),
+                        } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                        LiveConsoleIO.onStderr()),
                 dispatch.boardCommand(), dispatch.dashboardCommand())
         def args = new DefaultApplicationArguments('serve', "--dir=${worktreesRoot}".toString())
 
@@ -264,7 +268,8 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
                 new BoardCommand(Clock.systemUTC(), testProperties(),
                 [github: new FixedTrackerAdapterFactory({
                         boardTrackerStub
-                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource()),
+                    })], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(),
+                LiveConsoleIO.onStdout()),
                 dispatch.dashboardCommand())
         def args = new DefaultApplicationArguments('board', "--dir=${worktreesRoot}".toString())
         def originalOut = System.out

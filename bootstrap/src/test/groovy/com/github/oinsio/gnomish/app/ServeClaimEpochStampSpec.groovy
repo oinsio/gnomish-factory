@@ -84,7 +84,8 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
                 [github: claimWatcher],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                LiveConsoleIO.onStderr())
     }
 
     def "FR6: the tip a serve round delivered carries the epoch the tracker issued for that claim"() {

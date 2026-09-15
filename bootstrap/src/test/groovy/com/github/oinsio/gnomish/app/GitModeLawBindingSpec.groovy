@@ -95,7 +95,8 @@ exec sh '${scriptPath}' "\$@"
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out,
                 fakeAgentProperties('law-tamper-then-plain', captureFile.absolutePath)),
                 TaskGitFixture.real(),
-                worktreesRoot)
+                worktreesRoot,
+                LiveConsoleIO.onStdout())
         def context = new TaskContext('LAW-1', 'title', 'body', List.<Decision> of())
 
         when: 'a fresh git-mode run: attempt 1 tampers + fails files_exist, attempt 2 completes'

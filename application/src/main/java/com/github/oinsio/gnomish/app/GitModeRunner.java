@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
@@ -82,11 +83,13 @@ import org.jspecify.annotations.Nullable;
  *
  * @param assembly the shared engine/ports assembly, reused from the in-place path with a
  *     git-backed {@code AttemptPersistence}
+ * @param console the console owner the banner is written through (FR5, FR6 of
+ *     harden-untrusted-text-sinks)
  * @param worktreesRoot the root directory under which {@code <project-name>/<taskId>/} worktrees
  *     are created (design D6); production wiring resolves {@code ~/.gnomish/worktrees}, tests
  *     pass a temp directory
  */
-record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
+record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot, ConsoleIO console) {
 
     /**
      * Runs one fresh git-mode task to a terminal boundary this class can observe (see class
@@ -182,8 +185,8 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, Path worktreesRoot) {
      * Prints the branch name and worktree path before the pipeline runs (UX1: "the operator
      * always knows where the work lives").
      */
-    private static void printBanner(String branchName, Path worktree) {
-        System.out.println("git mode: branch " + branchName);
-        System.out.println("git mode: worktree " + worktree);
+    private void printBanner(String branchName, Path worktree) {
+        console.print("git mode: branch " + branchName + ConsoleIO.LINE_END);
+        console.print("git mode: worktree " + worktree + ConsoleIO.LINE_END);
     }
 }

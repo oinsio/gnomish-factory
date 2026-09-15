@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.EscalationResumeDialog;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -92,6 +93,11 @@ public final class TakeOutcomeMapper {
                     case EscalationReport.CannotExecute ignored -> ParkReason.INFRA;
                     case EscalationReport.PipelineMismatch ignored -> ParkReason.INFRA;
                 };
-        return new TakeResult.AwaitingHuman(escalated.finalState(), reason, "Escalated: " + escalated.report());
+        // FR7, design D8 of harden-untrusted-text-sinks: the report text is the one escalation
+        // render there is, never the record's own toString — that would publish
+        // `CannotVerify[check=..., details=...]` with the check's raw output inside it, past the
+        // fence renderEscalation puts around exactly that field.
+        return new TakeResult.AwaitingHuman(
+                escalated.finalState(), reason, EscalationResumeDialog.renderEscalation(escalated.report()));
     }
 }
