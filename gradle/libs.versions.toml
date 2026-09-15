@@ -47,7 +47,7 @@ wiremock = "3.13.2"
 # build.gradle). 11.0.26 clears GHSA-mmxm-8w33-wc4h; the residual Jetty 11
 # advisories have no Maven Central fix (Jetty 12 needs WireMock 4.x, still beta)
 # and are accepted in osv-scanner.toml. Bump the whole stack by editing here.
-jetty = "11.0.26"
+jetty = "12.1.12"
 # Resilience4j retry for the tracker adapter's HTTP client (NFR-R2 of add-tracker-port:
 # infrastructure failures of tracker calls SHALL be retried). 2.4.0 verified on Maven
 # Central 2026-07-28. `resilience4j-core` (IntervalFunction, used directly by
