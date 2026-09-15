@@ -1,7 +1,8 @@
 # plugin-api-contract — delta for split-logtext-leaves
 
-Both requirements are written over the main spec; no active change modifies
-them.
+Both requirements are written over the main spec; no active change sequenced
+before this one modifies them (`type-untrusted-text`, sequenced after, layers
+its "Thin plugin-api contract module" delta on this change's text).
 
 ## MODIFIED Requirements
 
@@ -20,7 +21,11 @@ config types referenced by these ports stay in `domain` and are exposed through
 a transitive `api` dependency; the untrusted-text primitives the findings
 sanitizer delegates to stay in the JDK-only `untrustedtext` leaf and reach a
 third party through the same transitive edge, so the single declared
-dependency contract is unchanged.
+dependency contract is unchanged. The published project jar graph — and with
+it the committed compatibility baseline — is `gnomish-plugin-api`, `domain`
+and every JDK-only leaf `domain` reaches (`untrustedtext`, `operatorevent`);
+a change to that set is re-baselined with a version bump even when no
+signature moves.
 <!-- implements FR4 of split-into-modules -->
 <!-- implements FR5, FR12, FR15, FR17 of add-plugin-architecture -->
 <!-- implements FR1, FR2 of close-plugin-api-compilability-gap -->
@@ -36,7 +41,8 @@ dependency contract is unchanged.
 #### Scenario: A third party compiles against a single declared dependency
 - **WHEN** a third-party adapter is compiled with `gnomish-plugin-api` as its
   only declared dependency (the `domain` and `untrustedtext` types the ports
-  and the sanitizer reference arrive transitively)
+  and the sanitizer reference arrive transitively, as does the `operatorevent`
+  jar the domain's own emitters use)
 - **THEN** it can implement any exposed port and its SPI factory — tracker or
   check — without needing `application` or `bootstrap`
 - **AND** an external-check implementation can read the attempt-commit sha of
@@ -53,7 +59,8 @@ dependency contract is unchanged.
 
 ### Requirement: Findings sanitization available to every plugin
 The api SHALL provide the findings-sanitization utility (control-character /
-ANSI strip and tail cap) so any check plugin can apply the same
+ANSI strip, tail cap, and the log-bound `forLog` composition of the two) so
+any check plugin can apply the same
 pre-publication hygiene as first-party adapters; first-party call sites SHALL
 keep enforcing it after the relocation. The utility is a facade over the
 untrusted-text leaf's primitives: it holds no character-class table of its

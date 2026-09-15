@@ -6,9 +6,11 @@
 one question: where can a sanitizer live that `:application`, every adapter
 module and the sandbox backends all reach? The answer — a dependency-free leaf,
 slf4j-api only — was right, and the module then grew into the factory's
-logging-support module: the operator-event catalog (`OperatorEvent`, 146 codes,
+logging-support module: the operator-event catalog (`OperatorEvent`, 148 codes,
 80 production imports), the repeat suppressor family, MDC propagation and the
-shutdown-phase flag now sit beside `LogText`. Two concerns share one module, and
+shutdown-phase flag now sit beside `LogText` and the three text-primitive
+classes it drives (`CharacterTable`, `ConsoleNotation`, `LineFlattening`,
+carved out by `harden-untrusted-text-sinks`). Two concerns share one module, and
 both of the codebase's remaining "declared pairs with no shared classpath"
 (`manual-sync-pairs.md`) exist *because* of that packaging:
 
@@ -42,15 +44,20 @@ only its own semantics and none of the 140-import relocation noise.
 - **MODIFIED** `module-layering`: the module tree gains the two leafs; `:domain`
   may depend on JDK-only leafs (a principle, stated once); `:logtext` depends on
   `:untrustedtext`; `:gnomish-plugin-api` reaches `:untrustedtext` transitively
-  and `FindingsSanitizer` delegates to it.
+  and `FindingsSanitizer` delegates to it; because the layering gate is
+  transitive, every module whose production classpath reaches a leaf through
+  `:domain` or `:logtext` lists that leaf in its allowlist.
 - **MODIFIED** `factory-logging`: the sanitizer requirement drops the declared
   pair (one table, one owner); the operator-event requirement drops the
-  literal-head exemption (every emitter reaches the catalog).
+  literal-head exemption (every emitter reaches the catalog) and the
+  log-contract gate gains the rule that makes that stick — a literal
+  `[GFnnn]` head in any production source fails the build.
 - **MODIFIED** `plugin/plugin-api-contract`: the contract module's transitive
-  surface gains `:untrustedtext`; the findings-sanitization utility is a
-  delegate over it; **BREAKING** for pre-1.0 semver — a MINOR bump with a
-  regenerated baseline, as `FindingsSanitizer`'s primitives now resolve to
-  another module's types in the published jar graph.
+  surface gains the two leafs; the findings-sanitization utility is a delegate
+  over `:untrustedtext`. No signature changes, so japicmp reports nothing
+  incompatible; the version still moves (pre-1.0 MINOR, baseline regenerated)
+  because the committed baseline jar set is part of the gate's input and a
+  silently changed jar graph is the drift the gate exists to catch.
 - **REMOVED** from `manual-sync-pairs.md`: both "no shared classpath" rows, and
   the two specs that verified them (`SanitizerPairEquivalenceSpec` becomes a
   single-table spec; `DomainOperatorEventHeadSpec` is deleted).
@@ -64,10 +71,12 @@ stated as modifications of the layering, logging and plugin capabilities._
 ### Modified Capabilities
 - `module-layering`: "Layered Gradle module tree" and "Enforced acyclic
   dependency direction" — two new leafs, the `:domain`-may-reach-JDK-only-leafs
-  principle, the `:logtext → :untrustedtext` edge.
+  principle, the `:logtext → :untrustedtext` edge, transitive allowlist
+  entries in every consumer of `:domain` / `:logtext`.
 - `factory-logging`: "Untrusted text enters logs only sanitized" — the
   declared-pair sentence becomes a single-owner sentence; "Operator lines carry
-  a stable event identity" — the literal-head exemption is removed.
+  a stable event identity" — the literal-head exemption is removed and the
+  gate rejects literal heads.
 - `plugin/plugin-api-contract`: "Thin plugin-api contract module" and "Findings
   sanitization available to every plugin" — the transitive surface and the
   delegate.
@@ -82,8 +91,8 @@ stated as modifications of the layering, logging and plugin capabilities._
   `:domain` still depends on no module that carries slf4j, Spring, Jackson or
   the filesystem.
 - G3: No behavior changes: every existing spec passes unchanged in substance;
-  the only source edits outside the two leafs are import lines and the four
-  domain literals.
+  the only production source edits outside the two leafs and the two facades
+  are import lines, the four domain literals and the javadoc pair markers.
 
 ## Non-Goals
 
@@ -101,9 +110,10 @@ stated as modifications of the layering, logging and plugin capabilities._
 ## Users & Scenarios
 
 - U1: A plugin author depending only on `gnomish-plugin-api` calls
-  `FindingsSanitizer.strip` as before; it compiles and behaves identically; the
-  jar graph now also carries `untrustedtext-<version>.jar`, which their build
-  tool resolves transitively like `domain`.
+  `FindingsSanitizer.strip`, `forLog` and `capTail` as before; it compiles and
+  behaves identically; the jar graph now also carries
+  `untrustedtext-<version>.jar` and `operatorevent-<version>.jar`, which their
+  build tool resolves transitively like `domain`.
 - U2: A developer adds a fifth domain emitter and writes
   `OperatorEvent.SOMETHING.head()`; the `DomainLoggerAllowlistSpec` still asks
   them to justify the fifth logger, but no literal code and no round-trip pin
@@ -121,13 +131,15 @@ stated as modifications of the layering, logging and plugin capabilities._
   primitives: one character-class table (ANSI/CSI/OSC/DCS/APC/PM/SOS with
   terminators, C0, C1, DEL, bidi overrides and isolates, zero-width and tag
   characters, U+2028/U+2029), `strip`, `capTail`, `flatten`, the console
-  notation and the record cap; it SHALL declare no internal module and no
-  external library.
+  notation and the record cap — today the classes `CharacterTable`,
+  `ConsoleNotation`, `LineFlattening` and the primitive bodies of `LogText`; it
+  SHALL declare no internal module and no external library.
 - FR2: `LogText` (`:logtext`) SHALL keep its public surface and semantics,
   delegating every primitive to `:untrustedtext`; no production or test call
   site outside `:logtext` needs an edit for `LogText`.
 - FR3: `FindingsSanitizer` (`gnomish-plugin-api`) SHALL keep its public surface
-  and semantics, delegating its primitives to `:untrustedtext`; the
+  (`strip`, `capTail`, `forLog` with its tail cap) and semantics, delegating
+  its primitives to `:untrustedtext`; the
   `Kept in sync with` markers on both classes are removed and the pair's row in
   `manual-sync-pairs.md` deleted; the equivalence spec becomes a single-table
   spec asserting `LogText.strip`, `FindingsSanitizer.strip` and the leaf's
@@ -137,19 +149,33 @@ stated as modifications of the layering, logging and plugin capabilities._
   content and the `[GFnnn]` codes are unchanged.
 - FR5: The four `:domain` emitters (`AttemptJournal`, `Events`,
   `RoundExecution`, `VerifyOrchestrator`) SHALL render their message head from
-  the `OperatorEvent` constant; the literal heads, the
-  `DomainOperatorEventHeadSpec` and the registry row are removed.
+  the `OperatorEvent` constant; the literal heads, the four `Kept in sync
+  with` javadoc paragraphs on those classes, the `DomainOperatorEventHeadSpec`
+  and the registry row are removed.
 - FR6: `:domain`'s layering allowlist SHALL name exactly `:untrustedtext` and
   `:operatorevent`; the module-layering spec SHALL state the principle that
   `:domain` may depend on a JDK-only leaf and on nothing else internal.
 - FR7: `:logtext`'s layering allowlist SHALL name exactly `:untrustedtext`; its
   external dependency stays slf4j-api only.
-- FR8: `gnomish-plugin-api` SHALL bump to 0.6.0 with a regenerated
-  `compat-baseline/` that includes `untrustedtext`; the japicmp gate SHALL pass
-  against it.
-- FR9: ADR 0004 SHALL record the domain-may-reach-JDK-only-leafs principle and
-  drop the literal-head half of accepted deviation 1; `docs/glossary.md` SHALL
-  name the new owners of *operator event* and *log text sanitization*.
+- FR8: `gnomish-plugin-api` SHALL bump from 0.6.0 to 0.7.0 with a regenerated
+  `compat-baseline/` holding the whole published project jar graph
+  (`gnomish-plugin-api`, `domain`, `untrustedtext`, `operatorevent`); the
+  japicmp gate SHALL pass against it with no signature change on
+  `FindingsSanitizer`.
+- FR9: ADR 0004 SHALL record the domain-may-reach-JDK-only-leafs principle,
+  drop the literal-head half of accepted deviation 1, drop every remaining
+  reference to the `LogText ↔ FindingsSanitizer` declared pair (the layer-2
+  paragraph and the See-also row), and turn its "two follow-ups" sentence into
+  provenance for this change; `docs/glossary.md` SHALL name the new owners of
+  *operator event* and *log text sanitization*.
+- FR10: The log-contract gate SHALL reject a `[GFnnn]` head spelled as a string
+  literal in any production source; the catalog constant's `head()` is the only
+  accepted form. The gate's existing "literal form is not flagged" feature is
+  inverted, not deleted.
+- FR11: Every module whose production classpath reaches `:untrustedtext` or
+  `:operatorevent` — directly or transitively through `:domain` or `:logtext` —
+  SHALL list it in its layering allowlist with a comment naming the edge it
+  arrives through, because the layering gate walks the transitive graph.
 
 ### Non-Functional Reliability
 
@@ -166,7 +192,9 @@ stated as modifications of the layering, logging and plugin capabilities._
 ## Operator Experience Criteria
 
 - UX1: Nothing observable changes: log lines, codes, console output, tracker
-  comments are byte-identical before and after.
+  comments are byte-identical before and after. Evidence: no assertion in any
+  existing spec is edited — the test-tree diff holds import lines, moved files
+  and the two replaced pair specs only.
 
 ## Success Metrics
 
@@ -174,7 +202,8 @@ stated as modifications of the layering, logging and plugin capabilities._
   has one row left (`HostRoundEnvironmentSource ↔ SandboxRoundEnvironmentSource`).
 - M2: `./gradlew projects` lists `:untrustedtext` and `:operatorevent`; the
   layering gate passes with the new allowlists; `:domain`'s allowlist is exactly
-  the two leafs.
+  the two leafs; a seeded literal head in any module fails the log-contract
+  gate.
 - M3: `./gradlew check` green with PIT 100% in `:untrustedtext`,
   `:operatorevent`, `:logtext`, `:domain`, `:gnomish-plugin-api`.
 - M4: Zero lines changed in any production class outside the two leafs,
@@ -182,19 +211,23 @@ stated as modifications of the layering, logging and plugin capabilities._
 
 ## Open Questions
 
-- Q1: Whether `OperatorEvent`'s `head()` should stay the only rendering method,
-  or the enum should also expose `code()` for the ledger. Not needed by any
-  consumer today; proposed: unchanged.
+- Q1 (resolved): `OperatorEvent` already exposes both `code()` and `head()`;
+  the enum's surface is unchanged.
 
 ## Impact
 
 - New: `untrustedtext/`, `operatorevent/` (build.gradle, package-info, specs).
 - Edited: `settings.gradle`; `domain/build.gradle`, `logtext/build.gradle`,
-  `gnomish-plugin-api/build.gradle` (allowlists, version, baseline);
-  `LogText`, `FindingsSanitizer`, the four domain emitters; ~80 production and
-  ~96 test files for the `OperatorEvent` import; `DomainOperatorEventHeadSpec`
-  deleted; `SanitizerPairEquivalenceSpec` reshaped; `manual-sync-pairs.md`,
-  ADR 0004, glossary, `module-layering` spec.
+  `gnomish-plugin-api/build.gradle` (allowlists, version, baseline); the
+  allowlists of every other module that reaches `:domain` or `:logtext`
+  (`:application`, `:adapters`, `:adapters:agent`, `:adapters:git`,
+  `:adapters:github`, `:sandbox:core`, `:sandbox:docker`, `:bootstrap`,
+  `:gnomish-plugin-api:sample`); `LogText`, `FindingsSanitizer`, the four
+  domain emitters; ~80 production and ~96 test files for the `OperatorEvent`
+  import; `DomainOperatorEventHeadSpec` deleted; `SanitizerPairEquivalenceSpec`
+  moved from `:application` to `:bootstrap` and reshaped;
+  `LogContractGateSpec` (one feature inverted, one rule added);
+  `manual-sync-pairs.md`, ADR 0004, glossary, `module-layering` spec.
 - Sequencing: after `harden-untrusted-text-sinks` (which adds `forConsole` and
   the record cap to `LogText` — both move here) and after
   `add-base-ref-resolution` (whose `module-layering` delta this one layers on).

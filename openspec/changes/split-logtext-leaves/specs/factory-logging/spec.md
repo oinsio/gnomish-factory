@@ -7,7 +7,9 @@ the sinks delta's text. If this change syncs first, the two earlier syncs
 must merge by hand — the sink-layer paragraph and its four scenarios, and
 the findings-funnel sentences with their two scenarios — instead of
 replacing the requirement. The second requirement is written over the main
-spec; no active change modifies it.
+spec; no active change sequenced before this one modifies it
+(`type-untrusted-text`, sequenced after, layers its own factory-logging delta
+on this change's first requirement only).
 
 ## MODIFIED Requirements
 
@@ -114,10 +116,11 @@ Every production WARN/ERROR message SHALL begin with a stable catalog code
 never reused, additive-only. The code — not the wording — is the operator
 contract; prose may change freely without breaking alerts, greps, or specs
 keyed on the code. Every emitter, the domain's included, SHALL render the head
-from the catalog constant; no production source carries a literal code head.
-INFO/DEBUG lines carry no codes.
+from the catalog constant; no production source carries a literal code head,
+and the log-contract gate SHALL fail the build on one — the catalog constant's
+rendering is the only accepted form. INFO/DEBUG lines carry no codes.
 <!-- implements FR14 of harden-logging-observability -->
-<!-- implements FR4, FR5 of split-logtext-leaves -->
+<!-- implements FR4, FR5, FR10 of split-logtext-leaves -->
 
 #### Scenario: Wording drifts, contract holds
 - **WHEN** an operator line's prose is reworded without touching its code
@@ -130,7 +133,8 @@ INFO/DEBUG lines carry no codes.
 - **THEN** the build fails naming the site and the collision or omission
 
 #### Scenario: A literal head fails the build
-- **WHEN** a production source spells a `[GFnnn]` head as a string literal
-  instead of rendering the catalog constant
+- **WHEN** a production log call in any module spells a `[GFnnn]` head as a
+  string literal instead of rendering the catalog constant
 - **THEN** the log-contract gate fails naming the site — the domain's four
-  emitters included, since they now reach the catalog
+  emitters included, since they now reach the catalog — while the same call
+  rendering `OperatorEvent.<CONSTANT>.head()` passes

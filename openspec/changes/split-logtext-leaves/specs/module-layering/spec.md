@@ -85,6 +85,11 @@ together and the only one that reaches every adapter. `subprocess` and
 their consumers free of transitive coupling. `untrustedtext` and
 `operatorevent` SHALL likewise never acquire a dependency: the domain and the
 published contract reach them, so any edge added there is pushed into both.
+Because the layering gate walks the transitive production graph, every module
+whose classpath reaches `untrustedtext` or `operatorevent` — through `domain`,
+through `logtext`, or directly — SHALL list it in its own allowlist with a
+comment naming the edge it arrives through; "depends only on" above describes
+declared edges, and the allowlist describes reach.
 `logtext` SHALL declare no internal module dependency beyond `untrustedtext`
 and at most the logging API (`slf4j-api`) — never an implementation,
 framework, or any other external library. `baseref` SHALL declare no
@@ -100,7 +105,7 @@ defaulting to a no-op.
 <!-- implements FR4, FR6, FR8 of harden-logging-observability -->
 <!-- implements FR2, FR3 of add-subprocess-access-log -->
 <!-- implements FR10, NFR-S3 of add-base-ref-resolution -->
-<!-- implements FR6, FR7, NFR-S1 of split-logtext-leaves -->
+<!-- implements FR6, FR7, FR11, NFR-S1 of split-logtext-leaves -->
 
 #### Scenario: A vendor adapter reaches the tenure record through the contract
 - **WHEN** a vendor adapter module stamps its writes with the claim epoch of
@@ -134,6 +139,14 @@ defaulting to a no-op.
 - **THEN** its allowed projects are exactly `:untrustedtext` and
   `:operatorevent`, and each of those declares no internal module and no
   external library
+
+#### Scenario: A transitive leaf is listed by every module that reaches it
+- **WHEN** the layering gate runs against a module whose production classpath
+  reaches `:untrustedtext` or `:operatorevent` only through `:domain` or
+  `:logtext` — `:sandbox:core`, `:gnomish-plugin-api`, the sample plugin,
+  `:bootstrap` among them
+- **THEN** the gate passes only because that module's allowlist names the
+  leaf; removing the entry fails the gate naming the leaf as an unlisted reach
 
 #### Scenario: The subprocess leaf stays empty of dependencies
 - **WHEN** the dependency gates run against `:subprocess`
