@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.usage.json.UsageReportJsonMapper;
@@ -15,10 +16,13 @@ import org.springframework.stereotype.Component;
  * envelope, separate from status-report v1 per design D5).
  *
  * <p>"Task not found" (task 5.7, FR13, UX3, design D15): mirrors {@link StatusCommand} — a calm,
- * single-line message on {@link System#out} followed by {@link TaskNotFoundException}, never a
+ * single-line message on the operator console followed by {@link TaskNotFoundException}, never a
  * stack trace or a WARN log; {@link RunExitCodeMapper} settles it on exit code 6.
  *
- * <p>Implements FR14, NFR-C1, UX3 of add-git-workflow.
+ * <p>The rendered table goes out on the console owner's human path and the {@code --json}
+ * envelope on its machine path, byte for byte (FR5, UX3 of harden-untrusted-text-sinks).
+ *
+ * <p>Implements FR14, NFR-C1, UX3 of add-git-workflow; FR5 of harden-untrusted-text-sinks.
  */
 @Component
 final class UsageCommand {
@@ -27,20 +31,23 @@ final class UsageCommand {
     private final TaskGit git;
     private final UsageTextRenderer textRenderer = new UsageTextRenderer();
     private final UsageReportJsonMapper jsonMapper = new UsageReportJsonMapper();
+    private final ConsoleIO console;
 
     /**
      * @param git the task-git capability set the usage history is reconstructed through; never
      *     null
+     * @param console the console owner every byte this command writes goes through; never null
      */
-    UsageCommand(TaskGit git) {
+    UsageCommand(TaskGit git, ConsoleIO console) {
         this.git = git;
+        this.console = console;
     }
 
     /**
      * @param args the raw application arguments, including the leading {@code usage} token
      * @throws UsageException if {@code --dir} or the task id is missing/malformed
      * @throws TaskNotFoundException if no {@code gnomish/<task>} branch exists anywhere (FR13,
-     *     UX3) — printed calmly to {@link System#out} first
+     *     UX3) — printed calmly to the operator console first
      */
     void run(ApplicationArguments args) {
         UsageArguments usageArguments = argumentsParser.parse(args);
@@ -56,15 +63,16 @@ final class UsageCommand {
      * branch death after a merged PR is normal, not a crash (design D15).
      */
     private void reportNotFound(String taskId) {
-        System.out.println("task not found: " + taskId);
+        console.print("task not found: " + taskId + ConsoleIO.LINE_END);
         throw new TaskNotFoundException(taskId);
     }
 
     private void print(UsageArguments usageArguments, UsageHistoryResult.Found found) {
         if (usageArguments.json()) {
-            System.out.println(jsonMapper.serialize(usageArguments.task(), found.rows(), found.totals()));
+            console.printMachine(
+                    jsonMapper.serialize(usageArguments.task(), found.rows(), found.totals()) + ConsoleIO.LINE_END);
         } else {
-            System.out.println(textRenderer.render(found.rows(), found.totals()));
+            console.print(textRenderer.render(found.rows(), found.totals()) + ConsoleIO.LINE_END);
         }
     }
 }

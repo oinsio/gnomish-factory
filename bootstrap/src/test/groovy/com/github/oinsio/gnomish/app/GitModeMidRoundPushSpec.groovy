@@ -117,7 +117,8 @@ echo '{"type":"result","subtype":"success","session_id":"fake-session-1","result
                 agentCliBinary: gnomeScript(observedRemoteTip, committedTip).toString(), agentCliEnvPassthrough: [])
         def output = new ByteArrayOutputStream()
         def runner = new GitModeRunner(
-                newAssembly(null, new PrintStream(output, true, 'UTF-8'), properties), taskGit(), worktreesRoot)
+                newAssembly(null, new PrintStream(output, true, 'UTF-8'), properties), taskGit(), worktreesRoot,
+                LiveConsoleIO.onStdout())
         def operatorPlane = LogCaptureSupport.attach(Logger.ROOT_LOGGER_NAME, Level.WARN)
 
         when:

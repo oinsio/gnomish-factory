@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
@@ -62,6 +63,13 @@ import org.jspecify.annotations.Nullable;
 public final class ManualRunAssembly implements RunAssembly {
 
     final SystemConsoleIO systemConsoleIO;
+    /**
+     * The console owner bound to standard error (FR5, FR6 of harden-untrusted-text-sinks): the
+     * terminal error paths write through this one rather than the dialog console, and which
+     * stream that is stays a decision of the composition root.
+     */
+    final ConsoleIO errorConsole;
+
     final FilesExistCheckRunner filesExistCheckRunner;
     final ShellCommandCheckRunner shellCommandCheckRunner;
     final Map<String, CheckClientFactory> checkClientRegistry;
@@ -81,6 +89,7 @@ public final class ManualRunAssembly implements RunAssembly {
 
     private ManualRunAssembly(
             SystemConsoleIO systemConsoleIO,
+            ConsoleIO errorConsole,
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
             Map<String, CheckClientFactory> checkClientRegistry,
@@ -94,6 +103,7 @@ public final class ManualRunAssembly implements RunAssembly {
             UnaryOperator<RoundEnvironmentSource> hostGitPush,
             @Nullable PipelineSource pipelineSource) {
         this.systemConsoleIO = systemConsoleIO;
+        this.errorConsole = errorConsole;
         this.filesExistCheckRunner = filesExistCheckRunner;
         this.shellCommandCheckRunner = shellCommandCheckRunner;
         this.checkClientRegistry = checkClientRegistry;
@@ -115,6 +125,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     ManualRunAssembly(
             SystemConsoleIO systemConsoleIO,
+            ConsoleIO errorConsole,
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
             Map<String, CheckClientFactory> checkClientRegistry,
@@ -125,6 +136,7 @@ public final class ManualRunAssembly implements RunAssembly {
             SandboxProperties sandboxProperties) {
         this(
                 systemConsoleIO,
+                errorConsole,
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
                 checkClientRegistry,
@@ -159,6 +171,7 @@ public final class ManualRunAssembly implements RunAssembly {
             @Nullable PipelineSource source) {
         return new ManualRunAssembly(
                 systemConsoleIO,
+                errorConsole,
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
                 checkClientRegistry,

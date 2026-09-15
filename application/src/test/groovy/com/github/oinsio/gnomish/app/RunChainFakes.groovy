@@ -249,7 +249,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
                 persistence, clock, new VirtualSleeper(clock))
-                new Run(new RunnerOutcomeLoop(new Engine(), console, FIXED_CLOCK), ports,
+                new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr(), FIXED_CLOCK), ports,
                         new StatusSnapshotHolder(state as TaskState, 1))
             },
             dialogConsole: { context, state -> console },

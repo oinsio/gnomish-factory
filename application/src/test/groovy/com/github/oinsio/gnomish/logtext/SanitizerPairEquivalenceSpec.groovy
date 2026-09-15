@@ -65,6 +65,45 @@ class SanitizerPairEquivalenceSpec extends Specification {
         'bidi isolate upper edge (PDI)': "a${ch(0x2069)}b",
         'bidi-forged tail': "deleted ${ch(0x202E)}txt.exe",
         'forged log record': 'stage failed\n2026-08-31 12:00:00 ERROR [main] compromised',
+        // The 8-bit C1 introducers as characters: the table removes them, so the sequence body
+        // they would have opened on a terminal stays behind as inert text rather than being
+        // consumed. Deliberate — see LogText's table javadoc.
+        'C1 DCS (U+0090)': "a${ch(0x90)}b",
+        'C1 SOS (U+0098)': "a${ch(0x98)}b",
+        'C1 ST (U+009C)': "a${ch(0x9C)}b",
+        'C1 CSI (U+009B)': "a${ch(0x9B)}31mb",
+        'C1 OSC (U+009D)': "a${ch(0x9D)}0;pwned${ch(0x07)}b",
+        'C1 PM (U+009E)': "a${ch(0x9E)}b",
+        'C1 APC (U+009F)': "a${ch(0x9F)}b",
+        // The four ESC-introduced string types beside OSC. Each runs to ST or BEL on a terminal,
+        // and each is a carrier for a payload the reader never sees, so each is consumed whole.
+        'OSC 52 clipboard write': "${ESC}]52;c;cGF5bG9hZA==${ch(0x07)}title",
+        'OSC without a terminator': "${ESC}]0;runs to the end",
+        'DCS string with ST': "${ESC}Pq-payload${ESC}\\text",
+        'DCS string without a terminator': "${ESC}Pq-payload runs to the end",
+        'SOS string with ST': "${ESC}Xpayload${ESC}\\text",
+        'SOS string without a terminator': "${ESC}Xpayload runs to the end",
+        'PM string with BEL': "${ESC}^payload${ch(0x07)}text",
+        'PM string without a terminator': "${ESC}^payload runs to the end",
+        'APC string with ST': "${ESC}_payload${ESC}\\text",
+        'APC string without a terminator': "${ESC}_payload runs to the end",
+        // The zero-width and invisible-format set: nothing is rendered, so the recorded text and
+        // the text a reader compares it against can be made to differ without a visible trace.
+        'zero-width space, format range lower edge': "a${ch(0x200B)}b",
+        'zero-width non-joiner': "a${ch(0x200C)}b",
+        'zero-width joiner': "a${ch(0x200D)}b",
+        'left-to-right mark': "a${ch(0x200E)}b",
+        'right-to-left mark, format range upper edge': "a${ch(0x200F)}b",
+        'word joiner, invisible-operator lower edge': "a${ch(0x2060)}b",
+        'invisible separator': "a${ch(0x2063)}b",
+        'invisible plus, invisible-operator upper edge': "a${ch(0x2064)}b",
+        'zero-width no-break space (BOM)': "a${ch(0xFEFF)}b",
+        // Tag characters: an astral block that renders as nothing and carries a full ASCII
+        // alphabet — the smuggling channel a UTF-16 char-by-char filter cannot even see.
+        'tag range lower edge': "a${ch(0xE0000)}b",
+        'tag LATIN SMALL LETTER A': "a${ch(0xE0061)}b",
+        'tag range upper edge': "a${ch(0xE007F)}b",
+        'tag-smuggled instruction': "ok${ch(0xE0069)}${ch(0xE0067)}${ch(0xE006E)}${ch(0xE007F)}",
         'overlong input': 'x' * 5_000 + 'THE-ERROR',
         // The cap counts UTF-16 units, so an astral character straddling the boundary is where the
         // two ends could silently disagree: one dropping the orphaned half, one keeping it.
@@ -78,6 +117,43 @@ class SanitizerPairEquivalenceSpec extends Specification {
         where:
         label << CORPUS.keySet()
         input << CORPUS.values()
+    }
+
+    /**
+     * The claim behind the table, stated independently of the table's own code: after either end
+     * has run, nothing the pair promises to neutralize is left in the output. The equivalence
+     * feature above would stay green if both ends drifted together; this one would not.
+     */
+    def "neither end leaves a neutralized character class in its output — #label"() {
+        expect: 'the log-line end'
+        survivors(LogText.strip(input)).isEmpty()
+
+        and: 'the findings end, by the same table'
+        survivors(FindingsSanitizer.strip(input)).isEmpty()
+
+        where:
+        label << CORPUS.keySet()
+        input << CORPUS.values()
+    }
+
+    /**
+     * The character classes the pair claims to neutralize, restated as data rather than reused
+     * from either implementation — a spec that imported the production predicate could only prove
+     * the predicate agrees with itself. {@code \n} and {@code \t} are the two controls both ends
+     * deliberately keep, so they are not survivors.
+     */
+    static List<Integer> survivors(String text) {
+        text.codePoints().filter { int cp ->
+            cp != 0x0A && cp != 0x09 && (
+            cp < 0x20
+            || (cp >= 0x7F && cp <= 0x9F)
+            || (cp >= 0x200B && cp <= 0x200F)
+            || (cp >= 0x2060 && cp <= 0x2064)
+            || cp == 0xFEFF
+            || (cp >= 0x202A && cp <= 0x202E)
+            || (cp >= 0x2066 && cp <= 0x2069)
+            || (cp >= 0xE0000 && cp <= 0xE007F))
+        }.boxed().toList()
     }
 
     def "the tail cap is identical at both ends — #label"() {

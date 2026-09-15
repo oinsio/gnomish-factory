@@ -93,7 +93,8 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
             new ContainerRunSupport(new GitProcessRunner(), c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         def runner = new ContainerGitModeRunner(
-                newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), factory)
+                newAssembly(input, output), TaskGitFixture.real(), sandbox, testProperties(), factory,
+                LiveConsoleIO.onStdout())
         runner.run(cloneDir, base, pipeline(), segments(), context(taskId), TaskState.atStageStart('build'),
                 RunArguments.InteractiveMode.ALL)
     }
@@ -109,7 +110,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
 
     // FR3, UX1: both banner lines print before the branch/environment identity is used further —
     // a mutant that drops either println still leaves the other one, so both are asserted. The
-    // banner writes directly to System.out (the process's own console, not the injected dialog
+    // banner goes out through the console owner bound to System.out (not the injected dialog
     // console), so — like GitModeRunnerSpec's own banner test — this redirects System.out itself.
     def "run() prints both the branch and environment banner lines before driving the pipeline"() {
         given:

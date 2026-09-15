@@ -65,6 +65,62 @@ class AbortHandlerSpec extends Specification {
         logs.detach()
     }
 
+    // FR5 of harden-untrusted-text-sinks (design D7): where the abort came from a live exception,
+    // the exception itself rides the trailing argument — so Logback renders its stack and cause
+    // chain rather than a pre-rendered string flattened onto one line by the record sink. The two
+    // triggers are two emitters of one fault, so they carry two codes (.claude/rules/logging.md).
+    def "an abort holding the exception logs it in the throwable slot under its own code"() {
+        given:
+        def facts = new AbortFacts(0, null)
+        def logs = LogCaptureSupport.attach(AbortHandler)
+        def crash = new IllegalStateException('the box died mid-round')
+
+        when:
+        handler.handle(REF, STATE, 'uncaught exception during the take run', facts, THRESHOLD, INSTANCE,
+                RecoveryCause.INSTANCE_CRASH, crash)
+
+        then: 'the with-throwable twin code, with the throwable attached and not merely printed'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.INFRASTRUCTURE_ABORT_UNCAUGHT.head())
+        }
+        event != null
+        event.level == Level.ERROR
+        event.formattedMessage.contains('PROJ-1')
+        event.throwableProxy != null
+        event.throwableProxy.message == 'the box died mid-round'
+
+        and: 'the throwable-less code is not emitted for this trigger'
+        logs.list.every {
+            !it.formattedMessage.startsWith(OperatorEvent.INFRASTRUCTURE_ABORT.head())
+        }
+
+        cleanup:
+        logs.detach()
+    }
+
+    // The throwable-less trigger keeps the rendered text as its message: an engine `Aborted`
+    // outcome has no exception anywhere in reach, only the string the domain already rendered.
+    def "an abort with no exception in hand keeps the rendered cause as the message"() {
+        given:
+        def facts = new AbortFacts(0, null)
+        def logs = LogCaptureSupport.attach(AbortHandler)
+
+        when:
+        handler.handle(REF, STATE, 'persist failed: disk full', facts, THRESHOLD, INSTANCE,
+                RecoveryCause.INSTANCE_CRASH, null)
+
+        then:
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.INFRASTRUCTURE_ABORT.head())
+        }
+        event != null
+        event.formattedMessage.contains('persist failed: disk full')
+        event.throwableProxy == null
+
+        cleanup:
+        logs.detach()
+    }
+
     // FR14, NFR-C1: the fuse trips when count + 1 reaches the threshold, parking
     // AwaitingHuman(INFRA) with a report carrying count/cause/threshold, and
     // recordAbort is never called

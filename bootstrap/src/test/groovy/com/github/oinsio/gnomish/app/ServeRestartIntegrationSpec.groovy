@@ -95,7 +95,8 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(), { FeedAutomaton automaton ->
                     automaton.run()
-                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                } as FeedAutomatonStarter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                LiveConsoleIO.onStderr())
         def failure = new AtomicReference<Throwable>()
         def worker = Thread.ofVirtual().name('serve-restart-integration-under-test').start {
             try {

@@ -1,8 +1,12 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO
+import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.usage.json.UsageReportJsonMapper
 import java.nio.file.Path
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -27,7 +31,7 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
     }
 
     private static UsageCommand newCommand() {
-        new UsageCommand(TaskGitFixture.realClaimless())
+        new UsageCommand(TaskGitFixture.realClaimless(), liveConsole())
     }
 
     def "FR14: text render prints the stage/round table and a totals line"() {
@@ -111,5 +115,26 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
 
         then:
         thrown(UsageException)
+    }
+
+    // FR5, UX3 of harden-untrusted-text-sinks: the `--json` mini-contract is read by a parser, so
+    // it goes out on the console owner's machine path, byte for byte. The path itself is what this
+    // asserts — a human-path render of well-formed JSON still looks like JSON, and would corrupt
+    // the document only for the characters that make the corruption worth catching.
+    def "FR5, UX3: the --json mini-contract goes out on the machine path, byte for byte"() {
+        given:
+        def passed = round(0, AttemptRecord.Result.PASSED, 1000, 100)
+        persistRound('MACHINE-1', TaskState.atStageStart('implement').recordUnburnedRound(passed), 'implement', 0)
+        def found = TaskGitFixture.realClaimless().store().usageHistory(cloneDir, 'MACHINE-1') as UsageHistoryResult.Found
+        def expected = new UsageReportJsonMapper().serialize('MACHINE-1', found.rows(), found.totals()) +
+                ConsoleIO.LINE_END
+        def console = new ScriptedConsoleIO()
+        def args = new DefaultApplicationArguments('usage', '--dir=' + cloneDir, 'MACHINE-1', '--json')
+
+        when:
+        new UsageCommand(TaskGitFixture.realClaimless(), console).run(args)
+
+        then: "exactly the mapper's own bytes, on the machine path"
+        console.printedMachine == [expected]
     }
 }

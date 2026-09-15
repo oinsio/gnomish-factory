@@ -1,22 +1,14 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
-import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
-import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.JudgeUsage
-import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolCall
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import java.nio.file.Path
-import java.time.Duration
 import java.time.Instant
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -43,23 +35,17 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
     }
 
     private StatusCommand newCommand() {
-        new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot)
+        new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, liveConsole())
     }
 
     /** Records exactly one round commit and, deliberately, never calls {@code recordOutcome} —
-     * the branch state a process leaves behind if it dies right after the round commit. */
+     * the branch state a process leaves behind if it dies right after the round commit. Reuses
+     * {@link SeededCloneFixture#persistRound} for the shared clone/attempt-persistence plumbing;
+     * only the "unburned round" state shape is specific to this spec's crash scenario. */
     private void recordInterruptedRound(String taskId, String stage = 'implement', int round = 0) {
-        new GitTaskRepository(runner, cloneDir, worktreesRoot, ClaimEpochSource.NONE)
-                .createTask(new TaskContext(taskId, 'Fix the thing', 'Body', []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('verify'))
-        def worktree = worktreesRoot.resolve('clone').resolve(taskId)
-        def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
-        def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
-            new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
-        ])
         def attempt = new AttemptRecord(round, AttemptRecord.Result.PASSED,
                 Instant.parse('2026-07-18T09:00:00Z'), [], ExecutorUsage.none(), JudgeUsage.none(), [])
-        def state = TaskState.atStageStart(stage).recordUnburnedRound(attempt)
-        persistence.persist(taskId, state, trace)
+        persistRound(taskId, TaskState.atStageStart(stage).recordUnburnedRound(attempt), stage, round)
     }
 
     def "NFR-R2: text status of an interrupted task shows the recorded round and no completion claim"() {

@@ -30,8 +30,25 @@
 -->
 <configuration>
 
+    <!-- The sink-side backstop (FR1, FR3, FR4 of harden-untrusted-text-sinks, design D1).
+         Every text-log appender below renders through these three conversion words instead of
+         the plain message, throwable and MDC conversions: whatever a call site assembled — an
+         operator report, an exception message folded from subprocess stderr, a stage name read
+         out of the target repository's manifest — the bytes reaching the encoder carry no escape
+         sequence, no forged record and no unbounded flood. The choke point (`LogText` at the call
+         site) is the first layer and stays mandatory; this is the layer that does not depend on
+         caller discipline. The converters hold no character table of their own — they call
+         `:logtext`, the one owner — and they never throw: a neutralization that fails writes a
+         bounded placeholder record rather than losing the record or the appender (NFR-R1). -->
+    <conversionRule conversionWord="safeMsg"
+                    class="com.github.oinsio.gnomish.logging.SafeMessageConverter"/>
+    <conversionRule conversionWord="safeEx"
+                    class="com.github.oinsio.gnomish.logging.SafeThrowableConverter"/>
+    <conversionRule conversionWord="safeX"
+                    class="com.github.oinsio.gnomish.logging.SafeMdcConverter"/>
+
     <property name="GNOMISH_TEST_LOG_PATTERN"
-              value="%d{ISO8601} [%thread] %-5level [taskId=%X{taskId}, stage=%X{stage}, attempt=%X{attempt}, component=%X{component}] %logger{36} - %msg%n"/>
+              value="%d{ISO8601} [%thread] %-5level [taskId=%safeX{taskId}, stage=%safeX{stage}, attempt=%safeX{attempt}, component=%safeX{component}] %logger{36} - %safeMsg%n%safeEx"/>
 
     <appender name="TEST_FILE" class="ch.qos.logback.core.FileAppender">
         <file>build/test-logs/gnomish-test.log</file>

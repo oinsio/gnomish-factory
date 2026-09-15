@@ -41,7 +41,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR5 of add-dashboard-page.
  */
-class BoardCompositionAgreementSpec extends Specification implements ApplicationArgumentsFixture {
+class BoardCompositionAgreementSpec extends Specification implements ApplicationArgumentsFixture, StdoutCaptureFixture {
 
     private static final String INSTANCE_NAME = 'board-instance'
     private static final Instant NOW = Instant.parse('2026-08-05T00:00:00Z')
@@ -73,7 +73,9 @@ class BoardCompositionAgreementSpec extends Specification implements Application
         def factoryProperties = new FactoryProperties(
                 INSTANCE_NAME, null, null, new FactoryProperties.Tracker(Duration.ofMinutes(2), Duration.ofHours(1)), null)
         def trackerValidatorRegistry = TrackerValidatorStub.acceptingGithubSource()
-        def boardCommand = new BoardCommand(clock, factoryProperties, [github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry)
+        def boardCommand = new BoardCommand(
+                clock, factoryProperties, [github: factory], MapSecretsProvider.NONE, trackerValidatorRegistry,
+                liveConsole())
 
         and: 'the board CLI\'s default readyLimit (50), stood in for as the dashboard\'s own choice too'
         int readyLimit = 50

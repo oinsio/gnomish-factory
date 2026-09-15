@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
@@ -41,8 +42,13 @@ import org.springframework.stereotype.Component;
  * com.github.oinsio.gnomish.app.port.git.TaskListingFailedException} propagates and the command
  * fails with the git evidence — an empty table means "verified: no tasks", never "could not look".
  *
+ * <p>Every byte this command writes goes through the {@link ConsoleIO} the composition root
+ * hands it (FR5, FR6 of harden-untrusted-text-sinks): the rendered tables and reports on the
+ * human path, whose reader is a person at a terminal, and the {@code --json} surfaces on the
+ * machine path, byte for byte, because their reader is a parser (UX3 of that change).
+ *
  * <p>Implements FR13, FR6, UX3 of add-git-workflow; FR16, UX4 of harden-task-branch-contract;
- * FR13 of harden-logging-observability.
+ * FR13 of harden-logging-observability; FR5 of harden-untrusted-text-sinks.
  */
 @Component
 final class StatusCommand {
@@ -54,19 +60,21 @@ final class StatusCommand {
     private final TaskListRenderer taskListRenderer = new TaskListRenderer();
     private final BranchShapeReportRenderer shapeRenderer = new BranchShapeReportRenderer();
     private final Path worktreesRoot;
+    private final ConsoleIO console;
 
-    StatusCommand(TaskGit git, Path worktreesRoot) {
+    StatusCommand(TaskGit git, Path worktreesRoot, ConsoleIO console) {
         this.git = git;
         this.worktreesRoot = worktreesRoot;
+        this.console = console;
     }
 
     /**
      * @param args the raw application arguments, including the leading {@code status} token
      * @throws UsageException if {@code --dir} is missing or malformed
      * @throws TaskNotFoundException if a task id was given and no {@code gnomish/<task>} branch
-     *     exists anywhere (FR13, UX3) — printed calmly to {@link System#out} first
+     *     exists anywhere (FR13, UX3) — printed calmly to the operator console first
      * @throws BranchShapeRefusedException if the branch classifies as a quarantine shape (FR16) —
-     *     its diagnosis printed calmly to {@link System#out} first
+     *     its diagnosis printed calmly to the operator console first
      * @throws com.github.oinsio.gnomish.app.port.git.TaskListingFailedException if list mode's ref
      *     enumeration failed; nothing is printed, since an empty table would be a false answer
      */
@@ -82,7 +90,11 @@ final class StatusCommand {
 
     private void runList(Path dir, boolean json) {
         var rows = git.branches().list(dir);
-        System.out.println(json ? taskListRenderer.renderJson(rows) : taskListRenderer.renderText(rows));
+        if (json) {
+            console.printMachine(taskListRenderer.renderJson(rows) + ConsoleIO.LINE_END);
+        } else {
+            console.print(taskListRenderer.renderText(rows) + ConsoleIO.LINE_END);
+        }
     }
 
     private void runForTask(Path dir, String taskId, boolean json) {
@@ -99,7 +111,7 @@ final class StatusCommand {
      * branch death after a merged PR is normal, not a crash (design D15).
      */
     private void reportNotFound(String taskId) {
-        System.out.println("task not found: " + taskId);
+        console.print("task not found: " + taskId + ConsoleIO.LINE_END);
         throw new TaskNotFoundException(taskId);
     }
 
@@ -109,7 +121,11 @@ final class StatusCommand {
      * is mutated either way.
      */
     private void printShape(String taskId, BranchShape shape, boolean json) {
-        System.out.println(json ? shapeRenderer.renderJson(taskId, shape) : shapeRenderer.renderText(taskId, shape));
+        if (json) {
+            console.printMachine(shapeRenderer.renderJson(taskId, shape) + ConsoleIO.LINE_END);
+        } else {
+            console.print(shapeRenderer.renderText(taskId, shape) + ConsoleIO.LINE_END);
+        }
         if (shape.disposition() == RecoveryDisposition.QUARANTINE) {
             throw new BranchShapeRefusedException(taskId, shape);
         }
@@ -117,7 +133,11 @@ final class StatusCommand {
 
     private void printFound(Path dir, String taskId, StatusReport report, boolean json) {
         Path worktree = TaskWorktreePath.resolve(worktreesRoot, dir, taskId);
-        System.out.println(json ? jsonMapper.serialize(report) : textRenderer.renderFull(report));
-        System.out.println("Worktree: " + worktree);
+        if (json) {
+            console.printMachine(jsonMapper.serialize(report) + ConsoleIO.LINE_END);
+        } else {
+            console.print(textRenderer.renderFull(report) + ConsoleIO.LINE_END);
+        }
+        console.print("Worktree: " + worktree + ConsoleIO.LINE_END);
     }
 }

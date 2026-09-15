@@ -62,7 +62,7 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
      * and writing to {@code out}.
      */
     private GitModeRunner newRunner(InputStream input, PrintStream output) {
-        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), worktreesRoot)
+        new GitModeRunner(newAssembly(input, output), TaskGitFixture.real(), worktreesRoot, LiveConsoleIO.onStdout())
     }
 
     private Path expectedWorktree(String taskId) {

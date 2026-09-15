@@ -212,7 +212,12 @@ public enum OperatorEvent {
     REMOTE_OUTAGE_GATE_SUSTAINED_OPEN("GF146"),
     // remote outage gate observability (add-base-ref-resolution, task 7.4): the ledger write point
     // for the closed-outage `remoteOutage` line, mirroring SWEEP_LEDGER_APPEND_FAILED's shape.
-    REMOTE_OUTAGE_LEDGER_APPEND_FAILED("GF147");
+    REMOTE_OUTAGE_LEDGER_APPEND_FAILED("GF147"),
+    // The with-throwable twin of INFRASTRUCTURE_ABORT (harden-untrusted-text-sinks, design D7):
+    // an abort triggered by an uncaught exception has the exception itself in hand, so it is
+    // logged in the throwable slot with its stack and cause chain rather than as a rendered
+    // string in the message. Two emitters of one fault are two codes (.claude/rules/logging.md).
+    INFRASTRUCTURE_ABORT_UNCAUGHT("GF148");
 
     private final String code;
     private final String head;

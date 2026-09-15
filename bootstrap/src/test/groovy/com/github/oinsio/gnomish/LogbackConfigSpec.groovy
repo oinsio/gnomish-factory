@@ -45,6 +45,16 @@ class LogbackConfigSpec extends Specification {
 
     private static final String PRODUCTION_CONFIG = '/logback-spring.xml'
 
+    /** The configuration the suite itself runs on (task 2.3 of harden-logging-observability). */
+    private static final String TEST_CONFIG = '/logback-test.xml'
+
+    /** The sink converters of harden-untrusted-text-sinks, by the word each is registered under. */
+    private static final Map<String, String> SINK_CONVERSION_RULES = [
+        safeMsg: 'com.github.oinsio.gnomish.logging.SafeMessageConverter',
+        safeEx: 'com.github.oinsio.gnomish.logging.SafeThrowableConverter',
+        safeX: 'com.github.oinsio.gnomish.logging.SafeMdcConverter',
+    ]
+
     private final List<LoggerContext> configured = []
     private File home
 
@@ -94,7 +104,8 @@ class LogbackConfigSpec extends Specification {
         policy.totalSizeCap.size == FileSize.valueOf('100MB').size
     }
 
-    // NFR-O1 + FR8: the correlation keys the post-mortem greps by, including the daemon `component`
+    // NFR-O1 + FR8: the correlation keys the post-mortem greps by, including the daemon
+    // `component` — rendered through the sink converter since FR4 of harden-untrusted-text-sinks
     def "every appender's pattern carries the taskId, stage, attempt and component MDC placeholders"() {
         given:
         LoggerContext context = configure()
@@ -106,8 +117,8 @@ class LogbackConfigSpec extends Specification {
             stderr(context)
         ].every { Appender<?> appender ->
             String pattern = encoderPattern(appender)
-            pattern.contains('%X{taskId}') && pattern.contains('%X{stage}') &&
-                    pattern.contains('%X{attempt}') && pattern.contains('%X{component}')
+            pattern.contains('%safeX{taskId}') && pattern.contains('%safeX{stage}') &&
+                    pattern.contains('%safeX{attempt}') && pattern.contains('%safeX{component}')
         }
     }
 
@@ -217,6 +228,50 @@ class LogbackConfigSpec extends Specification {
         '' | Level.DEBUG
     }
 
+    // FR1, FR3, FR4 of harden-untrusted-text-sinks, single-owner table row 1: the rendered record
+    // is neutralized at the sink whatever the call site did, so both Logback files — production and
+    // the one the suite runs on, which must render the same way for a spec to prove anything about
+    // production — register the three converters.
+    def "#config registers the three sink conversion rules"() {
+        given:
+        String xml = configSource(config)
+
+        expect:
+        SINK_CONVERSION_RULES.every { String word, String converter ->
+            xml.contains("conversionWord=\"${word}\"") && xml.contains("class=\"${converter}\"")
+        }
+
+        where:
+        config << [
+            PRODUCTION_CONFIG,
+            TEST_CONFIG
+        ]
+    }
+
+    // Single-owner table row 1: the old way is deleted, not merely unused — a pattern that still
+    // carried %msg, %ex or %X{ would render that field past the sink, which is the whole hole this
+    // layer closes.
+    def "#config's pattern carries no plain message, throwable or MDC conversion"() {
+        given:
+        String pattern = patternOf(configSource(config))
+
+        expect:
+        !pattern.contains('%msg')
+        !pattern.contains('%ex')
+        !pattern.contains('%X{')
+
+        and: 'and the safe forms are what replaced them'
+        pattern.contains('%safeMsg')
+        pattern.contains('%safeEx')
+        pattern.contains('%safeX{taskId}')
+
+        where:
+        config << [
+            PRODUCTION_CONFIG,
+            TEST_CONFIG
+        ]
+    }
+
     /**
      * Configures a fresh context from the production file. {@code user.home} is seeded as a
      * context property — the scope Logback consults before system properties — so the default
@@ -242,6 +297,19 @@ class LogbackConfigSpec extends Specification {
             throw new AssertionError("logback-spring.xml did not configure cleanly: ${problems}" as Object)
         }
         return context
+    }
+
+    private String configSource(String config) {
+        def url = getClass().getResource(config)
+        assert url != null: "no ${config} on the test classpath"
+        return url.text
+    }
+
+    /** The one pattern property every appender of a configuration renders through. */
+    private static String patternOf(String xml) {
+        def matcher = xml =~ /<property name="[A-Z_]*PATTERN"\s+value="([^"]*)"/
+        assert matcher.find(): 'no log pattern property found'
+        return matcher.group(1)
     }
 
     private static Logger root(LoggerContext context) {

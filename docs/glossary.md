@@ -432,6 +432,16 @@ trusted/task tier split, and the law-root rule.
   duplicated code or a code no test source names, and a runtime one failing any
   spec that provokes a WARN/ERROR no capture observed. *Not:* the log format,
   which is the encoder pattern in `logback.xml` and carries no promise at all.
+- **Operator console** — the factory's terminal output that does not go through
+  the logger: command reports, dialogs, and `--json` renderings. It has one
+  owner, `ConsoleIO` (implemented by `SystemConsoleIO`), with two paths chosen
+  by the reader: the *human path* renders untrusted characters **visibly**
+  (`^[`, `^X`, `^?`, `\uXXXX`) while preserving line structure and length, so an
+  operator sees that a hostile source tried; the *machine path* writes verbatim,
+  because its reader is a parser. No other production class writes to
+  `System.out`/`System.err`, and a build gate holds that. *Not:* the operator
+  plane, which is the WARN+ log lines that reach the console through the logger.
+  *Never:* stdout writer, printer.
 - **Repeat suppression** — the edge-logging discipline for a loop that can
   fail on every tick: the first occurrence (or a changed reason) logs at the
   site's level, repeats drop to DEBUG, a periodic roll-up names the count, and
@@ -443,10 +453,16 @@ trusted/task tier split, and the law-root rule.
 - **Log text sanitization** — the choke point every piece of untrusted text
   passes before it becomes part of a log line: control/ANSI stripping, newline
   flattening so one event stays one line, and a length cap. Owned by `LogText`
-  in `:logtext`. *Not:* findings sanitization — `FindingsSanitizer` guards the
-  plugin-findings boundary and deliberately *preserves* line structure; the two
-  are distinct controls at distinct trust boundaries that share only their
-  character vocabulary, kept in step as a declared pair.
+  in `:logtext`. Behind it stands the **sink layer**: the Logback encoder
+  neutralizes the rendered message, the rendered throwable and every MDC value
+  through its own converters, so a hostile byte that reached a record without
+  passing the choke point still cannot forge a line — defense in depth, not a
+  license to skip the choke point (the three layers are stated in
+  `docs/adr/0004-logging-policy.md`). *Not:* findings sanitization —
+  `FindingsSanitizer` guards the plugin-findings boundary and deliberately
+  *preserves* line structure; the two are distinct controls at distinct trust
+  boundaries that share only their character vocabulary, kept in step as a
+  declared pair.
 - **Shutdown phase** — the window between the moment a stop takes ownership of
   the process and the moment it exits. Marked once, first thing in the shutdown
   hook, and read by the sites that would otherwise report the stop's own

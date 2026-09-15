@@ -23,7 +23,11 @@ import java.util.Set;
  * whether the read returns a line or raises {@link ConsoleClosedException} on
  * EOF (design D7).
  *
- * <p>Implements FR10, FR13, UX1, D7 of add-manual-run.
+ * <p>The two meta-commands take the two write paths of {@link ConsoleIO}: the text
+ * render is for a person, the {@code --json} render for a parser (FR5 of
+ * harden-untrusted-text-sinks).
+ *
+ * <p>Implements FR10, FR13, UX1, D7 of add-manual-run, FR5 of harden-untrusted-text-sinks.
  */
 public final class DialogConsole {
 
@@ -86,6 +90,18 @@ public final class DialogConsole {
     }
 
     /**
+     * Writes {@code text} to the operator byte for byte — the machine-readable path of the
+     * wrapped {@link ConsoleIO}, for blocks a parser rather than a terminal consumes
+     * (FR5 of harden-untrusted-text-sinks). Kept beside {@link #print} so a dialog that
+     * holds this wrapper never has to reach past it for one of the two paths.
+     *
+     * @param text the text to print
+     */
+    public void printMachine(String text) {
+        io.printMachine(text);
+    }
+
+    /**
      * Prints {@code prompt} and reads one line, intercepting {@code status} and
      * {@code status --json} (FR10): a meta-command renders the current status,
      * prints it, and re-prompts with the same {@code prompt} text — the caller
@@ -108,7 +124,10 @@ public final class DialogConsole {
                 continue;
             }
             if (STATUS_JSON_COMMAND.equals(line)) {
-                io.print(statusRenderer.render(true));
+                // The machine-readable path: the reader of a --json render is a parser, and the
+                // human path would rewrite the characters it renders visibly into escapes JSON
+                // does not define (FR5 of harden-untrusted-text-sinks).
+                io.printMachine(statusRenderer.render(true));
                 continue;
             }
             return line;

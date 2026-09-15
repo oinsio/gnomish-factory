@@ -32,7 +32,7 @@ import spock.lang.Specification
  *
  * <p>Added by task 8.7 of split-into-modules.
  */
-class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes {
+class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes, StdoutCaptureFixture {
 
     private static final TaskContext CONTEXT = new TaskContext('PROJ-1', 'title', 'body', List.<Decision> of())
 
@@ -55,7 +55,8 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes 
                 new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
                 new FactoryProperties(null, null, null, null, null), { _c, _t, _s, _sp, _fp, _def, _cred ->
                     support
-                } as ContainerSupportFactory)
+                } as ContainerSupportFactory,
+                liveConsole())
         def originalOut = System.out
         def captured = new ByteArrayOutputStream()
         System.out = new PrintStream(captured, true, 'UTF-8')

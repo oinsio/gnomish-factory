@@ -72,7 +72,8 @@ trait ServeObservabilityFixture {
                 [github: trackerFactory],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new RefusingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(),
+                LiveConsoleIO.onStderr())
     }
 
     /**

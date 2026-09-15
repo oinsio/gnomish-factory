@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -34,6 +35,7 @@ import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -128,6 +130,13 @@ public final class ManualRunRunner implements ApplicationRunner {
     final AdapterBindingRegistry bindingRegistry;
 
     private final SubcommandDispatch subcommandDispatch;
+    /** The console owner bound to standard error; see {@link ManualRunConfiguration#errorConsoleIO}. */
+    private final ConsoleIO errorConsole;
+    /**
+     * The console owner bound to standard output, read directly by {@link ManualRunDrive} the way
+     * it reads every other collaborator off this instance (FR5, FR6 of harden-untrusted-text-sinks).
+     */
+    final ConsoleIO console;
 
     /**
      * The container-prerequisite probe {@link SandboxModeSelector#plan} consults (D13 of
@@ -142,6 +151,7 @@ public final class ManualRunRunner implements ApplicationRunner {
             PipelineStartup pipelineStartup,
             AdHocTaskSynthesizer taskSynthesizer,
             SystemConsoleIO systemConsoleIO,
+            @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO,
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
             Map<String, CheckClientFactory> checkClientRegistry,
@@ -165,6 +175,8 @@ public final class ManualRunRunner implements ApplicationRunner {
             PipelineSource pipelineSource,
             ServeProperties serveProperties) {
         this.argumentsParser = argumentsParser;
+        this.errorConsole = errorConsoleIO;
+        this.console = systemConsoleIO;
         this.pipelineStartup = pipelineStartup;
         this.taskSynthesizer = taskSynthesizer;
         this.inPlacePersistence = attemptPersistence;
@@ -173,6 +185,7 @@ public final class ManualRunRunner implements ApplicationRunner {
         // write point, so a run-level listener doing it too would state the same outcome twice.
         ManualRunAssembly subcommandAssembly = new ManualRunAssembly(
                 systemConsoleIO,
+                errorConsoleIO,
                 filesExistCheckRunner,
                 shellCommandCheckRunner,
                 checkClientRegistry,
@@ -186,7 +199,7 @@ public final class ManualRunRunner implements ApplicationRunner {
         // manual run has no terminal TakeResult to map, so the engine's own run bookend is where
         // its summary comes from, which is one seam rather than five entry points each remembering.
         this.assembly = subcommandAssembly.withExtraListener(new SummaryAccumulatorListener());
-        this.gitModeRunner = new GitModeRunner(assembly, git, worktreesRoot);
+        this.gitModeRunner = new GitModeRunner(assembly, git, worktreesRoot, systemConsoleIO);
         this.gitResumeRunner = new GitResumeRunner(assembly, git, worktreesRoot, TASK_ID_KEY);
         // The container support seam is bound over the check providers' own credential declarations
         // (FR17, design D11 of add-plugin-architecture): resolved once here from the discovered
@@ -204,8 +217,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                 checkClientRegistry);
         ContainerSupportFactory containerSupport =
                 containerSupportFactory(checkCredentials, checkClientRegistry, OwnershipMode.MANUAL, git.epochs());
-        this.containerGitModeRunner =
-                new ContainerGitModeRunner(assembly, git, sandboxProperties, factoryProperties, containerSupport);
+        this.containerGitModeRunner = new ContainerGitModeRunner(
+                assembly, git, sandboxProperties, factoryProperties, containerSupport, systemConsoleIO);
         this.containerResumeRunner = new ContainerResumeRunner(
                 assembly, git, sandboxProperties, factoryProperties, TASK_ID_KEY, containerSupport);
         this.bindingProperties = bindingProperties;
@@ -241,7 +254,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                 boardCommand,
                 dashboardCommand,
                 SandboxLifecyclePassFactory.create(sandboxProperties, factoryProperties, javaTimeClock),
-                containerTakeSupport);
+                containerTakeSupport,
+                errorConsoleIO);
     }
 
     /**
@@ -284,7 +298,8 @@ public final class ManualRunRunner implements ApplicationRunner {
                         }
                         ManualRunDrive.drive(this, args);
                     },
-                    log);
+                    log,
+                    errorConsole);
         } finally {
             MDC.remove(TASK_ID_KEY);
             // FR8: backstop for a run that ended without TaskFinished (an abort thrown out of

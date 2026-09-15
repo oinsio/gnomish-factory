@@ -46,7 +46,7 @@ import spock.lang.Specification
  * attemptsUsed}, preserved {@code totals}, optional appended {@link Decision}, loop-back into
  * the engine. {@code Paused}/{@code Aborted} stay stubs for later tasks.
  */
-class RunnerOutcomeLoopSpec extends Specification {
+class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixture {
 
     private static final TaskState STATE = TaskState.atStageStart('build')
     private static final TaskContext CONTEXT = new TaskContext('task-1', 'title', 'body', [])
@@ -54,7 +54,7 @@ class RunnerOutcomeLoopSpec extends Specification {
 
     private ScriptedConsoleIO io = new ScriptedConsoleIO()
     private DialogConsole console = new DialogConsole(io, { json -> 'unused' })
-    private RunnerOutcomeLoop loop = new RunnerOutcomeLoop(new Engine(), console, CLOCK)
+    private RunnerOutcomeLoop loop = new RunnerOutcomeLoop(new Engine(), console, liveErrorConsole(), CLOCK)
 
     private static DialogConsole consoleWithScript(List<String> script) {
         new DialogConsole(new ScriptedConsoleIO(script), { json -> 'unused' })
@@ -83,7 +83,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         def scriptedConsole = new DialogConsole(scriptedIo, { json ->
             'unused'
         })
-        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), scriptedConsole, CLOCK)
+        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), scriptedConsole, liveErrorConsole(), CLOCK)
 
         when:
         def resumption = scriptedLoop.dispatch(CONTEXT, outcome)
@@ -123,7 +123,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         assert consoleThatWasExhausted.inputExhausted()
         io.printed.clear()
         io.resume([''])
-        def loopUnderTest = new RunnerOutcomeLoop(new Engine(), consoleThatWasExhausted, CLOCK)
+        def loopUnderTest = new RunnerOutcomeLoop(new Engine(), consoleThatWasExhausted, liveErrorConsole(), CLOCK)
 
         when:
         def resumption = loopUnderTest.dispatch(CONTEXT, outcome)
@@ -140,7 +140,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         def outcome = new TaskOutcome.Paused(advancedState, 'build')
         def io = new ScriptedConsoleIO([])
         def freshConsole = new DialogConsole(io, { json -> 'unused' })
-        def freshLoop = new RunnerOutcomeLoop(new Engine(), freshConsole, CLOCK)
+        def freshLoop = new RunnerOutcomeLoop(new Engine(), freshConsole, liveErrorConsole(), CLOCK)
 
         when:
         freshLoop.dispatch(CONTEXT, outcome)
@@ -210,7 +210,7 @@ class RunnerOutcomeLoopSpec extends Specification {
 
     def "dispatch routes a non-mismatch Escalated without throwing"() {
         given:
-        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), consoleWithScript(['']), CLOCK)
+        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), consoleWithScript(['']), liveErrorConsole(), CLOCK)
         def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
@@ -246,7 +246,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         def scriptedConsole = new DialogConsole(scriptedIo, { json ->
             'unused'
         })
-        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), scriptedConsole, CLOCK)
+        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), scriptedConsole, liveErrorConsole(), CLOCK)
 
         when:
         def resumption = scriptedLoop.dispatch(CONTEXT, outcome)
@@ -286,7 +286,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         }
         assert exhaustedConsole.inputExhausted()
         exhaustedIo.printed.clear()
-        def exhaustedLoop = new RunnerOutcomeLoop(new Engine(), exhaustedConsole, CLOCK)
+        def exhaustedLoop = new RunnerOutcomeLoop(new Engine(), exhaustedConsole, liveErrorConsole(), CLOCK)
         def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
@@ -301,7 +301,7 @@ class RunnerOutcomeLoopSpec extends Specification {
 
     def "dispatch still resumes normally through the decision prompt when input is not exhausted (regression)"() {
         given:
-        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), consoleWithScript(['']), CLOCK)
+        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), consoleWithScript(['']), liveErrorConsole(), CLOCK)
         def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
@@ -315,7 +315,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         given: 'a console whose script runs out exactly at the resume-decision prompt'
         def io = new ScriptedConsoleIO([])
         def freshConsole = new DialogConsole(io, { json -> 'unused' })
-        def freshLoop = new RunnerOutcomeLoop(new Engine(), freshConsole, CLOCK)
+        def freshLoop = new RunnerOutcomeLoop(new Engine(), freshConsole, liveErrorConsole(), CLOCK)
         def outcome = new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3))
 
         when:
@@ -332,7 +332,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         def burnedState = new TaskState(new Position.AtStage('build'), 1, [], totals)
         def report = new EscalationReport.CannotVerify(new CheckRef(0, 'command:./gradlew test'), 'timeout', 'trace')
         def outcome = new TaskOutcome.Escalated(burnedState, report)
-        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), consoleWithScript(['']), CLOCK)
+        def scriptedLoop = new RunnerOutcomeLoop(new Engine(), consoleWithScript(['']), liveErrorConsole(), CLOCK)
 
         when:
         def resumption = scriptedLoop.dispatch(CONTEXT, outcome)
@@ -357,17 +357,18 @@ class RunnerOutcomeLoopSpec extends Specification {
             completed(),
             completed(),
         ])
-        def builtinRunner = new ScriptedBuiltinCheckRunner([
+        List<Verdict> verdicts = [
             new Verdict.Fail([]),
             new Verdict.Pass(),
-        ])
+        ]
+        def builtinRunner = new ScriptedBuiltinCheckRunner(verdicts)
         def clock = new VirtualClock()
         def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
                 new InMemoryAttemptPersistence(), clock, new VirtualSleeper(clock))
 
         def resumingLoop = new RunnerOutcomeLoop(
-                new Engine(), consoleWithScript(['fixed the environment']), CLOCK)
+                new Engine(), consoleWithScript(['fixed the environment']), liveErrorConsole(), CLOCK)
 
         when:
         resumingLoop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports)
@@ -417,7 +418,7 @@ class RunnerOutcomeLoopSpec extends Specification {
         def scriptedConsole = new DialogConsole(scriptedIo, { json ->
             'unused'
         })
-        def resumingLoop = new RunnerOutcomeLoop(new Engine(), scriptedConsole, CLOCK)
+        def resumingLoop = new RunnerOutcomeLoop(new Engine(), scriptedConsole, liveErrorConsole(), CLOCK)
 
         when:
         resumingLoop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports)
@@ -516,7 +517,7 @@ class RunnerOutcomeLoopSpec extends Specification {
 
     def "renderEscalation produces distinct text across all five report kinds"() {
         given:
-        def reports = [
+        List<EscalationReport> reports = [
             new EscalationReport.AttemptsExhausted(3),
             new EscalationReport.DecisionNeeded('proceed?', ['yes', 'no']),
             new EscalationReport.CannotVerify(new CheckRef(0, 'command:./gradlew test'), 'timeout', 'trace'),
@@ -557,6 +558,11 @@ class RunnerOutcomeLoopSpec extends Specification {
 
         @Override
         void print(String text) {
+            printed << text
+        }
+
+        @Override
+        void printMachine(String text) {
             printed << text
         }
     }

@@ -160,7 +160,7 @@ tracker:
                 registry,
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                starter, SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
     }
 
     // Non-termination guard: run() assembles a REAL FeedAutomaton whose outage retry (NFR-R3)
@@ -397,7 +397,7 @@ tracker:
                 [github: factory],
                 MapSecretsProvider.NONE,
                 TrackerValidatorStub.acceptingGithubSource(),
-                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly())
+                new CapturingStarter(), SandboxLifecyclePass.NONE, ContainerTakeSupport.hostOnly(), LiveConsoleIO.onStderr())
 
         when:
         runsToCompletion { command.run(args('serve', "--dir=$projectDir")) }

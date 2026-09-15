@@ -146,7 +146,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def instanceOne = new ContainerGitModeRunner(
                 newAssembly(new ByteArrayInputStream(new byte[0]), System.out, factoryProps), TaskGitFixture.real(),
-                sandboxProps, factoryProps, trackedContainerSupport())
+                sandboxProps, factoryProps, trackedContainerSupport(), LiveConsoleIO.onStdout())
 
         when:
         instanceOne.run(cloneDir, null, pipeline(), segments(), new TaskContext(taskId, 'title', 'body', List.<Decision> of()),

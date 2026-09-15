@@ -5,7 +5,8 @@ paths:
 
 # Rule: logging
 
-The one-page checklist for anyone adding or touching a log call. The reasoning,
+The one-page checklist for anyone adding or touching a log call — or any line of
+text written to the operator's terminal. The reasoning,
 the rejected alternatives and the accepted deviations live in
 `docs/adr/0004-logging-policy.md`; this file is what you check the line against.
 Together they implement FR1 of `harden-logging-observability`.
@@ -113,31 +114,56 @@ and are followed through the builder chain. The accessor list is what the gate
 can see, not the whole rule: a change that introduces a new untrusted accessor
 adds it there in the same change.
 
-### Known limit: untrusted text in exception messages
+### The sink is a backstop, not a substitute
 
 The gate scans **log call sites**. An exception whose *message* concatenates
-subprocess output escapes it structurally — nothing untrusted appears at the
-log call, yet Logback renders the message when the throwable is logged, so the
-control characters and forged newlines land in the record anyway.
+subprocess output escapes it structurally — nothing untrusted appears at the log
+call, yet Logback renders the message when the throwable is logged. The same holds
+for a record's `toString()`, an assembled operator report, and an MDC value.
 
-So the obligation is on the throw site, not on the gate: **an exception that
-carries subprocess or in-container output into its message sanitizes it at
-construction.**
+That hole is closed at the sink: the encoder renders the message, the throwable and
+every MDC value through the `%safeMsg` / `%safeEx` / `%safeX{…}` converters
+(`:bootstrap`), so no byte from an untrusted source can forge a record or drive a
+terminal whatever the call site did. It is layer 3 of the three layers
+`docs/adr/0004-logging-policy.md` states (capture → per-consumer exit → sink
+backstop) — **defense in depth, not a license to skip `LogText`**. The obligation on
+the throw site stands:
 
 ```java
 throw new TaskListingFailedException(pattern, result.exitCode(), LogText.forLog(result.stderr()));
 ```
 
-Sites predating this rule still concatenate raw `stderr()` (across
-`adapters/git`, `gitobjects`, `sandbox/docker`); they are honest debt, not
-precedent. Bringing them under the rule — and extending the gate to
-exception-constructor arguments so it stops being a limit — is its own change.
+Sites predating this rule still concatenate raw `stderr()` (across `adapters/git`,
+`gitobjects`, `sandbox/docker`); they are honest debt, not precedent. Bringing them
+under the rule — and replacing the accessor-name gate with typed carriers — is
+`type-untrusted-text`.
 
 Never log a secret **value**; a warning about a secret names the variable only.
 `FindingsSanitizer` is a different control at a different boundary (plugin
 findings, line structure preserved) — do not use it for log lines, and do not
 add a production edge between the two (they are a declared pair, see
 `manual-sync-pairs.md`).
+
+## Never write to `System.out` / `System.err`
+
+Text that goes to the operator's terminal outside the logger has one owner:
+`ConsoleIO` (`app/port/console`), implemented by `SystemConsoleIO`. A production
+class outside that owner writing to a process stream fails `ConsoleOwnerGateSpec`
+(`:bootstrap`). Commands that have no console in hand take one by constructor from
+the composition root.
+
+Two paths, chosen by who reads the output:
+
+```java
+console.print(report);        // human — controls rendered visible (^[, ^X, ^?, \uXXXX)
+console.printMachine(json);   // machine (--json) — byte-for-byte verbatim
+```
+
+`print` applies `LogText.forConsole`: it makes controls **visible** rather than
+removing them, and preserves line structure and length, because an operator report
+is long by design and the operator must see that a hostile source tried. Never send
+`--json` output down the human path — it is a parser's input, and neutralizing it
+would corrupt it.
 
 ## Suppress repeats in poll and retry loops
 
@@ -198,12 +224,17 @@ is the subject of the assertion.
 7. A new WARN/ERROR took the next free `OperatorEvent` code as its message head.
 8. A spec pins that code — its level, and its attribution key where the line
    concerns a task or a check — through `LogCaptureSupport`.
+9. Terminal output outside the logger went through `ConsoleIO` — `print` for a
+   human, `printMachine` for `--json`.
 
-## The two gates that ask for you
+## The gates that ask for you
 
 - **Static** (`LogContractGateSpec`, `:bootstrap`): every WARN/ERROR site
   carries a code, every code belongs to one site, every code is named by some
   test source. In-place escape hatch: `log-contract-exempt: <reason>`.
+- **Console owner** (`ConsoleOwnerGateSpec`, `:bootstrap`): a source scan
+  failing the build on `System.out.print*` / `System.err.print*` in any
+  production class but `SystemConsoleIO`.
 - **Runtime** (`LogExpectationGate` in `:test-fixtures` +
   `checkLogExpectationGate` in `build-logic`): a global Spock extension watches
   every feature's operator plane. It **reports** — per module, in

@@ -125,21 +125,62 @@ a message string is a label for it. Enforced by a build gate, with an
 inline-comment exemption idiom for the rare site where the throwable genuinely
 is not the subject.
 
-### Untrusted text enters a log line only through the sanitizer
+### Untrusted text is neutralized in three layers
 
 Agent/LLM output, subprocess stderr, tracker-sourced strings and in-container
-command output are attacker-influenced. They reach a log line only through
-`LogText` (module `:logtext`): control/ANSI stripping, newline flattening — so
-one event is one line and no embedded `\n` can forge a record — and a length
-cap. No secret value, token, or credential material appears in any log line;
-warnings about secrets name the *variable*, never the value.
+command output are attacker-influenced. Three layers stand between them and the
+operator's screen, and each is load-bearing on its own:
 
-`FindingsSanitizer` (`gnomish-plugin-api`) guards a different trust boundary
-with a different contract — plugin findings, where line structure is preserved
-deliberately — and stays self-contained. The two share only their character
-vocabulary (the ANSI/control table and the tail cap) and are kept in step as a
-declared pair under `.claude/rules/manual-sync-pairs.md`, verified by an
-executable equivalence spec rather than by a production dependency.
+1. **Capture.** The text is taken from its source and carried **raw** — no
+   sanitizing at the capture point. The raw form is the one a `grep` matches, the
+   one a ledger stores, and the one a tracker comment quotes; neutralizing it here
+   would corrupt every consumer to protect one. The MDC follows the same rule: it
+   is a carrier, so `taskId` stays exactly the id an operator holds.
+2. **Per-consumer exit.** Each consumer has one exit that applies *its* notation,
+   and all exits read one character-class table. `LogText.forLog` (`:logtext`)
+   strips control/ANSI sequences, flattens newlines so one event stays one line,
+   and caps length — that is the log plane's exit, and every call site carrying
+   untrusted text into a log line is obliged to use it. `LogText.forConsole` is
+   the operator console's exit: it makes controls **visible** instead of removing
+   them, and preserves line structure and length. `FindingsSanitizer`
+   (`gnomish-plugin-api`) is the plugin-findings boundary's exit, with line
+   structure preserved deliberately; it shares only the character vocabulary with
+   `LogText` and is kept in step as a declared pair under
+   `.claude/rules/manual-sync-pairs.md`, verified by an executable equivalence
+   spec rather than by a production dependency.
+3. **Sink backstop.** The two sinks neutralize whatever reaches them, whatever the
+   call site did. Logback's encoder renders the message, the throwable and every
+   MDC value through the `%safeMsg` / `%safeEx` / `%safeX{…}` converters
+   (`:bootstrap`, delegating to `:logtext` primitives, holding no vocabulary of
+   their own), with a 16 KB per-record cap; `SystemConsoleIO` is the single owner
+   of terminal output outside the logger, and a build gate keeps
+   `System.out`/`System.err` out of every other production class. Introduced by
+   `harden-untrusted-text-sinks`.
+
+The backstop exists because layer 2 depends on caller discipline and the gate that
+enforces it can only see *accessor names at log call sites*: text concatenated into
+an exception message, a record's `toString()`, an assembled operator report or an
+MDC value leaves no accessor for the gate to see. It is **defense in depth, not a
+license to skip the exit** — a call site that carries untrusted text still reaches
+for `LogText`, and the gate still fails the build when it does not. The backstop is
+idempotent over `forLog` output, so a correct call site renders byte-identically
+with and without it.
+
+Two layer-2 properties are deliberate asymmetries. The log plane *strips*; the
+console plane makes the same characters *visible* (`^[`, `^X`, `^?`, `\uXXXX`),
+because the log's reader is `grep` and one-event-one-line is its contract, while
+the console's reader is a human who must see that a hostile source tried. Git
+(`sideband.allowControlCharacters`), kubectl (`EscapeTerminal`) and `less` all take
+the visible route on a terminal. The console's machine-readable path (`--json`)
+writes verbatim: it is a parser's input, not a screen's.
+
+No secret value, token, or credential material appears in any log line; warnings
+about secrets name the *variable*, never the value.
+
+Two follow-ups are sequenced after the backstop: `split-logtext-leaves` moves the
+primitives into their own leaf modules, and `type-untrusted-text` replaces the
+accessor-name gate with typed carriers so layer 2 stops depending on discipline at
+all.
 
 ### Repeat suppression has one owner; edges are the signal
 
@@ -223,7 +264,8 @@ Recorded so they are decisions rather than drift:
   any WARN is worth reading.
 - New mechanisms carry ownership: `AnchorLog` for lifecycle anchors and the
   canonical task summary, `RepeatSuppressor` for edges, `LogText` for untrusted
-  text — a second implementation of them is a review finding.
+  text, `SystemConsoleIO` for terminal output outside the logger — a second
+  implementation of them is a review finding.
 - The cost is indirection: a site that wants to log agent output must reach for
   `LogText`, and a poll loop must thread a suppressor key. Both are one line.
 
@@ -231,7 +273,8 @@ Recorded so they are decisions rather than drift:
 
 - `.claude/rules/logging.md` — the emitter's one-page checklist.
 - `docs/glossary.md` — *anchor line*, *canonical task summary*, *operator
-  event*, *log contract*, *repeat suppression*, *log text sanitization*.
+  event*, *operator console*, *log contract*, *repeat suppression*, *log text
+  sanitization*.
 - `.claude/rules/manual-sync-pairs.md` — the `LogText` ↔ `FindingsSanitizer`
   row.
 - `docs/adr/0003-crash-consistency.md` — why the durable record is the media,

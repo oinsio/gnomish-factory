@@ -18,7 +18,7 @@ import spock.lang.Specification
  *
  * <p>Added by task 8.7 of split-into-modules (design D13(c)).
  */
-class RunExceptionReportingSpec extends Specification {
+class RunExceptionReportingSpec extends Specification implements StdoutCaptureFixture {
 
     private static final Logger LOG = LoggerFactory.getLogger(RunExceptionReportingSpec)
 
@@ -36,7 +36,7 @@ class RunExceptionReportingSpec extends Specification {
         System.err = new PrintStream(captured, true, 'UTF-8')
         rethrown = null
         try {
-            RunExceptionReporting.run(action, LOG)
+            RunExceptionReporting.run(action, LOG, liveErrorConsole())
         } catch (Throwable t) {
             rethrown = t
         } finally {

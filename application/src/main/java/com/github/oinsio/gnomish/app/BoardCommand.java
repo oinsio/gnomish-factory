@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
@@ -28,7 +29,7 @@ import org.springframework.stereotype.Component;
  * is rendered by {@link BoardJsonMapper} (task 4.2) — both are projections of the same {@link
  * BoardModel} (UX4).
  *
- * <p>Implements FR1, NFR-S1 of add-board-command.
+ * <p>Implements FR1, NFR-S1 of add-board-command; FR5 of harden-untrusted-text-sinks.
  */
 @Component
 final class BoardCommand {
@@ -41,18 +42,21 @@ final class BoardCommand {
     private final Map<String, TrackerAdapterFactory> trackerAdapterRegistry;
     private final SecretsProvider secretsProvider;
     private final PipelineSource pipelineSource;
+    private final ConsoleIO console;
 
     BoardCommand(
             Clock javaTimeClock,
             FactoryProperties factoryProperties,
             Map<String, TrackerAdapterFactory> trackerAdapterRegistry,
             SecretsProvider secretsProvider,
-            PipelineSource pipelineSource) {
+            PipelineSource pipelineSource,
+            ConsoleIO console) {
         this.clock = javaTimeClock;
         this.factoryProperties = factoryProperties;
         this.trackerAdapterRegistry = trackerAdapterRegistry;
         this.secretsProvider = secretsProvider;
         this.pipelineSource = pipelineSource;
+        this.console = console;
     }
 
     /**
@@ -71,9 +75,13 @@ final class BoardCommand {
         BoardModel model = BoardComposition.compose(
                 resolution.tracker(), trackerConfig, factoryProperties.tracker(), clock, boardArguments.limit());
 
-        String output = boardArguments.json()
-                ? jsonMapper.serialize(model, trackerConfig.wipLimit())
-                : textRenderer.render(model);
-        System.out.println(output);
+        if (boardArguments.json()) {
+            console.printMachine(jsonMapper.serialize(model, trackerConfig.wipLimit()) + ConsoleIO.LINE_END);
+        } else {
+            // The human path, and the one that matters most here: a board row carries the tracker's
+            // own issue title, which is attacker-influenced text arriving at a terminal (UX2, FR5 of
+            // harden-untrusted-text-sinks).
+            console.print(textRenderer.render(model) + ConsoleIO.LINE_END);
+        }
     }
 }

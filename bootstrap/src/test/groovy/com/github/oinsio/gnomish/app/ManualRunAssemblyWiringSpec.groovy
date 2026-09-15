@@ -160,6 +160,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
         def assembly = new ManualRunAssembly(
                 new SystemConsoleIO(
                         new ByteArrayInputStream(new byte[0]), System.out),
+                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
                 githubRegistry(), { name ->
@@ -192,6 +193,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
         def assembly = new ManualRunAssembly(
                 new SystemConsoleIO(
                         new ByteArrayInputStream(new byte[0]), System.out),
+                new SystemConsoleIO(new ByteArrayInputStream(new byte[0]), System.err),
                 new FilesExistCheckRunner(),
                 new ShellCommandCheckRunner(),
                 githubRegistry(),

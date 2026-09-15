@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.console.ConsoleClosedException;
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
@@ -148,6 +149,10 @@ final class ContainerResumeOutcomes {
     /** Outcome {@code completed}: the same final status summary as the host path, no engine run. */
     static void reportCompleted(ContainerResumeRunner runner, TaskRecord taskJson, TaskState state) {
         var report = StatusReport.build(taskJson.context(), state, null, LiveActivity.idle());
-        System.out.println(runner.statusRenderer.renderFull(report));
+        // The same console the resume dialogs above used (FR5, FR6 of harden-untrusted-text-sinks),
+        // mirroring the host path's own summary print.
+        runner.assembly
+                .dialogConsole(taskJson.context(), state)
+                .print(runner.statusRenderer.renderFull(report) + ConsoleIO.LINE_END);
     }
 }

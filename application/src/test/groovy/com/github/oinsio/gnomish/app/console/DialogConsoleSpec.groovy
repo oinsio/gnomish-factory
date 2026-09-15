@@ -55,6 +55,9 @@ class DialogConsoleSpec extends Specification {
             'json-report',
             'question? '
         ]
+
+        and: 'FR5 of harden-untrusted-text-sinks: the render went the verbatim way, not the human one'
+        io.printedMachine == ['json-report']
     }
 
     def "handles several status interceptions before a real answer"() {
@@ -222,6 +225,28 @@ class DialogConsoleSpec extends Specification {
         console.ask('pass/fail/running? ', ['pass', 'fail', 'running']) == 'pass'
         tracker.markCount == 2
         tracker.restoredTo == [null, null]
+    }
+
+    // FR5 of harden-untrusted-text-sinks: the wrapper carries both write paths, so a dialog
+    // holding it never has to reach past it for the machine-readable one — and the path a caller
+    // chose is the path the console owner is asked for, not one the wrapper decides.
+    def "carries both write paths through to the wrapped console"() {
+        given:
+        def io = new ScriptedConsoleIO([])
+        def console = new DialogConsole(io, { json -> 'unused' })
+
+        when:
+        console.print('a briefing for the operator')
+        console.printMachine('{"task":"GNOME-17"}')
+
+        then:
+        io.printed == [
+            'a briefing for the operator',
+            '{"task":"GNOME-17"}'
+        ]
+
+        and: 'and only the second went the verbatim way'
+        io.printedMachine == ['{"task":"GNOME-17"}']
     }
 
     def "the two-arg constructor defaults to a no-op activity tracker"() {

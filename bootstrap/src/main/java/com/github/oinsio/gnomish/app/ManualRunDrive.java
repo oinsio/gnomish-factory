@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.io.IOException;
 import java.util.List;
@@ -23,7 +24,7 @@ final class ManualRunDrive {
     static void drive(ManualRunRunner runner, ApplicationArguments args) throws IOException {
         RunArguments runArguments = runner.argumentsParser.parse(args);
         if (runArguments.mode() == RunArguments.Mode.IN_PLACE) {
-            System.out.println(ManualRunRunner.IN_PLACE_REMINDER);
+            runner.console.print(ManualRunRunner.IN_PLACE_REMINDER + ConsoleIO.LINE_END);
         }
 
         PipelineLoadOutcome loadOutcome = runner.pipelineStartup.load(runArguments);

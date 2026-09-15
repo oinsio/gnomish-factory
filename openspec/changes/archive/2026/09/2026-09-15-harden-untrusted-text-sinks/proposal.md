@@ -114,12 +114,17 @@ type-level work can proceed without an open terminal-injection window.
 
 ### Functional
 
-- FR1: Every Logback appender the factory configures (rolling file, stdout
-  WARN+, stderr ERROR) SHALL render its message through a sink-side neutralizer
-  that applies `LogText`'s vocabulary to the *formatted* message: control and
-  ANSI/C1/bidi sequences stripped or made inert, line breaks inside the message
-  rendered as the visible marker `LogText.flatten` produces, and the message
-  bounded by a per-record cap with a visible truncation marker.
+- FR1: Every Logback appender the factory configures for the text log
+  (rolling file, stdout WARN+, stderr ERROR) SHALL render its message
+  through a sink-side neutralizer that applies `LogText`'s vocabulary to the
+  *formatted* message: control and ANSI/C1/bidi sequences stripped or made
+  inert, line breaks inside the message rendered as the visible marker
+  `LogText.flatten` produces, and the message bounded by a per-record cap
+  with a visible truncation marker. The dedicated JSONL access-log appender
+  `add-subprocess-access-log` attaches to `gnomish.access` is exempt: it is a
+  separate machine-readable sink with its own redactor at a separate trust
+  boundary (design D1's exemption), not the human-read text log this
+  requirement governs.
 - FR2: The sink-side neutralizer SHALL be idempotent over `LogText.forLog`
   output: a message already prepared by the choke point renders byte-identically
   with and without the sink layer (no double escaping of the visible `\n`
@@ -135,13 +140,13 @@ type-level work can proceed without an open terminal-injection window.
   the message, and SHALL be single-line.
 - FR5: One owner SHALL write all non-logger text to the operator's terminal.
   Its human-readable output path applies *visible* neutralization — ESC as
-  `^[`, other C0 as `^X`, DEL as `^?`, C1 and bidi/format characters as
-  `\uXXXX`, `\r` as `\r` — preserving line structure and length (operator
-  reports are long by design). Its machine-readable path (`--json` renderers,
+  `^[`, C0 other than `\n` and `\t` as `^X`, DEL as `^?`, C1 and bidi/format
+  characters as `\uXXXX`, `\r` as `\r` — preserving line structure, tab
+  indentation and length (operator reports are long by design). Its machine-readable path (`--json` renderers,
   JSON mappers) writes verbatim.
 - FR6: No production class outside the console owner SHALL write to
-  `System.out` or `System.err`; a build gate fails on a new site. The 25
-  existing sites (24 in `:application`, 1 in `:bootstrap`, listed in
+  `System.out` or `System.err`; a build gate fails on a new site. The 24
+  existing sites (23 in `:application`, 1 in `:bootstrap`, listed in
   design.md) are routed through the owner in this change, each classified as
   human or machine output.
 - FR7: `TakeOutcomeMapper` SHALL build the `AwaitingHuman` report text from the
@@ -199,7 +204,8 @@ type-level work can proceed without an open terminal-injection window.
 ## Success Metrics
 
 - M1: The end-to-end invariant spec (NFR-S1, NFR-S2) is green over the whole
-  corpus on all three appenders and both console paths.
+  corpus on all three text-log appenders and both console paths, and confirms
+  the `gnomish.access` appender is untouched (FR1's exemption).
 - M2: `grep -rn "System\.\(out\|err\)\.print" --include=*.java` over
   production sources returns exactly the console owner's own lines.
 - M3: Every existing spec in `:application`, `:adapters:*`, `:sandbox:docker`,
@@ -237,4 +243,7 @@ type-level work can proceed without an open terminal-injection window.
   gains the sink layer sentence).
 - Sequencing: after `add-base-ref-resolution` (its `module-layering` delta is
   the base the later `split-logtext-leaves` layers on; this change touches no
-  module edges). Before `split-logtext-leaves` and `type-untrusted-text`.
+  module edges) and after `add-subprocess-access-log` (its `factory-logging`
+  delta modifies the same requirement this change modifies again, and its
+  `gnomish.access` JSONL appender is the exemption FR1 names). Before
+  `split-logtext-leaves` and `type-untrusted-text`.

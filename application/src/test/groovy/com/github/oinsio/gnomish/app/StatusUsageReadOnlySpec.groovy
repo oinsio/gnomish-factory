@@ -93,7 +93,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         when:
         def output = captureStdout {
-            new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot).run(args)
+            new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, liveConsole()).run(args)
         }
 
         then: 'the fetch path was actually exercised, not vacuously true'
@@ -118,7 +118,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         when:
         def output = captureStdout {
-            new UsageCommand(TaskGitFixture.realClaimless()).run(args)
+            new UsageCommand(TaskGitFixture.realClaimless(), liveConsole()).run(args)
         }
 
         then:
@@ -150,7 +150,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         when:
         captureStdout {
-            new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot).run(args)
+            new StatusCommand(TaskGitFixture.realClaimless(), worktreesRoot, liveConsole()).run(args)
         }
 
         then: 'no new fetch happened: FETCH_HEAD is untouched and the tracking ref sha is unchanged'

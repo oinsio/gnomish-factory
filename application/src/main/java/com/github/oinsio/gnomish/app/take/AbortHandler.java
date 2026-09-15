@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.logtext.OperatorEvent;
 import java.time.Clock;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,11 +100,47 @@ public record AbortHandler(Tracker tracker, Clock clock) {
             int threshold,
             InstanceId instanceId,
             RecoveryCause category) {
-        log.error(
-                OperatorEvent.INFRASTRUCTURE_ABORT.head() + "Infrastructure abort on task {} ({}): {}",
-                ref.id(),
-                category.wireValue(),
-                cause);
+        return handle(ref, finalState, cause, facts, threshold, instanceId, category, null);
+    }
+
+    /**
+     * {@link #handle(TaskRef, TaskState, String, AbortFacts, int, InstanceId, RecoveryCause)} for a
+     * trigger that still holds the exception itself (design D7 of harden-untrusted-text-sinks).
+     *
+     * <p>The two triggers differ in what they can give the log. An uncaught take-run exception is
+     * a live {@link Throwable}, so it rides the trailing argument and Logback renders its stack
+     * and cause chain — indented, one frame per line. An engine {@code Aborted} outcome carries
+     * only a string the domain already rendered, with no throwable anywhere in reach, so that one
+     * stays a message argument and the sink flattens it onto the record's single line. Passing a
+     * rendered trace as a message argument where the throwable exists would lose the shape for no
+     * reason, which is what this overload is for.
+     *
+     * @param crash the exception the abort came from, or {@code null} when the trigger is an
+     *     engine {@code Aborted} outcome and {@code cause} is all there is
+     * @return the same result the other overload documents
+     */
+    public TakeResult handle(
+            TaskRef ref,
+            TaskState finalState,
+            String cause,
+            AbortFacts facts,
+            int threshold,
+            InstanceId instanceId,
+            RecoveryCause category,
+            @Nullable Throwable crash) {
+        if (crash == null) {
+            log.error(
+                    OperatorEvent.INFRASTRUCTURE_ABORT.head() + "Infrastructure abort on task {} ({}): {}",
+                    ref.id(),
+                    category.wireValue(),
+                    cause);
+        } else {
+            log.error(
+                    OperatorEvent.INFRASTRUCTURE_ABORT_UNCAUGHT.head() + "Infrastructure abort on task {} ({})",
+                    ref.id(),
+                    category.wireValue(),
+                    crash);
+        }
 
         // Everything tracker-bound goes through the budget first (FR1, NFR-R1 of
         // cap-abort-cause-length); the ERROR log above and the returned result keep the full text.
